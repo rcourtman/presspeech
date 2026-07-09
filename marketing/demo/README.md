@@ -1,12 +1,12 @@
-# Parakey demo video
+# Presspeech demo video
 
-Synthetic Mac interaction demo for sharing the Parakey workflow without
+Synthetic Mac interaction demo for sharing the Presspeech workflow without
 screen-recording the real app. The animation is described declaratively
 in `index.html` (a single deterministic timeline driven by
 `window.renderAt(t)`); `render.mjs` walks that timeline frame-by-frame
 through headless Chrome and hands the PNG sequence to ffmpeg.
 
-Output: `dist/parakey-demo.mp4` (also `.webm`, `.gif`).
+Output: `dist/presspeech-demo.mp4` (also `.webm`, `.gif`).
 
 ## Render
 
@@ -28,9 +28,9 @@ The script:
    `window.renderAt(t)` to set deterministic state and screenshots the
    1920×1080 viewport into `frames/`.
 4. Encodes the frame sequence to
-   - `dist/parakey-demo.mp4`  (H.264, yuv420p, CRF 18, +faststart)
-   - `dist/parakey-demo.webm` (VP9, CRF 32)
-   - `dist/parakey-demo.gif`  (1080 px wide, 20 fps, palette-quantised)
+   - `dist/presspeech-demo.mp4`  (H.264, yuv420p, CRF 18, +faststart)
+   - `dist/presspeech-demo.webm` (VP9, CRF 32)
+   - `dist/presspeech-demo.gif`  (1080 px wide, 20 fps, palette-quantised)
 
 Total wall-time on an M-series Mac: ≈ 1 minute.
 
@@ -84,9 +84,9 @@ console.
 
 ## Output paths
 
-- `marketing/demo/dist/parakey-demo.mp4` — for Reddit and most social
-- `marketing/demo/dist/parakey-demo.webm` — for `<video>` embeds
-- `marketing/demo/dist/parakey-demo.gif`  — for places that disallow video
+- `marketing/demo/dist/presspeech-demo.mp4` — for Reddit and most social
+- `marketing/demo/dist/presspeech-demo.webm` — for `<video>` embeds
+- `marketing/demo/dist/presspeech-demo.gif`  — for places that disallow video
 
 The docs site embeds copies as `docs/demo-video.{mp4,webm}` plus
 `docs/demo-poster.jpg` for the mobile breakpoint — re-copy them after

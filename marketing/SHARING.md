@@ -1,6 +1,6 @@
 # Sharing kit
 
-The distribution stance for Parakey: **one Show HN post, written as
+The distribution stance for Presspeech: **one Show HN post, written as
 engineering notes, posted once — then answer-driven replies only.**
 No recurring promotion, no broadcast posts. The information "a good
 free tool exists" should travel in postures that aren't marketing:
@@ -15,19 +15,19 @@ posting so claims match the current release.
 
 | Asset | Where | Use |
 |---|---|---|
-| Demo video (MP4) | `marketing/demo/dist/parakey-demo.mp4` | most platforms |
-| Demo video (WebM) | `marketing/demo/dist/parakey-demo.webm` | web `<video>` embeds |
-| Demo GIF | `marketing/demo/dist/parakey-demo.gif` | platforms without video upload |
+| Demo video (MP4) | `marketing/demo/dist/presspeech-demo.mp4` | most platforms |
+| Demo video (WebM) | `marketing/demo/dist/presspeech-demo.webm` | web `<video>` embeds |
+| Demo GIF | `marketing/demo/dist/presspeech-demo.gif` | platforms without video upload |
 | Animated workflow SVG | `icon/demo.svg` (embedded in README + site) | GitHub-native surfaces |
 | Social card (1280×640) | `icon/social-preview.png` | link previews |
 
 Links:
 
-- Repo: <https://github.com/rcourtman/parakey>
-- Site: <https://rcourtman.github.io/parakey/>
-- Benchmarks: <https://rcourtman.github.io/parakey/benchmarks.html>
-- Download: <https://github.com/rcourtman/parakey/releases/latest/download/Parakey.zip>
-- Homebrew: `brew install --cask rcourtman/parakey/parakey`
+- Repo: <https://github.com/rcourtman/presspeech>
+- Site: <https://rcourtman.github.io/presspeech/>
+- Benchmarks: <https://rcourtman.github.io/presspeech/benchmarks.html>
+- Download: <https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip>
+- Homebrew: `brew install --cask rcourtman/parakey/presspeech`
 
 ## Claims and where they're backed
 
@@ -40,20 +40,28 @@ Links:
 
 ## Show HN (post once)
 
-> **Show HN: Parakey – Local push-to-talk dictation for Apple Silicon (~100 ms)**
+> **Show HN: Presspeech – a 2.5 MB local dictation app for Apple Silicon**
 
-Parakey is a macOS menu-bar app: hold Right Option, speak, release,
+Presspeech is a macOS menu-bar app: hold Right Option, speak, release,
 and the transcript pastes at the cursor about 100 ms later.
 
+This is the 0.3 release and a relaunch under a new name. It was
+previously called Parakey, which turned out to be a poor discovery
+choice because an established access-control company already owned the
+search results. The app keeps its old bundle identity underneath, so
+existing macOS permissions and preferences survive the rename.
+
 I built it because I wanted dictation that feels like a keyboard
-shortcut rather than a mode you enter and leave.
+shortcut rather than a mode you enter and leave. It is free and MIT
+licensed, with no account, subscription, telemetry, or cloud
+transcription.
 
 How it works: audio is captured in memory and decoded once on key
 release with the local Parakeet TDT v3 CoreML model through FluidAudio on the
 Apple Neural Engine, then pasted at the cursor. The single-pass
 decode — rather than streaming — is where the latency comes from.
 Benchmarks and methodology:
-https://rcourtman.github.io/parakey/benchmarks.html
+https://rcourtman.github.io/presspeech/benchmarks.html
 
 Numbers: ~100 ms key-release-to-paste; 2.5 MB notarised app plus about
 500-600 MB for the local speech model; ~80 MB RAM idle; 0% CPU between
@@ -61,16 +69,58 @@ dictations. Transcription makes no network calls, and the full
 network surface (model download, optional update check) is
 documented on the privacy page.
 
+New in 0.3: deterministic voice shortcuts (a spoken phrase maps to
+exact reusable text), opt-in spoken formatting commands such as “new
+paragraph” and “bullet point”, and a focused Try Dictation scratchpad
+for first-run setup. None of these features uses a rewriting model.
+
 Limitations: Apple Silicon and macOS 14+ only; 18
 Latin/Cyrillic-script languages via Parakeet v3; no streaming mode.
 
 MIT licensed. Download:
-https://github.com/rcourtman/parakey/releases/latest/download/Parakey.zip
+https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 
 Or install with Homebrew:
-`brew install --cask rcourtman/parakey/parakey`
+`brew install --cask rcourtman/parakey/presspeech`
 
-**Posting notes.** Post from a personal account (pseudonymous is
+## Reddit / r/macapps (prepare, then confirm before posting)
+
+> **[Free & open source] Presspeech – fast, fully local push-to-talk dictation for Apple Silicon**
+
+I’ve released Presspeech 0.3, a small native Mac menu-bar app for one
+workflow: hold a key, speak, release, and the text appears wherever your
+cursor already is.
+
+- speech recognition runs on-device with Parakeet TDT v3 on the Apple
+  Neural Engine
+- about 100 ms from key release to pasted text on the documented M4
+  benchmark clips
+- no account, subscription, telemetry, cloud transcription, or saved
+  audio
+- 2.5 MB notarised app; the local speech model is about 500–600 MB on
+  first launch
+- voice shortcuts for exact reusable text, plus optional deterministic
+  “new paragraph”, “bullet point”, punctuation, quote, and parenthesis
+  commands
+- free, MIT licensed, Apple Silicon + macOS 14+
+
+The project used to be called Parakey. I renamed it after realising an
+unrelated access-control company dominated that name in search. Existing
+permissions and settings carry over, and Homebrew migrates the old cask
+token automatically.
+
+Demo and download:
+https://rcourtman.github.io/presspeech/
+
+Source:
+https://github.com/rcourtman/presspeech
+
+I’d especially value feedback on the first-run flow and which exact,
+non-rewriting voice commands would be useful next.
+
+### Show HN posting notes
+
+Post from a personal account (pseudonymous is
 fine; being the author is required for Show HN). Weekday mornings US
 Eastern get the most eyes. Stay in the thread for the first few
 hours and answer technical questions plainly. Expectation-setting:
@@ -109,42 +159,42 @@ question:
 
 General:
 
-> I maintain a free MIT-licensed one: Parakey
-> (https://github.com/rcourtman/parakey). Hold a key, speak, release —
+> I maintain a free MIT-licensed one: Presspeech
+> (https://github.com/rcourtman/presspeech). Hold a key, speak, release —
 > pastes at the cursor in ~100 ms, fully on-device (Parakeet v3 on the
 > Apple Neural Engine). Apple Silicon + macOS 14+ only.
 
 Local-AI angle (r/LocalLLaMA and similar):
 
-> If you want local ASR as a daily input method: Parakey runs Parakeet
+> If you want local ASR as a daily input method: Presspeech runs Parakeet
 > TDT v3 on the ANE via CoreML — no API keys, ~100 ms from key release
 > to pasted text. Benchmarks + methodology:
-> https://rcourtman.github.io/parakey/benchmarks.html. I'm the
+> https://rcourtman.github.io/presspeech/benchmarks.html. I'm the
 > maintainer; MIT licensed.
 
 Privacy angle:
 
-> Parakey transcribes entirely on-device and documents its full
+> Presspeech transcribes entirely on-device and documents its full
 > network surface (model download + optional update check, nothing
-> else): https://rcourtman.github.io/parakey/privacy.html. I maintain
+> else): https://rcourtman.github.io/presspeech/privacy.html. I maintain
 > it; it's free and MIT.
 
 Comparison ("how is this different from Superwhisper / Wispr Flow /
 VoiceInk?"):
 
-> Mostly scope. Parakey only does push-to-talk dictation — verbatim,
+> Mostly scope. Presspeech only does push-to-talk dictation — verbatim,
 > on-device, free — where those are fuller workspaces with AI
 > formatting and more. Side-by-side facts (price, where audio is
 > processed, measured latency, footprint) are here, with every
 > competitor claim sourced and dated:
-> https://rcourtman.github.io/parakey/compare/. I maintain Parakey,
+> https://rcourtman.github.io/presspeech/compare/. I maintain Presspeech,
 > so read it with that in mind.
 
 ## One-liner boilerplate
 
 For directories and "what is this" replies:
 
-> Parakey is a free, MIT-licensed menu-bar app for Apple Silicon Macs:
+> Presspeech is a free, MIT-licensed menu-bar app for Apple Silicon Macs:
 > hold a key, speak, release, and the transcript pastes at the cursor
 > in about 100 ms — fully on-device, no cloud, no telemetry.
 

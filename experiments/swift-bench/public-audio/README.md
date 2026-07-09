@@ -35,7 +35,7 @@ CC BY 4.0. That makes it useful as a reproducible public benchmark, but it
 does not replace private push-to-talk dictation clips. Keep both:
 
 - public fixtures for reproducible production v3 WER checks and candidate model comparisons
-- private real-dictation fixtures for Parakey's actual short, messy workflow
+- private real-dictation fixtures for Presspeech's actual short, messy workflow
 
 Generated fixture sets contain:
 

@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Parakey Privacy - Local Dictation, No Telemetry</title>
-    <meta name="description" content="Parakey transcribes locally on the Mac, stores no transcript history on disk, ships no telemetry, and has a documented three-call network surface.">
-    <link rel="canonical" href="https://rcourtman.github.io/parakey/privacy.html">
+    <title>Presspeech Privacy - Local Dictation, No Telemetry</title>
+    <meta name="description" content="Presspeech transcribes locally on the Mac, stores no transcript history on disk, ships no telemetry, and has a documented three-call network surface.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/privacy.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
-    <meta property="og:title" content="Parakey Privacy - Local Dictation, No Telemetry">
-    <meta property="og:description" content="Parakey transcribes locally on the Mac, stores no transcript history on disk, ships no telemetry, and has a documented three-call network surface.">
-    <meta property="og:url" content="https://rcourtman.github.io/parakey/privacy.html">
-    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/parakey/main/icon/social-preview.png">
+    <meta property="og:title" content="Presspeech Privacy - Local Dictation, No Telemetry">
+    <meta property="og:description" content="Presspeech transcribes locally on the Mac, stores no transcript history on disk, ships no telemetry, and has a documented three-call network surface.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/privacy.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="styles.css">
@@ -19,14 +19,14 @@
   <body>
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
-        <a class="brand" href="./"><span class="brand-mark">P</span><span>Parakey</span></a>
+        <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
           <a href="install.html">Install</a>
           <a href="privacy.html">Privacy</a>
           <a href="benchmarks.html">Benchmarks</a>
           <a href="faq.html">FAQ</a>
           <a href="compare/">Compare</a>
-          <a href="https://github.com/rcourtman/parakey">GitHub</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
         </div>
       </nav>
     </header>
@@ -35,7 +35,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Privacy</span>
         <h1>Privacy model</h1>
-        <p>Parakey is local-first in the strict sense: no analytics SDK, no accounts, no crash reporter, no transcript sync, and no cloud transcription endpoint.</p>
+        <p>Presspeech is local-first in the strict sense: no analytics SDK, no accounts, no crash reporter, no transcript sync, and no cloud transcription endpoint.</p>
       </div>
 
       <section>
@@ -49,11 +49,11 @@
             </article>
             <article class="card">
               <h3>Paste at cursor</h3>
-              <p>The finished text normally goes through the general pasteboard and <span class="kbd">⌘ V</span>. If that setup fails, Parakey falls back to direct Unicode key events.</p>
+              <p>The finished text normally goes through the general pasteboard and <span class="kbd">⌘ V</span>. If that setup fails, Presspeech falls back to direct Unicode key events.</p>
             </article>
             <article class="card">
               <h3>Clipboard persistence</h3>
-              <p>Parakey deliberately does not restore your previous clipboard contents — racing to round-trip them fights with clipboard managers. The trade-off: the last dictation stays on the system pasteboard, visible to clipboard managers and Universal Clipboard, until you copy something else.</p>
+              <p>Presspeech deliberately does not restore your previous clipboard contents — racing to round-trip them fights with clipboard managers. The trade-off: the last dictation stays on the system pasteboard, visible to clipboard managers and Universal Clipboard, until you copy something else.</p>
             </article>
             <article class="card">
               <h3>No transcript logs</h3>
@@ -67,7 +67,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Three calls, fully listed</span>
           <h2>Network calls</h2>
-          <p>This is the complete network surface of Parakey itself and its install/update path.</p>
+          <p>This is the complete network surface of Presspeech itself and its install/update path.</p>
           <div class="table-scroll">
             <table>
               <thead>
@@ -87,14 +87,14 @@
                 </tr>
                 <tr>
                   <td><strong>Periodic update check</strong></td>
-                  <td><code>api.github.com/repos/rcourtman/parakey/releases/latest</code></td>
-                  <td>Release lookup every six hours, plus one check shortly after launch; it only notifies. The GET carries a fixed User-Agent header, exactly <code>parakey-update-check</code> — no version, device, or user identifiers.</td>
+                  <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code></td>
+                  <td>Release lookup every six hours, plus one check shortly after launch; it only notifies. The GET carries a fixed User-Agent header, exactly <code>presspeech-update-check</code> — no version, device, or user identifiers.</td>
                   <td>Disable update notifications from Settings.</td>
                 </tr>
                 <tr>
                   <td><strong>User-triggered install/update</strong></td>
-                  <td><code>github.com/rcourtman/parakey/releases/download/...</code>, <code>formulae.brew.sh</code>, <code>github.com/rcourtman/homebrew-parakey</code>, Homebrew's own update endpoints (github.com / api.github.com)</td>
-                  <td>When the user downloads Parakey directly, the browser fetches the signed GitHub release archive. When the user chooses to install or update through Homebrew, Homebrew refreshes its metadata and the tap, then downloads the same signed release archive.</td>
+                  <td><code>github.com/rcourtman/presspeech/releases/download/...</code>, <code>formulae.brew.sh</code>, <code>github.com/rcourtman/homebrew-parakey</code>, Homebrew's own update endpoints (github.com / api.github.com)</td>
+                  <td>When the user downloads Presspeech directly, the browser fetches the signed GitHub release archive. When the user chooses to install or update through Homebrew, Homebrew refreshes its metadata and the tap, then downloads the same signed release archive.</td>
                   <td>Only runs when the user installs or updates.</td>
                 </tr>
               </tbody>
@@ -110,7 +110,7 @@
           <h2>Permissions and entitlements</h2>
           <p>The notarised app uses two hardened-runtime entitlements: audio input and microphone. macOS also requires user-granted Accessibility and Input Monitoring permissions for the hotkey and paste workflow.</p>
           <div class="note">
-            <p>Parakey does not add JIT, unsigned executable memory, library-validation, network-client, contacts, calendar, location, camera, or file-provider entitlements.</p>
+            <p>Presspeech does not add JIT, unsigned executable memory, library-validation, network-client, contacts, calendar, location, camera, or file-provider entitlements.</p>
           </div>
         </div>
       </section>
@@ -118,8 +118,8 @@
 
     <footer class="site-footer">
       <div class="wrap">
-        <span>Privacy docs for Parakey.</span>
-        <span><a href="./">Home</a> · <a href="install.html">Install</a> · <a href="https://github.com/rcourtman/parakey/blob/main/AGENTS.md">Project invariants</a></span>
+        <span>Privacy docs for Presspeech.</span>
+        <span><a href="./">Home</a> · <a href="install.html">Install</a> · <a href="https://github.com/rcourtman/presspeech/blob/main/AGENTS.md">Project invariants</a></span>
       </div>
     </footer>
   </body>

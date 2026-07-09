@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ship-swift.sh — full release pipeline for native Swift Parakey.
+# ship-swift.sh — full release pipeline for native Swift Presspeech.
 #
 # Designed for unattended agent operation: there's nothing to remember
 # between invocations. Reads the current version out of
@@ -24,7 +24,7 @@
 #   - gh CLI authenticated for github.com
 #   - brew CLI installed for post-release Cask verification
 #   - sibling Homebrew tap at ../homebrew-parakey (override with
-#     PARAKEY_HOMEBREW_TAP=/path/to/tap)
+#     PRESSPEECH_HOMEBREW_TAP=/path/to/tap)
 #
 # Recovery: if anything after the build fails, swift/Info.plist and
 # synced docs metadata may be locally mutated. Reset with `git checkout
@@ -39,12 +39,14 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SWIFT_DIR="$PROJECT_DIR/swift"
 INFO_PLIST="$SWIFT_DIR/Info.plist"
 ENTITLEMENTS="$PROJECT_DIR/entitlements.plist"
-APP="$SWIFT_DIR/dist/Parakey.app"
-ZIP_OUT="$SWIFT_DIR/dist/Parakey.zip"
+APP="$SWIFT_DIR/dist/Presspeech.app"
+ZIP_OUT="$SWIFT_DIR/dist/Presspeech.zip"
 NOTARY_PROFILE="parakey-notary"
-CASK_TAP="${PARAKEY_HOMEBREW_TAP:-$PROJECT_DIR/../homebrew-parakey}"
-CASK_FILE="$CASK_TAP/Casks/parakey.rb"
-CASK_TOKEN="rcourtman/parakey/parakey"
+CASK_TAP="${PRESSPEECH_HOMEBREW_TAP:-$PROJECT_DIR/../homebrew-parakey}"
+CASK_FILE="$CASK_TAP/Casks/presspeech.rb"
+LEGACY_CASK_FILE="$CASK_TAP/Casks/parakey.rb"
+CASK_RENAMES_FILE="$CASK_TAP/cask_renames.json"
+CASK_TOKEN="rcourtman/parakey/presspeech"
 # Directory-level superset of SYNCED_PATHS in scripts/sync-docs.py
 # (every synced file lives at README.md or under docs/). Deliberately
 # coarse: a path added to SYNCED_PATHS alone is still committed and
@@ -284,7 +286,8 @@ PY
 # Shared by the full release flow and --cask-only. Sets $tap_branch.
 cask_preflight() {
     command -v brew >/dev/null || die "'brew' CLI not installed (needed to verify the published Cask)"
-    [[ -f "$CASK_FILE" ]] || die "cask not found at $CASK_FILE — set PARAKEY_HOMEBREW_TAP or use --no-cask"
+    [[ -f "$CASK_FILE" || -f "$LEGACY_CASK_FILE" ]] \
+        || die "cask not found at $CASK_FILE or $LEGACY_CASK_FILE — set PRESSPEECH_HOMEBREW_TAP or use --no-cask"
     tap_branch="$(git -C "$CASK_TAP" rev-parse --abbrev-ref HEAD)"
     git -C "$CASK_TAP" update-index --refresh >/dev/null 2>&1 || true
     if ! git -C "$CASK_TAP" diff-index --quiet HEAD --; then
@@ -295,6 +298,38 @@ cask_preflight() {
     fi
 }
 
+prepare_cask_rebrand_migration() {
+    [[ -f "$CASK_FILE" ]] && return 0
+    [[ -f "$LEGACY_CASK_FILE" ]] || die "legacy cask missing at $LEGACY_CASK_FILE"
+
+    say "Migrating Homebrew Cask token parakey → presspeech"
+    mv "$LEGACY_CASK_FILE" "$CASK_FILE"
+    /usr/bin/python3 - "$CASK_FILE" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text()
+replacements = {
+    'cask "parakey" do': 'cask "presspeech" do',
+    'github.com/rcourtman/parakey/releases/download/v#{version}/Parakey.zip':
+        'github.com/rcourtman/presspeech/releases/download/v#{version}/Presspeech.zip',
+    'name "Parakey"': 'name "Presspeech"',
+    'homepage "https://github.com/rcourtman/parakey"':
+        'homepage "https://github.com/rcourtman/presspeech"',
+    'app "Parakey.app"': 'app "Presspeech.app"',
+    '"~/Library/Logs/Parakey.log",':
+        '"~/Library/Logs/Parakey.log",\n    "~/Library/Logs/Presspeech.log",',
+}
+for old, new in replacements.items():
+    if old not in source:
+        raise SystemExit(f"legacy cask migration could not find: {old}")
+    source = source.replace(old, new, 1)
+path.write_text(source)
+PY
+    printf '{\n  "parakey": "presspeech"\n}\n' >"$CASK_RENAMES_FILE"
+}
+
 # Cask update + verification against an already-published GitHub release.
 # Used by the tail of the full release flow and by --cask-only resume.
 # Requires cask_preflight to have set $tap_branch.
@@ -303,13 +338,14 @@ run_cask_stage() {
     local zip_sha="$2"
     local resume_hint="fix the issue, then resume with: ./ship-swift.sh --cask-only $version"
 
+    prepare_cask_rebrand_migration
     say "Updating Homebrew Cask at $CASK_FILE"
     rewrite_cask_file "$CASK_FILE" "$version" "$zip_sha"
     grep -q "version \"$version\"" "$CASK_FILE" || die "cask rewrite failed (version) -- $resume_hint"
     grep -q "sha256 \"$zip_sha\""  "$CASK_FILE" || die "cask rewrite failed (sha256) -- $resume_hint"
 
-    git -C "$CASK_TAP" add Casks/parakey.rb
-    local cask_commit_message="parakey $version"
+    git -C "$CASK_TAP" add -A Casks/parakey.rb Casks/presspeech.rb cask_renames.json
+    local cask_commit_message="presspeech $version"
     check_no_attribution_text "cask commit message" "$cask_commit_message"
     if git -C "$CASK_TAP" diff --cached --quiet; then
         # Resume case: a previous run already committed this rewrite.
@@ -406,12 +442,12 @@ run_release_script_self_test() {
         "failing" "failed check run should report failing"
 
     local cask_file
-    cask_file="$tmpdir/parakey.rb"
+    cask_file="$tmpdir/presspeech.rb"
     local old_sha new_sha
     old_sha="$(printf 'a%.0s' {1..64})"
     new_sha="$(printf 'b%.0s' {1..64})"
     cat >"$cask_file" <<EOF
-cask "parakey" do
+cask "presspeech" do
   version "1.2.3"
   sha256 "$old_sha"
 end
@@ -423,7 +459,7 @@ EOF
         || die "self-test cask rewrite missed sha256"
 
     cat >"$cask_file" <<EOF
-cask "parakey" do
+cask "presspeech" do
   version "1.2.3"
   version "1.2.4"
   sha256 "$old_sha"
@@ -433,6 +469,43 @@ EOF
         rewrite_cask_file "$cask_file" "4.5.6" "$new_sha"
     assert_self_test_fails "accepted malformed cask sha256" \
         rewrite_cask_file "$cask_file" "4.5.6" "not-a-sha"
+
+    (
+        CASK_TAP="$tmpdir/tap"
+        CASK_FILE="$CASK_TAP/Casks/presspeech.rb"
+        LEGACY_CASK_FILE="$CASK_TAP/Casks/parakey.rb"
+        CASK_RENAMES_FILE="$CASK_TAP/cask_renames.json"
+        mkdir -p "$CASK_TAP/Casks"
+        cat >"$LEGACY_CASK_FILE" <<'EOF'
+cask "parakey" do
+  version "0.2.20"
+  sha256 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  url "https://github.com/rcourtman/parakey/releases/download/v#{version}/Parakey.zip"
+  name "Parakey"
+  homepage "https://github.com/rcourtman/parakey"
+  app "Parakey.app"
+  zap trash: [
+    "~/Library/Logs/Parakey.log",
+  ]
+end
+EOF
+        prepare_cask_rebrand_migration
+        [[ ! -e "$LEGACY_CASK_FILE" ]] || die "self-test cask migration left the legacy file behind"
+        grep -qx 'cask "presspeech" do' "$CASK_FILE" \
+            || die "self-test cask migration missed the token"
+        grep -q 'Presspeech.zip' "$CASK_FILE" \
+            || die "self-test cask migration missed the release asset"
+        grep -qx '  app "Presspeech.app"' "$CASK_FILE" \
+            || die "self-test cask migration missed the app artifact"
+        /usr/bin/python3 - "$CASK_RENAMES_FILE" <<'PY'
+import json
+import sys
+with open(sys.argv[1]) as handle:
+    value = json.load(handle)
+if value != {"parakey": "presspeech"}:
+    raise SystemExit(f"unexpected cask rename mapping: {value!r}")
+PY
+    )
 
     rm -rf "$tmpdir"
     say "Release script self-test passed"
@@ -455,18 +528,18 @@ if [[ "$CASK_ONLY" -eq 1 ]]; then
     cask_preflight
 
     say "Validating published release v$CASK_ONLY_VERSION"
-    release_assets="$(gh release view "v$CASK_ONLY_VERSION" --repo rcourtman/parakey \
+    release_assets="$(gh release view "v$CASK_ONLY_VERSION" --repo rcourtman/presspeech \
         --json assets --jq '.assets[].name')" \
         || die "release v$CASK_ONLY_VERSION not found on GitHub -- --cask-only resumes an already-published release"
-    grep -qx 'Parakey.zip' <<<"$release_assets" \
-        || die "release v$CASK_ONLY_VERSION has no Parakey.zip asset -- upload it (gh release upload) before resuming the Cask"
+    grep -qx 'Presspeech.zip' <<<"$release_assets" \
+        || die "release v$CASK_ONLY_VERSION has no Presspeech.zip asset -- upload it (gh release upload) before resuming the Cask"
 
-    say "Downloading published Parakey.zip to compute sha256"
+    say "Downloading published Presspeech.zip to compute sha256"
     cask_only_tmp="$(mktemp -d)"
-    gh release download "v$CASK_ONLY_VERSION" --repo rcourtman/parakey \
-        --pattern Parakey.zip --dir "$cask_only_tmp" \
-        || die "could not download Parakey.zip from release v$CASK_ONLY_VERSION"
-    cask_only_sha="$(shasum -a 256 "$cask_only_tmp/Parakey.zip" | awk '{print $1}')"
+    gh release download "v$CASK_ONLY_VERSION" --repo rcourtman/presspeech \
+        --pattern Presspeech.zip --dir "$cask_only_tmp" \
+        || die "could not download Presspeech.zip from release v$CASK_ONLY_VERSION"
+    cask_only_sha="$(shasum -a 256 "$cask_only_tmp/Presspeech.zip" | awk '{print $1}')"
     rm -rf "$cask_only_tmp"
 
     run_cask_stage "$CASK_ONLY_VERSION" "$cask_only_sha"
@@ -547,7 +620,7 @@ if [[ "$SKIP_QA" -eq 1 ]]; then
 else
     if [[ "$DRY_RUN" -eq 0 ]]; then
         say "Checking CI status for HEAD ($head_sha)"
-        ci_json="$(gh api "repos/rcourtman/parakey/commits/$head_sha/check-runs?per_page=100")" \
+        ci_json="$(gh api "repos/rcourtman/presspeech/commits/$head_sha/check-runs?per_page=100")" \
             || die "could not query CI check-runs for $head_sha"
         ci_state="$(check_runs_overall_state "$ci_json")"
         case "$ci_state" in
@@ -560,7 +633,7 @@ else
     fi
 
     say "Running debug self-test suite (same as CI)"
-    ( cd "$SWIFT_DIR" && swift run -c debug Parakey --self-test all ) \
+    ( cd "$SWIFT_DIR" && swift run -c debug Presspeech --self-test all ) \
         || die "swift self-test suite failed -- fix before shipping, or --skip-qa in an emergency"
 
     say "Running packaged-app smoke test"
@@ -573,7 +646,7 @@ say "Building (release)"
 ( cd "$SWIFT_DIR" && swift build -c release 2>&1 | tail -5 ) \
     || die "swift build failed"
 
-BIN="$SWIFT_DIR/.build/release/Parakey"
+BIN="$SWIFT_DIR/.build/release/Presspeech"
 [[ -f "$BIN" ]] || die "release build produced no $BIN"
 
 # ---- 4. Bump Info.plist (before wrapping, so the .app carries new version)
@@ -590,18 +663,18 @@ plutil -lint "$INFO_PLIST" >/dev/null || {
 say "Wrapping in $APP"
 rm -rf "$APP" "$ZIP_OUT" "$SWIFT_DIR/dist"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Parakey"
+cp "$BIN" "$APP/Contents/MacOS/Presspeech"
 cp "$INFO_PLIST" "$APP/Contents/Info.plist"
-cp "$SWIFT_DIR/Resources/parakey-menubar.png"    "$APP/Contents/Resources/"
-cp "$SWIFT_DIR/Resources/parakey-menubar@2x.png" "$APP/Contents/Resources/"
+cp "$SWIFT_DIR/Resources/presspeech-menubar.png"    "$APP/Contents/Resources/"
+cp "$SWIFT_DIR/Resources/presspeech-menubar@2x.png" "$APP/Contents/Resources/"
 # Hard requirement: scripts/smoke-packaged-app.sh fails CI on a missing
 # icon, so the release packaging must hold the same contract.
-[[ -f "$PROJECT_DIR/icon/Parakey.icns" ]] \
-    || die "icon/Parakey.icns missing -- the packaged app must ship with an icon"
-cp "$PROJECT_DIR/icon/Parakey.icns" "$APP/Contents/Resources/Parakey.icns"
+[[ -f "$PROJECT_DIR/icon/Presspeech.icns" ]] \
+    || die "icon/Presspeech.icns missing -- the packaged app must ship with an icon"
+cp "$PROJECT_DIR/icon/Presspeech.icns" "$APP/Contents/Resources/Presspeech.icns"
 
 # ---- 6. Codesign ----------------------------------------------------------
-CODESIGN_IDENTITY="${PARAKEY_CODESIGN_IDENTITY:-}"
+CODESIGN_IDENTITY="${PRESSPEECH_CODESIGN_IDENTITY:-}"
 if [[ -n "$CODESIGN_IDENTITY" ]]; then
     CERT="$CODESIGN_IDENTITY"
 else
@@ -642,7 +715,7 @@ say "All required entitlements present"
 if [[ "$DRY_RUN" -eq 0 ]]; then
     if xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
         say "Notarising (typically 1-3 minutes)"
-        NOTARIZE_ZIP="$(mktemp -d)/parakey-notarize.zip"
+        NOTARIZE_ZIP="$(mktemp -d)/presspeech-notarize.zip"
         /usr/bin/ditto -c -k --keepParent "$APP" "$NOTARIZE_ZIP"
         xcrun notarytool submit "$NOTARIZE_ZIP" \
             --keychain-profile "$NOTARY_PROFILE" --wait
@@ -658,7 +731,7 @@ else
 fi
 
 # ---- 8. Zip ---------------------------------------------------------------
-say "Packaging Parakey.zip"
+say "Packaging Presspeech.zip"
 /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP_OUT"
 ZIP_SHA="$(shasum -a 256 "$ZIP_OUT" | awk '{print $1}')"
 ZIP_SIZE="$(du -h "$ZIP_OUT" | cut -f1)"
@@ -669,7 +742,7 @@ say "Syncing release docs metadata"
     || die "docs metadata sync failed"
 
 # Tidy up the unzipped .app so Spotlight / Launch Services don't
-# accidentally favour it over /Applications/Parakey.app.
+# accidentally favour it over /Applications/Presspeech.app.
 rm -rf "$APP"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -727,18 +800,18 @@ say "Creating GitHub release v$new_version"
 # At this point main and the tag are already on origin; only the GitHub
 # release itself is missing. `gh release create` on an existing pushed
 # tag attaches to that tag, so re-running it manually is safe.
-release_failure_msg="gh release create failed -- commit and tag v$new_version ARE pushed to origin; no GitHub release exists yet. Re-run: gh release create v$new_version $ZIP_OUT --repo rcourtman/parakey --title $release_title --notes ... (it will reuse the pushed tag), then finish with ./ship-swift.sh --cask-only $new_version"
+release_failure_msg="gh release create failed -- commit and tag v$new_version ARE pushed to origin; no GitHub release exists yet. Re-run: gh release create v$new_version $ZIP_OUT --repo rcourtman/presspeech --title $release_title --notes ... (it will reuse the pushed tag), then finish with ./ship-swift.sh --cask-only $new_version"
 
 if [[ "$USE_NOTES_FILE" -eq 1 ]]; then
     say "Using hand-written release notes from $NOTES_FILE"
     gh release create "v$new_version" "$ZIP_OUT" \
-        --repo rcourtman/parakey \
+        --repo rcourtman/presspeech \
         --title "$release_title" \
         --notes-file "$NOTES_FILE" \
         || die "$release_failure_msg"
 else
     gh release create "v$new_version" "$ZIP_OUT" \
-        --repo rcourtman/parakey \
+        --repo rcourtman/presspeech \
         --title "$release_title" \
         --notes "$notes" \
         || die "$release_failure_msg"
@@ -754,6 +827,6 @@ fi
 # ---- 12. Done -------------------------------------------------------------
 say "Shipped v$new_version"
 echo
-echo "  GitHub:   https://github.com/rcourtman/parakey/releases/tag/v$new_version"
+echo "  GitHub:   https://github.com/rcourtman/presspeech/releases/tag/v$new_version"
 echo "  Cask:     brew update && brew upgrade --cask $CASK_TOKEN"
 echo

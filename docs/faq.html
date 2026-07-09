@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Parakey FAQ - Local Mac Dictation Questions</title>
-    <meta name="description" content="Answers about Parakey requirements, privacy, install path, model download, hotkeys, permissions, updates, logs, and limitations.">
-    <link rel="canonical" href="https://rcourtman.github.io/parakey/faq.html">
+    <title>Presspeech FAQ - Local Mac Dictation Questions</title>
+    <meta name="description" content="Answers about Presspeech requirements, privacy, install path, model download, hotkeys, permissions, updates, logs, and limitations.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/faq.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
-    <meta property="og:title" content="Parakey FAQ - Local Mac Dictation Questions">
-    <meta property="og:description" content="Answers about Parakey requirements, privacy, install path, model download, hotkeys, permissions, updates, logs, and limitations.">
-    <meta property="og:url" content="https://rcourtman.github.io/parakey/faq.html">
-    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/parakey/main/icon/social-preview.png">
+    <meta property="og:title" content="Presspeech FAQ - Local Mac Dictation Questions">
+    <meta property="og:description" content="Answers about Presspeech requirements, privacy, install path, model download, hotkeys, permissions, updates, logs, and limitations.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/faq.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="styles.css">
@@ -19,14 +19,14 @@
   <body>
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
-        <a class="brand" href="./"><span class="brand-mark">P</span><span>Parakey</span></a>
+        <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
           <a href="install.html">Install</a>
           <a href="privacy.html">Privacy</a>
           <a href="benchmarks.html">Benchmarks</a>
           <a href="faq.html">FAQ</a>
           <a href="compare/">Compare</a>
-          <a href="https://github.com/rcourtman/parakey">GitHub</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
         </div>
       </nav>
     </header>
@@ -35,15 +35,19 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">FAQ</span>
         <h1>Frequently asked questions</h1>
-        <p>Short answers for people and retrieval systems evaluating Parakey as a local Mac dictation app.</p>
+        <p>Short answers for people and retrieval systems evaluating Presspeech as a local Mac dictation app.</p>
       </div>
 
       <section>
         <div class="wrap">
           <div class="grid two">
             <article class="card">
-              <h3>What is Parakey?</h3>
+              <h3>What is Presspeech?</h3>
               <p>A free MIT-licensed menu-bar app for push-to-talk dictation on Apple Silicon Macs. Hold a hotkey, speak, release, and text is pasted at the cursor.</p>
+            </article>
+            <article class="card">
+              <h3>Was Presspeech previously called Parakey?</h3>
+              <p>Yes. The public name changed in version 0.3.0 to avoid a search collision with an unrelated access-control product. The original bundle identifier remains in place, so existing macOS permissions, preferences, and local dictionary rules carry across.</p>
             </article>
             <article class="card">
               <h3>Does audio leave the Mac?</h3>
@@ -51,11 +55,11 @@
             </article>
             <article class="card">
               <h3>Does it support Intel Macs?</h3>
-              <p>No. Parakey requires Apple Silicon and macOS 14 or later.</p>
+              <p>No. Presspeech requires Apple Silicon and macOS 14 or later.</p>
             </article>
             <article class="card">
               <h3>How do I install it?</h3>
-              <p>Download the notarised <a href="https://github.com/rcourtman/parakey/releases/latest/download/Parakey.zip">Parakey.zip</a> from GitHub Releases, or use <code>brew install --cask rcourtman/parakey/parakey</code> if you prefer Homebrew updates.</p>
+              <p>Download the notarised <a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Presspeech.zip</a> from GitHub Releases, or use <code>brew install --cask rcourtman/parakey/presspeech</code> if you prefer Homebrew updates.</p>
             </article>
             <article class="card">
               <h3>What model does it use?</h3>
@@ -63,7 +67,7 @@
             </article>
             <article class="card">
               <h3>Is it a file transcription app?</h3>
-              <p>No. Parakey is focused on live push-to-talk dictation into the app you are already using.</p>
+              <p>No. Presspeech is focused on live push-to-talk dictation into the app you are already using.</p>
             </article>
             <article class="card">
               <h3>Does it keep a history?</h3>
@@ -75,11 +79,19 @@
             </article>
             <article class="card">
               <h3>How do updates work?</h3>
-              <p>Parakey can check GitHub every six hours for a newer release and notify you in the menu. Nothing is installed unless you choose Update Now.</p>
+              <p>Presspeech can check GitHub every six hours for a newer release and notify you in the menu. Nothing is installed unless you choose Update Now.</p>
             </article>
             <article class="card">
               <h3>Can I change the hotkey?</h3>
               <p>Yes. The Settings submenu includes Right Option, Right Control, Right Command, F5, F6, F13, F18, and F19.</p>
+            </article>
+            <article class="card">
+              <h3>Does it support voice shortcuts and formatting commands?</h3>
+              <p>Yes. Dictionary &amp; Shortcuts maps a spoken phrase to exact replacement text, and the optional spoken-formatting pass handles commands such as “new paragraph”, “bullet point”, “comma”, and “open quote”. Both are deterministic and run locally.</p>
+            </article>
+            <article class="card">
+              <h3>How do I test my first dictation?</h3>
+              <p>Finish Setup Checklist, then choose Support → Try Dictation. The private scratchpad keeps focus while you test the hotkey and see the pasted result.</p>
             </article>
             <article class="card">
               <h3>Why does first launch take time?</h3>
@@ -91,11 +103,11 @@
             </article>
             <article class="card">
               <h3>Which speech model should I use?</h3>
-              <p>Use the built-in Parakeet TDT v3 model. Parakey no longer exposes model switching unless a future model is proven better in benchmarks and real dictation tests.</p>
+              <p>Use the built-in Parakeet TDT v3 model. Presspeech no longer exposes model switching unless a future model is proven better in benchmarks and real dictation tests.</p>
             </article>
             <article class="card">
               <h3>How does it compare to other dictation apps?</h3>
-              <p>The <a href="compare/">compare section</a> has a side-by-side table covering Apple Dictation, Superwhisper, Wispr Flow, and VoiceInk — price, where audio is processed, measured latency, and footprint — plus per-tool pages. Short version: Parakey is the minimal free option, verbatim and fully on-device.</p>
+              <p>The <a href="compare/">compare section</a> has a side-by-side table covering Apple Dictation, Superwhisper, Wispr Flow, and VoiceInk — price, where audio is processed, measured latency, and footprint — plus per-tool pages. Short version: Presspeech is the minimal free option, verbatim and fully on-device.</p>
             </article>
           </div>
         </div>
@@ -104,7 +116,7 @@
 
     <footer class="site-footer">
       <div class="wrap">
-        <span>FAQ for Parakey.</span>
+        <span>FAQ for Presspeech.</span>
         <span><a href="./">Home</a> · <a href="install.html">Install</a> · <a href="privacy.html">Privacy</a></span>
       </div>
     </footer>

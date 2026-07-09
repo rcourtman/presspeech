@@ -2,7 +2,7 @@
 # generate-test-audio.sh — synthesise the same set of test clips both
 # backends will run against. Uses macOS's built-in `say` for the TTS
 # and `afconvert` to land at 16 kHz / mono / Float32 WAV, which is
-# what FluidAudio's AsrManager and parakey-mlx both want.
+# what FluidAudio's AsrManager and presspeech-mlx both want.
 #
 # Caveat: TTS audio is "too clean" — no real prosody, no breath, no
 # overlapping noise — so the accuracy column from this run is a
@@ -21,7 +21,7 @@ mkdir -p "$OUTDIR"
 
 declare -a CLIPS=(
     "short-clean|The quick brown fox jumps over the lazy dog."
-    "medium-clean|Parakey is a lightweight push-to-talk dictation app for Apple Silicon Macs."
+    "medium-clean|Presspeech is a lightweight push-to-talk dictation app for Apple Silicon Macs."
     "disfluent|So, um, I was going to send, like, maybe a quick note about the thing we discussed earlier, you know."
     "longer-technical|When you press the dictation key, the audio buffer is captured at sixteen kilohertz, run through Parakeet's encoder on the neural engine, and the resulting tokens are pasted at the cursor location."
 )
@@ -36,7 +36,7 @@ for entry in "${CLIPS[@]}"; do
     afconvert -f WAVE -d LEF32@16000 "$aiff" "$wav"
     rm -f "$aiff"
     # Sidecar ground-truth transcript: the TTS input IS the reference, so
-    # parakey-bench picks up "<stem>.txt" automatically for WER.
+    # presspeech-bench picks up "<stem>.txt" automatically for WER.
     printf '%s\n' "$text" > "$OUTDIR/$name.txt"
 done
 

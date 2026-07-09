@@ -1,8 +1,8 @@
-# Parakey — Swift source
+# Presspeech — Swift source
 
-This directory is the canonical Parakey app: a single-file Swift
+This directory is the canonical Presspeech app: a single-file Swift
 menu-bar dictation tool for Apple Silicon. The whole app lives in
-[`Sources/Parakey/main.swift`](Sources/Parakey/main.swift).
+[`Sources/Presspeech/main.swift`](Sources/Presspeech/main.swift).
 
 ## Quick build
 
@@ -10,12 +10,12 @@ menu-bar dictation tool for Apple Silicon. The whole app lives in
 ./dev-run.sh
 ```
 
-Builds `Sources/Parakey/main.swift`, wraps it in a signed
-`/tmp/Parakey-dev.app`, kills any prior instance, and relaunches.
+Builds `Sources/Presspeech/main.swift`, wraps it in a signed
+`/tmp/Presspeech-dev.app`, kills any prior instance, and relaunches.
 Requires Xcode 16+, macOS 14 (Sonoma) or later, and a Developer ID Application
 certificate in your keychain.
 
-Logs land in `~/Library/Logs/Parakey.log` — same path the production
+Logs land in `~/Library/Logs/Presspeech.log` — same path the production
 Cask install uses, so a single `tail -f` covers both.
 
 ## Layout
@@ -23,9 +23,9 @@ Cask install uses, so a single `tail -f` covers both.
 | Path | Purpose |
 |---|---|
 | `Package.swift` | SwiftPM manifest. Single dependency: [FluidAudio](https://github.com/FluidInference/FluidAudio). |
-| `Sources/Parakey/main.swift` | The entire app. Section-tagged with `// MARK: -`. |
+| `Sources/Presspeech/main.swift` | The entire app. Section-tagged with `// MARK: -`. |
 | `Info.plist` | Canonical Info.plist shared by `dev-run.sh` and `../ship-swift.sh`. |
-| `Resources/parakey-menubar.png` (+ `@2x`) | Template menu-bar icon. Lives outside the SwiftPM target on purpose — see `../AGENTS.md`. |
+| `Resources/presspeech-menubar.png` (+ `@2x`) | Template menu-bar icon. Lives outside the SwiftPM target on purpose — see `../AGENTS.md`. |
 | `dev-run.sh` | Local iteration loop (debug build, sign, relaunch). |
 
 ## More

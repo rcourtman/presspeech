@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-bench-py.py — Python-side companion to ``parakey-bench`` (Swift CLI).
+bench-py.py — Python-side companion to ``presspeech-bench`` (Swift CLI).
 
-Runs the *current* parakey-mlx pipeline against the same WAV files
-the Swift bench targets, so the three backends — parakey-mlx (here),
-FluidAudio's Parakeet TDT v3 (parakey-bench --backend fluid), and
-Apple's DictationTranscriber (parakey-bench --backend apple) — can
+Runs the *current* presspeech-mlx pipeline against the same WAV files
+the Swift bench targets, so the three backends — presspeech-mlx (here),
+FluidAudio's Parakeet TDT v3 (presspeech-bench --backend fluid), and
+Apple's DictationTranscriber (presspeech-bench --backend apple) — can
 be compared head-to-head in the same units.
 
 Usage:
@@ -64,13 +64,13 @@ def main() -> int:
     parser.add_argument("--trials", type=int, default=5)
     args = parser.parse_args()
 
-    print(f"bench-py: {args.file.name}, {args.trials} trials, backend=parakey-mlx",
+    print(f"bench-py: {args.file.name}, {args.trials} trials, backend=presspeech-mlx",
           file=sys.stderr)
     audio = load_16k_mono(args.file)
     print(f"audio: {len(audio)} samples (~{len(audio)/SAMPLE_RATE:.2f} s @ 16 kHz mono)",
           file=sys.stderr)
 
-    print("preparing parakey-mlx (parakeet-tdt-0.6b-v2 via MLX)…", file=sys.stderr)
+    print("preparing presspeech-mlx (parakeet-tdt-0.6b-v2 via MLX)…", file=sys.stderr)
     t_prep = time.perf_counter()
     model = from_pretrained(MODEL_ID)
     _ = transcribe_once(model, audio)  # warmup, untimed below
@@ -83,13 +83,13 @@ def main() -> int:
         text, dt = transcribe_once(model, audio)
         times.append(dt)
         texts.add(text)
-        print(f"    parakey-mlx trial {i+1}/{args.trials}: {fmt_ms(dt)}",
+        print(f"    presspeech-mlx trial {i+1}/{args.trials}: {fmt_ms(dt)}",
               file=sys.stderr)
 
     p50 = statistics.median(times)
     mn, mx_ = min(times), max(times)
     print()
-    print("  parakey-mlx")
+    print("  presspeech-mlx")
     print(f"    latency:  p50={fmt_ms(p50)}  min={fmt_ms(mn)}  max={fmt_ms(mx_)}")
     if len(texts) == 1:
         print(f"    transcript: \"{next(iter(texts))}\"")

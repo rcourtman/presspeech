@@ -79,9 +79,9 @@ redacted_log_name() {
 
 report_title() {
     if [[ "$CORPUS_KIND" == "public" ]]; then
-        printf 'Parakey Public-Speech Model Comparison'
+        printf 'Presspeech Public-Speech Model Comparison'
     else
-        printf 'Parakey Real-Dictation Model Comparison'
+        printf 'Presspeech Real-Dictation Model Comparison'
     fi
 }
 
@@ -199,7 +199,7 @@ assert_not_contains() {
 
 run_self_test() {
     local tmpdir
-    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-real-compare-self-test.XXXXXX")"
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-compare-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
     local log="$tmpdir/mock.log"
@@ -364,11 +364,11 @@ if [[ "${#missing_refs[@]}" -gt 0 ]]; then
 fi
 
 mkdir -p "$OUTDIR"
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-real-compare.XXXXXX")"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-compare.XXXXXX")"
 cleanup() { rm -rf "$tmpdir"; }
 trap cleanup EXIT INT TERM
 
-echo "building parakey-bench..."
+echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -413,7 +413,7 @@ for clip in "${clips[@]}"; do
 
     for backend in v3 unified; do
         log_file="$raw_dir/$(redacted_log_name "$clip_id" "$backend")"
-        bench_args=( ".build/release/parakey-bench" "--file" "$normalized" "--backend" "$backend" "--trials" "$TRIALS" )
+        bench_args=( ".build/release/presspeech-bench" "--file" "$normalized" "--backend" "$backend" "--trials" "$TRIALS" )
         if [[ "$backend" == "unified" ]]; then
             bench_args+=( "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
         fi

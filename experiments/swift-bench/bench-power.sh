@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run parakey-bench while sampling SoC power rails with powermetrics.
+# Run presspeech-bench while sampling SoC power rails with powermetrics.
 #
 # powermetrics requires sudo and reports estimates, not lab-grade energy
 # numbers. Treat these reports as same-Mac, same-OS comparisons between
@@ -28,7 +28,7 @@ usage() {
 usage: ./bench-power.sh --file <audio> [options]
 
 Options:
-  --backend <name>       parakey-bench backend: v3, unified, apple, 110m, fluid, both (default: v3)
+  --backend <name>       presspeech-bench backend: v3, unified, apple, 110m, fluid, both (default: v3)
   --trials <n>           measured transcription trials (default: 20)
   --unified-trailing-silence-ms <n>
                          Unified-only trailing silence in ms (default: 250)
@@ -41,7 +41,7 @@ Options:
 
 The script writes:
   <out-dir>/*.md                 human-readable summary
-  <out-dir>/*.bench.txt          raw parakey-bench output
+  <out-dir>/*.bench.txt          raw presspeech-bench output
   <out-dir>/*.powermetrics.txt   raw powermetrics output
 USAGE
 }
@@ -90,7 +90,7 @@ report_stem_for() {
 prepare_bench_file() {
     bench_file="$FILE"
     if [[ "$REDACT_PATHS" -eq 1 ]]; then
-        tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-power.XXXXXX")"
+        tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-power.XXXXXX")"
         local extension="${FILE##*.}"
         if [[ "$extension" == "$FILE" ]]; then
             bench_file="$tmpdir/audio"
@@ -123,7 +123,7 @@ write_power_report() {
     local power_summary="$3"
     local bench_log="$4"
     {
-        echo "# Parakey Power Benchmark"
+        echo "# Presspeech Power Benchmark"
         echo
         echo "- Date: $timestamp"
         echo "- Audio: $(path_label "$FILE")"
@@ -173,7 +173,7 @@ assert_not_contains() {
 
 run_self_test() {
     local self_tmp
-    self_tmp="$(mktemp -d "${TMPDIR:-/tmp}/parakey-power-self-test.XXXXXX")"
+    self_tmp="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-power-self-test.XXXXXX")"
     trap 'rm -rf "$self_tmp"; cleanup' EXIT INT TERM
 
     local secret_dir="$self_tmp/Private Battery Client"
@@ -207,7 +207,7 @@ run_self_test() {
     fi
 
     {
-        echo "parakey-bench: $(basename "$bench_file"), 1 trials, backend=v3"
+        echo "presspeech-bench: $(basename "$bench_file"), 1 trials, backend=v3"
         echo "reference: <redacted ${#secret_transcript} chars>"
         echo "transcript: [WER 0.0%] <redacted ${#secret_transcript} chars>"
     } >"$bench_log"
@@ -216,7 +216,7 @@ run_self_test() {
     write_power_report "$report" "$timestamp" "CPU Power avg: 123.0 mW (2 samples)" "$bench_log"
     assert_contains "$report" "- Audio: <redacted path>"
     assert_contains "$report" "- Fixture paths: redacted"
-    assert_contains "$report" "parakey-bench: audio.wav"
+    assert_contains "$report" "presspeech-bench: audio.wav"
     assert_not_contains "$report" "Private Battery Client"
     assert_not_contains "$report" "$secret_stem"
     assert_not_contains "$report" "$secret_transcript"
@@ -350,14 +350,14 @@ bench_log="$prefix.bench.txt"
 power_log="$prefix.powermetrics.txt"
 report="$prefix.md"
 
-echo "building parakey-bench..."
+echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
 trap cleanup EXIT INT TERM
 
 prepare_bench_file
 
-bench_args=( ".build/release/parakey-bench" "--file" "$bench_file" "--backend" "$BACKEND" "--trials" "$TRIALS" "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
+bench_args=( ".build/release/presspeech-bench" "--file" "$bench_file" "--backend" "$BACKEND" "--trials" "$TRIALS" "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
 if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
     bench_args+=( "--redact-transcripts" )
 fi

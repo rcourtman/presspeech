@@ -3,7 +3,7 @@
 #
 # The script uses synthetic local TTS so the report can be shared without
 # private dictation audio. It trims trailing silence, cuts the end of each
-# phrase to simulate an early key release, then runs parakey-bench with
+# phrase to simulate an early key release, then runs presspeech-bench with
 # configurable Unified trailing-silence padding.
 
 set -euo pipefail
@@ -225,7 +225,7 @@ PY
 
 run_self_test() {
     local self_tmp
-    self_tmp="$(mktemp -d "${TMPDIR:-/tmp}/parakey-tail-self-test.XXXXXX")"
+    self_tmp="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-tail-self-test.XXXXXX")"
     trap 'rm -rf "$self_tmp"' EXIT INT TERM
 
     local mock="$self_tmp/mock.log"
@@ -364,10 +364,10 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 mkdir -p "$OUTDIR"
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-tail-word.XXXXXX")"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-tail-word.XXXXXX")"
 trap cleanup EXIT INT TERM
 
-echo "building parakey-bench..."
+echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -375,7 +375,7 @@ report="$OUTDIR/$timestamp-tail-word.md"
 tsv="$OUTDIR/$timestamp-tail-word.tsv"
 
 {
-    echo "# Parakey Tail-Word Regression"
+    echo "# Presspeech Tail-Word Regression"
     echo
     echo "- Date: $timestamp"
     echo "- Voice: $VOICE"
@@ -386,7 +386,7 @@ tsv="$OUTDIR/$timestamp-tail-word.tsv"
     echo "- v3 baseline: $([[ "$INCLUDE_V3_BASELINE" -eq 1 ]] && echo included || echo skipped)"
     echo
     echo "The cut column simulates releasing the key before the phrase finishes."
-    echo "Capture grace simulates Parakey continuing to record briefly after release."
+    echo "Capture grace simulates Presspeech continuing to record briefly after release."
     echo "Unified trailing silence is synthetic zero padding added before the Unified model sees the audio."
     echo
     echo "Candidate threshold: Unified @ ${CANDIDATE_UNIFIED_TRAILING_MS} ms, 0 ms capture grace, final word retained, max WER <= ${MAX_CANDIDATE_WER}% on the known regression cases."
@@ -435,7 +435,7 @@ for entry in "${CLIPS[@]}"; do
                 backend="${backend_entry%%:*}"
                 trailing_ms="${backend_entry#*:}"
                 log_file="$tmpdir/$phrase-cut${cut_ms}-grace${grace_ms}-${backend}-${trailing_ms}.log"
-                bench_args=( ".build/release/parakey-bench" "--file" "$case_wav" "--backend" "$backend" "--trials" "$TRIALS" "--ref" "$text" )
+                bench_args=( ".build/release/presspeech-bench" "--file" "$case_wav" "--backend" "$backend" "--trials" "$TRIALS" "--ref" "$text" )
                 if [[ "$backend" == "unified" ]]; then
                     bench_args+=( "--unified-trailing-silence-ms" "$trailing_ms" )
                 fi

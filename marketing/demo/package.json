@@ -1,9 +1,9 @@
 {
-  "name": "parakey-demo",
+  "name": "presspeech-demo",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Synthetic Mac interaction demo for Parakey. Renders deterministic frames via headless Chrome, encodes to MP4/WebM/GIF with ffmpeg.",
+  "description": "Synthetic Mac interaction demo for Presspeech. Renders deterministic frames via headless Chrome, encodes to MP4/WebM/GIF with ffmpeg.",
   "scripts": {
     "render": "node render.mjs"
   },

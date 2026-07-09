@@ -5,9 +5,9 @@ Briefing for AI coding agents working on this repo. Complements
 
 ## Project shape
 
-Parakey is a **single-file Swift menu-bar app** for push-to-talk
+Presspeech is a **single-file Swift menu-bar app** for push-to-talk
 dictation on Apple Silicon Macs. The whole app is
-`swift/Sources/Parakey/main.swift` (currently about 12k lines). The `ParakeyApp`
+`swift/Sources/Presspeech/main.swift` (currently about 12k lines). The `PresspeechApp`
 @MainActor class owns the menu bar, settings UI, recording loop,
 and update flow; surrounding it in the same file are the
 single-responsibility types it composes (`Settings`, `Permissions`,
@@ -33,16 +33,16 @@ single-responsibility types it composes (`Settings`, `Permissions`,
 
 | Path | Purpose |
 |---|---|
-| `swift/Sources/Parakey/main.swift` | The entire app. `// MARK: -` section comments tag the major regions (Constants, Text correction transfer, Correction sync path safety, Model registry hardening, Speech model integrity, Audio input devices, Logger, Settings, Permissions, Hotkey listener, Audio capture, Transcription worker, Transcript corrections, Filler word removal, Text insertion, System audio mute, Sounds, Bundle version helpers, Diagnostics, TCC recovery, Update check, App). |
+| `swift/Sources/Presspeech/main.swift` | The entire app. `// MARK: -` section comments tag the major regions (Constants, Text correction transfer, Correction sync path safety, Model registry hardening, Speech model integrity, Audio input devices, Logger, Settings, Permissions, Hotkey listener, Audio capture, Transcription worker, Transcript corrections, Filler word removal, Text insertion, System audio mute, Sounds, Bundle version helpers, Diagnostics, TCC recovery, Update check, App). |
 | `swift/Package.swift` | SwiftPM manifest. `.macOS("14.0")` platform target, single FluidAudio dependency. **No `resources:` declaration** — resources live outside the target on purpose (see *Resource bundling* below). |
 | `swift/Info.plist` | Canonical Info.plist for both dev and release builds. `CFBundleIdentifier com.local.parakey`, `LSMinimumSystemVersion 14.0`. `dev-run.sh` signs with the same Developer ID cert and identifier as the Cask, so TCC grants from the production install carry over to the dev binary automatically. |
-| `swift/Resources/parakey-menubar.png` (+ `@2x`) | Template menu-bar icon. Copied into `Contents/Resources/` by `dev-run.sh` and `ship-swift.sh`. |
-| `swift/dev-run.sh` | Local iteration loop: `swift build` → wrap binary in `/tmp/Parakey-dev.app` → sign with Developer ID + hardened runtime + production entitlements → relaunch. |
+| `swift/Resources/presspeech-menubar.png` (+ `@2x`) | Template menu-bar icon. Copied into `Contents/Resources/` by `dev-run.sh` and `ship-swift.sh`. |
+| `swift/dev-run.sh` | Local iteration loop: `swift build` → wrap binary in `/tmp/Presspeech-dev.app` → sign with Developer ID + hardened runtime + production entitlements → relaunch. |
 | `entitlements.plist` | Hardened-runtime entitlements. Just two keys: `device.audio-input` (what Tahoe 26 checks before exposing the app in Privacy & Security → Microphone) and `device.microphone` (legacy sandbox fallback for macOS 14–25). Anything new expands TCC surface — justify before adding. |
 | `ship-swift.sh` | One-command release: version bump in Info.plist → build → sign → notarise → ditto-zip → tag → push → `gh release create` → bump and verify sibling Homebrew Cask. |
 | `scripts/update-model-manifest.py` | Regenerates the pinned SHA-256 manifest for the Parakeet v3 CoreML model files when intentionally updating the upstream model commit. |
-| `icon/` | SVG sources (`hero.svg`, `latency.svg`, `parakey.svg`, etc.), `Parakey.icns`, menu-bar PNGs, `make-icons.sh`. |
-| `experiments/swift-bench/` | Standalone ASR latency benchmark used to validate FluidAudio against alternatives (Apple SpeechAnalyzer, parakey-mlx) on the same audio. Re-run when bumping FluidAudio or evaluating a backend swap. |
+| `icon/` | SVG sources (`hero.svg`, `latency.svg`, `presspeech.svg`, etc.), `Presspeech.icns`, menu-bar PNGs, `make-icons.sh`. |
+| `experiments/swift-bench/` | Standalone ASR latency benchmark used to validate FluidAudio against alternatives (Apple SpeechAnalyzer, presspeech-mlx) on the same audio. Re-run when bumping FluidAudio or evaluating a backend swap. |
 
 ## Build & test
 
@@ -52,14 +52,14 @@ cd swift
 ./dev-run.sh
 
 # Run the in-binary self-test suite (no UI, exits 0/1)
-swift run Parakey --self-test all
+swift run Presspeech --self-test all
 
 # Release dry-run: build + sign + entitlement check + zip; skips notarise/staple and git/tag/release/cask
 # (ship-swift.sh lives at the repo root; this block is still in swift/)
 ../ship-swift.sh --dry-run
 
 # Tail logs (same file for dev + Cask install — bundle ids match)
-tail -f ~/Library/Logs/Parakey.log
+tail -f ~/Library/Logs/Presspeech.log
 ```
 
 There is no separate unit-test target — pure logic instead exposes
@@ -100,7 +100,7 @@ If you need to validate ASR latency or correctness, use
 
 Strict-concurrency Swift 6 makes a few things load-bearing here:
 
-- **`ParakeyApp` and its menu wiring are `@MainActor`.** All AppKit /
+- **`PresspeechApp` and its menu wiring are `@MainActor`.** All AppKit /
   menu construction happens on the main actor. Don't touch
   `NSStatusItem`, `NSMenu`, `NSMenuItem`, or any UI state from a
   background queue without an explicit `await MainActor.run`.
@@ -117,7 +117,7 @@ Strict-concurrency Swift 6 makes a few things load-bearing here:
   `TdtDecoderState` it carries are owned solely by this actor. ANE
   access is effectively single-threaded; the actor enforces it.
   All `transcribe(...)` calls must go through this actor — never
-  call FluidAudio directly from `ParakeyApp` or `AudioCapture`.
+  call FluidAudio directly from `PresspeechApp` or `AudioCapture`.
 
 ### AVAudioConverter gotcha
 
@@ -139,7 +139,7 @@ the SwiftPM target. They are *not* declared as `resources:` in
    chokes on it during `ship-swift.sh`.
 2. `dev-run.sh` and `ship-swift.sh` both `cp` the resources into
    `Contents/Resources/` of the wrapped `.app`. The code loads them
-   via `Bundle.main` (i.e. `NSImage(named: "parakey-menubar")`),
+   via `Bundle.main` (i.e. `NSImage(named: "presspeech-menubar")`),
    which finds them under that canonical path.
 
 If you find yourself reaching for `Bundle.module`, you're about to
@@ -147,8 +147,8 @@ re-introduce the resource bundle and break codesigning. Don't.
 
 ## TCC inheritance — important
 
-The dev binary (`/tmp/Parakey-dev.app`) and the production Cask
-binary (`/Applications/Parakey.app`) share `CFBundleIdentifier
+The dev binary (`/tmp/Presspeech-dev.app`) and the production Cask
+binary (`/Applications/Presspeech.app`) share `CFBundleIdentifier
 com.local.parakey`. That's deliberate: macOS TCC keys permission
 grants by `(bundle id, code signature)`, so signing the dev binary
 with the **same Developer ID certificate** lets it inherit
@@ -159,6 +159,28 @@ new app and every launch will need re-granting.
 `dev-run.sh` picks up the first `Developer ID Application:`
 certificate in the keychain automatically. If you don't have one,
 that's a setup gap, not a bug to work around.
+
+### v0.3 public rename compatibility
+
+Presspeech was named Parakey through v0.2.x. The public product,
+repository, executable, bundle filename, and release asset changed in
+v0.3.0, but these internal identifiers are intentionally permanent:
+
+- `CFBundleIdentifier` and the UserDefaults suite remain
+  `com.local.parakey`, preserving TCC grants and preferences.
+- The correction document UTI remains
+  `com.local.parakey.corrections`; Info.plist accepts both the legacy
+  `.parakey-corrections` and current `.presspeech-corrections`
+  filename extensions.
+- The system-audio recovery marker remains under
+  `~/Library/Application Support/Parakey/`, so the renamed app can
+  recover from an interrupted mute owned by the v0.2 app.
+- The Homebrew tap remains `rcourtman/parakey` for installed-tap
+  continuity. Its `cask_renames.json` maps the former `parakey` token
+  to `presspeech`; do not remove that mapping.
+
+Do not “finish” the rename by changing these legacy identifiers. That
+would strand existing settings or permissions and break upgrades.
 
 ## Conventions
 
@@ -193,18 +215,18 @@ that's a setup gap, not a bug to work around.
   Zero — see *Privacy / security* below for the load-bearing
   invariant. Not "off by default", not "opt-in", not "just a UUID":
   **none**. This is the product's marketing position.
-- **Cloud transcription backends.** Parakey is local-only by design.
+- **Cloud transcription backends.** Presspeech is local-only by design.
   Audio never leaves the Mac (one-time exception: the model
   download from Hugging Face on first launch).
 - **Cross-platform.** Heavy macOS dependencies (AVFoundation,
   AppKit, AudioToolbox, ApplicationServices, CoreGraphics, IOKit,
   NSAppleScript, FluidAudio's CoreML path). Linux/Windows ports
   belong in separate forks if anyone wants to do them.
-- **AI rewriting / Parakey-operated cloud sync / preference windows.**
-  The README's opener positions Parakey as focused push-to-talk
+- **AI rewriting / Presspeech-operated cloud sync / preference windows.**
+  The README's opener positions Presspeech as focused push-to-talk
   dictation. Text-correction portability is intentionally limited to
   export/import/share and a user-chosen local sync file; do not add
-  accounts, a Parakey backend, or a background sync service.
+  accounts, a Presspeech backend, or a background sync service.
 - **Drag-and-drop file transcription.** Considered and rejected;
   if added, evaluate it on its own merits, not as an excuse for
   the dock icon to do something.
@@ -213,11 +235,11 @@ that's a setup gap, not a bug to work around.
 
 ### Invariant: no telemetry, ever
 
-Parakey ships with **no analytics, no event tracking, no error
+Presspeech ships with **no analytics, no event tracking, no error
 reporting, no crash reporting, no "anonymous usage stats."** This is
 a load-bearing product commitment — it's documented in the README's
 opening privacy bullet and in the in-app About copy. Users install
-Parakey *specifically* because of it.
+Presspeech *specifically* because of it.
 
 Do not add any of the following, regardless of how innocuous they
 seem or how strong the "we'd just like to know how many people use
@@ -250,10 +272,10 @@ Substitutes for the questions telemetry would answer:
 - **Is anything crashing in the wild?** → GitHub issues. Watch
   download counts vs. issue volume.
 - **Are people on the latest version?** → After a release ships, the
-  in-app update check gives every running Parakey the chance to
+  in-app update check gives every running Presspeech the chance to
   upgrade itself. Compare new vs. old release download counts.
 
-### The exhaustive list of network calls Parakey makes
+### The exhaustive list of network calls Presspeech makes
 
 Anything added to this list expands the privacy surface and must be
 documented here:
@@ -263,17 +285,17 @@ documented here:
    downloads on first launch, is about 500-600 MB, and is cached to
    `~/Library/Application Support/FluidAudio/`.
 2. **Update check** —
-   `api.github.com/repos/rcourtman/parakey/releases/latest`, every
+   `api.github.com/repos/rcourtman/presspeech/releases/latest`, every
    `UPDATE_CHECK_INTERVAL_SECONDS` (6 h), first call 30 s after
-   reaching "ready". Anonymous `GET`; Parakey sets no body, no auth
+   reaching "ready". Anonymous `GET`; Presspeech sets no body, no auth
    header, no app or user identifier, and no telemetry. The request
    uses Swift `URLSession` defaults plus the GitHub JSON `Accept`
    header. User can disable via Settings → Check for updates
    automatically.
 3. **Update apply** — When the user clicks the in-menu update item
-   on a brew install: shells out to `brew upgrade --cask parakey`,
+   on a brew install: shells out to `brew upgrade --cask presspeech`,
    which then fetches
-   `github.com/rcourtman/parakey/releases/download/...`. User-
+   `github.com/rcourtman/presspeech/releases/download/...`. User-
    triggered, not background. On source / non-brew installs, the same
    user-triggered update item opens the GitHub releases page instead
    of modifying the local checkout.
@@ -281,11 +303,11 @@ documented here:
 That is the entire list. If you're about to add a fourth, stop and
 read the "Invariant: no telemetry" section above.
 
-Text-correction sync does not add a Parakey network call: the app
-reads and writes one local `.parakey-corrections` file chosen by the
+Text-correction sync does not add a Presspeech network call: the app
+reads and writes one local `.presspeech-corrections` file chosen by the
 user. If that file lives in iCloud Drive, Dropbox, Syncthing, or a
 shared folder, the OS or that provider handles any network transfer
-outside Parakey.
+outside Presspeech.
 
 ### Other privacy / security invariants
 
@@ -302,7 +324,7 @@ outside Parakey.
   `cs.allow-unsigned-executable-memory`, or
   `cs.disable-library-validation`: the only reason to want any of
   those is to embed a runtime interpreter / unsigned dylib in the
-  bundle, and that's not what Parakey is.
+  bundle, and that's not what Presspeech is.
 - **Transcripts are in-memory only.** Recent transcript history is
   configurable from off / last 1 / last 5, defaults to last 5, and
   clears on quit. Nothing is persisted.
@@ -371,21 +393,21 @@ When the user does ask for a release, the mechanics are:
    if a tag for the target version already exists locally **or on
    origin** (`git ls-remote`)
 3. QA gates (skippable with `--skip-qa`): CI check-runs for HEAD must
-   be green (`gh api .../check-runs`), `swift run -c debug Parakey
+   be green (`gh api .../check-runs`), `swift run -c debug Presspeech
    --self-test all`, and `scripts/smoke-packaged-app.sh`
 4. `swift build -c release`
 5. Rewrite `CFBundleShortVersionString` and `CFBundleVersion` in
    `swift/Info.plist` (the latter monotonically increments). If
    `plutil -lint` rejects the rewrite, the change is reverted.
 6. Wrap binary + `Info.plist` + menu-bar PNGs + `.icns` in a fresh
-   `swift/dist/Parakey.app`
+   `swift/dist/Presspeech.app`
 7. Codesign with Developer ID + hardened runtime + `entitlements.plist`
 8. Assert that `com.apple.security.device.audio-input` and
    `com.apple.security.device.microphone` are present in the signed
    binary's embedded entitlements; fail loudly if not
 9. `notarytool submit --wait` (on a temp zip) + `xcrun stapler staple`
 10. `ditto -c -k --keepParent` the stapled bundle into
-    `swift/dist/Parakey.zip` (versioning lives in the GitHub release
+    `swift/dist/Presspeech.zip` (versioning lives in the GitHub release
     tag, not the filename)
 11. Commit the version bump, create an **annotated** tag `vX.Y.Z`,
     push `main` and the tag ref explicitly
@@ -396,15 +418,15 @@ When the user does ask for a release, the mechanics are:
     auto-generated from `git log <prev-tag>..<new-tag>`. Write the
     file before running `ship-swift.sh` to control the release body.
 13. Rewrite `version` + `sha256` in the sibling Homebrew tap's
-    `Casks/parakey.rb`, commit, push
+    `Casks/presspeech.rb`, commit, push
 14. Refresh Homebrew metadata, assert
-    `brew info --cask rcourtman/parakey/parakey` reports the new
+    `brew info --cask rcourtman/parakey/presspeech` reports the new
     version, and run `brew fetch --cask --force
-    rcourtman/parakey/parakey` to verify the published URL + sha256
+    rcourtman/parakey/presspeech` to verify the published URL + sha256
 
 With `--dry-run`, the script still builds, signs, checks embedded
-entitlements, packages `swift/dist/Parakey.zip`, removes the temporary
-`swift/dist/Parakey.app` bundle before exit, and reverts the temporary
+entitlements, packages `swift/dist/Presspeech.zip`, removes the temporary
+`swift/dist/Presspeech.app` bundle before exit, and reverts the temporary
 Info.plist bump, but it skips notarytool submission, stapling,
 git/tag/release work, and the Homebrew Cask update. Dry-run also runs
 the debug self-test suite and the packaged smoke test (`--skip-qa`
@@ -412,14 +434,14 @@ skips them here too); the CI-status, fetch/divergence, and remote-tag
 checks are skipped since they need network and a pushed HEAD.
 
 The tap lives at `../homebrew-parakey` by default; override with
-`PARAKEY_HOMEBREW_TAP=/path/to/tap` if your layout differs.
+`PRESSPEECH_HOMEBREW_TAP=/path/to/tap` if your layout differs.
 
 **Recovery**: if any step fails before the version-bump commit,
 `ship-swift.sh` reverts the `swift/Info.plist` edit (and any synced
 docs) so the working tree is clean again. After that point the
 artefact is still in `swift/dist/` and the commit + annotated tag are
 already on origin. If `gh release create` failed, re-run
-`gh release create v<version> swift/dist/Parakey.zip ...` manually —
+`gh release create v<version> swift/dist/Presspeech.zip ...` manually —
 it attaches to the existing pushed tag — then run
 `./ship-swift.sh --cask-only <version>`. If the GitHub release
 published but the Cask stage failed, run
@@ -451,7 +473,7 @@ git clone https://github.com/rcourtman/homebrew-parakey ../homebrew-parakey
   checks `defaults.object(forKey:) == nil` and returns the default
   inline (mirrors how every other setting handles defaults — there
   is no central `register()` call). Add a menu item under the
-  *Settings* submenu via `ParakeyApp.buildSettingsItem()`, with a
+  *Settings* submenu via `PresspeechApp.buildSettingsItem()`, with a
   click-handler that writes through `Settings.shared.foo = …` and
   updates any live state.
 - **Add a hotkey to the menu**: extend `HOTKEY_CHOICES` near the top

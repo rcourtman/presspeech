@@ -22,7 +22,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PATHS = [ROOT / "swift" / "Sources" / "Parakey" / "main.swift"]
+DEFAULT_PATHS = [ROOT / "swift" / "Sources" / "Presspeech" / "main.swift"]
 
 LOG_CALL_RE = re.compile(r"(?<![A-Za-z0-9_.])log\s*\(")
 

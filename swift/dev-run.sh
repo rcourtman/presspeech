@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# dev-run.sh — local iteration loop for the Swift Parakey port.
+# dev-run.sh — local iteration loop for the Swift Presspeech port.
 #
 # Rebuilds main.swift, drops the binary into a minimal .app wrapper
-# at /tmp/Parakey-dev.app, signs it with the Developer ID + hardened
+# at /tmp/Presspeech-dev.app, signs it with the Developer ID + hardened
 # runtime + the production entitlements (so TCC carries over from
-# the Cask-installed Parakey, no manual permission re-grants), kills
+# the Cask-installed Presspeech, no manual permission re-grants), kills
 # any prior dev instance, and relaunches via `open`.
 #
 # Usage: ./dev-run.sh
 #
-# When you're done testing and want the production Cask Parakey
-# back, just `open /Applications/Parakey.app` — both binaries share
+# When you're done testing and want the production Cask Presspeech
+# back, just `open /Applications/Presspeech.app` — both binaries share
 # bundle id `com.local.parakey`, so the TCC entries are
 # interchangeable.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-APP="/tmp/Parakey-dev.app"
+APP="/tmp/Presspeech-dev.app"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
@@ -27,7 +27,7 @@ say "Building (debug)..."
 say "Wrapping in $APP..."
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$HERE/.build/debug/Parakey" "$APP/Contents/MacOS/Parakey"
+cp "$HERE/.build/debug/Presspeech" "$APP/Contents/MacOS/Presspeech"
 # Single canonical Info.plist (swift/Info.plist) — same file
 # ship-swift.sh uses, so dev and release builds advertise the same
 # bundle id / minimum macOS / usage descriptions / icon. Don't
@@ -38,11 +38,11 @@ cp "$HERE/Info.plist" "$APP/Contents/Info.plist"
 # (named:) on Bundle.main finds them under this exact path. We avoid
 # SwiftPM's auto-generated <Package>_<Target>.bundle because it lacks
 # an Info.plist, which makes codesign --deep error out.
-cp "$HERE/Resources/parakey-menubar.png"    "$APP/Contents/Resources/"
-cp "$HERE/Resources/parakey-menubar@2x.png" "$APP/Contents/Resources/"
+cp "$HERE/Resources/presspeech-menubar.png"    "$APP/Contents/Resources/"
+cp "$HERE/Resources/presspeech-menubar@2x.png" "$APP/Contents/Resources/"
 # .icns for the About dialog + dock (when "Show in Dock" is on).
-if [[ -f "$REPO/icon/Parakey.icns" ]]; then
-    cp "$REPO/icon/Parakey.icns" "$APP/Contents/Resources/Parakey.icns"
+if [[ -f "$REPO/icon/Presspeech.icns" ]]; then
+    cp "$REPO/icon/Presspeech.icns" "$APP/Contents/Resources/Presspeech.icns"
 fi
 
 say "Signing with Developer ID + hardened runtime..."
@@ -75,8 +75,10 @@ do
 done
 
 say "Stopping any prior dev instance..."
+pkill -f "Presspeech-dev.app" 2>/dev/null || true
 pkill -f "Parakey-dev.app" 2>/dev/null || true
 # Also kill any Cask instance — same bundle id would clash on TCC + hotkey.
+pkill -f "/Applications/Presspeech.app" 2>/dev/null || true
 pkill -f "/Applications/Parakey.app" 2>/dev/null || true
 sleep 0.5
 
@@ -87,16 +89,16 @@ open "$APP"
 # appears is a hard failure.
 LAUNCHED_PID=""
 for _ in $(seq 1 25); do
-    LAUNCHED_PID="$(pgrep -f "Parakey-dev.app" | head -n 1 || true)"
+    LAUNCHED_PID="$(pgrep -f "Presspeech-dev.app" | head -n 1 || true)"
     [[ -n "$LAUNCHED_PID" ]] && break
     sleep 0.2
 done
 if [[ -z "$LAUNCHED_PID" ]]; then
-    echo "Parakey-dev did not appear within ~5s of 'open'." >&2
-    echo "Check ~/Library/Logs/Parakey.log for a startup crash." >&2
+    echo "Presspeech-dev did not appear within ~5s of 'open'." >&2
+    echo "Check ~/Library/Logs/Presspeech.log for a startup crash." >&2
     exit 1
 fi
-echo "  pid=$LAUNCHED_PID $APP/Contents/MacOS/Parakey"
+echo "  pid=$LAUNCHED_PID $APP/Contents/MacOS/Presspeech"
 echo
-echo "  log: tail -f ~/Library/Logs/Parakey.log"
-echo "  stop: pkill -f Parakey-dev.app"
+echo "  log: tail -f ~/Library/Logs/Presspeech.log"
+echo "  stop: pkill -f Presspeech-dev.app"

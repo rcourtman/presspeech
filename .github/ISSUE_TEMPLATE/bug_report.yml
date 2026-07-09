@@ -28,17 +28,17 @@ body:
     attributes:
       label: Log output
       description: |
-        Last ~30 lines of `~/Library/Logs/Parakey.log` (same path for
+        Last ~30 lines of `~/Library/Logs/Presspeech.log` (same path for
         the Homebrew Cask install and a contributor `dev-run.sh` build
         — they share a bundle id).
 
-        Parakey never logs transcript content; if you've manually
+        Presspeech never logs transcript content; if you've manually
         patched a debug build to do so, redact it before pasting.
       render: shell
   - type: checkboxes
     id: permissions
     attributes:
-      label: Permissions granted to Parakey.app
+      label: Permissions granted to Presspeech.app
       description: All three are required.
       options:
         - label: Microphone

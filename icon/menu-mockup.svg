@@ -26,7 +26,7 @@
     <text x="540" y="25" font-size="13" fill="#475569" opacity="0.85">3:14 PM</text>
   </g>
 
-  <!-- Parakey menu-bar icon (highlighted — selected state) -->
+  <!-- Presspeech menu-bar icon (highlighted — selected state) -->
   <g transform="translate(388, 6)">
     <!-- Highlight pill behind icon -->
     <rect x="-2" y="-2" width="32" height="32" rx="6" fill="#0F172A" fill-opacity="0.08"/>
@@ -48,7 +48,7 @@
 
     <!-- Status row (idle) -->
     <g transform="translate(0, 8)">
-      <text x="20" y="22" font-size="12" font-weight="600" fill="#94A3B8" letter-spacing="0.6">PARAKEY</text>
+      <text x="20" y="22" font-size="12" font-weight="600" fill="#94A3B8" letter-spacing="0.6">PRESSPEECH</text>
       <text x="360" y="22" font-size="12" font-weight="500" fill="#10B981" text-anchor="end">● idle</text>
     </g>
 
@@ -76,12 +76,12 @@
 
     <!-- About row -->
     <g transform="translate(0, 164)">
-      <text x="20" y="24" font-size="15" font-weight="500" fill="#0F172A">About Parakey</text>
+      <text x="20" y="24" font-size="15" font-weight="500" fill="#0F172A">About Presspeech</text>
     </g>
 
     <!-- Quit row -->
     <g transform="translate(0, 206)">
-      <text x="20" y="24" font-size="15" font-weight="500" fill="#0F172A">Quit Parakey</text>
+      <text x="20" y="24" font-size="15" font-weight="500" fill="#0F172A">Quit Presspeech</text>
       <!-- shortcut hint -->
       <text x="360" y="24" font-size="13" font-weight="400" fill="#94A3B8" text-anchor="end">⌘ Q</text>
     </g>
