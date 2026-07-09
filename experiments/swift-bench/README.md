@@ -4,7 +4,7 @@ Head-to-head ASR benchmark of production and candidate transcription backends ru
 against the same WAV files on the same Mac, so they can be compared
 in like-for-like units.
 
-Originally built to answer "should Parakey port from Python+MLX to
+Originally built to answer "should Presspeech port from Python+MLX to
 native Swift?" — the answer turned out to be yes, and the production
 app now runs on FluidAudio (see [`../../swift/`](../../swift/) and
 the [main README](../../README.md)). The bench stays in
@@ -20,7 +20,7 @@ the production app.
 | **`unified`** | FluidAudio Swift SDK → Parakeet Unified 0.6 B offline batch → CoreML | Apple Neural Engine |
 | **`nemotron-en`** | FluidAudio Swift SDK → Nemotron Speech Streaming English 0.6 B, 1120 ms tier → CoreML | Apple Neural Engine |
 | **`apple`** | `Speech.SpeechAnalyzer` + `DictationTranscriber` (built into macOS 26 Tahoe) | Apple Neural Engine |
-| **`parakey-mlx`** | parakey's current path: `parakeet_mlx` → MLX → Metal | GPU |
+| **`presspeech-mlx`** | presspeech's current path: `parakeet_mlx` → MLX → Metal | GPU |
 
 ## How to run
 
@@ -38,13 +38,13 @@ cd experiments/swift-bench
 swift build
 
 # 3a. Swift backends.
-./.build/debug/parakey-bench --file test-audio/short-clean.wav --backend v3 --trials 5
-./.build/debug/parakey-bench --file test-audio/short-clean.wav --backend unified --trials 5
+./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3 --trials 5
+./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend unified --trials 5
 
 # Unified uses a 250 ms candidate padding default in this benchmark.
 # Set it to 0 to measure the raw model, or sweep values with
 # run-tail-word-regression.sh when evaluating a future model.
-./.build/debug/parakey-bench --file test-audio/short-clean.wav --backend unified --trials 5 --unified-trailing-silence-ms 0
+./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend unified --trials 5 --unified-trailing-silence-ms 0
 
 # 3b. Python / MLX backend, same audio.
 ../../.venv/bin/python bench-py.py --file test-audio/short-clean.wav --trials 5
@@ -246,7 +246,7 @@ sudo -v
 ```
 
 This samples `cpu_power,gpu_power,ane_power` with `powermetrics` while
-`parakey-bench` runs, then writes a Markdown summary plus raw logs under
+`presspeech-bench` runs, then writes a Markdown summary plus raw logs under
 `power-results/`. Transcript text, fixture filenames, and local paths are
 redacted by default; pass `--show-transcripts` or `--show-paths` only for
 local reports you do not intend to share. `powermetrics` values are
@@ -266,7 +266,7 @@ Mac mini M4, 10 cores, 16 GB, macOS 26.4.1, Xcode/Swift 6.3.
 5 trials per backend per clip, p50 reported below. First inference
 (after model load) excluded from each row's p50 — that's the warmup.
 
-| Clip | Duration | `fluid` (ANE) | `parakey-mlx` (GPU) | Speed ratio |
+| Clip | Duration | `fluid` (ANE) | `presspeech-mlx` (GPU) | Speed ratio |
 |---|---:|---:|---:|---:|
 | `short-clean` | 2.50 s | **92.4 ms** | 145.4 ms | 1.57× |
 | `medium-clean` | 3.99 s | **96.1 ms** | 176.3 ms | 1.83× |
@@ -275,7 +275,7 @@ Mac mini M4, 10 cores, 16 GB, macOS 26.4.1, Xcode/Swift 6.3.
 
 **Key findings:**
 
-- **`fluid` (ANE) is consistently ~1.5–2× faster than `parakey-mlx`
+- **`fluid` (ANE) is consistently ~1.5–2× faster than `presspeech-mlx`
   (GPU)** — the gap widens with clip length, as expected for an
   encoder-bound workload.
 - **Both backends produce essentially identical transcripts.** They
@@ -297,9 +297,9 @@ Mac mini M4, 10 cores, 16 GB, macOS 26.4.1, Xcode/Swift 6.3.
 | Clip | Reference (TTS input) | Both backends |
 |---|---|---|
 | `short-clean` | "The quick brown fox jumps over the lazy dog." | ✓ exact |
-| `medium-clean` | "Parakey is a lightweight push-to-talk dictation app for Apple Silicon Macs." | "push-to-tock", "Max" (TTS artifacts) |
+| `medium-clean` | "Presspeech is a lightweight push-to-talk dictation app for Apple Silicon Macs." | "push-to-tock", "Max" (TTS artifacts) |
 | `disfluent` | "So, um, I was going to send, like, maybe a quick note about the thing we discussed earlier, you know." | ✓ exact, fillers preserved |
-| `longer-technical` | "When you press the dictation key, the audio buffer is captured at sixteen kilohertz, run through Parakeet's encoder on the neural engine, and the resulting tokens are pasted at the cursor location." | "16 kHz" (correctly normalised), `fluid` lowercases "parakeet", `parakey-mlx` capitalises |
+| `longer-technical` | "When you press the dictation key, the audio buffer is captured at sixteen kilohertz, run through Parakeet's encoder on the neural engine, and the resulting tokens are pasted at the cursor location." | "16 kHz" (correctly normalised), `fluid` lowercases "parakeet", `presspeech-mlx` capitalises |
 
 ### Re-run post-v0.14.5 FluidAudio pin + Apple SpeechAnalyzer unblock
 
@@ -323,7 +323,7 @@ notes" below).
 - **`apple` drops punctuation** ("So I was going to send like maybe a
   quick note about the thing we discussed earlier you know") whereas
   `fluid` produces commas and periods.
-- **Both have minor word-segmentation errors** on "Parakey"
+- **Both have minor word-segmentation errors** on "Presspeech"
   ("push-to-tock" for `fluid`, "Para key" for `apple`) and
   "Macs"->"Max" (TTS artifact, both backends).
 - **Apple's first-time model is also downloaded**, not preinstalled
@@ -356,7 +356,7 @@ Once-blocking gaps that have been resolved:
 3. **Analyzer lifecycle** — `analyzer.finalizeAndFinishThroughEndOfInput()`
    puts the analyzer into a terminal state; subsequent transcribe calls
    on the same instance produce empty output instantly. The bench now
-   recreates analyzer + transcriber per call (matches Parakey's
+   recreates analyzer + transcriber per call (matches Presspeech's
    push-to-talk pattern: one utterance, one session).
 4. **Results draining** — Reading `transcriber.results` sequentially
    after finalize loses events. The bench drains results in a child
@@ -396,12 +396,12 @@ The original questions and where they landed:
   has released the dictation key on typical clips, which makes
   end-to-end "press → text" feel measurably snappier in real use.
 
-- **"Is it worth porting Parakey to Swift to capture the win?"** —
+- **"Is it worth porting Presspeech to Swift to capture the win?"** —
   Yes. Beyond the latency win, going native removed the embedded
   Python interpreter (149 MB → 2.2 MB zip), shrank the hardened-
   runtime entitlement set from six keys to two, and sidestepped the
   whole class of TCC/codesigning bugs that plagued the
-  PyInstaller-bundled `.app`. The port shipped as Parakey 0.2.0.
+  PyInstaller-bundled `.app`. The port shipped as Presspeech 0.2.0.
 
 ## Future use
 

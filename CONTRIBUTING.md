@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for considering a contribution to Parakey. The project is a
+Thanks for considering a contribution to Presspeech. The project is a
 single-file Swift menu-bar app plus a thin signed/notarised `.app`
 wrapper, and the goal is to keep it that way.
 
@@ -8,13 +8,13 @@ wrapper, and the goal is to keep it that way.
 
 Open an issue with:
 
-- macOS version (`sw_vers`). Parakey requires **macOS 14 (Sonoma)** or
+- macOS version (`sw_vers`). Presspeech requires **macOS 14 (Sonoma)** or
   later.
 - Mac model (M1/M2/M3/M4 etc.)
-- The last ~30 lines of `~/Library/Logs/Parakey.log`
+- The last ~30 lines of `~/Library/Logs/Presspeech.log`
 - Whether the tink and pop sounds play at the expected moments
 - Whether all three privacy permissions (Microphone, Accessibility,
-  Input Monitoring) are granted to **Parakey.app** specifically (not
+  Input Monitoring) are granted to **Presspeech.app** specifically (not
   `Terminal` or anything else)
 
 ## Suggesting features
@@ -32,14 +32,14 @@ out of scope:
 ## Development setup
 
 ```sh
-git clone https://github.com/rcourtman/parakey.git
-cd parakey/swift
+git clone https://github.com/rcourtman/presspeech.git
+cd presspeech/swift
 ./dev-run.sh
 ```
 
 `dev-run.sh` is idempotent — re-run it any time. It builds
-`Sources/Parakey/main.swift` with `swift build`, wraps the binary
-in `/tmp/Parakey-dev.app`, signs it with your Developer ID +
+`Sources/Presspeech/main.swift` with `swift build`, wraps the binary
+in `/tmp/Presspeech-dev.app`, signs it with your Developer ID +
 hardened runtime + the production entitlements (so TCC permissions
 carry over from the Cask install — no manual re-grants), kills any
 prior dev instance, and relaunches via `open`.
@@ -48,11 +48,11 @@ Requirements: Xcode 16+ (or the Swift 6.3+ toolchain), macOS 14
 (Sonoma) or later, and a Developer ID Application certificate in your
 keychain.
 
-After editing `Sources/Parakey/main.swift`:
+After editing `Sources/Presspeech/main.swift`:
 
 ```sh
 ./dev-run.sh
-tail -f ~/Library/Logs/Parakey.log
+tail -f ~/Library/Logs/Presspeech.log
 ```
 
 ## Pull requests
@@ -78,9 +78,9 @@ tail -f ~/Library/Logs/Parakey.log
 
 ## Code structure
 
-- `swift/Sources/Parakey/main.swift` — the menu bar app. One file,
+- `swift/Sources/Presspeech/main.swift` — the menu bar app. One file,
   section-tagged with `// MARK: -` regions. State is kept on the
-  `ParakeyApp` instance and the various support classes
+  `PresspeechApp` instance and the various support classes
   (`Settings`, `HotkeyListener`, `AudioCapture`, `TranscriptionWorker`,
   `UpdateCheck`, etc.).
 - `swift/Package.swift` — SwiftPM manifest, single FluidAudio
@@ -97,7 +97,7 @@ tail -f ~/Library/Logs/Parakey.log
 - `entitlements.plist` — hardened-runtime entitlements (two keys:
   `audio-input` + `microphone`).
 - `experiments/swift-bench/` — head-to-head latency benchmark
-  (FluidAudio/ANE vs the older parakey-mlx/GPU path). Useful when
+  (FluidAudio/ANE vs the older presspeech-mlx/GPU path). Useful when
   changing the inference backend.
 
 See `AGENTS.md` for the deeper architectural invariants (Swift

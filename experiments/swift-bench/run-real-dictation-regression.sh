@@ -36,7 +36,7 @@ usage: ./run-real-dictation-regression.sh [options]
 Options:
   --input-dir <path>       directory with audio + .txt sidecars (default: real-audio)
   --out-dir <path>         report directory (default: real-results)
-  --backend <name>         parakey-bench backend: v3, unified, apple, 110m, fluid, both (default: v3)
+  --backend <name>         presspeech-bench backend: v3, unified, apple, 110m, fluid, both (default: v3)
   --trials <n>             measured trials per clip (default: 5)
   --unified-trailing-silence-ms <n>
                            Unified-only trailing silence in ms (default: 250)
@@ -49,7 +49,7 @@ Options:
 
 Supported input extensions: wav, aiff, aif, caf, m4a, mp3, flac.
 Audio is normalized through afconvert into a temporary 16 kHz Float32
-WAV before benchmarking; parakey-bench then does the final mono
+WAV before benchmarking; presspeech-bench then does the final mono
 conversion with AVAudioConverter.
 USAGE
 }
@@ -88,9 +88,9 @@ fixture_paths_label() {
 
 report_title() {
     if [[ "$CORPUS_KIND" == "public" ]]; then
-        printf 'Parakey Public-Speech Regression'
+        printf 'Presspeech Public-Speech Regression'
     else
-        printf 'Parakey Real-Dictation Regression'
+        printf 'Presspeech Real-Dictation Regression'
     fi
 }
 
@@ -196,7 +196,7 @@ assert_not_contains() {
 
 run_self_test() {
     local tmpdir
-    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-real-self-test.XXXXXX")"
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
     local secret_dir="$tmpdir/Private Client Project"
@@ -229,7 +229,7 @@ run_self_test() {
 
     write_clip_section_header "$report" "$clip_number" "$clip_id" "$secret_stem" "$secret_dir/$secret_stem.wav" "$secret_dir/$secret_stem.txt"
     {
-        echo "parakey-bench: $clip_id.wav, 1 trials, backend=v3"
+        echo "presspeech-bench: $clip_id.wav, 1 trials, backend=v3"
         echo "reference: <redacted ${#secret_transcript} chars>"
         echo "transcript: [WER 0.0%] <redacted ${#secret_transcript} chars>"
         echo '```'
@@ -237,7 +237,7 @@ run_self_test() {
 
     assert_contains "$report" "- Input directory: <redacted path>"
     assert_contains "$report" "- Clip name: <redacted>"
-    assert_contains "$report" "parakey-bench: 001.wav"
+    assert_contains "$report" "presspeech-bench: 001.wav"
     assert_not_contains "$report" "Private Client Project"
     assert_not_contains "$report" "$secret_stem"
     assert_not_contains "$report" "$secret_transcript"
@@ -373,11 +373,11 @@ if [[ "${#missing_refs[@]}" -gt 0 && "$ALLOW_MISSING_REF" -eq 0 ]]; then
 fi
 
 mkdir -p "$OUTDIR"
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-real-dictation.XXXXXX")"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-dictation.XXXXXX")"
 cleanup() { rm -rf "$tmpdir"; }
 trap cleanup EXIT INT TERM
 
-echo "building parakey-bench..."
+echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -402,7 +402,7 @@ for clip in "${clips[@]}"; do
         cp "$ref" "$tmpdir/$clip_id.txt"
     fi
 
-    bench_args=( ".build/release/parakey-bench" "--file" "$normalized" "--backend" "$BACKEND" "--trials" "$TRIALS" "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
+    bench_args=( ".build/release/presspeech-bench" "--file" "$normalized" "--backend" "$BACKEND" "--trials" "$TRIALS" "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
     if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
         bench_args+=( "--redact-transcripts" )
     fi

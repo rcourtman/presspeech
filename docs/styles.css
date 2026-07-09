@@ -195,6 +195,12 @@ section,
   line-height: 1.55;
 }
 
+.hero p.quiet {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: var(--muted-2);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

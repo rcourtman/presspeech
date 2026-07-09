@@ -34,7 +34,7 @@
   <!-- Wordmark + tagline + chips -->
   <g transform="translate(360, 0)">
     <!-- Wordmark -->
-    <text x="0" y="170" font-size="108" font-weight="700" fill="#0F172A" letter-spacing="-2">Parakey</text>
+    <text x="0" y="170" font-size="96" font-weight="700" fill="#0F172A" letter-spacing="-2">Presspeech</text>
 
     <!-- Tagline -->
     <text x="0" y="222" font-size="28" font-weight="500" fill="#475569">Fast, lightweight local dictation for Apple Silicon.</text>
@@ -67,7 +67,7 @@
 
     <!-- brew command -->
     <g transform="translate(0, 395)">
-      <text x="0" y="0" font-size="18" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#64748B" letter-spacing="0.3">brew install --cask rcourtman/parakey/parakey</text>
+      <text x="0" y="0" font-size="18" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#64748B" letter-spacing="0.3">brew install --cask rcourtman/parakey/presspeech</text>
     </g>
   </g>
 </svg>

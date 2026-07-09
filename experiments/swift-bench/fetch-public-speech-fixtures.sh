@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch licensed public speech fixtures for Parakey ASR benchmarks.
+# Fetch licensed public speech fixtures for Presspeech ASR benchmarks.
 #
 # The script intentionally imports a bounded subset into public-audio/
 # rather than checking audio into git. Generated clips are local benchmark
@@ -231,7 +231,7 @@ assert_file_contains() {
 
 run_self_test() {
     local tmpdir
-    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-public-fetch-self-test.XXXXXX")"
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-public-fetch-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
     assert_success "supported split" is_supported_librispeech_split "dev-clean"
@@ -418,7 +418,7 @@ download_file "$archive_url" "$archive_path"
 echo "verifying $archive_name..."
 verify_md5 "$archive_path" "$expected_md5"
 
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-public-fetch.XXXXXX")"
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-public-fetch.XXXXXX")"
 cleanup() { rm -rf "$tmpdir"; }
 trap cleanup EXIT INT TERM
 
@@ -471,7 +471,7 @@ while IFS=$'\t' read -r original_id original_member reference; do
 done <"$selected"
 
 cat >"$fixture_dir/README.txt" <<MSG
-Generated public Parakey benchmark fixtures.
+Generated public Presspeech benchmark fixtures.
 
 Source: LibriSpeech ASR corpus, split $SPLIT
 License: CC BY 4.0

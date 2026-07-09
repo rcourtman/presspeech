@@ -9,7 +9,7 @@ cd swift
 ./dev-run.sh
 ```
 
-- Confirm `/tmp/Parakey-dev.app` launches and the menu-bar item appears.
+- Confirm `/tmp/Presspeech-dev.app` launches and the menu-bar item appears.
 - Open **Support -> Setup Checklist...** and confirm model, permissions,
   audio input, and hotkey rows render.
 - On a clean preference profile, confirm setup asks for **Language & model**
@@ -44,7 +44,7 @@ cd swift
 
 ## Permissions And TCC
 
-- On a clean or reset machine, launch Parakey and use **Setup Checklist...**
+- On a clean or reset machine, launch Presspeech and use **Setup Checklist...**
   to request Microphone, Accessibility, and Input Monitoring.
 - Confirm each granted permission removes or updates its setup row after the
   app is reopened if macOS requires it.
@@ -70,7 +70,7 @@ cd experiments/swift-bench
 ./run-tail-word-regression.sh --self-test
 ./bench-power.sh --self-test
 sudo -v
-./bench-power.sh --file test-audio/short-clean.wav --backend v3 --trials 1 --out-dir /tmp/parakey-power-results
+./bench-power.sh --file test-audio/short-clean.wav --backend v3 --trials 1 --out-dir /tmp/presspeech-power-results
 ```
 
 The real `bench-power.sh` run requires interactive sudo because

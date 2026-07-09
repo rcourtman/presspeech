@@ -16,4 +16,4 @@ Allow: /
 User-agent: PerplexityBot
 Allow: /
 
-Sitemap: https://rcourtman.github.io/parakey/sitemap.xml
+Sitemap: https://rcourtman.github.io/presspeech/sitemap.xml

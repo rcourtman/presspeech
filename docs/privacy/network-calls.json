@@ -1,5 +1,5 @@
 {
-  "project": "Parakey",
+  "project": "Presspeech",
   "privacy_model": "Local dictation, no telemetry, no cloud transcription endpoint",
   "network_calls": [
     {
@@ -15,17 +15,17 @@
     {
       "name": "update_check",
       "when": "Every 6 hours when automatic update checks are enabled, plus one check shortly after launch",
-      "destination": "api.github.com/repos/rcourtman/parakey/releases/latest",
-      "purpose": "Check whether a newer Parakey release is available and notify the user",
+      "destination": "api.github.com/repos/rcourtman/presspeech/releases/latest",
+      "purpose": "Check whether a newer Presspeech release is available and notify the user",
       "user_triggered": false,
       "can_disable": true,
-      "data_sent": "GET with a fixed User-Agent header, exactly parakey-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
+      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
     },
     {
       "name": "user_triggered_install_or_update",
       "when": "Only when the user downloads the app directly, installs through Homebrew, or chooses to update through the menu or Homebrew",
       "destination": [
-        "github.com/rcourtman/parakey/releases/download/...",
+        "github.com/rcourtman/presspeech/releases/download/...",
         "github.com/rcourtman/homebrew-parakey",
         "formulae.brew.sh",
         "Homebrew's own update endpoints (github.com / api.github.com)"
@@ -38,9 +38,9 @@
   ],
   "local_storage": {
     "preferences": "~/Library/Preferences/com.local.parakey.plist",
-    "logs": "~/Library/Logs/Parakey.log",
+    "logs": "~/Library/Logs/Presspeech.log",
     "model_cache": "~/Library/Application Support/FluidAudio/",
     "transcripts": "Recent transcript history is in memory only and clears on quit",
-    "clipboard": "Pasted transcripts go through the system pasteboard and stay there until overwritten; Parakey deliberately does not restore the previous clipboard contents, so the last dictation remains visible to clipboard managers and Universal Clipboard"
+    "clipboard": "Pasted transcripts go through the system pasteboard and stay there until overwritten; Presspeech deliberately does not restore the previous clipboard contents, so the last dictation remains visible to clipboard managers and Universal Clipboard"
   }
 }

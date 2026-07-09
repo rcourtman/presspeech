@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate Parakey's pinned speech-model SHA-256 manifest.
+"""Regenerate Presspeech's pinned speech-model SHA-256 manifest.
 
 The v3 Parakeet CoreML repository contains a mix of LFS-backed files
 and small Git blobs. Hugging Face exposes SHA-256 directly for the LFS
@@ -22,7 +22,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "swift" / "Sources" / "Parakey" / "main.swift"
+SOURCE = ROOT / "swift" / "Sources" / "Presspeech" / "main.swift"
 
 DEFAULT_REPO = "FluidInference/parakeet-tdt-0.6b-v3-coreml"
 # The pinned revision is NOT duplicated here: main.swift's

@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Parakey - Local Push-to-Talk Dictation for Apple Silicon Macs</title>
-    <meta name="description" content="Parakey is a free, local, push-to-talk dictation app for Apple Silicon Macs. It runs the local Parakeet TDT v3 CoreML model on the Apple Neural Engine with no cloud transcription or telemetry.">
-    <link rel="canonical" href="https://rcourtman.github.io/parakey/">
+    <title>Presspeech - Local Push-to-Talk Dictation for Apple Silicon Macs</title>
+    <meta name="description" content="Presspeech is a free, local, push-to-talk dictation app for Apple Silicon Macs. It runs the local Parakeet TDT v3 CoreML model on the Apple Neural Engine with no cloud transcription or telemetry.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
-    <meta property="og:title" content="Parakey - Local Push-to-Talk Dictation">
+    <meta property="og:title" content="Presspeech - Local Push-to-Talk Dictation">
     <meta property="og:description" content="Hold a key, speak, release. Text appears at the cursor in about 100 ms. Local speech recognition on Apple Silicon.">
-    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/parakey/main/icon/social-preview.png">
-    <meta property="og:url" content="https://rcourtman.github.io/parakey/">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="styles.css">
@@ -19,18 +19,18 @@
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        "@id": "https://rcourtman.github.io/parakey/#software",
-        "name": "Parakey",
-        "alternateName": "Parakey push-to-talk dictation",
+        "@id": "https://rcourtman.github.io/presspeech/#software",
+        "name": "Presspeech",
+        "alternateName": "Presspeech push-to-talk dictation",
         "description": "Free MIT-licensed menu-bar app for private push-to-talk dictation into any Mac app. Speech recognition runs locally with Parakeet CoreML models on the Apple Neural Engine; no cloud transcription, account, subscription, or telemetry.",
         "operatingSystem": "macOS 14 Sonoma or later",
         "applicationCategory": "UtilitiesApplication",
         "applicationSubCategory": "Speech recognition, dictation, transcription",
         "softwareVersion": "0.2.20",
-        "downloadUrl": "https://github.com/rcourtman/parakey/releases/latest",
-        "installUrl": "https://rcourtman.github.io/parakey/install.html",
-        "codeRepository": "https://github.com/rcourtman/parakey",
-        "license": "https://github.com/rcourtman/parakey/blob/main/LICENSE",
+        "downloadUrl": "https://github.com/rcourtman/presspeech/releases/latest",
+        "installUrl": "https://rcourtman.github.io/presspeech/install.html",
+        "codeRepository": "https://github.com/rcourtman/presspeech",
+        "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -44,11 +44,11 @@
         "memoryRequirements": "About 80 MB RAM while idle",
         "storageRequirements": "2.5 MB signed release zip plus about 500-600 MB for the local speech model cache",
         "processorRequirements": "Apple Silicon with Apple Neural Engine",
-        "screenshot": "https://raw.githubusercontent.com/rcourtman/parakey/main/icon/social-preview.png",
-        "publishingPrinciples": "https://rcourtman.github.io/parakey/llms.txt",
-        "documentation": "https://rcourtman.github.io/parakey/llms.txt",
+        "screenshot": "https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png",
+        "publishingPrinciples": "https://rcourtman.github.io/presspeech/llms.txt",
+        "documentation": "https://rcourtman.github.io/presspeech/llms.txt",
         "sameAs": [
-          "https://github.com/rcourtman/parakey",
+          "https://github.com/rcourtman/presspeech",
           "https://github.com/rcourtman/homebrew-parakey",
           "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
           "https://github.com/FluidInference/FluidAudio"
@@ -59,14 +59,14 @@
   <body>
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
-        <a class="brand" href="./"><span class="brand-mark">P</span><span>Parakey</span></a>
+        <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
           <a href="install.html">Install</a>
           <a href="privacy.html">Privacy</a>
           <a href="benchmarks.html">Benchmarks</a>
           <a href="faq.html">FAQ</a>
           <a href="compare/">Compare</a>
-          <a href="https://github.com/rcourtman/parakey">GitHub</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
         </div>
       </nav>
     </header>
@@ -75,17 +75,18 @@
       <div class="wrap hero">
         <div class="hero-copy">
           <h1>Private dictation into any Mac app.</h1>
-          <p>Hold a key, speak, release. Parakey pastes text at the cursor in about 100 ms with no account, no subscription, and no cloud transcription. Apple Silicon, macOS 14+.</p>
+          <p>Hold a key, speak, release. Presspeech pastes text at the cursor in about 100 ms with no account, no subscription, and no cloud transcription. Apple Silicon, macOS 14+.</p>
+          <p class="quiet">Previously named Parakey. Existing permissions, preferences, and local dictionary rules carry across the rename.</p>
           <div class="actions">
-            <a class="button" href="https://github.com/rcourtman/parakey/releases/latest/download/Parakey.zip">Download Parakey.zip</a>
+            <a class="button" href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Download Presspeech.zip</a>
             <a class="button secondary" href="install.html">Install options</a>
             <a class="button secondary" href="compare/">Compare tools</a>
           </div>
           <div class="install-line" aria-label="Homebrew install command">
             <span class="prompt" aria-hidden="true">$</span>
-            <code>brew install --cask rcourtman/parakey/parakey</code>
+            <code>brew install --cask rcourtman/parakey/presspeech</code>
           </div>
-          <div class="stat-row" aria-label="Parakey summary">
+          <div class="stat-row" aria-label="Presspeech summary">
             <div class="stat"><strong>~100 ms</strong><span>key release to pasted text</span></div>
             <div class="stat"><strong>2.5 MB</strong><span>signed release zip</span></div>
             <div class="stat"><strong>~80 MB</strong><span>RAM while idle</span></div>
@@ -93,13 +94,13 @@
           </div>
         </div>
         <div class="hero-visual">
-          <figure class="menu-mock" aria-label="Parakey menu bar preview">
+          <figure class="menu-mock" aria-label="Presspeech menu bar preview">
             <div class="menu-mock__bar">
               <span class="menu-mock__time">9:41</span>
               <span class="menu-mock__bar-icons" aria-hidden="true">
                 <span class="icon-dot"></span>
                 <span class="icon-rect"></span>
-                <span class="menu-mock__active" title="Parakey">
+                <span class="menu-mock__active" title="Presspeech">
                   <svg viewBox="0 0 100 100" aria-hidden="true">
                     <g fill="currentColor">
                       <rect x="35" y="10" width="30" height="55" rx="15"/>
@@ -113,13 +114,13 @@
             <span class="menu-mock__pointer" aria-hidden="true"></span>
             <div class="menu-mock__panel" role="presentation">
               <div class="menu-mock__row menu-mock__row--header">
-                <strong>Parakey</strong>
+                <strong>Presspeech</strong>
                 <span class="ready">Ready</span>
               </div>
               <div class="menu-mock__sep"></div>
               <div class="menu-mock__row menu-mock__row--recent">
                 <span class="label">Most recent</span>
-                <span class="recent-text">Parakey pastes text at the cursor.</span>
+                <span class="recent-text">Presspeech pastes text at the cursor.</span>
               </div>
               <div class="menu-mock__sep"></div>
               <div class="menu-mock__row menu-mock__row--hover">
@@ -130,7 +131,7 @@
                 <span>Setup Checklist…</span>
               </div>
               <div class="menu-mock__row">
-                <span>About Parakey</span>
+                <span>About Presspeech</span>
               </div>
               <div class="menu-mock__row">
                 <span>Copy Diagnostics</span>
@@ -140,7 +141,7 @@
               </div>
               <div class="menu-mock__sep"></div>
               <div class="menu-mock__row">
-                <span>Quit Parakey</span>
+                <span>Quit Presspeech</span>
                 <span class="menu-mock__kbd">⌘ Q</span>
               </div>
             </div>
@@ -165,12 +166,33 @@
 
       <section>
         <div class="wrap">
+          <span class="section-eyebrow">New in 0.3</span>
+          <h2>Say exactly what should happen</h2>
+          <div class="grid">
+            <article class="card">
+              <h3>Voice shortcuts</h3>
+              <p>Map a phrase you say to exact reusable text. No rewriting model, no cloud call, and no ambiguity about the result.</p>
+            </article>
+            <article class="card">
+              <h3>Spoken formatting</h3>
+              <p>Opt in to deterministic commands including “new paragraph”, “bullet point”, “comma”, “open quote”, and more.</p>
+            </article>
+            <article class="card">
+              <h3>Try Dictation</h3>
+              <p>Finish setup in a focused private scratchpad, test the hotkey immediately, then take the same workflow into any Mac app.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
           <span class="section-eyebrow">One workflow</span>
           <h2>Built for one thing, not ten</h2>
           <div class="grid">
             <article class="card">
               <h3>Press and speak</h3>
-              <p>Parakey is a menu-bar utility, not a document manager. The default trigger is Right Option, with other hotkeys available from the menu.</p>
+              <p>Presspeech is a menu-bar utility, not a document manager. The default trigger is Right Option, with other hotkeys available from the menu.</p>
             </article>
             <article class="card">
               <h3>Local speech recognition</h3>
@@ -187,10 +209,10 @@
       <section>
         <div class="wrap">
           <span class="section-eyebrow">Good fit</span>
-          <h2>When Parakey is the right pick</h2>
+          <h2>When Presspeech is the right pick</h2>
           <div class="grid two">
             <article class="card">
-              <h3>Use Parakey when you want</h3>
+              <h3>Use Presspeech when you want</h3>
               <p>Fast phrase-length dictation into whatever app already has focus; a local-only privacy model; a tiny notarised app; and a workflow that does not keep a transcript library.</p>
             </article>
             <article class="card">
@@ -218,7 +240,7 @@
     <footer class="site-footer">
       <div class="wrap">
         <span>MIT licensed. Free, local push-to-talk dictation.</span>
-        <span><a href="https://github.com/rcourtman/parakey">Source</a> · <a href="sitemap.xml">Sitemap</a> · <a href="llms.txt">llms.txt</a></span>
+        <span><a href="https://github.com/rcourtman/presspeech">Source</a> · <a href="sitemap.xml">Sitemap</a> · <a href="llms.txt">llms.txt</a></span>
       </div>
     </footer>
   </body>

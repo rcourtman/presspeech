@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Render the Parakey demo: drive marketing/demo/index.html through
+// Render the Presspeech demo: drive marketing/demo/index.html through
 // puppeteer-core (pointed at the system Chrome — no separate Chromium
 // download), screenshot every frame deterministically, then encode the
 // frame sequence to MP4 / WebM / GIF with ffmpeg.
@@ -83,7 +83,7 @@ async function captureFrames() {
 }
 
 function encodeMp4() {
-  const out = path.join(DIST_DIR, 'parakey-demo.mp4');
+  const out = path.join(DIST_DIR, 'presspeech-demo.mp4');
   log(`encoding MP4 → ${out}`);
   run(FFMPEG, [
     '-y',
@@ -102,7 +102,7 @@ function encodeMp4() {
 }
 
 function encodeWebm() {
-  const out = path.join(DIST_DIR, 'parakey-demo.webm');
+  const out = path.join(DIST_DIR, 'presspeech-demo.webm');
   log(`encoding WebM → ${out}`);
   run(FFMPEG, [
     '-y',
@@ -123,7 +123,7 @@ function encodeGif() {
   // Two-pass palette method, downscaled to 1080px wide and 20fps so the
   // GIF stays a sensible size while remaining readable in a Reddit feed.
   const palette = path.join(FRAMES_DIR, 'palette.png');
-  const out     = path.join(DIST_DIR, 'parakey-demo.gif');
+  const out     = path.join(DIST_DIR, 'presspeech-demo.gif');
   log(`encoding GIF → ${out}`);
   run(FFMPEG, [
     '-y',

@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Parakey</string>
+	<string>Presspeech</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>Parakey Corrections</string>
+			<string>Presspeech Corrections</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -20,15 +20,15 @@
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
-	<string>Parakey</string>
+	<string>Presspeech</string>
 	<key>CFBundleIconFile</key>
-	<string>Parakey</string>
+	<string>Presspeech</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.local.parakey</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Parakey</string>
+	<string>Presspeech</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -40,13 +40,13 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Parakey uses System Events to paste transcribed text at your cursor and to mute the system audio output during recording.</string>
+	<string>Presspeech uses System Events to paste transcribed text at your cursor and to mute the system audio output during recording.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>MIT licensed. github.com/rcourtman/parakey</string>
+	<string>MIT licensed. github.com/rcourtman/presspeech</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Parakey records audio while you hold the dictation hotkey, then transcribes it locally on your Mac.</string>
+	<string>Presspeech records audio while you hold the dictation hotkey, then transcribes it locally on your Mac.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -55,15 +55,21 @@
 				<string>public.json</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>Parakey Corrections</string>
+			<string>Presspeech Corrections</string>
 			<key>UTTypeIdentifier</key>
 			<string>com.local.parakey.corrections</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
-				<string>parakey-corrections</string>
+				<array>
+					<string>presspeech-corrections</string>
+					<string>parakey-corrections</string>
+				</array>
 				<key>public.mime-type</key>
-				<string>application/vnd.parakey.corrections+json</string>
+				<array>
+					<string>application/vnd.presspeech.corrections+json</string>
+					<string>application/vnd.parakey.corrections+json</string>
+				</array>
 			</dict>
 		</dict>
 	</array>

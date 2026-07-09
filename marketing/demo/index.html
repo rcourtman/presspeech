@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Parakey demo</title>
+    <title>Presspeech demo</title>
     <style>
       :root {
         --text: #18201d;
@@ -106,19 +106,19 @@
         font-variant-numeric: tabular-nums;
         font-weight: 500;
       }
-      /* Parakey menubar icon — black template by default, switches to
+      /* Presspeech menubar icon — black template by default, switches to
          the macOS-systemRed tint while the hotkey is held. Mirrors
          setMenuBarState(.recording) → button.contentTintColor =
-         .systemRed in swift/Sources/Parakey/main.swift. */
-      .parakey-mb {
+         .systemRed in swift/Sources/Presspeech/main.swift. */
+      .presspeech-mb {
         position: relative;
         width: 30px; height: 30px;
         border-radius: 7px;
         display: grid; place-items: center;
         color: #18201d;
       }
-      .parakey-mb svg { width: 18px; height: 18px; transition: none; }
-      .parakey-mb.recording { color: var(--rec); }
+      .presspeech-mb svg { width: 18px; height: 18px; transition: none; }
+      .presspeech-mb.recording { color: var(--rec); }
 
       /* ---------- Editor window ---------- */
       .editor {
@@ -191,7 +191,7 @@
       /* ---------- Keypress visualisation + narration. ---------- */
       /* The input zone — keycap and narration — sits in the desktop
          band just below the menubar, right of centre. This way the
-         menubar's Parakey icon and the keycap are in the same vertical
+         menubar's Presspeech icon and the keycap are in the same vertical
          neighbourhood: when the camera zooms to the menubar, both
          appear in the same frame, so the press and the icon flip
          visibly tie together. */
@@ -260,7 +260,7 @@
          narration during the recording beat. Communicates "live audio
          right now" without faking an app waveform. Clearly sits in
          the demo's subtitle voice (next to plain narration text),
-         not pretending to be Parakey UI. */
+         not pretending to be Presspeech UI. */
       .narration-pulse {
         display: inline-block;
         width: 12px;
@@ -311,7 +311,7 @@
           <rect x="22" y="80" width="56" height="6" rx="3"/>
         </svg>
       </div>
-      <div class="title-word">Parakey</div>
+      <div class="title-word">Presspeech</div>
       <div class="title-tag">Local push-to-talk dictation for Apple Silicon Macs</div>
     </div>
 
@@ -343,7 +343,7 @@
             <circle cx="11" cy="16" r="1.2" fill="currentColor" stroke="none"/>
           </svg>
         </span>
-        <span class="parakey-mb" id="parakeyMb" aria-hidden="true">
+        <span class="presspeech-mb" id="presspeechMb" aria-hidden="true">
           <svg viewBox="0 0 100 100" fill="currentColor">
             <rect x="35" y="10" width="30" height="55" rx="15"/>
             <rect x="48.5" y="65" width="3" height="15"/>
@@ -382,13 +382,13 @@
     </div>
 
     <script>
-      const FULL_TEXT = "Parakey is a local push-to-talk dictation app for Apple Silicon Macs.";
+      const FULL_TEXT = "Presspeech is a local push-to-talk dictation app for Apple Silicon Macs.";
 
       // Beats:
-      //  0.0 – 1.8 s   Title card ("Parakey — local push-to-talk…")
+      //  0.0 – 1.8 s   Title card ("Presspeech — local push-to-talk…")
       //  1.8 – 2.7 s   Title fades out, scene fades in, narration reads
       //                "Hold Right Option"
-      //  2.7 s         KEY DOWN. Keycap depresses. Menubar Parakey icon
+      //  2.7 s         KEY DOWN. Keycap depresses. Menubar Presspeech icon
       //                switches to systemRed; attention ring pulses
       //                once around it. Audio-input ripples begin.
       //  2.7 – 7.7 s   Recording. Live "Listening · x.xs" counter.
@@ -426,7 +426,7 @@
       const keycap          = document.getElementById('keycap');
       const narrationText   = document.getElementById('narrationText');
       const narrationPulse  = document.getElementById('narrationPulse');
-      const parakeyMb       = document.getElementById('parakeyMb');
+      const presspeechMb       = document.getElementById('presspeechMb');
       const captionMain     = document.getElementById('captionMain');
       const captionSub      = document.getElementById('captionSub');
 
@@ -537,7 +537,7 @@
         // ----- Keycap + menubar state during the hotkey hold -----
         const isRecording = (t >= TL.keyDown && t < TL.recordingEnd);
         keycap.classList.toggle('pressed', isRecording);
-        parakeyMb.classList.toggle('recording', isRecording);
+        presspeechMb.classList.toggle('recording', isRecording);
 
         // Press animation — spring-overshoot depress on key-down,
         // pulsing red held-glow while the key stays down, snap back

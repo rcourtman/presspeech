@@ -17,7 +17,7 @@ body:
   - type: textarea
     id: scope
     attributes:
-      label: Why this fits Parakey's scope
+      label: Why this fits Presspeech's scope
       description: |
         See CONTRIBUTING.md. Out-of-scope: cloud backends, cross-platform
         ports, heavy preferences UI. Try to make the case briefly.

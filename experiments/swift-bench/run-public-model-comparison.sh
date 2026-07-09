@@ -101,7 +101,7 @@ assert_contains() {
 
 run_self_test() {
     local tmpdir
-    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-public-compare-self-test.XXXXXX")"
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-public-compare-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
     assert_eq "$(default_fixture_dir librispeech dev-clean)" "public-audio/librispeech-dev-clean" "default fixture dir"

@@ -3,7 +3,7 @@
   <!-- background -->
   <rect width="1280" height="640" fill="#FAF8F2"/>
 
-  <!-- left: the squircle logo (scaled-down version of icon/parakey.svg) -->
+  <!-- left: the squircle logo (scaled-down version of icon/presspeech.svg) -->
   <g transform="translate(80, 80)">
     <rect width="480" height="480" rx="109" fill="#10B981"/>
     <rect x="174" y="103" width="131" height="206" rx="65" fill="#FFFFFF"/>
@@ -13,7 +13,7 @@
 
   <!-- right: title + tagline -->
   <g transform="translate(640, 0)">
-    <text x="0" y="270" font-size="120" font-weight="700" fill="#0F172A">Parakey</text>
+    <text x="0" y="270" font-size="98" font-weight="700" fill="#0F172A" letter-spacing="-1">Presspeech</text>
     <text x="0" y="330" font-size="32" font-weight="500" fill="#475569">Push-to-talk dictation</text>
     <text x="0" y="370" font-size="32" font-weight="500" fill="#475569">for Apple Silicon Macs</text>
 
@@ -27,7 +27,7 @@
            flows naturally rather than being hand-positioned. -->
       <text x="0" y="38" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="19" xml:space="preserve"><tspan font-weight="700" fill="#0F172A">~100 ms </tspan><tspan font-weight="400" fill="#475569">transcription   </tspan><tspan font-weight="700" fill="#0F172A">2.5 MB </tspan><tspan font-weight="400" fill="#475569">download   </tspan><tspan font-weight="700" fill="#0F172A">~80 MB </tspan><tspan font-weight="400" fill="#475569">RAM</tspan></text>
 
-      <text x="0" y="98" font-size="20" font-weight="400" fill="#64748B" letter-spacing="0.5">brew install --cask rcourtman/parakey/parakey</text>
+      <text x="0" y="98" font-size="20" font-weight="400" fill="#64748B" letter-spacing="0.5">brew install --cask rcourtman/parakey/presspeech</text>
     </g>
   </g>
 </svg>

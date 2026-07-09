@@ -81,7 +81,7 @@ assert_file_contains() {
 
 run_self_test() {
     local tmpdir
-    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/parakey-add-fixture-self-test.XXXXXX")"
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-add-fixture-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
     assert_success "safe id" is_safe_clip_id "short-note_001"

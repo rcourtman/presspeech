@@ -1,7 +1,7 @@
 {
-  "project": "Parakey",
+  "project": "Presspeech",
   "benchmark": "swift-bench",
-  "source": "https://github.com/rcourtman/parakey/tree/main/experiments/swift-bench",
+  "source": "https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench",
   "environment": {
     "machine": "Mac mini M4",
     "cpu_cores": 10,
@@ -33,7 +33,7 @@
       "label": "Candidate only: FluidAudio Swift SDK, Nemotron Speech Streaming English 0.6B 1120 ms tier, CoreML",
       "hardware": "Apple Neural Engine"
     },
-    "parakey_mlx": {
+    "presspeech_mlx": {
       "label": "Prior parakeet_mlx path through MLX",
       "hardware": "GPU"
     }
@@ -43,28 +43,28 @@
       "clip": "short-clean",
       "duration_seconds": 2.50,
       "fluid_p50_ms": 92.4,
-      "parakey_mlx_p50_ms": 145.4,
+      "presspeech_mlx_p50_ms": 145.4,
       "speed_ratio": 1.57
     },
     {
       "clip": "medium-clean",
       "duration_seconds": 3.99,
       "fluid_p50_ms": 96.1,
-      "parakey_mlx_p50_ms": 176.3,
+      "presspeech_mlx_p50_ms": 176.3,
       "speed_ratio": 1.83
     },
     {
       "clip": "disfluent",
       "duration_seconds": 5.31,
       "fluid_p50_ms": 94.1,
-      "parakey_mlx_p50_ms": 185.9,
+      "presspeech_mlx_p50_ms": 185.9,
       "speed_ratio": 1.97
     },
     {
       "clip": "longer-technical",
       "duration_seconds": 9.49,
       "fluid_p50_ms": 152.4,
-      "parakey_mlx_p50_ms": 300.9,
+      "presspeech_mlx_p50_ms": 300.9,
       "speed_ratio": 1.97
     }
   ],

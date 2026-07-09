@@ -1,12 +1,12 @@
-// parakey-bench — head-to-head benchmark of Apple SpeechAnalyzer
+// presspeech-bench — head-to-head benchmark of Apple SpeechAnalyzer
 // (DictationTranscriber on the Apple Neural Engine, built into
 // macOS 26 Tahoe) vs FluidAudio model variants via CoreML on the
 // ANE on the same audio. Output is intentionally comparable to
-// the sibling `./bench-py.py` (Python parakey-mlx, GPU/Metal), so
+// the sibling `./bench-py.py` (Python presspeech-mlx, GPU/Metal), so
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   parakey-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|unified|nemotron-en|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|unified|nemotron-en|110m|fluid|both] [--redact-transcripts]
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -70,7 +70,7 @@ func parseArgs() -> CLIArgs {
             unifiedTrailingSilenceMs = n
         case "-h", "--help":
             print("""
-            usage: parakey-bench --file <wav> [--trials N] [--backend apple|v3|unified|nemotron-en|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|unified|nemotron-en|110m|fluid|both] [--ref "text"] [--redact-transcripts]
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
                          unified
@@ -88,7 +88,7 @@ func parseArgs() -> CLIArgs {
                          reporting WER; useful for private real-dictation runs
               --unified-trailing-silence-ms <n>
                          append n ms of silence before Unified transcription
-                         (default: \(UNIFIED_MODEL_TRAILING_SILENCE_MS), matching Parakey)
+                         (default: \(UNIFIED_MODEL_TRAILING_SILENCE_MS), matching Presspeech)
 
             For a clean per-model memory number, run one model per process
             (--backend v3, then --backend 110m) — footprint is cumulative
@@ -235,7 +235,7 @@ final class AppleBackend: ASRBackend {
 
     private func makeTranscriber() -> DictationTranscriber {
         // DictationTranscriber is the dictation-focused module (auto-
-        // punctuation, sentence structure), which matches Parakey's
+        // punctuation, sentence structure), which matches Presspeech's
         // workload. SpeechTranscriber is the raw-words sibling for
         // command-recognition use cases — wrong fit here.
         DictationTranscriber(
@@ -251,7 +251,7 @@ final class AppleBackend: ASRBackend {
         // `SpeechAnalyzer.finalizeAndFinishThroughEndOfInput()` puts the
         // analyzer (and the modules attached to it) into a terminal
         // state — you cannot push more audio afterwards. For push-to-
-        // talk style benchmarks (and Parakey's real-world usage) the
+        // talk style benchmarks (and Presspeech's real-world usage) the
         // canonical pattern is therefore a fresh analyzer+transcriber
         // per utterance, mirroring `TdtDecoderState()` on the fluid
         // side.
@@ -352,7 +352,7 @@ final class FluidBackend: ASRBackend {
         // TDT keeps decoder state (LSTM hidden + last-token) across
         // streaming chunks. For a single isolated utterance the
         // canonical pattern is a fresh state per transcribe call,
-        // matching what Parakey's push-to-talk usage looks like.
+        // matching what Presspeech's push-to-talk usage looks like.
         var state = try TdtDecoderState()
         let t0 = Date()
         let result = try await asr.transcribe(samples, decoderState: &state)
@@ -363,7 +363,7 @@ final class FluidBackend: ASRBackend {
 // ----- FluidAudio Unified (Parakeet Unified → CoreML → ANE) -------------
 //
 // English-only candidate backend. This is not a drop-in replacement for
-// Parakey's production v3 path because it uses FluidAudio's Unified manager
+// Presspeech's production v3 path because it uses FluidAudio's Unified manager
 // instead of `AsrModels` / `AsrManager`, but the benchmark interface is the
 // same: one complete push-to-talk utterance in, one transcript out.
 
@@ -397,7 +397,7 @@ final class UnifiedBatchBackend: ASRBackend {
 // ----- FluidAudio Nemotron Speech Streaming (English → CoreML → ANE) ----
 //
 // English-only candidate backend. Nemotron is a streaming model, but for
-// Parakey-style push-to-talk benchmarking we feed the full utterance and then
+// Presspeech-style push-to-talk benchmarking we feed the full utterance and then
 // finish the stream, which exercises the same final transcript path users
 // would care about.
 
@@ -590,11 +590,11 @@ func summarize(_ name: String,
 // MARK: - Main
 
 @main
-struct ParakeyBench {
+struct PresspeechBench {
     static func main() async throws {
         let args = parseArgs()
 
-        var runSummary = "parakey-bench: \(args.file.lastPathComponent), \(args.trials) trials, backend=\(args.backend)"
+        var runSummary = "presspeech-bench: \(args.file.lastPathComponent), \(args.trials) trials, backend=\(args.backend)"
         if args.backend == "unified" || args.backend == "both" {
             runSummary += ", unified-trailing-silence-ms=\(args.unifiedTrailingSilenceMs)"
         }
