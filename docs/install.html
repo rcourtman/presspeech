@@ -86,7 +86,7 @@
           <h2>Homebrew install and launch</h2>
           <pre><code>brew install --cask rcourtman/parakey/presspeech
 open /Applications/Presspeech.app</code></pre>
-          <p>Homebrew is the easiest path if you already use it or want command-line updates. The Presspeech icon appears in the menu bar. On first launch, allow 1-5 minutes for the model download before trying the hotkey. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>
+          <p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. Allow 1-5 minutes for the model download before trying the hotkey. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>
         </div>
       </section>
 
@@ -98,7 +98,7 @@ open /Applications/Presspeech.app</code></pre>
           <div class="grid two">
             <article class="card">
               <h3>Homebrew</h3>
-              <p>Run <code>brew update &amp;&amp; brew upgrade --cask parakey</code>. The tap's cask rename migrates the installed token to <code>presspeech</code> and replaces <strong>Parakey.app</strong> with <strong>Presspeech.app</strong>.</p>
+              <p>Run <code>brew update &amp;&amp; brew upgrade --cask rcourtman/parakey/presspeech</code>. The fully qualified command trusts only this cask under Homebrew's tap-trust model, migrates the installed token to <code>presspeech</code>, and replaces <strong>Parakey.app</strong> with <strong>Presspeech.app</strong>. Launch Presspeech and accept the standard macOS downloaded-app confirmation once.</p>
             </article>
             <article class="card">
               <h3>Direct download</h3>
@@ -206,8 +206,8 @@ After launch, explain that Presspeech downloads the ~500-600 MB local speech mod
         <div class="wrap">
           <span class="section-eyebrow">Maintenance</span>
           <h2>Update and uninstall</h2>
-          <pre><code>brew upgrade --cask presspeech
-brew uninstall --zap --cask presspeech</code></pre>
+          <pre><code>brew upgrade --cask rcourtman/parakey/presspeech
+brew uninstall --zap --cask rcourtman/parakey/presspeech</code></pre>
           <p>The in-app update menu also appears when Presspeech finds a newer GitHub release. The menu only notifies; installation starts only after you choose Update Now.</p>
         </div>
       </section>
