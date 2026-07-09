@@ -47,6 +47,10 @@ brew install --cask rcourtman/parakey/presspeech
 open /Applications/Presspeech.app
 ```
 
+On first launch, macOS shows its standard downloaded-app confirmation.
+Choose **Open** after checking that it says Apple found no malicious software;
+Presspeech then appears in the menu bar.
+
 Requirements:
 
 - Apple Silicon Mac
