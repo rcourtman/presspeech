@@ -3340,7 +3340,7 @@ actor TranscriptionWorker {
     private var inFlight = false
 
     func load(profile requestedProfile: SpeechModelProfile,
-              progressHandler: DownloadUtils.ProgressHandler? = nil) async throws {
+              progressHandler: ProgressHandler? = nil) async throws {
         let profile = requestedProfile.productionProfile
         if requestedProfile != profile {
             log("ASR: ignoring unsupported speech model \(requestedProfile.shortName); using \(profile.shortName)")
@@ -3362,7 +3362,7 @@ actor TranscriptionWorker {
         log("ASR: \(profile.shortName) ready in \(String(format: "%.2f", Date().timeIntervalSince(t0))) s")
     }
 
-    private func loadParakeetV3(progressHandler: DownloadUtils.ProgressHandler?) async throws -> AsrManager {
+    private func loadParakeetV3(progressHandler: ProgressHandler?) async throws -> AsrManager {
         if !speechModelCacheExists(for: .multilingualV3) {
             try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
         }
@@ -3702,7 +3702,7 @@ func pastedText(from correctedTranscript: String, suffix: PasteSuffix) -> String
     }
 }
 
-func speechModelStartupStatusTitle(_ progress: DownloadUtils.DownloadProgress) -> String {
+func speechModelStartupStatusTitle(_ progress: DownloadProgress) -> String {
     switch progress.phase {
     case .listing:
         return "Checking speech model files…"
@@ -3716,7 +3716,7 @@ func speechModelStartupStatusTitle(_ progress: DownloadUtils.DownloadProgress) -
     }
 }
 
-func speechModelStartupProgressValue(_ progress: DownloadUtils.DownloadProgress) -> Double? {
+func speechModelStartupProgressValue(_ progress: DownloadProgress) -> Double? {
     switch progress.phase {
     case .downloading(_, let totalFiles):
         guard totalFiles > 0 else { return nil }
@@ -5771,7 +5771,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         rebuildMenu()
     }
 
-    private func updateSpeechModelStartupProgress(_ progress: DownloadUtils.DownloadProgress) {
+    private func updateSpeechModelStartupProgress(_ progress: DownloadProgress) {
         guard startupTask != nil, !isTerminating else { return }
         let next = speechModelStartupStatusTitle(progress)
         let nextProgressFraction = speechModelStartupProgressValue(progress)
