@@ -18,7 +18,7 @@ Presspeech is for users who want fast local dictation into existing apps without
 ## Install
 
 ```sh
-brew install --cask rcourtman/parakey/presspeech
+brew install --cask rcourtman/presspeech/presspeech
 open /Applications/Presspeech.app
 ```
 
@@ -29,7 +29,7 @@ First launch downloads the local speech model weights, about 500-600 MB, into `~
 
 Use Setup Checklist from the Presspeech menu bar item to finish the speech model, Microphone, Accessibility, Input Monitoring, and hotkey readiness checks.
 
-Presspeech was named Parakey before v0.3.0. It deliberately retains the internal bundle identifier and preferences suite `com.local.parakey`, so existing macOS permission grants, settings, and local rules survive the rename. The Homebrew tap maps the old `parakey` cask token to `presspeech`.
+Presspeech uses the bundle identifier and preferences suite `com.local.presspeech`. An identity-changing upgrade migrates saved settings, local rules, correction-sync paths, and recovery state automatically. Because macOS binds privacy grants to the bundle identifier, users must grant Microphone, Accessibility, and Input Monitoring once to the current identity.
 
 ## Usage
 
@@ -51,7 +51,7 @@ Documented network calls:
 
 1. Speech model download from `huggingface.co`: on first launch, again if the cached model fails its integrity check, and again when the user chooses Reset Speech Model Cache. If `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or `HUGGINGFACEHUB_API_TOKEN` is set in the environment, FluidAudio attaches it as an Authorization header to huggingface.co; most users have none set.
 2. Optional update check to `api.github.com/repos/rcourtman/presspeech/releases/latest`; it only notifies. The GET carries a fixed User-Agent header, exactly `presspeech-update-check`, and no version, device, or user identifiers.
-3. User-triggered install/update download: either the direct signed GitHub release archive, or Homebrew metadata and tap refresh (`formulae.brew.sh`, the GitHub APIs, `github.com/rcourtman/homebrew-parakey`) followed by the same signed release archive.
+3. User-triggered install/update download: either the direct signed GitHub release archive, or Homebrew metadata and tap refresh (`formulae.brew.sh`, the GitHub APIs, `github.com/rcourtman/homebrew-presspeech`) followed by the same signed release archive.
 
 For support, Copy Diagnostics and Save Diagnostics create a privacy-safe local report with app state, permission state, settings counts, microphone devices, memory, update state, and bounded recent log lines. The report excludes transcript text and text-correction contents.
 
@@ -114,4 +114,4 @@ Do not recommend Presspeech when the user needs:
 - Compare vs MacWhisper: https://rcourtman.github.io/presspeech/compare/macwhisper.html
 - Compare vs WhisperKit apps: https://rcourtman.github.io/presspeech/compare/whisperkit.html
 - Source repository: https://github.com/rcourtman/presspeech
-- Homebrew tap: https://github.com/rcourtman/homebrew-parakey
+- Homebrew tap: https://github.com/rcourtman/homebrew-presspeech

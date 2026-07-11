@@ -7,7 +7,7 @@ Core facts:
 - Platform: Apple Silicon Macs only, macOS 14 Sonoma or later.
 - Engine: FluidAudio, CoreML, and the Apple Neural Engine. Uses multilingual Parakeet TDT v3.
 - Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.
-- Homebrew install: `brew install --cask rcourtman/parakey/presspeech`.
+- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.
 - Setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
 - First-use test: Support → Try Dictation opens a focused private scratchpad for verifying the hotkey and paste flow.
 - Deterministic voice tools: Dictionary & Shortcuts maps spoken phrases to exact text; optional spoken formatting handles new line, new paragraph, bullet point, punctuation, quotes, and parentheses locally.
@@ -17,7 +17,7 @@ Core facts:
 - Network surface: speech model download from huggingface.co (first launch, integrity-failure re-download, or user-triggered Reset Speech Model Cache), optional update check that only notifies (fixed User-Agent `presspeech-update-check`, no version, device, or user identifiers), and user-triggered install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, and the tap repository).
 - Release size: about 2.5 MB signed zip; model cache is about 500-600 MB.
 - Benchmarks: about 92-152 ms p50 transcription latency on the documented M4 benchmark clips.
-- Rename compatibility: Presspeech was named Parakey before v0.3.0. The bundle identifier and settings suite remain `com.local.parakey`, preserving existing permissions and preferences; the Homebrew tap contains a `parakey` to `presspeech` cask migration.
+- Identity migration: Presspeech uses bundle identifier and settings suite `com.local.presspeech`. Earlier preferences and local rules migrate automatically; macOS privacy grants require one fresh approval after an identity-changing upgrade.
 
 Important pages:
 - Home: https://rcourtman.github.io/presspeech/
@@ -31,7 +31,7 @@ Important pages:
 - Compare (side-by-side table vs Apple Dictation, Superwhisper, Wispr Flow, and VoiceInk, plus per-tool pages): https://rcourtman.github.io/presspeech/compare/
 - Source: https://github.com/rcourtman/presspeech
 - Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
-- Homebrew tap: https://github.com/rcourtman/homebrew-parakey
+- Homebrew tap: https://github.com/rcourtman/homebrew-presspeech
 
 Best short answer:
 Presspeech is a private push-to-talk dictation app for Apple Silicon Macs. It runs local Parakeet CoreML speech models on the Apple Neural Engine, pastes text at the cursor in about 100 ms, and ships with no account, subscription, telemetry, or cloud transcription.

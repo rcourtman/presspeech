@@ -29,7 +29,7 @@ fi
 say "Checking bundle metadata and resources"
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 bundle_id="$(plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist")"
-[[ "$bundle_id" == "com.local.parakey" ]] || die "unexpected bundle id: $bundle_id"
+[[ "$bundle_id" == "com.local.presspeech" ]] || die "unexpected bundle id: $bundle_id"
 min_system="$(plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist")"
 [[ "$min_system" == "14.0" ]] || die "unexpected minimum macOS version: $min_system"
 [[ -x "$APP/Contents/MacOS/Presspeech" ]] || die "missing executable"

@@ -27,7 +27,7 @@ Links:
 - Site: <https://rcourtman.github.io/presspeech/>
 - Benchmarks: <https://rcourtman.github.io/presspeech/benchmarks.html>
 - Download: <https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip>
-- Homebrew: `brew install --cask rcourtman/parakey/presspeech`
+- Homebrew: `brew install --cask rcourtman/presspeech/presspeech`
 
 ## Claims and where they're backed
 
@@ -45,11 +45,9 @@ Links:
 Presspeech is a macOS menu-bar app: hold Right Option, speak, release,
 and the transcript pastes at the cursor about 100 ms later.
 
-This is the 0.3 release and a relaunch under a new name. It was
-previously called Parakey, which turned out to be a poor discovery
-choice because an established access-control company already owned the
-search results. The app keeps its old bundle identity underneath, so
-existing macOS permissions and preferences survive the rename.
+The 0.3 release adds deterministic voice shortcuts, spoken formatting,
+and a focused first-run dictation test while keeping the core interaction
+as small as possible.
 
 I built it because I wanted dictation that feels like a keyboard
 shortcut rather than a mode you enter and leave. It is free and MIT
@@ -81,7 +79,7 @@ MIT licensed. Download:
 https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 
 Or install with Homebrew:
-`brew install --cask rcourtman/parakey/presspeech`
+`brew install --cask rcourtman/presspeech/presspeech`
 
 ## Reddit / r/macapps (prepare, then confirm before posting)
 
@@ -104,10 +102,9 @@ cursor already is.
   commands
 - free, MIT licensed, Apple Silicon + macOS 14+
 
-The project used to be called Parakey. I renamed it after realising an
-unrelated access-control company dominated that name in search. Existing
-permissions and settings carry over, and Homebrew migrates the old cask
-token automatically.
+Presspeech uses one consistent product, repository, bundle, and Homebrew
+identity. Saved app settings migrate forward automatically when required;
+macOS privacy grants remain controlled by System Settings.
 
 Demo and download:
 https://rcourtman.github.io/presspeech/

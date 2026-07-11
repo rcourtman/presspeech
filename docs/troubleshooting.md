@@ -14,9 +14,9 @@ If a permission row still does not appear:
 4. If it still does not appear, reset the affected TCC entry:
 
 ```sh
-tccutil reset Microphone com.local.parakey
-tccutil reset Accessibility com.local.parakey
-tccutil reset ListenEvent com.local.parakey
+tccutil reset Microphone com.local.presspeech
+tccutil reset Accessibility com.local.presspeech
+tccutil reset ListenEvent com.local.presspeech
 ```
 
 Then reopen Presspeech and request the permissions again.

@@ -50,8 +50,8 @@ let UPDATE_REMIND_LATER_SECONDS: TimeInterval = 24 * 3600  // 24h
 let GITHUB_LATEST_RELEASE_URL = URL(string: "https://api.github.com/repos/rcourtman/presspeech/releases/latest")!
 let GITHUB_REPOSITORY_PAGE = URL(string: "https://github.com/rcourtman/presspeech")!
 let GITHUB_RELEASES_PAGE = URL(string: "https://github.com/rcourtman/presspeech/releases/latest")!
-let HOMEBREW_CASK_TAP = "rcourtman/parakey"
-let HOMEBREW_CASK_TOKEN = "rcourtman/parakey/presspeech"
+let HOMEBREW_CASK_TAP = "rcourtman/presspeech"
+let HOMEBREW_CASK_TOKEN = "rcourtman/presspeech/presspeech"
 let HOMEBREW_CASK_INSTALLED_TOKEN = "presspeech"
 let INSTALLED_APP_BUNDLE_PATH = "/Applications/Presspeech.app"
 let UPDATE_HELPER_LOG_PATH = (NSHomeDirectory() as NSString)
@@ -75,10 +75,16 @@ let AUDIO_IDLE_STOP_DELAY_SECONDS: TimeInterval = 5
 let AUDIO_CONFIGURATION_CHANGE_SUPPRESSION_SECONDS: TimeInterval = 1
 let MODEL_DOWNLOAD_HEADROOM_BYTES: Int64 = 500 * 1024 * 1024
 
-let SETTINGS_SUITE = "com.local.parakey"
-let CORRECTIONS_FILE_UTI = "com.local.parakey.corrections"
+let SETTINGS_SUITE = "com.local.presspeech"
+let CORRECTIONS_FILE_UTI = "com.local.presspeech.corrections"
 let CORRECTIONS_FILE_EXTENSION = "presspeech-corrections"
 let CORRECTIONS_FILE_NAME = "Presspeech Corrections.\(CORRECTIONS_FILE_EXTENSION)"
+// Migration-only identifiers. They let the first build with the
+// Presspeech identity move existing user data, then delete the former
+// defaults domain and support files. Do not use these for new state.
+private let LEGACY_SETTINGS_SUITE = "com.local.parakey"
+private let LEGACY_APPLICATION_SUPPORT_DIRECTORY_NAME = "Parakey"
+private let LEGACY_CORRECTIONS_FILE_EXTENSION = "parakey-corrections"
 let MAX_TRANSCRIPT_CORRECTIONS = 512
 let MAX_TRANSCRIPT_CORRECTION_SOURCE_BYTES = 512
 let MAX_TRANSCRIPT_CORRECTION_REPLACEMENT_BYTES = 4096
@@ -1573,8 +1579,7 @@ func privacySafeLogPath(_ url: URL) -> String {
 
 func privacySafeBundlePath(_ path: String) -> String {
     switch path {
-    case "/Applications/Presspeech.app", "/tmp/Presspeech-dev.app",
-         "/Applications/Parakey.app", "/tmp/Parakey-dev.app":
+    case "/Applications/Presspeech.app", "/tmp/Presspeech-dev.app":
         return path
     default:
         return privacySafeLogPath(path)
@@ -1651,11 +1656,27 @@ extension ISO8601DateFormatter {
 // MARK: - Settings
 //
 // Thin wrapper around NSUserDefaults using the explicit suite name
-// `com.local.parakey` (the bundle id), so settings persist at
-// `~/Library/Preferences/com.local.parakey.plist`. One property per
+// `com.local.presspeech` (the bundle id), so settings persist at
+// `~/Library/Preferences/com.local.presspeech.plist`. One property per
 // user-visible setting; defaults are returned inline by each getter
 // when the key is missing, rather than via a central `register()`
 // call.
+
+func settingsDomainAfterIdentityMigration(current: [String: Any],
+                                          legacy: [String: Any]) -> [String: Any] {
+    var migrated = current
+    for (key, value) in legacy where migrated[key] == nil {
+        migrated[key] = value
+    }
+    return migrated
+}
+
+func identityMigrationDestinationURL(forLegacyCorrectionURL url: URL) -> URL? {
+    guard url.pathExtension.caseInsensitiveCompare(LEGACY_CORRECTIONS_FILE_EXTENSION) == .orderedSame else {
+        return nil
+    }
+    return url.deletingPathExtension().appendingPathExtension(CORRECTIONS_FILE_EXTENSION)
+}
 
 final class Settings: @unchecked Sendable {
     private static let keyHotkeyKeycode = "hotkey_keycode"
@@ -1687,14 +1708,30 @@ final class Settings: @unchecked Sendable {
     private static let keyActiveRunMarker = "active_run_marker"
 
     private let defaults: UserDefaults
+    let didMigrateLegacyIdentity: Bool
 
     static let shared = Settings()
 
     init() {
-        // Bundled .app under the Cask uses bundle id com.local.parakey,
+        // Bundled .app under the Cask uses bundle id com.local.presspeech,
         // so `standardUserDefaults` IS the right suite. Belt and braces:
         // also try the suite-name initialiser, which works regardless
         // of bundle identification.
+        let standard = UserDefaults.standard
+        if let legacyDomain = standard.persistentDomain(forName: LEGACY_SETTINGS_SUITE),
+           !legacyDomain.isEmpty {
+            let currentDomain = standard.persistentDomain(forName: SETTINGS_SUITE) ?? [:]
+            let migratedDomain = settingsDomainAfterIdentityMigration(current: currentDomain,
+                                                                       legacy: legacyDomain)
+            standard.setPersistentDomain(migratedDomain, forName: SETTINGS_SUITE)
+            standard.removePersistentDomain(forName: LEGACY_SETTINGS_SUITE)
+            self.didMigrateLegacyIdentity = true
+            log("identity migration: moved \(legacyDomain.count) saved settings")
+        } else {
+            self.didMigrateLegacyIdentity = false
+        }
+        // Construct this after the domain copy so the suite cannot
+        // retain a pre-migration cache.
         self.defaults = UserDefaults(suiteName: SETTINGS_SUITE) ?? .standard
     }
 
@@ -4199,17 +4236,83 @@ func systemAudioUnmuteRequestDecision(phase: SystemAudioMutePhase) -> SystemAudi
 }
 
 private func presspeechApplicationSupportDirectory() -> URL {
-    // Keep the legacy directory across the public rename. In addition
-    // to avoiding orphaned state, this lets Presspeech recover and
-    // unmute audio if the former Parakey build exited while its mute
-    // marker was present.
     FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Parakey", isDirectory: true)
+        .appendingPathComponent("Presspeech", isDirectory: true)
+}
+
+private func legacyApplicationSupportDirectory() -> URL {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent(LEGACY_APPLICATION_SUPPORT_DIRECTORY_NAME, isDirectory: true)
 }
 
 private func systemAudioMuteMarkerURL() -> URL {
     presspeechApplicationSupportDirectory()
         .appendingPathComponent("system-audio-muted", isDirectory: false)
+}
+
+private func migrateLegacyIdentityFilesIfNeeded(settings: Settings,
+                                                fileManager: FileManager = .default) {
+    let legacySupport = legacyApplicationSupportDirectory()
+    let currentSupport = presspeechApplicationSupportDirectory()
+    let markerName = "system-audio-muted"
+    let legacyMarker = legacySupport.appendingPathComponent(markerName, isDirectory: false)
+    let currentMarker = currentSupport.appendingPathComponent(markerName, isDirectory: false)
+
+    if fileManager.fileExists(atPath: legacyMarker.path) {
+        do {
+            try fileManager.createDirectory(at: currentSupport,
+                                            withIntermediateDirectories: true,
+                                            attributes: [.posixPermissions: 0o700])
+            if fileManager.fileExists(atPath: currentMarker.path) {
+                try fileManager.removeItem(at: legacyMarker)
+            } else {
+                try fileManager.moveItem(at: legacyMarker, to: currentMarker)
+            }
+            log("identity migration: moved system-audio recovery state")
+        } catch {
+            log("identity migration: recovery-state move failed: \(error.localizedDescription)")
+        }
+    }
+
+    if let contents = try? fileManager.contentsOfDirectory(atPath: legacySupport.path),
+       contents.isEmpty {
+        try? fileManager.removeItem(at: legacySupport)
+    }
+
+    let configuredPath = settings.transcriptCorrectionsSyncFile
+    if !configuredPath.isEmpty {
+        let legacyURL = URL(fileURLWithPath: configuredPath)
+        if let currentURL = identityMigrationDestinationURL(forLegacyCorrectionURL: legacyURL) {
+            do {
+                if fileManager.fileExists(atPath: currentURL.path) {
+                    settings.transcriptCorrectionsSyncFile = currentURL.path
+                } else if fileManager.fileExists(atPath: legacyURL.path) {
+                    try fileManager.moveItem(at: legacyURL, to: currentURL)
+                    settings.transcriptCorrectionsSyncFile = currentURL.path
+                    log("identity migration: renamed correction sync file")
+                }
+            } catch {
+                // Keep the configured legacy path so sync continues to
+                // work; the next launch can retry the rename.
+                log("identity migration: correction sync rename failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+    let stalePaths = [
+        library.appendingPathComponent("Caches/\(LEGACY_SETTINGS_SUITE)", isDirectory: true),
+        library.appendingPathComponent("HTTPStorages/\(LEGACY_SETTINGS_SUITE)", isDirectory: true),
+        library.appendingPathComponent("Logs/\(LEGACY_APPLICATION_SUPPORT_DIRECTORY_NAME).log",
+                                       isDirectory: false),
+    ]
+    for url in stalePaths where fileManager.fileExists(atPath: url.path) {
+        do {
+            try fileManager.removeItem(at: url)
+        } catch {
+            log("identity migration: stale-file cleanup failed for \(privacySafeLogPath(url)): \(error.localizedDescription)")
+        }
+    }
 }
 
 private func systemAudioMuteMarkerText(pid: pid_t = getpid(), date: Date = Date()) -> String {
@@ -4508,7 +4611,7 @@ func isNewer(_ candidate: String, than current: String) -> Bool {
 // previous denial is still cached). On a fresh launch after an
 // upgrade (CFBundleShortVersionString differs from
 // settings.lastSeenVersion), we proactively `tccutil reset` any
-// DENIED entry for `com.local.parakey`. GRANTED entries stay
+// DENIED entry for `com.local.presspeech`. GRANTED entries stay
 // intact — we never reset away permissions the user gave us.
 //
 // The companion to this is the click-twice-to-reset retry in the
@@ -5659,6 +5762,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             log("ASR: reset unsupported saved speech model selection to \(settings.speechModelProfile.shortName)")
         }
 
+        migrateLegacyIdentityFilesIfNeeded(settings: settings)
+        if settings.didMigrateLegacyIdentity {
+            // macOS does not transfer privacy grants between bundle
+            // identifiers. Remove the former rows so System Settings
+            // shows one current Presspeech identity, then let the
+            // normal setup checklist request fresh grants.
+            for permission in Permission.allCases {
+                TCC.reset(permission, bundleID: LEGACY_SETTINGS_SUITE)
+            }
+            log("identity migration: cleared former privacy-permission rows")
+        }
         recoverStaleTCCAfterUpgrade()
         let previousExitNotice = previousExitNoticeAction(previousRunWasActive: settings.hasActiveRunMarker)
         recoverStaleSystemAudioMuteIfNeeded()
@@ -7928,7 +8042,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // it before tccutil finished would race the scrub it
             // depends on.
             log("  resetting TCC for \(p.rawValue) before retry")
-            TCC.reset(p, bundleID: Bundle.main.bundleIdentifier ?? "com.local.parakey") { [weak self] in
+            TCC.reset(p, bundleID: Bundle.main.bundleIdentifier ?? "com.local.presspeech") { [weak self] in
                 guard let self, !self.isTerminating else { return }
                 Permissions.request(p)
                 self.startPermissionReadinessMonitor(reason: "permission grant")
@@ -10153,7 +10267,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         guard last != current else { return }
         log("upgrade detected: \(last) → \(current); checking for stale TCC state")
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.local.parakey"
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.local.presspeech"
         for p in Permission.allCases {
             if Permissions.isGranted(p) { continue }
             // Fire-and-forget on TCC's serial queue: these resets are
@@ -10221,6 +10335,8 @@ private enum PresspeechSelfTest {
             return runSuite("logging", testPrivateLogAppend)
         case "diagnostics":
             return runSuite("diagnostics", testDiagnostics)
+        case "identity-migration":
+            return runSuite("identity-migration", testIdentityMigration)
         case "all":
             return runSuite("all", testAll)
         default:
@@ -10263,6 +10379,43 @@ private enum PresspeechSelfTest {
         try testHostileRegistryEnvDetection()
         try testPrivateLogAppend()
         try testDiagnostics()
+        try testIdentityMigration()
+    }
+
+    private static func testIdentityMigration() throws {
+        let migrated = settingsDomainAfterIdentityMigration(
+            current: [
+                "hotkey_keycode": 58,
+                "new_only": true,
+            ],
+            legacy: [
+                "hotkey_keycode": 61,
+                "trigger_mode": "hold",
+            ]
+        )
+        try expect(migrated["hotkey_keycode"] as? Int,
+                   equals: 58,
+                   "identity migration should preserve settings already written under the current identity")
+        try expect(migrated["trigger_mode"] as? String,
+                   equals: "hold",
+                   "identity migration should copy missing settings from the former domain")
+        try expect(migrated["new_only"] as? Bool,
+                   equals: true,
+                   "identity migration should retain current-only settings")
+
+        let formerURL = URL(fileURLWithPath: "/tmp/Corrections.\(LEGACY_CORRECTIONS_FILE_EXTENSION)")
+        try expect(
+            identityMigrationDestinationURL(forLegacyCorrectionURL: formerURL)?.lastPathComponent,
+            equals: "Corrections.\(CORRECTIONS_FILE_EXTENSION)",
+            "identity migration should rename configured correction files"
+        )
+        try expect(
+            identityMigrationDestinationURL(
+                forLegacyCorrectionURL: URL(fileURLWithPath: "/tmp/Corrections.json")
+            ),
+            equals: nil,
+            "identity migration should leave unrelated file extensions alone"
+        )
     }
 
     private static func testPrivateLogAppend() throws {
@@ -10360,7 +10513,7 @@ private enum PresspeechSelfTest {
                 appVersion: "9.8.7",
                 appBuild: "123",
                 macOS: "Version 26.0",
-                bundleID: "com.local.parakey",
+                bundleID: "com.local.presspeech",
                 bundlePath: "/Applications/Presspeech.app",
                 installKind: "Applications app",
                 status: "Hold Right Option to dictate",
@@ -10858,7 +11011,7 @@ private enum PresspeechSelfTest {
         )
 
         let pasteboardProbe = MainActor.assumeIsolated {
-            let pasteboardName = NSPasteboard.Name("com.local.parakey.self-test.\(UUID().uuidString)")
+            let pasteboardName = NSPasteboard.Name("com.local.presspeech.self-test.\(UUID().uuidString)")
             let pasteboard = NSPasteboard(name: pasteboardName)
             let wrote = ClipboardPasteInserter.write("pasteboard probe", to: pasteboard)
             return (wrote: wrote, stored: pasteboard.string(forType: .string))
@@ -12439,8 +12592,8 @@ private enum PresspeechSelfTest {
             "/bin/rm -f \"$SCRIPT_PATH\"",
             "printf '[%s] %s\\n' \"$(timestamp)\" \"$*\"",
             "printf '%s\\t%s\\n' \"$phase\" \"$message\" >\"$tmp\"",
-            "CASK_TAP='rcourtman/parakey'",
-            "CASK_TOKEN='rcourtman/parakey/presspeech'",
+            "CASK_TAP='rcourtman/presspeech'",
+            "CASK_TOKEN='rcourtman/presspeech/presspeech'",
             "CASK_INSTALLED_TOKEN='presspeech'",
             "PlistBuddy -c \"Print :CFBundleShortVersionString\"",
             "version_at_least \"$installed\" \"$TARGET_VERSION\"",

@@ -20,10 +20,10 @@
 #
 # Pre-flight requires:
 #   - clean working tree on `main`
-#   - notary credentials stored (keychain profile "parakey-notary")
+#   - notary credentials stored (keychain profile "presspeech-notary")
 #   - gh CLI authenticated for github.com
 #   - brew CLI installed for post-release Cask verification
-#   - sibling Homebrew tap at ../homebrew-parakey (override with
+#   - sibling Homebrew tap at ../homebrew-presspeech (override with
 #     PRESSPEECH_HOMEBREW_TAP=/path/to/tap)
 #
 # Recovery: if anything after the build fails, swift/Info.plist and
@@ -41,12 +41,10 @@ INFO_PLIST="$SWIFT_DIR/Info.plist"
 ENTITLEMENTS="$PROJECT_DIR/entitlements.plist"
 APP="$SWIFT_DIR/dist/Presspeech.app"
 ZIP_OUT="$SWIFT_DIR/dist/Presspeech.zip"
-NOTARY_PROFILE="parakey-notary"
-CASK_TAP="${PRESSPEECH_HOMEBREW_TAP:-$PROJECT_DIR/../homebrew-parakey}"
+NOTARY_PROFILE="presspeech-notary"
+CASK_TAP="${PRESSPEECH_HOMEBREW_TAP:-$PROJECT_DIR/../homebrew-presspeech}"
 CASK_FILE="$CASK_TAP/Casks/presspeech.rb"
-LEGACY_CASK_FILE="$CASK_TAP/Casks/parakey.rb"
-CASK_RENAMES_FILE="$CASK_TAP/cask_renames.json"
-CASK_TOKEN="rcourtman/parakey/presspeech"
+CASK_TOKEN="rcourtman/presspeech/presspeech"
 # Directory-level superset of SYNCED_PATHS in scripts/sync-docs.py
 # (every synced file lives at README.md or under docs/). Deliberately
 # coarse: a path added to SYNCED_PATHS alone is still committed and
@@ -286,8 +284,8 @@ PY
 # Shared by the full release flow and --cask-only. Sets $tap_branch.
 cask_preflight() {
     command -v brew >/dev/null || die "'brew' CLI not installed (needed to verify the published Cask)"
-    [[ -f "$CASK_FILE" || -f "$LEGACY_CASK_FILE" ]] \
-        || die "cask not found at $CASK_FILE or $LEGACY_CASK_FILE — set PRESSPEECH_HOMEBREW_TAP or use --no-cask"
+    [[ -f "$CASK_FILE" ]] \
+        || die "cask not found at $CASK_FILE — set PRESSPEECH_HOMEBREW_TAP or use --no-cask"
     tap_branch="$(git -C "$CASK_TAP" rev-parse --abbrev-ref HEAD)"
     git -C "$CASK_TAP" update-index --refresh >/dev/null 2>&1 || true
     if ! git -C "$CASK_TAP" diff-index --quiet HEAD --; then
@@ -298,38 +296,6 @@ cask_preflight() {
     fi
 }
 
-prepare_cask_rebrand_migration() {
-    [[ -f "$CASK_FILE" ]] && return 0
-    [[ -f "$LEGACY_CASK_FILE" ]] || die "legacy cask missing at $LEGACY_CASK_FILE"
-
-    say "Migrating Homebrew Cask token parakey → presspeech"
-    mv "$LEGACY_CASK_FILE" "$CASK_FILE"
-    /usr/bin/python3 - "$CASK_FILE" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-source = path.read_text()
-replacements = {
-    'cask "parakey" do': 'cask "presspeech" do',
-    'github.com/rcourtman/parakey/releases/download/v#{version}/Parakey.zip':
-        'github.com/rcourtman/presspeech/releases/download/v#{version}/Presspeech.zip',
-    'name "Parakey"': 'name "Presspeech"',
-    'homepage "https://github.com/rcourtman/parakey"':
-        'homepage "https://github.com/rcourtman/presspeech"',
-    'app "Parakey.app"': 'app "Presspeech.app"',
-    '"~/Library/Logs/Parakey.log",':
-        '"~/Library/Logs/Parakey.log",\n    "~/Library/Logs/Presspeech.log",',
-}
-for old, new in replacements.items():
-    if old not in source:
-        raise SystemExit(f"legacy cask migration could not find: {old}")
-    source = source.replace(old, new, 1)
-path.write_text(source)
-PY
-    printf '{\n  "parakey": "presspeech"\n}\n' >"$CASK_RENAMES_FILE"
-}
-
 # Cask update + verification against an already-published GitHub release.
 # Used by the tail of the full release flow and by --cask-only resume.
 # Requires cask_preflight to have set $tap_branch.
@@ -338,13 +304,12 @@ run_cask_stage() {
     local zip_sha="$2"
     local resume_hint="fix the issue, then resume with: ./ship-swift.sh --cask-only $version"
 
-    prepare_cask_rebrand_migration
     say "Updating Homebrew Cask at $CASK_FILE"
     rewrite_cask_file "$CASK_FILE" "$version" "$zip_sha"
     grep -q "version \"$version\"" "$CASK_FILE" || die "cask rewrite failed (version) -- $resume_hint"
     grep -q "sha256 \"$zip_sha\""  "$CASK_FILE" || die "cask rewrite failed (sha256) -- $resume_hint"
 
-    git -C "$CASK_TAP" add -A Casks/parakey.rb Casks/presspeech.rb cask_renames.json
+    git -C "$CASK_TAP" add Casks/presspeech.rb
     local cask_commit_message="presspeech $version"
     check_no_attribution_text "cask commit message" "$cask_commit_message"
     if git -C "$CASK_TAP" diff --cached --quiet; then
@@ -364,7 +329,7 @@ run_cask_stage() {
     [[ "$remote_tap_head" == "$local_tap_head" ]] \
         || die "tap push did not publish HEAD ($local_tap_head) -- $resume_hint"
 
-    brew tap rcourtman/parakey >/dev/null || die "brew tap rcourtman/parakey failed -- $resume_hint"
+    brew tap rcourtman/presspeech >/dev/null || die "brew tap rcourtman/presspeech failed -- $resume_hint"
     brew update >/dev/null || die "brew update failed after Cask push -- $resume_hint"
 
     local published_version
@@ -469,43 +434,6 @@ EOF
         rewrite_cask_file "$cask_file" "4.5.6" "$new_sha"
     assert_self_test_fails "accepted malformed cask sha256" \
         rewrite_cask_file "$cask_file" "4.5.6" "not-a-sha"
-
-    (
-        CASK_TAP="$tmpdir/tap"
-        CASK_FILE="$CASK_TAP/Casks/presspeech.rb"
-        LEGACY_CASK_FILE="$CASK_TAP/Casks/parakey.rb"
-        CASK_RENAMES_FILE="$CASK_TAP/cask_renames.json"
-        mkdir -p "$CASK_TAP/Casks"
-        cat >"$LEGACY_CASK_FILE" <<'EOF'
-cask "parakey" do
-  version "0.2.20"
-  sha256 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-  url "https://github.com/rcourtman/parakey/releases/download/v#{version}/Parakey.zip"
-  name "Parakey"
-  homepage "https://github.com/rcourtman/parakey"
-  app "Parakey.app"
-  zap trash: [
-    "~/Library/Logs/Parakey.log",
-  ]
-end
-EOF
-        prepare_cask_rebrand_migration
-        [[ ! -e "$LEGACY_CASK_FILE" ]] || die "self-test cask migration left the legacy file behind"
-        grep -qx 'cask "presspeech" do' "$CASK_FILE" \
-            || die "self-test cask migration missed the token"
-        grep -q 'Presspeech.zip' "$CASK_FILE" \
-            || die "self-test cask migration missed the release asset"
-        grep -qx '  app "Presspeech.app"' "$CASK_FILE" \
-            || die "self-test cask migration missed the app artifact"
-        /usr/bin/python3 - "$CASK_RENAMES_FILE" <<'PY'
-import json
-import sys
-with open(sys.argv[1]) as handle:
-    value = json.load(handle)
-if value != {"parakey": "presspeech"}:
-    raise SystemExit(f"unexpected cask rename mapping: {value!r}")
-PY
-    )
 
     rm -rf "$tmpdir"
     say "Release script self-test passed"
@@ -724,7 +652,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
         xcrun stapler staple "$APP"
         xcrun stapler validate "$APP"
     else
-        die "no notary credentials -- run xcrun notarytool store-credentials parakey-notary first"
+        die "no notary credentials -- run xcrun notarytool store-credentials presspeech-notary first"
     fi
 else
     warn "Dry run: skipping notarisation"

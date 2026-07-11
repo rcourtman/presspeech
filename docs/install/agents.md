@@ -10,7 +10,7 @@ Presspeech has two notarised install paths: a direct release zip and a Homebrew 
 Run:
   uname -m
   sw_vers -productVersion
-  brew install --cask rcourtman/parakey/presspeech
+  brew install --cask rcourtman/presspeech/presspeech
   open /Applications/Presspeech.app
 
 Direct download:

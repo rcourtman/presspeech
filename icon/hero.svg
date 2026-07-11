@@ -67,7 +67,7 @@
 
     <!-- brew command -->
     <g transform="translate(0, 395)">
-      <text x="0" y="0" font-size="18" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#64748B" letter-spacing="0.3">brew install --cask rcourtman/parakey/presspeech</text>
+      <text x="0" y="0" font-size="18" font-family="ui-monospace, 'SF Mono', Menlo, monospace" fill="#64748B" letter-spacing="0.3">brew install --cask rcourtman/presspeech/presspeech</text>
     </g>
   </g>
 </svg>

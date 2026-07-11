@@ -95,7 +95,7 @@ Presspeech has two notarised install paths: a direct release zip and a Homebrew 
 Run:
   uname -m
   sw_vers -productVersion
-  brew install --cask rcourtman/parakey/presspeech
+  brew install --cask rcourtman/presspeech/presspeech
   open /Applications/Presspeech.app
 
 Direct download:
@@ -386,8 +386,8 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     if setup_line not in text:
         text = replace_literal(
             text,
-            "- Homebrew install: `brew install --cask rcourtman/parakey/presspeech`.\n",
-            "- Homebrew install: `brew install --cask rcourtman/parakey/presspeech`.\n" + setup_line,
+            "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n",
+            "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n" + setup_line,
             path=path,
         )
     diagnostics_line = "- Diagnostics: Copy Diagnostics and Save Diagnostics produce a privacy-safe local report with metadata and bounded recent logs, not transcript or correction contents.\n"
