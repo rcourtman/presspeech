@@ -42,7 +42,7 @@
         </div>
         <div class="install-line" aria-label="Homebrew install command">
           <span class="prompt" aria-hidden="true">$</span>
-          <code>brew install --cask rcourtman/parakey/presspeech</code>
+          <code>brew install --cask rcourtman/presspeech/presspeech</code>
         </div>
       </div>
 
@@ -84,7 +84,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Command line</span>
           <h2>Homebrew install and launch</h2>
-          <pre><code>brew install --cask rcourtman/parakey/presspeech
+          <pre><code>brew install --cask rcourtman/presspeech/presspeech
 open /Applications/Presspeech.app</code></pre>
           <p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. Allow 1-5 minutes for the model download before trying the hotkey. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>
         </div>
@@ -92,17 +92,17 @@ open /Applications/Presspeech.app</code></pre>
 
       <section>
         <div class="wrap">
-          <span class="section-eyebrow">Existing Parakey installs</span>
-          <h2>The 0.3 upgrade keeps your setup</h2>
-          <p>Presspeech retains the original bundle identifier, so macOS permissions, preferences, hotkey choices, and local dictionary rules continue to work after the rename.</p>
+          <span class="section-eyebrow">Existing installations</span>
+          <h2>Upgrade to the current Presspeech identity</h2>
+          <p>Presspeech migrates preferences, hotkey choices, local dictionary rules, correction-sync paths, and recovery state automatically. macOS privacy grants cannot move between app identities, so grant Microphone, Accessibility, and Input Monitoring once when Setup Checklist opens.</p>
           <div class="grid two">
             <article class="card">
               <h3>Homebrew</h3>
-              <p>Run <code>brew update &amp;&amp; brew upgrade --cask rcourtman/parakey/presspeech</code>. The fully qualified command trusts only this cask under Homebrew's tap-trust model, migrates the installed token to <code>presspeech</code>, and replaces <strong>Parakey.app</strong> with <strong>Presspeech.app</strong>. Launch Presspeech and accept the standard macOS downloaded-app confirmation once.</p>
+              <p>Run <code>brew update &amp;&amp; brew upgrade --cask rcourtman/presspeech/presspeech</code>. The fully qualified command trusts only this cask under Homebrew's tap-trust model. Launch Presspeech, accept the standard macOS downloaded-app confirmation, then finish the three permission rows in Setup Checklist.</p>
             </article>
             <article class="card">
               <h3>Direct download</h3>
-              <p>Quit Parakey, move <strong>Presspeech.app</strong> to Applications, launch it once, then remove the old <strong>Parakey.app</strong>. Do not run both copies at the same time because they intentionally share one settings and permissions identity.</p>
+              <p>Quit the installed copy, replace it with the current <strong>Presspeech.app</strong>, and launch it once. Saved app settings migrate automatically; finish the fresh macOS permission grants in Setup Checklist.</p>
             </article>
           </div>
         </div>
@@ -159,7 +159,7 @@ open /Applications/Presspeech.app</code></pre>
             </li>
             <li>
               <strong>Choose an install path</strong>
-              <p>Download <a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Presspeech.zip</a>, or run <code>brew install --cask rcourtman/parakey/presspeech</code>.</p>
+              <p>Download <a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Presspeech.zip</a>, or run <code>brew install --cask rcourtman/presspeech/presspeech</code>.</p>
             </li>
             <li>
               <strong>Launch the app</strong>
@@ -189,7 +189,7 @@ Presspeech has two notarised install paths: a direct release zip and a Homebrew 
 Run:
   uname -m
   sw_vers -productVersion
-  brew install --cask rcourtman/parakey/presspeech
+  brew install --cask rcourtman/presspeech/presspeech
   open /Applications/Presspeech.app
 
 Direct download:
@@ -206,8 +206,8 @@ After launch, explain that Presspeech downloads the ~500-600 MB local speech mod
         <div class="wrap">
           <span class="section-eyebrow">Maintenance</span>
           <h2>Update and uninstall</h2>
-          <pre><code>brew upgrade --cask rcourtman/parakey/presspeech
-brew uninstall --zap --cask rcourtman/parakey/presspeech</code></pre>
+          <pre><code>brew upgrade --cask rcourtman/presspeech/presspeech
+brew uninstall --zap --cask rcourtman/presspeech/presspeech</code></pre>
           <p>The in-app update menu also appears when Presspeech finds a newer GitHub release. The menu only notifies; installation starts only after you choose Update Now.</p>
         </div>
       </section>

@@ -35,7 +35,7 @@ single-responsibility types it composes (`Settings`, `Permissions`,
 |---|---|
 | `swift/Sources/Presspeech/main.swift` | The entire app. `// MARK: -` section comments tag the major regions (Constants, Text correction transfer, Correction sync path safety, Model registry hardening, Speech model integrity, Audio input devices, Logger, Settings, Permissions, Hotkey listener, Audio capture, Transcription worker, Transcript corrections, Filler word removal, Text insertion, System audio mute, Sounds, Bundle version helpers, Diagnostics, TCC recovery, Update check, App). |
 | `swift/Package.swift` | SwiftPM manifest. `.macOS("14.0")` platform target, single FluidAudio dependency. **No `resources:` declaration** — resources live outside the target on purpose (see *Resource bundling* below). |
-| `swift/Info.plist` | Canonical Info.plist for both dev and release builds. `CFBundleIdentifier com.local.parakey`, `LSMinimumSystemVersion 14.0`. `dev-run.sh` signs with the same Developer ID cert and identifier as the Cask, so TCC grants from the production install carry over to the dev binary automatically. |
+| `swift/Info.plist` | Canonical Info.plist for both dev and release builds. `CFBundleIdentifier com.local.presspeech`, `LSMinimumSystemVersion 14.0`. `dev-run.sh` signs with the same Developer ID cert and identifier as the Cask, so TCC grants from the production install carry over to the dev binary automatically. |
 | `swift/Resources/presspeech-menubar.png` (+ `@2x`) | Template menu-bar icon. Copied into `Contents/Resources/` by `dev-run.sh` and `ship-swift.sh`. |
 | `swift/dev-run.sh` | Local iteration loop: `swift build` → wrap binary in `/tmp/Presspeech-dev.app` → sign with Developer ID + hardened runtime + production entitlements → relaunch. |
 | `entitlements.plist` | Hardened-runtime entitlements. Just two keys: `device.audio-input` (what Tahoe 26 checks before exposing the app in Privacy & Security → Microphone) and `device.microphone` (legacy sandbox fallback for macOS 14–25). Anything new expands TCC surface — justify before adding. |
@@ -77,7 +77,8 @@ processing decisions), `power-state` (sleep/wake recovery decisions),
 verification), `update` (GitHub update parsing and update-helper
 script), `hostile-env` (model-registry override detection),
 `logging` (log-path redaction + private append), `diagnostics`
-(diagnostics report assembly).
+(diagnostics report assembly), `identity-migration` (settings merge
+precedence and correction-sync filename migration).
 Use `--self-test all` before pushing changes that touch any of
 those regions. The rest of the app is a thin glue layer over
 AVFoundation, AppKit, AudioToolbox, CoreGraphics,
@@ -149,7 +150,7 @@ re-introduce the resource bundle and break codesigning. Don't.
 
 The dev binary (`/tmp/Presspeech-dev.app`) and the production Cask
 binary (`/Applications/Presspeech.app`) share `CFBundleIdentifier
-com.local.parakey`. That's deliberate: macOS TCC keys permission
+com.local.presspeech`. That's deliberate: macOS TCC keys permission
 grants by `(bundle id, code signature)`, so signing the dev binary
 with the **same Developer ID certificate** lets it inherit
 Microphone / Accessibility / Input Monitoring grants from the Cask
@@ -160,27 +161,27 @@ new app and every launch will need re-granting.
 certificate in the keychain automatically. If you don't have one,
 that's a setup gap, not a bug to work around.
 
-### v0.3 public rename compatibility
+### Presspeech identity migration
 
-Presspeech was named Parakey through v0.2.x. The public product,
-repository, executable, bundle filename, and release asset changed in
-v0.3.0, but these internal identifiers are intentionally permanent:
+The active identity is Presspeech throughout:
 
-- `CFBundleIdentifier` and the UserDefaults suite remain
-  `com.local.parakey`, preserving TCC grants and preferences.
-- The correction document UTI remains
-  `com.local.parakey.corrections`; Info.plist accepts both the legacy
-  `.parakey-corrections` and current `.presspeech-corrections`
-  filename extensions.
-- The system-audio recovery marker remains under
-  `~/Library/Application Support/Parakey/`, so the renamed app can
-  recover from an interrupted mute owned by the v0.2 app.
-- The Homebrew tap remains `rcourtman/parakey` for installed-tap
-  continuity. Its `cask_renames.json` maps the former `parakey` token
-  to `presspeech`; do not remove that mapping.
+- Bundle identifier and UserDefaults suite: `com.local.presspeech`
+- Correction document UTI: `com.local.presspeech.corrections`
+- Application Support directory: `~/Library/Application Support/Presspeech/`
+- Homebrew tap and cask: `rcourtman/presspeech/presspeech`
 
-Do not “finish” the rename by changing these legacy identifiers. That
-would strand existing settings or permissions and break upgrades.
+`main.swift` contains a narrowly scoped one-time migration for saved
+settings, correction-sync paths, audio recovery state, caches, and logs
+created under the former identity. The tap's `cask_renames.json` keeps
+the matching Homebrew token migration. Do not use migration identifiers
+for new state or spread them into UI and documentation. Remove the
+migration code and token mapping only after the supported migration
+window closes.
+
+macOS does not transfer TCC grants between bundle identifiers. The first
+launch under `com.local.presspeech` clears stale permission rows and
+opens the normal Setup Checklist so the user can grant Microphone,
+Accessibility, and Input Monitoring once to the current identity.
 
 ## Conventions
 
@@ -203,7 +204,7 @@ would strand existing settings or permissions and break upgrades.
   `logger.info("got: \(transcript)")` for debugging, gate it behind a
   local `#if DEBUG` and *do not* land that gate on `main`.
 - **Settings persist via `NSUserDefaults`** with explicit
-  `UserDefaults(suiteName: "com.local.parakey")`. The suite-name init
+  `UserDefaults(suiteName: "com.local.presspeech")`. The suite-name init
   is functionally redundant once the bundle id is set correctly, but
   it's belt-and-braces: an unsigned debug binary run from `swift run`
   (without going through `dev-run.sh`) would otherwise scribble to
@@ -420,9 +421,9 @@ When the user does ask for a release, the mechanics are:
 13. Rewrite `version` + `sha256` in the sibling Homebrew tap's
     `Casks/presspeech.rb`, commit, push
 14. Refresh Homebrew metadata, assert
-    `brew info --cask rcourtman/parakey/presspeech` reports the new
+    `brew info --cask rcourtman/presspeech/presspeech` reports the new
     version, and run `brew fetch --cask --force
-    rcourtman/parakey/presspeech` to verify the published URL + sha256
+    rcourtman/presspeech/presspeech` to verify the published URL + sha256
 
 With `--dry-run`, the script still builds, signs, checks embedded
 entitlements, packages `swift/dist/Presspeech.zip`, removes the temporary
@@ -433,7 +434,7 @@ the debug self-test suite and the packaged smoke test (`--skip-qa`
 skips them here too); the CI-status, fetch/divergence, and remote-tag
 checks are skipped since they need network and a pushed HEAD.
 
-The tap lives at `../homebrew-parakey` by default; override with
+The tap lives at `../homebrew-presspeech` by default; override with
 `PRESSPEECH_HOMEBREW_TAP=/path/to/tap` if your layout differs.
 
 **Recovery**: if any step fails before the version-bump commit,
@@ -455,7 +456,7 @@ states — it would try to bump the version a second time.
 
 ```sh
 # Notary credentials so ship-swift.sh can notarise
-xcrun notarytool store-credentials parakey-notary \
+xcrun notarytool store-credentials presspeech-notary \
     --apple-id <YOUR_APPLE_ID> --team-id UJD57YVK2B \
     --password <APP_SPECIFIC_PASSWORD>
 
@@ -463,7 +464,7 @@ xcrun notarytool store-credentials parakey-notary \
 gh auth login
 
 # Sibling tap clone if you don't have it yet
-git clone https://github.com/rcourtman/homebrew-parakey ../homebrew-parakey
+git clone https://github.com/rcourtman/homebrew-presspeech ../homebrew-presspeech
 ```
 
 ## Common change recipes

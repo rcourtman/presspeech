@@ -11,7 +11,7 @@
 #
 # When you're done testing and want the production Cask Presspeech
 # back, just `open /Applications/Presspeech.app` — both binaries share
-# bundle id `com.local.parakey`, so the TCC entries are
+# bundle id `com.local.presspeech`, so the TCC entries are
 # interchangeable.
 set -euo pipefail
 
@@ -76,10 +76,8 @@ done
 
 say "Stopping any prior dev instance..."
 pkill -f "Presspeech-dev.app" 2>/dev/null || true
-pkill -f "Parakey-dev.app" 2>/dev/null || true
 # Also kill any Cask instance — same bundle id would clash on TCC + hotkey.
 pkill -f "/Applications/Presspeech.app" 2>/dev/null || true
-pkill -f "/Applications/Parakey.app" 2>/dev/null || true
 sleep 0.5
 
 say "Launching..."

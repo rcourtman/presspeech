@@ -15,7 +15,7 @@
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>com.local.parakey.corrections</string>
+				<string>com.local.presspeech.corrections</string>
 			</array>
 		</dict>
 	</array>
@@ -24,7 +24,7 @@
 	<key>CFBundleIconFile</key>
 	<string>Presspeech</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.local.parakey</string>
+	<string>com.local.presspeech</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -57,18 +57,16 @@
 			<key>UTTypeDescription</key>
 			<string>Presspeech Corrections</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.local.parakey.corrections</string>
+			<string>com.local.presspeech.corrections</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
 					<string>presspeech-corrections</string>
-					<string>parakey-corrections</string>
 				</array>
 				<key>public.mime-type</key>
 				<array>
 					<string>application/vnd.presspeech.corrections+json</string>
-					<string>application/vnd.parakey.corrections+json</string>
 				</array>
 			</dict>
 		</dict>

@@ -7,7 +7,7 @@
   <a href="https://github.com/rcourtman/presspeech/actions/workflows/check.yml"><img src="https://github.com/rcourtman/presspeech/actions/workflows/check.yml/badge.svg" alt="Build status"></a>
   <a href="https://github.com/rcourtman/presspeech/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rcourtman/presspeech?color=10B981" alt="MIT licensed"></a>
   <img src="https://img.shields.io/badge/Apple%20Silicon%20%C2%B7%20macOS%2014%2B-10B981?color=10B981" alt="Apple Silicon · macOS 14+">
-  <a href="https://github.com/rcourtman/homebrew-parakey"><img src="https://img.shields.io/badge/Homebrew-Cask-10B981?logo=homebrew&logoColor=white" alt="Homebrew Cask"></a>
+  <a href="https://github.com/rcourtman/homebrew-presspeech"><img src="https://img.shields.io/badge/Homebrew-Cask-10B981?logo=homebrew&logoColor=white" alt="Homebrew Cask"></a>
   <a href="https://rcourtman.github.io/presspeech/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-10B981" alt="Documentation site"></a>
 </p>
 
@@ -17,9 +17,10 @@
 release, and the transcript appears at the cursor. No account, no
 subscription, no cloud transcription.
 
-> Presspeech was previously named Parakey. The app keeps its original
-> bundle identifier so existing permissions, preferences, and local
-> dictionary rules carry across the rename.
+> Presspeech now uses the `com.local.presspeech` identity throughout.
+> When upgrading from an earlier identity, saved preferences and local
+> dictionary rules migrate automatically. macOS privacy permissions must
+> be granted once to the current identity.
 
 <p align="center">
   <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence lands at the cursor about 100 milliseconds later." width="900">
@@ -43,7 +44,7 @@ Download the notarised app:
 Or install with Homebrew, which is the easiest path for updates:
 
 ```sh
-brew install --cask rcourtman/parakey/presspeech
+brew install --cask rcourtman/presspeech/presspeech
 open /Applications/Presspeech.app
 ```
 
@@ -76,7 +77,7 @@ handles updates:
 
     https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 
-    brew install --cask rcourtman/parakey/presspeech
+    brew install --cask rcourtman/presspeech/presspeech
     open /Applications/Presspeech.app
 
 Confirm the Mac is Apple Silicon and running macOS 14 or later.
@@ -192,7 +193,7 @@ Release notes live in `swift/release-notes/`.
 - [Documentation site](https://rcourtman.github.io/presspeech/)
 - [Benchmarks and methodology](https://rcourtman.github.io/presspeech/benchmarks.html)
 - [Compare with other Mac dictation tools](https://rcourtman.github.io/presspeech/compare/)
-- [Homebrew tap](https://github.com/rcourtman/homebrew-parakey)
+- [Homebrew tap](https://github.com/rcourtman/homebrew-presspeech)
 - [FluidAudio](https://github.com/FluidInference/FluidAudio)
 - [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
 
