@@ -47,7 +47,9 @@ let MAX_RECORDING_SECONDS: TimeInterval = 120   // auto-release if held longer
 // How long to wait after posting Cmd+V before restoring the user's
 // previous clipboard. The paste event is delivered asynchronously, so
 // the target app must be given a moment to read the transcript off the
-// pasteboard before we write the old contents back over it.
+// pasteboard before we write the old contents back over it. Quartz has
+// no paste-consumed acknowledgement, which is why restoration remains
+// an opt-in, best-effort behavior.
 let CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 0.15
 let UPDATE_CHECK_FIRST_DELAY_SECONDS: TimeInterval = 30
 let UPDATE_CHECK_INTERVAL_SECONDS: TimeInterval = 6 * 3600  // 6h
@@ -3822,7 +3824,7 @@ private func processedDictationText(rawTranscript: String,
 // fails, fall back to direct Unicode events so a pasteboard problem
 // does not automatically lose the transcript.
 //
-// When "Restore clipboard after paste" is enabled (the default) the
+// When "Restore clipboard after paste" is enabled, the
 // clipboard-paste path snapshots the user's previous clipboard (every
 // item and type — text, images, files, RTF, links), pastes the
 // transcript, then writes the snapshot back so dictation doesn't
@@ -3976,10 +3978,9 @@ enum TextInserter {
     }
 }
 
-// Only restore the previous clipboard if nothing else has written to
-// the pasteboard since we placed the transcript on it. `changeCount`
-// bumps on every write, so a mismatch means a paste-manager, another
-// app, or the user copied something new — and we must not clobber it.
+// Only restore the previous clipboard if Presspeech still owns the
+// pasteboard. A `changeCount` mismatch means another app or the user
+// replaced its contents, and we must not clobber them.
 func pasteboardChangeCountAllowsRestore(current: Int, expected: Int) -> Bool {
     current == expected
 }
@@ -3995,19 +3996,38 @@ private enum ClipboardPasteInserter {
     /// pasteboards or after its owning pasteboard is cleared.
     struct Snapshot {
         let items: [NSPasteboardItem]
+        let sourceChangeCount: Int
     }
 
-    static func snapshot(of pb: NSPasteboard) -> Snapshot {
-        let copies = (pb.pasteboardItems ?? []).map { item -> NSPasteboardItem in
+    /// Returns nil rather than a partial snapshot if any advertised
+    /// representation cannot be materialized. Restoring a partial copy
+    /// would silently discard precisely the clipboard content this
+    /// option is intended to preserve.
+    static func snapshot(of pb: NSPasteboard) -> Snapshot? {
+        let sourceChangeCount = pb.changeCount
+        guard let sourceItems = pb.pasteboardItems else {
+            return (pb.types ?? []).isEmpty
+                ? Snapshot(items: [], sourceChangeCount: sourceChangeCount)
+                : nil
+        }
+
+        var copies: [NSPasteboardItem] = []
+        copies.reserveCapacity(sourceItems.count)
+        for item in sourceItems {
+            guard !item.types.isEmpty else { return nil }
             let copy = NSPasteboardItem()
             for type in item.types {
-                if let data = item.data(forType: type) {
-                    copy.setData(data, forType: type)
-                }
+                guard let data = item.data(forType: type),
+                      copy.setData(data, forType: type) else { return nil }
             }
-            return copy
+            copies.append(copy)
         }
-        return Snapshot(items: copies)
+
+        guard pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                                 expected: sourceChangeCount) else {
+            return nil
+        }
+        return Snapshot(items: copies, sourceChangeCount: sourceChangeCount)
     }
 
     /// Writes the snapshot back onto the pasteboard, but only if
@@ -4031,7 +4051,23 @@ private enum ClipboardPasteInserter {
 
     static func insert(_ text: String, restoreClipboard: Bool = false) -> Bool {
         let pb = NSPasteboard.general
-        let previous = restoreClipboard ? snapshot(of: pb) : nil
+        var previous: Snapshot?
+        if restoreClipboard {
+            previous = snapshot(of: pb)
+            if previous == nil {
+                log("clipboard snapshot incomplete; restore skipped")
+            }
+        }
+
+        // A lazy data provider can make snapshotting take long enough
+        // for another process to replace the clipboard. Never restore
+        // the now-stale snapshot after taking ownership for the paste.
+        if let candidate = previous,
+           !pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                               expected: candidate.sourceChangeCount) {
+            previous = nil
+            log("clipboard changed during snapshot; restore skipped")
+        }
 
         guard write(text, to: pb) else {
             log("pasteboard write failed")
@@ -10394,6 +10430,14 @@ private enum SelfTestFailure: Error, CustomStringConvertible {
 }
 
 private enum PresspeechSelfTest {
+    private final class UnavailablePasteboardDataProvider: NSObject, NSPasteboardItemDataProvider {
+        func pasteboard(_ pasteboard: NSPasteboard?,
+                        item: NSPasteboardItem,
+                        provideDataForType type: NSPasteboard.PasteboardType) {
+            // Intentionally leave the advertised representation unavailable.
+        }
+    }
+
     static func run(arguments: [String]) -> Int32? {
         guard arguments.count >= 2, arguments[0] == "--self-test" else { return nil }
         guard arguments.count == 2 else { return fail("usage") }
@@ -11141,31 +11185,57 @@ private enum PresspeechSelfTest {
         let restoreProbe = MainActor.assumeIsolated {
             let pasteboardName = NSPasteboard.Name("com.local.presspeech.self-test.\(UUID().uuidString)")
             let pasteboard = NSPasteboard(name: pasteboardName)
+            let binaryType = NSPasteboard.PasteboardType("com.local.presspeech.self-test.binary")
+            let firstItem = NSPasteboardItem()
+            firstItem.setString("previous clipboard", forType: .string)
+            firstItem.setData(Data([0, 1, 2, 3]), forType: binaryType)
+            let secondItem = NSPasteboardItem()
+            secondItem.setString("https://example.com", forType: .URL)
             pasteboard.clearContents()
-            pasteboard.setString("previous clipboard", forType: .string)
+            let wroteOriginal = pasteboard.writeObjects([firstItem, secondItem])
             let snapshot = ClipboardPasteInserter.snapshot(of: pasteboard)
 
             _ = ClipboardPasteInserter.write("dictated text", to: pasteboard)
             let afterWrite = pasteboard.string(forType: .string)
             let writeChangeCount = pasteboard.changeCount
 
-            let restored = ClipboardPasteInserter.restore(snapshot,
-                                                          to: pasteboard,
-                                                          expectedChangeCount: writeChangeCount)
+            let restored = snapshot.map {
+                ClipboardPasteInserter.restore($0,
+                                               to: pasteboard,
+                                               expectedChangeCount: writeChangeCount)
+            } ?? false
             let afterRestore = pasteboard.string(forType: .string)
+            let restoredBinary = pasteboard.pasteboardItems?.first?.data(forType: binaryType)
+            let restoredURL = pasteboard.pasteboardItems?.dropFirst().first?.string(forType: .URL)
 
             // A stale expected changeCount must leave the pasteboard alone.
             _ = ClipboardPasteInserter.write("newer text", to: pasteboard)
-            let blocked = ClipboardPasteInserter.restore(snapshot,
-                                                        to: pasteboard,
-                                                        expectedChangeCount: writeChangeCount)
+            let blocked = snapshot.map {
+                ClipboardPasteInserter.restore($0,
+                                               to: pasteboard,
+                                               expectedChangeCount: writeChangeCount)
+            } ?? false
             let afterBlocked = pasteboard.string(forType: .string)
-            return (afterWrite: afterWrite,
+            return (wroteOriginal: wroteOriginal,
+                    snapshotCreated: snapshot != nil,
+                    afterWrite: afterWrite,
                     restored: restored,
                     afterRestore: afterRestore,
+                    restoredBinary: restoredBinary,
+                    restoredURL: restoredURL,
                     blocked: blocked,
                     afterBlocked: afterBlocked)
         }
+        try expect(
+            restoreProbe.wroteOriginal,
+            equals: true,
+            "clipboard restore test should create a multi-item source pasteboard"
+        )
+        try expect(
+            restoreProbe.snapshotCreated,
+            equals: true,
+            "clipboard snapshot should preserve fully materialized pasteboard items"
+        )
         try expect(
             restoreProbe.afterWrite,
             equals: "dictated text",
@@ -11182,6 +11252,16 @@ private enum PresspeechSelfTest {
             "clipboard restore should put the previous contents back after paste"
         )
         try expect(
+            restoreProbe.restoredBinary,
+            equals: Data([0, 1, 2, 3]),
+            "clipboard restore should preserve non-text representations"
+        )
+        try expect(
+            restoreProbe.restoredURL,
+            equals: "https://example.com",
+            "clipboard restore should preserve multiple pasteboard items"
+        )
+        try expect(
             restoreProbe.blocked,
             equals: false,
             "clipboard restore should refuse to run against a stale changeCount"
@@ -11190,6 +11270,31 @@ private enum PresspeechSelfTest {
             restoreProbe.afterBlocked,
             equals: "newer text",
             "clipboard restore should not clobber content copied after the transcript"
+        )
+
+        let incompleteSnapshotProbe = MainActor.assumeIsolated {
+            let pasteboardName = NSPasteboard.Name("com.local.presspeech.self-test.\(UUID().uuidString)")
+            let pasteboard = NSPasteboard(name: pasteboardName)
+            let unavailableType = NSPasteboard.PasteboardType(
+                "com.local.presspeech.self-test.unavailable"
+            )
+            let provider = UnavailablePasteboardDataProvider()
+            let item = NSPasteboardItem()
+            let registered = item.setDataProvider(provider, forTypes: [unavailableType])
+            pasteboard.clearContents()
+            let wrote = pasteboard.writeObjects([item])
+            let snapshot = ClipboardPasteInserter.snapshot(of: pasteboard)
+            return (registered: registered, wrote: wrote, rejected: snapshot == nil)
+        }
+        try expect(
+            incompleteSnapshotProbe.registered && incompleteSnapshotProbe.wrote,
+            equals: true,
+            "clipboard snapshot test should install a lazy data provider"
+        )
+        try expect(
+            incompleteSnapshotProbe.rejected,
+            equals: true,
+            "clipboard snapshot should reject an unavailable representation instead of restoring partial data"
         )
     }
 
