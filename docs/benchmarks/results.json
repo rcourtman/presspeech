@@ -33,6 +33,10 @@
       "label": "Candidate only: FluidAudio Swift SDK, Nemotron Speech Streaming English 0.6B 1120 ms tier, CoreML",
       "hardware": "Apple Neural Engine"
     },
+    "nemotron_multilingual": {
+      "label": "Candidate only: FluidAudio Swift SDK, Nemotron 3.5 Streaming Multilingual 0.6B, 2240 ms tier, en-US prompt, CoreML",
+      "hardware": "Apple Neural Engine"
+    },
     "presspeech_mlx": {
       "label": "Prior parakeet_mlx path through MLX",
       "hardware": "GPU"
@@ -85,44 +89,60 @@
       ],
       "redacted_by_default": true
     },
-    "public_candidate_smoke_2026_06_23": {
+    "public_candidate_recheck_2026_07_22": {
       "script": "experiments/swift-bench/run-real-dictation-regression.sh",
-      "purpose": "Public 5-clip smoke comparison for production v3, Apple SpeechAnalyzer, and Nemotron English",
+      "purpose": "Public 25-clip current-pin comparison for production v3, repaired Nemotron English, and Nemotron 3.5 multilingual",
+      "corpus": "First 25 sorted LibriSpeech dev-clean transcript rows",
       "trials_per_clip": 3,
+      "environment": {
+        "machine": "Mac mini M4",
+        "memory_gb": 16,
+        "macos": "26.5.2",
+        "swift": "6.3.3",
+        "fluid_audio_revision": "19600a485baa4998812e4654b70d2bab8f2c9949"
+      },
       "results": [
         {
           "backend": "v3",
-          "avg_wer_percent": 1.4,
-          "worst_wer_percent": 7.0,
-          "final_word_failures": 0,
-          "avg_p50_ms": 100.7
-        },
-        {
-          "backend": "apple",
-          "avg_wer_percent": 11.7,
-          "worst_wer_percent": 18.2,
-          "final_word_failures": 0,
-          "avg_p50_ms": 384.8
+          "avg_wer_percent": 1.73,
+          "worst_wer_percent": 14.0,
+          "final_word_failures": 1,
+          "avg_p50_ms": 85.0
         },
         {
           "backend": "nemotron-en",
-          "avg_wer_percent": 5.3,
-          "worst_wer_percent": 11.3,
-          "final_word_failures": 0,
-          "avg_p50_ms": 1032.7,
-          "runtime_warning": "CoreML E5RT shape-inference warning emitted on each public clip"
+          "avg_wer_percent": 4.32,
+          "worst_wer_percent": 40.0,
+          "final_word_failures": 1,
+          "avg_p50_ms": 679.4,
+          "runtime_note": "Includes FluidAudio's repaired native mel front-end"
+        },
+        {
+          "backend": "nemotron-multilingual",
+          "language_prompt": "en-US",
+          "chunk_ms": 2240,
+          "avg_wer_percent": 6.22,
+          "worst_wer_percent": 40.0,
+          "final_word_failures": 2,
+          "avg_p50_ms": 123.2
         }
       ]
     },
     "release_gate": {
       "script": "experiments/swift-bench/run-release-asr-checks.sh",
       "runs_private_real_audio_when_present": true,
-      "candidate_models_require_flag": "--include-candidate-models"
+      "candidate_models_require_flag": "--include-candidate-models",
+      "candidate_models": [
+        "unified",
+        "nemotron-en",
+        "nemotron-multilingual"
+      ]
     }
   },
   "notes": [
     "The benchmark measures compute latency, not energy use.",
     "Both tested backends produced essentially identical transcripts on the synthetic audio.",
-    "Unified English is candidate-only and is not exposed in the app unless future benchmarks and real dictation tests prove it improves on v3."
+    "Unified and Nemotron models are candidate-only and are not exposed in the app unless future benchmarks and real dictation tests prove they improve on v3.",
+    "The 2026-07-22 current-pin recheck retained Parakeet TDT v3 because both Nemotron candidates had higher average and worst-case WER."
   ]
 }

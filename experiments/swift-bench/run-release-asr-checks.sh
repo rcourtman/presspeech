@@ -29,7 +29,7 @@ Options:
   --require-real-audio      fail if no private real-dictation clips are present
   --require-public-audio    fail if no public speech clips are present
   --include-candidate-models
-                            also run Unified candidate tail/comparison checks
+                            also run Unified and current Nemotron candidate checks
   --skip-tail               with --include-candidate-models, skip the synthetic tail-word gate
   --self-test               run wrapper parser/detection tests only
   -h, --help                show this help
@@ -39,8 +39,8 @@ The default run performs:
   2. production v3 regression if private real-dictation fixtures exist,
   3. production v3 regression if public speech fixtures exist.
 
-Unified is not a shipped app model. Use --include-candidate-models only
-when evaluating whether a future model is good enough to expose.
+Candidate models are not shipped by the app. Use --include-candidate-models
+only when evaluating whether a future model is good enough to expose.
 USAGE
 }
 
@@ -204,6 +204,19 @@ else
         echo
         echo "running private v3-vs-Unified candidate comparison on $real_count clip(s)..."
         ./run-real-model-comparison.sh --input-dir "$REAL_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
+
+        echo
+        echo "running private repaired Nemotron English candidate regression on $real_count clip(s)..."
+        ./run-real-dictation-regression.sh --input-dir "$REAL_AUDIO_DIR" --backend nemotron-en --trials "$TRIALS"
+
+        echo
+        echo "running private Nemotron 3.5 multilingual candidate regression on $real_count clip(s)..."
+        ./run-real-dictation-regression.sh \
+            --input-dir "$REAL_AUDIO_DIR" \
+            --backend nemotron-multilingual \
+            --nemotron-multilingual-language en-US \
+            --nemotron-multilingual-chunk-ms 2240 \
+            --trials "$TRIALS"
     fi
 fi
 
@@ -235,6 +248,30 @@ if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
     echo
     echo "running public v3-vs-Unified candidate comparison on $public_count clip(s)..."
     ./run-public-model-comparison.sh --fixture-dir "$PUBLIC_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
+
+    echo
+    echo "running public repaired Nemotron English candidate regression on $public_count clip(s)..."
+    ./run-real-dictation-regression.sh \
+        --input-dir "$PUBLIC_AUDIO_DIR" \
+        --out-dir public-results \
+        --backend nemotron-en \
+        --trials "$TRIALS" \
+        --public-corpus \
+        --show-transcripts \
+        --show-paths
+
+    echo
+    echo "running public Nemotron 3.5 multilingual candidate regression on $public_count clip(s)..."
+    ./run-real-dictation-regression.sh \
+        --input-dir "$PUBLIC_AUDIO_DIR" \
+        --out-dir public-results \
+        --backend nemotron-multilingual \
+        --nemotron-multilingual-language en-US \
+        --nemotron-multilingual-chunk-ms 2240 \
+        --trials "$TRIALS" \
+        --public-corpus \
+        --show-transcripts \
+        --show-paths
 fi
 
 echo
