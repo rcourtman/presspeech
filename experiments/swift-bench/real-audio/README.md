@@ -33,6 +33,8 @@ For single-backend debugging:
 ```sh
 ./run-real-dictation-regression.sh --backend v3 --trials 5
 ./run-real-dictation-regression.sh --backend unified --trials 5 --unified-trailing-silence-ms 250
+./run-real-dictation-regression.sh --backend nemotron-en --trials 5
+./run-real-dictation-regression.sh --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --trials 5
 ```
 
 Reports are written to `real-results/`, which is also ignored by git.

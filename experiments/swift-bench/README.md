@@ -19,6 +19,7 @@ the production app.
 | **`v3`** | FluidAudio Swift SDK → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
 | **`unified`** | FluidAudio Swift SDK → Parakeet Unified 0.6 B offline batch → CoreML | Apple Neural Engine |
 | **`nemotron-en`** | FluidAudio Swift SDK → Nemotron Speech Streaming English 0.6 B, 1120 ms tier → CoreML | Apple Neural Engine |
+| **`nemotron-multilingual`** | FluidAudio Swift SDK → Nemotron 3.5 Streaming Multilingual 0.6 B → CoreML | Apple Neural Engine |
 | **`apple`** | `Speech.SpeechAnalyzer` + `DictationTranscriber` (built into macOS 26 Tahoe) | Apple Neural Engine |
 | **`presspeech-mlx`** | presspeech's current path: `parakeet_mlx` → MLX → Metal | GPU |
 
@@ -40,6 +41,7 @@ swift build
 # 3a. Swift backends.
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3 --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend unified --trials 5
+./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --trials 5
 
 # Unified uses a 250 ms candidate padding default in this benchmark.
 # Set it to 0 to measure the raw model, or sweep values with
@@ -99,7 +101,12 @@ For single-backend debugging:
 ```sh
 ./run-real-dictation-regression.sh --backend v3 --trials 5
 ./run-real-dictation-regression.sh --backend unified --trials 5 --unified-trailing-silence-ms 250
+./run-real-dictation-regression.sh --backend nemotron-en --trials 5
+./run-real-dictation-regression.sh --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --trials 5
 ```
+
+Each single-backend report ends with the same aggregate decision metrics used
+below: average and worst WER, final-word failures, and average p50 latency.
 
 For a quick non-ASR check of argument parsing and report redaction:
 
@@ -142,6 +149,7 @@ Or run a specific candidate backend against the public fixtures:
 ```sh
 ./run-real-dictation-regression.sh --input-dir public-audio/librispeech-dev-clean --out-dir public-results --backend apple --public-corpus --show-transcripts --show-paths --trials 3
 ./run-real-dictation-regression.sh --input-dir public-audio/librispeech-dev-clean --out-dir public-results --backend nemotron-en --public-corpus --show-transcripts --show-paths --trials 3
+./run-real-dictation-regression.sh --input-dir public-audio/librispeech-dev-clean --out-dir public-results --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --public-corpus --show-transcripts --show-paths --trials 3
 ```
 
 Or fetch and compare in one command:
@@ -156,20 +164,24 @@ read English audiobook speech under CC BY 4.0, so treat it as a stable
 reproducible benchmark, not as a replacement for local push-to-talk dictation
 clips.
 
-### 2026-06-23 candidate smoke results
+### 2026-07-22 candidate recheck
 
-Five LibriSpeech dev-clean clips, three trials per clip:
+The first 25 LibriSpeech dev-clean clips, three trials per clip, on the
+production FluidAudio pin. This recheck includes FluidAudio's repaired native
+mel front-end for Nemotron English and adds Nemotron 3.5 multilingual at its
+recommended 2240 ms tier with an `en-US` language prompt.
 
 | Backend | Avg WER | Worst WER | Final-word failures | Avg p50 |
 |---|---:|---:|---:|---:|
-| `v3` | 1.4% | 7.0% | 0 | 100.7 ms |
-| `apple` | 11.7% | 18.2% | 0 | 384.8 ms |
-| `nemotron-en` | 5.3% | 11.3% | 0 | 1032.7 ms |
+| `v3` | 1.73% | 14.0% | 1 | 85.0 ms |
+| `nemotron-en` | 4.32% | 40.0% | 1 | 679.4 ms |
+| `nemotron-multilingual` | 6.22% | 40.0% | 2 | 123.2 ms |
 
-Neither Apple SpeechAnalyzer nor Nemotron English beat Parakeet TDT v3 on
-this public smoke corpus. Nemotron also emitted a CoreML shape-inference
-warning on each clip, so it should remain candidate-only unless a future
-FluidAudio/model revision changes those numbers.
+Neither repaired Nemotron English nor Nemotron 3.5 multilingual beats
+Parakeet TDT v3 on this larger public corpus. Multilingual Nemotron is much
+faster than the older English streaming path, but its WER and final-word
+retention are worse than v3. Parakeet TDT v3 therefore remains the production
+model; rerun these gates when FluidAudio or candidate weights change.
 
 ## Tail-word retention regression
 
@@ -229,7 +241,8 @@ If you want the release check to fail when no local corpus is available:
 ./run-release-asr-checks.sh --require-public-audio
 ```
 
-To also run Unified candidate tail-word and v3-vs-Unified comparisons:
+To also run Unified tail-word/comparison checks plus repaired Nemotron English
+and Nemotron 3.5 multilingual regressions:
 
 ```sh
 ./run-release-asr-checks.sh --include-candidate-models

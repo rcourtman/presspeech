@@ -153,18 +153,18 @@
             </article>
             <article class="card">
               <h3>Private corpus</h3>
-              <p>For candidate-model decisions, maintainers can run a local-only v3-vs-Unified comparison over private real-dictation clips. Reports keep transcript text and filenames redacted by default while showing WER, final-word failures, and latency.</p>
+              <p>For candidate-model decisions, maintainers can run Unified and current Nemotron candidates over private real-dictation clips. Reports keep transcript text and filenames redacted by default while showing WER, final-word failures, and latency.</p>
             </article>
             <article class="card">
               <h3>Release gate</h3>
-              <p><code>run-release-asr-checks.sh</code> checks production v3 by default. Pass <code>--include-candidate-models</code> to add Unified tail-word and v3-vs-Unified comparisons.</p>
+              <p><code>run-release-asr-checks.sh</code> checks production v3 by default. Pass <code>--include-candidate-models</code> to add Unified, repaired Nemotron English, and Nemotron 3.5 multilingual checks.</p>
             </article>
           </div>
           <div class="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>2026-06-23 public smoke backend</th>
+                  <th>2026-07-22 public recheck backend</th>
                   <th>Avg WER</th>
                   <th>Worst WER</th>
                   <th>Final-word failures</th>
@@ -174,29 +174,29 @@
               <tbody>
                 <tr>
                   <td><code>v3</code></td>
-                  <td>1.4%</td>
-                  <td>7.0%</td>
-                  <td>0</td>
-                  <td>100.7 ms</td>
-                </tr>
-                <tr>
-                  <td><code>apple</code></td>
-                  <td>11.7%</td>
-                  <td>18.2%</td>
-                  <td>0</td>
-                  <td>384.8 ms</td>
+                  <td>1.73%</td>
+                  <td>14.0%</td>
+                  <td>1</td>
+                  <td>85.0 ms</td>
                 </tr>
                 <tr>
                   <td><code>nemotron-en</code></td>
-                  <td>5.3%</td>
-                  <td>11.3%</td>
-                  <td>0</td>
-                  <td>1032.7 ms</td>
+                  <td>4.32%</td>
+                  <td>40.0%</td>
+                  <td>1</td>
+                  <td>679.4 ms</td>
+                </tr>
+                <tr>
+                  <td><code>nemotron-multilingual</code></td>
+                  <td>6.22%</td>
+                  <td>40.0%</td>
+                  <td>2</td>
+                  <td>123.2 ms</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p>Apple SpeechAnalyzer and Nemotron English both stayed behind Parakeet TDT v3 on this smoke corpus, so neither is a production replacement.</p>
+          <p>On 25 LibriSpeech dev-clean clips, repaired Nemotron English and Nemotron 3.5 multilingual both stayed behind Parakeet TDT v3. Multilingual is much faster than the older English path, but its accuracy and final-word retention are worse, so v3 remains the production model.</p>
         </div>
       </section>
 

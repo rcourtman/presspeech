@@ -23,6 +23,8 @@ OUTDIR="real-results"
 BACKEND="v3"
 TRIALS="5"
 UNIFIED_TRAILING_SILENCE_MS="250"
+NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
+NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
 ALLOW_MISSING_REF=0
 REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
@@ -36,10 +38,15 @@ usage: ./run-real-dictation-regression.sh [options]
 Options:
   --input-dir <path>       directory with audio + .txt sidecars (default: real-audio)
   --out-dir <path>         report directory (default: real-results)
-  --backend <name>         presspeech-bench backend: v3, unified, apple, 110m, fluid, both (default: v3)
+  --backend <name>         presspeech-bench backend: v3, unified, nemotron-en,
+                           nemotron-multilingual, apple, 110m, fluid, both (default: v3)
   --trials <n>             measured trials per clip (default: 5)
   --unified-trailing-silence-ms <n>
                            Unified-only trailing silence in ms (default: 250)
+  --nemotron-multilingual-language <code>
+                           Nemotron 3.5 language prompt (default: en-US)
+  --nemotron-multilingual-chunk-ms <560|1120|2240|4480>
+                           Nemotron 3.5 exported chunk tier (default: 2240)
   --allow-missing-ref      run clips without .txt sidecars, skipping WER
   --show-transcripts       include reference/hypothesis text in the report
   --show-paths             include local fixture filenames and paths in the report
@@ -95,7 +102,64 @@ report_title() {
 }
 
 backend_uses_unified() {
-    [[ "$BACKEND" == "unified" || "$BACKEND" == "both" ]]
+    [[ "$BACKEND" == "unified" || "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
+}
+
+backend_uses_nemotron_multilingual() {
+    [[ "$BACKEND" == "nemotron-multilingual" || "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
+}
+
+backend_is_aggregate() {
+    [[ "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
+}
+
+single_backend_summary_row() {
+    local report="$1"
+    awk -v backend="$BACKEND" '
+        /latency:.*p50=/ {
+            p50 = $0
+            sub(/^.*p50=[[:space:]]*/, "", p50)
+            sub(/ ms.*$/, "", p50)
+            p50_sum += p50
+            p50_seen += 1
+        }
+        /transcript: \[WER [0-9.]+%\]/ {
+            wer = $0
+            sub(/^.*\[WER /, "", wer)
+            sub(/%\].*$/, "", wer)
+            wer_sum += wer
+            if (wer_seen == 0 || wer > worst_wer) {
+                worst_wer = wer
+            }
+            wer_seen += 1
+            if ($0 ~ /final-word retained=false/) {
+                final_fail += 1
+            }
+        }
+        END {
+            rows = p50_seen > wer_seen ? p50_seen : wer_seen
+            avg_wer = wer_seen > 0 ? sprintf("%.2f", wer_sum / wer_seen) : "unknown"
+            worst = wer_seen > 0 ? sprintf("%.1f", worst_wer) : "unknown"
+            failures = wer_seen > 0 ? final_fail : "unknown"
+            avg_p50 = p50_seen > 0 ? sprintf("%.1f", p50_sum / p50_seen) : "unknown"
+            printf("| `%s` | %d | %s | %s | %s | %s |\n", backend, rows, avg_wer, worst, failures, avg_p50)
+        }
+    ' "$report"
+}
+
+append_single_backend_summary() {
+    local report="$1"
+    if backend_is_aggregate; then
+        return
+    fi
+    {
+        echo
+        echo "## Summary"
+        echo
+        echo "| Backend | Clip rows | Average WER % | Worst WER % | Final-word failures | Average p50 ms |"
+        echo "|---|---:|---:|---:|---:|---:|"
+        single_backend_summary_row "$report"
+    } >>"$report"
 }
 
 report_note() {
@@ -139,6 +203,10 @@ write_report_header() {
         echo "- Trials per clip: $TRIALS"
         if backend_uses_unified; then
             echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
+        fi
+        if backend_uses_nemotron_multilingual; then
+            echo "- Nemotron multilingual language: $NEMOTRON_MULTILINGUAL_LANGUAGE"
+            echo "- Nemotron multilingual chunk: ${NEMOTRON_MULTILINGUAL_CHUNK_MS} ms"
         fi
         echo "- Transcript output: $(transcript_output_label)"
         echo "- Fixture paths: $(fixture_paths_label)"
@@ -185,6 +253,16 @@ assert_contains() {
     fi
 }
 
+assert_eq() {
+    local actual="$1"
+    local expected="$2"
+    local label="$3"
+    if [[ "$actual" != "$expected" ]]; then
+        echo "self-test failed for $label: expected '$expected', got '$actual'" >&2
+        exit 1
+    fi
+}
+
 assert_not_contains() {
     local file="$1"
     local needle="$2"
@@ -211,6 +289,8 @@ run_self_test() {
     BACKEND="v3"
     TRIALS="2"
     UNIFIED_TRAILING_SILENCE_MS="250"
+    NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
+    NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
 
@@ -224,6 +304,10 @@ run_self_test() {
     BACKEND="unified"
     write_report_header "$report" "20260101T000000Z" 1
     assert_contains "$report" "- Unified trailing silence: 250 ms"
+    BACKEND="nemotron-multilingual"
+    write_report_header "$report" "20260101T000000Z" 1
+    assert_contains "$report" "- Nemotron multilingual language: en-US"
+    assert_contains "$report" "- Nemotron multilingual chunk: 2240 ms"
     BACKEND="v3"
     write_report_header "$report" "20260101T000000Z" 1
 
@@ -241,6 +325,16 @@ run_self_test() {
     assert_not_contains "$report" "Private Client Project"
     assert_not_contains "$report" "$secret_stem"
     assert_not_contains "$report" "$secret_transcript"
+
+    local summary_source="$tmpdir/summary-source.md"
+    {
+        echo 'latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms'
+        echo 'transcript: [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] <redacted 3 chars>'
+        echo 'latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms'
+        echo 'transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] <redacted 3 chars>'
+    } >"$summary_source"
+    BACKEND="v3"
+    assert_eq "$(single_backend_summary_row "$summary_source")" '| `v3` | 2 | 5.00 | 10.0 | 1 | 60.0 |' "single-backend summary"
 
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
@@ -279,6 +373,16 @@ while [[ $# -gt 0 ]]; do
         --unified-trailing-silence-ms)
             need_value "$@"
             UNIFIED_TRAILING_SILENCE_MS="$2"
+            shift 2
+            ;;
+        --nemotron-multilingual-language)
+            need_value "$@"
+            NEMOTRON_MULTILINGUAL_LANGUAGE="$2"
+            shift 2
+            ;;
+        --nemotron-multilingual-chunk-ms)
+            need_value "$@"
+            NEMOTRON_MULTILINGUAL_CHUNK_MS="$2"
             shift 2
             ;;
         --allow-missing-ref)
@@ -337,6 +441,19 @@ if ! [[ "$UNIFIED_TRAILING_SILENCE_MS" =~ ^[0-9]+$ ]]; then
     echo "--unified-trailing-silence-ms must be a non-negative integer" >&2
     exit 2
 fi
+
+if [[ -z "${NEMOTRON_MULTILINGUAL_LANGUAGE//[[:space:]]/}" ]]; then
+    echo "--nemotron-multilingual-language must not be empty" >&2
+    exit 2
+fi
+
+case "$NEMOTRON_MULTILINGUAL_CHUNK_MS" in
+    560|1120|2240|4480) ;;
+    *)
+        echo "--nemotron-multilingual-chunk-ms must be one of 560, 1120, 2240, or 4480" >&2
+        exit 2
+        ;;
+esac
 
 if ! command -v afconvert >/dev/null 2>&1; then
     echo "afconvert is required to normalize audio" >&2
@@ -402,7 +519,15 @@ for clip in "${clips[@]}"; do
         cp "$ref" "$tmpdir/$clip_id.txt"
     fi
 
-    bench_args=( ".build/release/presspeech-bench" "--file" "$normalized" "--backend" "$BACKEND" "--trials" "$TRIALS" "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
+    bench_args=(
+        ".build/release/presspeech-bench"
+        "--file" "$normalized"
+        "--backend" "$BACKEND"
+        "--trials" "$TRIALS"
+        "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS"
+        "--nemotron-multilingual-language" "$NEMOTRON_MULTILINGUAL_LANGUAGE"
+        "--nemotron-multilingual-chunk-ms" "$NEMOTRON_MULTILINGUAL_CHUNK_MS"
+    )
     if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
         bench_args+=( "--redact-transcripts" )
     fi
@@ -422,5 +547,7 @@ for clip in "${clips[@]}"; do
 
     echo '```' >>"$report"
 done
+
+append_single_backend_summary "$report"
 
 echo "report: $report"

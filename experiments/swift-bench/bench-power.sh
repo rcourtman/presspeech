@@ -14,6 +14,8 @@ FILE=""
 BACKEND="v3"
 TRIALS="20"
 UNIFIED_TRAILING_SILENCE_MS="250"
+NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
+NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
 SAMPLE_MS="250"
 OUTDIR="power-results"
 REDACT_TRANSCRIPTS=1
@@ -28,10 +30,15 @@ usage() {
 usage: ./bench-power.sh --file <audio> [options]
 
 Options:
-  --backend <name>       presspeech-bench backend: v3, unified, apple, 110m, fluid, both (default: v3)
+  --backend <name>       presspeech-bench backend: v3, unified, nemotron-en,
+                         nemotron-multilingual, apple, 110m, fluid, both (default: v3)
   --trials <n>           measured transcription trials (default: 20)
   --unified-trailing-silence-ms <n>
                          Unified-only trailing silence in ms (default: 250)
+  --nemotron-multilingual-language <code>
+                         Nemotron 3.5 language prompt (default: en-US)
+  --nemotron-multilingual-chunk-ms <560|1120|2240|4480>
+                         Nemotron 3.5 exported chunk tier (default: 2240)
   --sample-ms <n>        powermetrics sample interval in ms (default: 250)
   --out-dir <path>       report directory (default: power-results)
   --show-transcripts     include reference/hypothesis text in the bench log
@@ -87,6 +94,14 @@ report_stem_for() {
     fi
 }
 
+backend_uses_unified() {
+    [[ "$BACKEND" == "unified" || "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
+}
+
+backend_uses_nemotron_multilingual() {
+    [[ "$BACKEND" == "nemotron-multilingual" || "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
+}
+
 prepare_bench_file() {
     bench_file="$FILE"
     if [[ "$REDACT_PATHS" -eq 1 ]]; then
@@ -129,7 +144,13 @@ write_power_report() {
         echo "- Audio: $(path_label "$FILE")"
         echo "- Backend: $BACKEND"
         echo "- Trials: $TRIALS"
-        echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
+        if backend_uses_unified; then
+            echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
+        fi
+        if backend_uses_nemotron_multilingual; then
+            echo "- Nemotron multilingual language: $NEMOTRON_MULTILINGUAL_LANGUAGE"
+            echo "- Nemotron multilingual chunk: ${NEMOTRON_MULTILINGUAL_CHUNK_MS} ms"
+        fi
         echo "- powermetrics sample interval: ${SAMPLE_MS} ms"
         echo "- Transcript output: $(transcript_output_label)"
         echo "- Fixture paths: $(fixture_paths_label)"
@@ -188,6 +209,8 @@ run_self_test() {
     BACKEND="v3"
     TRIALS="2"
     UNIFIED_TRAILING_SILENCE_MS="250"
+    NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
+    NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
     SAMPLE_MS="100"
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
@@ -220,6 +243,12 @@ run_self_test() {
     assert_not_contains "$report" "Private Battery Client"
     assert_not_contains "$report" "$secret_stem"
     assert_not_contains "$report" "$secret_transcript"
+    assert_not_contains "$report" "Unified trailing silence"
+
+    BACKEND="nemotron-multilingual"
+    write_power_report "$report" "$timestamp" "CPU Power avg: 123.0 mW (2 samples)" "$bench_log"
+    assert_contains "$report" "- Nemotron multilingual language: en-US"
+    assert_contains "$report" "- Nemotron multilingual chunk: 2240 ms"
 
     local missing_value_log="$self_tmp/missing-value.log"
     if bash "$SCRIPT_PATH" --out-dir >"$missing_value_log" 2>&1; then
@@ -254,6 +283,16 @@ while [[ $# -gt 0 ]]; do
         --unified-trailing-silence-ms)
             need_value "$@"
             UNIFIED_TRAILING_SILENCE_MS="$2"
+            shift 2
+            ;;
+        --nemotron-multilingual-language)
+            need_value "$@"
+            NEMOTRON_MULTILINGUAL_LANGUAGE="$2"
+            shift 2
+            ;;
+        --nemotron-multilingual-chunk-ms)
+            need_value "$@"
+            NEMOTRON_MULTILINGUAL_CHUNK_MS="$2"
             shift 2
             ;;
         --sample-ms)
@@ -316,6 +355,19 @@ if ! [[ "$UNIFIED_TRAILING_SILENCE_MS" =~ ^[0-9]+$ ]]; then
     exit 2
 fi
 
+if [[ -z "${NEMOTRON_MULTILINGUAL_LANGUAGE//[[:space:]]/}" ]]; then
+    echo "--nemotron-multilingual-language must not be empty" >&2
+    exit 2
+fi
+
+case "$NEMOTRON_MULTILINGUAL_CHUNK_MS" in
+    560|1120|2240|4480) ;;
+    *)
+        echo "--nemotron-multilingual-chunk-ms must be one of 560, 1120, 2240, or 4480" >&2
+        exit 2
+        ;;
+esac
+
 if ! [[ "$SAMPLE_MS" =~ ^[0-9]+$ ]] || [[ "$SAMPLE_MS" -lt 50 ]]; then
     echo "--sample-ms must be an integer >= 50" >&2
     exit 2
@@ -357,7 +409,15 @@ trap cleanup EXIT INT TERM
 
 prepare_bench_file
 
-bench_args=( ".build/release/presspeech-bench" "--file" "$bench_file" "--backend" "$BACKEND" "--trials" "$TRIALS" "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
+bench_args=(
+    ".build/release/presspeech-bench"
+    "--file" "$bench_file"
+    "--backend" "$BACKEND"
+    "--trials" "$TRIALS"
+    "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS"
+    "--nemotron-multilingual-language" "$NEMOTRON_MULTILINGUAL_LANGUAGE"
+    "--nemotron-multilingual-chunk-ms" "$NEMOTRON_MULTILINGUAL_CHUNK_MS"
+)
 if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
     bench_args+=( "--redact-transcripts" )
 fi

@@ -11,6 +11,8 @@
 //   * FluidAudio's `AsrManager` running Parakeet TDT v3 via CoreML
 //     on the ANE (model downloaded from HuggingFace on first run,
 //     ~600 MB, cached thereafter).
+//   * Candidate FluidAudio Parakeet Unified, Nemotron English, and
+//     Nemotron 3.5 multilingual paths, also via CoreML on the ANE.
 //
 // This benchmark drove the original "should Presspeech port to Swift?"
 // decision; FluidAudio won and the production app uses it now (see

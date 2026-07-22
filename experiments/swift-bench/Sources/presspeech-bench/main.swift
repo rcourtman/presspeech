@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|unified|nemotron-en|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -17,6 +17,9 @@ import Speech
 import FluidAudio
 
 let UNIFIED_MODEL_TRAILING_SILENCE_MS = 250
+let DEFAULT_NEMOTRON_MULTILINGUAL_LANGUAGE = "en-US"
+let DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS = 2240
+let NEMOTRON_MULTILINGUAL_CHUNK_CHOICES = [560, 1120, 2240, 4480]
 let BENCH_SAMPLE_RATE: Double = 16_000
 
 // MARK: - CLI
@@ -24,10 +27,11 @@ let BENCH_SAMPLE_RATE: Double = 16_000
 struct CLIArgs {
     var file: URL
     var trials: Int = 5
-    // "apple" | "v3" | "unified" | "nemotron-en" | "110m" | "fluid"
-    // (= v3 + candidates + 110m) | "both" (= apple + fluid).
-    // Defaults to "v3": it's the production model. Unified is an
-    // English-only candidate backend; 110m remains broken upstream.
+    // "apple" | "v3" | "unified" | "nemotron-en" |
+    // "nemotron-multilingual" | "110m" | "fluid" (= v3 + candidates +
+    // 110m) | "both" (= apple + fluid).
+    // Defaults to "v3": it's the production model. Unified and Nemotron
+    // remain candidate backends; 110m remains broken upstream.
     var backend: String = "v3"
     // Ground-truth transcript for WER. If nil, falls back to a sibling
     // "<file-stem>.txt" (written by generate-test-audio.sh); if neither
@@ -40,6 +44,10 @@ struct CLIArgs {
     // Candidate-model default used for final-word retention studies. Set to
     // 0 to measure the raw model, or sweep values when tuning a future model.
     var unifiedTrailingSilenceMs = UNIFIED_MODEL_TRAILING_SILENCE_MS
+    // Nemotron 3.5 is prompt-conditioned and has separately exported chunk
+    // tiers, so record both choices in every benchmark invocation.
+    var nemotronMultilingualLanguage = DEFAULT_NEMOTRON_MULTILINGUAL_LANGUAGE
+    var nemotronMultilingualChunkMs = DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS
 }
 
 func parseArgs() -> CLIArgs {
@@ -50,6 +58,8 @@ func parseArgs() -> CLIArgs {
     var ref: String? = nil
     var redactTranscripts = false
     var unifiedTrailingSilenceMs = UNIFIED_MODEL_TRAILING_SILENCE_MS
+    var nemotronMultilingualLanguage = DEFAULT_NEMOTRON_MULTILINGUAL_LANGUAGE
+    var nemotronMultilingualChunkMs = DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS
     while let arg = iter.next() {
         switch arg {
         case "--file":
@@ -68,15 +78,30 @@ func parseArgs() -> CLIArgs {
                 exit(2)
             }
             unifiedTrailingSilenceMs = n
+        case "--nemotron-multilingual-language":
+            guard let v = iter.next(), !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                FileHandle.standardError.write(Data("--nemotron-multilingual-language requires a language code\n".utf8))
+                exit(2)
+            }
+            nemotronMultilingualLanguage = v
+        case "--nemotron-multilingual-chunk-ms":
+            guard let v = iter.next(), let n = Int(v), NEMOTRON_MULTILINGUAL_CHUNK_CHOICES.contains(n) else {
+                let choices = NEMOTRON_MULTILINGUAL_CHUNK_CHOICES.map(String.init).joined(separator: "|")
+                FileHandle.standardError.write(Data("--nemotron-multilingual-chunk-ms must be one of \(choices)\n".utf8))
+                exit(2)
+            }
+            nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|unified|nemotron-en|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
                          unified
                               FluidAudio Parakeet Unified 0.6B offline batch
                          nemotron-en
                               FluidAudio Nemotron Speech Streaming English 0.6B, 1120 ms tier
+                         nemotron-multilingual
+                              FluidAudio Nemotron 3.5 Streaming Multilingual 0.6B
                          110m  FluidAudio Parakeet TDT-CTC 110M (smaller English model;
                                currently fails to load — broken upstream)
                          fluid v3 + candidate FluidAudio backends + 110m head-to-head
@@ -89,6 +114,10 @@ func parseArgs() -> CLIArgs {
               --unified-trailing-silence-ms <n>
                          append n ms of silence before Unified transcription
                          (default: \(UNIFIED_MODEL_TRAILING_SILENCE_MS), matching Presspeech)
+              --nemotron-multilingual-language <code>
+                         language prompt for Nemotron 3.5 (default: \(DEFAULT_NEMOTRON_MULTILINGUAL_LANGUAGE))
+              --nemotron-multilingual-chunk-ms <560|1120|2240|4480>
+                         exported Nemotron 3.5 chunk tier (default: \(DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS))
 
             For a clean per-model memory number, run one model per process
             (--backend v3, then --backend 110m) — footprint is cumulative
@@ -109,7 +138,9 @@ func parseArgs() -> CLIArgs {
                    backend: backend,
                    ref: ref,
                    redactTranscripts: redactTranscripts,
-                   unifiedTrailingSilenceMs: unifiedTrailingSilenceMs)
+                   unifiedTrailingSilenceMs: unifiedTrailingSilenceMs,
+                   nemotronMultilingualLanguage: nemotronMultilingualLanguage,
+                   nemotronMultilingualChunkMs: nemotronMultilingualChunkMs)
 }
 
 // MARK: - Audio loading
@@ -422,6 +453,46 @@ final class NemotronEnglishBackend: ASRBackend {
     }
 }
 
+// ----- FluidAudio Nemotron 3.5 Multilingual (CoreML → ANE) -------------
+//
+// Prompt-conditioned multilingual candidate. The model repository contains
+// separate vocabulary/tier variants, so both the language and chunk size are
+// explicit benchmark inputs instead of hidden global defaults.
+
+final class NemotronMultilingualBackend: ASRBackend {
+    let name: String
+    private let language: String
+    private let chunkMs: Int
+    private var asr: StreamingNemotronMultilingualAsrManager!
+
+    init(language: String, chunkMs: Int) {
+        self.language = language
+        self.chunkMs = chunkMs
+        self.name = "fluid-Nemotron3.5Multilingual-\(language)-\(chunkMs)"
+    }
+
+    func prepare(warmupSamples: [Float]) async throws {
+        let shared = try await StreamingNemotronMultilingualAsrManager.downloadAndPreloadShared(
+            languageCode: language,
+            chunkMs: chunkMs
+        )
+        asr = StreamingNemotronMultilingualAsrManager()
+        try await asr.loadFromShared(shared)
+        await asr.setLanguage(language)
+        _ = try await run(samples: warmupSamples)
+    }
+
+    func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
+        await asr.reset()
+        await asr.setLanguage(language)
+        let t0 = Date()
+        _ = try await asr.process(samples: samples)
+        let text = try await asr.finish()
+        return (text.trimmingCharacters(in: .whitespacesAndNewlines),
+                Date().timeIntervalSince(t0))
+    }
+}
+
 func makeFloatPCMBuffer(samples: [Float]) -> AVAudioPCMBuffer {
     let format = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
@@ -595,8 +666,12 @@ struct PresspeechBench {
         let args = parseArgs()
 
         var runSummary = "presspeech-bench: \(args.file.lastPathComponent), \(args.trials) trials, backend=\(args.backend)"
-        if args.backend == "unified" || args.backend == "both" {
+        if args.backend == "unified" || args.backend == "fluid" || args.backend == "both" {
             runSummary += ", unified-trailing-silence-ms=\(args.unifiedTrailingSilenceMs)"
+        }
+        if args.backend == "nemotron-multilingual" || args.backend == "fluid" || args.backend == "both" {
+            runSummary += ", nemotron-multilingual-language=\(args.nemotronMultilingualLanguage)"
+            runSummary += ", nemotron-multilingual-chunk-ms=\(args.nemotronMultilingualChunkMs)"
         }
         log(runSummary)
         let samples = try load16kMono(url: args.file)
@@ -624,7 +699,10 @@ struct PresspeechBench {
         // "first inference" for the same shape we'll measure.
         let warmup = samples
 
-        let known = ["apple", "v3", "unified", "nemotron-en", "110m", "fluid", "both"]
+        let known = [
+            "apple", "v3", "unified", "nemotron-en", "nemotron-multilingual",
+            "110m", "fluid", "both",
+        ]
         guard known.contains(args.backend) else {
             FileHandle.standardError.write(Data("unknown --backend \"\(args.backend)\" (expected \(known.joined(separator: "|")))\n".utf8))
             exit(2)
@@ -645,6 +723,14 @@ struct PresspeechBench {
         }
         if args.backend == "nemotron-en" || args.backend == "fluid" || args.backend == "both" {
             backends.append(NemotronEnglishBackend())
+        }
+        if args.backend == "nemotron-multilingual" || args.backend == "fluid" || args.backend == "both" {
+            backends.append(
+                NemotronMultilingualBackend(
+                    language: args.nemotronMultilingualLanguage,
+                    chunkMs: args.nemotronMultilingualChunkMs
+                )
+            )
         }
         if args.backend == "110m" || args.backend == "fluid" || args.backend == "both" {
             // Kept wired up but off the default path: as of the current

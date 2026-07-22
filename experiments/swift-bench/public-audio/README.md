@@ -23,6 +23,13 @@ Unified model:
 ./run-public-model-comparison.sh --trials 3
 ```
 
+Run the current Nemotron candidates through the same fixtures:
+
+```sh
+./run-real-dictation-regression.sh --input-dir public-audio/librispeech-dev-clean --out-dir public-results --backend nemotron-en --public-corpus --show-transcripts --show-paths --trials 3
+./run-real-dictation-regression.sh --input-dir public-audio/librispeech-dev-clean --out-dir public-results --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --public-corpus --show-transcripts --show-paths --trials 3
+```
+
 Or fetch and compare in one command:
 
 ```sh
