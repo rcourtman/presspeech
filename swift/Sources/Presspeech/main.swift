@@ -50,7 +50,7 @@ let MAX_RECORDING_SECONDS: TimeInterval = 120   // auto-release if held longer
 // pasteboard before we write the old contents back over it. Quartz has
 // no paste-consumed acknowledgement, which is why restoration remains
 // an opt-in, best-effort behavior.
-let CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 0.15
+let CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 0.4
 let UPDATE_CHECK_FIRST_DELAY_SECONDS: TimeInterval = 30
 let UPDATE_CHECK_INTERVAL_SECONDS: TimeInterval = 6 * 3600  // 6h
 let UPDATE_REMIND_LATER_SECONDS: TimeInterval = 24 * 3600  // 24h
