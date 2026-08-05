@@ -116,42 +116,64 @@ CUE_SOUNDS = {
 }
 
 
-def _mute_default_playback():
-    """Mute the current default render endpoint and return its prior state."""
+def _mute_active_playback():
+    """Mute every active render endpoint and return their prior states."""
     import comtypes
+    from pycaw.constants import AudioDeviceState, EDataFlow
     from pycaw.pycaw import AudioUtilities
 
     comtypes.CoInitialize()
     try:
-        device = AudioUtilities.GetSpeakers()
-        volume = device.EndpointVolume
-        was_muted = bool(volume.GetMute())
-        volume.SetMute(1, None)
-        return device.id, was_muted
+        saved = []
+        failures = []
+        devices = AudioUtilities.GetAllDevices(
+            data_flow=EDataFlow.eRender.value,
+            device_state=AudioDeviceState.Active.value,
+        )
+        for device in devices:
+            try:
+                volume = device.EndpointVolume
+                was_muted = bool(volume.GetMute())
+                volume.SetMute(1, None)
+                if not bool(volume.GetMute()):
+                    raise RuntimeError("mute state did not change")
+                saved.append((device.id, was_muted))
+            except Exception as exc:
+                failures.append("%s: %s" % (device.FriendlyName, exc))
+        if not saved:
+            detail = "; ".join(failures) if failures else "no active playback endpoints"
+            raise RuntimeError(detail)
+        return saved, failures
     finally:
         comtypes.CoUninitialize()
 
 
-def _restore_playback_mute(endpoint_id, was_muted):
-    """Restore the saved mute state on the endpoint muted for recording."""
+def _restore_playback_mutes(saved_states):
+    """Restore every saved render endpoint mute state."""
     import comtypes
+    from pycaw.constants import EDataFlow
     from pycaw.pycaw import AudioUtilities
 
     comtypes.CoInitialize()
     try:
-        default = AudioUtilities.GetSpeakers()
-        if default.id.lower() == endpoint_id.lower():
-            device = default
-        else:
-            device = next(
-                (item for item in AudioUtilities.GetAllDevices()
-                 if item.id.lower() == endpoint_id.lower()),
-                None,
-            )
-        if device is None:
-            return False
-        device.EndpointVolume.SetMute(1 if was_muted else 0, None)
-        return True
+        devices = {
+            device.id.lower(): device
+            for device in AudioUtilities.GetAllDevices(
+                data_flow=EDataFlow.eRender.value)
+        }
+        restored = 0
+        failures = []
+        for endpoint_id, was_muted in saved_states:
+            device = devices.get(endpoint_id.lower())
+            if device is None:
+                failures.append("%s: endpoint disappeared" % endpoint_id)
+                continue
+            try:
+                device.EndpointVolume.SetMute(1 if was_muted else 0, None)
+                restored += 1
+            except Exception as exc:
+                failures.append("%s: %s" % (device.FriendlyName, exc))
+        return restored, failures
     finally:
         comtypes.CoUninitialize()
 
@@ -435,8 +457,12 @@ class PresspeechApp:
             if self._playback_restore is not None:
                 return
             try:
-                self._playback_restore = _mute_default_playback()
-                self._log("playback muted for recording")
+                saved, failures = _mute_active_playback()
+                self._playback_restore = saved
+                self._log("playback muted for recording: %d endpoint(s)" % len(saved))
+                if failures:
+                    self._log("could not mute some playback endpoints: %s" %
+                              "; ".join(failures))
             except Exception as exc:
                 self._log("could not mute playback: %s" % exc)
 
@@ -447,11 +473,11 @@ class PresspeechApp:
             if saved is None:
                 return
             try:
-                restored = _restore_playback_mute(*saved)
-                if restored:
-                    self._log("playback mute state restored")
-                else:
-                    self._log("playback endpoint disappeared before mute restore")
+                restored, failures = _restore_playback_mutes(saved)
+                self._log("playback mute state restored: %d endpoint(s)" % restored)
+                if failures:
+                    self._log("could not restore some playback endpoints: %s" %
+                              "; ".join(failures))
             except Exception as exc:
                 self._log("could not restore playback mute state: %s" % exc)
 

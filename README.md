@@ -45,7 +45,7 @@ and the Apple Neural Engine. The default model is multilingual
 
 Download the self-contained installer—Python is not required:
 
-- [Download Presspeech for Windows 0.1.1](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.1/Presspeech-Setup-0.1.1-x64.exe)
+- [Download Presspeech for Windows 0.1.2](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.2/Presspeech-Setup-0.1.2-x64.exe)
 - Run the installer, then launch Presspeech from the Start Menu.
 - On first launch, wait for **Preparing speech model…** to disappear before
   the first dictation.
