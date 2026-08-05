@@ -1,0 +1,60 @@
+name: windows-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Windows version (X.Y.Z)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      PRESSPEECH_CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Install runtime and build dependencies
+        working-directory: windows
+        shell: pwsh
+        run: |
+          python -m pip install --no-cache-dir -r requirements.txt -r requirements-build.txt
+          python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu126
+          winget install --id JRSoftware.InnoSetup --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+      - name: Import optional signing certificate
+        if: ${{ env.WINDOWS_CERTIFICATE_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP "presspeech-signing.pfx"
+          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          "PRESSPEECH_CERT_PATH=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build installer
+        working-directory: windows
+        shell: pwsh
+        run: |
+          .\build-release.ps1 -Version "${{ inputs.version }}" -Python (Get-Command python).Source
+      - name: Publish Windows prerelease
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $tag = "windows-v$version"
+          $notes = "windows/release-notes/$version.md"
+          if (-not (Test-Path -LiteralPath $notes)) {
+            throw "Missing release notes: $notes"
+          }
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target $env:GITHUB_SHA --prerelease --title "Presspeech for Windows $version" --notes-file $notes
+          }
+          $installer = "windows/dist/installer/Presspeech-Setup-$version-x64.exe"
+          gh release upload $tag $installer "$installer.sha256" --clobber

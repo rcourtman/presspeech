@@ -4,6 +4,7 @@ import json
 import os
 
 APP_NAME = "Presspeech"
+VERSION = "0.1.0"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 

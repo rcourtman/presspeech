@@ -41,7 +41,24 @@ and the Apple Neural Engine. The default model is multilingual
 
 > **~100 ms transcription** · **2.5 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
 
-## Install
+## Install on Windows
+
+Download the self-contained installer—Python is not required:
+
+- [Download Presspeech for Windows 0.1.0](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.0/Presspeech-Setup-0.1.0-x64.exe)
+- Run the installer, then launch Presspeech from the Start Menu.
+- On first launch, wait for **Preparing speech model…** to disappear before
+  the first dictation.
+
+The installer is currently unsigned, so SmartScreen may show **Unknown
+publisher**. Choose **More info → Run anyway** after checking the release
+checksum. The installed app is about 4.4 GB and the first-run Parakeet model
+download is about 2.5 GB. A current NVIDIA GPU driver is strongly recommended.
+
+See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
+source-build details.
+
+## Install on macOS
 
 Download the notarised app:
 

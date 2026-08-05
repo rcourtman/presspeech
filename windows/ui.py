@@ -13,6 +13,7 @@ class DictationIndicator:
     """Small click-through overlay driven safely from any application thread."""
 
     _STATES = {
+        "loading": ("Preparing speech model\u2026", "#6aa9ff"),
         "listening": ("Listening\u2026", "#ff5a5f"),
         "transcribing": ("Transcribing\u2026", "#ffb340"),
     }
@@ -112,7 +113,7 @@ class DictationIndicator:
                 ctypes.c_uint,
             ]
 
-            width, height = 154, 38
+            width, height = 224, 38
 
             def apply_command(command):
                 if command == "close":

@@ -15,20 +15,40 @@ automatic fallback.
 
 ## Install
 
-Prerequisite: Python 3.11+ (`winget install Python.Python.3.12`) and, for the
-Parakeet engine, an NVIDIA GPU with a current driver.
+Download the self-contained Windows x64 installer:
 
-```bat
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\pip install torch --index-url https://download.pytorch.org/whl/cu126
-run.bat
-```
+- [Presspeech-Setup-0.1.0-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.0/Presspeech-Setup-0.1.0-x64.exe)
+- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.0)
+
+No Python installation or command-line setup is required. Presspeech installs
+per-user under `%LOCALAPPDATA%\Programs\Presspeech`, adds a Start Menu shortcut,
+and appears in **Settings → Apps → Installed apps** for normal uninstallation.
+
+This first build is not code-signed. Windows SmartScreen may report **Unknown
+publisher**; choose **More info → Run anyway** after verifying the checksum on
+the release page.
+
+Requirements:
+
+- Windows 10 or 11, x64
+- About 4.4 GB for the app and 2.5 GB for the first-run model cache
+- A current NVIDIA driver is strongly recommended for fast Parakeet inference
 
 First launch downloads the Parakeet model once (~2.5 GB) into
-`%USERPROFILE%\.cache\huggingface`, then loads and warms it in the background
-so the first dictation is ready. First recording triggers the Windows
-microphone permission prompt — allow it.
+`%USERPROFILE%\.cache\huggingface`, then loads and warms it in the background.
+Wait for **Preparing speech model…** to disappear before the first dictation.
+First recording triggers the Windows microphone permission prompt—allow it.
+
+### Install from source
+
+For development, install Python 3.12 and create a project virtual environment:
+
+```bat
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+run.bat
+```
 
 ## Use
 
@@ -100,3 +120,22 @@ Always run the Windows code with its project virtual environment:
 The unit tests do not load a speech model. The self-test does, and therefore
 also verifies the installed Torch/CUDA/model pipeline. Local benchmark audio,
 results, virtual environments, caches, and logs are ignored by Git.
+
+## Build the installer
+
+Install Inno Setup 6 and the pinned build dependency, then run the release
+script from `windows/`:
+
+```powershell
+winget install --id JRSoftware.InnoSetup --exact
+.\.venv\Scripts\python -m pip install -r requirements-build.txt
+powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.0
+```
+
+The build uses a short temporary staging path to avoid Windows path-length
+failures and writes the installer plus checksum under `dist\installer`. Build
+outputs remain ignored by Git. The manual `windows-release` GitHub workflow
+builds and publishes a Windows prerelease. If the repository later receives a
+code-signing certificate, add its base64 PFX and password as
+`WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`; the same build
+automatically signs both the app executable and installer.
