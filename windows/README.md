@@ -17,8 +17,8 @@ automatic fallback.
 
 Download the self-contained Windows x64 installer:
 
-- [Presspeech-Setup-0.1.0-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.0/Presspeech-Setup-0.1.0-x64.exe)
-- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.0)
+- [Presspeech-Setup-0.1.1-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.1/Presspeech-Setup-0.1.1-x64.exe)
+- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.1)
 
 No Python installation or command-line setup is required. Presspeech installs
 per-user under `%LOCALAPPDATA%\Programs\Presspeech`, adds a Start Menu shortcut,
@@ -36,7 +36,9 @@ Requirements:
 
 First launch downloads the Parakeet model once (~2.5 GB) into
 `%USERPROFILE%\.cache\huggingface`, then loads and warms it in the background.
-Wait for **Preparing speech model…** to disappear before the first dictation.
+The first-run readiness window shows model loading, microphone selection, the
+push-to-talk key, and Start with Windows in one place. Wait until it says the
+model is ready before the first dictation.
 First recording triggers the Windows microphone permission prompt—allow it.
 
 ### Install from source
@@ -72,9 +74,10 @@ clipboard-typing shortcut so transcripts reach the remote host, including macOS.
 Microsoft Remote Desktop is also detected automatically and uses its redirected
 clipboard with a small reliability delay. Normal Windows apps retain fast Ctrl+V.
 
-Tray icon (bottom-right) menus: **Dictate** (toggle), **Try Dictation…**
-(scratchpad that doesn't paste anywhere), **Settings…**, **Exit**. The icon
-turns red while recording.
+Tray icon (bottom-right) menus include **Dictate** (toggle), **Try Dictation…**
+(scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
+**Check for Updates…**, **Copy Diagnostics**, and **Exit**. The icon turns red
+while recording.
 
 ## Settings
 
@@ -88,6 +91,8 @@ turns red while recording.
 - Audio cues when dictation starts and stops
 - Mute speaker playback while recording, restoring its previous state afterwards
 - A click-through **Listening… / Transcribing…** indicator on the active display
+- Optional daily GitHub update checks; downloads and installation require
+  approval and the installer is verified by size and SHA-256
 - Dictionary: map a misheard phrase or spoken shortcut to exact text
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)
@@ -101,6 +106,8 @@ turns red while recording.
 - All audio is processed in memory and discarded after transcription.
 - Transcript content is never written to logs; diagnostics retain timings and
   character counts only.
+- **Copy Diagnostics** includes configuration counts and runtime state, never
+  transcripts, audio, or dictionary contents.
 - Clipboard is used briefly to paste; it is overwritten.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
@@ -129,7 +136,7 @@ script from `windows/`:
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact
 .\.venv\Scripts\python -m pip install -r requirements-build.txt
-powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.0
+powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.1
 ```
 
 The build uses a short temporary staging path to avoid Windows path-length

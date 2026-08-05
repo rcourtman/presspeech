@@ -135,6 +135,40 @@ class TextRegressionTests(unittest.TestCase):
     def test_visual_indicator_defaults_on(self):
         self.assertTrue(config.DEFAULTS["visual_indicator"])
 
+    def test_update_checks_default_on_and_first_run_setup_is_incomplete(self):
+        self.assertTrue(config.DEFAULTS["check_updates"])
+        self.assertFalse(config.DEFAULTS["setup_complete"])
+        self.assertTrue(config.DEFAULTS["autostart"])
+
+    def test_daily_update_check_interval(self):
+        day = app.UPDATE_CHECK_INTERVAL_SEC
+        self.assertFalse(app._update_check_due(1000, 1000 + day - 1))
+        self.assertTrue(app._update_check_due(1000, 1000 + day))
+        self.assertTrue(app._update_check_due("invalid", 1000))
+
+    def test_diagnostics_exclude_private_dictionary_contents(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "input_device": "MME::Yeti Nano",
+            "hotkey": "right alt",
+            "trigger": "hold",
+            "check_updates": True,
+            "dictionary": [["private spoken phrase", "private replacement"]],
+        }
+        instance.transcriber = mock.Mock()
+        instance.transcriber.backend = "parakeet"
+        instance.transcriber._device = "cuda"
+        instance.transcriber.model.dtype = "torch.float16"
+        instance.input_device = (0, 16000)
+        instance.model_status = "ready"
+        diagnostics = instance.diagnostics_text()
+        self.assertIn("Dictionary rule count: 1", diagnostics)
+        self.assertIn("Model status: ready", diagnostics)
+        self.assertNotIn("\\Users\\", diagnostics)
+        self.assertNotIn("private spoken phrase", diagnostics)
+        self.assertNotIn("private replacement", diagnostics)
+
     def test_visual_indicator_routes_states_without_stealing_app_logic(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"visual_indicator": True}
@@ -261,6 +295,19 @@ class StartupTests(unittest.TestCase):
             instance._set_indicator.mock_calls,
             [mock.call("loading"), mock.call(None)],
         )
+        self.assertEqual(instance.model_status, "ready")
+
+    def test_startup_worker_exposes_model_error_without_crashing(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.load.side_effect = RuntimeError("model unavailable")
+        instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        with mock.patch.object(app.PresspeechApp, "_log"):
+            instance._preload_model_worker()
+        self.assertEqual(instance.model_status, "error")
+        self.assertIn("model unavailable", instance.model_status_detail)
 
 
 if __name__ == "__main__":

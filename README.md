@@ -45,7 +45,7 @@ and the Apple Neural Engine. The default model is multilingual
 
 Download the self-contained installer—Python is not required:
 
-- [Download Presspeech for Windows 0.1.0](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.0/Presspeech-Setup-0.1.0-x64.exe)
+- [Download Presspeech for Windows 0.1.1](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.1/Presspeech-Setup-0.1.1-x64.exe)
 - Run the installer, then launch Presspeech from the Start Menu.
 - On first launch, wait for **Preparing speech model…** to disappear before
   the first dictation.
@@ -160,8 +160,8 @@ Presspeech is local-first:
 Network calls are limited to:
 
 - speech model download from Hugging Face (first launch, integrity-failure re-download, or user-triggered cache reset),
-- optional GitHub release checks that only notify (fixed `presspeech-update-check` User-Agent, no version, device, or user identifiers),
-- user-triggered install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap).
+- optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers),
+- user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows verifies the release asset's size and SHA-256 before offering to run it.
 
 ## How It Works
 

@@ -6,7 +6,9 @@ Everything runs locally (Whisper via faster-whisper); no cloud, no accounts.
 
 import math
 import os
+import platform
 import re
+import subprocess
 import struct
 import sys
 import threading
@@ -25,6 +27,7 @@ from pystray import Icon, Menu, MenuItem
 import config as cfg
 import engine
 import ui
+import updates
 from british import to_british
 
 KEY_MAP = {
@@ -74,6 +77,17 @@ INPUT_DEVICE_SKIP_WORDS = (
 UNSAFE_INPUT_HOST_APIS = ("wdm-ks",)
 
 LOG_PATH = os.path.join(cfg.CONFIG_DIR, "log.txt")
+UPDATE_CHECK_INTERVAL_SEC = 24 * 60 * 60
+
+
+def _update_check_due(last_check_epoch, now_epoch=None):
+    """Return whether the privacy-safe daily update check is due."""
+    now_epoch = time.time() if now_epoch is None else now_epoch
+    try:
+        last_check_epoch = float(last_check_epoch or 0)
+    except (TypeError, ValueError):
+        return True
+    return now_epoch - last_check_epoch >= UPDATE_CHECK_INTERVAL_SEC
 
 
 def _make_cue_wave(frequency, duration=0.055, volume=0.14, sample_rate=24000):
@@ -248,6 +262,12 @@ class PresspeechApp:
         self.paste_target = "paste"
         self.scratchpad = None
         self.settings_window = None
+        self.setup_window = None
+        self.update_window = None
+        self.pending_update = None
+        self.model_status = "pending"
+        self.model_status_detail = "Waiting to load"
+        self._update_lock = threading.Lock()
         self.icon = None
         self.listener = None
         self._mutex_handle = None
@@ -285,7 +305,11 @@ class PresspeechApp:
             menu=Menu(
                 MenuItem("Dictate", self.toggle_dictate, default=True),
                 MenuItem("Try Dictation\u2026", self.open_scratchpad),
+                MenuItem("Setup\u2026", self.open_setup),
                 MenuItem("Settings\u2026", self.open_settings),
+                Menu.SEPARATOR,
+                MenuItem("Check for Updates\u2026", self.check_for_updates),
+                MenuItem("Copy Diagnostics", self.copy_diagnostics),
                 Menu.SEPARATOR,
                 MenuItem("Exit", self.exit_app),
             ),
@@ -295,6 +319,12 @@ class PresspeechApp:
         self.listener.start()
         self._log("running; hotkey=%s trigger=%s" % (self.settings["hotkey"], self.settings["trigger"]))
         self._model_executor.submit(self._preload_model_worker)
+        if not self.settings.get("setup_complete", False):
+            threading.Timer(0.8, self.open_setup).start()
+        if (self.settings.get("check_updates", True) and
+                _update_check_due(self.settings.get("last_update_check_epoch", 0))):
+            threading.Thread(
+                target=self._update_check_worker, args=(False,), daemon=True).start()
         try:
             while True:
                 threading.Event().wait(3600)
@@ -320,7 +350,8 @@ class PresspeechApp:
         self.indicator.close()
         if self.listener is not None:
             self.listener.stop()
-        for win in (self.scratchpad, self.settings_window):
+        for win in (self.scratchpad, self.settings_window,
+                    self.setup_window, self.update_window):
             if win is not None and win.root is not None:
                 try:
                     win.root.after(0, win.root.destroy)
@@ -824,6 +855,78 @@ class PresspeechApp:
         if self.settings_window is None:
             self.settings_window = ui.SettingsWindow(self)
 
+    def open_setup(self, icon=None, item=None):
+        if self.setup_window is None:
+            self.setup_window = ui.SetupWindow(self)
+
+    def check_for_updates(self, icon=None, item=None):
+        if not self._update_lock.acquire(blocking=False):
+            self.notify("Presspeech", "An update check is already running.")
+            return
+        threading.Thread(
+            target=self._update_check_worker, args=(True, True), daemon=True).start()
+
+    def _update_check_worker(self, manual=False, lock_held=False):
+        if not lock_held and not self._update_lock.acquire(blocking=False):
+            return
+        try:
+            update = updates.fetch_update(cfg.VERSION)
+            self.settings["last_update_check_epoch"] = int(time.time())
+            cfg.save(self.settings)
+            if update is None:
+                if manual:
+                    self.notify("Presspeech", "Version %s is up to date." % cfg.VERSION)
+                return
+            self.pending_update = update
+            if self.update_window is None:
+                self.update_window = ui.UpdateWindow(self, update)
+        except Exception as exc:
+            self._log("update check failed: %s" % exc)
+            if manual:
+                self.notify("Update check failed", str(exc))
+        finally:
+            self._update_lock.release()
+
+    def launch_update(self, installer_path):
+        """Run a verified installer only after UpdateWindow gets user approval."""
+        subprocess.Popen([installer_path], cwd=os.path.dirname(installer_path))
+        time.sleep(0.15)
+        self.exit_app()
+
+    def diagnostics_text(self):
+        """Return useful support facts without transcript or dictionary contents."""
+        transcriber = self.transcriber
+        model = getattr(transcriber, "model", None)
+        dtype = str(getattr(model, "dtype", "not loaded"))
+        device = str(getattr(transcriber, "_device", "not loaded"))
+        active_input = self.input_device or "not opened yet"
+        lines = [
+            "Presspeech diagnostics",
+            "Version: %s" % cfg.VERSION,
+            "Build: %s" % ("packaged" if getattr(sys, "frozen", False) else "source"),
+            "Windows: %s" % platform.platform(),
+            "Configured model: %s" % self.settings.get("model", "unknown"),
+            "Model status: %s" % getattr(self, "model_status", "unknown"),
+            "Backend: %s" % (getattr(transcriber, "backend", None) or "not loaded"),
+            "Device / dtype: %s / %s" % (device, dtype),
+            "Configured microphone: %s" % self.settings.get("input_device", "auto"),
+            "Active microphone: %s" % (active_input,),
+            "Hotkey / trigger: %s / %s" % (
+                self.settings.get("hotkey", "unknown"),
+                self.settings.get("trigger", "unknown")),
+            "Automatic update checks: %s" % bool(
+                self.settings.get("check_updates", True)),
+            "Dictionary rule count: %d" % len(self.settings.get("dictionary", [])),
+            r"Config path: %APPDATA%\Presspeech\config.json",
+            r"Log path: %APPDATA%\Presspeech\log.txt",
+            "Privacy: no transcript, audio, or dictionary contents included",
+        ]
+        return "\r\n".join(lines)
+
+    def copy_diagnostics(self, icon=None, item=None):
+        pyperclip.copy(self.diagnostics_text())
+        self.notify("Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
+
     # ---------------- helpers ----------------
 
     def apply_autostart(self):
@@ -886,6 +989,8 @@ class PresspeechApp:
     def _preload_model_worker(self):
         """Warm the configured model in the tray process before the first dictation."""
         model_name = self.settings["model"]
+        self.model_status = "loading"
+        self.model_status_detail = "Loading %s" % model_name
         self._set_indicator("loading")
         self._log("loading model at startup: %s" % model_name)
         try:
@@ -905,12 +1010,17 @@ class PresspeechApp:
                 pass
             self._last_model_use = time.perf_counter()
         except Exception as exc:
+            self.model_status = "error"
+            self.model_status_detail = str(exc)[:160]
             self._log("startup model load failed: %s\n%s" % (exc, traceback.format_exc()))
             self.notify("Model load failed", "%s will retry on first dictation." % model_name)
             return
         finally:
             self._set_indicator(None)
         model_dtype = getattr(self.transcriber.model, "dtype", "unknown")
+        self.model_status = "ready"
+        self.model_status_detail = "%s on %s (%s)" % (
+            model_name, getattr(self.transcriber, "_device", "unknown"), model_dtype)
         self._log("model ready: %s (%s)" % (model_name, model_dtype))
         self._schedule_model_idle_unload()
 

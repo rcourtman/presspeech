@@ -3,7 +3,7 @@
   "privacy_model": "Local dictation, no telemetry, no cloud transcription endpoint",
   "network_calls": [
     {
-      "name": "first_launch_model_download",
+      "name": "macos_first_launch_model_download",
       "when": "First launch until the model weights are cached locally; again if the local cache fails its integrity check and is re-downloaded; again when the user chooses Reset Speech Model Cache",
       "destination": "huggingface.co",
       "purpose": "FluidAudio downloads the Parakeet TDT v3 CoreML model weights",
@@ -13,13 +13,32 @@
       "data_sent": "Standard HTTPS request metadata; no dictation audio. If HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN is set in the environment, FluidAudio attaches it as an Authorization header to huggingface.co; most users do not have these set"
     },
     {
-      "name": "update_check",
+      "name": "windows_first_launch_model_download",
+      "when": "First Windows launch until the NVIDIA Parakeet TDT v3 model weights are cached locally",
+      "destination": "huggingface.co",
+      "purpose": "Transformers downloads the Parakeet TDT v3 model weights for local CUDA inference",
+      "approximate_size": "2.5 GB",
+      "user_triggered": false,
+      "can_disable": false,
+      "data_sent": "Standard HTTPS request metadata; no dictation audio, transcript, settings, or usage data"
+    },
+    {
+      "name": "macos_update_check",
       "when": "Every 6 hours when automatic update checks are enabled, plus one check shortly after launch",
       "destination": "api.github.com/repos/rcourtman/presspeech/releases/latest",
       "purpose": "Check whether a newer Presspeech release is available and notify the user",
       "user_triggered": false,
       "can_disable": true,
       "data_sent": "GET with a fixed User-Agent header, exactly presspeech-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
+    },
+    {
+      "name": "windows_update_check",
+      "when": "At most once every 24 hours when automatic checks are enabled, plus manual checks from the tray menu",
+      "destination": "api.github.com/repos/rcourtman/presspeech/releases?per_page=30",
+      "purpose": "Find a newer complete windows-vX.Y.Z release and offer it to the user",
+      "user_triggered": false,
+      "can_disable": true,
+      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
     },
     {
       "name": "user_triggered_install_or_update",
@@ -30,7 +49,7 @@
         "formulae.brew.sh",
         "Homebrew's own update endpoints (github.com / api.github.com)"
       ],
-      "purpose": "User-triggered install/update flow: direct browser download of the signed GitHub release archive, or Homebrew tap and metadata refresh followed by the same signed release archive",
+      "purpose": "User-triggered install/update flow: direct release download, a Homebrew metadata refresh followed by the signed macOS archive, or a Windows installer whose published size and SHA-256 are verified before launch",
       "user_triggered": true,
       "can_disable": true,
       "data_sent": "Browser or Homebrew request metadata; no dictation audio"
@@ -40,6 +59,9 @@
     "preferences": "~/Library/Preferences/com.local.presspeech.plist",
     "logs": "~/Library/Logs/Presspeech.log",
     "model_cache": "~/Library/Application Support/FluidAudio/",
+    "windows_preferences": "%APPDATA%\\Presspeech\\config.json",
+    "windows_logs": "%APPDATA%\\Presspeech\\log.txt",
+    "windows_model_cache": "%USERPROFILE%\\.cache\\huggingface",
     "transcripts": "Recent transcript history is in memory only and clears on quit",
     "clipboard": "Pasted transcripts go through the system pasteboard and stay there until overwritten; Presspeech deliberately does not restore the previous clipboard contents, so the last dictation remains visible to clipboard managers and Universal Clipboard"
   }
