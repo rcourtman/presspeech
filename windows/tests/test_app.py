@@ -206,15 +206,16 @@ class TextRegressionTests(unittest.TestCase):
         instance._playback_mute_lock = __import__("threading").Lock()
         instance._playback_restore = None
         instance._log = mock.Mock()
-        with mock.patch.object(app, "_mute_default_playback",
-                               return_value=("endpoint-id", True)) as mute, \
-                mock.patch.object(app, "_restore_playback_mute",
-                                  return_value=True) as restore:
+        saved = [("endpoint-one", True), ("endpoint-two", False)]
+        with mock.patch.object(app, "_mute_active_playback",
+                               return_value=(saved, [])) as mute, \
+                mock.patch.object(app, "_restore_playback_mutes",
+                                  return_value=(2, [])) as restore:
             instance._mute_playback_for_recording()
             instance.recording = False
             instance._restore_playback_after_recording()
         mute.assert_called_once_with()
-        restore.assert_called_once_with("endpoint-id", True)
+        restore.assert_called_once_with(saved)
         self.assertIsNone(instance._playback_restore)
 
     def test_start_cue_finishes_before_playback_mutes_and_mic_opens(self):
