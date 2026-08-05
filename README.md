@@ -13,9 +13,16 @@
 
 # Presspeech
 
-**Private push-to-talk dictation into any Mac app.** Hold a key, speak,
+**Private push-to-talk dictation into any app.** Hold a key, speak,
 release, and the transcript appears at the cursor. No account, no
 subscription, no cloud transcription.
+
+Presspeech now has two platform implementations:
+
+- **macOS:** the released native Swift app for Apple Silicon, documented below.
+- **Windows:** the Python/CUDA implementation in [`windows/`](windows/README.md),
+  with Right Alt hold-to-talk, Parakeet TDT v3, a tray app, audio cues,
+  playback muting, and a compact on-screen status indicator.
 
 > Presspeech now uses the `com.local.presspeech` identity throughout.
 > When upgrading from an earlier identity, saved preferences and local
@@ -185,6 +192,19 @@ Key files:
 - `experiments/swift-bench/` — latency benchmark harness
 
 Release notes live in `swift/release-notes/`.
+
+For the Windows implementation:
+
+```bat
+cd windows
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\python -m unittest discover -s tests -v
+run.bat
+```
+
+See [`windows/README.md`](windows/README.md) for hardware, setup, and usage details.
 
 ## Links
 

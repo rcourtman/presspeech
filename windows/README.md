@@ -1,0 +1,102 @@
+# Presspeech for Windows
+
+Fast, private, local push-to-talk dictation for Windows — a Windows port of
+[presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
+speak, release, and the transcript is typed at the cursor. No cloud, no
+accounts, no telemetry — speech recognition runs entirely on your machine.
+
+Default engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family
+Presspeech uses on macOS. On an NVIDIA GPU (CUDA) it transcribes with
+punctuation and capitalization in a fraction of real time (~50× realtime on an
+RTX 3070). Parakeet loads in FP16 on CUDA to halve resident model tensors, with
+an automatic FP32 retry if the half-precision load fails. Whisper
+(`faster-whisper`) models are available as faster/lighter alternatives and as
+automatic fallback.
+
+## Install
+
+Prerequisite: Python 3.11+ (`winget install Python.Python.3.12`) and, for the
+Parakeet engine, an NVIDIA GPU with a current driver.
+
+```bat
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\pip install torch --index-url https://download.pytorch.org/whl/cu126
+run.bat
+```
+
+First launch downloads the Parakeet model once (~2.5 GB) into
+`%USERPROFILE%\.cache\huggingface`, then loads and warms it in the background
+so the first dictation is ready. First recording triggers the Windows
+microphone permission prompt — allow it.
+
+## Use
+
+1. Hold **Right Alt** (configurable).
+2. Speak.
+3. Release — the punctuated transcript appears at the cursor moments later.
+
+A short high tone confirms recording has started and a lower tone confirms it has
+stopped. Audio cues are enabled by default and can be disabled in Settings.
+
+After release, silence-aware post-roll stops as early as 80 ms while retaining
+the original 400 ms safety ceiling whenever speech is still present. This keeps
+final words intact without always paying the full delay.
+
+The model stays loaded during normal use so every dictation is immediately ready.
+The internal unload support is retained for an explicit gaming mode rather than
+being triggered merely because dictation has been idle.
+
+When a Moonlight stream is focused, Presspeech automatically uses Moonlight's
+clipboard-typing shortcut so transcripts reach the remote host, including macOS.
+Microsoft Remote Desktop is also detected automatically and uses its redirected
+clipboard with a small reliability delay. Normal Windows apps retain fast Ctrl+V.
+
+Tray icon (bottom-right) menus: **Dictate** (toggle), **Try Dictation…**
+(scratchpad that doesn't paste anywhere), **Settings…**, **Exit**. The icon
+turns red while recording.
+
+## Settings
+
+- Hotkey: right/left Alt, Ctrl, Shift, Win, or F8–F12
+- Trigger: hold-to-talk or press-to-toggle
+- Microphone: automatic selection or a specific safe Windows input device
+- Engine/model: Parakeet TDT v3 (GPU, best), Whisper turbo/small/medium/base
+- After pasting: space / newline / nothing
+- Remove filler words (um, uh, er, …)
+- British English spelling (color → colour, realize → realise)
+- Audio cues when dictation starts and stops
+- Mute speaker playback while recording, restoring its previous state afterwards
+- A click-through **Listening… / Transcribing…** indicator on the active display
+- Dictionary: map a misheard phrase or spoken shortcut to exact text
+  (e.g. "press speech" → `presspeech`), applied deterministically
+- Start with Windows (registry `HKCU\...\Run`)
+
+## Notes
+
+- A working microphone must be connected. Automatic selection prefers the
+  Windows Sound Mapper, skips virtual/loopback and WDM-KS devices, and resamples
+  to 16 kHz. A specific safe input can be selected in Settings.
+- Single-instance (named mutex) — launching twice does nothing.
+- All audio is processed in memory and discarded after transcription.
+- Transcript content is never written to logs; diagnostics retain timings and
+  character counts only.
+- Clipboard is used briefly to paste; it is overwritten.
+- `python app.py --selftest` verifies the engine pipeline.
+- `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
+  see `benchmarks/README.md` for the reviewed-reference workflow.
+- If you see missing-DLL errors, install the Visual C++ Redistributable
+  (x64) from Microsoft.
+
+## Develop and test
+
+Always run the Windows code with its project virtual environment:
+
+```bat
+.venv\Scripts\python -m unittest discover -s tests -v
+.venv\Scripts\python app.py --selftest
+```
+
+The unit tests do not load a speech model. The self-test does, and therefore
+also verifies the installed Torch/CUDA/model pipeline. Local benchmark audio,
+results, virtual environments, caches, and logs are ignored by Git.

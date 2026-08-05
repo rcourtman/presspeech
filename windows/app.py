@@ -1,0 +1,990 @@
+"""Presspeech for Windows - local push-to-talk dictation.
+
+Hold a hotkey, speak, release, and the transcript is typed at the cursor.
+Everything runs locally (Whisper via faster-whisper); no cloud, no accounts.
+"""
+
+import math
+import os
+import re
+import struct
+import sys
+import threading
+import time
+import traceback
+import winsound
+from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
+import sounddevice as sd
+import pyperclip
+from pynput import keyboard as pkb
+from PIL import Image, ImageDraw
+from pystray import Icon, Menu, MenuItem
+
+import config as cfg
+import engine
+import ui
+from british import to_british
+
+KEY_MAP = {
+    "right alt": {pkb.Key.alt_gr, pkb.Key.alt_r},
+    "left alt": {pkb.Key.alt_l, pkb.Key.alt_gr},
+    "right ctrl": {pkb.Key.ctrl_r},
+    "left ctrl": {pkb.Key.ctrl_l},
+    "right shift": {pkb.Key.shift_r},
+    "left shift": {pkb.Key.shift_l},
+    "right win": {pkb.Key.cmd_r},
+    "left win": {pkb.Key.cmd_l},
+    "f8": {pkb.Key.f8},
+    "f9": {pkb.Key.f9},
+    "f10": {pkb.Key.f10},
+    "f11": {pkb.Key.f11},
+    "f12": {pkb.Key.f12},
+}
+
+FILLER_RE = re.compile(
+    r"\b(?:u+m+|u+h+|a+h+|e+r+|e+r+m+|h+m+|h+m+m+|h+u+h+)\b", re.IGNORECASE
+)
+
+SINGLE_INSTANCE_MUTEX = "Local\\PresspeechSingleInstance"
+
+POST_ROLL_MIN_SEC = 0.08
+POST_ROLL_MAX_SEC = 0.4
+POST_ROLL_CHECK_SEC = 0.04
+POST_ROLL_TAIL_SEC = 0.09
+POST_ROLL_ABS_SILENCE_RMS = 0.003
+POST_ROLL_RELATIVE_SILENCE = 0.06
+POST_ROLL_MAX_SILENCE_RMS = 0.012
+# Backwards-compatible conservative value used by the benchmark's worst-case estimate.
+POST_ROLL_SEC = POST_ROLL_MAX_SEC
+MODEL_WARMUP_SEC = 8.0
+MODEL_IDLE_WAKE_SEC = 60.0
+PASTE_DELAY_SEC = 0.01
+RDP_PASTE_DELAY_SEC = 0.08
+
+MOONLIGHT_PROCESSES = {"moonlight.exe"}
+RDP_PROCESSES = {"mstsc.exe", "msrdc.exe"}
+
+AUTO_INPUT_DEVICE = "auto"
+INPUT_DEVICE_SKIP_WORDS = (
+    "stereo mix", "steam", "stream", "virtual", "loopback", "aux", "line in",
+    "hyperx",
+)
+UNSAFE_INPUT_HOST_APIS = ("wdm-ks",)
+
+LOG_PATH = os.path.join(cfg.CONFIG_DIR, "log.txt")
+
+
+def _make_cue_wave(frequency, duration=0.055, volume=0.14, sample_rate=24000):
+    """Build a short, softly faded mono WAV for native Windows playback."""
+    frame_count = int(duration * sample_rate)
+    fade_in = max(1, int(0.006 * sample_rate))
+    fade_out = max(1, int(0.014 * sample_rate))
+    frames = bytearray(frame_count * 2)
+    for i in range(frame_count):
+        envelope = min(1.0, i / fade_in, (frame_count - 1 - i) / fade_out)
+        value = int(32767 * volume * envelope *
+                    math.sin(2.0 * math.pi * frequency * i / sample_rate))
+        struct.pack_into("<h", frames, i * 2, value)
+    header = (
+        b"RIFF" + struct.pack("<I", 36 + len(frames)) + b"WAVEfmt " +
+        struct.pack("<IHHIIHH", 16, 1, 1, sample_rate,
+                    sample_rate * 2, 2, 16) +
+        b"data" + struct.pack("<I", len(frames))
+    )
+    return header + bytes(frames)
+
+
+CUE_SOUNDS = {
+    "start": _make_cue_wave(880),
+    "stop": _make_cue_wave(620),
+}
+
+
+def _mute_default_playback():
+    """Mute the current default render endpoint and return its prior state."""
+    import comtypes
+    from pycaw.pycaw import AudioUtilities
+
+    comtypes.CoInitialize()
+    try:
+        device = AudioUtilities.GetSpeakers()
+        volume = device.EndpointVolume
+        was_muted = bool(volume.GetMute())
+        volume.SetMute(1, None)
+        return device.id, was_muted
+    finally:
+        comtypes.CoUninitialize()
+
+
+def _restore_playback_mute(endpoint_id, was_muted):
+    """Restore the saved mute state on the endpoint muted for recording."""
+    import comtypes
+    from pycaw.pycaw import AudioUtilities
+
+    comtypes.CoInitialize()
+    try:
+        default = AudioUtilities.GetSpeakers()
+        if default.id.lower() == endpoint_id.lower():
+            device = default
+        else:
+            device = next(
+                (item for item in AudioUtilities.GetAllDevices()
+                 if item.id.lower() == endpoint_id.lower()),
+                None,
+            )
+        if device is None:
+            return False
+        device.EndpointVolume.SetMute(1 if was_muted else 0, None)
+        return True
+    finally:
+        comtypes.CoUninitialize()
+
+
+def _resample_to_16k(audio, from_rate):
+    """Resample a mono float32 array to 16 kHz (48k = exact /3 decimation)."""
+    if from_rate == 16000:
+        return audio
+    if from_rate == 48000:
+        n = len(audio) // 3 * 3
+        if n < 3:
+            return audio
+        return audio[:n].reshape(-1, 3).mean(axis=1)
+    duration = len(audio) / float(from_rate)
+    out_n = int(round(duration * 16000))
+    if out_n < 2:
+        return audio
+    x = np.linspace(0.0, len(audio) - 1.0, out_n)
+    xi = np.floor(x).astype(np.int64)
+    frac = (x - xi).astype(np.float32)
+    xi = np.clip(xi, 0, len(audio) - 2)
+    return audio[xi] * (1.0 - frac) + audio[xi + 1] * frac
+
+
+def _foreground_process_name():
+    """Return the executable owning the foreground window, or an empty string."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND,
+                                                    ctypes.POINTER(wintypes.DWORD)]
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL,
+                                         wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return ""
+        process_id = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+        handle = kernel32.OpenProcess(0x1000, False, process_id.value)
+        if not handle:
+            return ""
+        try:
+            size = wintypes.DWORD(32768)
+            path = ctypes.create_unicode_buffer(size.value)
+            if not kernel32.QueryFullProcessImageNameW(
+                    handle, 0, path, ctypes.byref(size)):
+                return ""
+            return os.path.basename(path.value).lower()
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        return ""
+
+
+def _paste_route(process_name):
+    """Choose a paste method for the application receiving the transcript."""
+    name = (process_name or "").lower()
+    if name in MOONLIGHT_PROCESSES:
+        return "moonlight"
+    if name in RDP_PROCESSES:
+        return "rdp"
+    return "local"
+
+
+def _make_icon(color):
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse((3, 3, 61, 61), fill=color + (255,))
+    d.rounded_rectangle((23, 13, 41, 33), radius=7, fill=(255, 255, 255, 255))
+    d.ellipse((19, 29, 45, 45), fill=(255, 255, 255, 255))
+    d.rounded_rectangle((28, 38, 36, 52), radius=4, fill=(255, 255, 255, 255))
+    d.ellipse((24, 48, 40, 56), fill=(255, 255, 255, 255))
+    return img
+
+
+class PresspeechApp:
+    def __init__(self):
+        self.settings = cfg.load()
+        self.transcriber = engine.Transcriber(
+            precision=self.settings.get("precision", "fp16"))
+        self.buffer = []
+        self.stream = None
+        self.recording = False
+        self.lock = threading.Lock()
+        self.paste_target = "paste"
+        self.scratchpad = None
+        self.settings_window = None
+        self.icon = None
+        self.listener = None
+        self._mutex_handle = None
+        self._key_held = False
+        self._injecting_keys = False
+        self._recording_target_process = ""
+        self._rec_epoch = 0
+        self._peak_rms = 0.0
+        self._last_model_use = 0.0
+        self._wake_in_progress = False
+        self._wake_lock = threading.Lock()
+        # Keep every model operation on one permanent OS thread. CUDA/cuDNN
+        # execution state is thread-affine enough that creating a fresh worker
+        # per dictation costs roughly one second even with fixed input shapes.
+        self._model_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="presspeech-model")
+        self._model_idle_epoch = 0
+        self._playback_mute_lock = threading.Lock()
+        self._playback_restore = None
+        self.indicator = ui.DictationIndicator()
+        self.input_device = None
+        self.idle_icon = _make_icon((140, 140, 140))
+        self.rec_icon = _make_icon((225, 60, 60))
+
+    # ---------------- lifecycle ----------------
+
+    def run(self):
+        if not self._single_instance():
+            print("Presspeech is already running.")
+            sys.exit(1)
+        self.icon = Icon(
+            "Presspeech",
+            self.idle_icon,
+            "Presspeech - push-to-talk dictation",
+            menu=Menu(
+                MenuItem("Dictate", self.toggle_dictate, default=True),
+                MenuItem("Try Dictation\u2026", self.open_scratchpad),
+                MenuItem("Settings\u2026", self.open_settings),
+                Menu.SEPARATOR,
+                MenuItem("Exit", self.exit_app),
+            ),
+        )
+        threading.Thread(target=self.icon.run, daemon=True).start()
+        self.listener = pkb.Listener(on_press=self._on_press, on_release=self._on_release)
+        self.listener.start()
+        self._log("running; hotkey=%s trigger=%s" % (self.settings["hotkey"], self.settings["trigger"]))
+        self._model_executor.submit(self._preload_model_worker)
+        try:
+            while True:
+                threading.Event().wait(3600)
+        except KeyboardInterrupt:
+            pass
+
+    def _single_instance(self):
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+        handle = kernel32.CreateMutexW(None, False, SINGLE_INSTANCE_MUTEX)
+        if not handle:
+            return False
+        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+            return False
+        self._mutex_handle = handle
+        return True
+
+    def exit_app(self, icon=None, item=None):
+        self._restore_playback_after_recording()
+        self.indicator.close()
+        if self.listener is not None:
+            self.listener.stop()
+        for win in (self.scratchpad, self.settings_window):
+            if win is not None and win.root is not None:
+                try:
+                    win.root.after(0, win.root.destroy)
+                except Exception:
+                    pass
+        if self.icon is not None:
+            self.icon.stop()
+        os._exit(0)
+
+    # ---------------- hotkey ----------------
+
+    def _is_hotkey(self, key):
+        return key in KEY_MAP.get(self.settings["hotkey"], set())
+
+    def _on_press(self, key):
+        if self._injecting_keys:
+            return
+        if not self._is_hotkey(key):
+            return
+        if self._key_held:
+            return
+        self._key_held = True
+        self._log("key down: %s" % (key,))
+        if self.settings["trigger"] == "toggle":
+            if self.recording:
+                self.request_stop()
+            else:
+                self.start_recording()
+        else:
+            self.start_recording()
+
+    def _on_release(self, key):
+        if self._injecting_keys:
+            return
+        if not self._is_hotkey(key):
+            return
+        self._key_held = False
+        self._log("key up: %s" % (key,))
+        if self.settings["trigger"] != "toggle":
+            self.request_stop()
+
+    def toggle_dictate(self, icon=None, item=None):
+        if self.recording:
+            self.request_stop()
+        else:
+            self.start_recording()
+
+    # ---------------- recording ----------------
+
+    def start_recording(self):
+        target_process = _foreground_process_name()
+        with self.lock:
+            self._rec_epoch += 1
+            if self.recording:
+                return
+            self.recording = True
+            self.buffer = []
+            self._peak_rms = 0.0
+            self._model_idle_epoch += 1
+            self._recording_target_process = target_process
+        self._log("recording started")
+        self._set_indicator("listening")
+        self._wake_model_if_idle()
+        threading.Thread(target=self._start_audio_worker, daemon=True).start()
+
+    def _start_audio_worker(self):
+        # Finish the audible cue before muting, and mute before opening the mic,
+        # so neither the cue nor existing speaker audio is captured.
+        if self.settings.get("audio_cues", True):
+            self._play_cue_worker("start")
+        self._mute_playback_for_recording()
+        self._open_mic_worker()
+
+    def _mute_playback_for_recording(self):
+        if not self.settings.get("mute_playback_while_recording", True):
+            return
+        with self._playback_mute_lock:
+            with self.lock:
+                if not self.recording:
+                    return
+            if self._playback_restore is not None:
+                return
+            try:
+                self._playback_restore = _mute_default_playback()
+                self._log("playback muted for recording")
+            except Exception as exc:
+                self._log("could not mute playback: %s" % exc)
+
+    def _restore_playback_after_recording(self):
+        with self._playback_mute_lock:
+            saved = self._playback_restore
+            self._playback_restore = None
+            if saved is None:
+                return
+            try:
+                restored = _restore_playback_mute(*saved)
+                if restored:
+                    self._log("playback mute state restored")
+                else:
+                    self._log("playback endpoint disappeared before mute restore")
+            except Exception as exc:
+                self._log("could not restore playback mute state: %s" % exc)
+
+    def _open_mic_worker(self):
+        try:
+            chosen = self._get_input_device()
+            if chosen is None:
+                with self.lock:
+                    self.recording = False
+                self._restore_playback_after_recording()
+                self._set_indicator(None)
+                self._log("no working microphone found")
+                self.notify("No microphone found",
+                            "Plug in a microphone or check Windows Sound settings "
+                            "(Recording tab), then try again.")
+                return
+            self.input_device = chosen
+            idx, rate = chosen
+            stream = sd.InputStream(
+                device=idx, samplerate=rate, channels=1, dtype="float32",
+                callback=self._audio_cb,
+            )
+            stream.start()
+            with self.lock:
+                if not self.recording:
+                    self.stream = None
+                else:
+                    self.stream = stream
+            if self.stream is None:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
+                return
+        except Exception as exc:
+            with self.lock:
+                self.recording = False
+                self.stream = None
+            self._restore_playback_after_recording()
+            self._set_indicator(None)
+            self._log("mic error: %s" % exc)
+            self.notify("Microphone error", str(exc))
+            return
+        self._log("mic open ok: %s" % (self.input_device,))
+        if self.icon is not None:
+            self.icon.icon = self.rec_icon
+
+    def _audio_cb(self, indata, frames, time_info, status):
+        chunk = indata.copy()
+        chunk_rms = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
+        with self.lock:
+            if self.recording:
+                self.buffer.append(chunk)
+                self._peak_rms = max(self._peak_rms, chunk_rms)
+
+    def request_stop(self):
+        """Stop after silence, retaining the full safety window for ongoing speech."""
+        self._rec_epoch += 1
+        self._schedule_post_roll(
+            POST_ROLL_MIN_SEC, self._rec_epoch, time.perf_counter())
+
+    def _schedule_post_roll(self, delay, epoch, released_at):
+        timer = threading.Timer(delay, self._finish_after_roll, (epoch, released_at))
+        timer.daemon = True
+        timer.start()
+
+    def _post_roll_tail(self):
+        with self.lock:
+            rate = self.input_device[1] if self.input_device is not None else 16000
+            needed = max(1, int(rate * POST_ROLL_TAIL_SEC))
+            remaining = needed
+            parts = []
+            for chunk in reversed(self.buffer):
+                flat = chunk.reshape(-1)
+                take = min(remaining, flat.size)
+                if take:
+                    parts.append(flat[-take:])
+                    remaining -= take
+                if remaining == 0:
+                    break
+            peak_rms = self._peak_rms
+        if not parts:
+            tail_rms = 0.0
+        else:
+            tail = np.concatenate(list(reversed(parts)))
+            tail_rms = float(np.sqrt(np.mean(np.square(tail))))
+        threshold = min(
+            POST_ROLL_MAX_SILENCE_RMS,
+            max(POST_ROLL_ABS_SILENCE_RMS,
+                peak_rms * POST_ROLL_RELATIVE_SILENCE),
+        )
+        return tail_rms, threshold
+
+    def _finish_after_roll(self, epoch, released_at):
+        if epoch != self._rec_epoch:
+            return
+        elapsed = time.perf_counter() - released_at
+        tail_rms, threshold = self._post_roll_tail()
+        silent = tail_rms <= threshold
+        if silent or elapsed >= POST_ROLL_MAX_SEC:
+            reason = "silence" if silent else "maximum"
+            self._log("post-roll %.3fs (%s; rms %.4f, threshold %.4f)" %
+                      (elapsed, reason, tail_rms, threshold))
+            self.stop_recording()
+            return
+        remaining = POST_ROLL_MAX_SEC - elapsed
+        self._schedule_post_roll(
+            min(POST_ROLL_CHECK_SEC, max(0.0, remaining)), epoch, released_at)
+
+    def stop_recording(self):
+        with self.lock:
+            if not self.recording:
+                return
+            self.recording = False
+            audio = np.concatenate(self.buffer) if self.buffer else np.zeros(0, dtype=np.float32)
+            target_process = self._recording_target_process
+            self.buffer = []
+        if self.stream is not None:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
+        if self.icon is not None:
+            self.icon.icon = self.idle_icon
+        # Restore playback only after closing the stream, so returning speaker
+        # audio and the stop cue are never captured in the post-roll.
+        self._restore_playback_after_recording()
+        self._play_cue("stop")
+        if audio.size == 0:
+            self._set_indicator(None)
+            self._log("recording stopped; no audio captured")
+            self._schedule_model_idle_unload()
+            return
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)
+        if self.input_device is not None and self.input_device[1] != 16000:
+            audio = _resample_to_16k(audio, self.input_device[1])
+        if audio.size / 16000.0 < 0.25:
+            self._set_indicator(None)
+            self._log("recording stopped; too short (%.2fs)" % (audio.size / 16000.0))
+            self._schedule_model_idle_unload()
+            return
+        self._capture_benchmark_if_armed(audio)
+        self._set_indicator("transcribing")
+        self._log("recording stopped; %.2fs captured, transcribing" % (audio.size / 16000.0))
+        self._model_executor.submit(
+            self._transcribe_worker, audio, target_process)
+
+    def _capture_benchmark_if_armed(self, audio):
+        """Persist only explicitly armed recordings for local model comparison."""
+        remaining = int(self.settings.get("capture_benchmark_remaining", 0) or 0)
+        one_shot = bool(self.settings.get("capture_next_benchmark", False))
+        if remaining <= 0 and not one_shot:
+            return None
+        output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "benchmarks", "audio")
+        session = self.settings.get("capture_benchmark_session", "").strip()
+        index = int(self.settings.get("capture_benchmark_index", 1) or 1)
+        safe_session = re.sub(r"[^A-Za-z0-9_-]+", "-", session).strip("-")
+        if remaining > 0 and safe_session:
+            filename = "%s-%02d.wav" % (safe_session, index)
+        else:
+            filename = "live-%s.wav" % time.strftime("%Y%m%d-%H%M%S")
+        output_path = os.path.join(output_dir, filename)
+        try:
+            import wave
+            os.makedirs(output_dir, exist_ok=True)
+            pcm = (np.clip(audio, -1, 1) * 32767).astype(np.int16)
+            with wave.open(output_path, "wb") as handle:
+                handle.setnchannels(1)
+                handle.setsampwidth(2)
+                handle.setframerate(16000)
+                handle.writeframes(pcm.tobytes())
+            self.settings["capture_next_benchmark"] = False
+            if remaining > 0:
+                self.settings["capture_benchmark_remaining"] = remaining - 1
+                self.settings["capture_benchmark_index"] = index + 1
+            cfg.save(self.settings)
+            self._log("saved one-shot benchmark audio: %s" % output_path)
+            left = max(0, remaining - 1) if remaining > 0 else 0
+            self.notify("Benchmark clip saved", "%s (%d remaining)" %
+                        (os.path.basename(output_path), left))
+            return output_path
+        except Exception as exc:
+            self._log("benchmark capture failed: %s" % exc)
+            self.notify("Benchmark capture failed", str(exc))
+            return None
+
+    # ---------------- input device selection ----------------
+
+    @staticmethod
+    def _device_selector(device, host_name):
+        """Return a stable selector that does not depend on PortAudio device indexes."""
+        return "%s::%s" % (host_name, device["name"])
+
+    @staticmethod
+    def _safe_input_device(device, host_name):
+        if device["max_input_channels"] < 1:
+            return False
+        name = device["name"].lower()
+        host_name = host_name.lower()
+        if any(word in name for word in INPUT_DEVICE_SKIP_WORDS):
+            return False
+        return not any(word in host_name for word in UNSAFE_INPUT_HOST_APIS)
+
+    def input_device_options(self):
+        """Return (label, selector) pairs for Settings, excluding unsafe devices."""
+        options = [("Automatic (recommended)", AUTO_INPUT_DEVICE)]
+        try:
+            devices = sd.query_devices()
+            host_apis = sd.query_hostapis()
+        except Exception as exc:
+            self._log("could not list input devices: %s" % exc)
+            return options
+        for i, device in enumerate(devices):
+            host_name = host_apis[device["hostapi"]]["name"]
+            if not self._safe_input_device(device, host_name):
+                continue
+            label = "%s — %s (device %d)" % (device["name"], host_name, i)
+            options.append((label, self._device_selector(device, host_name)))
+        return options
+
+    def _get_input_device(self):
+        if self.input_device is not None:
+            return self.input_device
+        devices = sd.query_devices()
+        host_apis = sd.query_hostapis()
+        selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
+        host_pref = {"mme": 0, "windows directsound": 1, "windows wasapi": 2}
+        ranked = []
+        for i, d in enumerate(devices):
+            host_name = host_apis[d["hostapi"]]["name"]
+            if not self._safe_input_device(d, host_name):
+                continue
+            name = d["name"].lower()
+            selector = self._device_selector(d, host_name)
+            score = host_pref.get(host_name.lower(), 9) * 10
+            if name == "microsoft sound mapper - input":
+                score -= 100
+            elif "yeti nano" in name:
+                score -= 10
+            if "microphone" in name or "mic" in name:
+                score -= 1
+            else:
+                score += 1
+            selected_first = 0 if selected != AUTO_INPUT_DEVICE and selector == selected else 1
+            ranked.append((selected_first, score, i, d, host_name, selector))
+        ranked.sort(key=lambda t: (t[0], t[1], t[2]))
+        if selected != AUTO_INPUT_DEVICE:
+            # An explicit device choice is strict. If it disappears or cannot be
+            # opened, fail safely instead of silently recording from another mic.
+            ranked = [item for item in ranked if item[5] == selected]
+            if not ranked:
+                self._log("configured input is unavailable: %s" % selected)
+                return None
+        for _selected_first, _score, i, d, _host_name, selector in ranked:
+            for rate in (16000, 48000, 44100):
+                try:
+                    sd.check_input_settings(device=i, samplerate=rate, channels=1,
+                                            dtype="float32")
+                except Exception:
+                    continue
+                if self._probe_input(i, rate):
+                    self.input_device = (i, rate)
+                    chosen_for = "configured" if selector == selected else "automatic"
+                    self._log("using %s input: %s at %d Hz" %
+                              (chosen_for, d["name"], rate))
+                    return self.input_device
+        return None
+
+    @staticmethod
+    def _probe_input(idx, rate):
+        got = threading.Event()
+
+        def cb(indata, frames, t, status):
+            got.set()
+
+        try:
+            s = sd.InputStream(device=idx, samplerate=rate, channels=1, dtype="float32",
+                               callback=cb)
+            s.start()
+            ok = got.wait(0.8)
+            s.stop()
+            s.close()
+            return ok
+        except Exception:
+            return False
+
+    # ---------------- transcription ----------------
+
+    def _transcribe_worker(self, audio, target_process=""):
+        try:
+            return self._transcribe_worker_inner(audio, target_process)
+        finally:
+            self._set_indicator(None)
+
+    def _transcribe_worker_inner(self, audio, target_process=""):
+        model_started = time.perf_counter()
+        try:
+            if not self.transcriber.loaded(self.settings["model"]):
+                self.transcriber.load(self.settings["model"], notify=self.notify)
+            text = self.transcriber.transcribe(audio, language="en")
+            model_seconds = time.perf_counter() - model_started
+        except Exception as exc:
+            self._log(traceback.format_exc())
+            if not engine.is_parakeet(self.settings["model"]):
+                self.notify("Transcription failed", str(exc))
+                return
+            try:
+                self.notify("Parakeet failed", "Falling back to Whisper base.en (%s)"
+                            % str(exc)[:100])
+                self.transcriber.load("base.en", notify=self.notify)
+                model_started = time.perf_counter()
+                text = self.transcriber.transcribe(audio, language="en")
+                model_seconds = time.perf_counter() - model_started
+            except Exception as exc2:
+                self._log(traceback.format_exc())
+                self.notify("Transcription failed", str(exc2))
+                return
+        if not text:
+            self._log("transcription returned empty")
+            return
+        text = self._apply_text(text)
+        self._last_model_use = time.perf_counter()
+        self._schedule_model_idle_unload()
+        # Dictation is private: retain performance data without persisting the
+        # user's words in the diagnostic log.
+        self._log("transcription complete: %d chars (model %.3fs)" %
+                  (len(text), model_seconds))
+        timing = getattr(self.transcriber, "last_timing", {})
+        if timing:
+            self._log(
+                "model detail: backend=%s bucket=%s lock=%.3fs prepare=%.3fs "
+                "transfer=%.3fs generate=%.3fs decode=%.3fs" % (
+                    timing.get("backend", ""),
+                    timing.get("bucket_seconds", "-"),
+                    timing.get("lock_wait", 0.0),
+                    timing.get("prepare", 0.0),
+                    timing.get("transfer", 0.0),
+                    timing.get("generate", timing.get("inference", 0.0)),
+                    timing.get("decode", 0.0),
+                ))
+        if self.paste_target == "scratchpad" and self.scratchpad is not None:
+            self.scratchpad.append_text(text)
+        else:
+            self._paste(text, target_process)
+
+    def _apply_text(self, text):
+        for spoken, replacement in self.settings["dictionary"]:
+            if spoken:
+                pattern = r"(?<!\w)%s(?!\w)" % re.escape(spoken)
+                text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        if self.settings["remove_fillers"]:
+            text = FILLER_RE.sub("", text)
+            text = re.sub(r"\s{2,}", " ", text).strip()
+        if self.settings.get("british"):
+            text = to_british(text)
+        text += cfg.SUFFIXES.get(self.settings["suffix"], " ")
+        return text
+
+    def _paste(self, text, target_process=""):
+        pyperclip.copy(text)
+        process_name = target_process or _foreground_process_name()
+        route = _paste_route(process_name)
+        time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
+        keyboard = pkb.Controller()
+        modifiers = [pkb.Key.ctrl_l]
+        if route == "moonlight":
+            # Moonlight's client-side shortcut types clipboard text on the host.
+            modifiers.extend((pkb.Key.alt_l, pkb.Key.shift_l))
+            self._log("paste route: Moonlight clipboard typing")
+        elif route == "rdp":
+            self._log("paste route: Remote Desktop clipboard")
+        else:
+            self._log("paste route: local (%s)" % (process_name or "unknown"))
+        self._injecting_keys = True
+        pressed = []
+        try:
+            for key in modifiers:
+                keyboard.press(key)
+                pressed.append(key)
+            keyboard.press("v")
+            keyboard.release("v")
+        finally:
+            for key in reversed(pressed):
+                keyboard.release(key)
+            # Let hook callbacks consume the injected releases before re-enabling PTT.
+            time.sleep(0.02)
+            self._injecting_keys = False
+
+    # ---------------- windows ----------------
+
+    def open_scratchpad(self, icon=None, item=None):
+        if self.scratchpad is None:
+            self.scratchpad = ui.ScratchpadWindow(self)
+
+    def open_settings(self, icon=None, item=None):
+        if self.settings_window is None:
+            self.settings_window = ui.SettingsWindow(self)
+
+    # ---------------- helpers ----------------
+
+    def apply_autostart(self):
+        enable = bool(self.settings["autostart"])
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0,
+                winreg.KEY_SET_VALUE,
+            )
+            if enable:
+                exe = sys.executable
+                if exe.lower().endswith("python.exe"):
+                    candidate = os.path.join(os.path.dirname(exe), "pythonw.exe")
+                    if os.path.exists(candidate):
+                        exe = candidate
+                winreg.SetValueEx(key, "Presspeech", 0, winreg.REG_SZ,
+                                  '"%s" "%s"' % (exe, os.path.abspath(__file__)))
+            else:
+                try:
+                    winreg.DeleteValue(key, "Presspeech")
+                except FileNotFoundError:
+                    pass
+            winreg.CloseKey(key)
+        except Exception as exc:
+            self._log("autostart error: %s" % exc)
+
+    def notify(self, title, message):
+        try:
+            if self.icon is not None:
+                self.icon.notify(message, title)
+        except Exception:
+            pass
+
+    def _set_indicator(self, state):
+        indicator = getattr(self, "indicator", None)
+        if indicator is None:
+            return
+        try:
+            if state is None:
+                indicator.hide()
+            elif self.settings.get("visual_indicator", True):
+                indicator.show(state)
+        except Exception:
+            pass
+
+    def _play_cue(self, name):
+        if not self.settings.get("audio_cues", True):
+            return
+        threading.Thread(
+            target=self._play_cue_worker, args=(name,), daemon=True).start()
+
+    @staticmethod
+    def _play_cue_worker(name):
+        try:
+            winsound.PlaySound(
+                CUE_SOUNDS[name], winsound.SND_MEMORY | winsound.SND_NODEFAULT)
+        except (KeyError, RuntimeError):
+            pass
+
+    def _preload_model_worker(self):
+        """Warm the configured model in the tray process before the first dictation."""
+        model_name = self.settings["model"]
+        self._log("loading model at startup: %s" % model_name)
+        try:
+            self.transcriber.load(model_name, notify=self.notify)
+            self._log("warming model at startup")
+            self.transcriber.warmup(
+                seconds=MODEL_WARMUP_SEC, all_buckets=True)
+            # Warming long fixed shapes temporarily reserves CUDA workspace.
+            # The cuDNN execution plans stay cached after releasing unused
+            # allocator blocks, so first-pass speed is retained without
+            # needlessly occupying gaming VRAM.
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            self._last_model_use = time.perf_counter()
+        except Exception as exc:
+            self._log("startup model load failed: %s\n%s" % (exc, traceback.format_exc()))
+            self.notify("Model load failed", "%s will retry on first dictation." % model_name)
+            return
+        model_dtype = getattr(self.transcriber.model, "dtype", "unknown")
+        self._log("model ready: %s (%s)" % (model_name, model_dtype))
+        self._schedule_model_idle_unload()
+
+    def _wake_model_if_idle(self):
+        loaded = self.transcriber.loaded(self.settings["model"])
+        if (loaded and
+                time.perf_counter() - self._last_model_use < MODEL_IDLE_WAKE_SEC):
+            return
+        with self._wake_lock:
+            if self._wake_in_progress:
+                return
+            self._wake_in_progress = True
+        self._model_executor.submit(self._wake_model_worker)
+
+    def _wake_model_worker(self):
+        started = time.perf_counter()
+        try:
+            reloaded = False
+            if not self.transcriber.loaded(self.settings["model"]):
+                self._log("reloading model on hotkey: %s" % self.settings["model"])
+                self.transcriber.load(self.settings["model"], notify=self.notify)
+                reloaded = True
+            # A resident Parakeet needs only the smallest fixed shape to raise
+            # GPU clocks after a long idle. It starts at key-down and normally
+            # completes while the user is still speaking. A genuinely reloaded
+            # model warms every supported duration bucket.
+            self.transcriber.warmup(
+                seconds=1.0, all_buckets=reloaded)
+            self._last_model_use = time.perf_counter()
+            self._schedule_model_idle_unload()
+            self._log("idle model wake completed in %.3fs" %
+                      (self._last_model_use - started))
+        except Exception as exc:
+            self._log("idle model wake failed: %s" % exc)
+        finally:
+            with self._wake_lock:
+                self._wake_in_progress = False
+
+    def _schedule_model_idle_unload(self):
+        idle_seconds = int(self.settings.get("gpu_idle_unload_sec", 0) or 0)
+        if idle_seconds <= 0:
+            return
+        self._model_idle_epoch += 1
+        epoch = self._model_idle_epoch
+        timer = threading.Timer(idle_seconds, self._unload_model_if_idle, (epoch,))
+        timer.daemon = True
+        timer.start()
+
+    def _unload_model_if_idle(self, epoch):
+        if epoch != self._model_idle_epoch or self.recording:
+            return
+        if not self.transcriber.loaded(self.settings["model"]):
+            return
+        idle_seconds = int(self.settings.get("gpu_idle_unload_sec", 0) or 0)
+        elapsed = time.perf_counter() - self._last_model_use
+        if elapsed < idle_seconds:
+            self._schedule_model_idle_unload()
+            return
+        self.transcriber.unload()
+        self._log("model unloaded after %ds idle; hotkey remains active" % idle_seconds)
+
+    @staticmethod
+    def _log(message):
+        print("[presspeech] %s" % message, flush=True)
+        try:
+            os.makedirs(cfg.CONFIG_DIR, exist_ok=True)
+            with open(LOG_PATH, "a", encoding="utf-8") as fh:
+                fh.write(time.strftime("%H:%M:%S ") + message + "\n")
+        except Exception:
+            pass
+
+
+def _selftest():
+    settings = cfg.load()
+    transcriber = engine.Transcriber(precision=settings.get("precision", "fp16"))
+    model_name = settings["model"]
+    print("Loading %s model..." % model_name, flush=True)
+    transcriber.load(model_name, notify=lambda title, msg: print("  " + msg, flush=True))
+    print("Transcribing silent clip...", flush=True)
+    text = transcriber.transcribe(np.zeros(16000, dtype=np.float32), language="en")
+    print("Silent clip transcribed:", repr(text), flush=True)
+    print("Self-test OK.", flush=True)
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        _selftest()
+        sys.exit(0)
+    PresspeechApp().run()
