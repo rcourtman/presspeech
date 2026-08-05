@@ -2,9 +2,10 @@
 
 import json
 import os
+import threading
 
 APP_NAME = "Presspeech"
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 
@@ -21,13 +22,18 @@ DEFAULTS = {
     "mute_playback_while_recording": True,
     "visual_indicator": True,
     "dictionary": [],
-    "autostart": False,
+    "autostart": True,
+    "setup_complete": False,
+    "check_updates": True,
+    "last_update_check_epoch": 0,
     "capture_next_benchmark": False,
     "capture_benchmark_remaining": 0,
     "capture_benchmark_session": "",
     "capture_benchmark_index": 1,
     "gpu_idle_unload_sec": 0,
 }
+
+_SAVE_LOCK = threading.Lock()
 
 HOTKEYS = [
     "right alt", "right ctrl", "right shift", "right win",
@@ -68,5 +74,16 @@ def load():
 
 def save(settings):
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
-        json.dump(settings, fh, indent=2, ensure_ascii=False)
+    temporary = CONFIG_PATH + ".tmp"
+    with _SAVE_LOCK:
+        try:
+            with open(temporary, "w", encoding="utf-8") as fh:
+                json.dump(settings, fh, indent=2, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(temporary, CONFIG_PATH)
+        finally:
+            try:
+                os.remove(temporary)
+            except OSError:
+                pass

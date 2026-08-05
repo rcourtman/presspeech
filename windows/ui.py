@@ -1,12 +1,15 @@
 """Tkinter windows: settings, scratchpad, and a focus-safe status overlay."""
 
 import ctypes
+import os
 import queue
+import tempfile
 import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 import config as cfg
+import updates
 
 
 class DictationIndicator:
@@ -152,6 +155,212 @@ class DictationIndicator:
             return
 
 
+class SetupWindow:
+    """Small first-run readiness screen; all processing remains local."""
+
+    def __init__(self, app):
+        self.app = app
+        self.root = None
+        threading.Thread(target=self._build, daemon=True).start()
+
+    def _build(self):
+        root = tk.Tk()
+        self.root = root
+        root.title("Welcome to Presspeech")
+        root.resizable(False, False)
+        root.lift()
+        root.attributes("-topmost", True)
+        root.after(500, lambda: root.attributes("-topmost", False))
+        frame = ttk.Frame(root, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text="Presspeech is almost ready",
+                  font=("Segoe UI", 16, "bold")).grid(
+                      row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(
+            frame,
+            text=("Hold %s, speak, then release to type at the cursor.\n"
+                  "Speech stays on this PC; no audio or transcripts are uploaded."
+                  % self.app.settings.get("hotkey", "right alt").title()),
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 16))
+
+        ttk.Label(frame, text="Speech model").grid(row=2, column=0, sticky="w")
+        self.model_label = ttk.Label(frame, text="Preparing…")
+        self.model_label.grid(row=2, column=1, sticky="w", padx=(12, 0))
+        self.progress = ttk.Progressbar(frame, mode="indeterminate", length=260)
+        self.progress.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 13))
+        self.progress.start(12)
+
+        ttk.Label(frame, text="Microphone").grid(row=4, column=0, sticky="w")
+        options = self.app.input_device_options()
+        self.device_values = {label: value for label, value in options}
+        current = self.app.settings.get("input_device", cfg.DEFAULTS["input_device"])
+        selected = next((label for label, value in options if value == current),
+                        options[0][0])
+        self.device = ttk.Combobox(
+            frame, values=[label for label, _value in options],
+            state="readonly", width=48)
+        self.device.set(selected)
+        self.device.grid(row=4, column=1, sticky="w", padx=(12, 0), pady=3)
+
+        ttk.Label(frame, text="Push-to-talk").grid(row=5, column=0, sticky="w")
+        ttk.Label(frame, text=self.app.settings.get("hotkey", "right alt").title()).grid(
+            row=5, column=1, sticky="w", padx=(12, 0), pady=3)
+
+        self.autostart = tk.BooleanVar(
+            value=self.app.settings.get("autostart", True))
+        ttk.Checkbutton(frame, text="Start Presspeech with Windows",
+                        variable=self.autostart).grid(
+                            row=6, column=0, columnspan=2, sticky="w", pady=(10, 14))
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=7, column=0, columnspan=2, sticky="ew")
+        ttk.Button(buttons, text="Try Dictation",
+                   command=self.app.open_scratchpad).pack(side="left")
+        ttk.Button(buttons, text="Finish Setup",
+                   command=self._finish).pack(side="right")
+
+        root.protocol("WM_DELETE_WINDOW", self._close)
+        root.after(100, self._poll_model)
+        root.mainloop()
+        self.root = None
+        self.app.setup_window = None
+
+    def _poll_model(self):
+        if self.root is None:
+            return
+        status = getattr(self.app, "model_status", "pending")
+        detail = getattr(self.app, "model_status_detail", "")
+        labels = {
+            "pending": "Waiting to start…",
+            "loading": detail or "Downloading or loading…",
+            "ready": "Ready — " + detail,
+            "error": "Needs attention — " + detail,
+        }
+        self.model_label.config(text=labels.get(status, detail or status))
+        if status in ("ready", "error"):
+            self.progress.stop()
+            self.progress.config(mode="determinate", value=100 if status == "ready" else 0)
+        else:
+            self.root.after(300, self._poll_model)
+
+    def _finish(self):
+        settings = self.app.settings
+        selected = self.device_values.get(
+            self.device.get(), cfg.DEFAULTS["input_device"])
+        if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
+            self.app.input_device = None
+        settings["input_device"] = selected
+        settings["autostart"] = bool(self.autostart.get())
+        settings["setup_complete"] = True
+        cfg.save(settings)
+        self.app.apply_autostart()
+        self._close()
+
+    def _close(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+
+class UpdateWindow:
+    """Explicit, verified Windows update download and install prompt."""
+
+    def __init__(self, app, update):
+        self.app = app
+        self.update = update
+        self.root = None
+        self.events = queue.Queue()
+        threading.Thread(target=self._build, daemon=True).start()
+
+    def _build(self):
+        root = tk.Tk()
+        self.root = root
+        root.title("Presspeech Update")
+        root.resizable(False, False)
+        frame = ttk.Frame(root, padding=18)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Presspeech %s is available" % self.update["version"],
+                  font=("Segoe UI", 14, "bold")).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=("The installer is downloaded only if you approve it.\n"
+                  "Its size and SHA-256 checksum will be verified before it runs."),
+            justify="left",
+        ).pack(anchor="w", pady=(6, 12))
+        self.status = ttk.Label(frame, text="Ready to download")
+        self.status.pack(anchor="w")
+        self.progress = ttk.Progressbar(frame, mode="determinate", length=370)
+        self.progress.pack(fill="x", pady=(5, 14))
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Later", command=self._close).pack(side="left")
+        self.download_button = ttk.Button(
+            buttons, text="Download Update", command=self._download)
+        self.download_button.pack(side="right")
+        root.protocol("WM_DELETE_WINDOW", self._close)
+        root.after(100, self._poll)
+        root.mainloop()
+        self.root = None
+        self.app.update_window = None
+
+    def _download(self):
+        self.download_button.config(state="disabled")
+        self.status.config(text="Downloading…")
+        threading.Thread(target=self._download_worker, daemon=True).start()
+
+    def _download_worker(self):
+        try:
+            destination = os.path.join(tempfile.gettempdir(), "Presspeech")
+            path = updates.download_update(
+                self.update, destination,
+                lambda done, total: self.events.put(("progress", done, total)))
+            self.events.put(("ready", path))
+        except Exception as exc:
+            self.events.put(("error", str(exc)))
+
+    def _poll(self):
+        if self.root is None:
+            return
+        try:
+            while True:
+                event = self.events.get_nowait()
+                if event[0] == "progress":
+                    _kind, done, total = event
+                    if total:
+                        self.progress.config(maximum=total, value=done)
+                        self.status.config(text="Downloaded %.1f of %.1f GB" %
+                                           (done / 1073741824, total / 1073741824))
+                    else:
+                        self.status.config(text="Downloaded %.1f MB" %
+                                           (done / 1048576))
+                elif event[0] == "error":
+                    self.status.config(text="Download failed")
+                    self.download_button.config(state="normal")
+                    messagebox.showerror("Update failed", event[1], parent=self.root)
+                elif event[0] == "ready":
+                    self.progress.config(value=self.progress["maximum"])
+                    self.status.config(text="Verified and ready to install")
+                    if messagebox.askyesno(
+                            "Install update",
+                            "Close Presspeech and run the verified installer now?",
+                            parent=self.root):
+                        self.app.launch_update(event[1])
+                    else:
+                        self.download_button.config(state="normal")
+        except queue.Empty:
+            pass
+        self.root.after(100, self._poll)
+
+    def _close(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+
 class SettingsWindow:
     def __init__(self, app):
         self.app = app
@@ -246,6 +455,12 @@ class SettingsWindow:
                             row=row, column=0, columnspan=3, sticky="w", pady=2)
         row += 1
 
+        self.var_check_updates = tk.BooleanVar(value=s.get("check_updates", True))
+        ttk.Checkbutton(f, text="Check GitHub for updates once a day",
+                        variable=self.var_check_updates).grid(
+                            row=row, column=0, columnspan=3, sticky="w", pady=2)
+        row += 1
+
         self.var_autostart = tk.BooleanVar(value=s["autostart"])
         ttk.Checkbutton(f, text="Start with Windows",
                         variable=self.var_autostart).grid(row=row, column=0, columnspan=3,
@@ -327,6 +542,7 @@ class SettingsWindow:
         s["visual_indicator"] = bool(self.var_visual_indicator.get())
         if not s["visual_indicator"]:
             self.app._set_indicator(None)
+        s["check_updates"] = bool(self.var_check_updates.get())
         s["autostart"] = bool(self.var_autostart.get())
         rules = []
         for line in self.listbox.get(0, "end"):

@@ -125,6 +125,13 @@ optional PFX signing through the `WINDOWS_CERTIFICATE_BASE64` and
 `WINDOWS_CERTIFICATE_PASSWORD` repository secrets; unsigned builds must be
 labelled clearly as such.
 
+The Windows updater is a security boundary. Accept only `windows-vX.Y.Z`
+releases with the exact versioned installer and `.sha256` asset names. Keep
+downloads HTTPS-only and restricted to GitHub release hosts, verify the asset
+size and SHA-256 before launch, and require explicit user approval before both
+download and install. Its User-Agent must remain fixed and must not carry the
+app version, device details, settings, transcripts, or usage identifiers.
+
 ## Swift concurrency model — important
 
 Strict-concurrency Swift 6 makes a few things load-bearing here:
