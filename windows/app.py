@@ -213,6 +213,18 @@ def _paste_route(process_name):
     return "local"
 
 
+def _autostart_command(executable, source_path, frozen=False):
+    """Return the registry command for source and packaged installations."""
+    executable = os.path.abspath(executable)
+    if frozen:
+        return '"%s"' % executable
+    if executable.lower().endswith("python.exe"):
+        candidate = os.path.join(os.path.dirname(executable), "pythonw.exe")
+        if os.path.exists(candidate):
+            executable = candidate
+    return '"%s" "%s"' % (executable, os.path.abspath(source_path))
+
+
 def _make_icon(color):
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -825,13 +837,10 @@ class PresspeechApp:
                 winreg.KEY_SET_VALUE,
             )
             if enable:
-                exe = sys.executable
-                if exe.lower().endswith("python.exe"):
-                    candidate = os.path.join(os.path.dirname(exe), "pythonw.exe")
-                    if os.path.exists(candidate):
-                        exe = candidate
                 winreg.SetValueEx(key, "Presspeech", 0, winreg.REG_SZ,
-                                  '"%s" "%s"' % (exe, os.path.abspath(__file__)))
+                                  _autostart_command(
+                                      sys.executable, __file__,
+                                      frozen=bool(getattr(sys, "frozen", False))))
             else:
                 try:
                     winreg.DeleteValue(key, "Presspeech")
@@ -877,6 +886,7 @@ class PresspeechApp:
     def _preload_model_worker(self):
         """Warm the configured model in the tray process before the first dictation."""
         model_name = self.settings["model"]
+        self._set_indicator("loading")
         self._log("loading model at startup: %s" % model_name)
         try:
             self.transcriber.load(model_name, notify=self.notify)
@@ -898,6 +908,8 @@ class PresspeechApp:
             self._log("startup model load failed: %s\n%s" % (exc, traceback.format_exc()))
             self.notify("Model load failed", "%s will retry on first dictation." % model_name)
             return
+        finally:
+            self._set_indicator(None)
         model_dtype = getattr(self.transcriber.model, "dtype", "unknown")
         self._log("model ready: %s (%s)" % (model_name, model_dtype))
         self._schedule_model_idle_unload()
@@ -975,16 +987,27 @@ def _selftest():
     settings = cfg.load()
     transcriber = engine.Transcriber(precision=settings.get("precision", "fp16"))
     model_name = settings["model"]
-    print("Loading %s model..." % model_name, flush=True)
-    transcriber.load(model_name, notify=lambda title, msg: print("  " + msg, flush=True))
-    print("Transcribing silent clip...", flush=True)
-    text = transcriber.transcribe(np.zeros(16000, dtype=np.float32), language="en")
-    print("Silent clip transcribed:", repr(text), flush=True)
-    print("Self-test OK.", flush=True)
+    PresspeechApp._log("self-test loading model: %s" % model_name)
+    try:
+        transcriber.load(
+            model_name,
+            notify=lambda title, msg: PresspeechApp._log("self-test: " + msg))
+        PresspeechApp._log("self-test transcribing silent clip")
+        text = transcriber.transcribe(
+            np.zeros(16000, dtype=np.float32), language="en")
+        PresspeechApp._log(
+            "self-test OK: %d characters returned" % len(text))
+    finally:
+        transcriber.unload()
 
 
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         _selftest()
+        # Some native CUDA worker threads outlive Python finalisation in a
+        # frozen GUI executable. The test has completed and unloaded the model,
+        # so avoid leaving a headless packaging-check process behind.
+        if getattr(sys, "frozen", False):
+            os._exit(0)
         sys.exit(0)
     PresspeechApp().run()

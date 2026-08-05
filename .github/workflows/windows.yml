@@ -33,3 +33,9 @@ jobs:
       - name: Compile Python sources
         working-directory: windows
         run: python -m compileall -q app.py benchmark.py british.py config.py engine.py ui.py
+      - name: Packaging script syntax
+        working-directory: windows
+        shell: pwsh
+        run: |
+          [ScriptBlock]::Create((Get-Content build-release.ps1 -Raw)) | Out-Null
+          python -m py_compile Presspeech.spec

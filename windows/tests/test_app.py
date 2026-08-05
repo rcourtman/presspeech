@@ -148,6 +148,22 @@ class TextRegressionTests(unittest.TestCase):
              mock.call.hide()],
         )
 
+    def test_frozen_autostart_runs_only_the_packaged_executable(self):
+        command = app._autostart_command(
+            r"C:\Program Files\Presspeech\Presspeech.exe",
+            r"C:\ignored\app.py", frozen=True)
+        self.assertEqual(
+            command, r'"C:\Program Files\Presspeech\Presspeech.exe"')
+
+    def test_source_autostart_runs_pythonw_with_app(self):
+        with mock.patch.object(app.os.path, "exists", return_value=True):
+            command = app._autostart_command(
+                r"C:\Presspeech\.venv\Scripts\python.exe",
+                r"C:\Presspeech\app.py", frozen=False)
+        self.assertEqual(
+            command,
+            r'"C:\Presspeech\.venv\Scripts\pythonw.exe" "C:\Presspeech\app.py"')
+
     def test_playback_mute_restores_the_prior_endpoint_state(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"mute_playback_while_recording": True}
@@ -231,6 +247,7 @@ class StartupTests(unittest.TestCase):
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
         instance.transcriber = mock.Mock()
         instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
         with mock.patch.object(app.PresspeechApp, "_log") as log:
             instance._preload_model_worker()
         instance.transcriber.load.assert_called_once_with(
@@ -240,6 +257,10 @@ class StartupTests(unittest.TestCase):
         ready_logs = [call.args[0] for call in log.call_args_list
                       if call.args and call.args[0].startswith("model ready:")]
         self.assertEqual(len(ready_logs), 1)
+        self.assertEqual(
+            instance._set_indicator.mock_calls,
+            [mock.call("loading"), mock.call(None)],
+        )
 
 
 if __name__ == "__main__":

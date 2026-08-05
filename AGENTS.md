@@ -114,6 +114,17 @@ the end-to-end CUDA/ASR check. Preserve the TDT decode call with
 `well` out of the filler-word regex, keep the pynput Right Alt/AltGr mapping,
 and do not replace the epoch-guarded post-roll timer with a blocking stop.
 
+Windows packaging lives in `windows/Presspeech.spec`, `windows/installer.iss`,
+and `windows/build-release.ps1`. The release build is intentionally one-folder
+PyInstaller plus Inno Setup: CUDA Torch makes the installed payload roughly
+4.4 GB, while maximum compression keeps the installer below GitHub's 2 GB
+single-file limit. Build outputs belong only in ignored `windows/build/`,
+`windows/dist/`, and the guarded `%TEMP%\presspeech-package` staging directory.
+Use the manual `windows-release` workflow for Windows prereleases. It supports
+optional PFX signing through the `WINDOWS_CERTIFICATE_BASE64` and
+`WINDOWS_CERTIFICATE_PASSWORD` repository secrets; unsigned builds must be
+labelled clearly as such.
+
 ## Swift concurrency model — important
 
 Strict-concurrency Swift 6 makes a few things load-bearing here:
