@@ -1,0 +1,35 @@
+name: windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: windows/requirements.txt
+      - name: Install dependencies
+        working-directory: windows
+        run: python -m pip install -r requirements.txt
+      - name: Unit tests
+        working-directory: windows
+        run: python -m unittest discover -s tests -v
+      - name: Compile Python sources
+        working-directory: windows
+        run: python -m compileall -q app.py benchmark.py british.py config.py engine.py ui.py

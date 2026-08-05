@@ -5,8 +5,9 @@ Briefing for AI coding agents working on this repo. Complements
 
 ## Project shape
 
-Presspeech is a **single-file Swift menu-bar app** for push-to-talk
-dictation on Apple Silicon Macs. The whole app is
+Presspeech has isolated macOS and Windows implementations. The released macOS
+app is a **single-file Swift menu-bar app** for push-to-talk dictation on Apple
+Silicon Macs. The whole macOS app is
 `swift/Sources/Presspeech/main.swift` (currently about 12k lines). The `PresspeechApp`
 @MainActor class owns the menu bar, settings UI, recording loop,
 and update flow; surrounding it in the same file are the
@@ -43,6 +44,7 @@ single-responsibility types it composes (`Settings`, `Permissions`,
 | `scripts/update-model-manifest.py` | Regenerates the pinned SHA-256 manifest for the Parakeet v3 CoreML model files when intentionally updating the upstream model commit. |
 | `icon/` | SVG sources (`hero.svg`, `latency.svg`, `presspeech.svg`, etc.), `Presspeech.icns`, menu-bar PNGs, `make-icons.sh`. |
 | `experiments/swift-bench/` | Standalone ASR latency benchmark used to validate FluidAudio against alternatives (Apple SpeechAnalyzer, presspeech-mlx) on the same audio. Re-run when bumping FluidAudio or evaluating a backend swap. |
+| `windows/` | Windows tray implementation in Python. `app.py` owns hotkey/audio/paste lifecycle, `engine.py` owns local ASR backends, and `tests/` contains pure unit tests. Keep virtual environments, model caches, logs, and private benchmark recordings out of Git. |
 
 ## Build & test
 
@@ -96,6 +98,21 @@ maintainer's Mac.
 
 If you need to validate ASR latency or correctness, use
 `experiments/swift-bench/` against the WAVs in `test-audio/`.
+
+For Windows changes, use Python 3.12 from the implementation's virtual
+environment (never a system Python):
+
+```bat
+cd windows
+.venv\Scripts\python -m unittest discover -s tests -v
+.venv\Scripts\python app.py --selftest
+```
+
+The unit suite is model-free. The self-test loads the configured model and is
+the end-to-end CUDA/ASR check. Preserve the TDT decode call with
+`durations=output.durations`; omitting durations can truncate words. Keep
+`well` out of the filler-word regex, keep the pynput Right Alt/AltGr mapping,
+and do not replace the epoch-guarded post-roll timer with a blocking stop.
 
 ## Swift concurrency model — important
 
@@ -185,7 +202,7 @@ Accessibility, and Input Monitoring once to the current identity.
 
 ## Conventions
 
-- **One app file.** `main.swift` is the whole app (currently about 12k lines).
+- **One macOS app file.** `main.swift` is the whole macOS app (currently about 12k lines).
   Resist splitting it into separate `.swift` files unless a piece is
   genuinely decoupled and testable in isolation (which, given the
   AVFoundation / AppKit / ApplicationServices / FluidAudio
@@ -219,10 +236,11 @@ Accessibility, and Input Monitoring once to the current identity.
 - **Cloud transcription backends.** Presspeech is local-only by design.
   Audio never leaves the Mac (one-time exception: the model
   download from Hugging Face on first launch).
-- **Cross-platform.** Heavy macOS dependencies (AVFoundation,
-  AppKit, AudioToolbox, ApplicationServices, CoreGraphics, IOKit,
-  NSAppleScript, FluidAudio's CoreML path). Linux/Windows ports
-  belong in separate forks if anyone wants to do them.
+- **Shared cross-platform UI/runtime code.** The macOS implementation depends on
+  AVFoundation/AppKit/CoreML and the Windows implementation depends on native
+  Windows APIs, PortAudio, pynput, and CUDA. Keep platform implementations
+  isolated rather than building a leaky common abstraction. Linux is not
+  currently supported.
 - **AI rewriting / Presspeech-operated cloud sync / preference windows.**
   The README's opener positions Presspeech as focused push-to-talk
   dictation. Text-correction portability is intentionally limited to

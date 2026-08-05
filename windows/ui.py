@@ -1,0 +1,390 @@
+"""Tkinter windows: settings, scratchpad, and a focus-safe status overlay."""
+
+import ctypes
+import queue
+import threading
+import tkinter as tk
+from tkinter import ttk
+
+import config as cfg
+
+
+class DictationIndicator:
+    """Small click-through overlay driven safely from any application thread."""
+
+    _STATES = {
+        "listening": ("Listening\u2026", "#ff5a5f"),
+        "transcribing": ("Transcribing\u2026", "#ffb340"),
+    }
+
+    def __init__(self):
+        self._commands = queue.Queue()
+        self._thread = None
+        self._thread_lock = threading.Lock()
+        self._closed = False
+
+    def show(self, state):
+        if state not in self._STATES or self._closed:
+            return
+        self._ensure_thread()
+        self._commands.put(state)
+
+    def hide(self):
+        if self._thread is not None and not self._closed:
+            self._commands.put("hide")
+
+    def close(self):
+        self._closed = True
+        if self._thread is not None:
+            self._commands.put("close")
+
+    def _ensure_thread(self):
+        with self._thread_lock:
+            if self._thread is None:
+                self._thread = threading.Thread(
+                    target=self._run, name="presspeech-indicator", daemon=True)
+                self._thread.start()
+
+    @staticmethod
+    def _work_area():
+        """Return the work area of the monitor containing the active window."""
+        user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.restype = ctypes.c_void_p
+        user32.MonitorFromWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        user32.MonitorFromWindow.restype = ctypes.c_void_p
+
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", RECT),
+                        ("rcWork", RECT), ("dwFlags", ctypes.c_ulong)]
+
+        hwnd = user32.GetForegroundWindow()
+        monitor = user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+        info = MONITORINFO()
+        info.cbSize = ctypes.sizeof(info)
+        if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            return info.rcWork
+        return RECT(0, 0, user32.GetSystemMetrics(0), user32.GetSystemMetrics(1))
+
+    def _run(self):
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            root.title("Presspeech Indicator")
+            root.overrideredirect(True)
+            root.configure(bg="#202124")
+            root.attributes("-topmost", True)
+            root.attributes("-alpha", 0.94)
+
+            frame = tk.Frame(root, bg="#202124", padx=12, pady=7)
+            frame.pack(fill="both", expand=True)
+            dot = tk.Label(frame, text="\u25cf", bg="#202124", fg="#ff5a5f",
+                           font=("Segoe UI", 11))
+            dot.pack(side="left")
+            label = tk.Label(frame, text="Listening\u2026", bg="#202124", fg="#ffffff",
+                             font=("Segoe UI", 10, "bold"), padx=7)
+            label.pack(side="left")
+            root.update_idletasks()
+
+            user32 = ctypes.windll.user32
+            user32.GetParent.argtypes = [ctypes.c_void_p]
+            user32.GetParent.restype = ctypes.c_void_p
+            client_hwnd = root.winfo_id()
+            hwnd = user32.GetParent(client_hwnd) or client_hwnd
+            get_window_long = user32.GetWindowLongPtrW
+            set_window_long = user32.SetWindowLongPtrW
+            get_window_long.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            set_window_long.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t]
+            get_window_long.restype = ctypes.c_ssize_t
+            set_window_long.restype = ctypes.c_ssize_t
+            ex_style = get_window_long(hwnd, -20)  # GWL_EXSTYLE
+            ex_style |= 0x00000080  # WS_EX_TOOLWINDOW
+            ex_style |= 0x00000020  # WS_EX_TRANSPARENT (click-through)
+            ex_style |= 0x08000000  # WS_EX_NOACTIVATE
+            set_window_long(hwnd, -20, ex_style)
+            user32.ShowWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            user32.SetWindowPos.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                ctypes.c_uint,
+            ]
+
+            width, height = 154, 38
+
+            def apply_command(command):
+                if command == "close":
+                    root.destroy()
+                    return False
+                if command == "hide":
+                    user32.ShowWindow(hwnd, 0)  # SW_HIDE
+                    return True
+                text, colour = self._STATES[command]
+                label.configure(text=text)
+                dot.configure(fg=colour)
+                area = self._work_area()
+                x = area.left + ((area.right - area.left - width) // 2)
+                y = area.bottom - height - 42
+                user32.SetWindowPos(
+                    hwnd, ctypes.c_void_p(-1), x, y, width, height,
+                    0x0010 | 0x0040,  # SWP_NOACTIVATE | SWP_SHOWWINDOW
+                )
+                return True
+
+            def poll():
+                command = None
+                try:
+                    while True:
+                        command = self._commands.get_nowait()
+                except queue.Empty:
+                    pass
+                if command is not None and not apply_command(command):
+                    return
+                root.after(25, poll)
+
+            root.after(0, poll)
+            root.mainloop()
+        except Exception:
+            # Dictation must remain usable even if Windows refuses the overlay.
+            return
+
+
+class SettingsWindow:
+    def __init__(self, app):
+        self.app = app
+        self.root = None
+        threading.Thread(target=self._build, daemon=True).start()
+
+    def _build(self):
+        s = self.app.settings
+        root = tk.Tk()
+        self.root = root
+        root.title("Presspeech Settings")
+        root.resizable(False, False)
+        f = ttk.Frame(root, padding=12)
+        f.pack(fill="both", expand=True)
+
+        row = 0
+
+        ttk.Label(f, text="Dictation hotkey").grid(row=row, column=0, sticky="w", pady=2)
+        self.var_hotkey = ttk.Combobox(f, values=cfg.HOTKEYS, state="readonly", width=14)
+        self.var_hotkey.set(s["hotkey"])
+        self.var_hotkey.grid(row=row, column=1, sticky="w", padx=10, pady=2)
+        row += 1
+
+        ttk.Label(f, text="Trigger").grid(row=row, column=0, sticky="w", pady=2)
+        self.var_trigger = tk.StringVar(value=s["trigger"])
+        ttk.Radiobutton(f, text="Hold to talk", value="hold", variable=self.var_trigger).grid(
+            row=row, column=1, sticky="w", padx=10)
+        ttk.Radiobutton(f, text="Press to toggle", value="toggle", variable=self.var_trigger).grid(
+            row=row, column=2, sticky="w")
+        row += 1
+
+        ttk.Label(f, text="Microphone").grid(row=row, column=0, sticky="w", pady=2)
+        device_options = self.app.input_device_options()
+        self.device_values = {label: value for label, value in device_options}
+        selected_device = s.get("input_device", cfg.DEFAULTS["input_device"])
+        selected_label = next(
+            (label for label, value in device_options if value == selected_device),
+            device_options[0][0],
+        )
+        self.var_device = ttk.Combobox(
+            f, values=[label for label, _value in device_options],
+            state="readonly", width=46,
+        )
+        self.var_device.set(selected_label)
+        self.var_device.grid(row=row, column=1, columnspan=2, sticky="w", padx=10, pady=2)
+        row += 1
+
+        ttk.Label(f, text="Speech model").grid(row=row, column=0, sticky="w", pady=2)
+        self.var_model = ttk.Combobox(f, values=[cfg.MODEL_LABELS[m] for m in cfg.MODELS],
+                                      state="readonly", width=26)
+        self.var_model.set(cfg.MODEL_LABELS.get(s["model"], cfg.MODEL_LABELS[cfg.MODELS[0]]))
+        self.var_model.grid(row=row, column=1, sticky="w", padx=10, pady=2)
+        ttk.Label(f, text="GPU models need the NVIDIA runtime").grid(
+            row=row, column=2, sticky="w", foreground="#666")
+        row += 1
+
+        ttk.Label(f, text="After pasting").grid(row=row, column=0, sticky="w", pady=2)
+        self.var_suffix = ttk.Combobox(
+            f, values=["space", "newline", "none"], state="readonly", width=14)
+        self.var_suffix.set(s["suffix"])
+        self.var_suffix.grid(row=row, column=1, sticky="w", padx=10, pady=2)
+        row += 1
+
+        self.var_fillers = tk.BooleanVar(value=s["remove_fillers"])
+        ttk.Checkbutton(f, text="Remove filler words (um, uh, er\u2026)",
+                        variable=self.var_fillers).grid(row=row, column=0, columnspan=3,
+                                                        sticky="w", pady=2)
+        row += 1
+
+        self.var_british = tk.BooleanVar(value=s.get("british", True))
+        ttk.Checkbutton(f, text="British English spelling (color \u2192 colour)",
+                        variable=self.var_british).grid(row=row, column=0, columnspan=3,
+                                                        sticky="w", pady=2)
+        row += 1
+
+        self.var_audio_cues = tk.BooleanVar(value=s.get("audio_cues", True))
+        ttk.Checkbutton(f, text="Audio cues when dictation starts and stops",
+                        variable=self.var_audio_cues).grid(
+                            row=row, column=0, columnspan=3, sticky="w", pady=2)
+        row += 1
+
+        self.var_mute_playback = tk.BooleanVar(
+            value=s.get("mute_playback_while_recording", True))
+        ttk.Checkbutton(f, text="Mute speaker playback while dictating",
+                        variable=self.var_mute_playback).grid(
+                            row=row, column=0, columnspan=3, sticky="w", pady=2)
+        row += 1
+
+        self.var_visual_indicator = tk.BooleanVar(value=s.get("visual_indicator", True))
+        ttk.Checkbutton(f, text="Show listening and transcribing indicator",
+                        variable=self.var_visual_indicator).grid(
+                            row=row, column=0, columnspan=3, sticky="w", pady=2)
+        row += 1
+
+        self.var_autostart = tk.BooleanVar(value=s["autostart"])
+        ttk.Checkbutton(f, text="Start with Windows",
+                        variable=self.var_autostart).grid(row=row, column=0, columnspan=3,
+                                                          sticky="w", pady=2)
+        row += 1
+
+        ttk.Separator(f, orient="horizontal").grid(row=row, column=0, columnspan=3,
+                                                   sticky="ew", pady=8)
+        row += 1
+
+        ttk.Label(f, text="Dictionary (fix mishearings / spoken shortcuts):").grid(
+            row=row, column=0, columnspan=3, sticky="w")
+        row += 1
+
+        self.var_spoken = tk.StringVar()
+        self.var_replace = tk.StringVar()
+        ttk.Entry(f, textvariable=self.var_spoken, width=18).grid(
+            row=row, column=0, sticky="w", pady=2)
+        ttk.Label(f, text="\u2192").grid(row=row, column=1)
+        ttk.Entry(f, textvariable=self.var_replace, width=18).grid(
+            row=row, column=2, sticky="w", padx=10, pady=2)
+        row += 1
+
+        ttk.Button(f, text="Add rule", command=self._add_rule).grid(
+            row=row, column=0, sticky="w", pady=2)
+        ttk.Button(f, text="Remove selected", command=self._remove_rule).grid(
+            row=row, column=1, columnspan=2, sticky="w")
+        row += 1
+
+        self.listbox = tk.Listbox(f, width=52, height=6)
+        self.listbox.grid(row=row, column=0, columnspan=3, sticky="ew", pady=4)
+        for spoken, replacement in s["dictionary"]:
+            self.listbox.insert("end", "%s \u2192 %s" % (spoken, replacement))
+        row += 1
+
+        ttk.Separator(f, orient="horizontal").grid(row=row, column=0, columnspan=3,
+                                                   sticky="ew", pady=8)
+        row += 1
+
+        ttk.Button(f, text="Save", command=self._save).grid(row=row, column=0, sticky="w")
+        self.status = ttk.Label(f, text="", foreground="#666")
+        self.status.grid(row=row, column=1, columnspan=2, sticky="w", padx=10)
+
+        root.protocol("WM_DELETE_WINDOW", self._close)
+        root.mainloop()
+        self.root = None
+        self.app.settings_window = None
+
+    def _add_rule(self):
+        spoken = self.var_spoken.get().strip()
+        replacement = self.var_replace.get()
+        if not spoken:
+            return
+        self.listbox.insert("end", "%s \u2192 %s" % (spoken, replacement))
+        self.var_spoken.set("")
+        self.var_replace.set("")
+
+    def _remove_rule(self):
+        selection = self.listbox.curselection()
+        if selection:
+            self.listbox.delete(selection[0])
+
+    def _save(self):
+        s = self.app.settings
+        label_to_value = {v: k for k, v in cfg.MODEL_LABELS.items()}
+        s["hotkey"] = self.var_hotkey.get() or cfg.DEFAULTS["hotkey"]
+        s["trigger"] = self.var_trigger.get()
+        old_input_device = s.get("input_device", cfg.DEFAULTS["input_device"])
+        s["input_device"] = self.device_values.get(
+            self.var_device.get(), cfg.DEFAULTS["input_device"])
+        if s["input_device"] != old_input_device:
+            self.app.input_device = None
+        s["model"] = label_to_value.get(self.var_model.get(), cfg.DEFAULTS["model"])
+        s["suffix"] = self.var_suffix.get() or cfg.DEFAULTS["suffix"]
+        s["remove_fillers"] = bool(self.var_fillers.get())
+        s["british"] = bool(self.var_british.get())
+        s["audio_cues"] = bool(self.var_audio_cues.get())
+        s["mute_playback_while_recording"] = bool(self.var_mute_playback.get())
+        s["visual_indicator"] = bool(self.var_visual_indicator.get())
+        if not s["visual_indicator"]:
+            self.app._set_indicator(None)
+        s["autostart"] = bool(self.var_autostart.get())
+        rules = []
+        for line in self.listbox.get(0, "end"):
+            if "\u2192" in line:
+                spoken, replacement = line.split("\u2192", 1)
+                rules.append([spoken.strip(), replacement.strip()])
+        s["dictionary"] = rules
+        cfg.save(s)
+        self.app.apply_autostart()
+        self.status.config(text="Saved. Hotkey changes apply immediately.")
+
+    def _close(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+
+class ScratchpadWindow:
+    def __init__(self, app):
+        self.app = app
+        self.root = None
+        threading.Thread(target=self._build, daemon=True).start()
+
+    def _build(self):
+        root = tk.Tk()
+        self.root = root
+        root.title("Presspeech - Try Dictation")
+        root.geometry("480x280")
+        self.text = tk.Text(root, wrap="word", font=("Segoe UI", 12))
+        self.text.pack(fill="both", expand=True, padx=8, pady=8)
+        self.btn = ttk.Button(root, text="Dictate (or use the hotkey)", command=self.toggle)
+        self.btn.pack(pady=(0, 8))
+        root.protocol("WM_DELETE_WINDOW", self._close)
+        root.mainloop()
+        self.root = None
+        self.app.scratchpad = None
+        self.app.paste_target = "paste"
+
+    def toggle(self):
+        if self.app.recording:
+            self.app.stop_recording()
+            self.btn.config(text="Dictate (or use the hotkey)")
+        else:
+            self.app.paste_target = "scratchpad"
+            self.app.start_recording()
+            self.btn.config(text="Stop")
+
+    def append_text(self, text):
+        def do():
+            self.text.insert("end", text)
+            self.text.see("end")
+        try:
+            self.root.after(0, do)
+        except Exception:
+            pass
+
+    def _close(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
