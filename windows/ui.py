@@ -587,9 +587,9 @@ class ScratchpadWindow:
             self.app.stop_recording()
             self.btn.config(text="Dictate (or use the hotkey)")
         else:
-            self.app.paste_target = "scratchpad"
-            self.app.start_recording()
-            self.btn.config(text="Stop")
+            if self.app.start_recording():
+                self.app.paste_target = "scratchpad"
+                self.btn.config(text="Stop")
 
     def append_text(self, text):
         def do():

@@ -117,6 +117,10 @@ class TextRegressionTests(unittest.TestCase):
         instance.buffer = []
         instance._rec_epoch = 0
         instance._model_idle_epoch = 0
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.model_status = "ready"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
         instance._play_cue = mock.Mock()
         instance._wake_model_if_idle = mock.Mock()
         with mock.patch.object(app, "_foreground_process_name",
@@ -125,6 +129,41 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(app.PresspeechApp, "_log"):
             instance.start_recording()
         self.assertEqual(instance._recording_target_process, "moonlight.exe")
+
+    def test_recording_is_blocked_while_startup_model_is_loading(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.model_status = "loading"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = False
+        instance._model_executor = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        with mock.patch.object(app, "_foreground_process_name") as foreground, \
+                mock.patch.object(app.threading, "Thread") as worker:
+            self.assertFalse(instance.start_recording())
+        self.assertFalse(getattr(instance, "recording", False))
+        foreground.assert_not_called()
+        worker.assert_not_called()
+        instance._set_indicator.assert_called_once_with("loading")
+        instance._model_executor.submit.assert_not_called()
+
+    def test_first_press_after_model_error_starts_one_retry_not_recording(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.model_status = "error"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = False
+        instance._model_executor = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        self.assertFalse(instance.start_recording())
+        self.assertEqual(instance.model_status, "loading")
+        instance._model_executor.submit.assert_called_once_with(
+            instance._preload_model_worker)
+        self.assertFalse(instance.start_recording())
+        instance._model_executor.submit.assert_called_once_with(
+            instance._preload_model_worker)
 
     def test_audio_cues_default_on(self):
         self.assertTrue(config.DEFAULTS["audio_cues"])
@@ -283,6 +322,9 @@ class StartupTests(unittest.TestCase):
         instance.transcriber = mock.Mock()
         instance.notify = mock.Mock()
         instance._set_indicator = mock.Mock()
+        indicator_states = []
+        instance._set_indicator.side_effect = lambda state: indicator_states.append(
+            (state, instance.model_status))
         with mock.patch.object(app.PresspeechApp, "_log") as log:
             instance._preload_model_worker()
         instance.transcriber.load.assert_called_once_with(
@@ -297,6 +339,8 @@ class StartupTests(unittest.TestCase):
             [mock.call("loading"), mock.call(None)],
         )
         self.assertEqual(instance.model_status, "ready")
+        self.assertEqual(
+            indicator_states, [("loading", "loading"), (None, "ready")])
 
     def test_startup_worker_exposes_model_error_without_crashing(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -305,10 +349,15 @@ class StartupTests(unittest.TestCase):
         instance.transcriber.load.side_effect = RuntimeError("model unavailable")
         instance.notify = mock.Mock()
         instance._set_indicator = mock.Mock()
+        indicator_states = []
+        instance._set_indicator.side_effect = lambda state: indicator_states.append(
+            (state, instance.model_status))
         with mock.patch.object(app.PresspeechApp, "_log"):
             instance._preload_model_worker()
         self.assertEqual(instance.model_status, "error")
         self.assertIn("model unavailable", instance.model_status_detail)
+        self.assertEqual(
+            indicator_states, [("loading", "loading"), (None, "error")])
 
 
 if __name__ == "__main__":
