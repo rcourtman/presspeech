@@ -17,8 +17,8 @@ automatic fallback.
 
 Download the self-contained Windows x64 installer:
 
-- [Presspeech-Setup-0.1.2-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.2/Presspeech-Setup-0.1.2-x64.exe)
-- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.2)
+- [Presspeech-Setup-0.1.3-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.3/Presspeech-Setup-0.1.3-x64.exe)
+- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.3)
 
 No Python installation or command-line setup is required. Presspeech installs
 per-user under `%LOCALAPPDATA%\Programs\Presspeech`, adds a Start Menu shortcut,
@@ -39,6 +39,10 @@ First launch downloads the Parakeet model once (~2.5 GB) into
 The first-run readiness window shows model loading, microphone selection, the
 push-to-talk key, and Start with Windows in one place. Wait until it says the
 model is ready before the first dictation.
+If the push-to-talk key is pressed before readiness, Presspeech keeps showing
+**Preparing speech model…** and does not open the microphone, play recording
+cues, mute playback, or claim to be listening. Release and press again once the
+preparation indicator disappears.
 First recording triggers the Windows microphone permission prompt—allow it.
 
 ### Install from source
@@ -137,7 +141,7 @@ script from `windows/`:
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact
 .\.venv\Scripts\python -m pip install -r requirements-build.txt
-powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.2
+powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.3
 ```
 
 The build uses a short temporary staging path to avoid Windows path-length

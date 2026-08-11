@@ -423,12 +423,36 @@ class PresspeechApp:
 
     # ---------------- recording ----------------
 
+    def _dictation_model_ready(self):
+        """Gate capture until the configured model is loaded and fully warmed."""
+        model_name = self.settings["model"]
+        status = getattr(self, "model_status", "pending")
+        loaded = self.transcriber.loaded(model_name)
+        if status == "ready" and loaded:
+            return True
+
+        # Startup already owns the model executor while pending/loading. A
+        # failed, explicitly unloaded, or newly selected model needs one fresh
+        # load attempt; changing the state before submitting prevents repeats.
+        needs_load = status in ("error", "unloaded") or (
+            status == "ready" and not loaded)
+        if needs_load:
+            self.model_status = "loading"
+            self.model_status_detail = "Loading %s" % model_name
+            self._model_executor.submit(self._preload_model_worker)
+
+        self._set_indicator("loading")
+        self._log("dictation ignored; speech model is not ready (status=%s)" % status)
+        return False
+
     def start_recording(self):
+        if not self._dictation_model_ready():
+            return False
         target_process = _foreground_process_name()
         with self.lock:
             self._rec_epoch += 1
             if self.recording:
-                return
+                return False
             self.recording = True
             self.buffer = []
             self._peak_rms = 0.0
@@ -438,6 +462,7 @@ class PresspeechApp:
         self._set_indicator("listening")
         self._wake_model_if_idle()
         threading.Thread(target=self._start_audio_worker, daemon=True).start()
+        return True
 
     def _start_audio_worker(self):
         # Finish the audible cue before muting, and mute before opening the mic,
@@ -1040,15 +1065,15 @@ class PresspeechApp:
             self.model_status_detail = str(exc)[:160]
             self._log("startup model load failed: %s\n%s" % (exc, traceback.format_exc()))
             self.notify("Model load failed", "%s will retry on first dictation." % model_name)
-            return
-        finally:
             self._set_indicator(None)
+            return
         model_dtype = getattr(self.transcriber.model, "dtype", "unknown")
         self.model_status = "ready"
         self.model_status_detail = "%s on %s (%s)" % (
             model_name, getattr(self.transcriber, "_device", "unknown"), model_dtype)
         self._log("model ready: %s (%s)" % (model_name, model_dtype))
         self._schedule_model_idle_unload()
+        self._set_indicator(None)
 
     def _wake_model_if_idle(self):
         loaded = self.transcriber.loaded(self.settings["model"])
@@ -1106,6 +1131,8 @@ class PresspeechApp:
             self._schedule_model_idle_unload()
             return
         self.transcriber.unload()
+        self.model_status = "unloaded"
+        self.model_status_detail = "Model unloaded to release resources"
         self._log("model unloaded after %ds idle; hotkey remains active" % idle_seconds)
 
     @staticmethod
