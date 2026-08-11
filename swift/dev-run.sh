@@ -78,6 +78,14 @@ say "Stopping any prior dev instance..."
 pkill -f "Presspeech-dev.app" 2>/dev/null || true
 # Also kill any Cask instance — same bundle id would clash on TCC + hotkey.
 pkill -f "/Applications/Presspeech.app" 2>/dev/null || true
+
+# pkill is a SIGTERM the app never gets to handle, so the active-run marker it
+# sets at launch is left standing and the NEXT launch shows the "Reopened After
+# an Unexpected Exit" alert — whose default button is Copy Diagnostics. That
+# notice is for real crashes; a deliberate stop by this script is not one, so
+# clear the marker rather than crying wolf on every dev iteration.
+sleep 0.5
+defaults write com.local.presspeech active_run_marker -bool false 2>/dev/null || true
 sleep 0.5
 
 say "Launching..."
