@@ -2760,6 +2760,16 @@ final class HotkeyListener {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var transitionState = HotkeyTransitionState()
+    /// `tapCreate` succeeding proves only that the tap was installed, not
+    /// that events are reaching it — with Input Monitoring stale the tap
+    /// goes live and then stays silent forever, which is indistinguishable
+    /// in the log from "the user never pressed anything". Log the first
+    /// event that actually arrives so the two can be told apart.
+    private var didLogFirstEvent = false
+    /// Same problem one level in: events arrive, but none of them match the
+    /// configured hotkey. Log the first non-matching modifier so a wrong-key
+    /// or wrong-keycode diagnosis takes one press instead of a rebuild.
+    private var didLogFirstUnmatched = false
 
     /// User's current hotkey (set via Settings → Hotkey submenu).
     var hotkey: HotkeyChoice = hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
@@ -2865,11 +2875,20 @@ final class HotkeyListener {
             return false
         }
 
+        if !didLogFirstEvent {
+            didLogFirstEvent = true
+            log("HotkeyListener: first event received (type=\(event.typeRawValue) keycode=\(event.keycode)) — tap is delivering")
+        }
+
         let result = transitionState.transition(for: event,
                                                 hotkey: hotkey,
                                                 triggerMode: triggerMode,
                                                 isRecording: isRecordingActive?() ?? false,
                                                 canStartRecording: canStartRecording?() ?? true)
+        if result.actions.isEmpty, !didLogFirstUnmatched, event.keycode != hotkey.keycode {
+            didLogFirstUnmatched = true
+            log("HotkeyListener: saw keycode \(event.keycode) but watching \(hotkey.name) (keycode \(hotkey.keycode))")
+        }
         dispatchHotkeyActions(result.actions)
         return result.suppress
     }
@@ -6791,7 +6810,18 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - Recording loop
 
     private func handlePress() {
-        guard isReady, !isRecording, !isBusy, !isTerminating else { return }
+        // This guard used to return silently, which meant a press that the app
+        // deliberately declined looked exactly like a press it never received.
+        // Name the reason — it is the difference between a permissions problem
+        // and a not-finished-loading problem.
+        guard isReady, !isRecording, !isBusy, !isTerminating else {
+            let reason = !isReady ? "not ready (ASR still loading?)"
+                : isRecording ? "already recording"
+                : isBusy ? "busy transcribing"
+                : "terminating"
+            log("press ignored: \(reason)")
+            return
+        }
         let missing = missingPermissions()
         guard missing.isEmpty else {
             enterPermissionBlockedState(missing: missing, reason: "hotkey press")
