@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+workspace=/srv/presspeech/presspeech
+state_root=/var/lib/presspeech-maintainer
+run_root="${state_root}/runs"
+prompt_file=/etc/presspeech-maintainer/daily-prompt.txt
+lock_file="${state_root}/run.lock"
+
+exec 9>"${lock_file}"
+if ! flock -n 9; then
+  echo "A Presspeech maintenance run is already active." >&2
+  exit 0
+fi
+
+run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+artifact_dir="${run_root}/${run_id}"
+mkdir -p "${artifact_dir}"
+
+exec > >(tee -a "${artifact_dir}/runner.log") 2>&1
+
+echo "run_id=${run_id}"
+echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+if [[ ! -d "${workspace}/.git" ]]; then
+  echo "Repository is missing: ${workspace}" >&2
+  exit 1
+fi
+if [[ ! -r "${prompt_file}" ]]; then
+  echo "Daily prompt is missing: ${prompt_file}" >&2
+  exit 1
+fi
+
+cd "${workspace}"
+git status --short --branch >"${artifact_dir}/git-before.txt"
+git rev-parse HEAD >"${artifact_dir}/head-before.txt"
+
+# Update a clean main checkout. If a previous run left recoverable work, keep it
+# intact and let today's single model cycle inspect and finish it.
+if [[ "$(git branch --show-current)" == "main" ]] && git diff --quiet && \
+   git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+  git fetch --prune origin main
+  git merge --ff-only origin/main
+else
+  echo "Existing work is present; skipping the automatic fast-forward."
+fi
+
+if [[ "${PRESSPEECH_MAINTAINER_DRY_RUN:-0}" == "1" ]]; then
+  echo "Dry run: preflight passed; no model invocation was made."
+  printf '%s\n' "Dry run completed without invoking the daily prompt." >"${artifact_dir}/final.md"
+  : >"${artifact_dir}/events.jsonl"
+  codex_status=0
+else
+  set +e
+  codex exec \
+    --json \
+    --color never \
+    --sandbox danger-full-access \
+    -c 'approval_policy="never"' \
+    -c 'model_reasoning_effort="xhigh"' \
+    -C "${workspace}" \
+    --output-last-message "${artifact_dir}/final.md" \
+    - <"${prompt_file}" >"${artifact_dir}/events.jsonl" 2>&1
+  codex_status=$?
+  set -e
+fi
+
+git status --short --branch >"${artifact_dir}/git-after.txt"
+git rev-parse HEAD >"${artifact_dir}/head-after.txt"
+printf 'codex_exit=%s\nfinished_at=%s\n' \
+  "${codex_status}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${artifact_dir}/result.env"
+ln -sfn "${artifact_dir}" "${state_root}/latest"
+
+# Keep detailed local evidence for three months without creating another model
+# or reporting cycle.
+find "${run_root}" -mindepth 1 -maxdepth 1 -type d -mtime +90 -exec rm -rf -- {} +
+
+exit "${codex_status}"

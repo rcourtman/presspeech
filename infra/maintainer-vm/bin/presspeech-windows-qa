@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# The validated run identifier and fixed interpreter path intentionally expand
+# on the Linux client before each command is sent to the Windows worker.
+# shellcheck disable=SC2029
+set -euo pipefail
+
+workspace="${1:-$PWD}"
+windows_host="${PRESSPEECH_WINDOWS_QA_HOST:-presspeech-windows-qa}"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+remote_root="C:\\Presspeech-QA\\runs\\${run_id}"
+python='C:\Presspeech-QA\.venv\Scripts\python.exe'
+
+if [[ ! -d "${workspace}/.git" ]]; then
+  echo "Run from a Presspeech Git worktree or pass its path." >&2
+  exit 2
+fi
+if [[ ! "${run_id}" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+$ ]]; then
+  echo "Invalid QA run identifier." >&2
+  exit 2
+fi
+
+cleanup() {
+  ssh "${windows_host}" \
+    "powershell -NoProfile -NonInteractive -Command \"Remove-Item -LiteralPath '${remote_root}' -Recurse -Force -ErrorAction SilentlyContinue\"" \
+    >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+ssh "${windows_host}" \
+  "powershell -NoProfile -NonInteractive -Command \"New-Item -ItemType Directory -Force -Path '${remote_root}' | Out-Null\""
+tar \
+  --exclude=.git \
+  --exclude=.build \
+  --exclude=swift/dist \
+  --exclude=windows/.venv \
+  --exclude=windows/build \
+  --exclude=windows/dist \
+  -C "${workspace}" -cf - . | \
+  ssh "${windows_host}" "tar.exe -xf - -C \"${remote_root}\""
+
+ssh "${windows_host}" \
+  "powershell -NoProfile -NonInteractive -Command \"Set-Location '${remote_root}\\windows'; & '${python}' -m unittest discover -s tests -v; if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }; & '${python}' app.py --selftest; exit \$LASTEXITCODE\""

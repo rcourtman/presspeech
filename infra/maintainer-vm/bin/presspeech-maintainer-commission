@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+marker=/etc/presspeech-maintainer/enabled
+timer=presspeech-maintainer.timer
+
+require_root() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "Run with sudo." >&2
+    exit 2
+  fi
+}
+
+status() {
+  if [[ -e "${marker}" ]]; then
+    echo "commissioned=yes"
+  else
+    echo "commissioned=no"
+  fi
+  systemctl show "${timer}" -p ActiveState -p UnitFileState -p NextElapseUSecRealtime --no-pager
+  systemctl show presspeech-maintainer.service -p ActiveState -p Result --no-pager
+  if [[ -L /var/lib/presspeech-maintainer/latest ]]; then
+    echo "latest=$(readlink -f /var/lib/presspeech-maintainer/latest)"
+  fi
+}
+
+doctor() {
+  require_root
+  runuser -u presspeech-agent -- env \
+    HOME=/var/lib/presspeech-agent \
+    CODEX_HOME=/var/lib/presspeech-agent/codex \
+    codex login status
+  runuser -u presspeech-agent -- env HOME=/var/lib/presspeech-agent gh auth status
+  runuser -u presspeech-agent -- git -C /srv/presspeech/presspeech remote get-url origin >/dev/null
+  # uname must expand on the remote Mac, not in this script.
+  # shellcheck disable=SC2016
+  runuser -u presspeech-agent -- ssh presspeech-mac-qa \
+    'test "$(uname -s)" = Darwin && command -v swift >/dev/null'
+  runuser -u presspeech-agent -- ssh presspeech-windows-qa \
+    'powershell -NoProfile -NonInteractive -Command "if (-not (Test-Path C:\Presspeech-QA\.venv\Scripts\python.exe)) { exit 1 }"'
+  systemd-analyze verify \
+    /etc/systemd/system/presspeech-maintainer.service \
+    /etc/systemd/system/presspeech-maintainer.timer
+  echo "readiness=ready"
+}
+
+case "${1:-status}" in
+  activate)
+    require_root
+    doctor
+    install -m 0644 /dev/null "${marker}"
+    systemctl enable --now "${timer}"
+    status
+    ;;
+  pause)
+    require_root
+    systemctl disable --now "${timer}"
+    rm -f "${marker}"
+    status
+    ;;
+  run-now)
+    require_root
+    test -e "${marker}"
+    systemctl start --no-block presspeech-maintainer.service
+    status
+    ;;
+  status)
+    status
+    ;;
+  doctor)
+    doctor
+    ;;
+  *)
+    echo "Usage: presspeech-maintainer-commission {activate|pause|run-now|status|doctor}" >&2
+    exit 2
+    ;;
+esac

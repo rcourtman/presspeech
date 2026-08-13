@@ -1,0 +1,27 @@
+[Unit]
+Description=Daily autonomous Presspeech maintenance
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/presspeech-maintainer/enabled
+
+[Service]
+Type=oneshot
+User=presspeech-agent
+Group=presspeech-agent
+WorkingDirectory=/srv/presspeech/presspeech
+Environment=HOME=/var/lib/presspeech-agent
+Environment=CODEX_HOME=/var/lib/presspeech-agent/codex
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/var/lib/presspeech-agent/.local/bin
+ExecStart=/usr/local/libexec/presspeech-maintainer-run
+Nice=5
+CPUQuota=300%
+MemoryHigh=6G
+MemoryMax=7G
+TasksMax=2048
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/presspeech /var/lib/presspeech-agent /var/lib/presspeech-maintainer
+UMask=0077
+TimeoutStartSec=18h

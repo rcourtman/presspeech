@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Presspeech maintainer once per day
+
+[Timer]
+OnCalendar=*-*-* 07:15:00 Europe/London
+RandomizedDelaySec=45m
+Persistent=true
+AccuracySec=1m
+Unit=presspeech-maintainer.service
+
+[Install]
+WantedBy=timers.target

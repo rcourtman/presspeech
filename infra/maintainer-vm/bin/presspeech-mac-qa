@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+workspace="${1:-$PWD}"
+mac_host="${PRESSPEECH_MAC_QA_HOST:-presspeech-mac-qa}"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+remote_root="/tmp/presspeech-maintainer-qa-${run_id}"
+
+if [[ ! -d "${workspace}/.git" ]]; then
+  echo "Run from a Presspeech Git worktree or pass its path." >&2
+  exit 2
+fi
+if [[ ! "${run_id}" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+$ ]]; then
+  echo "Invalid QA run identifier." >&2
+  exit 2
+fi
+
+cleanup() {
+  ssh -o BatchMode=yes "${mac_host}" "rm -rf -- '${remote_root}'" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+ssh -o BatchMode=yes "${mac_host}" "mkdir -p -- '${remote_root}'"
+tar \
+  --exclude=.git \
+  --exclude=.build \
+  --exclude=swift/dist \
+  -C "${workspace}" -cf - . | \
+  ssh -o BatchMode=yes "${mac_host}" "tar -C '${remote_root}' -xf -"
+
+ssh -o BatchMode=yes "${mac_host}" \
+  "cd '${remote_root}/swift' && swift run Presspeech --self-test all"

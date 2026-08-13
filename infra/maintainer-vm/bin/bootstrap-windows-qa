@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# The base64-encoded PowerShell bootstrap intentionally expands on the Linux
+# client before the trusted payload is sent to the Windows worker.
+# shellcheck disable=SC2029
+set -euo pipefail
+
+workspace="${1:-$PWD}"
+windows_host="${PRESSPEECH_WINDOWS_QA_HOST:-presspeech-windows-qa}"
+
+if [[ ! -r "${workspace}/windows/requirements.txt" ]]; then
+  echo "Pass a Presspeech worktree containing windows/requirements.txt." >&2
+  exit 2
+fi
+
+ssh "${windows_host}" \
+  'powershell -NoProfile -NonInteractive -Command "New-Item -ItemType Directory -Force -Path C:\Presspeech-QA | Out-Null"'
+tar -C "${workspace}/windows" -cf - requirements.txt | \
+  ssh "${windows_host}" 'tar.exe -xf - -C C:\Presspeech-QA'
+
+read -r -d '' powershell_script <<'POWERSHELL' || true
+$ErrorActionPreference = 'Stop'
+$python = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
+if (-not (Test-Path $python)) {
+    winget install --id Python.Python.3.12 --exact --silent --scope user `
+        --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+if (-not (Test-Path $python)) {
+    throw "Python 3.12 was not found at $python after installation."
+}
+$venvPython = 'C:\Presspeech-QA\.venv\Scripts\python.exe'
+if (-not (Test-Path $venvPython)) {
+    & $python -m venv C:\Presspeech-QA\.venv
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+& $venvPython -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $venvPython -m pip install -r C:\Presspeech-QA\requirements.txt
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $venvPython -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+exit $LASTEXITCODE
+POWERSHELL
+powershell_encoded="$(printf '%s' "${powershell_script}" | iconv -f UTF-8 -t UTF-16LE | base64 -w 0)"
+ssh "${windows_host}" \
+  "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${powershell_encoded}"

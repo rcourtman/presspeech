@@ -1,0 +1,96 @@
+#cloud-config
+hostname: presspeech-dev
+fqdn: presspeech-dev.local
+manage_etc_hosts: true
+timezone: Europe/London
+
+package_update: true
+package_upgrade: true
+packages:
+  - acl
+  - ca-certificates
+  - curl
+  - git
+  - gh
+  - jq
+  - openssh-server
+  - qemu-guest-agent
+  - ripgrep
+  - rsync
+  - shellcheck
+  - sqlite3
+  - tmux
+  - unzip
+  - zip
+
+ssh_pwauth: false
+disable_root: true
+
+groups:
+  - presspeech
+
+users:
+  - name: rcourtman
+    gecos: Richard Courtman
+    groups: [adm, presspeech, sudo, systemd-journal]
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - __SSH_PUBLIC_KEY__
+  - name: presspeech-agent
+    uid: 1001
+    gecos: Presspeech automation agent
+    homedir: /var/lib/presspeech-agent
+    shell: /bin/bash
+    groups: [presspeech]
+    lock_passwd: true
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/90-presspeech-hardening.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AllowUsers rcourtman presspeech-agent
+  - path: /etc/sysctl.d/90-presspeech-dev.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      fs.inotify.max_user_watches = 262144
+      fs.inotify.max_user_instances = 512
+  - path: /etc/systemd/system/swapfile.swap
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Presspeech development emergency swap
+      Before=swap.target
+
+      [Swap]
+      What=/swapfile
+
+      [Install]
+      WantedBy=swap.target
+
+runcmd:
+  - [systemctl, enable, --now, qemu-guest-agent]
+  - [install, -d, -m, '2775', -o, rcourtman, -g, presspeech, /srv/presspeech]
+  - [install, -d, -m, '0700', -o, presspeech-agent, -g, presspeech-agent, /var/lib/presspeech-agent]
+  - [install, -d, -m, '0700', -o, presspeech-agent, -g, presspeech-agent, /var/lib/presspeech-agent/codex]
+  - [install, -d, -m, '0700', -o, presspeech-agent, -g, presspeech-agent, /var/lib/presspeech-agent/.ssh]
+  - [setfacl, -m, 'g:presspeech:rwx,d:g:presspeech:rwx', /srv/presspeech]
+  - [fallocate, -l, 4G, /swapfile]
+  - [chmod, '0600', /swapfile]
+  - [mkswap, /swapfile]
+  - [systemctl, enable, --now, swapfile.swap]
+  - [sysctl, --system]
+  - [systemctl, restart, ssh]
+
+power_state:
+  mode: reboot
+  message: Rebooting after Presspeech base provisioning
+  timeout: 30
+  condition: true
