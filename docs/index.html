@@ -77,6 +77,7 @@
           <h1>Private dictation into any Mac app.</h1>
           <p>Hold a key, speak, release. Presspeech pastes text at the cursor in about 100 ms with no account, no subscription, and no cloud transcription. Apple Silicon, macOS 14+.</p>
           <p class="quiet">The current Presspeech identity migrates saved preferences and local dictionary rules from earlier builds. macOS privacy permissions require one fresh grant.</p>
+          <p class="quiet">Looking for Windows? The separate local CUDA tray app and current installer are documented in the <a href="https://github.com/rcourtman/presspeech/blob/main/windows/README.md">Windows guide</a>.</p>
           <div class="actions">
             <a class="button" href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Download Presspeech.zip</a>
             <a class="button secondary" href="install.html">Install options</a>
@@ -229,7 +230,7 @@
           <h2>Evidence and install paths</h2>
           <div class="facts">
             <div class="fact"><strong>Benchmarked</strong><span>FluidAudio on the Apple Neural Engine is measured against the prior GPU path on the same WAV clips.</span></div>
-            <div class="fact"><strong>Auditable</strong><span>The app is a single Swift source file plus release scripts, signed GitHub release assets, and a public Homebrew Cask tap.</span></div>
+            <div class="fact"><strong>Auditable</strong><span>The macOS app is a single Swift source file; the separate Windows implementation is readable Python. Release scripts and packaging metadata are public.</span></div>
             <div class="fact"><strong>Private by design</strong><span>The full network surface is documented: model download, update check, and user-triggered install/update downloads.</span></div>
             <div class="fact"><strong>Agent-readable</strong><span>Install instructions, benchmark results, privacy facts, and comparison pages are available as plain HTML, Markdown, JSON, and text.</span></div>
           </div>

@@ -144,6 +144,9 @@ Useful menu items:
   and “open quote”
 - **Settings → Text → Remove filler words** — opt-in deterministic strip of
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
+- **Settings → Text → Restore clipboard after paste** — opt-in guarded restore
+  of the previous macOS pasteboard contents; skipped if another process copies
+  newer content
 - **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, and bounded recent logs
 
 ## Privacy

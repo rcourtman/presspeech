@@ -1,12 +1,14 @@
 # Contributing
 
-Thanks for considering a contribution to Presspeech. The project is a
-single-file Swift menu-bar app plus a thin signed/notarised `.app`
-wrapper, and the goal is to keep it that way.
+Thanks for considering a contribution to Presspeech. The project has isolated
+macOS and Windows implementations. The released macOS app remains a
+single-file Swift menu-bar app plus a thin signed/notarised `.app` wrapper;
+the Windows tray app lives under `windows/` and uses Python, native Windows
+integration, and local CUDA inference.
 
 ## Reporting bugs
 
-Open an issue with:
+Open an issue with the affected platform and version. For macOS, include:
 
 - macOS version (`sw_vers`). Presspeech requires **macOS 14 (Sonoma)** or
   later.
@@ -17,6 +19,10 @@ Open an issue with:
   Input Monitoring) are granted to **Presspeech.app** specifically (not
   `Terminal` or anything else)
 
+For Windows, include the Windows version, configured model, GPU/driver details,
+whether the model reached **Ready**, and the relevant tail of
+`%APPDATA%\Presspeech\log.txt`. Never paste transcript text into a report.
+
 ## Suggesting features
 
 Open an issue. Roughly in scope: hotkey behaviour, transcription
@@ -24,9 +30,8 @@ quality / latency, menu bar UX, install/upgrade ergonomics. Roughly
 out of scope:
 
 - Cloud transcription backends — the project is local-only by design.
-- Cross-platform (Windows / Linux) — the integration is heavily
-  macOS-specific (AVFoundation, AppKit, Carbon, NSAppleScript,
-  CoreGraphics event taps).
+- A shared cross-platform UI or runtime. The macOS and Windows integrations
+  deliberately stay separate; Linux is not currently supported.
 - Heavy GUIs / preferences windows — the menu bar is the UI.
 
 ## Development setup
@@ -54,6 +59,20 @@ After editing `Sources/Presspeech/main.swift`:
 ./dev-run.sh
 tail -f ~/Library/Logs/Presspeech.log
 ```
+
+For Windows development, use Python 3.12 from the project virtual environment:
+
+```bat
+cd windows
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\python -m unittest discover -s tests -v
+.venv\Scripts\python app.py --selftest
+```
+
+The unit suite is model-free. The self-test loads the configured model and is
+the native CUDA/ASR gate.
 
 ## Pull requests
 
@@ -99,6 +118,9 @@ tail -f ~/Library/Logs/Presspeech.log
 - `experiments/swift-bench/` — head-to-head latency benchmark
   (FluidAudio/ANE vs the older presspeech-mlx/GPU path). Useful when
   changing the inference backend.
+- `windows/app.py` — Windows hotkey, audio, paste, and tray lifecycle.
+- `windows/engine.py` — Windows local ASR backends.
+- `windows/tests/` — model-free Windows unit tests.
 
 See `AGENTS.md` for the deeper architectural invariants (Swift
 concurrency model, AVAudioConverter `.noDataNow` gotcha, TCC
