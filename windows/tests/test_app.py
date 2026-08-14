@@ -90,9 +90,35 @@ class TextRegressionTests(unittest.TestCase):
             instance._apply_text("Parakeet is already correct."),
             "Parakeet is already correct.")
 
-    def test_filler_removal_keeps_well(self):
-        self.assertEqual(app.FILLER_RE.sub("", "It works well."), "It works well.")
-        self.assertEqual(app.FILLER_RE.sub("", "Um, it works."), ", it works.")
+    def test_filler_removal_repairs_sentence_capitalization(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "dictionary": [],
+            "remove_fillers": True,
+            "british": False,
+            "suffix": "none",
+        }
+        self.assertEqual(instance._apply_text("Um, it works."), "It works.")
+        self.assertEqual(
+            instance._apply_text(
+                "This is the first sentence. Um this is the second sentence."),
+            "This is the first sentence. This is the second sentence.")
+        self.assertEqual(
+            app._remove_fillers("This is not a boundary Um this stays lowercase."),
+            "This is not a boundary this stays lowercase.")
+
+    def test_filler_removal_cleans_punctuation_runs(self):
+        self.assertEqual(
+            app._remove_fillers("So, um, uh, I was going."),
+            "So, I was going.")
+        self.assertEqual(app._remove_fillers("That's all, um."), "That's all.")
+        self.assertEqual(app._remove_fillers("Um? What?"), "What?")
+
+    def test_filler_removal_preserves_real_words_and_compounds(self):
+        for text in ("It works well.", "I might err.", "Yeah, uh-huh.",
+                     "An ohm is a unit."):
+            with self.subTest(text=text):
+                self.assertEqual(app._remove_fillers(text), text)
 
     def test_input_device_default_is_automatic(self):
         self.assertEqual(config.DEFAULTS["input_device"], "auto")

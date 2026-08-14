@@ -47,8 +47,12 @@ KEY_MAP = {
 }
 
 FILLER_RE = re.compile(
-    r"\b(?:u+m+|u+h+|a+h+|e+r+|e+r+m+|h+m+|h+m+m+|h+u+h+)\b", re.IGNORECASE
+    r"(?<![\w'-])(?:um+|uh+|ah+|er|erm|hm+)(?![\w'-])", re.IGNORECASE
 )
+
+FILLER_BOUNDARY_WRAPPERS = "\"'\u201c\u201d\u2018\u2019([{"
+FILLER_SENTENCE_TERMINATORS = ".!?"
+FILLER_ORPHAN_SEPARATORS = ",.;:!?"
 
 SINGLE_INSTANCE_MUTEX = "Local\\PresspeechSingleInstance"
 
@@ -89,6 +93,74 @@ def _update_check_due(last_check_epoch, now_epoch=None):
     except (TypeError, ValueError):
         return True
     return now_epoch - last_check_epoch >= UPDATE_CHECK_INTERVAL_SEC
+
+
+def _filler_capitalization_targets(text, matches):
+    """Locate sentence starts whose capitalized filler carried the casing."""
+    targets = set()
+    for match in matches:
+        filler = match.group(0)
+        if not filler or not filler[0].isupper():
+            continue
+        index = match.start()
+        while index > 0:
+            previous = text[index - 1]
+            if previous.isspace() or previous in FILLER_BOUNDARY_WRAPPERS:
+                index -= 1
+                continue
+            if previous in FILLER_SENTENCE_TERMINATORS:
+                targets.add(sum(
+                    character in FILLER_SENTENCE_TERMINATORS
+                    for character in text[:index]))
+            break
+        else:
+            targets.add(0)
+    return targets
+
+
+def _restore_filler_capitalization(text, targets):
+    if not text or not targets:
+        return text
+    result = []
+    terminator_ordinal = 0
+    should_capitalize = 0 in targets
+    for character in text:
+        if should_capitalize:
+            if character.islower():
+                result.append(character.upper())
+                should_capitalize = False
+                continue
+            if character.isalpha() or character.isdigit():
+                should_capitalize = False
+
+        result.append(character)
+        if character in FILLER_SENTENCE_TERMINATORS:
+            terminator_ordinal += 1
+            if terminator_ordinal in targets:
+                should_capitalize = True
+        elif (should_capitalize and not character.isspace()
+              and character not in FILLER_BOUNDARY_WRAPPERS
+              and character not in FILLER_ORPHAN_SEPARATORS):
+            should_capitalize = False
+    return "".join(result)
+
+
+def _remove_fillers(text):
+    """Remove conservative filler words and repair their punctuation/casing."""
+    matches = list(FILLER_RE.finditer(text))
+    if not matches:
+        return text
+    capitalization_targets = _filler_capitalization_targets(text, matches)
+    result = FILLER_RE.sub("", text)
+    # Removing a filler must not leave comma runs, punctuation pairs, or a
+    # lowercase sentence start when the filler carried the capital letter.
+    result = re.sub(r"\s*,(?:\s*,)+", ",", result)
+    result = re.sub(r"([.!?])\s+[,.;:!?]+\s*", r"\1 ", result)
+    result = re.sub(r"\s+([.,!?;:])", r"\1", result)
+    result = re.sub(r",+([.!?;:])", r"\1", result)
+    result = re.sub(r"\s+", " ", result)
+    result = re.sub(r"^[\s,.;:!?]+", "", result).strip()
+    return _restore_filler_capitalization(result, capitalization_targets)
 
 
 def _make_cue_wave(frequency, duration=0.055, volume=0.14, sample_rate=24000):
@@ -936,8 +1008,7 @@ class PresspeechApp:
                 pattern = r"(?<!\w)%s(?!\w)" % re.escape(spoken)
                 text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
         if self.settings["remove_fillers"]:
-            text = FILLER_RE.sub("", text)
-            text = re.sub(r"\s{2,}", " ", text).strip()
+            text = _remove_fillers(text)
         if self.settings.get("british"):
             text = to_british(text)
         text += cfg.SUFFIXES.get(self.settings["suffix"], " ")
