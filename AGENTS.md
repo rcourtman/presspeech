@@ -113,6 +113,8 @@ the end-to-end CUDA/ASR check. Preserve the TDT decode call with
 `durations=output.durations`; omitting durations can truncate words. Keep
 `well` out of the filler-word regex, keep the pynput Right Alt/AltGr mapping,
 and do not replace the epoch-guarded post-roll timer with a blocking stop.
+Keep the two-minute recording safety limit epoch-guarded and cancel its timer
+when capture stops; a stale timer must never stop a newer recording.
 Do not start capture until `model_status` is `ready` and the configured model
 is actually loaded. A hotkey press during pending/loading must keep the loading
 indicator visible without opening the microphone, playing recording cues, or

@@ -61,6 +61,7 @@ POST_ROLL_RELATIVE_SILENCE = 0.06
 POST_ROLL_MAX_SILENCE_RMS = 0.012
 # Backwards-compatible conservative value used by the benchmark's worst-case estimate.
 POST_ROLL_SEC = POST_ROLL_MAX_SEC
+MAX_RECORDING_SEC = 120.0
 MODEL_WARMUP_SEC = 8.0
 MODEL_IDLE_WAKE_SEC = 60.0
 PASTE_DELAY_SEC = 0.01
@@ -297,6 +298,7 @@ class PresspeechApp:
         self._injecting_keys = False
         self._recording_target_process = ""
         self._rec_epoch = 0
+        self._recording_limit_timer = None
         self._peak_rms = 0.0
         self._last_model_use = 0.0
         self._wake_in_progress = False
@@ -462,6 +464,7 @@ class PresspeechApp:
         self._log("recording started")
         self._set_indicator("listening")
         self._wake_model_if_idle()
+        self._schedule_recording_limit(epoch)
         threading.Thread(
             target=self._start_audio_worker, args=(epoch,), daemon=True).start()
         return True
@@ -530,6 +533,7 @@ class PresspeechApp:
                     if not self.recording or epoch != self._rec_epoch:
                         return
                     self.recording = False
+                self._cancel_recording_limit(epoch)
                 self._restore_playback_after_recording()
                 self._set_indicator(None)
                 self._log("no working microphone found")
@@ -575,6 +579,7 @@ class PresspeechApp:
                     pass
             if stale:
                 return
+            self._cancel_recording_limit(epoch)
             self._restore_playback_after_recording()
             self._set_indicator(None)
             self._log("mic error: %s" % exc)
@@ -600,6 +605,33 @@ class PresspeechApp:
             epoch = self._rec_epoch
         self._schedule_post_roll(
             POST_ROLL_MIN_SEC, epoch, time.perf_counter())
+
+    def _schedule_recording_limit(self, epoch):
+        """Bound capture even if Windows never delivers the hotkey release."""
+        timer = threading.Timer(
+            MAX_RECORDING_SEC, self._recording_limit_reached, (epoch,))
+        timer.daemon = True
+        with self.lock:
+            if not self.recording or epoch != self._rec_epoch:
+                return
+            previous = getattr(self, "_recording_limit_timer", None)
+            self._recording_limit_timer = timer
+        if previous is not None:
+            previous.cancel()
+        timer.start()
+
+    def _recording_limit_reached(self, epoch):
+        if self.stop_recording(expected_epoch=epoch):
+            self._log("maximum recording duration reached; capture stopped")
+
+    def _cancel_recording_limit(self, epoch):
+        with self.lock:
+            if epoch != self._rec_epoch:
+                return
+            timer = getattr(self, "_recording_limit_timer", None)
+            self._recording_limit_timer = None
+        if timer is not None:
+            timer.cancel()
 
     def _schedule_post_roll(self, delay, epoch, released_at):
         timer = threading.Timer(delay, self._finish_after_roll, (epoch, released_at))
@@ -643,22 +675,29 @@ class PresspeechApp:
             reason = "silence" if silent else "maximum"
             self._log("post-roll %.3fs (%s; rms %.4f, threshold %.4f)" %
                       (elapsed, reason, tail_rms, threshold))
-            self.stop_recording()
+            self.stop_recording(expected_epoch=epoch)
             return
         remaining = POST_ROLL_MAX_SEC - elapsed
         self._schedule_post_roll(
             min(POST_ROLL_CHECK_SEC, max(0.0, remaining)), epoch, released_at)
 
-    def stop_recording(self):
+    def stop_recording(self, expected_epoch=None):
         with self.lock:
-            if not self.recording:
-                return
+            if (not self.recording or
+                    (expected_epoch is not None and
+                     expected_epoch != self._rec_epoch)):
+                return False
             self.recording = False
             audio = np.concatenate(self.buffer) if self.buffer else np.zeros(0, dtype=np.float32)
             target_process = self._recording_target_process
             stream = self.stream
             self.stream = None
             self.buffer = []
+            recording_limit_timer = getattr(
+                self, "_recording_limit_timer", None)
+            self._recording_limit_timer = None
+        if recording_limit_timer is not None:
+            recording_limit_timer.cancel()
         if stream is not None:
             try:
                 stream.stop()
@@ -675,7 +714,7 @@ class PresspeechApp:
             self._set_indicator(None)
             self._log("recording stopped; no audio captured")
             self._schedule_model_idle_unload()
-            return
+            return True
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
         if self.input_device is not None and self.input_device[1] != 16000:
@@ -684,12 +723,13 @@ class PresspeechApp:
             self._set_indicator(None)
             self._log("recording stopped; too short (%.2fs)" % (audio.size / 16000.0))
             self._schedule_model_idle_unload()
-            return
+            return True
         self._capture_benchmark_if_armed(audio)
         self._set_indicator("transcribing")
         self._log("recording stopped; %.2fs captured, transcribing" % (audio.size / 16000.0))
         self._model_executor.submit(
             self._transcribe_worker, audio, target_process)
+        return True
 
     def _capture_benchmark_if_armed(self, audio):
         """Persist only explicitly armed recordings for local model comparison."""
