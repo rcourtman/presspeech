@@ -74,7 +74,9 @@ presspeech-windows-release X.Y.Z
 
 Neither helper exposes a QA bypass. Both refuse dirty or divergent `main`
 checkouts; the Windows helper additionally requires native CUDA/ASR QA and
-committed version-specific release notes.
+committed version-specific release notes. Mac requests are placed in a
+LaunchAgent-watched queue and handled serially, so a later request cannot
+terminate signing or notarisation already in progress.
 
 The timer remains disabled until all readiness checks pass. Commission it with:
 

@@ -96,8 +96,8 @@ nothing meaningful left to mock. CI
 (`.github/workflows/check.yml`) runs the self-test suite plus
 repo-hygiene syntax checks for shell, plist, XML/SVG, YAML, JSON,
 and HTML on `macos-26`. It also runs the packaged-app smoke test,
-release-script self-test, model-manifest self-test, log-privacy guard,
-and benchmark helper self-tests
+release-script and maintainer release-queue self-tests, model-manifest
+self-test, log-privacy guard, and benchmark helper self-tests
 (`experiments/swift-bench/bench-power.sh --self-test` and
 `experiments/swift-bench/run-real-dictation-regression.sh --self-test`);
 the full build/notarise path lives in `ship-swift.sh` on the

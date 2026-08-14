@@ -9,12 +9,13 @@ if [[ "$(uname -s)" == Darwin ]]; then
   mac_worker_dir="${HOME}/.local/libexec"
   mac_launch_agents="${HOME}/Library/LaunchAgents"
   mac_state_root="${HOME}/Library/Application Support/PresspeechMaintainer/releases"
+  mac_request_root="${mac_state_root}/requests"
   mac_plist="${mac_launch_agents}/com.local.presspeech.maintainer-release.plist"
   rendered_plist="$(mktemp)"
   trap 'rm -f "${rendered_plist}"' EXIT
 
   install -d -m 0755 "${mac_worker_dir}" "${mac_launch_agents}"
-  install -d -m 0700 "${mac_state_root}"
+  install -d -m 0700 "${mac_state_root}" "${mac_request_root}"
   install -m 0755 "${bundle_root}/macos/presspeech-release-worker" \
     "${mac_worker_dir}/presspeech-release-worker"
   sed "s|__HOME__|${HOME}|g" \

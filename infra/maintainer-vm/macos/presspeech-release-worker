@@ -6,29 +6,30 @@ export HOME=/Users/rcourtman
 export PATH=/Users/rcourtman/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 state_root="${HOME}/Library/Application Support/PresspeechMaintainer/releases"
+state_root="${PRESSPEECH_RELEASE_STATE_ROOT:-${state_root}}"
+request_root="${state_root}/requests"
 repository=/Volumes/Development/presspeech
 tap=/Volumes/Development/homebrew-presspeech
-lock_dir="${state_root}/worker.lock"
-mkdir -p "${state_root}"
+mkdir -p "${request_root}"
 
-shopt -s nullglob
-requests=("${state_root}"/*.request)
-[[ ${#requests[@]} -gt 0 ]] || exit 0
-request="$(printf '%s\n' "${requests[@]}" | sort | head -1)"
-request_id="$(basename "${request}" .request)"
-[[ "${request_id}" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+$ ]] || exit 2
+shopt -s nullglob dotglob
+entries=("${request_root}"/*)
+[[ ${#entries[@]} -gt 0 ]] || exit 0
+request="$(printf '%s\n' "${entries[@]}" | sort | head -1)"
+request_name="$(basename "${request}")"
+if [[ ! "${request_name}" =~ ^([0-9]{8}T[0-9]{6}Z-[0-9]+)\.request$ ]]; then
+  rejected="${state_root}/rejected-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  mv "${request}" "${rejected}"
+  echo "Rejected malformed release request: ${request_name}" >&2
+  exit 2
+fi
+request_id="${BASH_REMATCH[1]}"
 
 result="${state_root}/${request_id}.result"
 log="${state_root}/${request_id}.log"
 active="${state_root}/${request_id}.active"
 action="$(head -1 "${request}")"
 mv "${request}" "${active}"
-
-if ! mkdir "${lock_dir}" 2>/dev/null; then
-  printf 'exit_code=75\nfinished_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${result}"
-  rm -f "${active}"
-  exit 75
-fi
 
 finish() {
   exit_code=$?
@@ -38,7 +39,6 @@ finish() {
     "${exit_code}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${result_tmp}"
   mv "${result_tmp}" "${result}"
   rm -f "${active}"
-  rmdir "${lock_dir}" 2>/dev/null || true
   exit "${exit_code}"
 }
 trap finish EXIT

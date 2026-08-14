@@ -31,12 +31,12 @@ set -euo pipefail
 request_id="$1"
 action="$2"
 state_root='/Users/rcourtman/Library/Application Support/PresspeechMaintainer/releases'
-mkdir -p "${state_root}"
+request_root="${state_root}/requests"
 umask 077
-tmp="${state_root}/${request_id}.request.tmp"
+mkdir -p "${request_root}"
+tmp="${state_root}/.${request_id}.request.tmp"
 printf '%s\n' "${action}" >"${tmp}"
-mv "${tmp}" "${state_root}/${request_id}.request"
-launchctl kickstart -k "gui/$(id -u)/com.local.presspeech.maintainer-release"
+mv "${tmp}" "${request_root}/${request_id}.request"
 REMOTE
 
 for _ in $(seq 1 960); do

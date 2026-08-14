@@ -8,6 +8,10 @@
   <array>
     <string>__HOME__/.local/libexec/presspeech-release-worker</string>
   </array>
+  <key>QueueDirectories</key>
+  <array>
+    <string>__HOME__/Library/Application Support/PresspeechMaintainer/releases/requests</string>
+  </array>
   <key>ProcessType</key>
   <string>Background</string>
   <key>Nice</key>
