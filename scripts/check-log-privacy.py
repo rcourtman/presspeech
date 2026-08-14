@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Reject log calls that look like they may include transcript content.
+"""Reject log calls that look like they may include private user input.
 
 This is a conservative static guard. It does not prove privacy, but it
 catches the easy mistakes: interpolating or concatenating transcript
 text, correction sources/replacements, or whole correction arrays into
-`log(...)`. Counts and boolean state are allowed.
+`log(...)`. Raw global keycodes are also forbidden because they can reveal
+typed characters. Counts and boolean state are allowed.
 
 The whole argument expression of each `log(...)` call is scanned —
 string-literal prose is stripped first so only code (interpolations,
@@ -44,6 +45,9 @@ FORBIDDEN_IDENTIFIER_RE = re.compile(
       | replacementField
       | body
       | history
+      | keycode
+      | keyCode
+      | keyboardEventKeycode
       | s
     )\b
     """,
@@ -210,6 +214,7 @@ def run_self_test() -> None:
     log(transcript)
     log("request body: \\(body)")
     log("history: \\(history.joined(separator: ", "))")
+    log("first key: \\(event.keycode)")
     """
     non_log_calls = """
     catalog("transcript: \\(cleaned)")
@@ -228,14 +233,15 @@ def run_self_test() -> None:
         if scan_paths([non_log_path]):
             raise SystemExit("self-test treated non-log calls as log calls")
         findings = scan_paths([dirty_path])
-        if len(findings) != 7:
-            raise SystemExit(f"self-test expected 7 dirty findings, got {len(findings)}: {findings}")
+        if len(findings) != 8:
+            raise SystemExit(f"self-test expected 8 dirty findings, got {len(findings)}: {findings}")
         for needle, label in [
             (":4:", "String(format:) argument bypass"),
             (":5:", "string concatenation bypass"),
             (":6:", "direct argument bypass"),
             (":7:", "forbidden identifier 'body'"),
             (":8:", "forbidden identifier 'history'"),
+            (":9:", "raw global keycode"),
         ]:
             if not any(needle in finding for finding in findings):
                 raise SystemExit(f"self-test did not catch {label}")
