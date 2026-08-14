@@ -82,6 +82,25 @@ jobs:
             YAML.load_file(path)
           end
           '
+      - name: Workflow script input safety
+        run: |
+          ruby - <<'RUBY'
+          require "yaml"
+
+          unsafe = []
+          Dir[".github/workflows/*.{yml,yaml}"].sort.each do |path|
+            jobs = YAML.load_file(path).fetch("jobs", {})
+            jobs.each_value do |job|
+              Array(job["steps"]).each do |step|
+                run = step["run"]
+                next unless run&.match?(/\$\{\{\s*inputs\./)
+
+                unsafe << "#{path}: #{step.fetch("name", "unnamed step")}"
+              end
+            end
+          end
+          abort "workflow inputs must enter scripts through env:\n#{unsafe.join("\n")}" unless unsafe.empty?
+          RUBY
       - name: Docs syntax
         run: |
           python3 - <<'PY'
