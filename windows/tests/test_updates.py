@@ -87,7 +87,9 @@ class UpdateSelectionTests(unittest.TestCase):
         def opener(request, timeout):
             seen["request"] = request
             seen["timeout"] = timeout
-            return Response(json.dumps([release("0.1.1")]).encode("utf-8"))
+            return Response(
+                json.dumps([release("0.1.1")]).encode("utf-8"),
+                updates.RELEASES_API)
 
         selected = updates.fetch_update("0.1.0", opener=opener)
         self.assertEqual(selected["version"], "0.1.1")
@@ -95,6 +97,21 @@ class UpdateSelectionTests(unittest.TestCase):
                    seen["request"].header_items()}
         self.assertEqual(headers["user-agent"], updates.USER_AGENT)
         self.assertNotIn("x-presspeech-version", headers)
+
+    def test_update_check_rejects_every_redirect(self):
+        handler = updates._UpdateAPIRedirectHandler()
+        request = updates._request(updates.RELEASES_API)
+        with self.assertRaises(updates.UpdateError):
+            handler.redirect_request(
+                request, None, 302, "Found", {},
+                "https://api.github.com/unexpected")
+
+    def test_update_check_rejects_an_unexpected_final_url(self):
+        def opener(request, timeout):
+            return Response(b"[]", "https://example.com/releases")
+
+        with self.assertRaises(updates.UpdateError):
+            updates.fetch_update("0.1.0", opener=opener)
 
 
 class DownloadTests(unittest.TestCase):
@@ -150,6 +167,23 @@ class DownloadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(updates.UpdateError):
                 updates.download_update(update, directory)
+
+    def test_every_redirect_hop_requires_https_and_an_approved_host(self):
+        handler = updates._ReleaseRedirectHandler()
+        request = updates._request("https://github.com/installer")
+        allowed = "https://release-assets.githubusercontent.com/installer"
+        redirected = handler.redirect_request(
+            request, None, 302, "Found", {}, allowed)
+        self.assertEqual(redirected.full_url, allowed)
+        rejected = (
+            "https://example.com/intermediate",
+            "http://release-assets.githubusercontent.com/intermediate",
+        )
+        for redirect_url in rejected:
+            with self.subTest(redirect_url=redirect_url), \
+                    self.assertRaises(updates.UpdateError):
+                handler.redirect_request(
+                    request, None, 302, "Found", {}, redirect_url)
 
 
 if __name__ == "__main__":
