@@ -69,6 +69,9 @@ After release, silence-aware post-roll stops as early as 80 ms while retaining
 the original 400 ms safety ceiling whenever speech is still present. This keeps
 final words intact without always paying the full delay.
 
+Recordings stop automatically after two minutes. This bounds in-memory audio
+and restores muted playback if Windows misses a hotkey release.
+
 The model stays loaded during normal use so every dictation is immediately ready.
 The internal unload support is retained for an explicit gaming mode rather than
 being triggered merely because dictation has been idle.

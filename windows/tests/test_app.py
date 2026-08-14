@@ -123,12 +123,14 @@ class TextRegressionTests(unittest.TestCase):
         instance.transcriber.loaded.return_value = True
         instance._play_cue = mock.Mock()
         instance._wake_model_if_idle = mock.Mock()
+        instance._schedule_recording_limit = mock.Mock()
         with mock.patch.object(app, "_foreground_process_name",
                                return_value="moonlight.exe"), \
                 mock.patch.object(app.threading, "Thread"), \
                 mock.patch.object(app.PresspeechApp, "_log"):
             instance.start_recording()
         self.assertEqual(instance._recording_target_process, "moonlight.exe")
+        instance._schedule_recording_limit.assert_called_once_with(1)
 
     def test_recording_is_blocked_while_startup_model_is_loading(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -320,13 +322,42 @@ class TextRegressionTests(unittest.TestCase):
         instance._set_indicator = mock.Mock()
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
+        timer = mock.Mock()
+        instance._recording_limit_timer = timer
         with mock.patch.object(app.sd, "InputStream",
                                side_effect=OSError("device disconnected")):
             instance._open_mic_worker(7)
         self.assertFalse(instance.recording)
         self.assertIsNone(instance.input_device)
+        self.assertIsNone(instance._recording_limit_timer)
+        timer.cancel.assert_called_once_with()
         instance.notify.assert_called_once_with(
             "Microphone error", "device disconnected")
+
+    def test_missing_microphone_cancels_recording_limit(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance.input_device = None
+        instance.stream = None
+        instance._get_input_device = mock.Mock(return_value=None)
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        timer = mock.Mock()
+        instance._recording_limit_timer = timer
+
+        instance._open_mic_worker(7)
+
+        self.assertFalse(instance.recording)
+        self.assertIsNone(instance._recording_limit_timer)
+        timer.cancel.assert_called_once_with()
+        instance.notify.assert_called_once_with(
+            "No microphone found",
+            "Plug in a microphone or check Windows Sound settings "
+            "(Recording tab), then try again.")
 
     def test_stale_microphone_error_does_not_cancel_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -367,6 +398,47 @@ class TextRegressionTests(unittest.TestCase):
             target=instance._play_cue_worker, args=("start",), daemon=True)
         thread.return_value.start.assert_called_once_with()
 
+    def test_recording_limit_timer_is_daemon_and_epoch_scoped(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance._recording_limit_timer = None
+        with mock.patch.object(app.threading, "Timer") as timer:
+            instance._schedule_recording_limit(7)
+        timer.assert_called_once_with(
+            app.MAX_RECORDING_SEC, instance._recording_limit_reached, (7,))
+        self.assertTrue(timer.return_value.daemon)
+        timer.return_value.start.assert_called_once_with()
+
+    def test_stale_recording_limit_cannot_stop_a_new_recording(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 8
+        self.assertFalse(instance.stop_recording(expected_epoch=7))
+        self.assertTrue(instance.recording)
+
+    def test_stopping_recording_cancels_duration_timer(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance.buffer = []
+        instance.stream = None
+        instance.icon = None
+        instance._recording_target_process = "notepad.exe"
+        timer = mock.Mock()
+        instance._recording_limit_timer = timer
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        self.assertTrue(instance.stop_recording(expected_epoch=7))
+        self.assertIsNone(instance._recording_limit_timer)
+        timer.cancel.assert_called_once_with()
+
 
 class PostRollTests(unittest.TestCase):
     def make_app(self, value, peak=0.1, rate=16000):
@@ -406,7 +478,7 @@ class PostRollTests(unittest.TestCase):
         with mock.patch.object(app.time, "perf_counter", return_value=10.5), \
                 mock.patch.object(app.PresspeechApp, "_log"):
             instance._finish_after_roll(7, 10.0)
-        instance.stop_recording.assert_called_once_with()
+        instance.stop_recording.assert_called_once_with(expected_epoch=7)
 
 
 class StartupTests(unittest.TestCase):
