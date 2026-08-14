@@ -133,6 +133,21 @@ let RIGHT_MODIFIER_HOTKEY_CHOICES: [HotkeyChoice] = [
     HotkeyChoice(name: "Right Command", keycode: 54, isModifier: true, modifierFlag: .maskCommand),
 ]
 
+/// Names are safe diagnostic metadata: unlike ordinary keycodes, these
+/// identify only modifier keys and cannot disclose typed text.
+let MODIFIER_KEY_NAMES_BY_KEYCODE: [CGKeyCode: String] = [
+    54: "Right Command",
+    55: "Left Command",
+    56: "Left Shift",
+    57: "Caps Lock",
+    58: "Left Option",
+    59: "Left Control",
+    60: "Right Shift",
+    61: "Right Option",
+    62: "Right Control",
+    63: "Fn",
+]
+
 let FUNCTION_KEY_NAMES_BY_KEYCODE: [CGKeyCode: String] = [
     122: "F1",
     120: "F2",
@@ -2566,6 +2581,11 @@ private struct HotkeyEventSnapshot: Sendable {
     }
 }
 
+private func diagnosticModifierName(for event: HotkeyEventSnapshot) -> String? {
+    guard event.typeRawValue == CGEventType.flagsChanged.rawValue else { return nil }
+    return MODIFIER_KEY_NAMES_BY_KEYCODE[event.keycode]
+}
+
 private enum HotkeyRecordingDecision: Equatable {
     case accept(HotkeyChoice)
     case reject(String)
@@ -2638,9 +2658,25 @@ private enum HotkeyTransitionAction: Equatable, Sendable {
     case cancel
 }
 
+private enum RecordingStartBlocker: String, Sendable {
+    case notReady = "not ready"
+    case alreadyRecording = "already recording"
+    case busyTranscribing = "busy transcribing"
+    case terminating
+}
+
 private struct HotkeyTransitionResult: Equatable, Sendable {
     let suppress: Bool
     let actions: [HotkeyTransitionAction]
+    let startWasDeclined: Bool
+
+    init(suppress: Bool,
+         actions: [HotkeyTransitionAction],
+         startWasDeclined: Bool = false) {
+        self.suppress = suppress
+        self.actions = actions
+        self.startWasDeclined = startWasDeclined
+    }
 
     static let pass = HotkeyTransitionResult(suppress: false, actions: [])
     static let suppressOnly = HotkeyTransitionResult(suppress: true, actions: [])
@@ -2717,14 +2753,13 @@ private struct HotkeyTransitionState {
                 toggleActive = false
                 return HotkeyTransitionResult(suppress: true, actions: [.release])
             }
-            // A press the app will reject (model loading, a
-            // transcription in flight, terminating) must not flip the
-            // toggle. Otherwise the rejected press strands
-            // toggleActive at true, the NEXT press emits a .release
-            // the app discards, and only the third press records —
-            // with zero feedback in between. Same gate-callback
-            // pattern Escape uses via isRecording.
-            guard canStartRecording else { return .suppressOnly }
+            // A press the app will reject must not flip the toggle. Report
+            // the decline separately so the next ready press still starts.
+            guard canStartRecording else {
+                return HotkeyTransitionResult(suppress: true,
+                                              actions: [],
+                                              startWasDeclined: true)
+            }
             toggleActive = true
             return HotkeyTransitionResult(suppress: true, actions: [.press])
         }
@@ -2760,6 +2795,16 @@ final class HotkeyListener {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var transitionState = HotkeyTransitionState()
+    /// `tapCreate` succeeding proves only that the tap was installed, not
+    /// that events are reaching it — with Input Monitoring stale the tap
+    /// goes live and then stays silent forever, which is indistinguishable
+    /// in the log from "the user never pressed anything". Log the first
+    /// event that actually arrives so the two can be told apart.
+    private var didLogFirstEvent = false
+    /// Same problem one level in: events arrive, but none of them match the
+    /// configured hotkey. Only modifier names are safe to persist; logging an
+    /// arbitrary global keycode could disclose part of something the user typed.
+    private var didLogFirstUnmatchedModifier = false
 
     /// User's current hotkey (set via Settings → Hotkey submenu).
     var hotkey: HotkeyChoice = hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
@@ -2773,13 +2818,9 @@ final class HotkeyListener {
     var onRelease: (() -> Void)?
     var onCancel: (() -> Void)?
     var isRecordingActive: (() -> Bool)?
-    /// Asks the app whether a new recording would actually start if
-    /// onPress fired right now (ready, idle, not transcribing, not
-    /// terminating). Toggle mode uses it so a press the app would
-    /// silently discard doesn't flip the toggle state and leave the
-    /// next press emitting a swallowed .release. nil (or no callback
-    /// installed) is treated as "would start".
-    var canStartRecording: (() -> Bool)?
+    /// Describes why a new recording cannot start. Toggle mode uses this to
+    /// report a rejected press without flipping its state. nil means ready.
+    fileprivate var recordingStartBlocker: (() -> RecordingStartBlocker?)?
 
     @discardableResult
     func start() -> Bool {
@@ -2865,11 +2906,27 @@ final class HotkeyListener {
             return false
         }
 
+        if !didLogFirstEvent {
+            didLogFirstEvent = true
+            log("HotkeyListener: first keyboard event received — tap is delivering")
+        }
+
+        let startBlocker = recordingStartBlocker?()
         let result = transitionState.transition(for: event,
                                                 hotkey: hotkey,
                                                 triggerMode: triggerMode,
                                                 isRecording: isRecordingActive?() ?? false,
-                                                canStartRecording: canStartRecording?() ?? true)
+                                                canStartRecording: startBlocker == nil)
+        if result.startWasDeclined {
+            log("press ignored: \((startBlocker ?? .notReady).rawValue)")
+        }
+        if result.actions.isEmpty,
+           !didLogFirstUnmatchedModifier,
+           event.keycode != hotkey.keycode,
+           let modifierName = diagnosticModifierName(for: event) {
+            didLogFirstUnmatchedModifier = true
+            log("HotkeyListener: received \(modifierName), but watching \(hotkey.name)")
+        }
         dispatchHotkeyActions(result.actions)
         return result.suppress
     }
@@ -5861,14 +5918,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onRelease = { [weak self] in self?.handleRelease() }
         hotkey.onCancel = { [weak self] in self?.cancelActiveRecording(reason: "escape") }
         hotkey.isRecordingActive = { [weak self] in self?.isRecording == true }
-        // Mirrors the first guard in handlePress — if this returns
-        // false the press would be silently discarded, so toggle mode
-        // must not flip state for it. The missing-permissions case is
-        // deliberately NOT part of the gate: that press gives feedback
-        // (enterPermissionBlockedState), which also resets the toggle.
-        hotkey.canStartRecording = { [weak self] in
-            guard let self else { return false }
-            return self.isReady && !self.isRecording && !self.isBusy && !self.isTerminating
+        // Missing permissions are deliberately not a blocker here: that press
+        // enters the permission-blocked state and provides its own feedback.
+        hotkey.recordingStartBlocker = { [weak self] in
+            self?.recordingStartBlocker() ?? .terminating
         }
         guard hotkey.start() else {
             isReady = false
@@ -5878,7 +5931,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hotkey.onRelease = nil
             hotkey.onCancel = nil
             hotkey.isRecordingActive = nil
-            hotkey.canStartRecording = nil
+            hotkey.recordingStartBlocker = nil
             hotkey.resetToggleState()
             hotkey.stop()
             log("readiness failed (\(reason)): hotkey listener unavailable")
@@ -6116,7 +6169,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onRelease = nil
         hotkey.onCancel = nil
         hotkey.isRecordingActive = nil
-        hotkey.canStartRecording = nil
+        hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
         hotkey.stop()
         if didTouchAudioEngine {
@@ -6184,7 +6237,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onRelease = nil
         hotkey.onCancel = nil
         hotkey.isRecordingActive = nil
-        hotkey.canStartRecording = nil
+        hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
         hotkey.stop()
         if didTouchAudioEngine {
@@ -6290,7 +6343,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onRelease = nil
         hotkey.onCancel = nil
         hotkey.isRecordingActive = nil
-        hotkey.canStartRecording = nil
+        hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
         hotkey.stop()
         stopAudioEngineImmediately()
@@ -6348,7 +6401,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onRelease = nil
         hotkey.onCancel = nil
         hotkey.isRecordingActive = nil
-        hotkey.canStartRecording = nil
+        hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
         hotkey.stop()
         stopAudioEngineImmediately()
@@ -6395,7 +6448,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onRelease = nil
         hotkey.onCancel = nil
         hotkey.isRecordingActive = nil
-        hotkey.canStartRecording = nil
+        hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
         hotkey.stop()
 
@@ -6790,8 +6843,19 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // MARK: - Recording loop
 
+    private func recordingStartBlocker() -> RecordingStartBlocker? {
+        if !isReady { return .notReady }
+        if isRecording { return .alreadyRecording }
+        if isBusy { return .busyTranscribing }
+        if isTerminating { return .terminating }
+        return nil
+    }
+
     private func handlePress() {
-        guard isReady, !isRecording, !isBusy, !isTerminating else { return }
+        if let blocker = recordingStartBlocker() {
+            log("press ignored: \(blocker.rawValue)")
+            return
+        }
         let missing = missingPermissions()
         guard missing.isEmpty else {
             enterPermissionBlockedState(missing: missing, reason: "hotkey press")
@@ -6962,7 +7026,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotkey.onRelease = nil
         hotkey.onCancel = nil
         hotkey.isRecordingActive = nil
-        hotkey.canStartRecording = nil
+        hotkey.recordingStartBlocker = nil
         hotkey.stop()
 
         let hadActiveRecording = isRecording || audio.isRunning
@@ -10766,6 +10830,7 @@ private enum PresspeechSelfTest {
 
     private static func testHotkey() throws {
         try testHotkeyPreferenceNormalization()
+        try testHotkeyDiagnosticModifierNames()
         try testHotkeyPreferenceUpdateResults()
         try testHotkeyRecorderRestartActions()
         try testHandledHotkeySuppression()
@@ -10775,6 +10840,24 @@ private enum PresspeechSelfTest {
         try testToggleGatedPressDoesNotFlipToggleState()
         try testEscapePassesThroughWhenNotRecording()
         try testEscapeSuppressesCancelRepeatAndKeyUpWhileRecording()
+    }
+
+    private static func testHotkeyDiagnosticModifierNames() throws {
+        try expect(
+            diagnosticModifierName(for: event(.flagsChanged, keycode: 58)),
+            equals: "Left Option",
+            "hotkey diagnostics should name non-text modifier events"
+        )
+        try expect(
+            diagnosticModifierName(for: event(.keyDown, keycode: 0)),
+            equals: nil,
+            "hotkey diagnostics must not expose ordinary typing keys"
+        )
+        try expect(
+            diagnosticModifierName(for: event(.keyDown, keycode: 58)),
+            equals: nil,
+            "hotkey diagnostics should require a modifier event"
+        )
     }
 
     private static func testHotkeyPreferenceNormalization() throws {
@@ -13712,14 +13795,15 @@ private enum PresspeechSelfTest {
         var state = HotkeyTransitionState()
         let f5 = hotkeyChoice(forKeycode: 96)
 
-        // A press the app would reject (e.g. a transcription in
-        // flight) must suppress the key but not flip the toggle —
-        // otherwise the next press emits a swallowed .release and
-        // only the third press records.
+        // A press the app would reject (e.g. a transcription in flight) must
+        // report the reason but not flip the toggle — otherwise the next press
+        // emits a swallowed .release.
         try expect(
             state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: false, canStartRecording: false),
-            equals: .suppressOnly,
-            "gated toggle press should suppress without flipping state"
+            equals: HotkeyTransitionResult(suppress: true,
+                                           actions: [],
+                                           startWasDeclined: true),
+            "gated toggle press should report the decline without flipping state"
         )
         try expect(
             state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: false, canStartRecording: true),
