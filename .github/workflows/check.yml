@@ -88,18 +88,24 @@ jobs:
           require "yaml"
 
           unsafe = []
+          unscoped_winget = []
           Dir[".github/workflows/*.{yml,yaml}"].sort.each do |path|
             jobs = YAML.load_file(path).fetch("jobs", {})
             jobs.each_value do |job|
               Array(job["steps"]).each do |step|
                 run = step["run"]
-                next unless run&.match?(/\$\{\{\s*inputs\./)
+                if run&.match?(/\$\{\{\s*inputs\./)
+                  unsafe << "#{path}: #{step.fetch("name", "unnamed step")}"
+                end
 
-                unsafe << "#{path}: #{step.fetch("name", "unnamed step")}"
+                if run&.match?(/\bwinget\s+install\b/) && !run.match?(/--source\s+winget\b/)
+                  unscoped_winget << "#{path}: #{step.fetch("name", "unnamed step")}"
+                end
               end
             end
           end
           abort "workflow inputs must enter scripts through env:\n#{unsafe.join("\n")}" unless unsafe.empty?
+          abort "winget installs must pin the community source:\n#{unscoped_winget.join("\n")}" unless unscoped_winget.empty?
           RUBY
       - name: Docs syntax
         run: |
