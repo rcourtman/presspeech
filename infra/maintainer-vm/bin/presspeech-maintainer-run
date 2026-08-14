@@ -53,11 +53,14 @@ if [[ "${PRESSPEECH_MAINTAINER_DRY_RUN:-0}" == "1" ]]; then
   codex_status=0
 else
   set +e
+  # Keep role identity separate from the daily objective so policy can
+  # distinguish this process without steering its choice of maintenance work.
   codex exec \
     --json \
     --color never \
     --sandbox danger-full-access \
     -c 'approval_policy="never"' \
+    -c 'developer_instructions="This invocation is the scheduled unattended presspeech-dev maintainer."' \
     -c 'model_reasoning_effort="xhigh"' \
     -C "${workspace}" \
     --output-last-message "${artifact_dir}/final.md" \
