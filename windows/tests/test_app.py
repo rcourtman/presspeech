@@ -241,6 +241,7 @@ class TextRegressionTests(unittest.TestCase):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"mute_playback_while_recording": True}
         instance.recording = True
+        instance._rec_epoch = 4
         instance.lock = __import__("threading").Lock()
         instance._playback_mute_lock = __import__("threading").Lock()
         instance._playback_restore = None
@@ -250,7 +251,7 @@ class TextRegressionTests(unittest.TestCase):
                                return_value=(saved, [])) as mute, \
                 mock.patch.object(app, "_restore_playback_mutes",
                                   return_value=(2, [])) as restore:
-            instance._mute_playback_for_recording()
+            instance._mute_playback_for_recording(4)
             instance.recording = False
             instance._restore_playback_after_recording()
         mute.assert_called_once_with()
@@ -260,15 +261,97 @@ class TextRegressionTests(unittest.TestCase):
     def test_start_cue_finishes_before_playback_mutes_and_mic_opens(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"audio_cues": True}
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 4
         calls = mock.Mock()
         instance._play_cue_worker = calls.cue
         instance._mute_playback_for_recording = calls.mute
         instance._open_mic_worker = calls.open_mic
-        instance._start_audio_worker()
+        instance._start_audio_worker(4)
         self.assertEqual(
             calls.mock_calls,
-            [mock.call.cue("start"), mock.call.mute(), mock.call.open_mic()],
+            [mock.call.cue("start"), mock.call.mute(4), mock.call.open_mic(4)],
         )
+
+    def test_stale_audio_worker_cannot_attach_to_a_new_recording(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 4
+        instance.input_device = None
+        current_stream = object()
+        instance.stream = current_stream
+
+        def finish_old_device_search():
+            instance._rec_epoch = 5
+            return (2, 16000)
+
+        instance._get_input_device = mock.Mock(side_effect=finish_old_device_search)
+        with mock.patch.object(app.sd, "InputStream") as input_stream:
+            instance._open_mic_worker(4)
+        input_stream.assert_not_called()
+        self.assertIs(instance.stream, current_stream)
+        self.assertTrue(instance.recording)
+
+    def test_audio_callback_rejects_chunks_from_a_stale_stream(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 5
+        instance.buffer = []
+        instance._peak_rms = 0.0
+        chunk = __import__("numpy").ones((8, 1), dtype="float32")
+
+        instance._audio_cb(chunk, 8, None, None, 4)
+        self.assertEqual(instance.buffer, [])
+        instance._audio_cb(chunk, 8, None, None, 5)
+        self.assertEqual(len(instance.buffer), 1)
+
+    def test_microphone_open_error_invalidates_cached_device_for_retry(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance.input_device = (3, 48000)
+        instance.stream = None
+        instance._get_input_device = mock.Mock(return_value=(3, 48000))
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        with mock.patch.object(app.sd, "InputStream",
+                               side_effect=OSError("device disconnected")):
+            instance._open_mic_worker(7)
+        self.assertFalse(instance.recording)
+        self.assertIsNone(instance.input_device)
+        instance.notify.assert_called_once_with(
+            "Microphone error", "device disconnected")
+
+    def test_stale_microphone_error_does_not_cancel_new_recording(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 4
+        instance.input_device = (3, 48000)
+        current_stream = object()
+        instance.stream = current_stream
+        instance._get_input_device = mock.Mock(return_value=(3, 48000))
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        def fail_after_new_recording(*_args, **_kwargs):
+            instance._rec_epoch = 5
+            raise OSError("old device disconnected")
+
+        with mock.patch.object(app.sd, "InputStream",
+                               side_effect=fail_after_new_recording):
+            instance._open_mic_worker(4)
+        self.assertTrue(instance.recording)
+        self.assertIs(instance.stream, current_stream)
+        instance.notify.assert_not_called()
 
     def test_audio_cues_are_valid_and_distinct_wav_data(self):
         self.assertTrue(app.CUE_SOUNDS["start"].startswith(b"RIFF"))
@@ -304,6 +387,17 @@ class PostRollTests(unittest.TestCase):
         instance = self.make_app(0.03)
         rms, threshold = instance._post_roll_tail()
         self.assertGreater(rms, threshold)
+
+    def test_release_keeps_the_capture_epoch_through_post_roll(self):
+        instance = self.make_app(0.03)
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance._schedule_post_roll = mock.Mock()
+        with mock.patch.object(app.time, "perf_counter", return_value=10.0):
+            instance.request_stop()
+        self.assertEqual(instance._rec_epoch, 7)
+        instance._schedule_post_roll.assert_called_once_with(
+            app.POST_ROLL_MIN_SEC, 7, 10.0)
 
     def test_maximum_window_stops_even_with_voiced_tail(self):
         instance = self.make_app(0.03)
