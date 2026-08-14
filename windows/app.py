@@ -450,9 +450,10 @@ class PresspeechApp:
             return False
         target_process = _foreground_process_name()
         with self.lock:
-            self._rec_epoch += 1
             if self.recording:
                 return False
+            self._rec_epoch += 1
+            epoch = self._rec_epoch
             self.recording = True
             self.buffer = []
             self._peak_rms = 0.0
@@ -461,23 +462,33 @@ class PresspeechApp:
         self._log("recording started")
         self._set_indicator("listening")
         self._wake_model_if_idle()
-        threading.Thread(target=self._start_audio_worker, daemon=True).start()
+        threading.Thread(
+            target=self._start_audio_worker, args=(epoch,), daemon=True).start()
         return True
 
-    def _start_audio_worker(self):
+    def _recording_epoch_active(self, epoch):
+        with self.lock:
+            return self.recording and epoch == self._rec_epoch
+
+    def _start_audio_worker(self, epoch):
         # Finish the audible cue before muting, and mute before opening the mic,
         # so neither the cue nor existing speaker audio is captured.
+        # Device discovery can outlive a quick release and re-press, so every
+        # asynchronous stage remains owned by the recording that started it.
         if self.settings.get("audio_cues", True):
             self._play_cue_worker("start")
-        self._mute_playback_for_recording()
-        self._open_mic_worker()
+        if not self._recording_epoch_active(epoch):
+            return
+        self._mute_playback_for_recording(epoch)
+        if self._recording_epoch_active(epoch):
+            self._open_mic_worker(epoch)
 
-    def _mute_playback_for_recording(self):
+    def _mute_playback_for_recording(self, epoch):
         if not self.settings.get("mute_playback_while_recording", True):
             return
         with self._playback_mute_lock:
             with self.lock:
-                if not self.recording:
+                if not self.recording or epoch != self._rec_epoch:
                     return
             if self._playback_restore is not None:
                 return
@@ -506,11 +517,18 @@ class PresspeechApp:
             except Exception as exc:
                 self._log("could not restore playback mute state: %s" % exc)
 
-    def _open_mic_worker(self):
+    def _open_mic_worker(self, epoch):
+        stream = None
         try:
+            if not self._recording_epoch_active(epoch):
+                return
             chosen = self._get_input_device()
+            if not self._recording_epoch_active(epoch):
+                return
             if chosen is None:
                 with self.lock:
+                    if not self.recording or epoch != self._rec_epoch:
+                        return
                     self.recording = False
                 self._restore_playback_after_recording()
                 self._set_indicator(None)
@@ -523,15 +541,17 @@ class PresspeechApp:
             idx, rate = chosen
             stream = sd.InputStream(
                 device=idx, samplerate=rate, channels=1, dtype="float32",
-                callback=self._audio_cb,
+                callback=lambda indata, frames, time_info, status: self._audio_cb(
+                    indata, frames, time_info, status, epoch),
             )
             stream.start()
             with self.lock:
-                if not self.recording:
-                    self.stream = None
+                if not self.recording or epoch != self._rec_epoch:
+                    accepted = False
                 else:
                     self.stream = stream
-            if self.stream is None:
+                    accepted = True
+            if not accepted:
                 try:
                     stream.stop()
                     stream.close()
@@ -540,8 +560,21 @@ class PresspeechApp:
                 return
         except Exception as exc:
             with self.lock:
-                self.recording = False
-                self.stream = None
+                if not self.recording or epoch != self._rec_epoch:
+                    stale = True
+                else:
+                    stale = False
+                    self.input_device = None
+                    self.recording = False
+                    self.stream = None
+            if stream is not None:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
+            if stale:
+                return
             self._restore_playback_after_recording()
             self._set_indicator(None)
             self._log("mic error: %s" % exc)
@@ -551,19 +584,22 @@ class PresspeechApp:
         if self.icon is not None:
             self.icon.icon = self.rec_icon
 
-    def _audio_cb(self, indata, frames, time_info, status):
+    def _audio_cb(self, indata, frames, time_info, status, epoch):
         chunk = indata.copy()
         chunk_rms = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
         with self.lock:
-            if self.recording:
+            if self.recording and epoch == self._rec_epoch:
                 self.buffer.append(chunk)
                 self._peak_rms = max(self._peak_rms, chunk_rms)
 
     def request_stop(self):
         """Stop after silence, retaining the full safety window for ongoing speech."""
-        self._rec_epoch += 1
+        with self.lock:
+            if not self.recording:
+                return
+            epoch = self._rec_epoch
         self._schedule_post_roll(
-            POST_ROLL_MIN_SEC, self._rec_epoch, time.perf_counter())
+            POST_ROLL_MIN_SEC, epoch, time.perf_counter())
 
     def _schedule_post_roll(self, delay, epoch, released_at):
         timer = threading.Timer(delay, self._finish_after_roll, (epoch, released_at))
@@ -620,14 +656,15 @@ class PresspeechApp:
             self.recording = False
             audio = np.concatenate(self.buffer) if self.buffer else np.zeros(0, dtype=np.float32)
             target_process = self._recording_target_process
+            stream = self.stream
+            self.stream = None
             self.buffer = []
-        if self.stream is not None:
+        if stream is not None:
             try:
-                self.stream.stop()
-                self.stream.close()
+                stream.stop()
+                stream.close()
             except Exception:
                 pass
-            self.stream = None
         if self.icon is not None:
             self.icon.icon = self.idle_icon
         # Restore playback only after closing the stream, so returning speaker
