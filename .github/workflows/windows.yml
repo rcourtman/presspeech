@@ -33,9 +33,24 @@ jobs:
       - name: Compile Python sources
         working-directory: windows
         run: python -m compileall -q app.py benchmark.py british.py config.py engine.py ui.py updates.py
-      - name: Packaging script syntax
+      - name: Packaging script safety and syntax
         working-directory: windows
         shell: pwsh
         run: |
           [ScriptBlock]::Create((Get-Content build-release.ps1 -Raw)) | Out-Null
           python -m py_compile Presspeech.spec
+          $rejected = $false
+          try {
+            .\build-release.ps1 `
+              -Version "999.999.999" `
+              -Python (Get-Command python).Source `
+              -SkipInstaller
+          } catch {
+            if ($_.Exception.Message -notlike "*config.py must declare*") {
+              throw
+            }
+            $rejected = $true
+          }
+          if (-not $rejected) {
+            throw "build-release.ps1 accepted a version that disagrees with config.py"
+          }

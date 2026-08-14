@@ -19,8 +19,19 @@ $stageRoot = Join-Path $tempRoot "presspeech-package"
 $stageBuildDir = Join-Path $stageRoot "build"
 $stageDistDir = Join-Path $stageRoot "dist"
 
-if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw "Version must have the form X.Y.Z"
+if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+    throw "Version must have the canonical form X.Y.Z"
+}
+
+# The installer name, PE metadata, GitHub tag, and the version used by the
+# in-app updater must agree. The guarded maintainer command checks this too,
+# but build-release.ps1 is also a supported direct entry point.
+$expectedVersionLine = 'VERSION = "' + $Version + '"'
+$declaredVersionLines = @(Get-Content -LiteralPath (Join-Path $windowsRoot "config.py") |
+    Where-Object { $_ -match '^VERSION\s*=' })
+if ($declaredVersionLines.Count -ne 1 -or
+        $declaredVersionLines[0] -ne $expectedVersionLine) {
+    throw "windows/config.py must declare $expectedVersionLine"
 }
 
 $Python = (Resolve-Path -LiteralPath $Python).Path

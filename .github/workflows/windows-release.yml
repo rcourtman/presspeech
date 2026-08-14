@@ -16,11 +16,30 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     env:
-      GH_TOKEN: ${{ github.token }}
-      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-      PRESSPEECH_CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      # Treat workflow_dispatch input as data. Referencing it directly inside a
+      # PowerShell run block would allow PowerShell expressions in the input.
+      PRESSPEECH_RELEASE_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Validate release metadata
+        shell: pwsh
+        run: |
+          $version = $env:PRESSPEECH_RELEASE_VERSION
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw "Version must have the canonical form X.Y.Z"
+          }
+          $expected = 'VERSION = "' + $version + '"'
+          $declared = @(Get-Content -LiteralPath windows/config.py |
+            Where-Object { $_ -match '^VERSION\s*=' })
+          if ($declared.Count -ne 1 -or $declared[0] -ne $expected) {
+            throw "windows/config.py must declare $expected"
+          }
+          $notes = "windows/release-notes/$version.md"
+          if (-not (Test-Path -LiteralPath $notes)) {
+            throw "Missing release notes: $notes"
+          }
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
@@ -32,21 +51,41 @@ jobs:
           python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu126
           winget install --id JRSoftware.InnoSetup --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
       - name: Import optional signing certificate
-        if: ${{ env.WINDOWS_CERTIFICATE_BASE64 != '' }}
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
         shell: pwsh
         run: |
-          $path = Join-Path $env:RUNNER_TEMP "presspeech-signing.pfx"
-          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
-          "PRESSPEECH_CERT_PATH=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ($env:WINDOWS_CERTIFICATE_BASE64) {
+            $path = Join-Path $env:RUNNER_TEMP "presspeech-signing.pfx"
+            [IO.File]::WriteAllBytes(
+              $path,
+              [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+            "PRESSPEECH_CERT_PATH=$path" |
+              Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
       - name: Build installer
         working-directory: windows
         shell: pwsh
+        env:
+          PRESSPEECH_CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          .\build-release.ps1 -Version "${{ inputs.version }}" -Python (Get-Command python).Source
-      - name: Publish Windows prerelease
+          .\build-release.ps1 `
+            -Version $env:PRESSPEECH_RELEASE_VERSION `
+            -Python (Get-Command python).Source
+      - name: Remove signing certificate
+        if: ${{ always() }}
         shell: pwsh
         run: |
-          $version = "${{ inputs.version }}"
+          if ($env:PRESSPEECH_CERT_PATH) {
+            Remove-Item -LiteralPath $env:PRESSPEECH_CERT_PATH -Force `
+              -ErrorAction SilentlyContinue
+          }
+      - name: Publish Windows prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:PRESSPEECH_RELEASE_VERSION
           $tag = "windows-v$version"
           $notes = "windows/release-notes/$version.md"
           if (-not (Test-Path -LiteralPath $notes)) {
