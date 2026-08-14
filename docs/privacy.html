@@ -4,12 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Presspeech Privacy - Local Dictation, No Telemetry</title>
-    <meta name="description" content="Presspeech transcribes locally on the Mac, stores no transcript history on disk, ships no telemetry, and has a documented three-call network surface.">
+    <meta name="description" content="Presspeech transcribes locally on macOS and Windows, stores no transcript history on disk, ships no telemetry, and documents its complete network surface.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/privacy.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
     <meta property="og:title" content="Presspeech Privacy - Local Dictation, No Telemetry">
-    <meta property="og:description" content="Presspeech transcribes locally on the Mac, stores no transcript history on disk, ships no telemetry, and has a documented three-call network surface.">
+    <meta property="og:description" content="Presspeech transcribes locally on macOS and Windows, stores no transcript history on disk, ships no telemetry, and documents its complete network surface.">
     <meta property="og:url" content="https://rcourtman.github.io/presspeech/privacy.html">
     <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:type" content="website">
@@ -49,11 +49,11 @@
             </article>
             <article class="card">
               <h3>Paste at cursor</h3>
-              <p>The finished text normally goes through the general pasteboard and <span class="kbd">⌘ V</span>. If that setup fails, Presspeech falls back to direct Unicode key events.</p>
+              <p>The finished text normally goes through the platform clipboard and a synthetic paste shortcut. On macOS, Presspeech falls back to direct Unicode key events if clipboard paste setup fails.</p>
             </article>
             <article class="card">
               <h3>Clipboard persistence</h3>
-              <p>Presspeech deliberately does not restore your previous clipboard contents — racing to round-trip them fights with clipboard managers. The trade-off: the last dictation stays on the system pasteboard, visible to clipboard managers and Universal Clipboard, until you copy something else.</p>
+              <p>macOS leaves the transcript on the pasteboard by default. The opt-in <strong>Restore clipboard after paste</strong> setting takes a guarded snapshot and restores it only when complete and still current, so it does not overwrite a newer copy. Windows leaves the transcript on the clipboard until something else is copied.</p>
             </article>
             <article class="card">
               <h3>No transcript logs</h3>
@@ -65,7 +65,7 @@
 
       <section>
         <div class="wrap">
-          <span class="section-eyebrow">Three calls, fully listed</span>
+          <span class="section-eyebrow">Three call types, fully listed</span>
           <h2>Network calls</h2>
           <p>This is the complete network surface of Presspeech itself and its install/update path.</p>
           <div class="table-scroll">
@@ -82,19 +82,19 @@
                 <tr>
                   <td><strong>Model download</strong></td>
                   <td><code>huggingface.co</code></td>
-                  <td>FluidAudio downloads the Parakeet TDT v3 CoreML model weights, about 500-600 MB, into the local support cache. Runs on first launch, again if the cached model fails its integrity check, and again when you choose Reset Speech Model Cache. If <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> is set in the environment, FluidAudio attaches it as an Authorization header to huggingface.co (most users have none set).</td>
-                  <td>Required once for local transcription.</td>
+                  <td>macOS downloads the FluidAudio Parakeet TDT v3 CoreML model (about 500-600 MB) on first launch, after an integrity failure, or after a user-triggered cache reset. Windows downloads its selected local model; the default Parakeet cache is about 2.5 GB. No dictation audio is sent. If <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> is set, FluidAudio may attach it to macOS model requests; most users have none set.</td>
+                  <td>Required for each platform's local transcription.</td>
                 </tr>
                 <tr>
                   <td><strong>Periodic update check</strong></td>
-                  <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code></td>
-                  <td>Release lookup every six hours, plus one check shortly after launch; it only notifies. The GET carries a fixed User-Agent header, exactly <code>presspeech-update-check</code> — no version, device, or user identifiers.</td>
+                  <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code> (macOS); <code>api.github.com/repos/rcourtman/presspeech/releases?per_page=30</code> (Windows)</td>
+                  <td>macOS checks every six hours; Windows checks at most daily. Both only notify and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no version, device, settings, transcript, or usage identifiers.</td>
                   <td>Disable update notifications from Settings.</td>
                 </tr>
                 <tr>
                   <td><strong>User-triggered install/update</strong></td>
                   <td><code>github.com/rcourtman/presspeech/releases/download/...</code>, <code>formulae.brew.sh</code>, <code>github.com/rcourtman/homebrew-presspeech</code>, Homebrew's own update endpoints (github.com / api.github.com)</td>
-                  <td>When the user downloads Presspeech directly, the browser fetches the signed GitHub release archive. When the user chooses to install or update through Homebrew, Homebrew refreshes its metadata and the tap, then downloads the same signed release archive.</td>
+                  <td>macOS uses the signed GitHub release archive directly or through Homebrew. Windows downloads an installer only after user approval, then verifies the published size and SHA-256 before offering to launch it.</td>
                   <td>Only runs when the user installs or updates.</td>
                 </tr>
               </tbody>
@@ -108,9 +108,9 @@
         <div class="wrap">
           <span class="section-eyebrow">Sandbox surface</span>
           <h2>Permissions and entitlements</h2>
-          <p>The notarised app uses two hardened-runtime entitlements: audio input and microphone. macOS also requires user-granted Accessibility and Input Monitoring permissions for the hotkey and paste workflow.</p>
+          <p>The notarised macOS app uses two hardened-runtime entitlements: audio input and microphone. macOS also requires user-granted Accessibility and Input Monitoring permissions for the hotkey and paste workflow.</p>
           <div class="note">
-            <p>Presspeech does not add JIT, unsigned executable memory, library-validation, network-client, contacts, calendar, location, camera, or file-provider entitlements.</p>
+            <p>The macOS app does not add JIT, unsigned executable memory, library-validation, network-client, contacts, calendar, location, camera, or file-provider entitlements.</p>
           </div>
         </div>
       </section>

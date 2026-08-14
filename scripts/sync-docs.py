@@ -43,9 +43,13 @@ SYNCED_PATHS = [
     METADATA_PATH,
 ]
 
-# Hand-written marketing copy that quotes release stats. Not synced, but
-# scanned for the stale patterns below so old numbers fail loudly.
+# Hand-written project/privacy copy. Not rewritten, but scanned for stale
+# patterns so old platform and privacy claims fail loudly.
 EXTRA_STALE_SCAN = [
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "llms.txt",
+    DOCS / "privacy.html",
+    DOCS / "privacy" / "network-calls.json",
     ROOT / "marketing" / "SHARING.md",
     ROOT / "marketing" / "demo" / "README.md",
 ]
@@ -86,6 +90,30 @@ STALE_PATTERNS = [
     (re.compile(r"#install-one-liner"), "old README anchor install URL"),
     (re.compile(r"warning rows?", re.IGNORECASE), "old permission warning-row setup wording"),
     (re.compile(r"permission rows disappear", re.IGNORECASE), "old permission-row completion wording"),
+    (
+        re.compile(
+            r"deliberately does not restore (?:your|the) previous clipboard contents",
+            re.IGNORECASE,
+        ),
+        "pre-clipboard-restoration privacy wording",
+    ),
+    (re.compile(r"Platform: Apple Silicon Macs only", re.IGNORECASE), "pre-Windows platform wording"),
+    (
+        re.compile(
+            r"Presspeech is a free MIT-licensed menu-bar app for (?:local |private )?"
+            r"push-to-talk dictation on Apple Silicon Macs",
+            re.IGNORECASE,
+        ),
+        "pre-Windows project summary",
+    ),
+    (
+        re.compile(r"The project is a\s+single-file Swift menu-bar app", re.IGNORECASE),
+        "pre-Windows contributor wording",
+    ),
+    (
+        re.compile(r"cross-platform Windows or Linux support", re.IGNORECASE),
+        "pre-Windows recommendation wording",
+    ),
 ]
 
 INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
@@ -378,8 +406,9 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     size = str(metadata["release_zip_size"])
     text = replace_regex(
         text,
-        r"- Release size: about [\d.]+ MB signed zip; (?:model cache is about 500-600 MB|model cache is about 600 MB on first launch)\.",
-        f"- Release size: about {size} signed zip; model cache is about 500-600 MB.",
+        r"- (?:Release size|macOS footprint): about [\d.]+ MB signed zip; "
+        r"(?:model cache is about 500-600 MB|model cache is about 600 MB on first launch)\.",
+        f"- macOS footprint: about {size} signed zip; model cache is about 500-600 MB.",
         path=path,
     )
     setup_line = "- Setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.\n"
@@ -390,7 +419,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n" + setup_line,
             path=path,
         )
-    diagnostics_line = "- Diagnostics: Copy Diagnostics and Save Diagnostics produce a privacy-safe local report with metadata and bounded recent logs, not transcript or correction contents.\n"
+    diagnostics_line = "- Diagnostics: macOS Copy/Save Diagnostics and Windows Copy Diagnostics produce privacy-safe local reports without transcript or dictionary contents.\n"
     if diagnostics_line not in text:
         text = replace_literal(
             text,
@@ -428,9 +457,9 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             path=path,
         )
     diagnostics_sentence = (
-        "For support, Copy Diagnostics and Save Diagnostics create a privacy-safe local report with "
-        "app state, permission state, settings counts, microphone devices, memory, update state, "
-        "and bounded recent log lines. The report excludes transcript text and text-correction contents.\n"
+        "For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe "
+        "local reports with runtime metadata and bounded recent log lines. The reports exclude "
+        "transcript text and dictionary/correction contents.\n"
     )
     if diagnostics_sentence not in text:
         text = replace_literal(
@@ -498,12 +527,13 @@ def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
 def stale_copy_errors(paths: list[Path]) -> list[str]:
     errors: list[str] = []
     for path in paths:
-        if not path.exists() or path.suffix not in {".html", ".md", ".txt"}:
+        if not path.exists() or path.suffix not in {".html", ".json", ".md", ".txt"}:
             continue
         text = read_text(path)
         for pattern, label in STALE_PATTERNS:
             if pattern.search(text):
-                errors.append(f"{path.relative_to(ROOT)}: stale copy found ({label})")
+                display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+                errors.append(f"{display}: stale copy found ({label})")
     return errors
 
 
@@ -590,6 +620,14 @@ def run_self_test() -> None:
         page.write_text("<p>Sources: example.</p>", encoding="utf-8")
         if not check_compare_freshness(today=date(2026, 3, 1), compare_dir=compare_dir):
             raise SyncError("self-test: missing compare stamp was not flagged")
+
+        stale = Path(tmp) / "privacy.txt"
+        stale.write_text(
+            "Presspeech deliberately does not restore the previous clipboard contents.\n",
+            encoding="utf-8",
+        )
+        if not stale_copy_errors([stale]):
+            raise SyncError("self-test: stale clipboard privacy wording was not flagged")
 
 
 def main() -> int:
