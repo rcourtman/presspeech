@@ -112,12 +112,46 @@ def _checked_download_url(url):
     return url
 
 
-def fetch_update(current_version, opener=urllib.request.urlopen, timeout=15):
+class _ReleaseRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep every release-asset redirect on an approved HTTPS origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _checked_download_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class _UpdateAPIRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """The fixed GitHub API request has no legitimate redirect target."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise UpdateError("GitHub redirected the update check unexpectedly")
+
+
+def _open_release_asset(request, opener, timeout):
+    # urlopen validates neither intermediate redirect schemes nor hosts. Use a
+    # dedicated opener in production; injected openers keep unit tests offline.
+    if opener is None:
+        opener = urllib.request.build_opener(_ReleaseRedirectHandler()).open
+    return opener(request, timeout=timeout)
+
+
+def _open_update_api(request, opener, timeout):
+    if opener is None:
+        opener = urllib.request.build_opener(_UpdateAPIRedirectHandler()).open
+    return opener(request, timeout=timeout)
+
+
+def fetch_update(current_version, opener=None, timeout=15):
     """Query public GitHub releases without sending app or device identity."""
     try:
-        with opener(_request(RELEASES_API), timeout=timeout) as response:
+        with _open_update_api(_request(RELEASES_API), opener, timeout) as response:
+            final_url = getattr(response, "geturl", lambda: RELEASES_API)()
+            if final_url != RELEASES_API:
+                raise UpdateError("GitHub redirected the update check unexpectedly")
             payload = response.read(2 * 1024 * 1024 + 1)
     except Exception as exc:
+        if isinstance(exc, UpdateError):
+            raise
         raise UpdateError("could not check GitHub releases: %s" % exc) from exc
     if len(payload) > 2 * 1024 * 1024:
         raise UpdateError("GitHub release response was unexpectedly large")
@@ -141,7 +175,7 @@ def parse_checksum(text, expected_name):
 def _read_checksum(update, opener, timeout):
     url = _checked_download_url(update["checksum_url"])
     try:
-        with opener(_request(url), timeout=timeout) as response:
+        with _open_release_asset(_request(url), opener, timeout) as response:
             final_url = getattr(response, "geturl", lambda: url)()
             _checked_download_url(final_url)
             payload = response.read(8193)
@@ -156,7 +190,7 @@ def _read_checksum(update, opener, timeout):
 
 
 def download_update(update, destination=None, progress=None,
-                    opener=urllib.request.urlopen, timeout=30):
+                    opener=None, timeout=30):
     """Download an installer atomically and verify its published SHA-256."""
     url = _checked_download_url(update["installer_url"])
     _checked_download_url(update["checksum_url"])
@@ -172,7 +206,7 @@ def download_update(update, destination=None, progress=None,
     digest = hashlib.sha256()
     downloaded = 0
     try:
-        with opener(_request(url), timeout=timeout) as response, \
+        with _open_release_asset(_request(url), opener, timeout) as response, \
                 open(partial_path, "wb") as output:
             final_url = getattr(response, "geturl", lambda: url)()
             _checked_download_url(final_url)
