@@ -1,0 +1,94 @@
+#!/bin/bash
+set -uo pipefail
+umask 077
+
+export HOME=/Users/rcourtman
+export PATH=/Users/rcourtman/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+state_root="${HOME}/Library/Application Support/PresspeechMaintainer/releases"
+repository=/Volumes/Development/presspeech
+tap=/Volumes/Development/homebrew-presspeech
+lock_dir="${state_root}/worker.lock"
+mkdir -p "${state_root}"
+
+shopt -s nullglob
+requests=("${state_root}"/*.request)
+[[ ${#requests[@]} -gt 0 ]] || exit 0
+request="$(printf '%s\n' "${requests[@]}" | sort | head -1)"
+request_id="$(basename "${request}" .request)"
+[[ "${request_id}" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+$ ]] || exit 2
+
+result="${state_root}/${request_id}.result"
+log="${state_root}/${request_id}.log"
+active="${state_root}/${request_id}.active"
+action="$(head -1 "${request}")"
+mv "${request}" "${active}"
+
+if ! mkdir "${lock_dir}" 2>/dev/null; then
+  printf 'exit_code=75\nfinished_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${result}"
+  rm -f "${active}"
+  exit 75
+fi
+
+finish() {
+  exit_code=$?
+  trap - EXIT
+  result_tmp="${result}.tmp"
+  printf 'exit_code=%s\nfinished_at=%s\n' \
+    "${exit_code}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${result_tmp}"
+  mv "${result_tmp}" "${result}"
+  rm -f "${active}"
+  rmdir "${lock_dir}" 2>/dev/null || true
+  exit "${exit_code}"
+}
+trap finish EXIT
+exec > >(tee -a "${log}") 2>&1
+set -e
+
+echo "request_id=${request_id}"
+echo "action=${action}"
+echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+check_credentials() {
+  gh api user --jq .login
+  security find-identity -v -p codesigning | grep -q 'Developer ID Application:'
+  xcrun notarytool history --keychain-profile presspeech-notary >/dev/null
+  test -x "${repository}/ship-swift.sh"
+  test -d "${tap}/.git"
+}
+
+prepare_checkout() {
+  checkout="$1"
+  git -C "${checkout}" update-index --refresh >/dev/null 2>&1 || true
+  [[ "$(git -C "${checkout}" branch --show-current)" == main ]]
+  git -C "${checkout}" diff --quiet
+  git -C "${checkout}" diff --cached --quiet
+  [[ -z "$(git -C "${checkout}" ls-files --others --exclude-standard)" ]]
+  git -C "${checkout}" fetch --prune origin main
+  git -C "${checkout}" merge --ff-only origin/main
+}
+
+case "${action}" in
+  doctor)
+    check_credentials
+    echo "release-worker=ready"
+    ;;
+  patch|minor|major|version:*|cask-only:*)
+    check_credentials
+    prepare_checkout "${repository}"
+    prepare_checkout "${tap}"
+    case "${action}" in
+      patch) release_args=() ;;
+      minor) release_args=(--minor) ;;
+      major) release_args=(--major) ;;
+      version:*) release_args=(--version "${action#version:}") ;;
+      cask-only:*) release_args=(--cask-only "${action#cask-only:}") ;;
+    esac
+    cd "${repository}"
+    ./ship-swift.sh "${release_args[@]}"
+    ;;
+  *)
+    echo "Unsupported release action: ${action}" >&2
+    exit 2
+    ;;
+esac

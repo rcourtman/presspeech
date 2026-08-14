@@ -36,6 +36,12 @@ doctor() {
   # shellcheck disable=SC2016
   runuser -u presspeech-agent -- ssh presspeech-mac-qa \
     'test "$(uname -s)" = Darwin && command -v swift >/dev/null'
+  # launchctl must resolve the GUI domain using the remote Mac account's UID.
+  # shellcheck disable=SC2016
+  runuser -u presspeech-agent -- ssh presspeech-mac-qa \
+    'test -x /Users/rcourtman/.local/libexec/presspeech-release-worker && launchctl print "gui/$(id -u)/com.local.presspeech.maintainer-release" >/dev/null'
+  runuser -u presspeech-agent -- test -x /usr/local/bin/presspeech-mac-release
+  runuser -u presspeech-agent -- test -x /usr/local/bin/presspeech-windows-release
   runuser -u presspeech-agent -- ssh presspeech-windows-qa \
     'powershell -NoProfile -NonInteractive -Command "if (-not (Test-Path C:\Presspeech-QA\.venv\Scripts\python.exe)) { exit 1 }"'
   systemd-analyze verify \

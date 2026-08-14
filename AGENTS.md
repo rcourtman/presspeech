@@ -384,43 +384,35 @@ outside Presspeech.
 
 ## Release workflow
 
-### Invariant: only ship when the user asks
+### Release authority and judgment
 
-**Do not run `./ship-swift.sh` on your own initiative.** Commit
-changes to `main`, push them, and wait. The user decides when a
-release happens. Bundle multiple commits into a single release
-naturally — there's no correctness or safety reason to ship every
-accumulated commit immediately.
+Interactive agents ship only when the user explicitly asks. The unattended
+`presspeech-dev` maintainer is the deliberate exception: it has delegated
+authority to decide when accumulated work on `main` warrants a release and may
+initiate that release without another founder prompt.
 
-Triggers that mean "ship":
+That authority is discretionary, not a requirement to release after every
+change. Release when the exact green `main` contains a meaningful user-visible
+improvement, an important fix users should receive, or a coherent accumulated
+batch. Avoid noisy version churn for trivial internal maintenance. Before any
+release:
 
-- The user explicitly says something like *"ship it"*, *"do the
-  release"*, *"cut v0.2.x"*, or *"release this".*
-- An earlier in-progress release was interrupted and needs to finish
-  (resume the existing flow, don't start a new version bump).
+- Require clean, synchronized `main`, green CI for the exact HEAD, relevant
+  native QA, and accurate release notes.
+- Never use `--skip-qa` autonomously.
+- Check for an existing or in-progress tag/release and resume documented
+  recovery rather than creating a second version.
+- Keep macOS and Windows version lines independent and use the appropriate
+  platform workflow.
 
-Triggers that do **not** mean "ship":
+From `presspeech-dev`, publish macOS through `presspeech-mac-release
+patch|minor|major` so signing and notarisation occur in the Mac Mini's logged-in
+session. Publish Windows only after committing its version and
+`windows/release-notes/X.Y.Z.md`, using `presspeech-windows-release X.Y.Z`.
+These guarded entry points deliberately expose no QA bypass. Do not invoke
+`ship-swift.sh` through arbitrary SSH commands.
 
-- Finishing a feature or bug fix. Push to main, stop there.
-- "Just committed something cool" momentum. Commit. Don't ship.
-- A bundle of "polish" changes you'd like users to have. Wait for
-  the user to ask.
-- The user thanking you, agreeing with a plan, or saying *"continue"* —
-  *"continue"* means continue the work you were doing, not "kick off
-  a release."
-- Even an "urgent" bug fix — commit + push, then tell the user the
-  fix is on main and ask whether they want a release. They may want
-  to bundle it with other in-flight work, do their own testing first,
-  or schedule it.
-
-This rule exists because each release runs notarytool against Apple,
-bumps the cask version, creates a GitHub release, and irreversibly
-publishes a version number. Six releases in two hours is wasteful and
-makes the version log noisy. One release with six commits' worth of
-content is just as useful to users and uses one notary slot instead
-of six.
-
-When the user does ask for a release, the mechanics are:
+When a macOS release is warranted, the underlying mechanics are:
 
 ```sh
 ./ship-swift.sh                 # default: bump patch (0.2.0 → 0.2.1)

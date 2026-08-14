@@ -5,6 +5,31 @@ target="${1:-presspeech-dev.local}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 bundle_root="${repo_root}/infra/maintainer-vm"
 
+if [[ "$(uname -s)" == Darwin ]]; then
+  mac_worker_dir="${HOME}/.local/libexec"
+  mac_launch_agents="${HOME}/Library/LaunchAgents"
+  mac_state_root="${HOME}/Library/Application Support/PresspeechMaintainer/releases"
+  mac_plist="${mac_launch_agents}/com.local.presspeech.maintainer-release.plist"
+  rendered_plist="$(mktemp)"
+  trap 'rm -f "${rendered_plist}"' EXIT
+
+  install -d -m 0755 "${mac_worker_dir}" "${mac_launch_agents}"
+  install -d -m 0700 "${mac_state_root}"
+  install -m 0755 "${bundle_root}/macos/presspeech-release-worker" \
+    "${mac_worker_dir}/presspeech-release-worker"
+  sed "s|__HOME__|${HOME}|g" \
+    "${bundle_root}/macos/com.local.presspeech.maintainer-release.plist" \
+    >"${rendered_plist}"
+  plutil -lint "${rendered_plist}" >/dev/null
+  install -m 0644 "${rendered_plist}" "${mac_plist}"
+
+  launch_domain="gui/$(id -u)"
+  launch_label=com.local.presspeech.maintainer-release
+  launchctl bootout "${launch_domain}/${launch_label}" 2>/dev/null || true
+  launchctl bootstrap "${launch_domain}" "${mac_plist}"
+  launchctl enable "${launch_domain}/${launch_label}"
+fi
+
 rsync -a --delete "${bundle_root}/" "rcourtman@${target}:/tmp/presspeech-maintainer-install/"
 
 ssh "rcourtman@${target}" 'sudo bash -s' <<'REMOTE'
@@ -16,7 +41,9 @@ install -d -m 0700 -o presspeech-agent -g presspeech-agent /var/lib/presspeech-m
 install -m 0644 "${source_root}/config/daily-prompt.txt" /etc/presspeech-maintainer/daily-prompt.txt
 install -m 0755 "${source_root}/bin/presspeech-maintainer-run" /usr/local/libexec/presspeech-maintainer-run
 install -m 0755 "${source_root}/bin/presspeech-mac-qa" /usr/local/bin/presspeech-mac-qa
+install -m 0755 "${source_root}/bin/presspeech-mac-release" /usr/local/bin/presspeech-mac-release
 install -m 0755 "${source_root}/bin/presspeech-windows-qa" /usr/local/bin/presspeech-windows-qa
+install -m 0755 "${source_root}/bin/presspeech-windows-release" /usr/local/bin/presspeech-windows-release
 install -m 0755 "${source_root}/bin/bootstrap-windows-qa" /usr/local/bin/bootstrap-windows-qa
 install -m 0755 "${source_root}/bin/presspeech-maintainer-commission" /usr/local/bin/presspeech-maintainer-commission
 install -m 0644 "${source_root}/systemd/presspeech-maintainer.service" /etc/systemd/system/presspeech-maintainer.service

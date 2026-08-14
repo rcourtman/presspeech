@@ -14,11 +14,11 @@ The VM deliberately has a much smaller operating model than Pulse Dev:
   in the repository's `AGENTS.md`; recent work stays in Git and the local run
   archive.
 - Native verification is delegated to the Mac Mini by `presspeech-mac-qa` and
-  to the Windows VM by `presspeech-windows-qa`. The Linux VM has no signing or
-  release credentials.
-- Releases remain founder-triggered. The maintainer may implement, verify,
-  commit, and push ordinary work to `main`, but it cannot notarise or update the
-  Homebrew tap from this VM.
+  to the Windows VM by `presspeech-windows-qa`.
+- The maintainer has delegated authority to decide when accumulated, verified
+  work warrants a release. macOS signing and notarisation run through a queued
+  LaunchAgent in the logged-in Mac session; Windows releases use the guarded
+  GitHub Actions workflow. Credentials remain on their native hosts.
 
 ## Provision
 
@@ -54,6 +54,27 @@ reusable Python 3.12 environment once with:
 ssh presspeech-dev.local sudo -u presspeech-agent -H \
   bootstrap-windows-qa /srv/presspeech/presspeech
 ```
+
+The installer also registers the Mac release worker in the logged-in GUI
+session. Validate its signing, notarisation, GitHub, repository, and Homebrew
+access without publishing anything:
+
+```sh
+ssh presspeech-dev.local sudo -u presspeech-agent -H presspeech-mac-release doctor
+```
+
+Release entry points available to the maintainer are:
+
+```sh
+presspeech-mac-release patch
+presspeech-mac-release minor
+presspeech-mac-release major
+presspeech-windows-release X.Y.Z
+```
+
+Neither helper exposes a QA bypass. Both refuse dirty or divergent `main`
+checkouts; the Windows helper additionally requires native CUDA/ASR QA and
+committed version-specific release notes.
 
 The timer remains disabled until all readiness checks pass. Commission it with:
 

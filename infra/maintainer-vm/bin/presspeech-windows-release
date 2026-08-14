@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+workspace="${PRESSPEECH_WORKSPACE:-/srv/presspeech/presspeech}"
+version="${1:-}"
+[[ $# -eq 1 && "${version}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+  echo "Usage: presspeech-windows-release X.Y.Z" >&2
+  exit 2
+}
+
+cd "${workspace}"
+[[ "$(git branch --show-current)" == main ]] || {
+  echo "Windows releases require the main branch." >&2
+  exit 2
+}
+git diff --quiet
+git diff --cached --quiet
+[[ -z "$(git ls-files --others --exclude-standard)" ]]
+git fetch --prune origin main
+[[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || {
+  echo "Local main must exactly match origin/main." >&2
+  exit 2
+}
+[[ -f "windows/release-notes/${version}.md" ]] || {
+  echo "Missing windows/release-notes/${version}.md" >&2
+  exit 2
+}
+grep -Eq "^VERSION = [\"']${version}[\"']$" windows/config.py || {
+  echo "windows/config.py does not declare VERSION = ${version}." >&2
+  exit 2
+}
+if gh release view "windows-v${version}" >/dev/null 2>&1; then
+  echo "windows-v${version} already exists; refusing to overwrite it." >&2
+  exit 2
+fi
+
+presspeech-windows-qa "${workspace}"
+
+head_sha="$(git rev-parse HEAD)"
+not_before="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+gh workflow run windows-release.yml --ref main -f "version=${version}"
+
+run_id=""
+for _ in $(seq 1 60); do
+  run_id="$(gh run list \
+    --workflow windows-release.yml \
+    --event workflow_dispatch \
+    --limit 10 \
+    --json databaseId,createdAt,headSha \
+    --jq ".[] | select(.headSha == \"${head_sha}\" and .createdAt >= \"${not_before}\") | .databaseId" \
+    | head -1)"
+  [[ -n "${run_id}" ]] && break
+  sleep 2
+done
+[[ -n "${run_id}" ]] || {
+  echo "Could not find the dispatched Windows release workflow." >&2
+  exit 1
+}
+
+gh run watch "${run_id}" --exit-status
+gh release view "windows-v${version}" \
+  --json isPrerelease,assets \
+  --jq ".isPrerelease == true and ([.assets[].name] | index(\"Presspeech-Setup-${version}-x64.exe\") != null) and ([.assets[].name] | index(\"Presspeech-Setup-${version}-x64.exe.sha256\") != null)" \
+  | grep -qx true
+echo "Windows release windows-v${version} published and verified."

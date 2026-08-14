@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Request values are deliberately expanded on the Linux client after strict
+# validation, then consumed by the logged-in Mac release worker.
+# shellcheck disable=SC2029
+set -euo pipefail
+
+mac_host="${PRESSPEECH_MAC_QA_HOST:-presspeech-mac-qa}"
+
+usage() {
+  echo "Usage: presspeech-mac-release {doctor|patch|minor|major|version X.Y.Z|cask-only X.Y.Z}" >&2
+  exit 2
+}
+
+case "${1:-}" in
+  doctor|patch|minor|major)
+    [[ $# -eq 1 ]] || usage
+    action="$1"
+    ;;
+  version|cask-only)
+    [[ $# -eq 2 && "$2" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || usage
+    action="$1:$2"
+    ;;
+  *) usage ;;
+esac
+
+request_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+[[ "${request_id}" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+$ ]] || exit 2
+
+ssh "${mac_host}" bash -s -- "${request_id}" "${action}" <<'REMOTE'
+set -euo pipefail
+request_id="$1"
+action="$2"
+state_root='/Users/rcourtman/Library/Application Support/PresspeechMaintainer/releases'
+mkdir -p "${state_root}"
+umask 077
+tmp="${state_root}/${request_id}.request.tmp"
+printf '%s\n' "${action}" >"${tmp}"
+mv "${tmp}" "${state_root}/${request_id}.request"
+launchctl kickstart -k "gui/$(id -u)/com.local.presspeech.maintainer-release"
+REMOTE
+
+for _ in $(seq 1 960); do
+  result="$(ssh "${mac_host}" bash -s -- "${request_id}" <<'REMOTE'
+request_id="$1"
+state_root='/Users/rcourtman/Library/Application Support/PresspeechMaintainer/releases'
+result="${state_root}/${request_id}.result"
+if [[ -f "${result}" ]]; then
+  cat "${result}"
+fi
+REMOTE
+)"
+  if [[ -n "${result}" ]]; then
+    ssh "${mac_host}" bash -s -- "${request_id}" <<'REMOTE'
+request_id="$1"
+state_root='/Users/rcourtman/Library/Application Support/PresspeechMaintainer/releases'
+cat "${state_root}/${request_id}.log"
+REMOTE
+    printf '%s\n' "${result}"
+    exit_code="$(awk -F= '$1 == "exit_code" {print $2}' <<<"${result}")"
+    [[ "${exit_code}" =~ ^[0-9]+$ ]] || exit 1
+    exit "${exit_code}"
+  fi
+  sleep 15
+done
+
+echo "Timed out waiting for the Mac release worker: ${request_id}" >&2
+exit 124
