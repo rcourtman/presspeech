@@ -16,6 +16,10 @@ mkdir -p "${request_root}"
 # particular, patch must pass zero arguments: an empty Bash array expands as
 # an unbound variable under the Bash 3.2 still shipped by macOS.
 "${worker}" --self-test >/dev/null
+if grep -Eq '^(repository|tap)=/Volumes/' "${worker}"; then
+  echo "Release worker checkouts must not live on an external volume." >&2
+  exit 1
+fi
 
 # Unsupported actions exercise queue consumption and atomic result publication
 # without contacting GitHub or touching either release checkout.

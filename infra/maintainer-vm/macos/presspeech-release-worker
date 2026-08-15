@@ -10,9 +10,8 @@ run_release_action() {
   local requested_action="$2"
 
   cd "${checkout}"
-  # The checkout lives on an external APFS volume. A background LaunchAgent
-  # can read it but macOS may deny direct execution of a provenance-marked
-  # script there. The system Bash reads the already-validated script normally.
+  # Keep the interpreter explicit so the LaunchAgent never asks LaunchServices
+  # to decide how a release entry point should be opened.
   case "${requested_action}" in
     patch) /bin/bash ./ship-swift.sh ;;
     minor) /bin/bash ./ship-swift.sh --minor ;;
@@ -78,12 +77,19 @@ if [[ "${1:-}" == --self-test ]]; then
   exit 0
 fi
 
-state_root="${HOME}/Library/Application Support/PresspeechMaintainer/releases"
+maintainer_root="${HOME}/Library/Application Support/PresspeechMaintainer"
+state_root="${maintainer_root}/releases"
 state_root="${PRESSPEECH_RELEASE_STATE_ROOT:-${state_root}}"
 request_root="${state_root}/requests"
-repository=/Volumes/Development/presspeech
-tap=/Volumes/Development/homebrew-presspeech
-mkdir -p "${request_root}"
+# macOS can leave a background LaunchAgent's binaries stuck in dyld when they
+# live on a provenance-marked external volume. Dedicated internal-disk clones
+# also isolate unattended releases from the developer's interactive checkout.
+checkout_root="${maintainer_root}/checkouts"
+repository="${checkout_root}/presspeech"
+tap="${checkout_root}/homebrew-presspeech"
+repository_url=https://github.com/rcourtman/presspeech.git
+tap_url=https://github.com/rcourtman/homebrew-presspeech.git
+mkdir -p "${request_root}" "${checkout_root}"
 
 shopt -s nullglob dotglob
 entries=("${request_root}"/*)
@@ -128,16 +134,39 @@ check_credentials() {
   gh api user --jq .login
   security find-identity -v -p codesigning | grep -q 'Developer ID Application:'
   xcrun notarytool history --keychain-profile presspeech-notary >/dev/null
-  test -r "${repository}/ship-swift.sh"
-  test -d "${tap}/.git"
+}
+
+ensure_checkout() {
+  local checkout_url="$1"
+  local checkout="$2"
+  if [[ -e "${checkout}" && ! -d "${checkout}/.git" ]]; then
+    echo "Release checkout path exists but is not a Git repository: ${checkout}" >&2
+    return 1
+  fi
+  if [[ ! -d "${checkout}/.git" ]]; then
+    git clone --origin origin "${checkout_url}" "${checkout}"
+  fi
+  [[ "$(git -C "${checkout}" remote get-url origin)" == "${checkout_url}" ]] || {
+    echo "Release checkout has an unexpected origin: ${checkout}" >&2
+    return 1
+  }
+}
+
+ensure_release_checkouts() {
+  ensure_checkout "${repository_url}" "${repository}"
+  ensure_checkout "${tap_url}" "${tap}"
 }
 
 check_release_entrypoint() {
   (cd "${repository}" && /bin/bash ./ship-swift.sh --self-test)
 }
 
+check_release_runtime() {
+  (cd "${repository}/swift" && swift run -c debug Presspeech --self-test all)
+}
+
 prepare_checkout() {
-  checkout="$1"
+  local checkout="$1"
   git -C "${checkout}" update-index --refresh >/dev/null 2>&1 || true
   [[ "$(git -C "${checkout}" branch --show-current)" == main ]]
   git -C "${checkout}" diff --quiet
@@ -150,11 +179,16 @@ prepare_checkout() {
 case "${action}" in
   doctor)
     check_credentials
+    ensure_release_checkouts
+    prepare_checkout "${repository}"
+    prepare_checkout "${tap}"
     check_release_entrypoint
+    check_release_runtime
     echo "release-worker=ready"
     ;;
   patch|minor|major|version:*|cask-only:*)
     check_credentials
+    ensure_release_checkouts
     prepare_checkout "${repository}"
     prepare_checkout "${tap}"
     check_release_entrypoint
