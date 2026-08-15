@@ -12,6 +12,11 @@ state_root="${tmpdir}/Application Support/state"
 request_root="${state_root}/requests"
 mkdir -p "${request_root}"
 
+# Exercise argument mapping with the worker's own fake ship script. In
+# particular, patch must pass zero arguments: an empty Bash array expands as
+# an unbound variable under the Bash 3.2 still shipped by macOS.
+"${worker}" --self-test >/dev/null
+
 # Unsupported actions exercise queue consumption and atomic result publication
 # without contacting GitHub or touching either release checkout.
 printf 'unsupported\n' >"${request_root}/20260814T070000Z-2.request"

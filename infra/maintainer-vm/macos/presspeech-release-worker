@@ -5,6 +5,76 @@ umask 077
 export HOME=/Users/rcourtman
 export PATH=/Users/rcourtman/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
+run_release_action() {
+  local checkout="$1"
+  local requested_action="$2"
+
+  cd "${checkout}"
+  case "${requested_action}" in
+    patch) ./ship-swift.sh ;;
+    minor) ./ship-swift.sh --minor ;;
+    major) ./ship-swift.sh --major ;;
+    version:*) ./ship-swift.sh --version "${requested_action#version:}" ;;
+    cask-only:*) ./ship-swift.sh --cask-only "${requested_action#cask-only:}" ;;
+    *) return 2 ;;
+  esac
+}
+
+resolved_exit_code() {
+  local observed_status="$1"
+  local fallback_status="$2"
+
+  if [[ "${observed_status}" -ne 0 ]]; then
+    printf '%s\n' "${observed_status}"
+  else
+    printf '%s\n' "${fallback_status}"
+  fi
+}
+
+self_test_release_actions() (
+  set -e
+  local scratch action_log expected_log
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-release-action-self-test.XXXXXX")"
+  trap 'rm -rf -- "${scratch}"' EXIT
+  action_log="${scratch}/actions.log"
+  expected_log="${scratch}/expected.log"
+
+  # These expressions belong to the generated fake, not this worker.
+  # shellcheck disable=SC2016
+  printf '%s\n' \
+    '#!/bin/bash' \
+    'printf "%s" "$#" >>"${PRESSPEECH_RELEASE_ACTION_LOG}"' \
+    'for argument in "$@"; do printf " <%s>" "${argument}" >>"${PRESSPEECH_RELEASE_ACTION_LOG}"; done' \
+    'printf "\\n" >>"${PRESSPEECH_RELEASE_ACTION_LOG}"' \
+    >"${scratch}/ship-swift.sh"
+  chmod 0755 "${scratch}/ship-swift.sh"
+
+  export PRESSPEECH_RELEASE_ACTION_LOG="${action_log}"
+  run_release_action "${scratch}" patch
+  run_release_action "${scratch}" minor
+  run_release_action "${scratch}" major
+  run_release_action "${scratch}" version:1.2.3
+  run_release_action "${scratch}" cask-only:1.2.3
+
+  printf '%s\n' \
+    '0' \
+    '1 <--minor>' \
+    '1 <--major>' \
+    '2 <--version> <1.2.3>' \
+    '2 <--cask-only> <1.2.3>' \
+    >"${expected_log}"
+  diff -u "${expected_log}" "${action_log}"
+  [[ "$(resolved_exit_code 0 1)" -eq 1 ]]
+  [[ "$(resolved_exit_code 7 1)" -eq 7 ]]
+  echo "Mac release worker self-test passed."
+)
+
+if [[ "${1:-}" == --self-test ]]; then
+  [[ $# -eq 1 ]] || exit 2
+  self_test_release_actions
+  exit 0
+fi
+
 state_root="${HOME}/Library/Application Support/PresspeechMaintainer/releases"
 state_root="${PRESSPEECH_RELEASE_STATE_ROOT:-${state_root}}"
 request_root="${state_root}/requests"
@@ -31,9 +101,11 @@ active="${state_root}/${request_id}.active"
 action="$(head -1 "${request}")"
 mv "${request}" "${active}"
 
+final_status=1
 finish() {
-  exit_code=$?
+  observed_status=$?
   trap - EXIT
+  exit_code="$(resolved_exit_code "${observed_status}" "${final_status}")"
   result_tmp="${result}.tmp"
   printf 'exit_code=%s\nfinished_at=%s\n' \
     "${exit_code}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${result_tmp}"
@@ -77,18 +149,12 @@ case "${action}" in
     check_credentials
     prepare_checkout "${repository}"
     prepare_checkout "${tap}"
-    case "${action}" in
-      patch) release_args=() ;;
-      minor) release_args=(--minor) ;;
-      major) release_args=(--major) ;;
-      version:*) release_args=(--version "${action#version:}") ;;
-      cask-only:*) release_args=(--cask-only "${action#cask-only:}") ;;
-    esac
-    cd "${repository}"
-    ./ship-swift.sh "${release_args[@]}"
+    run_release_action "${repository}" "${action}"
     ;;
   *)
     echo "Unsupported release action: ${action}" >&2
+    final_status=2
     exit 2
     ;;
 esac
+final_status=0
