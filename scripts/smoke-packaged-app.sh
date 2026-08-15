@@ -12,8 +12,21 @@ APP="${PRESSPEECH_SMOKE_APP:-${TMPDIR:-/tmp}/Presspeech-smoke.app}"
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
+SWIFTPM_CACHE_PATH="${PRESSPEECH_SWIFTPM_CACHE_PATH:-}"
+if [[ -n "$SWIFTPM_CACHE_PATH" && "$SWIFTPM_CACHE_PATH" != /* ]]; then
+    die "PRESSPEECH_SWIFTPM_CACHE_PATH must be absolute"
+fi
+
+invoke_swift_build() {
+    if [[ -n "$SWIFTPM_CACHE_PATH" ]]; then
+        command swift build --cache-path "$SWIFTPM_CACHE_PATH"
+    else
+        command swift build
+    fi
+}
+
 say "Building debug binary"
-( cd "$SWIFT_DIR" && swift build ) >/dev/null
+( cd "$SWIFT_DIR" && invoke_swift_build ) >/dev/null
 
 say "Wrapping $APP"
 rm -rf "$APP"

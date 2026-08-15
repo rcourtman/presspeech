@@ -87,9 +87,11 @@ request_root="${state_root}/requests"
 checkout_root="${maintainer_root}/checkouts"
 repository="${checkout_root}/presspeech"
 tap="${checkout_root}/homebrew-presspeech"
+swiftpm_cache="${maintainer_root}/caches/swiftpm"
 repository_url=https://github.com/rcourtman/presspeech.git
 tap_url=https://github.com/rcourtman/homebrew-presspeech.git
-mkdir -p "${request_root}" "${checkout_root}"
+mkdir -p "${request_root}" "${checkout_root}" "${swiftpm_cache}"
+export PRESSPEECH_SWIFTPM_CACHE_PATH="${swiftpm_cache}"
 
 shopt -s nullglob dotglob
 entries=("${request_root}"/*)
@@ -162,7 +164,8 @@ check_release_entrypoint() {
 }
 
 check_release_runtime() {
-  (cd "${repository}/swift" && swift run -c debug Presspeech --self-test all)
+  (cd "${repository}/swift" && \
+    swift run --cache-path "${swiftpm_cache}" -c debug Presspeech --self-test all)
 }
 
 prepare_checkout() {

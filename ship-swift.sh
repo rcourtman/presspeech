@@ -96,6 +96,21 @@ say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
+SWIFTPM_CACHE_PATH="${PRESSPEECH_SWIFTPM_CACHE_PATH:-}"
+if [[ -n "$SWIFTPM_CACHE_PATH" && "$SWIFTPM_CACHE_PATH" != /* ]]; then
+    die "PRESSPEECH_SWIFTPM_CACHE_PATH must be absolute"
+fi
+
+invoke_swift() {
+    local subcommand="$1"
+    shift
+    if [[ -n "$SWIFTPM_CACHE_PATH" ]]; then
+        command swift "$subcommand" --cache-path "$SWIFTPM_CACHE_PATH" "$@"
+    else
+        command swift "$subcommand" "$@"
+    fi
+}
+
 rollback_release_mutations_on_exit() {
     local status=$?
     if [[ "$status" -ne 0 && "$ROLLBACK_RELEASE_MUTATIONS" -eq 1 ]]; then
@@ -561,7 +576,7 @@ else
     fi
 
     say "Running debug self-test suite (same as CI)"
-    ( cd "$SWIFT_DIR" && swift run -c debug Presspeech --self-test all ) \
+    ( cd "$SWIFT_DIR" && invoke_swift run -c debug Presspeech --self-test all ) \
         || die "swift self-test suite failed -- fix before shipping, or --skip-qa in an emergency"
 
     say "Running packaged-app smoke test"
@@ -571,7 +586,7 @@ fi
 
 # ---- 3. Build release-optimised binary ------------------------------------
 say "Building (release)"
-( cd "$SWIFT_DIR" && swift build -c release 2>&1 | tail -5 ) \
+( cd "$SWIFT_DIR" && invoke_swift build -c release 2>&1 | tail -5 ) \
     || die "swift build failed"
 
 BIN="$SWIFT_DIR/.build/release/Presspeech"
