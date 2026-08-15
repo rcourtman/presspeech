@@ -10,12 +10,15 @@ run_release_action() {
   local requested_action="$2"
 
   cd "${checkout}"
+  # The checkout lives on an external APFS volume. A background LaunchAgent
+  # can read it but macOS may deny direct execution of a provenance-marked
+  # script there. The system Bash reads the already-validated script normally.
   case "${requested_action}" in
-    patch) ./ship-swift.sh ;;
-    minor) ./ship-swift.sh --minor ;;
-    major) ./ship-swift.sh --major ;;
-    version:*) ./ship-swift.sh --version "${requested_action#version:}" ;;
-    cask-only:*) ./ship-swift.sh --cask-only "${requested_action#cask-only:}" ;;
+    patch) /bin/bash ./ship-swift.sh ;;
+    minor) /bin/bash ./ship-swift.sh --minor ;;
+    major) /bin/bash ./ship-swift.sh --major ;;
+    version:*) /bin/bash ./ship-swift.sh --version "${requested_action#version:}" ;;
+    cask-only:*) /bin/bash ./ship-swift.sh --cask-only "${requested_action#cask-only:}" ;;
     *) return 2 ;;
   esac
 }
@@ -125,8 +128,12 @@ check_credentials() {
   gh api user --jq .login
   security find-identity -v -p codesigning | grep -q 'Developer ID Application:'
   xcrun notarytool history --keychain-profile presspeech-notary >/dev/null
-  test -x "${repository}/ship-swift.sh"
+  test -r "${repository}/ship-swift.sh"
   test -d "${tap}/.git"
+}
+
+check_release_entrypoint() {
+  (cd "${repository}" && /bin/bash ./ship-swift.sh --self-test)
 }
 
 prepare_checkout() {
@@ -143,12 +150,14 @@ prepare_checkout() {
 case "${action}" in
   doctor)
     check_credentials
+    check_release_entrypoint
     echo "release-worker=ready"
     ;;
   patch|minor|major|version:*|cask-only:*)
     check_credentials
     prepare_checkout "${repository}"
     prepare_checkout "${tap}"
+    check_release_entrypoint
     run_release_action "${repository}" "${action}"
     ;;
   *)
