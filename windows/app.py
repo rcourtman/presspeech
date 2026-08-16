@@ -949,6 +949,11 @@ class PresspeechApp:
         try:
             return self._transcribe_worker_inner(audio, target_process)
         finally:
+            # Empty/error results still exercised the model. Refresh the idle
+            # deadline here so an already-queued gaming-mode unload cannot
+            # evict it immediately after that work completes.
+            self._last_model_use = time.perf_counter()
+            self._schedule_model_idle_unload()
             self._set_indicator(None)
 
     def _transcribe_worker_inner(self, audio, target_process=""):
@@ -978,8 +983,6 @@ class PresspeechApp:
             self._log("transcription returned empty")
             return
         text = self._apply_text(text)
-        self._last_model_use = time.perf_counter()
-        self._schedule_model_idle_unload()
         # Dictation is private: retain performance data without persisting the
         # user's words in the diagnostic log.
         self._log("transcription complete: %d chars (model %.3fs)" %
@@ -1264,9 +1267,18 @@ class PresspeechApp:
             return
         self._model_idle_epoch += 1
         epoch = self._model_idle_epoch
-        timer = threading.Timer(idle_seconds, self._unload_model_if_idle, (epoch,))
+        timer = threading.Timer(
+            idle_seconds, self._queue_model_idle_unload, (epoch,))
         timer.daemon = True
         timer.start()
+
+    def _queue_model_idle_unload(self, epoch):
+        # Timer callbacks run on fresh threads. Keep CUDA/model teardown on the
+        # permanent executor thread, and re-check the epoch again after any
+        # transcription already queued ahead of this request has completed.
+        if epoch != self._model_idle_epoch:
+            return
+        self._model_executor.submit(self._unload_model_if_idle, epoch)
 
     def _unload_model_if_idle(self, epoch):
         if epoch != self._model_idle_epoch or self.recording:

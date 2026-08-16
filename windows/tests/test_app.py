@@ -507,6 +507,49 @@ class PostRollTests(unittest.TestCase):
         instance.stop_recording.assert_called_once_with(expected_epoch=7)
 
 
+class ModelIdleTests(unittest.TestCase):
+    def test_idle_timer_queues_unload_on_permanent_model_executor(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"gpu_idle_unload_sec": 30}
+        instance._model_idle_epoch = 4
+        instance._model_executor = mock.Mock()
+
+        with mock.patch.object(app.threading, "Timer") as timer:
+            instance._schedule_model_idle_unload()
+
+        timer.assert_called_once_with(
+            30, instance._queue_model_idle_unload, (5,))
+        self.assertTrue(timer.return_value.daemon)
+        timer.return_value.start.assert_called_once_with()
+
+        instance._queue_model_idle_unload(5)
+        instance._model_executor.submit.assert_called_once_with(
+            instance._unload_model_if_idle, 5)
+
+    def test_stale_idle_timer_never_queues_model_work(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._model_idle_epoch = 5
+        instance._model_executor = mock.Mock()
+
+        instance._queue_model_idle_unload(4)
+
+        instance._model_executor.submit.assert_not_called()
+
+    def test_empty_transcription_refreshes_idle_deadline(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._last_model_use = 0.0
+        instance._transcribe_worker_inner = mock.Mock(return_value=None)
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._set_indicator = mock.Mock()
+
+        with mock.patch.object(app.time, "perf_counter", return_value=123.0):
+            instance._transcribe_worker([], "notepad.exe")
+
+        self.assertEqual(instance._last_model_use, 123.0)
+        instance._schedule_model_idle_unload.assert_called_once_with()
+        instance._set_indicator.assert_called_once_with(None)
+
+
 class StartupTests(unittest.TestCase):
     def test_startup_worker_preloads_configured_model(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
