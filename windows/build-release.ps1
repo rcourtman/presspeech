@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.1.4",
+    [string]$Version = "0.1.5",
     [string]$Python = (Join-Path $PSScriptRoot ".venv\Scripts\python.exe"),
     [string]$InnoCompiler = "",
     [string]$CertificatePath = $env:PRESSPEECH_CERT_PATH,
