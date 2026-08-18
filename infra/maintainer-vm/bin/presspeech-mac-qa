@@ -20,12 +20,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
+archive_workspace() {
+  # Validate uncommitted source too, but never copy Git-ignored caches, logs,
+  # build products, or private benchmark recordings to the native worker.
+  while IFS= read -r -d '' path; do
+    if [[ -e "${workspace}/${path}" || -L "${workspace}/${path}" ]]; then
+      printf '%s\0' "${path}"
+    fi
+  done < <(git -C "${workspace}" ls-files -z --cached --others --exclude-standard) |
+    tar -C "${workspace}" --null --verbatim-files-from --files-from=- -cf -
+}
+
 ssh -o BatchMode=yes "${mac_host}" "mkdir -p -- '${remote_root}'"
-tar \
-  --exclude=.git \
-  --exclude=.build \
-  --exclude=swift/dist \
-  -C "${workspace}" -cf - . | \
+archive_workspace | \
   ssh -o BatchMode=yes "${mac_host}" "tar -C '${remote_root}' -xf -"
 
 ssh -o BatchMode=yes "${mac_host}" \

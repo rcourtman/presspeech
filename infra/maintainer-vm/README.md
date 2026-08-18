@@ -45,10 +45,12 @@ readiness report. Do not copy the Pulse maintainer's ChatGPT refresh tokens;
 each unattended machine must have its own login state.
 
 The installer creates separate Mac and Windows QA keys and prints their public
-halves. Authorize each key only on its named worker. The QA helpers copy a clean
-working tree to a disposable directory, run the platform's native tests, and
-remove the directory afterwards. After authorizing the Windows key, prepare its
-reusable Python 3.12 environment once with:
+halves. Authorize each key only on its named worker. The QA helpers copy tracked
+files and non-ignored untracked work to a disposable directory, run the
+platform's native tests, and remove the directory afterwards. Git-ignored
+caches, logs, build products, and private benchmark recordings stay on the
+maintainer VM. After authorizing the Windows key, prepare its reusable Python
+3.12 environment once with:
 
 ```sh
 ssh presspeech-dev.local sudo -u presspeech-agent -H \
