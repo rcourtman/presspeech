@@ -2665,6 +2665,14 @@ private enum RecordingStartBlocker: String, Sendable {
     case terminating
 }
 
+private func resolvedRecordingStartBlocker<Owner: AnyObject>(
+    for owner: Owner?,
+    evaluate: (Owner) -> RecordingStartBlocker?
+) -> RecordingStartBlocker? {
+    guard let owner else { return .terminating }
+    return evaluate(owner)
+}
+
 private struct HotkeyTransitionResult: Equatable, Sendable {
     let suppress: Bool
     let actions: [HotkeyTransitionAction]
@@ -5921,7 +5929,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Missing permissions are deliberately not a blocker here: that press
         // enters the permission-blocked state and provides its own feedback.
         hotkey.recordingStartBlocker = { [weak self] in
-            self?.recordingStartBlocker() ?? .terminating
+            resolvedRecordingStartBlocker(for: self) { app in
+                app.recordingStartBlocker()
+            }
         }
         guard hotkey.start() else {
             isReady = false
@@ -10833,6 +10843,7 @@ private enum PresspeechSelfTest {
         try testHotkeyDiagnosticModifierNames()
         try testHotkeyPreferenceUpdateResults()
         try testHotkeyRecorderRestartActions()
+        try testRecordingStartBlockerResolution()
         try testHandledHotkeySuppression()
         try testFKeyAutoRepeatSuppressesWithoutAction()
         try testRightModifierReleaseWithLeftFlagStillSet()
@@ -10997,6 +11008,29 @@ private enum PresspeechSelfTest {
             ),
             equals: .recordFailure,
             "hotkey recorder should surface restart failure after an active listener was paused"
+        )
+    }
+
+    private static func testRecordingStartBlockerResolution() throws {
+        final class Owner {}
+
+        var owner: Owner? = Owner()
+        try expect(
+            resolvedRecordingStartBlocker(for: owner) { _ in nil },
+            equals: nil,
+            "a live ready app should allow recording to start"
+        )
+        try expect(
+            resolvedRecordingStartBlocker(for: owner) { _ in .busyTranscribing },
+            equals: .busyTranscribing,
+            "a live blocked app should preserve its blocker"
+        )
+
+        owner = nil
+        try expect(
+            resolvedRecordingStartBlocker(for: owner) { _ in nil },
+            equals: .terminating,
+            "a released app should reject new recordings as terminating"
         )
     }
 
