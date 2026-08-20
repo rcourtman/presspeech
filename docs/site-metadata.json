@@ -1,8 +1,8 @@
 {
-  "last_updated": "2026-08-19",
+  "last_updated": "2026-08-20",
   "model_cache_size": "~600 MB",
-  "release_zip_bytes": 2651366,
+  "release_zip_bytes": 2655183,
   "release_zip_size": "2.5 MB",
   "schema": 1,
-  "version": "0.3.4"
+  "version": "0.3.5"
 }
