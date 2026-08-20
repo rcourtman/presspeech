@@ -144,6 +144,9 @@ Useful menu items:
   and “open quote”
 - **Settings → Text → Remove filler words** — opt-in deterministic strip of
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
+- **Settings → Text → Keep dictation history** — opt-in local history of the
+  last 100 finished transcripts (text only, owner-only file), with a
+  **Dictation History** menu for one-click re-copy and clear
 - **Settings → Text → Restore clipboard after paste** — opt-in guarded restore
   of the previous macOS pasteboard contents; skipped if another process copies
   newer content
@@ -157,7 +160,10 @@ Presspeech is local-first:
 - No cloud transcription.
 - No telemetry, analytics, accounts, or crash reporter.
 - Transcript content is never written to logs.
-- Recent transcript history is in-memory only and clears on quit.
+- Recent transcript history is in-memory only and clears on quit. An
+  opt-in dictation history (off by default) can keep the last 100
+  transcripts in an owner-only local file, with a menu to re-copy or
+  clear them.
 - Text corrections stay local unless you choose a sync file yourself.
 
 Network calls are limited to:

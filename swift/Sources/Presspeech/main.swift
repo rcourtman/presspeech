@@ -1770,6 +1770,7 @@ final class Settings: @unchecked Sendable {
     private static let keySpeechModelProfile = "speech_model_profile"
     private static let keyInitialSpeechModelChoiceRequired = "initial_speech_model_choice_required"
     private static let keyRemoveFillerWords = "remove_filler_words"
+    private static let keyDictationHistoryEnabled = "dictation_history_enabled"
     private static let keySpokenFormattingCommands = "spoken_formatting_commands"
     private static let keyActiveRunMarker = "active_run_marker"
 
@@ -2146,6 +2147,13 @@ final class Settings: @unchecked Sendable {
     var removeFillerWords: Bool {
         get { defaults.bool(forKey: Self.keyRemoveFillerWords) }
         set { defaults.set(newValue, forKey: Self.keyRemoveFillerWords) }
+    }
+
+    /// Off unless the user explicitly opts in — `defaults.bool` returns
+    /// false for an unset key, which is the privacy-safe default here.
+    var dictationHistoryEnabled: Bool {
+        get { defaults.bool(forKey: Self.keyDictationHistoryEnabled) }
+        set { defaults.set(newValue, forKey: Self.keyDictationHistoryEnabled) }
     }
 
     var spokenFormattingCommands: Bool {
@@ -3889,6 +3897,85 @@ enum FillerWordRemover {
 
     private static func isOrphanSeparator(_ character: Character) -> Bool {
         ",.;:!?".contains(character)
+    }
+}
+
+// MARK: - Dictation history store
+//
+// Opt-in on-disk transcript history (off by default — the in-memory
+// Recent Transcripts feature stays the only history unless the user
+// turns on Settings → Text → Keep dictation history). One JSON object
+// per line, newest first, so the file stays human-inspectable. Each
+// append rewrites the file atomically, which stays cheap because the
+// store is capped at `maxEntries`. Text only: audio is never persisted,
+// and transcript content still never reaches the log.
+
+struct DictationHistoryEntry: Codable, Equatable {
+    let timestamp: Date
+    let text: String
+}
+
+enum DictationHistoryStore {
+    static let maxEntries = 100
+    static let menuEntryCount = 10
+    static let fileName = "history.jsonl"
+
+    static func defaultFileURL() -> URL {
+        presspeechApplicationSupportDirectory()
+            .appendingPathComponent(fileName, isDirectory: false)
+    }
+
+    /// Newest first. A missing or unreadable file reads as empty and
+    /// creates nothing on disk — with the setting off, Presspeech must
+    /// leave no history trace. Malformed lines are skipped so one bad
+    /// write can't take the whole history down.
+    static func load(from url: URL, fileManager: FileManager = .default) -> [DictationHistoryEntry] {
+        guard let data = fileManager.contents(atPath: url.path),
+              let content = String(data: data, encoding: .utf8) else {
+            return []
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return content.split(separator: "\n").compactMap { line in
+            try? decoder.decode(DictationHistoryEntry.self, from: Data(line.utf8))
+        }
+    }
+
+    static func append(text: String,
+                       at timestamp: Date = Date(),
+                       to url: URL,
+                       fileManager: FileManager = .default) throws {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let entries = trimmedToLimit([DictationHistoryEntry(timestamp: timestamp, text: text)]
+                                     + load(from: url, fileManager: fileManager))
+        try save(entries, to: url, fileManager: fileManager)
+    }
+
+    static func clear(at url: URL, fileManager: FileManager = .default) throws {
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.removeItem(at: url)
+    }
+
+    static func trimmedToLimit(_ entries: [DictationHistoryEntry]) -> [DictationHistoryEntry] {
+        entries.count > maxEntries ? Array(entries.prefix(maxEntries)) : entries
+    }
+
+    /// Owner-only directory and file: dictation history is content the
+    /// user explicitly chose to keep, and it deserves the same guard the
+    /// identity migration gives the support directory. The atomic write
+    /// replaces the file, so the 0600 mode must be re-applied after it.
+    private static func save(_ entries: [DictationHistoryEntry],
+                             to url: URL,
+                             fileManager: FileManager = .default) throws {
+        try fileManager.createDirectory(at: url.deletingLastPathComponent(),
+                                        withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let lines = try entries.map { String(decoding: try encoder.encode($0), as: UTF8.self) }
+        let body = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+        try Data(body.utf8).write(to: url, options: .atomic)
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 }
 
@@ -5898,6 +5985,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Last N transcripts, newest first. Shown in the History submenu.
     private var history: [String] = []
+    /// Opt-in on-disk history, newest first. Loaded from disk at launch;
+    /// only appended to while `dictationHistoryEnabled` is on.
+    private var persistedHistory: [DictationHistoryEntry] = []
 
     /// In-session click counter per permission. Click #2 onwards
     /// resets the matching TCC entry before re-requesting — belt
@@ -6040,6 +6130,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         recoverStaleSystemAudioMuteIfNeeded()
         settings.hasActiveRunMarker = true
         restoreUpdateReminderPause()
+        persistedHistory = DictationHistoryStore.load(from: DictationHistoryStore.defaultFileURL())
 
         NSApp.setActivationPolicy(settings.showInDock ? .regular : .accessory)
 
@@ -7314,11 +7405,29 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - History
 
     private func addToHistory(_ text: String) {
+        // Persistence runs even when the in-memory limit is Off: the two
+        // histories are independent opt-ins. Persisted text is the fully
+        // processed transcript — corrections, formatting, filler removal
+        // already applied — so re-copying it matches what was pasted.
+        if settings.dictationHistoryEnabled {
+            appendToPersistedHistory(text)
+        }
         let next = limitedRecentTranscripts([text] + history,
                                             limit: settings.recentTranscriptLimit)
-        guard next != history else { return }
-        history = next
+        if next != history {
+            history = next
+        }
         rebuildMenu()
+    }
+
+    private func appendToPersistedHistory(_ text: String) {
+        do {
+            let url = DictationHistoryStore.defaultFileURL()
+            try DictationHistoryStore.append(text: text, to: url)
+            persistedHistory = DictationHistoryStore.load(from: url)
+        } catch {
+            log("dictation history append failed: \(error.localizedDescription)")
+        }
     }
 
     private func applyRecentTranscriptLimit() {
@@ -7505,6 +7614,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             menu.addItem(.separator())
         }
 
+        // Persisted history stays reachable while entries exist even if
+        // the setting was turned back off, so the user can still re-copy
+        // or clear what they previously saved.
+        if settings.dictationHistoryEnabled || !persistedHistory.isEmpty {
+            menu.addItem(buildDictationHistoryItem())
+            menu.addItem(.separator())
+        }
+
         // Settings submenu.
         menu.addItem(buildSettingsItem())
         menu.addItem(buildSupportItem())
@@ -7550,6 +7667,68 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         parent.submenu = sub
         return parent
+    }
+
+    private static let dictationHistoryMenuDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private func buildDictationHistoryItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "Dictation History", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+
+        for entry in persistedHistory.prefix(DictationHistoryStore.menuEntryCount) {
+            let timestamp = Self.dictationHistoryMenuDateFormatter.string(from: entry.timestamp)
+            let item = NSMenuItem(title: "\(timestamp) — \(previewLine(for: entry.text))",
+                                  action: #selector(historyClicked(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = entry.text
+            item.toolTip = entry.text
+            sub.addItem(item)
+        }
+        if persistedHistory.isEmpty {
+            let empty = NSMenuItem(title: "No Saved Dictations", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            sub.addItem(empty)
+        }
+
+        sub.addItem(.separator())
+
+        let clear = NSMenuItem(title: "Clear History…",
+                               action: #selector(clearPersistedHistoryClicked(_:)),
+                               keyEquivalent: "")
+        clear.target = self
+        clear.isEnabled = !persistedHistory.isEmpty
+        sub.addItem(clear)
+
+        parent.submenu = sub
+        return parent
+    }
+
+    @objc private func clearPersistedHistoryClicked(_ sender: NSMenuItem) {
+        guard !persistedHistory.isEmpty else { return }
+        showAppForModal()
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Clear Dictation History?"
+        alert.informativeText = "This permanently deletes every saved dictation from this Mac."
+        alert.addButton(withTitle: "Clear History")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try DictationHistoryStore.clear(at: DictationHistoryStore.defaultFileURL())
+            let count = persistedHistory.count
+            persistedHistory = []
+            log("dictation history cleared (\(count) entries)")
+            rebuildMenu()
+        } catch {
+            log("dictation history clear failed: \(error.localizedDescription)")
+        }
     }
 
     private func buildSupportItem() -> NSMenuItem {
@@ -7792,6 +7971,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 "Remove filler words: \(settings.removeFillerWords)",
                 "Spoken formatting commands: \(settings.spokenFormattingCommands)",
                 "Recent transcripts: \(RECENT_TRANSCRIPT_LIMIT_DISPLAY[settings.recentTranscriptLimit] ?? settings.recentTranscriptLimit.rawValue) (\(history.count) in memory)",
+                "Dictation history: \(settings.dictationHistoryEnabled ? "on" : "off") (\(persistedHistory.count) on disk)",
                 "Text corrections: \(settings.transcriptCorrections.count) configured",
                 "Text correction sync: \(settings.transcriptCorrectionsSyncFile.isEmpty ? "off" : "configured")",
                 "Text insertion: \(TextInserter.defaultStrategyDescription)",
@@ -8386,6 +8566,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         filler.target = self
         filler.state = settings.removeFillerWords ? .on : .off
         sub.addItem(filler)
+
+        let keepHistory = NSMenuItem(title: "Keep dictation history",
+                                     action: #selector(toggleDictationHistory(_:)),
+                                     keyEquivalent: "")
+        keepHistory.target = self
+        keepHistory.state = settings.dictationHistoryEnabled ? .on : .off
+        keepHistory.toolTip = "Save each finished transcript to a local history file you can re-copy from the Dictation History menu. Off by default; text only, no audio."
+        sub.addItem(keepHistory)
 
         parent.submenu = sub
         return parent
@@ -9922,6 +10110,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         sender.state = settings.removeFillerWords ? .on : .off
     }
 
+    @objc private func toggleDictationHistory(_ sender: NSMenuItem) {
+        settings.dictationHistoryEnabled.toggle()
+        sender.state = settings.dictationHistoryEnabled ? .on : .off
+        if settings.dictationHistoryEnabled {
+            persistedHistory = DictationHistoryStore.load(from: DictationHistoryStore.defaultFileURL())
+        }
+        rebuildMenu()
+    }
+
     @objc private func toggleSpokenFormattingCommands(_ sender: NSMenuItem) {
         settings.spokenFormattingCommands.toggle()
         sender.state = settings.spokenFormattingCommands ? .on : .off
@@ -10646,6 +10843,8 @@ private enum PresspeechSelfTest {
             return runSuite("paste", testPasteSuffixFormatting)
         case "history":
             return runSuite("history", testRecentTranscriptLimit)
+        case "history-store":
+            return runSuite("history-store", testDictationHistoryStore)
         case "corrections":
             return runSuite("corrections", testTranscriptCorrections)
         case "fillers":
@@ -10704,6 +10903,7 @@ private enum PresspeechSelfTest {
         try testReadiness()
         try testPasteSuffixFormatting()
         try testRecentTranscriptLimit()
+        try testDictationHistoryStore()
         try testTranscriptCorrections()
         try testFillerWordRemoval()
         try testAudioLevelMetering()
@@ -11628,6 +11828,105 @@ private enum PresspeechSelfTest {
             parseRecentTranscriptLimit(storedValue: NSNumber(value: 1)),
             equals: .last1,
             "numeric defaults writes should be accepted for last-one history"
+        )
+    }
+
+    private static func testDictationHistoryStore() throws {
+        let fileManager = FileManager.default
+        let directory = fileManager.temporaryDirectory
+            .appendingPathComponent("presspeech-history-store-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: directory) }
+        let file = directory.appendingPathComponent(DictationHistoryStore.fileName, isDirectory: false)
+
+        // Reading a missing store stays empty and creates nothing —
+        // with the setting off the disk must show no history trace.
+        try expect(
+            DictationHistoryStore.load(from: file, fileManager: fileManager),
+            equals: [],
+            "missing history file should read as an empty store"
+        )
+        try expect(
+            fileManager.fileExists(atPath: directory.path),
+            equals: false,
+            "reading a missing history file should not create the directory"
+        )
+        try DictationHistoryStore.clear(at: file, fileManager: fileManager)
+        try expect(
+            fileManager.fileExists(atPath: directory.path),
+            equals: false,
+            "clearing a missing history file should be a no-op"
+        )
+
+        // Appends round-trip text and timestamp, newest first. Whole-second
+        // timestamps because the ISO8601 encoding drops fractional seconds.
+        let first = Date(timeIntervalSince1970: 1_700_000_000)
+        let second = Date(timeIntervalSince1970: 1_700_000_060)
+        try DictationHistoryStore.append(text: "hello world", at: first, to: file, fileManager: fileManager)
+        try DictationHistoryStore.append(text: "second line one\nline two", at: second, to: file, fileManager: fileManager)
+        let loaded = DictationHistoryStore.load(from: file, fileManager: fileManager)
+        try expect(
+            loaded,
+            equals: [
+                DictationHistoryEntry(timestamp: second, text: "second line one\nline two"),
+                DictationHistoryEntry(timestamp: first, text: "hello world"),
+            ],
+            "appended entries should round-trip newest first with multi-line text intact"
+        )
+
+        // Owner-only permissions on both the directory and the file.
+        let directoryPermissions = try fileManager.attributesOfItem(atPath: directory.path)[.posixPermissions] as? Int
+        try expect(
+            directoryPermissions,
+            equals: 0o700,
+            "history directory should be owner-only"
+        )
+        let filePermissions = try fileManager.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+        try expect(
+            filePermissions,
+            equals: 0o600,
+            "history file should be owner-only"
+        )
+
+        // The store trims to the newest maxEntries entries on append.
+        for index in 0..<(DictationHistoryStore.maxEntries + 5) {
+            try DictationHistoryStore.append(text: "entry \(index)", to: file, fileManager: fileManager)
+        }
+        let trimmed = DictationHistoryStore.load(from: file, fileManager: fileManager)
+        try expect(
+            trimmed.count,
+            equals: DictationHistoryStore.maxEntries,
+            "history store should cap the entry count"
+        )
+        try expect(
+            trimmed.first?.text,
+            equals: "entry \(DictationHistoryStore.maxEntries + 4)",
+            "history store should keep the newest entry when trimming"
+        )
+        try expect(
+            trimmed.last?.text,
+            equals: "entry 5",
+            "history store should drop the oldest entries when trimming"
+        )
+
+        // Whitespace-only dictations are not persisted.
+        try DictationHistoryStore.append(text: "  \n ", to: file, fileManager: fileManager)
+        try expect(
+            DictationHistoryStore.load(from: file, fileManager: fileManager).count,
+            equals: DictationHistoryStore.maxEntries,
+            "blank entries should not be persisted"
+        )
+
+        // Clear removes the file but leaves the directory alone.
+        try DictationHistoryStore.clear(at: file, fileManager: fileManager)
+        try expect(
+            fileManager.fileExists(atPath: file.path),
+            equals: false,
+            "clearing the history should remove the file"
+        )
+        try expect(
+            DictationHistoryStore.load(from: file, fileManager: fileManager),
+            equals: [],
+            "a cleared history should read as empty"
         )
     }
 

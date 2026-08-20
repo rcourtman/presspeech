@@ -61,7 +61,7 @@ The Windows tray app uses Python with native hotkey/audio/paste integration. Its
 
 ## Privacy
 
-Presspeech has no analytics, event tracking, crash reporter, account system, transcript sync, or cloud transcription endpoint. Audio is captured while the hotkey is active, transcribed locally, then discarded. macOS can keep a configurable in-memory history of up to five transcripts while running; it clears on quit. Windows does not maintain an in-app transcript history.
+Presspeech has no analytics, event tracking, crash reporter, account system, transcript sync, or cloud transcription endpoint. Audio is captured while the hotkey is active, transcribed locally, then discarded. macOS can keep a configurable in-memory history of up to five transcripts while running; it clears on quit. An opt-in dictation history (off by default) can persist the last 100 finished transcripts to an owner-only local file, with an in-menu re-copy and clear. Windows does not maintain an in-app transcript history.
 
 Pasted text goes through the system clipboard. On macOS the transcript stays on the pasteboard by default. Users can opt into **Restore clipboard after paste**; restoration is best-effort and guarded so an incomplete snapshot or a newer copy by another process is never overwritten. Windows leaves the transcript on the clipboard until something else is copied.
 

@@ -62,7 +62,7 @@
     "windows_preferences": "%APPDATA%\\Presspeech\\config.json",
     "windows_logs": "%APPDATA%\\Presspeech\\log.txt",
     "windows_model_cache": "%USERPROFILE%\\.cache\\huggingface",
-    "transcripts": "macOS recent transcript history is configurable, stays in memory only, and clears on quit; Windows does not keep an in-app transcript history",
+    "transcripts": "macOS recent transcript history is configurable, stays in memory only, and clears on quit; an opt-in dictation history (off by default) can keep the last 100 transcripts in an owner-only history.jsonl under ~/Library/Application Support/Presspeech/; Windows does not keep an in-app transcript history",
     "clipboard": "On macOS, pasted transcripts stay on the system pasteboard by default; users can opt into guarded best-effort restoration of the previous clipboard, which is skipped if the snapshot is incomplete or another process has copied newer content. On Windows, the transcript remains on the clipboard until overwritten"
   }
 }

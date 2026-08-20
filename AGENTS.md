@@ -75,7 +75,9 @@ There is no separate unit-test target — pure logic instead exposes
 itself through the `--self-test` lane on the same binary. Suites:
 `hotkey` (transition state machine), `readiness` (permission-rollup
 state machine), `paste` (suffix formatting), `history`
-(`RecentTranscriptLimit` slicing), `corrections` (transcript
+(`RecentTranscriptLimit` slicing), `history-store` (opt-in on-disk
+dictation history: append/load round-trip, cap trimming, owner-only
+permissions, clear), `corrections` (transcript
 correction apply/merge), `fillers` (filler-word removal),
 `audio-level` (level metering), `audio-conversion` (offline
 conversion/downmix rules), `audio-input` (input-device filtering),
@@ -375,9 +377,13 @@ outside Presspeech.
   `cs.disable-library-validation`: the only reason to want any of
   those is to embed a runtime interpreter / unsigned dylib in the
   bundle, and that's not what Presspeech is.
-- **Transcripts are in-memory only.** Recent transcript history is
-  configurable from off / last 1 / last 5, defaults to last 5, and
-  clears on quit. Nothing is persisted.
+- **Transcripts are in-memory only by default.** Recent transcript
+  history is configurable from off / last 1 / last 5, defaults to last
+  5, and clears on quit. The one exception is the opt-in dictation
+  history (`dictation_history_enabled`, default off): finished
+  transcripts append to an owner-only `history.jsonl` under
+  `~/Library/Application Support/Presspeech/`, capped at 100 entries,
+  clearable from the Dictation History menu. Nothing else is persisted.
 - **Transcript content never reaches the logger.** There's no
   opt-in flag for this in the Swift port. If you need to inspect a
   transcript while debugging, use the in-menu Recent history while
