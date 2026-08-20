@@ -43,7 +43,11 @@ let SAMPLE_RATE: Double = 16_000
 let DEFAULT_HOTKEY_KEYCODE: CGKeyCode = 61  // Right Option
 let ESCAPE_KEYCODE: CGKeyCode = 53
 let MIN_CLIP_SECONDS: Double = 0.25
-let MAX_RECORDING_SECONDS: TimeInterval = 120   // auto-release if held longer
+// A forgotten toggle must still stop, and even hand-written defaults
+// cannot grow the in-memory capture without a bound.
+let DEFAULT_MAX_RECORDING_SECONDS: TimeInterval = 120
+let MIN_MAX_RECORDING_SECONDS: TimeInterval = 30
+let MAX_MAX_RECORDING_SECONDS: TimeInterval = 600
 // How long to wait after posting Cmd+V before restoring the user's
 // previous clipboard. The paste event is delivered asynchronously, so
 // the target app must be given a moment to read the transcript off the
@@ -221,6 +225,41 @@ let TRIGGER_DISPLAY: [TriggerMode: String] = [
     .hold: "Press and hold",
     .toggle: "Press to toggle",
 ]
+
+struct MaximumRecordingLengthChoice: Equatable {
+    let seconds: TimeInterval
+    let title: String
+}
+
+let MAXIMUM_RECORDING_LENGTH_CHOICES: [MaximumRecordingLengthChoice] = [
+    MaximumRecordingLengthChoice(seconds: 60, title: "1 minute"),
+    MaximumRecordingLengthChoice(seconds: 120, title: "2 minutes (Default)"),
+    MaximumRecordingLengthChoice(seconds: 300, title: "5 minutes"),
+    MaximumRecordingLengthChoice(seconds: 600, title: "10 minutes"),
+]
+
+func normalizedMaximumRecordingSeconds(storedValue value: Any?) -> TimeInterval? {
+    let raw: TimeInterval?
+    if let number = value as? NSNumber {
+        raw = number.doubleValue
+    } else if let string = value as? String {
+        raw = TimeInterval(string.trimmingCharacters(in: .whitespacesAndNewlines))
+    } else {
+        raw = nil
+    }
+
+    guard let raw, raw.isFinite else { return nil }
+    return min(max(raw.rounded(), MIN_MAX_RECORDING_SECONDS), MAX_MAX_RECORDING_SECONDS)
+}
+
+func maximumRecordingLengthTitle(seconds: TimeInterval) -> String {
+    let wholeSeconds = Int(seconds)
+    if wholeSeconds.isMultiple(of: 60) {
+        let minutes = wholeSeconds / 60
+        return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+    }
+    return "\(wholeSeconds) seconds"
+}
 
 enum PasteSuffix: String { case appendSpace = "space", none, appendNewline = "newline" }
 let PASTE_SUFFIX_DISPLAY: [PasteSuffix: String] = [
@@ -1706,6 +1745,7 @@ func identityMigrationDestinationURL(forLegacyCorrectionURL url: URL) -> URL? {
 final class Settings: @unchecked Sendable {
     private static let keyHotkeyKeycode = "hotkey_keycode"
     private static let keyTriggerMode = "trigger_mode"
+    private static let keyMaxRecordingSeconds = "max_recording_seconds"
     private static let keyPasteSuffix = "paste_suffix"
     private static let keyRecentTranscripts = "recent_transcripts"
     private static let keyShowRecordingWaveform = "show_recording_waveform"
@@ -1781,6 +1821,19 @@ final class Settings: @unchecked Sendable {
             return .hold
         }
         set { defaults.set(newValue.rawValue, forKey: Self.keyTriggerMode) }
+    }
+
+    var maxRecordingSeconds: TimeInterval {
+        get {
+            normalizedMaximumRecordingSeconds(
+                storedValue: defaults.object(forKey: Self.keyMaxRecordingSeconds)
+            ) ?? DEFAULT_MAX_RECORDING_SECONDS
+        }
+        set {
+            let normalized = normalizedMaximumRecordingSeconds(storedValue: newValue)
+                ?? DEFAULT_MAX_RECORDING_SECONDS
+            defaults.set(Int(normalized), forKey: Self.keyMaxRecordingSeconds)
+        }
     }
 
     var pasteSuffix: PasteSuffix {
@@ -7242,6 +7295,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func scheduleMaxDurationAutoRelease() {
+        let maximumDuration = settings.maxRecordingSeconds
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isRecording else { return }
             log("max recording duration reached, releasing")
@@ -7249,7 +7303,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.handleRelease()
         }
         maxDurationWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + MAX_RECORDING_SECONDS, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + maximumDuration, execute: work)
     }
 
     private func cancelMaxDurationAutoRelease() {
@@ -8349,6 +8403,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         waveform.state = settings.showRecordingWaveform ? .on : .off
         sub.addItem(waveform)
 
+        sub.addItem(buildMaximumRecordingLengthSettingsItem())
+
         let mute = NSMenuItem(title: "Mute system audio while recording",
                               action: #selector(toggleMute(_:)),
                               keyEquivalent: "")
@@ -8402,6 +8458,39 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         sub.addItem(dock)
 
         parent.submenu = sub
+        return parent
+    }
+
+    private func buildMaximumRecordingLengthSettingsItem() -> NSMenuItem {
+        let current = settings.maxRecordingSeconds
+        let parent = NSMenuItem(title: "Maximum Recording Length",
+                                action: nil,
+                                keyEquivalent: "")
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+
+        if !MAXIMUM_RECORDING_LENGTH_CHOICES.contains(where: { $0.seconds == current }) {
+            let custom = NSMenuItem(title: "\(maximumRecordingLengthTitle(seconds: current)) (Custom)",
+                                    action: nil,
+                                    keyEquivalent: "")
+            custom.state = .on
+            sub.addItem(custom)
+            sub.addItem(.separator())
+        }
+
+        for choice in MAXIMUM_RECORDING_LENGTH_CHOICES {
+            let item = NSMenuItem(title: choice.title,
+                                  action: #selector(selectMaximumRecordingLength(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.state = choice.seconds == current ? .on : .off
+            item.representedObject = Int(choice.seconds)
+            item.isEnabled = !isRecording && !isTerminating
+            sub.addItem(item)
+        }
+
+        parent.submenu = sub
+        parent.toolTip = "Automatically stop and transcribe a recording at this length."
         return parent
     }
 
@@ -9803,6 +9892,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
               let limit = RecentTranscriptLimit(rawValue: raw) else { return }
         settings.recentTranscriptLimit = limit
         applyRecentTranscriptLimit()
+        rebuildMenu()
+    }
+
+    @objc private func selectMaximumRecordingLength(_ sender: NSMenuItem) {
+        guard !isRecording,
+              let seconds = sender.representedObject as? Int else { return }
+        settings.maxRecordingSeconds = TimeInterval(seconds)
         rebuildMenu()
     }
 
@@ -13413,6 +13509,47 @@ private enum PresspeechSelfTest {
     }
 
     private static func testRecordingLifecycle() throws {
+        try expect(
+            MAXIMUM_RECORDING_LENGTH_CHOICES.map(\.seconds),
+            equals: [60, 120, 300, 600],
+            "recording limit menu should offer one, two, five, and ten minutes"
+        )
+        try expect(
+            DEFAULT_MAX_RECORDING_SECONDS,
+            equals: 120,
+            "recording limit should preserve the existing two-minute default"
+        )
+        try expect(
+            normalizedMaximumRecordingSeconds(storedValue: NSNumber(value: 300)),
+            equals: 300,
+            "recording limit should accept numeric defaults writes"
+        )
+        try expect(
+            normalizedMaximumRecordingSeconds(storedValue: " 75 "),
+            equals: 75,
+            "recording limit should accept trimmed string defaults writes"
+        )
+        try expect(
+            normalizedMaximumRecordingSeconds(storedValue: 1),
+            equals: MIN_MAX_RECORDING_SECONDS,
+            "recording limit should preserve the minimum safety bound"
+        )
+        try expect(
+            normalizedMaximumRecordingSeconds(storedValue: 3_600),
+            equals: MAX_MAX_RECORDING_SECONDS,
+            "recording limit should cap excessive in-memory capture"
+        )
+        try expect(
+            normalizedMaximumRecordingSeconds(storedValue: Double.nan),
+            equals: TimeInterval?.none,
+            "recording limit should reject non-finite defaults values"
+        )
+        try expect(
+            maximumRecordingLengthTitle(seconds: 60),
+            equals: "1 minute",
+            "recording limit should use a singular one-minute label"
+        )
+
         try expect(
             recordingReleaseAction(capturedSampleCount: 3_999,
                                    sampleRate: 16_000,
