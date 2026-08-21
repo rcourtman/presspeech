@@ -17,7 +17,7 @@ Core facts:
 - Diagnostics: macOS Copy/Save Diagnostics and Windows Copy Diagnostics produce privacy-safe local reports without transcript or dictionary contents.
 - Clipboard: macOS leaves the transcript on the pasteboard by default and offers an opt-in guarded restore of the previous contents; Windows leaves the transcript on the clipboard until it is overwritten.
 - Network surface: platform model downloads from huggingface.co, optional GitHub update checks with fixed platform User-Agents and no version/device/user identifiers, and user-approved install/update downloads. See the machine-readable list below.
-- macOS footprint: about 2.5 MB signed zip; model cache is about 500-600 MB.
+- macOS footprint: about 8.3 MB signed zip; model cache is about 500-600 MB.
 - Windows footprint: about 4.4 GB installed; the default model cache is about 2.5 GB.
 - Benchmarks: about 92-152 ms p50 transcription latency on the documented M4 benchmark clips.
 - Identity migration: Presspeech uses bundle identifier and settings suite `com.local.presspeech`. Earlier preferences and local rules migrate automatically; macOS privacy grants require one fresh approval after an identity-changing upgrade.

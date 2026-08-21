@@ -39,7 +39,7 @@ the hood, speech recognition runs locally through
 and the Apple Neural Engine. The default model is multilingual
 [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3).
 
-> **~100 ms transcription** · **2.5 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
+> **~100 ms transcription** · **8.3 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
 
 ## Install on Windows
 

@@ -32,7 +32,7 @@ Links:
 ## Claims and where they're backed
 
 - **~100 ms from key release to pasted text** — benchmarks page, methodology included
-- **2.5 MB signed, notarised download** — release asset size; about 500-600 MB for the local speech model
+- **8.3 MB signed, notarised download** — release asset size; about 500-600 MB for the local speech model
 - **~80 MB RAM while idle, 0% CPU between dictations** — site stats
 - **100% local** — no cloud transcription, no telemetry, no account; privacy page documents the full three-call network surface
 - **Free, MIT, native Swift menu-bar app**
@@ -40,7 +40,7 @@ Links:
 
 ## Show HN (post once)
 
-> **Show HN: Presspeech – a 2.5 MB local dictation app for Apple Silicon**
+> **Show HN: Presspeech – an 8.3 MB local dictation app for Apple Silicon**
 
 Presspeech is a macOS menu-bar app: hold Right Option, speak, release,
 and the transcript pastes at the cursor about 100 ms later.
@@ -61,7 +61,7 @@ decode — rather than streaming — is where the latency comes from.
 Benchmarks and methodology:
 https://rcourtman.github.io/presspeech/benchmarks.html
 
-Numbers: ~100 ms key-release-to-paste; 2.5 MB notarised app plus about
+Numbers: ~100 ms key-release-to-paste; 8.3 MB notarised app plus about
 500-600 MB for the local speech model; ~80 MB RAM idle; 0% CPU between
 dictations. Transcription makes no network calls, and the full
 network surface (model download, optional update check) is
@@ -95,7 +95,7 @@ cursor already is.
   benchmark clips
 - no account, subscription, telemetry, cloud transcription, or saved
   audio
-- 2.5 MB notarised app; the local speech model is about 500–600 MB on
+- 8.3 MB notarised app; the local speech model is about 500–600 MB on
   first launch
 - voice shortcuts for exact reusable text, plus optional deterministic
   “new paragraph”, “bullet point”, punctuation, quote, and parenthesis
