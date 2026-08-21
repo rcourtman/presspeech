@@ -27,7 +27,9 @@ jobs:
         # Debug-config compile of the standalone benchmark package so its
         # sources can't silently rot against toolchain/FluidAudio changes.
         # It is never shipped, so a debug build is enough.
-        run: swift build --package-path experiments/swift-bench
+        run: |
+          swift build --package-path experiments/swift-bench
+          experiments/swift-bench/.build/debug/presspeech-bench --self-test
       - name: Shell syntax
         run: |
           while IFS= read -r -d '' path; do
@@ -46,6 +48,7 @@ jobs:
           experiments/swift-bench/fetch-public-speech-fixtures.sh --self-test
           experiments/swift-bench/run-real-dictation-regression.sh --self-test
           experiments/swift-bench/run-real-model-comparison.sh --self-test
+          experiments/swift-bench/run-vocabulary-bias-regression.sh --self-test
           experiments/swift-bench/run-public-model-comparison.sh --self-test
           experiments/swift-bench/run-release-asr-checks.sh --self-test
           experiments/swift-bench/run-tail-word-regression.sh --self-test
