@@ -35,5 +35,7 @@ ssh -o BatchMode=yes "${mac_host}" "mkdir -p -- '${remote_root}'"
 archive_workspace | \
   ssh -o BatchMode=yes "${mac_host}" "tar -C '${remote_root}' -xf -"
 
+# The SSH worker has no unlocked login keychain. Public SwiftPM binary
+# artifacts need no credentials, and their package checksums remain enforced.
 ssh -o BatchMode=yes "${mac_host}" \
-  "cd '${remote_root}/swift' && swift run Presspeech --self-test all"
+  "cd '${remote_root}/swift' && swift run --disable-keychain Presspeech --self-test all"
