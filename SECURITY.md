@@ -10,8 +10,12 @@ into leaking transcripts, escalate privileges, or be hijacked into
 performing unwanted clipboard / paste actions), please **don't open a
 public issue**.
 
-Instead, email the maintainer with the details. The repository owner's
-contact is listed on their GitHub profile.
+Use GitHub's private
+[Report a vulnerability](https://github.com/rcourtman/presspeech/security/advisories/new)
+form instead. Include the affected version and platform, the impact, and
+the smallest reproduction you can provide without exposing real transcript
+content. Reports stay private while the issue is investigated and a fix is
+prepared.
 
 ## What's in scope
 
