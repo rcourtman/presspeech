@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|sliding-v3|sliding-vocab|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -48,6 +48,14 @@ struct CLIArgs {
     // tiers, so record both choices in every benchmark invocation.
     var nemotronMultilingualLanguage = DEFAULT_NEMOTRON_MULTILINGUAL_LANGUAGE
     var nemotronMultilingualChunkMs = DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS
+    // Optional Parakeet v3 language/script hint. `nil` keeps auto-detection.
+    var language: Language? = nil
+    // The vocabulary path is accepted only by the sliding-vocab backend. It
+    // stays outside production until the benchmark proves a quality win.
+    var customVocabulary: URL? = nil
+    // Plain-text canonical terms whose exact surface-form recall is reported
+    // without printing term or transcript content.
+    var criticalTerms: URL? = nil
 }
 
 func parseArgs() -> CLIArgs {
@@ -60,6 +68,9 @@ func parseArgs() -> CLIArgs {
     var unifiedTrailingSilenceMs = UNIFIED_MODEL_TRAILING_SILENCE_MS
     var nemotronMultilingualLanguage = DEFAULT_NEMOTRON_MULTILINGUAL_LANGUAGE
     var nemotronMultilingualChunkMs = DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS
+    var language: Language? = nil
+    var customVocabulary: URL? = nil
+    var criticalTerms: URL? = nil
     while let arg = iter.next() {
         switch arg {
         case "--file":
@@ -72,6 +83,31 @@ func parseArgs() -> CLIArgs {
             if let v = iter.next() { ref = v }
         case "--redact-transcripts":
             redactTranscripts = true
+        case "--language":
+            guard let v = iter.next() else {
+                FileHandle.standardError.write(Data("--language requires auto or one of: \(Language.allCases.map(\.rawValue).joined(separator: "|"))\n".utf8))
+                exit(2)
+            }
+            if v == "auto" {
+                language = nil
+            } else if let parsed = Language(rawValue: v) {
+                language = parsed
+            } else {
+                FileHandle.standardError.write(Data("unsupported --language \"\(v)\" (expected auto|\(Language.allCases.map(\.rawValue).joined(separator: "|")))\n".utf8))
+                exit(2)
+            }
+        case "--custom-vocabulary":
+            guard let v = iter.next(), !v.isEmpty else {
+                FileHandle.standardError.write(Data("--custom-vocabulary requires a file path\n".utf8))
+                exit(2)
+            }
+            customVocabulary = URL(fileURLWithPath: v)
+        case "--critical-terms":
+            guard let v = iter.next(), !v.isEmpty else {
+                FileHandle.standardError.write(Data("--critical-terms requires a file path\n".utf8))
+                exit(2)
+            }
+            criticalTerms = URL(fileURLWithPath: v)
         case "--unified-trailing-silence-ms":
             guard let v = iter.next(), let n = Int(v), n >= 0 else {
                 FileHandle.standardError.write(Data("--unified-trailing-silence-ms requires a non-negative integer\n".utf8))
@@ -93,9 +129,15 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|sliding-v3|sliding-vocab|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+                   presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
+                         sliding-v3
+                              Parakeet v3 through FluidAudio's sliding-window manager
+                         sliding-vocab
+                              sliding-v3 plus auxiliary CTC vocabulary rescoring;
+                              requires --custom-vocabulary
                          unified
                               FluidAudio Parakeet Unified 0.6B offline batch
                          nemotron-en
@@ -111,6 +153,15 @@ func parseArgs() -> CLIArgs {
               --redact-transcripts
                          omit reference and hypothesis text from output while still
                          reporting WER; useful for private real-dictation runs
+              --language <auto|code>
+                         Parakeet v3 language/script hint (for example pl or en;
+                         default: auto)
+              --custom-vocabulary <path>
+                         simple text or FluidAudio JSON vocabulary file; valid only
+                         with --backend sliding-vocab
+              --critical-terms <path>
+                         plain text, one canonical word or phrase per line; report
+                         exact surface-form recall without printing term content
               --unified-trailing-silence-ms <n>
                          append n ms of silence before Unified transcription
                          (default: \(UNIFIED_MODEL_TRAILING_SILENCE_MS), matching Presspeech)
@@ -140,7 +191,10 @@ func parseArgs() -> CLIArgs {
                    redactTranscripts: redactTranscripts,
                    unifiedTrailingSilenceMs: unifiedTrailingSilenceMs,
                    nemotronMultilingualLanguage: nemotronMultilingualLanguage,
-                   nemotronMultilingualChunkMs: nemotronMultilingualChunkMs)
+                   nemotronMultilingualChunkMs: nemotronMultilingualChunkMs,
+                   language: language,
+                   customVocabulary: customVocabulary,
+                   criticalTerms: criticalTerms)
 }
 
 // MARK: - Audio loading
@@ -216,11 +270,47 @@ func load16kMono(url: URL) throws -> [Float] {
 
 protocol ASRBackend {
     var name: String { get }
+    /// On-disk model caches used by this backend. Reported after prepare so
+    /// candidate download/storage cost is visible beside latency and memory.
+    var modelCacheComponents: [(label: String, url: URL)] { get }
     /// Run one transcription. Returns the transcript and elapsed seconds
     /// for inference only (model load + warmup happen in `prepare()`).
     func run(samples: [Float]) async throws -> (text: String, elapsed: Double)
     /// Load models, do whatever warmup is fair to exclude from the measured path.
     func prepare(warmupSamples: [Float]) async throws
+}
+
+extension ASRBackend {
+    var modelCacheComponents: [(label: String, url: URL)] { [] }
+}
+
+func fluidAudioModelsDirectory() -> URL {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        .appendingPathComponent("FluidAudio", isDirectory: true)
+        .appendingPathComponent("Models", isDirectory: true)
+}
+
+func modelCacheDirectory(for repo: Repo) -> URL {
+    fluidAudioModelsDirectory().appendingPathComponent(repo.folderName, isDirectory: true)
+}
+
+func directoryLogicalBytes(at url: URL) -> UInt64 {
+    let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey]
+    guard let enumerator = FileManager.default.enumerator(
+        at: url,
+        includingPropertiesForKeys: Array(keys),
+        options: [.skipsHiddenFiles]
+    ) else { return 0 }
+    var total: UInt64 = 0
+    for case let fileURL as URL in enumerator {
+        guard let values = try? fileURL.resourceValues(forKeys: keys),
+              values.isRegularFile == true,
+              let size = values.fileSize,
+              size > 0
+        else { continue }
+        total += UInt64(size)
+    }
+    return total
 }
 
 // ----- Apple SpeechAnalyzer / DictationTranscriber ---------------------
@@ -362,11 +452,24 @@ final class AppleBackend: ASRBackend {
 final class FluidBackend: ASRBackend {
     let name: String
     private let version: AsrModelVersion
+    private let language: Language?
     private var asr: AsrManager!
 
-    init(name: String, version: AsrModelVersion) {
+    var modelCacheComponents: [(label: String, url: URL)] {
+        switch version {
+        case .v3:
+            return [("parakeet-v3", modelCacheDirectory(for: .parakeetV3))]
+        case .tdtCtc110m:
+            return [("tdt-ctc-110m", modelCacheDirectory(for: .parakeetTdtCtc110m))]
+        default:
+            return []
+        }
+    }
+
+    init(name: String, version: AsrModelVersion, language: Language? = nil) {
         self.name = name
         self.version = version
+        self.language = language
     }
 
     func prepare(warmupSamples: [Float]) async throws {
@@ -386,8 +489,81 @@ final class FluidBackend: ASRBackend {
         // matching what Presspeech's push-to-talk usage looks like.
         var state = try TdtDecoderState()
         let t0 = Date()
-        let result = try await asr.transcribe(samples, decoderState: &state)
+        let result = try await asr.transcribe(samples, decoderState: &state, language: language)
         return (result.text, Date().timeIntervalSince(t0))
+    }
+}
+
+// ----- FluidAudio sliding-window Parakeet v3 + vocabulary rescoring ------
+//
+// FluidAudio exposes custom vocabulary on the sliding-window manager rather
+// than the production app's direct AsrManager call. The unbiased variant is
+// intentionally benchmarked alongside the vocabulary variant so changes from
+// the engine path are not mistaken for vocabulary gains.
+
+final class SlidingWindowBackend: ASRBackend {
+    let name: String
+    private let language: Language?
+    private let customVocabularyURL: URL?
+    private var models: AsrModels!
+    private var vocabulary: CustomVocabularyContext?
+    private var ctcModels: CtcModels?
+
+    var modelCacheComponents: [(label: String, url: URL)] {
+        var components = [("parakeet-v3", modelCacheDirectory(for: .parakeetV3))]
+        if customVocabularyURL != nil {
+            components.append(("ctc-110m", CtcModels.defaultCacheDirectory()))
+        }
+        return components
+    }
+
+    init(language: Language?, customVocabularyURL: URL?) {
+        self.language = language
+        self.customVocabularyURL = customVocabularyURL
+        self.name = customVocabularyURL == nil
+            ? "fluid-ParakeetTDTv3Sliding"
+            : "fluid-ParakeetTDTv3Sliding+Vocabulary"
+    }
+
+    func prepare(warmupSamples: [Float]) async throws {
+        models = try await AsrModels.downloadAndLoad(version: .v3)
+        if let customVocabularyURL {
+            let loaded = try await CustomVocabularyContext.loadWithCtcTokens(
+                from: customVocabularyURL.path
+            )
+            guard !loaded.vocab.terms.isEmpty else {
+                throw NSError(
+                    domain: "presspeech-bench",
+                    code: 4,
+                    userInfo: [NSLocalizedDescriptionKey: "custom vocabulary contains no usable terms"]
+                )
+            }
+            vocabulary = loaded.vocab
+            ctcModels = loaded.models
+            log("  custom vocabulary ready (\(loaded.vocab.terms.count) terms; content redacted)")
+        }
+        _ = try await run(samples: warmupSamples)
+    }
+
+    func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
+        let config = SlidingWindowAsrConfig.default.applying(language: language)
+        let manager = SlidingWindowAsrManager(config: config)
+        try await manager.loadModels(models)
+        if let vocabulary, let ctcModels {
+            try await manager.configureVocabularyBoosting(
+                vocabulary: vocabulary,
+                ctcModels: ctcModels
+            )
+        }
+        try await manager.startStreaming()
+
+        let buffer = makeFloatPCMBuffer(samples: samples)
+        let t0 = Date()
+        await manager.streamAudio(buffer)
+        let text = try await manager.finish()
+        let elapsed = Date().timeIntervalSince(t0)
+        await manager.cleanup()
+        return (text.trimmingCharacters(in: .whitespacesAndNewlines), elapsed)
     }
 }
 
@@ -558,6 +734,79 @@ func werPercent(reference: String, hypothesis: String) -> Double {
     return Double(wordEditDistance(ref, hyp)) / Double(ref.count) * 100
 }
 
+struct CriticalTermRecall {
+    let matched: Int
+    let total: Int
+
+    var percent: Double {
+        guard total > 0 else { return 100 }
+        return Double(matched) / Double(total) * 100
+    }
+}
+
+func phraseOccurrenceCount(_ phrase: [String], in words: [String]) -> Int {
+    guard !phrase.isEmpty, phrase.count <= words.count else { return 0 }
+    var count = 0
+    for start in 0...(words.count - phrase.count) {
+        if Array(words[start..<(start + phrase.count)]) == phrase {
+            count += 1
+        }
+    }
+    return count
+}
+
+func criticalTermRecall(reference: String,
+                        hypothesis: String,
+                        terms: [String]) -> CriticalTermRecall {
+    let referenceWords = werTokens(reference)
+    let hypothesisWords = werTokens(hypothesis)
+    var matched = 0
+    var total = 0
+    for term in terms {
+        let phrase = werTokens(term)
+        guard !phrase.isEmpty else { continue }
+        let expected = phraseOccurrenceCount(phrase, in: referenceWords)
+        guard expected > 0 else { continue }
+        let actual = phraseOccurrenceCount(phrase, in: hypothesisWords)
+        total += expected
+        matched += min(expected, actual)
+    }
+    return CriticalTermRecall(matched: matched, total: total)
+}
+
+func loadCriticalTerms(from url: URL) throws -> [String] {
+    let contents = try String(contentsOf: url, encoding: .utf8)
+    return contents.split(whereSeparator: \.isNewline).compactMap { line in
+        let value = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty || value.hasPrefix("#") ? nil : value
+    }
+}
+
+enum BenchSelfTestError: Error {
+    case failed(String)
+}
+
+func runBenchSelfTests() throws {
+    func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+        guard condition() else { throw BenchSelfTestError.failed(message) }
+    }
+
+    try expect(
+        phraseOccurrenceCount(["szypańskim"], in: ["ze", "szypańskim", "i", "szypańskim"]) == 2,
+        "phrase occurrence count should preserve Polish diacritics"
+    )
+    let recall = criticalTermRecall(
+        reference: "Rozmawiałem z Szypańskim i Szypańskim.",
+        hypothesis: "Rozmawiałem z Szypańskim i Szymańskim.",
+        terms: ["Szypańskim", "Nieobecny"]
+    )
+    try expect(recall.matched == 1, "critical-term recall should count matched occurrences")
+    try expect(recall.total == 2, "critical-term recall should count only terms present in reference")
+    try expect(abs(recall.percent - 50) < 0.001, "critical-term recall percentage should be weighted")
+
+    print("presspeech-bench self-test passed")
+}
+
 func finalWordRetention(reference: String, hypothesis: String) -> (retained: Bool, expected: String, actualLast: String?)? {
     guard let expected = werTokens(reference).last else { return nil }
     let actualLast = werTokens(hypothesis).last
@@ -621,7 +870,8 @@ func summarize(_ name: String,
                reference: String?,
                baseline: UInt64,
                peak: UInt64,
-               redactTranscripts: Bool) {
+               redactTranscripts: Bool,
+               criticalTerms: [String]) {
     let times = results.map(\.elapsed)
     let p50 = percentile(times, 0.5)
     let mn = times.min() ?? 0
@@ -646,14 +896,23 @@ func summarize(_ name: String,
         let actualLast = retention.actualLast ?? "<none>"
         return " [final-word retained=\(retention.retained) expected=\"\(retention.expected)\" actual-last=\"\(actualLast)\"]"
     }
+    func criticalTermTag(_ text: String) -> String {
+        guard let reference, !criticalTerms.isEmpty else { return "" }
+        let recall = criticalTermRecall(
+            reference: reference,
+            hypothesis: text,
+            terms: criticalTerms
+        )
+        return " [critical-terms matched=\(recall.matched) total=\(recall.total) recall=\(String(format: "%.1f%%", recall.percent))]"
+    }
     if texts.count == 1, let only = texts.first {
         let display = redactTranscripts ? redactedTextLabel(only) : "\"\(only)\""
-        print("    transcript:\(werTag(only))\(finalWordTag(only)) \(display)")
+        print("    transcript:\(werTag(only))\(finalWordTag(only))\(criticalTermTag(only)) \(display)")
     } else {
         print("    transcripts (\(texts.count) distinct):")
         for t in texts.sorted() {
             let display = redactTranscripts ? redactedTextLabel(t) : "\"\(t)\""
-            print("      •\(werTag(t))\(finalWordTag(t)) \(display)")
+            print("      •\(werTag(t))\(finalWordTag(t))\(criticalTermTag(t)) \(display)")
         }
     }
 }
@@ -663,7 +922,20 @@ func summarize(_ name: String,
 @main
 struct PresspeechBench {
     static func main() async throws {
+        if CommandLine.arguments.dropFirst() == ["--self-test"] {
+            try runBenchSelfTests()
+            return
+        }
         let args = parseArgs()
+
+        if args.backend == "sliding-vocab", args.customVocabulary == nil {
+            FileHandle.standardError.write(Data("--backend sliding-vocab requires --custom-vocabulary\n".utf8))
+            exit(2)
+        }
+        if args.backend != "sliding-vocab", args.customVocabulary != nil {
+            FileHandle.standardError.write(Data("--custom-vocabulary is valid only with --backend sliding-vocab\n".utf8))
+            exit(2)
+        }
 
         var runSummary = "presspeech-bench: \(args.file.lastPathComponent), \(args.trials) trials, backend=\(args.backend)"
         if args.backend == "unified" || args.backend == "fluid" || args.backend == "both" {
@@ -672,6 +944,12 @@ struct PresspeechBench {
         if args.backend == "nemotron-multilingual" || args.backend == "fluid" || args.backend == "both" {
             runSummary += ", nemotron-multilingual-language=\(args.nemotronMultilingualLanguage)"
             runSummary += ", nemotron-multilingual-chunk-ms=\(args.nemotronMultilingualChunkMs)"
+        }
+        if args.backend == "v3" || args.backend == "sliding-v3" || args.backend == "sliding-vocab" {
+            runSummary += ", language=\(args.language?.rawValue ?? "auto")"
+        }
+        if args.backend == "sliding-vocab" {
+            runSummary += ", custom-vocabulary=enabled"
         }
         log(runSummary)
         let samples = try load16kMono(url: args.file)
@@ -694,13 +972,25 @@ struct PresspeechBench {
         } else {
             log("no reference (--ref or <file>.txt) — WER skipped")
         }
+        let criticalTerms: [String]
+        if let criticalTermsURL = args.criticalTerms {
+            criticalTerms = try loadCriticalTerms(from: criticalTermsURL)
+            guard !criticalTerms.isEmpty else {
+                FileHandle.standardError.write(Data("--critical-terms contains no usable terms\n".utf8))
+                exit(2)
+            }
+            log("critical terms: \(criticalTerms.count) canonical forms (content redacted)")
+        } else {
+            criticalTerms = []
+        }
 
         // Use the same audio for warmup — it's the most representative
         // "first inference" for the same shape we'll measure.
         let warmup = samples
 
         let known = [
-            "apple", "v3", "unified", "nemotron-en", "nemotron-multilingual",
+            "apple", "v3", "sliding-v3", "sliding-vocab", "unified",
+            "nemotron-en", "nemotron-multilingual",
             "110m", "fluid", "both",
         ]
         guard known.contains(args.backend) else {
@@ -716,7 +1006,26 @@ struct PresspeechBench {
             }
         }
         if args.backend == "v3" || args.backend == "fluid" || args.backend == "both" {
-            backends.append(FluidBackend(name: "fluid-ParakeetTDTv3", version: .v3))
+            backends.append(
+                FluidBackend(
+                    name: "fluid-ParakeetTDTv3",
+                    version: .v3,
+                    language: args.language
+                )
+            )
+        }
+        if args.backend == "sliding-v3" {
+            backends.append(
+                SlidingWindowBackend(language: args.language, customVocabularyURL: nil)
+            )
+        }
+        if args.backend == "sliding-vocab" {
+            backends.append(
+                SlidingWindowBackend(
+                    language: args.language,
+                    customVocabularyURL: args.customVocabulary
+                )
+            )
         }
         if args.backend == "unified" || args.backend == "fluid" || args.backend == "both" {
             backends.append(UnifiedBatchBackend(trailingSilenceMs: args.unifiedTrailingSilenceMs))
@@ -761,6 +1070,16 @@ struct PresspeechBench {
             }
             let prepDt = Date().timeIntervalSince(prepT0)
             log("  ready in \(fmtMs(prepDt)) (model load + 1 warmup inference)")
+            let cacheComponents = backend.modelCacheComponents.map { component in
+                (label: component.label, bytes: directoryLogicalBytes(at: component.url))
+            }
+            if !cacheComponents.isEmpty {
+                let totalCacheBytes = cacheComponents.reduce(UInt64(0)) { $0 + $1.bytes }
+                let detail = cacheComponents.map {
+                    "\($0.label)=\(fmtMB($0.bytes).trimmingCharacters(in: .whitespaces))"
+                }.joined(separator: ",")
+                log("  model-cache: total=\(fmtMB(totalCacheBytes).trimmingCharacters(in: .whitespaces)) components=\(detail)")
+            }
 
             do {
                 let (results, peak) = try await runBackend(backend, samples: samples, trials: args.trials)
@@ -769,7 +1088,8 @@ struct PresspeechBench {
                           reference: reference,
                           baseline: baseline,
                           peak: peak,
-                          redactTranscripts: args.redactTranscripts)
+                          redactTranscripts: args.redactTranscripts,
+                          criticalTerms: criticalTerms)
             } catch {
                 log("  run(\(backend.name)) FAILED: \(error)")
             }

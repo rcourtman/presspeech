@@ -174,6 +174,7 @@ echo "running helper self-tests..."
 ./fetch-public-speech-fixtures.sh --self-test
 ./run-real-dictation-regression.sh --self-test
 ./run-real-model-comparison.sh --self-test
+./run-vocabulary-bias-regression.sh --self-test
 ./run-public-model-comparison.sh --self-test
 ./bench-power.sh --self-test
 
