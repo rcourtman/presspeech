@@ -153,6 +153,6 @@
     <rect x="468" y="456" width="110" height="28" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
     <text x="523" y="474" text-anchor="middle" font-size="13"><tspan font-weight="700" fill="#0E8A66">~80 MB</tspan><tspan fill="#64748B"> RAM</tspan></text>
     <rect x="590" y="456" width="105" height="28" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
-    <text x="642" y="474" text-anchor="middle" font-size="13"><tspan font-weight="700" fill="#0E8A66">2.5 MB</tspan><tspan fill="#64748B"> app</tspan></text>
+    <text x="642" y="474" text-anchor="middle" font-size="13"><tspan font-weight="700" fill="#0E8A66">8.3 MB</tspan><tspan fill="#64748B"> app</tspan></text>
   </g>
 </svg>
