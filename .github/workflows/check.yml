@@ -40,6 +40,9 @@ jobs:
       - name: Release script self-test
         run: ./ship-swift.sh --self-test
       - name: Benchmark helper self-tests
+        env:
+          # Exercise the locale boundary: report metrics must remain dot-decimal.
+          LC_ALL: pl_PL.UTF-8
         run: |
           experiments/swift-bench/bench-power.sh --self-test
           experiments/swift-bench/add-real-dictation-fixture.sh --self-test
