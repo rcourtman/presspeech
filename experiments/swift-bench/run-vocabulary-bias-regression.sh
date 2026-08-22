@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Metrics are parsed and emitted as dot-decimal machine-readable values.
+export LC_ALL=C
+
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$SCRIPT_PATH")"
 
