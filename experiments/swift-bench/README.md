@@ -143,7 +143,7 @@ polish-benchmark/
   sentence-02.txt
 
 vocabulary.txt       # FluidAudio simple format: canonical: alias1, alias2
-critical-terms.txt   # one exact canonical output form per line
+critical-terms.txt   # every exact canonical vocabulary form, one per line
 ```
 
 Then run:
@@ -158,16 +158,19 @@ Then run:
 ```
 
 Reports are ignored and privacy-redacted by default. They include average and
-worst WER, weighted exact critical-term recall, p50 inference latency, peak
-process memory, model-cache footprint, and preparation time. Pass
+worst WER, weighted exact critical-term recall, unexpected critical-term
+insertions, p50 inference latency, peak process memory, model-cache footprint,
+and preparation time. Pass
 `--show-transcripts` or `--show-paths` only for local reports that are safe to
 share.
 
 Critical terms deliberately use exact surface forms after case/punctuation
-normalization. FluidAudio aliases are alternate acoustic/string matches, but
-an accepted candidate is replaced with its canonical term; aliases do not
-generate grammatical inflections. List every inflected form that the benchmark
-expects to preserve.
+normalization. Include every canonical vocabulary form: an occurrence beyond
+the reference count is reported as an unexpected insertion even when that term
+is absent from the clip. FluidAudio aliases are alternate acoustic/string
+matches, but an accepted candidate is replaced with its canonical term; aliases
+do not generate grammatical inflections. List every inflected form that the
+benchmark expects to preserve.
 
 ## Public speech regression
 

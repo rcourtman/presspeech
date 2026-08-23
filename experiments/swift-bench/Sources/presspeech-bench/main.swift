@@ -734,11 +734,12 @@ func werPercent(reference: String, hypothesis: String) -> Double {
     return Double(wordEditDistance(ref, hyp)) / Double(ref.count) * 100
 }
 
-struct CriticalTermRecall {
+struct CriticalTermScore {
     let matched: Int
     let total: Int
+    let unexpected: Int
 
-    var percent: Double {
+    var recallPercent: Double {
         guard total > 0 else { return 100 }
         return Double(matched) / Double(total) * 100
     }
@@ -755,23 +756,28 @@ func phraseOccurrenceCount(_ phrase: [String], in words: [String]) -> Int {
     return count
 }
 
-func criticalTermRecall(reference: String,
-                        hypothesis: String,
-                        terms: [String]) -> CriticalTermRecall {
+func criticalTermScore(reference: String,
+                       hypothesis: String,
+                       terms: [String]) -> CriticalTermScore {
     let referenceWords = werTokens(reference)
     let hypothesisWords = werTokens(hypothesis)
     var matched = 0
     var total = 0
+    var unexpected = 0
     for term in terms {
         let phrase = werTokens(term)
         guard !phrase.isEmpty else { continue }
         let expected = phraseOccurrenceCount(phrase, in: referenceWords)
-        guard expected > 0 else { continue }
         let actual = phraseOccurrenceCount(phrase, in: hypothesisWords)
         total += expected
         matched += min(expected, actual)
+        unexpected += max(0, actual - expected)
     }
-    return CriticalTermRecall(matched: matched, total: total)
+    return CriticalTermScore(
+        matched: matched,
+        total: total,
+        unexpected: unexpected
+    )
 }
 
 func loadCriticalTerms(from url: URL) throws -> [String] {
@@ -795,14 +801,15 @@ func runBenchSelfTests() throws {
         phraseOccurrenceCount(["szypańskim"], in: ["ze", "szypańskim", "i", "szypańskim"]) == 2,
         "phrase occurrence count should preserve Polish diacritics"
     )
-    let recall = criticalTermRecall(
+    let score = criticalTermScore(
         reference: "Rozmawiałem z Szypańskim i Szypańskim.",
-        hypothesis: "Rozmawiałem z Szypańskim i Szymańskim.",
+        hypothesis: "Rozmawiałem z Szypańskim, Szymańskim i Nieobecny.",
         terms: ["Szypańskim", "Nieobecny"]
     )
-    try expect(recall.matched == 1, "critical-term recall should count matched occurrences")
-    try expect(recall.total == 2, "critical-term recall should count only terms present in reference")
-    try expect(abs(recall.percent - 50) < 0.001, "critical-term recall percentage should be weighted")
+    try expect(score.matched == 1, "critical-term recall should count matched occurrences")
+    try expect(score.total == 2, "critical-term recall should count only terms present in reference")
+    try expect(abs(score.recallPercent - 50) < 0.001, "critical-term recall percentage should be weighted")
+    try expect(score.unexpected == 1, "critical-term scoring should count insertions absent from the reference")
 
     print("presspeech-bench self-test passed")
 }
@@ -898,12 +905,12 @@ func summarize(_ name: String,
     }
     func criticalTermTag(_ text: String) -> String {
         guard let reference, !criticalTerms.isEmpty else { return "" }
-        let recall = criticalTermRecall(
+        let score = criticalTermScore(
             reference: reference,
             hypothesis: text,
             terms: criticalTerms
         )
-        return " [critical-terms matched=\(recall.matched) total=\(recall.total) recall=\(String(format: "%.1f%%", recall.percent))]"
+        return " [critical-terms matched=\(score.matched) total=\(score.total) recall=\(String(format: "%.1f%%", score.recallPercent)) unexpected=\(score.unexpected)]"
     }
     if texts.count == 1, let only = texts.first {
         let display = redactTranscripts ? redactedTextLabel(only) : "\"\(only)\""

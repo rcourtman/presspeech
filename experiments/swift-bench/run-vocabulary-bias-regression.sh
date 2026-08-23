@@ -42,9 +42,10 @@ isolated:
   sliding-v3     SlidingWindowAsrManager without vocabulary boosting
   sliding-vocab  the same sliding path plus the auxiliary CTC rescorer
 
-Critical-term recall is exact after case/punctuation normalization. List each
-inflected output form separately; FluidAudio aliases are alternate matches,
-not morphological generators.
+Critical-term recall and unexpected insertions are exact after case/punctuation
+normalization. List every canonical vocabulary form, including forms absent from
+some clips, and list inflections separately; FluidAudio aliases are alternate
+matches, not morphological generators.
 USAGE
 }
 
@@ -83,8 +84,8 @@ extract_max_wer_percent() {
 
 extract_critical_metrics() {
     local log_file="$1"
-    sed -nE 's/.*critical-terms matched=([0-9]+) total=([0-9]+) recall=([0-9.]+)%.*/\1\t\2\t\3/p' "$log_file" \
-        | sort -t $'\t' -k3,3n \
+    sed -nE 's/.*critical-terms matched=([0-9]+) total=([0-9]+) recall=([0-9.]+)% unexpected=([0-9]+).*/\1\t\2\t\3\t\4/p' "$log_file" \
+        | sort -t $'\t' -k3,3n -k4,4nr \
         | head -n 1
 }
 
@@ -143,14 +144,15 @@ summary_row() {
                 critical_matched += $4
                 critical_total += $5
             }
-            if ($7 != "unknown") { p50_sum += $7; p50_seen += 1 }
-            if ($8 != "unknown" && (peak_seen == 0 || $8 > max_peak)) {
-                max_peak = $8; peak_seen += 1
+            if ($7 != "unknown") { critical_unexpected += $7 }
+            if ($8 != "unknown") { p50_sum += $8; p50_seen += 1 }
+            if ($9 != "unknown" && (peak_seen == 0 || $9 > max_peak)) {
+                max_peak = $9; peak_seen += 1
             }
-            if ($9 != "unknown" && (cache_seen == 0 || $9 > max_cache)) {
-                max_cache = $9; cache_seen += 1
+            if ($10 != "unknown" && (cache_seen == 0 || $10 > max_cache)) {
+                max_cache = $10; cache_seen += 1
             }
-            if ($10 != "unknown") { prep_sum += $10; prep_seen += 1 }
+            if ($11 != "unknown") { prep_sum += $11; prep_seen += 1 }
         }
         END {
             avg_wer = wer_seen ? sprintf("%.2f", wer_sum / wer_seen) : "unknown"
@@ -160,7 +162,7 @@ summary_row() {
             peak = peak_seen ? sprintf("%.1f", max_peak) : "unknown"
             cache = cache_seen ? sprintf("%.1f", max_cache) : "unknown"
             prep = prep_seen ? sprintf("%.1f", prep_sum / prep_seen) : "unknown"
-            printf("| `%s` | %d | %s | %s | %d/%d | %s | %s | %s | %s | %s |\n", variant, count, avg_wer, worst, critical_matched, critical_total, critical, avg_p50, peak, cache, prep)
+            printf("| `%s` | %d | %s | %s | %d/%d | %s | %d | %s | %s | %s | %s |\n", variant, count, avg_wer, worst, critical_matched, critical_total, critical, critical_unexpected, avg_p50, peak, cache, prep)
         }
     ' "$tsv"
 }
@@ -204,10 +206,10 @@ run_self_test() {
         echo '  model-cache: total=812.3 MB components=parakeet-v3=600.0 MB,ctc-110m=212.3 MB'
         echo '    latency:  p50=  140.2 ms  min=  138.0 ms  max=  145.0 ms'
         echo '    memory:   peak=  88.4 MB  Δ-from-start=  80.0 MB'
-        echo '    transcript: [WER 12.5%] [critical-terms matched=7 total=8 recall=87.5%] <redacted 42 chars>'
+        echo '    transcript: [WER 12.5%] [critical-terms matched=7 total=8 recall=87.5% unexpected=2] <redacted 42 chars>'
     } >"$log"
     assert_eq "$(extract_max_wer_percent "$log")" "12.5" "WER parser"
-    assert_eq "$(extract_critical_metrics "$log")" $'7\t8\t87.5' "critical-term parser"
+    assert_eq "$(extract_critical_metrics "$log")" $'7\t8\t87.5\t2' "critical-term parser"
     assert_eq "$(extract_p50_ms "$log")" "140.2" "latency parser"
     assert_eq "$(extract_peak_mb "$log")" "88.4" "memory parser"
     assert_eq "$(extract_cache_mb "$log")" "812.3" "cache parser"
@@ -221,13 +223,13 @@ run_self_test() {
 
     local tsv="$tmpdir/results.tsv"
     {
-        printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\n'
-        printf '001\tv3\t10.0\t1\t2\t50.0\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '002\tv3\t20.0\t2\t2\t100.0\t120.0\t42.0\t600.0\t1100.0\n'
+        printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\n'
+        printf '001\tv3\t10.0\t1\t2\t50.0\t2\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '002\tv3\t20.0\t2\t2\t100.0\t1\t120.0\t42.0\t600.0\t1100.0\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     summary_row "$tsv" v3 >"$summary"
-    assert_contains "$summary" '| `v3` | 2 | 15.00 | 20.0 | 3/4 | 75.0 | 110.0 | 42.0 | 600.0 | 1050.0 |'
+    assert_contains "$summary" '| `v3` | 2 | 15.00 | 20.0 | 3/4 | 75.0 | 3 | 110.0 | 42.0 | 600.0 | 1050.0 |'
 
     local secret_path="$tmpdir/Private Polish Benchmark"
     REDACT_PATHS=1
@@ -369,7 +371,7 @@ tsv="$OUTDIR/$timestamp-vocabulary-bias.tsv"
 raw_dir="$OUTDIR/$timestamp-vocabulary-bias-logs"
 mkdir -p "$raw_dir"
 
-printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\n' >"$tsv"
+printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\n' >"$tsv"
 
 {
     echo "# Presspeech Vocabulary-Bias Comparison"
@@ -384,14 +386,15 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Transcript output: $([[ "$REDACT_TRANSCRIPTS" -eq 1 ]] && echo redacted || echo included)"
     echo
     echo "> Production v3, unbiased sliding v3, and CTC-rescored sliding v3 run"
-    echo "> in separate processes. Critical-term recall counts exact canonical"
-    echo "> surface forms after case/punctuation normalization. Model cache is"
+    echo "> in separate processes. Critical-term recall and unexpected insertions"
+    echo "> count exact canonical surface forms after case/punctuation normalization."
+    echo "> An unexpected insertion is an occurrence beyond the reference count. Model cache is"
     echo "> logical on-disk size after preparation, not measured network traffic."
     echo
     echo "## Per-Clip Results"
     echo
-    echo "| Clip | Variant | WER % | Critical hits | Critical recall % | p50 ms | Peak MB | Cache MB | Prepare ms |"
-    echo "|---|---|---:|---:|---:|---:|---:|---:|---:|"
+    echo "| Clip | Variant | WER % | Critical hits | Critical recall % | Unexpected critical insertions | p50 ms | Peak MB | Cache MB | Prepare ms |"
+    echo "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"
 } >"$report"
 
 clip_index=0
@@ -434,11 +437,12 @@ for clip in "${clips[@]}"; do
         wer="$(extract_max_wer_percent "$log_file")"
         critical="$(extract_critical_metrics "$log_file")"
         if [[ -n "$critical" ]]; then
-            IFS=$'\t' read -r critical_matched critical_total critical_recall <<<"$critical"
+            IFS=$'\t' read -r critical_matched critical_total critical_recall critical_unexpected <<<"$critical"
         else
             critical_matched="unknown"
             critical_total="unknown"
             critical_recall="unknown"
+            critical_unexpected="unknown"
         fi
         p50="$(extract_p50_ms "$log_file")"
         peak="$(extract_peak_mb "$log_file")"
@@ -449,12 +453,12 @@ for clip in "${clips[@]}"; do
         [[ -n "$cache" ]] || cache="unknown"
         [[ -n "$prepare" ]] || prepare="unknown"
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
-            "$critical_recall" "$p50" "$peak" "$cache" "$prepare" >>"$tsv"
-        printf '| `%s` | `%s` | %s | %s/%s | %s | %s | %s | %s | %s |\n' \
+            "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" >>"$tsv"
+        printf '| `%s` | `%s` | %s | %s/%s | %s | %s | %s | %s | %s | %s |\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
-            "$critical_recall" "$p50" "$peak" "$cache" "$prepare" >>"$report"
+            "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" >>"$report"
     done
 done
 
@@ -462,8 +466,8 @@ done
     echo
     echo "## Summary"
     echo
-    echo "| Variant | Clips | Avg WER % | Worst WER % | Critical hits | Critical recall % | Avg p50 ms | Max peak MB | Cache MB | Avg prepare ms |"
-    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+    echo "| Variant | Clips | Avg WER % | Worst WER % | Critical hits | Critical recall % | Unexpected critical insertions | Avg p50 ms | Max peak MB | Cache MB | Avg prepare ms |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     summary_row "$tsv" v3
     summary_row "$tsv" sliding-v3
     summary_row "$tsv" sliding-vocab
