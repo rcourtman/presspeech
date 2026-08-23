@@ -66,10 +66,15 @@ tail -f ~/Library/Logs/Presspeech.log
 
 The unattended `presspeech-dev` maintainer runs on Linux and therefore cannot
 validate either platform's native runtime locally. In that environment, run
-`presspeech-mac-qa` from the repository root for the native Swift
-`--self-test all` gate and `presspeech-windows-qa` for the Windows unit and
-CUDA/ASR self-tests. Treat a missing or failed native worker as a verification
-blocker; never substitute a Linux-only check for platform-native validation.
+`infra/maintainer-vm/bin/presspeech-mac-qa` from the repository root for the
+native Swift `--self-test all` gate and
+`infra/maintainer-vm/bin/presspeech-windows-qa` for the Windows unit and
+CUDA/ASR self-tests. Use the checked-in helpers rather than the installed
+`/usr/local/bin` copies: repository fixes can land before the VM is
+reprovisioned, and the current helpers ensure ignored caches, logs, and private
+benchmark recordings are never copied to a native worker. Treat a missing or
+failed native worker as a verification blocker; never substitute a Linux-only
+check for platform-native validation.
 
 There is no separate unit-test target — pure logic instead exposes
 itself through the `--self-test` lane on the same binary. Suites:
