@@ -3,9 +3,10 @@
 
 This is a conservative static guard. It does not prove privacy, but it
 catches the easy mistakes: interpolating or concatenating transcript
-text, correction sources/replacements, or whole correction arrays into
-`log(...)`. Raw global keycodes are also forbidden because they can reveal
-typed characters. Counts and boolean state are allowed.
+text, correction sources/replacements, whole correction arrays, or audio
+buffers into Swift `log(...)` and Windows Python `_log(...)` calls. Raw
+global keycodes are also forbidden because they can reveal typed characters.
+Counts and other bounded metadata are allowed.
 
 The whole argument expression of each `log(...)` call is scanned —
 string-literal prose is stripped first so only code (interpolations,
@@ -16,6 +17,7 @@ is checked for forbidden identifiers.
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import sys
 import tempfile
@@ -23,7 +25,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PATHS = [ROOT / "swift" / "Sources" / "Presspeech" / "main.swift"]
+DEFAULT_PATHS = [
+    ROOT / "swift" / "Sources" / "Presspeech" / "main.swift",
+    *sorted((ROOT / "windows").glob("*.py")),
+]
 
 LOG_CALL_RE = re.compile(r"(?<![A-Za-z0-9_.])log\s*\(")
 
@@ -74,6 +79,33 @@ SAFE_MEMBER_ACCESS_RE = re.compile(
     """,
     re.VERBOSE,
 )
+
+PYTHON_PRIVATE_IDENTIFIERS = {
+    "audio",
+    "body",
+    "cleaned",
+    "corrected",
+    "correction",
+    "corrections",
+    "dictionary",
+    "history",
+    "pcm",
+    "raw_transcript",
+    "raw_text",
+    "replacement",
+    "replacement_field",
+    "samples",
+    "source",
+    "source_field",
+    "spoken",
+    "stripped",
+    "text",
+    "transcript",
+    "trimmed",
+}
+
+# Reading these properties exposes only bounded metadata, not the private value.
+PYTHON_SAFE_METADATA_ATTRIBUTES = {"count", "is_empty", "ndim", "shape", "size"}
 
 
 class Finding(Exception):
@@ -190,10 +222,81 @@ def scan_text(path: Path, text: str) -> list[str]:
     return findings
 
 
+def is_python_log_call(node: ast.Call) -> bool:
+    if isinstance(node.func, ast.Name):
+        return node.func.id == "_log"
+    return isinstance(node.func, ast.Attribute) and node.func.attr == "_log"
+
+
+def python_private_identifiers(node: ast.AST) -> list[str]:
+    identifiers: set[str] = set()
+
+    def visit(current: ast.AST) -> None:
+        # Length/count metadata is safe even when derived from transcript text,
+        # correction collections, or audio buffers.
+        if (isinstance(current, ast.Call)
+                and isinstance(current.func, ast.Name)
+                and current.func.id == "len"
+                and len(current.args) == 1
+                and not current.keywords):
+            return
+        if (isinstance(current, ast.Attribute)
+                and current.attr in PYTHON_SAFE_METADATA_ATTRIBUTES):
+            return
+
+        if isinstance(current, ast.Name) and current.id in PYTHON_PRIVATE_IDENTIFIERS:
+            identifiers.add(current.id)
+        elif (isinstance(current, ast.Attribute)
+              and current.attr in PYTHON_PRIVATE_IDENTIFIERS):
+            identifiers.add(current.attr)
+        elif isinstance(current, ast.Subscript):
+            index = current.slice
+            if (isinstance(index, ast.Constant)
+                    and isinstance(index.value, str)
+                    and index.value in PYTHON_PRIVATE_IDENTIFIERS):
+                identifiers.add(index.value)
+
+        for child in ast.iter_child_nodes(current):
+            visit(child)
+
+    visit(node)
+    return sorted(identifiers)
+
+
+def scan_python_text(path: Path, text: str) -> list[str]:
+    try:
+        tree = ast.parse(text, filename=str(path))
+    except SyntaxError as exc:
+        return [f"{path}:{exc.lineno or 1}: could not parse Python log calls"]
+
+    findings: list[str] = []
+    log_calls = sorted(
+        (
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and is_python_log_call(node)
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    for node in log_calls:
+        identifiers: set[str] = set()
+        for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
+            identifiers.update(python_private_identifiers(argument))
+        if identifiers:
+            findings.append(
+                f"{path}:{node.lineno}: suspicious log argument references "
+                f"{', '.join(sorted(identifiers))}"
+            )
+    return findings
+
+
 def scan_paths(paths: list[Path]) -> list[str]:
     findings: list[str] = []
     for path in paths:
-        findings.extend(scan_text(path, path.read_text(encoding="utf-8")))
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".py":
+            findings.extend(scan_python_text(path, text))
+        else:
+            findings.extend(scan_text(path, text))
     return findings
 
 
@@ -220,13 +323,31 @@ def run_self_test() -> None:
     catalog("transcript: \\(cleaned)")
     logger.log("transcript: \\(cleaned)")
     """
+    python_clean = """
+self._log("transcription complete: %d chars" % len(text))
+self._log("audio samples: %d" % audio.size)
+PresspeechApp._log("dictionary rules: %d" % len(self.settings["dictionary"]))
+self._log("backend: %s" % backend)
+"""
+    python_dirty = """
+self._log(text)
+self._log("transcript: %s" % transcript)
+self._log(f"corrected: {corrected}")
+self._log("dictionary: %s" % self.settings["dictionary"])
+self._log(audio)
+self._log(text.upper())
+"""
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
         dirty_path = Path(tmp) / "dirty.swift"
         non_log_path = Path(tmp) / "non-log.swift"
+        python_clean_path = Path(tmp) / "clean.py"
+        python_dirty_path = Path(tmp) / "dirty.py"
         clean_path.write_text(clean, encoding="utf-8")
         dirty_path.write_text(dirty, encoding="utf-8")
         non_log_path.write_text(non_log_calls, encoding="utf-8")
+        python_clean_path.write_text(python_clean, encoding="utf-8")
+        python_dirty_path.write_text(python_dirty, encoding="utf-8")
         findings = scan_paths([clean_path])
         if findings:
             raise SystemExit(f"self-test rejected clean log calls: {findings}")
@@ -245,6 +366,20 @@ def run_self_test() -> None:
         ]:
             if not any(needle in finding for finding in findings):
                 raise SystemExit(f"self-test did not catch {label}")
+
+        findings = scan_paths([python_clean_path])
+        if findings:
+            raise SystemExit(f"self-test rejected clean Python log calls: {findings}")
+        findings = scan_paths([python_dirty_path])
+        if len(findings) != 6:
+            raise SystemExit(
+                f"self-test expected 6 dirty Python findings, got {len(findings)}: {findings}"
+            )
+        for identifier in ("audio", "corrected", "dictionary", "text", "transcript"):
+            if not any(identifier in finding for finding in findings):
+                raise SystemExit(
+                    f"self-test did not catch Python private identifier {identifier!r}"
+                )
 
 
 def main() -> int:
