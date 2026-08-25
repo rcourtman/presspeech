@@ -8,7 +8,7 @@ pycaw==20251023
 numpy>=1.26.0
 soundfile>=0.12.1
 transformers>=5.14.1,<6
-sentencepiece>=0.2.0
+sentencepiece>=0.2.2
 librosa>=0.11.0
 
 # PyTorch with CUDA 12 (for Parakeet-TDT on the GPU). Install with:
