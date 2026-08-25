@@ -1,11 +1,17 @@
-# Surface advisories against the single Swift dependency (FluidAudio)
-# and the GitHub Actions used in .github/workflows/. Updates land as PRs
-# rather than auto-merging — the maintainer reviews each one before
-# bumping the pin.
+# Surface advisories and updates for the Swift, Windows Python, and GitHub
+# Actions dependency surfaces. Updates land as PRs rather than auto-merging —
+# the maintainer reviews each one before accepting a new version.
 version: 2
 updates:
   - package-ecosystem: swift
     directory: /swift
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+  - package-ecosystem: pip
+    directory: /windows
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
