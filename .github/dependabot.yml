@@ -14,6 +14,9 @@ updates:
     directory: /windows
     schedule:
       interval: weekly
+    # Most runtime requirements are lower bounds, so avoid PRs that merely
+    # raise a floor while the existing constraint already permits the update.
+    versioning-strategy: increase-if-necessary
     open-pull-requests-limit: 5
     labels:
       - dependencies
