@@ -7,7 +7,7 @@ pyperclip>=1.8.2
 pycaw==20251023
 numpy>=1.26.0
 soundfile>=0.12.1
-transformers>=5.14.1,<6
+transformers>=5.15.1,<6
 sentencepiece>=0.2.0
 librosa>=0.11.0
 
