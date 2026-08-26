@@ -129,7 +129,9 @@ single-file limit. Build outputs belong only in ignored `windows/build/`,
 Use the manual `windows-release` workflow for Windows prereleases. It supports
 optional PFX signing through the `WINDOWS_CERTIFICATE_BASE64` and
 `WINDOWS_CERTIFICATE_PASSWORD` repository secrets; unsigned builds must be
-labelled clearly as such.
+labelled clearly as such. Its required `expected_sha` input is the exact
+40-character `main` commit approved for release; the workflow rejects a moved
+ref before building.
 
 The Windows updater is a security boundary. Accept only `windows-vX.Y.Z`
 releases with the exact versioned installer and `.sha256` asset names. Keep

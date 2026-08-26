@@ -12,6 +12,10 @@ on:
         description: "Guarded-client correlation ID (normally blank)"
         required: false
         type: string
+      expected_sha:
+        description: "Exact main commit approved for release (40-character SHA)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -25,6 +29,8 @@ jobs:
       # PowerShell run block would allow PowerShell expressions in the input.
       PRESSPEECH_RELEASE_VERSION: ${{ inputs.version }}
       PRESSPEECH_RELEASE_REQUEST_ID: ${{ inputs.request_id }}
+      PRESSPEECH_RELEASE_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PRESSPEECH_RELEASE_HEAD_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,6 +45,13 @@ jobs:
           $requestId = $env:PRESSPEECH_RELEASE_REQUEST_ID
           if ($requestId -and $requestId -notmatch '^[0-9]{8}T[0-9]{6}Z-[0-9]+$') {
             throw "Request ID must be blank or use the guarded-client format"
+          }
+          $expectedSha = $env:PRESSPEECH_RELEASE_EXPECTED_SHA
+          if ($expectedSha -notmatch '^[0-9a-f]{40}$') {
+            throw "Expected SHA must be a lowercase 40-character Git commit ID"
+          }
+          if ($expectedSha -ne $env:PRESSPEECH_RELEASE_HEAD_SHA) {
+            throw "Release ref moved: expected $expectedSha but workflow checked out $env:PRESSPEECH_RELEASE_HEAD_SHA"
           }
           $expected = 'VERSION = "' + $version + '"'
           $declared = @(Get-Content -LiteralPath windows/config.py |
