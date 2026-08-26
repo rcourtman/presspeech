@@ -63,6 +63,13 @@ jobs:
           if (-not (Test-Path -LiteralPath $notes)) {
             throw "Missing release notes: $notes"
           }
+      - name: Validate existing release tag
+        shell: pwsh
+        run: |
+          .\windows\validate-release-tag.ps1 `
+            -Tag "windows-v$env:PRESSPEECH_RELEASE_VERSION" `
+            -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+            -AllowMissing
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -114,9 +121,25 @@ jobs:
           if (-not (Test-Path -LiteralPath $notes)) {
             throw "Missing release notes: $notes"
           }
-          gh release view $tag 2>$null
+          $releaseJson = gh release view $tag `
+            --json isDraft,isPrerelease,tagName 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --target $env:GITHUB_SHA --prerelease --title "Presspeech for Windows $version" --notes-file $notes
+            gh release create $tag `
+              --target $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+              --prerelease `
+              --title "Presspeech for Windows $version" `
+              --notes-file $notes
+          } else {
+            $release = $releaseJson | ConvertFrom-Json
+            if ($release.tagName -ne $tag -or $release.isDraft -or
+                -not $release.isPrerelease) {
+              throw "Existing $tag release is not the expected published prerelease"
+            }
           }
+          # targetCommitish can retain stale creation metadata after a tag is
+          # moved. Verify the actual tag ref before replacing any assets.
+          .\windows\validate-release-tag.ps1 `
+            -Tag $tag `
+            -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
           $installer = "windows/dist/installer/Presspeech-Setup-$version-x64.exe"
           gh release upload $tag $installer "$installer.sha256" --clobber

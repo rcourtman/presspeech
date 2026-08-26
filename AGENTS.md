@@ -121,7 +121,8 @@ indicator visible without opening the microphone, playing recording cues, or
 muting playback; error/unloaded states may schedule one retry.
 
 Windows packaging lives in `windows/Presspeech.spec`, `windows/installer.iss`,
-and `windows/build-release.ps1`. The release build is intentionally one-folder
+`windows/build-release.ps1`, and `windows/validate-release-tag.ps1`. The release
+build is intentionally one-folder
 PyInstaller plus Inno Setup: CUDA Torch makes the installed payload roughly
 4.4 GB, while maximum compression keeps the installer below GitHub's 2 GB
 single-file limit. Build outputs belong only in ignored `windows/build/`,
@@ -131,7 +132,8 @@ optional PFX signing through the `WINDOWS_CERTIFICATE_BASE64` and
 `WINDOWS_CERTIFICATE_PASSWORD` repository secrets; unsigned builds must be
 labelled clearly as such. Its required `expected_sha` input is the exact
 40-character `main` commit approved for release; the workflow rejects a moved
-ref before building.
+ref before building, rejects an existing same-version tag on any other commit,
+and verifies the tag again before replacing release assets.
 
 The Windows updater is a security boundary. Accept only `windows-vX.Y.Z`
 releases with the exact versioned installer and `.sha256` asset names. Keep

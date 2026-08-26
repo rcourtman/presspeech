@@ -38,6 +38,8 @@ jobs:
         shell: pwsh
         run: |
           [ScriptBlock]::Create((Get-Content build-release.ps1 -Raw)) | Out-Null
+          [ScriptBlock]::Create((Get-Content validate-release-tag.ps1 -Raw)) | Out-Null
+          .\validate-release-tag.ps1 -SelfTest
           python -m py_compile Presspeech.spec
           $rejected = $false
           try {

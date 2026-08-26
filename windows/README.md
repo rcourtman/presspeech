@@ -155,7 +155,9 @@ failures and writes the installer plus checksum under `dist\installer`. Build
 outputs remain ignored by Git. The manual `windows-release` GitHub workflow
 builds and publishes a Windows prerelease. Its `expected_sha` input must be the
 exact 40-character `main` commit being released; the workflow stops before the
-build if the branch has moved. If the repository later receives a code-signing
+build if the branch has moved or the version's existing release tag points to a
+different commit. It verifies the tag again before replacing release assets. If
+the repository later receives a code-signing
 certificate, add its base64 PFX and password as
 `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`; the same build
 automatically signs both the app executable and installer.
