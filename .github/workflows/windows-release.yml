@@ -20,6 +20,12 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  # Signing timestamps make repeated builds non-identical. Never let two jobs
+  # race to replace the same version's release assets.
+  group: windows-release-${{ inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   build-and-publish:
     runs-on: windows-latest
@@ -31,6 +37,7 @@ jobs:
       PRESSPEECH_RELEASE_REQUEST_ID: ${{ inputs.request_id }}
       PRESSPEECH_RELEASE_EXPECTED_SHA: ${{ inputs.expected_sha }}
       PRESSPEECH_RELEASE_HEAD_SHA: ${{ github.sha }}
+      PRESSPEECH_RELEASE_REF: ${{ github.ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,13 +53,10 @@ jobs:
           if ($requestId -and $requestId -notmatch '^[0-9]{8}T[0-9]{6}Z-[0-9]+$') {
             throw "Request ID must be blank or use the guarded-client format"
           }
-          $expectedSha = $env:PRESSPEECH_RELEASE_EXPECTED_SHA
-          if ($expectedSha -notmatch '^[0-9a-f]{40}$') {
-            throw "Expected SHA must be a lowercase 40-character Git commit ID"
-          }
-          if ($expectedSha -ne $env:PRESSPEECH_RELEASE_HEAD_SHA) {
-            throw "Release ref moved: expected $expectedSha but workflow checked out $env:PRESSPEECH_RELEASE_HEAD_SHA"
-          }
+          .\windows\validate-release-context.ps1 `
+            -DispatchRef $env:PRESSPEECH_RELEASE_REF `
+            -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+            -HeadSha $env:PRESSPEECH_RELEASE_HEAD_SHA
           $expected = 'VERSION = "' + $version + '"'
           $declared = @(Get-Content -LiteralPath windows/config.py |
             Where-Object { $_ -match '^VERSION\s*=' })
