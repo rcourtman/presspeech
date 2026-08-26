@@ -18,6 +18,13 @@ PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 NEMOTRON_MODEL = "nvidia/nemotron-speech-streaming-en-0.6b"
 MOONSHINE_MODEL = "UsefulSensors/moonshine-streaming-medium"
 
+# A Presspeech release should always load the model snapshots exercised by its
+# native QA. Hugging Face model names otherwise resolve through mutable main
+# branches, allowing a fresh install to change without a Presspeech update.
+PARAKEET_REVISION = "541d1f99c6b0c3cd0b11a95167540bb8edefd82b"
+NEMOTRON_REVISION = "ebe59e5a817142986528bbbee5dba8db7b38ed50"
+MOONSHINE_REVISION = "57b843633a8c183cadf6699ffa761377a933a866"
+
 NEMOTRON_NAME = "nemotron-speech-streaming-en-0.6b"
 MOONSHINE_NAME = "moonshine-streaming-medium"
 
@@ -103,20 +110,24 @@ class Transcriber:
             notify("Presspeech",
                    "Loading Parakeet-TDT v3 on %s (first run downloads ~2.5 GB)..." % device)
         self.processor = _configure_parakeet_processor(
-            AutoProcessor.from_pretrained(PARAKEET_MODEL))
+            AutoProcessor.from_pretrained(
+                PARAKEET_MODEL, revision=PARAKEET_REVISION))
         requested_dtype = _parakeet_dtype(torch, device, self.precision)
         try:
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, dtype=requested_dtype)
+                PARAKEET_MODEL, revision=PARAKEET_REVISION,
+                dtype=requested_dtype)
         except TypeError:
-            self.model = AutoModelForTDT.from_pretrained(PARAKEET_MODEL)
+            self.model = AutoModelForTDT.from_pretrained(
+                PARAKEET_MODEL, revision=PARAKEET_REVISION)
         except Exception as exc:
             if requested_dtype == "auto":
                 raise
             if notify is not None:
                 notify("Presspeech", "Half-precision load failed; retrying FP32 (%s)"
                        % str(exc)[:100])
-            self.model = AutoModelForTDT.from_pretrained(PARAKEET_MODEL, dtype="auto")
+            self.model = AutoModelForTDT.from_pretrained(
+                PARAKEET_MODEL, revision=PARAKEET_REVISION, dtype="auto")
         if device != "cpu":
             self.model.to(device)
         self.backend = "parakeet"
@@ -129,9 +140,11 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Nemotron English ASR on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
-        self.processor = AutoProcessor.from_pretrained(NEMOTRON_MODEL)
+        self.processor = AutoProcessor.from_pretrained(
+            NEMOTRON_MODEL, revision=NEMOTRON_REVISION)
         self.model = AutoModelForRNNT.from_pretrained(
-            NEMOTRON_MODEL, dtype=dtype).to(device)
+            NEMOTRON_MODEL, revision=NEMOTRON_REVISION,
+            dtype=dtype).to(device)
         self.backend = "nemotron"
         self._device = device
 
@@ -142,9 +155,11 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Moonshine Medium on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
-        self.processor = AutoProcessor.from_pretrained(MOONSHINE_MODEL)
+        self.processor = AutoProcessor.from_pretrained(
+            MOONSHINE_MODEL, revision=MOONSHINE_REVISION)
         self.model = MoonshineStreamingForConditionalGeneration.from_pretrained(
-            MOONSHINE_MODEL, dtype=dtype).to(device)
+            MOONSHINE_MODEL, revision=MOONSHINE_REVISION,
+            dtype=dtype).to(device)
         self.backend = "moonshine"
         self._device = device
 

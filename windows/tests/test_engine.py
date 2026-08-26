@@ -1,3 +1,4 @@
+import sys
 import types
 import unittest
 from unittest import mock
@@ -23,6 +24,112 @@ class ParakeetConfigurationTests(unittest.TestCase):
         returned = engine._configure_parakeet_processor(processor)
         self.assertIs(returned, processor)
         self.assertEqual(processor.decoder_type, "tdt")
+
+    def test_transformers_models_use_reviewed_immutable_revisions(self):
+        torch = types.ModuleType("torch")
+        torch.float16 = "float16"
+        torch.float32 = "float32"
+        torch.bfloat16 = "bfloat16"
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = False
+
+        transformers = types.ModuleType("transformers")
+        transformers.AutoProcessor = mock.Mock()
+        transformers.AutoProcessor.from_pretrained.return_value = \
+            types.SimpleNamespace(decoder_type=None)
+        transformers.AutoModelForTDT = mock.Mock()
+        transformers.AutoModelForRNNT = mock.Mock()
+        transformers.MoonshineStreamingForConditionalGeneration = mock.Mock()
+
+        with mock.patch.dict(sys.modules, {
+                "torch": torch,
+                "transformers": transformers,
+        }):
+            transcriber = engine.Transcriber(precision="auto")
+            transcriber._load_parakeet(None)
+            transformers.AutoProcessor.from_pretrained.assert_called_with(
+                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION)
+            transformers.AutoModelForTDT.from_pretrained.assert_called_once_with(
+                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION,
+                dtype="auto")
+
+            transcriber._load_nemotron(None)
+            transformers.AutoProcessor.from_pretrained.assert_called_with(
+                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION)
+            transformers.AutoModelForRNNT.from_pretrained.assert_called_once_with(
+                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION,
+                dtype="float32")
+
+            transcriber._load_moonshine(None)
+            transformers.AutoProcessor.from_pretrained.assert_called_with(
+                engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION)
+            (transformers.MoonshineStreamingForConditionalGeneration
+             .from_pretrained.assert_called_once_with(
+                 engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
+                 dtype="float32"))
+
+    def test_parakeet_load_fallbacks_keep_the_reviewed_revision(self):
+        torch = types.ModuleType("torch")
+        torch.float16 = "float16"
+        torch.float32 = "float32"
+        torch.bfloat16 = "bfloat16"
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = True
+        torch.cuda.is_bf16_supported.return_value = True
+
+        transformers = types.ModuleType("transformers")
+        transformers.AutoProcessor = mock.Mock()
+        transformers.AutoProcessor.from_pretrained.return_value = \
+            types.SimpleNamespace(decoder_type=None)
+        transformers.AutoModelForTDT = mock.Mock()
+        model = mock.Mock()
+        transformers.AutoModelForTDT.from_pretrained.side_effect = [
+            RuntimeError("half precision unavailable"), model,
+        ]
+
+        with mock.patch.dict(sys.modules, {
+                "torch": torch,
+                "transformers": transformers,
+        }):
+            engine.Transcriber(precision="fp16")._load_parakeet(None)
+
+        self.assertEqual(
+            transformers.AutoModelForTDT.from_pretrained.call_args_list,
+            [
+                mock.call(
+                    engine.PARAKEET_MODEL,
+                    revision=engine.PARAKEET_REVISION,
+                    dtype="float16"),
+                mock.call(
+                    engine.PARAKEET_MODEL,
+                    revision=engine.PARAKEET_REVISION,
+                    dtype="auto"),
+            ],
+        )
+
+        transformers.AutoModelForTDT.from_pretrained.reset_mock()
+        transformers.AutoModelForTDT.from_pretrained.side_effect = [
+            TypeError("dtype is unsupported"), model,
+        ]
+        torch.cuda.is_available.return_value = False
+        with mock.patch.dict(sys.modules, {
+                "torch": torch,
+                "transformers": transformers,
+        }):
+            engine.Transcriber(precision="auto")._load_parakeet(None)
+
+        self.assertEqual(
+            transformers.AutoModelForTDT.from_pretrained.call_args_list,
+            [
+                mock.call(
+                    engine.PARAKEET_MODEL,
+                    revision=engine.PARAKEET_REVISION,
+                    dtype="auto"),
+                mock.call(
+                    engine.PARAKEET_MODEL,
+                    revision=engine.PARAKEET_REVISION),
+            ],
+        )
 
     def test_fp16_is_selected_only_for_cuda(self):
         torch = types.SimpleNamespace(float16="fp16", bfloat16="bf16")

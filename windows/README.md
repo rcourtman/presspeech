@@ -36,6 +36,9 @@ Requirements:
 
 First launch downloads the Parakeet model once (~2.5 GB) into
 `%USERPROFILE%\.cache\huggingface`, then loads and warms it in the background.
+Each Presspeech release pins its Transformers-backed Hugging Face models to
+the immutable snapshots exercised by native QA, so a fresh install cannot
+silently receive different model files from the same app version.
 The first-run readiness window shows model loading, microphone selection, the
 push-to-talk key, and Start with Windows in one place. Wait until it says the
 model is ready before the first dictation.
