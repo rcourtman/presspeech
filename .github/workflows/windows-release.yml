@@ -1,4 +1,5 @@
 name: windows-release
+run-name: Windows release ${{ inputs.version }} (${{ inputs.request_id || 'manual' }})
 
 on:
   workflow_dispatch:
@@ -6,6 +7,10 @@ on:
       version:
         description: "Windows version (X.Y.Z)"
         required: true
+        type: string
+      request_id:
+        description: "Guarded-client correlation ID (normally blank)"
+        required: false
         type: string
 
 permissions:
@@ -19,6 +24,7 @@ jobs:
       # Treat workflow_dispatch input as data. Referencing it directly inside a
       # PowerShell run block would allow PowerShell expressions in the input.
       PRESSPEECH_RELEASE_VERSION: ${{ inputs.version }}
+      PRESSPEECH_RELEASE_REQUEST_ID: ${{ inputs.request_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,6 +35,10 @@ jobs:
           $version = $env:PRESSPEECH_RELEASE_VERSION
           if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
             throw "Version must have the canonical form X.Y.Z"
+          }
+          $requestId = $env:PRESSPEECH_RELEASE_REQUEST_ID
+          if ($requestId -and $requestId -notmatch '^[0-9]{8}T[0-9]{6}Z-[0-9]+$') {
+            throw "Request ID must be blank or use the guarded-client format"
           }
           $expected = 'VERSION = "' + $version + '"'
           $declared = @(Get-Content -LiteralPath windows/config.py |
