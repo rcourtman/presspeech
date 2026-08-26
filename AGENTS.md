@@ -127,6 +127,9 @@ PyInstaller plus Inno Setup: CUDA Torch makes the installed payload roughly
 4.4 GB, while maximum compression keeps the installer below GitHub's 2 GB
 single-file limit. Build outputs belong only in ignored `windows/build/`,
 `windows/dist/`, and the guarded `%TEMP%\presspeech-package` staging directory.
+The build runs the frozen executable's model-free package self-test before Inno
+Setup so missing lazy imports and native runtime modules cannot reach an
+installer.
 Use the manual `windows-release` workflow for Windows prereleases. It supports
 optional PFX signing through the `WINDOWS_CERTIFICATE_BASE64` and
 `WINDOWS_CERTIFICATE_PASSWORD` repository secrets; unsigned builds must be

@@ -74,6 +74,42 @@ class InputSelectionTests(unittest.TestCase):
 
 
 class TextRegressionTests(unittest.TestCase):
+    def test_packaged_selftest_loads_every_lazy_runtime_dependency(self):
+        loaded = {}
+
+        def load_module(name):
+            module = mock.Mock()
+            for symbol in dict(app.PACKAGE_SMOKE_IMPORTS)[name]:
+                setattr(module, symbol, object())
+            loaded[name] = module
+            return module
+
+        with mock.patch.object(app.sys, "frozen", True, create=True), \
+                mock.patch.object(app.importlib, "import_module",
+                                  side_effect=load_module) as importer:
+            app._package_selftest()
+
+        self.assertEqual(
+            [call.args[0] for call in importer.call_args_list],
+            [name for name, _symbols in app.PACKAGE_SMOKE_IMPORTS],
+        )
+        self.assertEqual(set(loaded), {
+            "comtypes", "ctranslate2", "faster_whisper", "librosa",
+            "pycaw.constants", "pycaw.pycaw", "safetensors",
+            "sentencepiece", "soundfile", "tokenizers", "torch",
+            "transformers",
+        })
+
+    def test_packaged_selftest_redacts_import_exception_details(self):
+        with mock.patch.object(app.sys, "frozen", True, create=True), \
+                mock.patch.object(
+                    app.importlib, "import_module",
+                    side_effect=OSError(r"C:\\private\\build\\missing.dll")):
+            with self.assertRaisesRegex(
+                    RuntimeError, r"^packaged import unavailable: torch$") as caught:
+                app._package_selftest()
+        self.assertNotIn("private", str(caught.exception))
+
     def test_dictionary_rules_match_whole_phrases_only(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {

@@ -88,6 +88,44 @@ function Invoke-PresspeechSign([string]$Path) {
     }
 }
 
+function Invoke-PresspeechPackageSelfTest([string]$Executable) {
+    $resultPath = Join-Path $stageBuildDir "package-selftest.txt"
+    Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
+    $env:PRESSPEECH_PACKAGE_SELFTEST_RESULT = $resultPath
+    try {
+        $process = Start-Process `
+            -FilePath $Executable `
+            -ArgumentList "--package-selftest" `
+            -WorkingDirectory (Split-Path -Parent $Executable) `
+            -PassThru
+        if (-not $process.WaitForExit(120000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Packaged executable self-test timed out."
+        }
+        if ($process.ExitCode -ne 0) {
+            $detail = if (Test-Path -LiteralPath $resultPath) {
+                (Get-Content -LiteralPath $resultPath -Raw).Trim()
+            } else {
+                "packaged executable did not reach the self-test entry point"
+            }
+            if ($detail -notmatch `
+                    '^(packaged import unavailable: [A-Za-z0-9_.]+|packaged executable did not reach the self-test entry point)$') {
+                $detail = "packaged executable returned an invalid self-test result"
+            }
+            throw "Packaged executable self-test failed: $detail"
+        }
+        if (-not (Test-Path -LiteralPath $resultPath) -or
+                (Get-Content -LiteralPath $resultPath -Raw).Trim() -ne "ok") {
+            throw "Packaged executable returned an invalid self-test result."
+        }
+    } finally {
+        Remove-Item Env:PRESSPEECH_PACKAGE_SELFTEST_RESULT `
+            -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
+    }
+    Write-Output "Packaged executable self-test passed."
+}
+
 if (-not $ReusePackage) {
 foreach ($path in @($buildDir, $distDir)) {
     $fullPath = [IO.Path]::GetFullPath($path)
@@ -161,6 +199,7 @@ if (-not (Test-Path -LiteralPath $appExe)) {
     throw "Packaged executable was not created: $appExe"
 }
 Invoke-PresspeechSign $appExe
+Invoke-PresspeechPackageSelfTest $appExe
 
 $appSize = (Get-ChildItem -LiteralPath (Join-Path $stageDistDir "Presspeech") -Recurse -File |
     Measure-Object -Property Length -Sum).Sum

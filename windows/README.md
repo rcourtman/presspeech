@@ -152,12 +152,15 @@ powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.6
 
 The build uses a short temporary staging path to avoid Windows path-length
 failures and writes the installer plus checksum under `dist\installer`. Build
-outputs remain ignored by Git. The manual `windows-release` GitHub workflow
-builds and publishes a Windows prerelease. Its `expected_sha` input must be the
-exact 40-character `main` commit being released; the workflow stops before the
-build if it was dispatched from another ref, the branch has moved, or the
-version's existing release tag points to a different commit. Same-version jobs
-are serialized, and the tag is verified again before replacing release assets.
+outputs remain ignored by Git. Before creating the installer, the build runs a
+model-free smoke test through the frozen executable to verify that its lazy ASR
+backends and native runtime modules were actually packaged. The manual
+`windows-release` GitHub workflow builds and publishes a Windows prerelease. Its
+`expected_sha` input must be the exact 40-character `main` commit being released;
+the workflow stops before the build if it was dispatched from another ref, the
+branch has moved, or the version's existing release tag points to a different
+commit. Same-version jobs are serialized, and the tag is verified again before
+replacing release assets.
 If the repository later receives a code-signing
 certificate, add its base64 PFX and password as
 `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`; the same build

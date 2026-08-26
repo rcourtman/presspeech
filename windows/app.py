@@ -4,6 +4,7 @@ Hold a hotkey, speak, release, and the transcript is typed at the cursor.
 Everything runs locally (Whisper via faster-whisper); no cloud, no accounts.
 """
 
+import importlib
 import math
 import os
 import platform
@@ -83,6 +84,29 @@ UNSAFE_INPUT_HOST_APIS = ("wdm-ks",)
 
 LOG_PATH = os.path.join(cfg.CONFIG_DIR, "log.txt")
 UPDATE_CHECK_INTERVAL_SEC = 24 * 60 * 60
+
+# The frozen app imports UI and capture dependencies at startup. Exercise the
+# model backends and other lazy imports explicitly before an installer can be
+# created, without downloading weights or opening the microphone.
+PACKAGE_SMOKE_IMPORTS = (
+    ("torch", ("cuda",)),
+    ("transformers", (
+        "AutoModelForRNNT",
+        "AutoModelForTDT",
+        "AutoProcessor",
+        "MoonshineStreamingForConditionalGeneration",
+    )),
+    ("faster_whisper", ("WhisperModel",)),
+    ("ctranslate2", ()),
+    ("sentencepiece", ("SentencePieceProcessor",)),
+    ("tokenizers", ("Tokenizer",)),
+    ("safetensors", ("safe_open",)),
+    ("librosa", ("resample",)),
+    ("soundfile", ("SoundFile",)),
+    ("comtypes", ()),
+    ("pycaw.constants", ("AudioDeviceState", "EDataFlow")),
+    ("pycaw.pycaw", ("AudioUtilities",)),
+)
 
 
 def _update_check_due(last_check_epoch, now_epoch=None):
@@ -1324,7 +1348,51 @@ def _selftest():
         transcriber.unload()
 
 
+def _package_selftest():
+    """Verify that the frozen executable contains every lazy runtime import."""
+    if not getattr(sys, "frozen", False):
+        raise RuntimeError("packaged self-test requires a frozen executable")
+    for module_name, symbols in PACKAGE_SMOKE_IMPORTS:
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            # Keep release logs deterministic and free of runner-local paths.
+            raise RuntimeError(
+                "packaged import unavailable: %s" % module_name) from None
+        for symbol in symbols:
+            try:
+                getattr(module, symbol)
+            except Exception:
+                raise RuntimeError(
+                    "packaged import unavailable: %s.%s" %
+                    (module_name, symbol)) from None
+
+
+def _write_package_selftest_result(result):
+    """Write the small build-script handshake without using app logging."""
+    result_path = os.environ.get("PRESSPEECH_PACKAGE_SELFTEST_RESULT", "")
+    if not result_path:
+        return
+    try:
+        with open(result_path, "w", encoding="ascii", newline="\n") as handle:
+            handle.write(result + "\n")
+    except OSError:
+        pass
+
+
 if __name__ == "__main__":
+    if "--package-selftest" in sys.argv:
+        try:
+            _package_selftest()
+            outcome = "ok"
+            exit_code = 0
+        except Exception as exc:
+            outcome = str(exc)
+            exit_code = 1
+        _write_package_selftest_result(outcome)
+        # GUI-mode frozen executables have no reliable stdout/stderr, and a
+        # few native libraries keep worker threads alive during finalisation.
+        os._exit(exit_code)
     if "--selftest" in sys.argv:
         _selftest()
         # Some native CUDA worker threads outlive Python finalisation in a
