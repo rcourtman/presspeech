@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Compare production Parakeet v3 with unbiased and vocabulary-rescored
-# sliding-window v3 on the same multilingual dictation fixtures.
+# sliding-window v3 policies on the same multilingual dictation fixtures.
 
 set -euo pipefail
 
@@ -36,11 +36,14 @@ Options:
   --self-test              run parser, aggregation, and redaction tests only
   -h, --help               show this help
 
-The three variants run in separate processes so memory measurements stay
+The four variants run in separate processes so memory measurements stay
 isolated:
   v3             production AsrManager path
   sliding-v3     SlidingWindowAsrManager without vocabulary boosting
   sliding-vocab  the same sliding path plus the auxiliary CTC rescorer
+  sliding-vocab-conservative
+                  the same rescorer with FluidAudio's recommended short-term
+                  taper (pivot 5) and spotter similarity floors (0.30/0.50)
 
 Critical-term recall and unexpected insertions are exact after case/punctuation
 normalization. List every canonical vocabulary form, including forms absent from
@@ -385,7 +388,7 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Clips: ${#clips[@]}"
     echo "- Transcript output: $([[ "$REDACT_TRANSCRIPTS" -eq 1 ]] && echo redacted || echo included)"
     echo
-    echo "> Production v3, unbiased sliding v3, and CTC-rescored sliding v3 run"
+    echo "> Production v3, unbiased sliding v3, and both CTC-rescored policies run"
     echo "> in separate processes. Critical-term recall and unexpected insertions"
     echo "> count exact canonical surface forms after case/punctuation normalization."
     echo "> An unexpected insertion is an occurrence beyond the reference count. Model cache is"
@@ -410,7 +413,7 @@ for clip in "${clips[@]}"; do
     afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
     cp "$ref" "$tmpdir/$clip_id.txt"
 
-    for variant in v3 sliding-v3 sliding-vocab; do
+    for variant in v3 sliding-v3 sliding-vocab sliding-vocab-conservative; do
         log_file="$raw_dir/$clip_id-$variant.bench.txt"
         bench_args=(
             ".build/release/presspeech-bench"
@@ -420,7 +423,7 @@ for clip in "${clips[@]}"; do
             "--critical-terms" "$CRITICAL_TERMS"
             "--trials" "$TRIALS"
         )
-        if [[ "$variant" == "sliding-vocab" ]]; then
+        if [[ "$variant" == "sliding-vocab" || "$variant" == "sliding-vocab-conservative" ]]; then
             bench_args+=( "--custom-vocabulary" "$VOCABULARY" )
         fi
         if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
@@ -471,6 +474,7 @@ done
     summary_row "$tsv" v3
     summary_row "$tsv" sliding-v3
     summary_row "$tsv" sliding-vocab
+    summary_row "$tsv" sliding-vocab-conservative
     echo
     echo "Raw bench logs: $(path_label "$raw_dir")"
     echo "Machine-readable TSV: $(path_label "$tsv")"

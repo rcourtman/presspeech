@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|sliding-v3|sliding-vocab|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -50,8 +50,9 @@ struct CLIArgs {
     var nemotronMultilingualChunkMs = DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS
     // Optional Parakeet v3 language/script hint. `nil` keeps auto-detection.
     var language: Language? = nil
-    // The vocabulary path is accepted only by the sliding-vocab backend. It
-    // stays outside production until the benchmark proves a quality win.
+    // The vocabulary path is accepted only by the sliding vocabulary
+    // backends. It stays outside production until the benchmark proves a
+    // quality win.
     var customVocabulary: URL? = nil
     // Plain-text canonical terms whose exact surface-form recall is reported
     // without printing term or transcript content.
@@ -129,7 +130,7 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|sliding-v3|sliding-vocab|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
@@ -138,6 +139,9 @@ func parseArgs() -> CLIArgs {
                          sliding-vocab
                               sliding-v3 plus auxiliary CTC vocabulary rescoring;
                               requires --custom-vocabulary
+                         sliding-vocab-conservative
+                              sliding-vocab with FluidAudio's recommended short-term
+                              taper and spotter similarity floors
                          unified
                               FluidAudio Parakeet Unified 0.6B offline batch
                          nemotron-en
@@ -158,7 +162,7 @@ func parseArgs() -> CLIArgs {
                          default: auto)
               --custom-vocabulary <path>
                          simple text or FluidAudio JSON vocabulary file; valid only
-                         with --backend sliding-vocab
+                         with --backend sliding-vocab or sliding-vocab-conservative
               --critical-terms <path>
                          plain text, one canonical word or phrase per line; report
                          exact surface-form recall without printing term content
@@ -505,6 +509,7 @@ final class SlidingWindowBackend: ASRBackend {
     let name: String
     private let language: Language?
     private let customVocabularyURL: URL?
+    private let conservativeVocabulary: Bool
     private var models: AsrModels!
     private var vocabulary: CustomVocabularyContext?
     private var ctcModels: CtcModels?
@@ -517,12 +522,21 @@ final class SlidingWindowBackend: ASRBackend {
         return components
     }
 
-    init(language: Language?, customVocabularyURL: URL?) {
+    init(
+        language: Language?,
+        customVocabularyURL: URL?,
+        conservativeVocabulary: Bool = false
+    ) {
         self.language = language
         self.customVocabularyURL = customVocabularyURL
-        self.name = customVocabularyURL == nil
-            ? "fluid-ParakeetTDTv3Sliding"
-            : "fluid-ParakeetTDTv3Sliding+Vocabulary"
+        self.conservativeVocabulary = conservativeVocabulary
+        if customVocabularyURL == nil {
+            self.name = "fluid-ParakeetTDTv3Sliding"
+        } else if conservativeVocabulary {
+            self.name = "fluid-ParakeetTDTv3Sliding+VocabularyConservative"
+        } else {
+            self.name = "fluid-ParakeetTDTv3Sliding+Vocabulary"
+        }
     }
 
     func prepare(warmupSamples: [Float]) async throws {
@@ -550,9 +564,17 @@ final class SlidingWindowBackend: ASRBackend {
         let manager = SlidingWindowAsrManager(config: config)
         try await manager.loadModels(models)
         if let vocabulary, let ctcModels {
+            let rescorerConfig = conservativeVocabulary
+                ? VocabularyRescorer.Config(
+                    shortTermCbwTaperPivot: 5,
+                    spotterRescueMinSimilarity: 0.30,
+                    spotterRescueMultiWordMinSimilarity: 0.50
+                )
+                : nil
             try await manager.configureVocabularyBoosting(
                 vocabulary: vocabulary,
-                ctcModels: ctcModels
+                ctcModels: ctcModels,
+                config: rescorerConfig
             )
         }
         try await manager.startStreaming()
@@ -935,12 +957,13 @@ struct PresspeechBench {
         }
         let args = parseArgs()
 
-        if args.backend == "sliding-vocab", args.customVocabulary == nil {
-            FileHandle.standardError.write(Data("--backend sliding-vocab requires --custom-vocabulary\n".utf8))
+        let vocabularyBackends = ["sliding-vocab", "sliding-vocab-conservative"]
+        if vocabularyBackends.contains(args.backend), args.customVocabulary == nil {
+            FileHandle.standardError.write(Data("--backend \(args.backend) requires --custom-vocabulary\n".utf8))
             exit(2)
         }
-        if args.backend != "sliding-vocab", args.customVocabulary != nil {
-            FileHandle.standardError.write(Data("--custom-vocabulary is valid only with --backend sliding-vocab\n".utf8))
+        if !vocabularyBackends.contains(args.backend), args.customVocabulary != nil {
+            FileHandle.standardError.write(Data("--custom-vocabulary is valid only with a sliding vocabulary backend\n".utf8))
             exit(2)
         }
 
@@ -952,11 +975,14 @@ struct PresspeechBench {
             runSummary += ", nemotron-multilingual-language=\(args.nemotronMultilingualLanguage)"
             runSummary += ", nemotron-multilingual-chunk-ms=\(args.nemotronMultilingualChunkMs)"
         }
-        if args.backend == "v3" || args.backend == "sliding-v3" || args.backend == "sliding-vocab" {
+        if args.backend == "v3" || args.backend == "sliding-v3" || vocabularyBackends.contains(args.backend) {
             runSummary += ", language=\(args.language?.rawValue ?? "auto")"
         }
-        if args.backend == "sliding-vocab" {
+        if vocabularyBackends.contains(args.backend) {
             runSummary += ", custom-vocabulary=enabled"
+        }
+        if args.backend == "sliding-vocab-conservative" {
+            runSummary += ", vocabulary-policy=conservative"
         }
         log(runSummary)
         let samples = try load16kMono(url: args.file)
@@ -996,7 +1022,7 @@ struct PresspeechBench {
         let warmup = samples
 
         let known = [
-            "apple", "v3", "sliding-v3", "sliding-vocab", "unified",
+            "apple", "v3", "sliding-v3", "sliding-vocab", "sliding-vocab-conservative", "unified",
             "nemotron-en", "nemotron-multilingual",
             "110m", "fluid", "both",
         ]
@@ -1031,6 +1057,15 @@ struct PresspeechBench {
                 SlidingWindowBackend(
                     language: args.language,
                     customVocabularyURL: args.customVocabulary
+                )
+            )
+        }
+        if args.backend == "sliding-vocab-conservative" {
+            backends.append(
+                SlidingWindowBackend(
+                    language: args.language,
+                    customVocabularyURL: args.customVocabulary,
+                    conservativeVocabulary: true
                 )
             )
         }

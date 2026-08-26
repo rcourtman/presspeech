@@ -19,6 +19,7 @@ the production app.
 | **`v3`** | FluidAudio Swift SDK → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
 | **`sliding-v3`** | FluidAudio sliding-window manager → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
 | **`sliding-vocab`** | `sliding-v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
+| **`sliding-vocab-conservative`** | `sliding-vocab` + FluidAudio's short-term taper and spotter similarity floors | Apple Neural Engine |
 | **`unified`** | FluidAudio Swift SDK → Parakeet Unified 0.6 B offline batch → CoreML | Apple Neural Engine |
 | **`nemotron-en`** | FluidAudio Swift SDK → Nemotron Speech Streaming English 0.6 B, 1120 ms tier → CoreML | Apple Neural Engine |
 | **`nemotron-multilingual`** | FluidAudio Swift SDK → Nemotron 3.5 Streaming Multilingual 0.6 B → CoreML | Apple Neural Engine |
@@ -124,12 +125,15 @@ For a quick non-ASR check of argument parsing and report redaction:
 
 FluidAudio exposes custom vocabulary through its sliding-window Parakeet v3
 manager, not through the direct `AsrManager` call used by Presspeech. The
-vocabulary runner therefore compares three isolated processes so engine-path
+vocabulary runner therefore compares four isolated processes so engine-path
 changes are not misattributed to vocabulary biasing:
 
 1. production `v3`;
 2. `sliding-v3` without vocabulary boosting;
 3. `sliding-vocab` with the auxiliary CTC model and rescorer.
+4. `sliding-vocab-conservative` with FluidAudio's recommended short-term
+   taper (pivot 5) and spotter-rescue similarity floors (0.30 single-word,
+   0.50 multi-word).
 
 Prepare an input directory using the same audio + `.txt` sidecars as the real
 dictation regression, a FluidAudio vocabulary file, and a plain-text critical
