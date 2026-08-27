@@ -639,10 +639,8 @@ say "Asserting required entitlements are present"
 EMBEDDED_ENTITLEMENTS="$(codesign -d --entitlements - "$APP" 2>&1)"
 REQUIRED_ENTITLEMENTS=(
     # The two microphone keys (Tahoe Hardened Runtime + sandbox
-    # legacy). The full justification + ban-list for everything else
-    # lives in ../AGENTS.md — if you're tempted to add JIT,
-    # unsigned-exec, or disable-library-validation here, read that
-    # section first.
+    # legacy). Executable-memory and library-validation exceptions are
+    # intentionally absent from this native application.
     "com.apple.security.device.audio-input"
     "com.apple.security.device.microphone"
 )

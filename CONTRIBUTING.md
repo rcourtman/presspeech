@@ -84,9 +84,6 @@ the native CUDA/ASR gate.
 - Match the existing style: terse Swift, structured concurrency where
   it earns its keep (`actor` for ANE access, `@MainActor` for UI),
   comments only when the *why* is non-obvious.
-- Don't reach for `Bundle.module` — see `AGENTS.md` for the
-  resource-bundling and codesigning constraints that pushed resources
-  outside the SwiftPM target.
 - Don't reintroduce `@MainActor` on `AudioCapture` — the
   `AVAudioEngine` tap fires on an audio thread and the actor
   isolation check will trap. The class is `@unchecked Sendable` with
@@ -121,7 +118,3 @@ the native CUDA/ASR gate.
 - `windows/app.py` — Windows hotkey, audio, paste, and tray lifecycle.
 - `windows/engine.py` — Windows local ASR backends.
 - `windows/tests/` — model-free Windows unit tests.
-
-See `AGENTS.md` for the deeper architectural invariants (Swift
-concurrency model, AVAudioConverter `.noDataNow` gotcha, TCC
-inheritance, telemetry/ship-on-request invariants).

@@ -25,13 +25,12 @@ Cask install uses, so a single `tail -f` covers both.
 | `Package.swift` | SwiftPM manifest. Single dependency: [FluidAudio](https://github.com/FluidInference/FluidAudio). |
 | `Sources/Presspeech/main.swift` | The entire app. Section-tagged with `// MARK: -`. |
 | `Info.plist` | Canonical Info.plist shared by `dev-run.sh` and `../ship-swift.sh`. |
-| `Resources/presspeech-menubar.png` (+ `@2x`) | Template menu-bar icon. Lives outside the SwiftPM target on purpose — see `../AGENTS.md`. |
+| `Resources/presspeech-menubar.png` (+ `@2x`) | Template menu-bar icon copied into the app wrapper by the development and release scripts. |
 | `dev-run.sh` | Local iteration loop (debug build, sign, relaunch). |
 
 ## More
 
 - **End users** — see [`../README.md`](../README.md) for install / usage / troubleshooting.
 - **Contributors** — see [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
-- **AI coding agents** — see [`../AGENTS.md`](../AGENTS.md) for the load-bearing invariants (Swift concurrency model, the `AVAudioConverter` `.noDataNow` gotcha, TCC inheritance, telemetry / ship-on-request rules).
 - **Release** — see [`../ship-swift.sh`](../ship-swift.sh).
 - **Latency benchmarks** — see [`../experiments/swift-bench/`](../experiments/swift-bench/).
