@@ -59,6 +59,11 @@ struct CLIArgs {
     var criticalTerms: URL? = nil
 }
 
+func positiveTrialCount(_ value: String) -> Int? {
+    guard let count = Int(value), count > 0 else { return nil }
+    return count
+}
+
 func parseArgs() -> CLIArgs {
     var iter = CommandLine.arguments.dropFirst().makeIterator()
     var file: URL? = nil
@@ -77,7 +82,11 @@ func parseArgs() -> CLIArgs {
         case "--file":
             if let v = iter.next() { file = URL(fileURLWithPath: v) }
         case "--trials":
-            if let v = iter.next(), let n = Int(v) { trials = n }
+            guard let v = iter.next(), let n = positiveTrialCount(v) else {
+                FileHandle.standardError.write(Data("--trials requires a positive integer\n".utf8))
+                exit(2)
+            }
+            trials = n
         case "--backend":
             if let v = iter.next() { backend = v }
         case "--ref":
@@ -834,6 +843,11 @@ func runBenchSelfTests() throws {
     func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
         guard condition() else { throw BenchSelfTestError.failed(message) }
     }
+
+    try expect(positiveTrialCount("3") == 3, "trial parser should accept positive integers")
+    try expect(positiveTrialCount("0") == nil, "trial parser should reject zero")
+    try expect(positiveTrialCount("-1") == nil, "trial parser should reject negative integers")
+    try expect(positiveTrialCount("three") == nil, "trial parser should reject non-integers")
 
     try expect(
         phraseOccurrenceCount(["szypańskim"], in: ["ze", "szypańskim", "i", "szypańskim"]) == 2,
