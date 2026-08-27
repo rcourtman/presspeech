@@ -43,7 +43,7 @@ _SAVE_LOCK = threading.Lock()
 
 HOTKEYS = [
     "right alt", "right ctrl", "right shift", "right win",
-    "left alt", "left ctrl",
+    "left alt", "left ctrl", "left shift", "left win",
     "f8", "f9", "f10", "f11", "f12",
 ]
 

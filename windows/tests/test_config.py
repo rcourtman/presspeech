@@ -56,6 +56,12 @@ class ConfigLoadTests(unittest.TestCase):
             self.assertEqual(settings[key], config.DEFAULTS[key])
         self.assertNotIn("unknown_future_setting", settings)
 
+    def test_every_advertised_hotkey_survives_validation(self):
+        for hotkey in config.HOTKEYS:
+            with self.subTest(hotkey=hotkey):
+                self.write({"hotkey": hotkey})
+                self.assertEqual(config.load()["hotkey"], hotkey)
+
     def test_dictionary_keeps_only_string_pairs(self):
         self.write({
             "dictionary": [

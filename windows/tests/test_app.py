@@ -250,6 +250,9 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_r))
         self.assertFalse(instance._is_hotkey(app.pkb.Key.alt_l))
 
+    def test_every_settings_hotkey_has_an_input_mapping(self):
+        self.assertEqual(set(config.HOTKEYS), set(app.KEY_MAP))
+
     def test_altgr_chord_does_not_start_right_alt_dictation(self):
         instance = self.make_app()
 
