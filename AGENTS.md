@@ -147,7 +147,9 @@ releases with the exact versioned installer and `.sha256` asset names. Keep
 downloads HTTPS-only and restricted to GitHub release hosts, verify the asset
 size and SHA-256 before launch, and require explicit user approval before both
 download and install. Revalidate the downloaded file immediately before process
-creation so the approved path cannot silently change between those steps. Its
+creation so the approved path cannot silently change between those steps. Keep
+both the installer and its containing directory locked against replacement
+through process creation; locking only the file leaves a parent-path swap. Its
 User-Agent must remain fixed and must not carry the
 app version, device details, settings, transcripts, or usage identifiers.
 

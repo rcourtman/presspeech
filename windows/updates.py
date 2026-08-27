@@ -243,24 +243,29 @@ def _installer_metadata(update, installer_path):
     return expected_size, expected_digest
 
 
+@contextlib.contextmanager
 def _open_locked_installer(installer_path):
-    """Open a Windows file while denying write/delete sharing."""
+    """Open a Windows file and its parent while denying path replacement."""
     if os.name != "nt":
-        return open(installer_path, "rb")
+        with open(installer_path, "rb") as handle:
+            yield handle
+        return
 
-    # Keep the native handle open across CreateProcess. FILE_SHARE_READ lets
-    # Windows load the executable while the missing WRITE and DELETE share
-    # flags prevent another process from changing or replacing the approved
-    # path between the final hash check and process creation.
+    # Keep native handles open across CreateProcess. The file handle denies
+    # write/delete sharing, while the directory handle denies delete sharing
+    # so the parent cannot be renamed and replaced underneath the approved
+    # pathname. Both still allow the access Windows needs to load the EXE.
     import ctypes
     import msvcrt
     from ctypes import wintypes
 
     generic_read = 0x80000000
     file_share_read = 0x00000001
+    file_share_write = 0x00000002
     open_existing = 3
     file_attribute_normal = 0x00000080
     file_flag_open_reparse_point = 0x00200000
+    file_flag_backup_semantics = 0x02000000
     file_attribute_directory = 0x00000010
     file_attribute_reparse_point = 0x00000400
     invalid_handle_value = ctypes.c_void_p(-1).value
@@ -301,31 +306,53 @@ def _open_locked_installer(installer_path):
     close_handle.argtypes = [wintypes.HANDLE]
     close_handle.restype = wintypes.BOOL
 
-    handle = create_file(
-        installer_path,
-        generic_read,
-        file_share_read,
+    parent_handle = create_file(
+        os.path.dirname(os.path.abspath(installer_path)),
+        0,
+        file_share_read | file_share_write,
         None,
         open_existing,
-        file_attribute_normal | file_flag_open_reparse_point,
+        file_flag_open_reparse_point | file_flag_backup_semantics,
         None,
     )
-    if handle == invalid_handle_value:
+    if parent_handle == invalid_handle_value:
         raise ctypes.WinError(ctypes.get_last_error())
+    installer_handle = None
     try:
         information = ByHandleFileInformation()
-        if not get_information(handle, ctypes.byref(information)):
+        if not get_information(parent_handle, ctypes.byref(information)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if (not information.file_attributes & file_attribute_directory or
+                information.file_attributes & file_attribute_reparse_point):
+            raise UpdateError("verified installer is no longer available")
+
+        installer_handle = create_file(
+            installer_path,
+            generic_read,
+            file_share_read,
+            None,
+            open_existing,
+            file_attribute_normal | file_flag_open_reparse_point,
+            None,
+        )
+        if installer_handle == invalid_handle_value:
+            installer_handle = None
+            raise ctypes.WinError(ctypes.get_last_error())
+        information = ByHandleFileInformation()
+        if not get_information(installer_handle, ctypes.byref(information)):
             raise ctypes.WinError(ctypes.get_last_error())
         if information.file_attributes & (
                 file_attribute_directory | file_attribute_reparse_point):
             raise UpdateError("verified installer is no longer available")
         file_descriptor = msvcrt.open_osfhandle(
-            handle, os.O_RDONLY | os.O_BINARY)
-        handle = None
-        return os.fdopen(file_descriptor, "rb")
+            installer_handle, os.O_RDONLY | os.O_BINARY)
+        installer_handle = None
+        with os.fdopen(file_descriptor, "rb") as handle:
+            yield handle
     finally:
-        if handle is not None:
-            close_handle(handle)
+        if installer_handle is not None:
+            close_handle(installer_handle)
+        close_handle(parent_handle)
 
 
 @contextlib.contextmanager
@@ -334,7 +361,9 @@ def locked_verified_installer(update, installer_path):
     expected_size, expected_digest = _installer_metadata(
         update, installer_path)
     try:
-        if os.name != "nt" and os.path.islink(installer_path):
+        if os.name != "nt" and (
+                os.path.islink(installer_path) or
+                os.path.islink(os.path.dirname(os.path.abspath(installer_path)))):
             raise UpdateError("verified installer is no longer available")
         with _open_locked_installer(installer_path) as handle:
             if os.fstat(handle.fileno()).st_size != expected_size:

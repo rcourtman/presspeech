@@ -367,6 +367,24 @@ class DownloadTests(unittest.TestCase):
             os.replace(replacement, path)
 
     @unittest.skipUnless(os.name == "nt", "Windows sharing semantics")
+    def test_launch_lock_denies_parent_path_swap_until_process_creation(self):
+        payload = b"safe installer"
+        update, _digest = self.make_update(payload)
+        with tempfile.TemporaryDirectory() as root:
+            directory = os.path.join(root, "approved")
+            moved = os.path.join(root, "moved")
+            os.mkdir(directory)
+            path = os.path.join(directory, update["installer_name"])
+            with open(path, "wb") as handle:
+                handle.write(payload)
+
+            with updates.locked_verified_installer(update, path):
+                with self.assertRaises(PermissionError):
+                    os.replace(directory, moved)
+
+            os.replace(directory, moved)
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing semantics")
     def test_launch_lock_allows_windows_to_load_the_executable(self):
         executable = sys.executable
         digest = hashlib.sha256()
