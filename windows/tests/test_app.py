@@ -453,6 +453,29 @@ class TextRegressionTests(unittest.TestCase):
         instance._set_indicator.assert_called_once_with("loading")
         instance._model_executor.submit.assert_not_called()
 
+    def test_recording_is_blocked_until_previous_paste_delivery_finishes(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = False
+        instance.transcribing = True
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.model_status = "ready"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+
+        with mock.patch.object(app, "_foreground_process_name") as foreground, \
+                mock.patch.object(app.threading, "Thread") as worker:
+            self.assertFalse(instance.start_recording())
+
+        self.assertFalse(instance.recording)
+        foreground.assert_not_called()
+        worker.assert_not_called()
+        instance._set_indicator.assert_called_once_with("transcribing")
+        instance._log.assert_called_once_with(
+            "dictation ignored; previous transcription is still being delivered")
+
     def test_first_press_after_model_error_starts_one_retry_not_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
@@ -802,6 +825,37 @@ class TextRegressionTests(unittest.TestCase):
         self.assertIsNone(instance._recording_limit_timer)
         timer.cancel.assert_called_once_with()
 
+    def test_stopping_recording_claims_delivery_before_model_queue(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance.transcribing = False
+        instance._rec_epoch = 7
+        audio = __import__("numpy").ones(4800, dtype="float32")
+        instance.buffer = [audio]
+        instance.stream = None
+        instance.icon = None
+        instance.input_device = (0, 16000)
+        instance._recording_target_process = "notepad.exe"
+        instance._recording_scratchpad = None
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._capture_benchmark_if_armed = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._model_executor = mock.Mock()
+
+        self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        self.assertTrue(instance.transcribing)
+        instance._set_indicator.assert_called_once_with("transcribing")
+        instance._model_executor.submit.assert_called_once()
+        queued = instance._model_executor.submit.call_args.args
+        self.assertEqual(queued[0], instance._transcribe_worker)
+        __import__("numpy").testing.assert_array_equal(queued[1], audio)
+        self.assertEqual(queued[2:], ("notepad.exe", None))
+
 
 class PostRollTests(unittest.TestCase):
     def make_app(self, value, peak=0.1, rate=16000):
@@ -874,6 +928,8 @@ class ModelIdleTests(unittest.TestCase):
 
     def test_empty_transcription_refreshes_idle_deadline(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.transcribing = True
         instance._last_model_use = 0.0
         instance._transcribe_worker_inner = mock.Mock(return_value=None)
         instance._schedule_model_idle_unload = mock.Mock()
@@ -885,6 +941,7 @@ class ModelIdleTests(unittest.TestCase):
         self.assertEqual(instance._last_model_use, 123.0)
         instance._schedule_model_idle_unload.assert_called_once_with()
         instance._set_indicator.assert_called_once_with(None)
+        self.assertFalse(instance.transcribing)
 
 
 class StartupTests(unittest.TestCase):

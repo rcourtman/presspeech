@@ -380,6 +380,7 @@ class PresspeechApp:
         self.buffer = []
         self.stream = None
         self.recording = False
+        self.transcribing = False
         self.lock = threading.Lock()
         self.scratchpad = None
         self.settings_window = None
@@ -551,11 +552,21 @@ class PresspeechApp:
         return False
 
     def start_recording(self):
+        # Keep transcription and paste delivery exclusive with capture. A
+        # previous worker injects Ctrl+V and briefly suppresses hook callbacks;
+        # overlapping that with a new recording could swallow its hotkey
+        # release and leave the microphone open until the safety timer fires.
+        if getattr(self, "transcribing", False):
+            self._set_indicator("transcribing")
+            self._log("dictation ignored; previous transcription is still being delivered")
+            return False
         if not self._dictation_model_ready():
             return False
         target_process = _foreground_process_name()
         with self.lock:
-            if self.recording:
+            # Recheck after foreground-process discovery so simultaneous tray
+            # and hotkey starts cannot cross the busy boundary.
+            if self.recording or getattr(self, "transcribing", False):
                 return False
             self._rec_epoch += 1
             epoch = self._rec_epoch
@@ -796,6 +807,10 @@ class PresspeechApp:
                 return False
             self.recording = False
             audio = np.concatenate(self.buffer) if self.buffer else np.zeros(0, dtype=np.float32)
+            # Claim the delivery lifecycle before releasing the recording lock.
+            # This closes the small window in which another hotkey press could
+            # start capture while this method prepares and queues model work.
+            self.transcribing = audio.size > 0
             target_process = self._recording_target_process
             scratchpad_target = getattr(self, "_recording_scratchpad", None)
             self._recording_scratchpad = None
@@ -829,7 +844,7 @@ class PresspeechApp:
         if self.input_device is not None and self.input_device[1] != 16000:
             audio = _resample_to_16k(audio, self.input_device[1])
         if audio.size / 16000.0 < 0.25:
-            self._set_indicator(None)
+            self._finish_transcribing()
             self._log("recording stopped; too short (%.2fs)" % (audio.size / 16000.0))
             self._schedule_model_idle_unload()
             return True
@@ -992,7 +1007,15 @@ class PresspeechApp:
             # evict it immediately after that work completes.
             self._last_model_use = time.perf_counter()
             self._schedule_model_idle_unload()
+            self._finish_transcribing()
+
+    def _finish_transcribing(self):
+        """Clear delivery state without hiding a subsequent recording HUD."""
+        # Hide first while holding the lifecycle lock. A waiting start can only
+        # show its listening state after this stale hide has completed.
+        with self.lock:
             self._set_indicator(None)
+            self.transcribing = False
 
     def _transcribe_worker_inner(
             self, audio, target_process="", scratchpad_target=None):
