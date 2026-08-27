@@ -154,3 +154,20 @@ jobs:
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
           $installer = "windows/dist/installer/Presspeech-Setup-$version-x64.exe"
           gh release upload $tag $installer "$installer.sha256" --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not upload Windows release assets"
+          }
+          # The updater consumes the REST API's exact names, sizes, hashes, and
+          # URLs. Confirm that public metadata contract after upload rather than
+          # treating a successful CLI process as sufficient publication proof.
+          $publishedJson = gh api `
+            "repos/rcourtman/presspeech/releases/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read the published Windows release"
+          }
+          .\windows\validate-release-assets.ps1 `
+            -ReleaseJson $publishedJson `
+            -Tag $tag `
+            -Version $version `
+            -Installer $installer `
+            -Checksum "$installer.sha256"

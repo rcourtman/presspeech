@@ -161,7 +161,10 @@ backends and native runtime modules were actually packaged. The manual
 the workflow stops before the build if it was dispatched from another ref, the
 branch has moved, or the version's existing release tag points to a different
 commit. Same-version jobs are serialized, and the tag is verified again after
-the build before creating the release and before replacing release assets.
+the build before creating the release and before replacing release assets. The
+workflow then compares GitHub's published asset names, sizes, SHA-256 digests,
+and download URLs with the local installer and checksum before reporting a
+successful release.
 If the repository later receives a code-signing
 certificate, add its base64 PFX and password as
 `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`; the same build
