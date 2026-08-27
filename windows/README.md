@@ -17,8 +17,8 @@ automatic fallback.
 
 Download the self-contained Windows x64 installer:
 
-- [Presspeech-Setup-0.1.9-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.9/Presspeech-Setup-0.1.9-x64.exe)
-- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.9)
+- [Presspeech-Setup-0.1.10-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe)
+- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10)
 
 No Python installation or command-line setup is required. Presspeech installs
 per-user under `%LOCALAPPDATA%\Programs\Presspeech`, adds a Start Menu shortcut,
@@ -148,7 +148,7 @@ script from `windows/`:
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact
 .\.venv\Scripts\python -m pip install -r requirements-build.txt
-powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.9
+powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.10
 ```
 
 The build uses a short temporary staging path to avoid Windows path-length
