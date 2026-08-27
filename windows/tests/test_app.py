@@ -592,11 +592,33 @@ class TextRegressionTests(unittest.TestCase):
         instance._log.assert_called_once_with(
             "paste skipped; focus changed from notepad.exe to calculator.exe")
 
+    def test_reused_window_handle_from_another_process_never_receives_paste(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        target = app.PasteTarget("notepad.exe", 1234, 41)
+        replacement = app.PasteTarget("notepad.exe", 1234, 42)
+
+        with mock.patch.object(app.pyperclip, "copy") as copy, \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target",
+                    return_value=replacement), \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("private transcript", target)
+
+        copy.assert_called_once_with("private transcript")
+        controller.assert_not_called()
+        instance.notify.assert_called_once_with(
+            "Transcript copied, not pasted",
+            "The focused window changed while Presspeech was transcribing. "
+            "Paste from the clipboard when ready.")
+
     def test_original_window_still_receives_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._injecting_keys = False
         instance._log = mock.Mock()
-        target = app.PasteTarget("notepad.exe", 1234)
+        target = app.PasteTarget("notepad.exe", 1234, 41)
 
         with mock.patch.object(app.pyperclip, "copy"), \
                 mock.patch.object(app.time, "sleep"), \

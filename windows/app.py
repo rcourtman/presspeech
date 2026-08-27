@@ -116,6 +116,7 @@ PACKAGE_SMOKE_IMPORTS = (
 class PasteTarget(NamedTuple):
     process_name: str
     window_handle: int
+    process_identifier: int = 0
 
 
 def _update_check_due(last_check_epoch, now_epoch=None):
@@ -355,17 +356,20 @@ def _foreground_paste_target():
         if not hwnd:
             return PasteTarget("", 0)
         process_id = wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+        if not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id)):
+            return PasteTarget("", int(hwnd))
         handle = kernel32.OpenProcess(0x1000, False, process_id.value)
         if not handle:
-            return PasteTarget("", int(hwnd))
+            return PasteTarget("", int(hwnd), int(process_id.value))
         try:
             size = wintypes.DWORD(32768)
             path = ctypes.create_unicode_buffer(size.value)
             if not kernel32.QueryFullProcessImageNameW(
                     handle, 0, path, ctypes.byref(size)):
-                return PasteTarget("", int(hwnd))
-            return PasteTarget(os.path.basename(path.value).lower(), int(hwnd))
+                return PasteTarget("", int(hwnd), int(process_id.value))
+            return PasteTarget(
+                os.path.basename(path.value).lower(), int(hwnd),
+                int(process_id.value))
         finally:
             kernel32.CloseHandle(handle)
     except Exception:
@@ -375,6 +379,18 @@ def _foreground_paste_target():
 def _foreground_process_name():
     """Return the executable owning the foreground window, or an empty string."""
     return _foreground_paste_target().process_name
+
+
+def _paste_target_matches(expected, current):
+    """Match an exact window owner, falling back only for legacy callers."""
+    if (not expected.window_handle or
+            current.window_handle != expected.window_handle):
+        return False
+    if expected.process_identifier:
+        return current.process_identifier == expected.process_identifier
+    if expected.process_name:
+        return current.process_name == expected.process_name
+    return False
 
 
 def _paste_route(process_name):
@@ -1171,7 +1187,7 @@ class PresspeechApp:
         time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
         if paste_target.window_handle:
             current_target = _foreground_paste_target()
-            if current_target.window_handle != paste_target.window_handle:
+            if not _paste_target_matches(paste_target, current_target):
                 self._log(
                     "paste skipped; focus changed from %s to %s" % (
                         process_name or "unknown",
