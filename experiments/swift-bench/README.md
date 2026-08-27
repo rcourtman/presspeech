@@ -176,6 +176,8 @@ share.
 Corpus WER is the total edit-error count divided by total reference words, so
 longer clips contribute proportionally instead of each clip receiving equal
 weight. Worst WER remains the most adverse individual trial output per clip.
+Worst-trial selection and vocabulary-policy win/loss categories use exact edit
+counts; the one-decimal WER shown in per-clip tables is display-only.
 
 Critical terms deliberately use exact surface forms after case/punctuation
 normalization. Include every canonical vocabulary form: an occurrence beyond

@@ -82,7 +82,26 @@ extract_worst_wer_metrics() {
     local log_file="$1"
     sed -nE 's/.*\[WER ([0-9.]+)%\].*\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\1\t\2\t\3/p' "$log_file" \
         | awk -F '\t' '
-            !seen || $1 > worst { worst = $1; errors = $2; words = $3; seen = 1 }
+            # Printed WER is rounded to one decimal. Select by the exact
+            # fraction so two distinct trial outcomes that share a display
+            # value cannot hide the true worst result.
+            {
+                numerator = $2
+                denominator = $3
+                # Match WordErrorScore.percent for an empty reference.
+                if (denominator == 0) {
+                    numerator = numerator == 0 ? 0 : 1
+                    denominator = 1
+                }
+                if (!seen || numerator * worst_denominator > worst_numerator * denominator) {
+                    worst = $1
+                    errors = $2
+                    words = $3
+                    worst_numerator = numerator
+                    worst_denominator = denominator
+                    seen = 1
+                }
+            }
             END {
                 if (seen) printf("%s\t%s\t%s\n", worst, errors, words)
                 else print "unknown\tunknown\tunknown"
@@ -225,16 +244,18 @@ comparison_row() {
                 comparable += 1
                 hit_delta = candidate_hits[clip] - baseline_hits[clip]
                 unexpected_delta += candidate_unexpected[clip] - baseline_unexpected[clip]
-                wer_delta = candidate_wer[clip] - baseline_wer[clip]
                 total_hit_delta += hit_delta
-                total_error_delta += candidate_errors[clip] - baseline_errors[clip]
+                error_delta = candidate_errors[clip] - baseline_errors[clip]
+                total_error_delta += error_delta
                 total_reference_words += baseline_words[clip]
 
                 # These categories mirror the per-clip review that exposed
-                # the original vocabulary policy recall/quality tradeoff.
-                if (hit_delta > 0 && wer_delta <= 0) clean_wins += 1
-                else if (hit_delta > 0 && wer_delta > 0) costly_wins += 1
-                else if (hit_delta <= 0 && wer_delta > 0) pure_losses += 1
+                # the original vocabulary policy recall/quality tradeoff. Use
+                # exact edit counts: displayed WER is rounded to one decimal
+                # and can otherwise turn a small real regression into a tie.
+                if (hit_delta > 0 && error_delta <= 0) clean_wins += 1
+                else if (hit_delta > 0 && error_delta > 0) costly_wins += 1
+                else if (hit_delta <= 0 && error_delta > 0) pure_losses += 1
                 else other += 1
             }
             corpus_wer_delta = total_reference_words ? sprintf("%+.2f", total_error_delta / total_reference_words * 100) : "unknown"
@@ -298,6 +319,14 @@ run_self_test() {
         echo '      • [WER 10.0%] [critical-terms matched=2 total=2 recall=100.0% unexpected=3] [word-errors=1 reference-words=10] <redacted 22 chars>'
     } >"$variable_log"
     assert_eq "$(extract_critical_metrics "$variable_log")" $'1\t2\t50.0\t3' "variable-output critical-term envelope"
+    assert_eq "$(extract_worst_wer_metrics "$variable_log")" $'20.0\t2\t10' "variable-output worst WER"
+
+    local rounded_wer_log="$tmpdir/rounded-wer.log"
+    {
+        echo '      • [WER 0.1%] [word-errors=1 reference-words=2000] <redacted 20 chars>'
+        echo '      • [WER 0.1%] [word-errors=2 reference-words=2000] <redacted 22 chars>'
+    } >"$rounded_wer_log"
+    assert_eq "$(extract_worst_wer_metrics "$rounded_wer_log")" $'0.1\t2\t2000' "rounded WER exact worst-trial selection"
 
     local filtered_log="$tmpdir/filtered.log"
     run_benchmark_to_log "$filtered_log" printf '%s\n' \
@@ -313,17 +342,19 @@ run_self_test() {
         printf '001\tsliding-v3\t10.0\t1\t2\t50.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
         printf '002\tsliding-v3\t20.0\t1\t2\t50.0\t1\t100.0\t40.0\t600.0\t1000.0\t1\t5\n'
         printf '003\tsliding-v3\t5.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t20\n'
-        printf '004\tsliding-v3\t10.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
+        printf '004\tsliding-v3\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t2000\n'
         printf '001\tsliding-vocab\t10.0\t2\t2\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
         printf '002\tsliding-vocab\t40.0\t2\t2\t100.0\t2\t100.0\t40.0\t600.0\t1000.0\t2\t5\n'
         printf '003\tsliding-vocab\t10.0\t1\t1\t100.0\t1\t100.0\t40.0\t600.0\t1000.0\t2\t20\n'
-        printf '004\tsliding-vocab\t0.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t0\t10\n'
+        # The displayed WER ties after rounding, but the exact count exposes
+        # one additional error and must classify this clip as a pure loss.
+        printf '004\tsliding-vocab\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t2\t2000\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     summary_row "$tsv" v3 >"$summary"
     assert_contains "$summary" '| `v3` | 2 | 13.33 | 20.0 | 3/4 | 75.0 | 3 | 110.0 | 42.0 | 600.0 | 1050.0 |'
     comparison_row "$tsv" sliding-v3 sliding-vocab >"$summary"
-    assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +2.22 | 1 | 1 | 1 | 1 |'
+    assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +0.15 | 1 | 1 | 2 | 0 |'
 
     local secret_path="$tmpdir/Private Polish Benchmark"
     REDACT_PATHS=1
