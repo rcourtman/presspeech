@@ -162,6 +162,24 @@ extract_prepare_ms() {
     sed -nE 's/.*ready in[[:space:]]+([0-9.]+) ms.*/\1/p' "$log_file" | head -n 1
 }
 
+validate_metrics() {
+    local name
+    local value
+    local missing=()
+    while [[ $# -gt 0 ]]; do
+        name="$1"
+        value="$2"
+        shift 2
+        if [[ -z "$value" || "$value" == "unknown" ]]; then
+            missing+=( "$name" )
+        fi
+    done
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+        printf 'benchmark output missing required metrics: %s\n' "$(IFS=,; echo "${missing[*]}")" >&2
+        return 1
+    fi
+}
+
 run_benchmark_to_log() {
     local log_file="$1"
     shift
@@ -323,6 +341,17 @@ run_self_test() {
     assert_eq "$(extract_peak_mb "$log")" "88.4" "memory parser"
     assert_eq "$(extract_cache_mb "$log")" "812.3" "cache parser"
     assert_eq "$(extract_prepare_ms "$log")" "1234.5" "prepare parser"
+    validate_metrics \
+        wer 12.5 word-errors 1 reference-words 8 \
+        critical-matched 7 critical-total 8 critical-recall 87.5 \
+        critical-unexpected 2 p50 140.2 peak 88.4 cache 812.3 prepare 1234.5
+
+    local validation_log="$tmpdir/validation.log"
+    if validate_metrics wer unknown p50 "" >"$validation_log" 2>&1; then
+        echo "self-test expected missing metrics to fail validation" >&2
+        exit 1
+    fi
+    assert_contains "$validation_log" "benchmark output missing required metrics: wer,p50"
 
     local variable_log="$tmpdir/variable.log"
     {
@@ -599,6 +628,15 @@ for clip in "${clips[@]}"; do
         [[ -n "$peak" ]] || peak="unknown"
         [[ -n "$cache" ]] || cache="unknown"
         [[ -n "$prepare" ]] || prepare="unknown"
+
+        if ! validate_metrics \
+            wer "$wer" word-errors "$word_errors" reference-words "$reference_words" \
+            critical-matched "$critical_matched" critical-total "$critical_total" \
+            critical-recall "$critical_recall" critical-unexpected "$critical_unexpected" \
+            p50 "$p50" peak "$peak" cache "$cache" prepare "$prepare"; then
+            echo "invalid benchmark output for clip $clip_id variant=$variant; see $(path_label "$log_file")" >&2
+            exit 1
+        fi
 
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
