@@ -17,7 +17,9 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # A cancelled workflow can leave its Pages deployment running, which makes
+  # the replacement deployment time out or fail with an in-progress conflict.
+  cancel-in-progress: false
 
 jobs:
   deploy:
