@@ -231,6 +231,11 @@ jobs:
               -Checksum "$installer.sha256" `
               -Notes $notes
             if ($disposition -ceq "publish-draft") {
+              # Asset uploads can take long enough for the remote tag to move.
+              # Recheck at the last possible point before making the draft public.
+              .\windows\validate-release-tag.ps1 `
+                -Tag $tag `
+                -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
               gh release edit $tag --draft=false --prerelease
               if ($LASTEXITCODE -ne 0) {
                 throw "Could not publish resumed draft release $tag"

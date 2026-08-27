@@ -145,6 +145,16 @@ jobs:
               workflow.include?("validate-release-state.ps1")
             abort "Interrupted Windows drafts must use guarded recovery"
           end
+          guarded_draft_publish = %r{
+            if\s*\(\$disposition\s+-ceq\s+"publish-draft"\)\s*\{.*?
+            \.\\windows\\validate-release-tag\.ps1\s+`\s*
+            -Tag\s+\$tag\s+`\s*
+            -ExpectedSha\s+\$env:PRESSPEECH_RELEASE_EXPECTED_SHA\s*
+            gh\s+release\s+edit\s+\$tag\s+--draft=false\s+--prerelease
+          }mx
+          unless workflow.match?(guarded_draft_publish)
+            abort "Resumed Windows drafts must revalidate the tag immediately before publication"
+          end
           if workflow.match?(/\bgh\s+release\s+upload[^\n]*--clobber/) ||
               workflow.match?(/\bgh\s+release\s+delete\b/)
             abort "Windows draft recovery must not replace releases or assets"

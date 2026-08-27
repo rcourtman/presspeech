@@ -169,8 +169,8 @@ same job inspects and completes it before discarding the exact build outputs. A
 later rerun resumes a remaining draft only after its tag, title, prerelease
 state, target commit, release notes, and any existing assets exactly match the
 approved release. It uploads only missing fixed-name assets without clobbering,
-revalidates the complete draft, and then publishes it. Existing published assets
-are never replaced: a rerun must
+then revalidates both the complete draft and the release tag immediately before
+publication. Existing published assets are never replaced: a rerun must
 reproduce them exactly. The workflow compares GitHub's published asset names,
 sizes,
 SHA-256 digests, and download URLs with the local installer and checksum before
