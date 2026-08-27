@@ -41,9 +41,11 @@ jobs:
         run: |
           [ScriptBlock]::Create((Get-Content build-release.ps1 -Raw)) | Out-Null
           [ScriptBlock]::Create((Get-Content validate-release-assets.ps1 -Raw)) | Out-Null
+          [ScriptBlock]::Create((Get-Content validate-release-checks.ps1 -Raw)) | Out-Null
           [ScriptBlock]::Create((Get-Content validate-release-context.ps1 -Raw)) | Out-Null
           [ScriptBlock]::Create((Get-Content validate-release-tag.ps1 -Raw)) | Out-Null
           .\validate-release-assets.ps1 -SelfTest
+          .\validate-release-checks.ps1 -SelfTest
           .\validate-release-context.ps1 -SelfTest
           .\validate-release-tag.ps1 -SelfTest
           $headSha = git rev-parse HEAD

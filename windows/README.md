@@ -159,7 +159,8 @@ backends and native runtime modules were actually packaged. The manual
 `windows-release` GitHub workflow builds and publishes a Windows prerelease. Its
 `expected_sha` input must be the exact 40-character `main` commit being released;
 the workflow stops before the build if it was dispatched from another ref, the
-branch has moved, or the version's existing release tag points to a different
+branch has moved, the repository or Windows push workflows are not green for
+that exact commit, or the version's existing release tag points to a different
 commit. Same-version jobs are serialized, and the tag is verified again after
 the build before creating the release and before replacing release assets. The
 workflow then compares GitHub's published asset names, sizes, SHA-256 digests,

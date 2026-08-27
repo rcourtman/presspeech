@@ -18,6 +18,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -74,6 +75,26 @@ jobs:
             -Tag "windows-v$env:PRESSPEECH_RELEASE_VERSION" `
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
             -AllowMissing
+      - name: Require green CI for approved commit
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $sha = $env:PRESSPEECH_RELEASE_EXPECTED_SHA
+          $checkJson = gh api `
+            "repos/rcourtman/presspeech/actions/workflows/check.yml/runs?branch=main&event=push&head_sha=$sha&per_page=100"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read repository CI runs for approved commit $sha"
+          }
+          $windowsJson = gh api `
+            "repos/rcourtman/presspeech/actions/workflows/windows.yml/runs?branch=main&event=push&head_sha=$sha&per_page=100"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read Windows CI runs for approved commit $sha"
+          }
+          .\windows\validate-release-checks.ps1 `
+            -CheckWorkflowJson $checkJson `
+            -WindowsWorkflowJson $windowsJson `
+            -ExpectedSha $sha
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
