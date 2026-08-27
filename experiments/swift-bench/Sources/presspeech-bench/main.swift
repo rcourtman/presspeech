@@ -1074,11 +1074,13 @@ struct PresspeechBench {
             exit(2)
         }
         var backends: [ASRBackend] = []
+        var failedBackends = 0
         if args.backend == "apple" || args.backend == "both" {
             if #available(macOS 26, *) {
                 backends.append(AppleBackend())
             } else {
-                print("apple backend skipped — requires macOS 26+")
+                failedBackends += 1
+                log("apple backend unavailable — requires macOS 26+")
             }
         }
         if args.backend == "v3" || args.backend == "fluid" || args.backend == "both" {
@@ -1130,7 +1132,8 @@ struct PresspeechBench {
             // Kept wired up but off the default path: as of the current
             // tested FluidAudio revision the 110m CoreML bundle won't load — missing
             // CtcHead.mlmodelc plus a decoder shape mismatch (2×1×640 vs
-            // 1×1×640). prepare() fails gracefully and the run continues.
+            // 1×1×640). prepare() records the failure and lets the remaining
+            // backends run before the benchmark exits unsuccessfully.
             // Re-test with --backend 110m once it's fixed upstream.
             backends.append(FluidBackend(name: "fluid-ParakeetTDTCTC110M", version: .tdtCtc110m))
         }
@@ -1144,7 +1147,6 @@ struct PresspeechBench {
             log("note: \(backends.count) backends in one process — memory is cumulative; run one --backend per process for clean per-model numbers")
         }
 
-        var failedBackends = 0
         for backend in backends {
             log("preparing \(backend.name)…")
             let prepT0 = Date()
