@@ -166,6 +166,37 @@ jobs:
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
             -Installer $installer `
             -Checksum "$installer.sha256"
+          if ($disposition -ceq "create") {
+            # Supplying both assets to `gh release create` makes the CLI stage
+            # a draft, upload the complete pair, and publish only after both
+            # uploads succeed. If the CLI exits after creating that draft, do
+            # not discard this runner's exact (potentially timestamped) build:
+            # inspect and finish the draft through the guarded recovery below.
+            gh release create $tag `
+              $installer `
+              "$installer.sha256" `
+              --target $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+              --prerelease `
+              --title "Presspeech for Windows $version" `
+              --notes-file $notes
+            $createExitCode = $LASTEXITCODE
+            if ($createExitCode -ne 0) {
+              $releaseJson = gh api `
+                "repos/rcourtman/presspeech/releases/tags/$tag" 2>$null
+              if ($LASTEXITCODE -ne 0) {
+                throw "Could not atomically publish Windows release $tag"
+              }
+              $disposition = .\windows\validate-release-state.ps1 `
+                -ReleaseJson $releaseJson `
+                -Tag $tag `
+                -Version $version `
+                -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+                -Installer $installer `
+                -Checksum "$installer.sha256"
+            } else {
+              $disposition = "verify-published"
+            }
+          }
           if ($disposition -like "upload-*" -or
               $disposition -ceq "publish-draft") {
             # Resume only an exact matching private draft. Existing assets must
@@ -206,22 +237,7 @@ jobs:
               throw "Resumed draft is incomplete: $disposition"
             }
           }
-          if ($disposition -ceq "create") {
-            # Supplying both assets to `gh release create` makes the CLI stage
-            # a draft, upload the complete pair, and publish only after both
-            # uploads succeed. An interrupted job therefore cannot expose a
-            # release with a missing installer or checksum.
-            gh release create $tag `
-              $installer `
-              "$installer.sha256" `
-              --target $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
-              --prerelease `
-              --title "Presspeech for Windows $version" `
-              --notes-file $notes
-            if ($LASTEXITCODE -ne 0) {
-              throw "Could not atomically publish Windows release $tag"
-            }
-          } elseif ($disposition -cne "verify-published") {
+          if ($disposition -cne "verify-published") {
             throw "Unexpected Windows release disposition: $disposition"
           }
           # targetCommitish can retain stale creation metadata after a tag is

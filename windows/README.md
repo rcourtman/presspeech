@@ -164,11 +164,13 @@ that exact commit, or the version's existing release tag points to a different
 commit. Same-version jobs are serialized, and the tag is verified again after
 the build before creating the release. The installer and checksum are uploaded
 while the release is still a draft, and it is published only after both uploads
-succeed. If an interrupted upload leaves that private draft behind, a rerun
-resumes it only after its tag, title, prerelease state, target commit, and any
-existing assets exactly match the approved release. It uploads only missing
-fixed-name assets without clobbering, revalidates the complete draft, and then
-publishes it. Existing published assets are never replaced: a rerun must
+succeed. If the atomic create command fails after leaving a private draft, the
+same job inspects and completes it before discarding the exact build outputs. A
+later rerun resumes a remaining draft only after its tag, title, prerelease
+state, target commit, and any existing assets exactly match the approved
+release. It uploads only missing fixed-name assets without clobbering,
+revalidates the complete draft, and then publishes it. Existing published assets
+are never replaced: a rerun must
 reproduce them exactly. The workflow compares GitHub's published asset names,
 sizes,
 SHA-256 digests, and download URLs with the local installer and checksum before

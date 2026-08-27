@@ -142,9 +142,10 @@ requires the repository and Windows push workflows to be green for the exact
 approved commit, rejects an existing same-version tag on any other commit,
 verifies the tag again after the build before creating the release, uploads both
 assets while the release is still a draft, publishes only after both uploads
-succeed, safely resumes a matching interrupted private draft by validating its
-existing assets and uploading only missing assets without clobbering, treats an
-existing published release's assets as immutable, and checks
+succeed, immediately recovers a failed atomic create while the exact build is
+still present, safely resumes a matching interrupted private draft by validating
+its existing assets and uploading only missing assets without clobbering, treats
+an existing published release's assets as immutable, and checks
 the published asset names, sizes, SHA-256 digests, and URLs against the local
 build before reporting success.
 

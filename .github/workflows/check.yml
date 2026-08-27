@@ -132,6 +132,15 @@ jobs:
           unless workflow.match?(atomic_create)
             abort "Windows releases must attach both assets during release creation"
           end
+          create_recovery = %r{
+            gh\s+release\s+create\s+\$tag.*?
+            \$createExitCode\s*=\s*\$LASTEXITCODE.*?
+            if\s*\(\$createExitCode\s+-ne\s+0\).*?
+            gh\s+api\s+`
+          }mx
+          unless workflow.match?(create_recovery)
+            abort "Failed atomic creates must recover before discarding build outputs"
+          end
           unless workflow.match?(/gh\s+release\s+upload\s+\$tag/) &&
               workflow.include?("validate-release-state.ps1")
             abort "Interrupted Windows drafts must use guarded recovery"
