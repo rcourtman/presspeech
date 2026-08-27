@@ -24,6 +24,25 @@ class BritishInflectionTests(unittest.TestCase):
         self.assertEqual(to_british("REALIZED"), "REALISED")
         self.assertEqual(to_british("Organizing"), "Organising")
 
+    def test_analyze_inflections_follow_analyse(self):
+        self.assertEqual(
+            to_british("Analyzed, analyzes, and analyzing."),
+            "Analysed, analyses, and analysing.",
+        )
+
+    def test_inflections_drop_silent_e_added_by_conversion(self):
+        examples = {
+            "centered": "centred",
+            "centering": "centring",
+            "maneuvered": "manoeuvred",
+            "maneuvering": "manoeuvring",
+            "cataloged": "catalogued",
+            "cataloging": "cataloguing",
+        }
+        for american, british in examples.items():
+            with self.subTest(word=american):
+                self.assertEqual(to_british(american), british)
+
     def test_unlisted_ize_like_words_are_unchanged(self):
         self.assertEqual(
             to_british("She prized the capsized model."),

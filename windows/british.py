@@ -134,6 +134,16 @@ def to_british(text):
 
 
 def _inflect(lower):
+    # ``analyze`` is the one listed -yze verb, so it does not enter the -ize
+    # branches below even though its British inflections follow the same rule.
+    if lower.endswith("yzing"):
+        base = BRITISH.get(lower[:-3] + "e")
+        if base:
+            return base[:-1] + "ing" if base.endswith("e") else base + "ing"
+    if lower.endswith("yzed"):
+        base = BRITISH.get(lower[:-1])
+        if base:
+            return base + "d"
     if lower.endswith("izing"):
         base = BRITISH.get(lower[:-3] + "e")
         if base:
@@ -150,5 +160,12 @@ def _inflect(lower):
         if lower.endswith(suffix):
             base = BRITISH.get(lower[:-len(suffix)])
             if base:
+                # Some conversions add a silent e (center -> centre,
+                # catalog -> catalogue). Apply English suffix rules to the
+                # converted base instead of producing centreed/centreing.
+                if suffix == "ed" and base.endswith("e"):
+                    return base + "d"
+                if suffix == "ing" and base.endswith("e"):
+                    return base[:-1] + "ing"
                 return base + suffix
     return None
