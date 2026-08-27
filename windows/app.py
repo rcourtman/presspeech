@@ -17,6 +17,7 @@ import time
 import traceback
 import winsound
 from concurrent.futures import ThreadPoolExecutor
+from typing import NamedTuple
 
 import numpy as np
 import sounddevice as sd
@@ -110,6 +111,11 @@ PACKAGE_SMOKE_IMPORTS = (
     ("pycaw.constants", ("AudioDeviceState", "EDataFlow")),
     ("pycaw.pycaw", ("AudioUtilities",)),
 )
+
+
+class PasteTarget(NamedTuple):
+    process_name: str
+    window_handle: int
 
 
 def _update_check_due(last_check_epoch, now_epoch=None):
@@ -325,8 +331,8 @@ def _resample_to_16k(audio, from_rate):
     return audio[xi] * (1.0 - frac) + audio[xi + 1] * frac
 
 
-def _foreground_process_name():
-    """Return the executable owning the foreground window, or an empty string."""
+def _foreground_paste_target():
+    """Return the foreground window and its executable as one snapshot."""
     try:
         import ctypes
         from ctypes import wintypes
@@ -347,23 +353,28 @@ def _foreground_process_name():
 
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
-            return ""
+            return PasteTarget("", 0)
         process_id = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
         handle = kernel32.OpenProcess(0x1000, False, process_id.value)
         if not handle:
-            return ""
+            return PasteTarget("", int(hwnd))
         try:
             size = wintypes.DWORD(32768)
             path = ctypes.create_unicode_buffer(size.value)
             if not kernel32.QueryFullProcessImageNameW(
                     handle, 0, path, ctypes.byref(size)):
-                return ""
-            return os.path.basename(path.value).lower()
+                return PasteTarget("", int(hwnd))
+            return PasteTarget(os.path.basename(path.value).lower(), int(hwnd))
         finally:
             kernel32.CloseHandle(handle)
     except Exception:
-        return ""
+        return PasteTarget("", 0)
+
+
+def _foreground_process_name():
+    """Return the executable owning the foreground window, or an empty string."""
+    return _foreground_paste_target().process_name
 
 
 def _paste_route(process_name):
@@ -425,7 +436,7 @@ class PresspeechApp:
         self._held_hotkey_keys = frozenset()
         self._held_hotkey_trigger = None
         self._injecting_keys = False
-        self._recording_target_process = ""
+        self._recording_paste_target = PasteTarget("", 0)
         self._recording_scratchpad = None
         self._rec_epoch = 0
         self._recording_limit_timer = None
@@ -619,7 +630,7 @@ class PresspeechApp:
             return False
         if not self._dictation_model_ready():
             return False
-        target_process = _foreground_process_name()
+        paste_target = _foreground_paste_target()
         with self.lock:
             # Recheck after foreground-process discovery so simultaneous tray
             # and hotkey starts cannot cross the busy boundary.
@@ -631,7 +642,7 @@ class PresspeechApp:
             self.buffer = []
             self._peak_rms = 0.0
             self._model_idle_epoch += 1
-            self._recording_target_process = target_process
+            self._recording_paste_target = paste_target
             # Delivery belongs to this recording. Model work is serialized and
             # can finish after a scratchpad is opened, replaced, or closed; a
             # mutable app-wide target could redirect an earlier transcript.
@@ -868,7 +879,7 @@ class PresspeechApp:
             # This closes the small window in which another hotkey press could
             # start capture while this method prepares and queues model work.
             self.transcribing = audio.size > 0
-            target_process = self._recording_target_process
+            paste_target = self._recording_paste_target
             scratchpad_target = getattr(self, "_recording_scratchpad", None)
             self._recording_scratchpad = None
             stream = self.stream
@@ -909,7 +920,7 @@ class PresspeechApp:
         self._set_indicator("transcribing")
         self._log("recording stopped; %.2fs captured, transcribing" % (audio.size / 16000.0))
         self._model_executor.submit(
-            self._transcribe_worker, audio, target_process, scratchpad_target)
+            self._transcribe_worker, audio, paste_target, scratchpad_target)
         return True
 
     def _capture_benchmark_if_armed(self, audio):
@@ -1054,10 +1065,12 @@ class PresspeechApp:
 
     # ---------------- transcription ----------------
 
-    def _transcribe_worker(self, audio, target_process="", scratchpad_target=None):
+    def _transcribe_worker(
+            self, audio, paste_target=PasteTarget("", 0),
+            scratchpad_target=None):
         try:
             return self._transcribe_worker_inner(
-                audio, target_process, scratchpad_target)
+                audio, paste_target, scratchpad_target)
         finally:
             # Empty/error results still exercised the model. Refresh the idle
             # deadline here so an already-queued gaming-mode unload cannot
@@ -1075,7 +1088,8 @@ class PresspeechApp:
             self.transcribing = False
 
     def _transcribe_worker_inner(
-            self, audio, target_process="", scratchpad_target=None):
+            self, audio, paste_target=PasteTarget("", 0),
+            scratchpad_target=None):
         model_started = time.perf_counter()
         try:
             if not self.transcriber.loaded(self.settings["model"]):
@@ -1119,12 +1133,14 @@ class PresspeechApp:
                     timing.get("generate", timing.get("inference", 0.0)),
                     timing.get("decode", 0.0),
                 ))
-        self._deliver_text(text, target_process, scratchpad_target)
+        self._deliver_text(text, paste_target, scratchpad_target)
 
-    def _deliver_text(self, text, target_process="", scratchpad_target=None):
+    def _deliver_text(
+            self, text, paste_target=PasteTarget("", 0),
+            scratchpad_target=None):
         """Deliver only to the destination captured when recording began."""
         if scratchpad_target is None:
-            self._paste(text, target_process)
+            self._paste(text, paste_target)
             return
         if (scratchpad_target is getattr(self, "scratchpad", None) and
                 getattr(scratchpad_target, "root", None) is not None):
@@ -1144,11 +1160,31 @@ class PresspeechApp:
         text += cfg.SUFFIXES.get(self.settings["suffix"], " ")
         return text
 
-    def _paste(self, text, target_process=""):
+    def _paste(self, text, paste_target=PasteTarget("", 0)):
         pyperclip.copy(text)
-        process_name = target_process or _foreground_process_name()
+        if not isinstance(paste_target, PasteTarget):
+            # Keep source callers and older tests compatible while binding all
+            # normal app recordings to an exact foreground-window snapshot.
+            paste_target = PasteTarget(str(paste_target or ""), 0)
+        process_name = paste_target.process_name
         route = _paste_route(process_name)
         time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
+        if paste_target.window_handle:
+            current_target = _foreground_paste_target()
+            if current_target.window_handle != paste_target.window_handle:
+                self._log(
+                    "paste skipped; focus changed from %s to %s" % (
+                        process_name or "unknown",
+                        current_target.process_name or "unknown",
+                    ))
+                self.notify(
+                    "Transcript copied, not pasted",
+                    "The focused window changed while Presspeech was "
+                    "transcribing. Paste from the clipboard when ready.")
+                return
+        elif not process_name:
+            process_name = _foreground_process_name()
+            route = _paste_route(process_name)
         keyboard = pkb.Controller()
         modifiers = [pkb.Key.ctrl_l]
         if route == "moonlight":

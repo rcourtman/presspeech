@@ -83,6 +83,9 @@ When a Moonlight stream is focused, Presspeech automatically uses Moonlight's
 clipboard-typing shortcut so transcripts reach the remote host, including macOS.
 Microsoft Remote Desktop is also detected automatically and uses its redirected
 clipboard with a small reliability delay. Normal Windows apps retain fast Ctrl+V.
+Each recording is bound to the window that was focused when it began. If focus
+changes while the model is transcribing, Presspeech leaves the transcript on the
+clipboard and notifies you instead of pasting private text into the wrong window.
 
 Tray icon (bottom-right) menus include **Dictate** (toggle), **Try Dictation…**
 (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,

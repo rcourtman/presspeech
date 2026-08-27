@@ -493,12 +493,13 @@ class TextRegressionTests(unittest.TestCase):
         instance._play_cue = mock.Mock()
         instance._wake_model_if_idle = mock.Mock()
         instance._schedule_recording_limit = mock.Mock()
-        with mock.patch.object(app, "_foreground_process_name",
-                               return_value="moonlight.exe"), \
+        target = app.PasteTarget("moonlight.exe", 1234)
+        with mock.patch.object(app, "_foreground_paste_target",
+                               return_value=target), \
                 mock.patch.object(app.threading, "Thread"), \
                 mock.patch.object(app.PresspeechApp, "_log"):
             instance.start_recording()
-        self.assertEqual(instance._recording_target_process, "moonlight.exe")
+        self.assertEqual(instance._recording_paste_target, target)
         instance._schedule_recording_limit.assert_called_once_with(1)
 
     def test_recording_owns_the_current_scratchpad_destination(self):
@@ -515,8 +516,9 @@ class TextRegressionTests(unittest.TestCase):
         instance.scratchpad = mock.Mock()
         instance._wake_model_if_idle = mock.Mock()
         instance._schedule_recording_limit = mock.Mock()
-        with mock.patch.object(app, "_foreground_process_name",
-                               return_value="presspeech.exe"), \
+        with mock.patch.object(
+                app, "_foreground_paste_target",
+                return_value=app.PasteTarget("presspeech.exe", 1234)), \
                 mock.patch.object(app.threading, "Thread"), \
                 mock.patch.object(app.PresspeechApp, "_log"):
             instance.start_recording()
@@ -532,7 +534,8 @@ class TextRegressionTests(unittest.TestCase):
         instance._log = mock.Mock()
 
         instance._deliver_text(
-            "private test transcript", "notepad.exe", original_scratchpad)
+            "private test transcript", app.PasteTarget("notepad.exe", 1234),
+            original_scratchpad)
 
         original_scratchpad.append_text.assert_not_called()
         instance._paste.assert_not_called()
@@ -547,7 +550,8 @@ class TextRegressionTests(unittest.TestCase):
         instance._paste = mock.Mock()
 
         instance._deliver_text(
-            "private test transcript", "notepad.exe", scratchpad)
+            "private test transcript", app.PasteTarget("notepad.exe", 1234),
+            scratchpad)
 
         scratchpad.append_text.assert_called_once_with(
             "private test transcript")
@@ -558,11 +562,54 @@ class TextRegressionTests(unittest.TestCase):
         instance.scratchpad = mock.Mock()
         instance._paste = mock.Mock()
 
-        instance._deliver_text("normal transcript", "notepad.exe", None)
+        target = app.PasteTarget("notepad.exe", 1234)
+        instance._deliver_text("normal transcript", target, None)
 
         instance._paste.assert_called_once_with(
-            "normal transcript", "notepad.exe")
+            "normal transcript", target)
         instance.scratchpad.append_text.assert_not_called()
+
+    def test_focus_change_copies_transcript_without_pasting(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        target = app.PasteTarget("notepad.exe", 1234)
+
+        with mock.patch.object(app.pyperclip, "copy") as copy, \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target",
+                    return_value=app.PasteTarget("calculator.exe", 5678)), \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("private transcript", target)
+
+        copy.assert_called_once_with("private transcript")
+        controller.assert_not_called()
+        instance.notify.assert_called_once_with(
+            "Transcript copied, not pasted",
+            "The focused window changed while Presspeech was transcribing. "
+            "Paste from the clipboard when ready.")
+        instance._log.assert_called_once_with(
+            "paste skipped; focus changed from notepad.exe to calculator.exe")
+
+    def test_original_window_still_receives_paste(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._injecting_keys = False
+        instance._log = mock.Mock()
+        target = app.PasteTarget("notepad.exe", 1234)
+
+        with mock.patch.object(app.pyperclip, "copy"), \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target", return_value=target), \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("transcript", target)
+
+        keyboard = controller.return_value
+        keyboard.press.assert_has_calls(
+            [mock.call(app.pkb.Key.ctrl_l), mock.call("v")])
+        keyboard.release.assert_has_calls(
+            [mock.call("v"), mock.call(app.pkb.Key.ctrl_l)])
 
     def test_recording_is_blocked_while_startup_model_is_loading(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -573,7 +620,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._model_executor = mock.Mock()
         instance._set_indicator = mock.Mock()
         instance._log = mock.Mock()
-        with mock.patch.object(app, "_foreground_process_name") as foreground, \
+        with mock.patch.object(app, "_foreground_paste_target") as foreground, \
                 mock.patch.object(app.threading, "Thread") as worker:
             self.assertFalse(instance.start_recording())
         self.assertFalse(getattr(instance, "recording", False))
@@ -594,7 +641,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._set_indicator = mock.Mock()
         instance._log = mock.Mock()
 
-        with mock.patch.object(app, "_foreground_process_name") as foreground, \
+        with mock.patch.object(app, "_foreground_paste_target") as foreground, \
                 mock.patch.object(app.threading, "Thread") as worker:
             self.assertFalse(instance.start_recording())
 
@@ -942,7 +989,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.buffer = []
         instance.stream = None
         instance.icon = None
-        instance._recording_target_process = "notepad.exe"
+        instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
         timer = mock.Mock()
         instance._recording_limit_timer = timer
         instance._restore_playback_after_recording = mock.Mock()
@@ -965,7 +1012,8 @@ class TextRegressionTests(unittest.TestCase):
         instance.stream = None
         instance.icon = None
         instance.input_device = (0, 16000)
-        instance._recording_target_process = "notepad.exe"
+        paste_target = app.PasteTarget("notepad.exe", 1234)
+        instance._recording_paste_target = paste_target
         instance._recording_scratchpad = None
         instance._recording_limit_timer = None
         instance._restore_playback_after_recording = mock.Mock()
@@ -983,7 +1031,7 @@ class TextRegressionTests(unittest.TestCase):
         queued = instance._model_executor.submit.call_args.args
         self.assertEqual(queued[0], instance._transcribe_worker)
         __import__("numpy").testing.assert_array_equal(queued[1], audio)
-        self.assertEqual(queued[2:], ("notepad.exe", None))
+        self.assertEqual(queued[2:], (paste_target, None))
 
 
 class PostRollTests(unittest.TestCase):
@@ -1065,7 +1113,8 @@ class ModelIdleTests(unittest.TestCase):
         instance._set_indicator = mock.Mock()
 
         with mock.patch.object(app.time, "perf_counter", return_value=123.0):
-            instance._transcribe_worker([], "notepad.exe")
+            instance._transcribe_worker(
+                [], app.PasteTarget("notepad.exe", 1234))
 
         self.assertEqual(instance._last_model_use, 123.0)
         instance._schedule_model_idle_unload.assert_called_once_with()
