@@ -70,29 +70,30 @@
           <p>This is the complete network surface of Presspeech itself and its install/update path.</p>
           <div class="table-scroll">
             <table>
+              <caption>Complete network surface and user controls</caption>
               <thead>
                 <tr>
-                  <th>When</th>
-                  <th>Destination</th>
-                  <th>Purpose</th>
-                  <th>User control</th>
+                  <th scope="col">When</th>
+                  <th scope="col">Destination</th>
+                  <th scope="col">Purpose</th>
+                  <th scope="col">User control</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>Model download</strong></td>
+                  <th scope="row">Model download</th>
                   <td><code>huggingface.co</code></td>
                   <td>macOS downloads the FluidAudio Parakeet TDT v3 CoreML model (about 500-600 MB) on first launch, after an integrity failure, or after a user-triggered cache reset. Windows downloads its selected local model; the default Parakeet cache is about 2.5 GB. No dictation audio is sent. If <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> is set, FluidAudio may attach it to macOS model requests; most users have none set.</td>
                   <td>Required for each platform's local transcription.</td>
                 </tr>
                 <tr>
-                  <td><strong>Periodic update check</strong></td>
+                  <th scope="row">Periodic update check</th>
                   <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code> (macOS); <code>api.github.com/repos/rcourtman/presspeech/releases?per_page=100</code> (Windows)</td>
                   <td>macOS checks every six hours; Windows checks at most daily. Both only notify and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no version, device, settings, transcript, or usage identifiers.</td>
                   <td>Disable update notifications from Settings.</td>
                 </tr>
                 <tr>
-                  <td><strong>User-triggered install/update</strong></td>
+                  <th scope="row">User-triggered install/update</th>
                   <td><code>github.com/rcourtman/presspeech/releases/download/...</code>, <code>formulae.brew.sh</code>, <code>github.com/rcourtman/homebrew-presspeech</code>, Homebrew's own update endpoints (github.com / api.github.com)</td>
                   <td>macOS uses the signed GitHub release archive directly or through Homebrew. Windows downloads an installer only after user approval, then verifies the published size and SHA-256 before offering to launch it.</td>
                   <td>Only runs when the user installs or updates.</td>

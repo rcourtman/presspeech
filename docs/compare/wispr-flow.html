@@ -42,41 +42,42 @@
         <div class="wrap">
           <div class="table-scroll">
             <table>
+              <caption>Presspeech and Wispr Flow compared</caption>
               <thead>
                 <tr>
-                  <th>Question</th>
-                  <th>Presspeech</th>
-                  <th>Wispr Flow</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Wispr Flow</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>Primary workflow</strong></td>
+                  <th scope="row">Primary workflow</th>
                   <td>Hold hotkey, speak, release, paste at cursor — verbatim, about 100 ms after release.</td>
                   <td>Hold hotkey, speak, and AI-formatted text appears — tone matching, auto-edits, and formatting applied.</td>
                 </tr>
                 <tr>
-                  <td><strong>Where transcription happens</strong></td>
+                  <th scope="row">Where transcription happens</th>
                   <td>On the Mac. The local Parakeet TDT v3 CoreML model runs on the Apple Neural Engine; no network round-trip for transcription.</td>
                   <td>In the cloud — Wispr's privacy page states "Transcription always happens in the cloud." Privacy Mode prevents retention on their servers, but audio is still processed remotely.</td>
                 </tr>
                 <tr>
-                  <td><strong>Platforms</strong></td>
+                  <th scope="row">Platforms</th>
                   <td>Apple Silicon Macs, macOS 14 or later.</td>
                   <td>Mac, Windows, iPhone, and Android, with a shared dictionary across devices.</td>
                 </tr>
                 <tr>
-                  <td><strong>Price</strong></td>
+                  <th scope="row">Price</th>
                   <td>Free and MIT licensed.</td>
                   <td>Free tier of 2,000 words/week on desktop; Pro is $15/month, or $12/month billed annually.</td>
                 </tr>
                 <tr>
-                  <td><strong>Accounts and telemetry</strong></td>
+                  <th scope="row">Accounts and telemetry</th>
                   <td>No account, no telemetry, transcript history in memory only.</td>
                   <td>Requires an account; without Privacy Mode, data may be used to improve their models per their privacy FAQ.</td>
                 </tr>
                 <tr>
-                  <td><strong>Beyond dictation</strong></td>
+                  <th scope="row">Beyond dictation</th>
                   <td>Deliberately narrow: verbatim transcription, local text corrections, opt-in filler-word removal.</td>
                   <td>AI editing and formatting, tone adjustment, command mode, and cross-device personalization.</td>
                 </tr>

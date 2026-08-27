@@ -57,18 +57,19 @@
           <h2>Results</h2>
           <div class="table-scroll">
             <table>
+              <caption>Measured transcription latency by audio clip</caption>
               <thead>
                 <tr>
-                  <th>Clip</th>
-                  <th>Duration</th>
-                  <th>FluidAudio on ANE</th>
-                  <th>Prior GPU path</th>
-                  <th>Speedup</th>
+                  <th scope="col">Clip</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">FluidAudio on ANE</th>
+                  <th scope="col">Prior GPU path</th>
+                  <th scope="col">Speedup</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><code>short-clean</code></td>
+                  <th scope="row"><code>short-clean</code></th>
                   <td>2.50 s</td>
                   <td>
                     <div class="bar-cell">
@@ -85,7 +86,7 @@
                   <td>1.57&times;</td>
                 </tr>
                 <tr>
-                  <td><code>medium-clean</code></td>
+                  <th scope="row"><code>medium-clean</code></th>
                   <td>3.99 s</td>
                   <td>
                     <div class="bar-cell">
@@ -102,7 +103,7 @@
                   <td>1.83&times;</td>
                 </tr>
                 <tr>
-                  <td><code>disfluent</code></td>
+                  <th scope="row"><code>disfluent</code></th>
                   <td>5.31 s</td>
                   <td>
                     <div class="bar-cell">
@@ -119,7 +120,7 @@
                   <td>1.97&times;</td>
                 </tr>
                 <tr>
-                  <td><code>longer-technical</code></td>
+                  <th scope="row"><code>longer-technical</code></th>
                   <td>9.49 s</td>
                   <td>
                     <div class="bar-cell">
@@ -162,32 +163,33 @@
           </div>
           <div class="table-scroll">
             <table>
+              <caption>Public accuracy and latency recheck by speech-recognition backend</caption>
               <thead>
                 <tr>
-                  <th>2026-07-22 public recheck backend</th>
-                  <th>Avg WER</th>
-                  <th>Worst WER</th>
-                  <th>Final-word failures</th>
-                  <th>Avg p50</th>
+                  <th scope="col">2026-07-22 public recheck backend</th>
+                  <th scope="col">Avg WER</th>
+                  <th scope="col">Worst WER</th>
+                  <th scope="col">Final-word failures</th>
+                  <th scope="col">Avg p50</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><code>v3</code></td>
+                  <th scope="row"><code>v3</code></th>
                   <td>1.73%</td>
                   <td>14.0%</td>
                   <td>1</td>
                   <td>85.0 ms</td>
                 </tr>
                 <tr>
-                  <td><code>nemotron-en</code></td>
+                  <th scope="row"><code>nemotron-en</code></th>
                   <td>4.32%</td>
                   <td>40.0%</td>
                   <td>1</td>
                   <td>679.4 ms</td>
                 </tr>
                 <tr>
-                  <td><code>nemotron-multilingual</code></td>
+                  <th scope="row"><code>nemotron-multilingual</code></th>
                   <td>6.22%</td>
                   <td>40.0%</td>
                   <td>2</td>

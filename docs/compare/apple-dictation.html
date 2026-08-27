@@ -42,36 +42,37 @@
         <div class="wrap">
           <div class="table-scroll">
             <table>
+              <caption>Presspeech and Apple Dictation compared</caption>
               <thead>
                 <tr>
-                  <th>Question</th>
-                  <th>Presspeech</th>
-                  <th>Apple Dictation</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Apple Dictation</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>Install</strong></td>
+                  <th scope="row">Install</th>
                   <td>Direct notarised download or Homebrew Cask, three explicit privacy grants.</td>
                   <td>Built into macOS, enabled from Keyboard settings.</td>
                 </tr>
                 <tr>
-                  <td><strong>Trigger model</strong></td>
+                  <th scope="row">Trigger model</th>
                   <td>Hold-to-talk by default, toggle mode optional.</td>
                   <td>Starts from the configured Dictation shortcut and stops manually or after inactivity.</td>
                 </tr>
                 <tr>
-                  <td><strong>Engine transparency</strong></td>
+                  <th scope="row">Engine transparency</th>
                   <td>Local Parakeet TDT v3 CoreML model through FluidAudio on the Apple Neural Engine.</td>
                   <td>Apple documents where to check whether general text Dictation is processed on device for the current configuration.</td>
                 </tr>
                 <tr>
-                  <td><strong>Privacy posture</strong></td>
+                  <th scope="row">Privacy posture</th>
                   <td>No telemetry, no accounts, no transcript persistence.</td>
                   <td>Governed by Apple's Dictation and privacy settings.</td>
                 </tr>
                 <tr>
-                  <td><strong>Best for</strong></td>
+                  <th scope="row">Best for</th>
                   <td>Users who want a small auditable utility with a fixed local transcription path.</td>
                   <td>Users who want the built-in system feature and do not want to install another app.</td>
                 </tr>

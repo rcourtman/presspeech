@@ -40,21 +40,23 @@
 
       <section>
         <div class="wrap">
+          <h2>Side-by-side comparison</h2>
           <div class="table-scroll">
             <table>
+              <caption>Mac dictation tools compared by workflow, price, privacy, performance, and platform support</caption>
               <thead>
                 <tr>
-                  <th></th>
-                  <th>Presspeech</th>
-                  <th>Apple Dictation</th>
-                  <th>Superwhisper</th>
-                  <th>Wispr Flow</th>
-                  <th>VoiceInk</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Apple Dictation</th>
+                  <th scope="col">Superwhisper</th>
+                  <th scope="col">Wispr Flow</th>
+                  <th scope="col">VoiceInk</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>How it works</strong></td>
+                  <th scope="row">How it works</th>
                   <td>Hold a key, speak, release; the verbatim transcript pastes at the cursor.</td>
                   <td>Press the Dictation shortcut to start, stop manually; auto-stops after 30 s of silence.</td>
                   <td>Hotkey recording; optional AI modes reshape the output before insertion.</td>
@@ -62,7 +64,7 @@
                   <td>Hotkey dictation with optional AI enhancement.</td>
                 </tr>
                 <tr>
-                  <td><strong>Price</strong></td>
+                  <th scope="row">Price</th>
                   <td>Free.</td>
                   <td>Included with macOS.</td>
                   <td>Free tier; Pro is $8.49/month, $84.99/year, or $249.99 lifetime.</td>
@@ -70,7 +72,7 @@
                   <td>$25&ndash;$49 one-time; free to build from source.</td>
                 </tr>
                 <tr>
-                  <td><strong>Source</strong></td>
+                  <th scope="row">Source</th>
                   <td>Open source, MIT.</td>
                   <td>Proprietary, built into macOS.</td>
                   <td>Proprietary.</td>
@@ -78,7 +80,7 @@
                   <td>Open source, GPL-3.0 per its README.</td>
                 </tr>
                 <tr>
-                  <td><strong>Where audio is processed</strong></td>
+                  <th scope="row">Where audio is processed</th>
                   <td>On this Mac only; no cloud transcription path exists in the app.</td>
                   <td>On-device for supported languages; otherwise sent to Apple servers. Keyboard settings shows which applies.</td>
                   <td>Your choice per model: fully local models or cloud services.</td>
@@ -86,7 +88,7 @@
                   <td>On-device by default; optional cloud providers.</td>
                 </tr>
                 <tr>
-                  <td><strong>Account required</strong></td>
+                  <th scope="row">Account required</th>
                   <td>No.</td>
                   <td>No.</td>
                   <td>No sign-in documented; Pro activates with a license key.</td>
@@ -94,7 +96,7 @@
                   <td>No; the paid binary activates with a license key.</td>
                 </tr>
                 <tr>
-                  <td><strong>Latency, release to text</strong></td>
+                  <th scope="row">Latency, release to text</th>
                   <td>~100 ms, measured p50 92&ndash;96 ms; <a href="../benchmarks.html">reproducible benchmark</a>.</td>
                   <td>Not published.</td>
                   <td>Not published.</td>
@@ -102,7 +104,7 @@
                   <td>Not published.</td>
                 </tr>
                 <tr>
-                  <td><strong>App size</strong></td>
+                  <th scope="row">App size</th>
                   <td>8.3 MB release zip, plus about 500-600 MB for the local model cache.</td>
                   <td>Built in; on-device languages need a model download, size not published.</td>
                   <td>Not published; local models are 75 MB&ndash;3 GB.</td>
@@ -110,7 +112,7 @@
                   <td>13.7 MB download (v1.79 DMG); models extra.</td>
                 </tr>
                 <tr>
-                  <td><strong>Idle footprint</strong></td>
+                  <th scope="row">Idle footprint</th>
                   <td>~80 MB RAM, 0% CPU between dictations.</td>
                   <td>Not published.</td>
                   <td>Not published.</td>
@@ -118,7 +120,7 @@
                   <td>Not published; 8 GB RAM recommended.</td>
                 </tr>
                 <tr>
-                  <td><strong>Languages</strong></td>
+                  <th scope="row">Languages</th>
                   <td>25 European languages, auto-detected; Settings can pin one of 18.</td>
                   <td>63 Dictation locales, 48 of them with on-device processing.</td>
                   <td>100+ via cloud models; local model counts vary.</td>
@@ -126,7 +128,7 @@
                   <td>No official count; its Whisper models cover about 100.</td>
                 </tr>
                 <tr>
-                  <td><strong>Platforms</strong></td>
+                  <th scope="row">Platforms</th>
                   <td>Apple Silicon Macs, macOS 14+.</td>
                   <td>Every Mac.</td>
                   <td>macOS 13.3+, Windows, iOS; local models work best on Apple Silicon.</td>
@@ -134,7 +136,7 @@
                   <td>Apple Silicon Macs, macOS 14.4+.</td>
                 </tr>
                 <tr>
-                  <td><strong>Beyond verbatim dictation</strong></td>
+                  <th scope="row">Beyond verbatim dictation</th>
                   <td>Deliberately nothing: local text corrections and opt-in filler-word removal are the whole list.</td>
                   <td>Auto-punctuation, spoken punctuation and emoji commands.</td>
                   <td>AI modes, meeting transcription, file transcription, translation.</td>
@@ -154,6 +156,7 @@
 
       <section>
         <div class="wrap">
+          <h2>Detailed comparisons</h2>
           <div class="grid">
             <article class="card">
               <h3>Presspeech vs Superwhisper</h3>

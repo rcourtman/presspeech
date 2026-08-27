@@ -42,36 +42,37 @@
         <div class="wrap">
           <div class="table-scroll">
             <table>
+              <caption>Presspeech and WhisperKit-based apps and projects compared</caption>
               <thead>
                 <tr>
-                  <th>Question</th>
-                  <th>Presspeech</th>
-                  <th>WhisperKit-based apps and projects</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">WhisperKit-based apps and projects</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>What is it?</strong></td>
+                  <th scope="row">What is it?</th>
                   <td>A complete menu-bar app for push-to-talk dictation.</td>
                   <td>Apps or projects built on a general on-device speech framework.</td>
                 </tr>
                 <tr>
-                  <td><strong>Model family</strong></td>
+                  <th scope="row">Model family</th>
                   <td>Parakeet TDT v3 CoreML through FluidAudio.</td>
                   <td>Usually Whisper-family CoreML models, depending on the app or project.</td>
                 </tr>
                 <tr>
-                  <td><strong>Hardware path</strong></td>
+                  <th scope="row">Hardware path</th>
                   <td>CoreML on the Apple Neural Engine via FluidAudio.</td>
                   <td>Depends on the chosen app, model, and framework configuration.</td>
                 </tr>
                 <tr>
-                  <td><strong>Best for</strong></td>
+                  <th scope="row">Best for</th>
                   <td>Users who want a finished app with a small, fixed feature surface.</td>
                   <td>Developers and users who want model choice, framework flexibility, or apps with broader speech features.</td>
                 </tr>
                 <tr>
-                  <td><strong>Evidence</strong></td>
+                  <th scope="row">Evidence</th>
                   <td>Ships with a reproducible benchmark comparing the current ANE path against the prior GPU path.</td>
                   <td>Use each app or framework's own benchmark and privacy docs; behavior varies by implementation.</td>
                 </tr>

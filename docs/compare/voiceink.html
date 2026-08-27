@@ -42,41 +42,42 @@
         <div class="wrap">
           <div class="table-scroll">
             <table>
+              <caption>Presspeech and VoiceInk compared</caption>
               <thead>
                 <tr>
-                  <th>Question</th>
-                  <th>Presspeech</th>
-                  <th>VoiceInk</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">VoiceInk</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>Primary workflow</strong></td>
+                  <th scope="row">Primary workflow</th>
                   <td>Hold hotkey, speak, release — the verbatim transcript pastes at the cursor about 100 ms later.</td>
                   <td>Hotkey dictation with optional AI enhancement, per-app Power Mode profiles, and audio/video file transcription.</td>
                 </tr>
                 <tr>
-                  <td><strong>Engine path</strong></td>
+                  <th scope="row">Engine path</th>
                   <td>Local Parakeet TDT v3 CoreML model on the Apple Neural Engine via FluidAudio.</td>
                   <td>Your choice: Parakeet V2/V3 via FluidAudio, Whisper models via whisper.cpp, Apple Speech on macOS 26+, or optional cloud providers.</td>
                 </tr>
                 <tr>
-                  <td><strong>Privacy posture</strong></td>
+                  <th scope="row">Privacy posture</th>
                   <td>No cloud path exists: no account, no telemetry, transcript history in memory only.</td>
                   <td>Local by default — &ldquo;your voice data never leaves your Mac&rdquo; — with optional cloud transcription and cloud enhancement if you enable them.</td>
                 </tr>
                 <tr>
-                  <td><strong>Price and license</strong></td>
+                  <th scope="row">Price and license</th>
                   <td>Free and MIT licensed.</td>
                   <td>$25&ndash;$49 one-time for the signed, auto-updating binary; GPL-3.0 source (per its README) you can build yourself for free.</td>
                 </tr>
                 <tr>
-                  <td><strong>Footprint</strong></td>
+                  <th scope="row">Footprint</th>
                   <td>8.3 MB app, ~80 MB RAM idle, 0% CPU between dictations; <a href="../benchmarks.html">published benchmark</a>.</td>
                   <td>13.7 MB download; resource figures not published, 8 GB RAM recommended.</td>
                 </tr>
                 <tr>
-                  <td><strong>Configurability</strong></td>
+                  <th scope="row">Configurability</th>
                   <td>Deliberately minimal: hotkey, trigger style, language pinning, local text corrections.</td>
                   <td>Extensive: model management, AI modes with custom prompts, per-app profiles, custom vocabulary, transcription history with audio replay.</td>
                 </tr>

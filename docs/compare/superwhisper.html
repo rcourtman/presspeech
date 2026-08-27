@@ -42,41 +42,42 @@
         <div class="wrap">
           <div class="table-scroll">
             <table>
+              <caption>Presspeech and Superwhisper compared</caption>
               <thead>
                 <tr>
-                  <th>Question</th>
-                  <th>Presspeech</th>
-                  <th>Superwhisper</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Superwhisper</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>Primary workflow</strong></td>
+                  <th scope="row">Primary workflow</th>
                   <td>Hold hotkey, speak, release — the verbatim transcript pastes at the cursor about 100 ms later.</td>
                   <td>Record with a hotkey, then optional AI modes reshape the output (notes, messages, custom prompts) before insertion.</td>
                 </tr>
                 <tr>
-                  <td><strong>Engine path</strong></td>
+                  <th scope="row">Engine path</th>
                   <td>Local Parakeet TDT v3 CoreML model on the Apple Neural Engine, decoded in a single pass on key release.</td>
                   <td>Choice of local Whisper-family models, local Parakeet models on the Pro tier, plus optional cloud models and LLM post-processing from multiple providers.</td>
                 </tr>
                 <tr>
-                  <td><strong>Privacy posture</strong></td>
+                  <th scope="row">Privacy posture</th>
                   <td>No cloud path exists: no account, no telemetry, transcript history in memory only.</td>
                   <td>Local models run fully offline; the optional cloud models and cloud AI modes send data out when you choose them.</td>
                 </tr>
                 <tr>
-                  <td><strong>Platforms</strong></td>
+                  <th scope="row">Platforms</th>
                   <td>Apple Silicon Macs, macOS 14 or later.</td>
                   <td>macOS, Windows, and iOS; Superwhisper notes Intel Macs work best with its cloud models.</td>
                 </tr>
                 <tr>
-                  <td><strong>Price</strong></td>
+                  <th scope="row">Price</th>
                   <td>Free and MIT licensed.</td>
                   <td>Free tier with smaller local models; Pro is $8.49/month, $84.99/year, or a $249.99 lifetime license.</td>
                 </tr>
                 <tr>
-                  <td><strong>Configurability</strong></td>
+                  <th scope="row">Configurability</th>
                   <td>Deliberately minimal: hotkey, trigger style, language pinning, local text corrections.</td>
                   <td>Extensive: modes, prompts, model management, vocabularies, and per-app behavior.</td>
                 </tr>

@@ -58,6 +58,12 @@ a:hover {
   text-decoration-color: var(--accent-dark);
 }
 
+a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, white);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
 /* ---------- Header ---------- */
 
 .site-header {
@@ -585,28 +591,10 @@ section p:last-child,
   box-shadow: var(--shadow-sm);
 }
 
-.demo-figure img {
+.demo-figure video {
   display: block;
   width: 100%;
   height: auto;
-}
-
-/* The SVG's in-image captions become unreadable below ~640px, so phones
-   get the rendered video, whose 1080p typography survives scaling. */
-.demo-figure video {
-  display: none;
-  width: 100%;
-  height: auto;
-}
-
-@media (max-width: 640px) {
-  .demo-figure img {
-    display: none;
-  }
-
-  .demo-figure video {
-    display: block;
-  }
 }
 
 .card p,
@@ -680,6 +668,7 @@ code {
 
 p code,
 td code,
+th code,
 li code {
   padding: 0.08em 0.4em;
   background: var(--code);
@@ -776,6 +765,15 @@ table {
   min-width: 480px;
 }
 
+caption {
+  padding: 10px 14px;
+  color: var(--muted);
+  background: var(--panel);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+}
+
 .table-scroll > table {
   margin: 0;
 }
@@ -788,7 +786,7 @@ td {
   border-bottom: 1px solid var(--line);
 }
 
-th {
+thead th {
   color: var(--text);
   background: color-mix(in srgb, var(--soft) 55%, white);
   font-weight: 640;
@@ -796,7 +794,13 @@ th {
   letter-spacing: 0.005em;
 }
 
-tbody tr:last-child td {
+tbody th {
+  color: var(--text);
+  background: var(--panel);
+  font-weight: 640;
+}
+
+tbody tr:last-child :is(th, td) {
   border-bottom: 0;
 }
 
@@ -920,5 +924,18 @@ td strong {
 @media (max-width: 460px) {
   .stat-row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
