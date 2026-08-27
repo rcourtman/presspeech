@@ -4129,6 +4129,52 @@ private func clipboardPasteKeyboardEventSteps(commandKey: CGKeyCode,
     ]
 }
 
+private enum ClipboardPasteEventOutcome: Equatable {
+    case posted
+    case targetChanged
+    case failed
+}
+
+@MainActor
+private func postFocusBoundClipboardPasteSteps(
+    _ steps: [KeyboardEventStep],
+    pasteKey: CGKeyCode,
+    targetStillFocused: () -> Bool,
+    postStep: (KeyboardEventStep) -> Bool
+) -> ClipboardPasteEventOutcome {
+    var pressedKeys: [CGKeyCode] = []
+
+    func releasePressedKeys() {
+        for key in pressedKeys.reversed() {
+            _ = postStep(KeyboardEventStep(virtualKey: key,
+                                           keyDown: false,
+                                           flags: []))
+        }
+    }
+
+    for step in steps {
+        // Command+V is several independent HID events. Focus can move after
+        // Command goes down, so revalidate immediately before the V key-down
+        // that makes the clipboard contents visible to the destination.
+        if step.virtualKey == pasteKey, step.keyDown, !targetStillFocused() {
+            releasePressedKeys()
+            return .targetChanged
+        }
+        guard postStep(step) else {
+            releasePressedKeys()
+            return .failed
+        }
+        if step.keyDown {
+            if !pressedKeys.contains(step.virtualKey) {
+                pressedKeys.append(step.virtualKey)
+            }
+        } else {
+            pressedKeys.removeAll { $0 == step.virtualKey }
+        }
+    }
+    return .posted
+}
+
 @MainActor
 enum TextInserter {
     nonisolated static let defaultStrategy = TextInsertionStrategy.clipboardPaste
@@ -4318,7 +4364,18 @@ private enum ClipboardPasteInserter {
 
         let steps = clipboardPasteKeyboardEventSteps(commandKey: virtualKeyCommand,
                                                      pasteKey: virtualKeyV)
-        guard post(steps) else {
+        let postOutcome = post(
+            steps,
+            pasteKey: virtualKeyV,
+            targetStillFocused: {
+                dictationPasteTargetMatches(expectedTarget,
+                                             currentDictationPasteTarget())
+            }
+        )
+        if postOutcome == .targetChanged {
+            return TextInserter.copyWithoutPasting(text)
+        }
+        guard postOutcome == .posted else {
             log("paste event creation failed")
             // Nothing consumed the transcript, so restoring immediately
             // (guarded) keeps the clipboard clean before we fall back to
@@ -4339,26 +4396,37 @@ private enum ClipboardPasteInserter {
         return .inserted
     }
 
-    private static func post(_ steps: [KeyboardEventStep]) -> Bool {
+    private static func post(
+        _ steps: [KeyboardEventStep],
+        pasteKey: CGKeyCode,
+        targetStillFocused: () -> Bool
+    ) -> ClipboardPasteEventOutcome {
         let source = CGEventSource(stateID: .hidSystemState)
-        let events = steps.compactMap { step -> CGEvent? in
+        let events = steps.compactMap { step -> (KeyboardEventStep, CGEvent)? in
             guard let event = CGEvent(keyboardEventSource: source,
                                       virtualKey: step.virtualKey,
                                       keyDown: step.keyDown) else {
                 return nil
             }
             event.flags = step.flags
-            return event
+            return (step, event)
         }
-        guard events.count == steps.count else { return false }
+        guard events.count == steps.count else { return .failed }
 
         // Post Command as real key events instead of only tagging the V
         // events with .maskCommand. Sleep/wake can leave session modifier
         // state unreliable for flag-only synthetic shortcuts.
-        for event in events {
+        return postFocusBoundClipboardPasteSteps(
+            steps,
+            pasteKey: pasteKey,
+            targetStillFocused: targetStillFocused
+        ) { step in
+            guard let event = events.first(where: { $0.0 == step })?.1 else {
+                return false
+            }
             event.post(tap: .cghidEventTap)
+            return true
         }
-        return true
     }
 }
 
@@ -11623,6 +11691,34 @@ private enum PresspeechSelfTest {
                 KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
             ],
             "clipboard paste should synthesize a full Command+V key sequence"
+        )
+        let focusBoundPasteProbe = MainActor.assumeIsolated {
+            let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
+                                                         pasteKey: 0x09)
+            var posted: [KeyboardEventStep] = []
+            let outcome = postFocusBoundClipboardPasteSteps(
+                steps,
+                pasteKey: 0x09,
+                targetStillFocused: { false },
+                postStep: {
+                    posted.append($0)
+                    return true
+                }
+            )
+            return (outcome: outcome, posted: posted)
+        }
+        try expect(
+            focusBoundPasteProbe.outcome,
+            equals: .targetChanged,
+            "clipboard paste should fail closed when focus changes after Command goes down"
+        )
+        try expect(
+            focusBoundPasteProbe.posted,
+            equals: [
+                KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
+                KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
+            ],
+            "focus-bound clipboard paste should release Command without emitting V"
         )
 
         let pasteboardProbe = MainActor.assumeIsolated {
