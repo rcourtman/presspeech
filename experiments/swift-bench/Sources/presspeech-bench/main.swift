@@ -725,7 +725,11 @@ func samplesAppendingTrailingSilence(_ samples: [Float],
 // are "too clean" to stand in for real dictation).
 
 func werTokens(_ s: String) -> [String] {
-    let lowered = s.lowercased()
+    // Normalize before inspecting individual scalars. Otherwise a decomposed
+    // letter such as "n" + COMBINING ACUTE ACCENT loses its mark as
+    // punctuation while the canonically equivalent precomposed "ń" remains
+    // intact, producing false WER and critical-term misses.
+    let lowered = s.lowercased().precomposedStringWithCanonicalMapping
     let kept = lowered.unicodeScalars.map { scalar -> Character in
         CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : " "
     }
@@ -834,6 +838,20 @@ func runBenchSelfTests() throws {
     try expect(
         phraseOccurrenceCount(["szypańskim"], in: ["ze", "szypańskim", "i", "szypańskim"]) == 2,
         "phrase occurrence count should preserve Polish diacritics"
+    )
+    let decomposedName = "Szypańskim".decomposedStringWithCanonicalMapping
+    try expect(
+        werTokens(decomposedName) == werTokens("Szypańskim"),
+        "token normalization should treat canonically equivalent diacritics equally"
+    )
+    let canonicalScore = criticalTermScore(
+        reference: "Rozmawiałem z Szypańskim.",
+        hypothesis: "Rozmawiałem z \(decomposedName).",
+        terms: ["Szypańskim"]
+    )
+    try expect(
+        canonicalScore.matched == 1 && canonicalScore.total == 1,
+        "critical-term scoring should match decomposed model output"
     )
     let score = criticalTermScore(
         reference: "Rozmawiałem z Szypańskim i Szypańskim.",
