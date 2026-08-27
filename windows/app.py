@@ -378,7 +378,6 @@ class PresspeechApp:
         self.stream = None
         self.recording = False
         self.lock = threading.Lock()
-        self.paste_target = "paste"
         self.scratchpad = None
         self.settings_window = None
         self.setup_window = None
@@ -393,6 +392,7 @@ class PresspeechApp:
         self._key_held = False
         self._injecting_keys = False
         self._recording_target_process = ""
+        self._recording_scratchpad = None
         self._rec_epoch = 0
         self._recording_limit_timer = None
         self._peak_rms = 0.0
@@ -561,6 +561,10 @@ class PresspeechApp:
             self._peak_rms = 0.0
             self._model_idle_epoch += 1
             self._recording_target_process = target_process
+            # Delivery belongs to this recording. Model work is serialized and
+            # can finish after a scratchpad is opened, replaced, or closed; a
+            # mutable app-wide target could redirect an earlier transcript.
+            self._recording_scratchpad = getattr(self, "scratchpad", None)
         self._log("recording started")
         self._set_indicator("listening")
         self._wake_model_if_idle()
@@ -790,6 +794,8 @@ class PresspeechApp:
             self.recording = False
             audio = np.concatenate(self.buffer) if self.buffer else np.zeros(0, dtype=np.float32)
             target_process = self._recording_target_process
+            scratchpad_target = getattr(self, "_recording_scratchpad", None)
+            self._recording_scratchpad = None
             stream = self.stream
             self.stream = None
             self.buffer = []
@@ -828,7 +834,7 @@ class PresspeechApp:
         self._set_indicator("transcribing")
         self._log("recording stopped; %.2fs captured, transcribing" % (audio.size / 16000.0))
         self._model_executor.submit(
-            self._transcribe_worker, audio, target_process)
+            self._transcribe_worker, audio, target_process, scratchpad_target)
         return True
 
     def _capture_benchmark_if_armed(self, audio):
@@ -973,9 +979,10 @@ class PresspeechApp:
 
     # ---------------- transcription ----------------
 
-    def _transcribe_worker(self, audio, target_process=""):
+    def _transcribe_worker(self, audio, target_process="", scratchpad_target=None):
         try:
-            return self._transcribe_worker_inner(audio, target_process)
+            return self._transcribe_worker_inner(
+                audio, target_process, scratchpad_target)
         finally:
             # Empty/error results still exercised the model. Refresh the idle
             # deadline here so an already-queued gaming-mode unload cannot
@@ -984,7 +991,8 @@ class PresspeechApp:
             self._schedule_model_idle_unload()
             self._set_indicator(None)
 
-    def _transcribe_worker_inner(self, audio, target_process=""):
+    def _transcribe_worker_inner(
+            self, audio, target_process="", scratchpad_target=None):
         model_started = time.perf_counter()
         try:
             if not self.transcriber.loaded(self.settings["model"]):
@@ -1028,10 +1036,21 @@ class PresspeechApp:
                     timing.get("generate", timing.get("inference", 0.0)),
                     timing.get("decode", 0.0),
                 ))
-        if self.paste_target == "scratchpad" and self.scratchpad is not None:
-            self.scratchpad.append_text(text)
-        else:
+        self._deliver_text(text, target_process, scratchpad_target)
+
+    def _deliver_text(self, text, target_process="", scratchpad_target=None):
+        """Deliver only to the destination captured when recording began."""
+        if scratchpad_target is None:
             self._paste(text, target_process)
+            return
+        if (scratchpad_target is getattr(self, "scratchpad", None) and
+                getattr(scratchpad_target, "root", None) is not None):
+            scratchpad_target.append_text(text)
+            return
+        # Try Dictation is a private sink. If its window disappeared while the
+        # model was working, dropping the result is safer than pasting it into
+        # whichever unrelated application has focus now.
+        self._log("scratchpad transcription discarded; window closed")
 
     def _apply_text(self, text):
         for spoken, replacement in self.settings["dictionary"]:

@@ -357,6 +357,69 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(instance._recording_target_process, "moonlight.exe")
         instance._schedule_recording_limit.assert_called_once_with(1)
 
+    def test_recording_owns_the_current_scratchpad_destination(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = False
+        instance.buffer = []
+        instance._rec_epoch = 0
+        instance._model_idle_epoch = 0
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.model_status = "ready"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.scratchpad = mock.Mock()
+        instance._wake_model_if_idle = mock.Mock()
+        instance._schedule_recording_limit = mock.Mock()
+        with mock.patch.object(app, "_foreground_process_name",
+                               return_value="presspeech.exe"), \
+                mock.patch.object(app.threading, "Thread"), \
+                mock.patch.object(app.PresspeechApp, "_log"):
+            instance.start_recording()
+
+        self.assertIs(instance._recording_scratchpad, instance.scratchpad)
+
+    def test_closed_scratchpad_transcript_is_discarded_not_pasted(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        original_scratchpad = mock.Mock()
+        original_scratchpad.root = None
+        instance.scratchpad = None
+        instance._paste = mock.Mock()
+        instance._log = mock.Mock()
+
+        instance._deliver_text(
+            "private test transcript", "notepad.exe", original_scratchpad)
+
+        original_scratchpad.append_text.assert_not_called()
+        instance._paste.assert_not_called()
+        instance._log.assert_called_once_with(
+            "scratchpad transcription discarded; window closed")
+
+    def test_captured_open_scratchpad_receives_its_transcript(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        scratchpad = mock.Mock()
+        scratchpad.root = mock.Mock()
+        instance.scratchpad = scratchpad
+        instance._paste = mock.Mock()
+
+        instance._deliver_text(
+            "private test transcript", "notepad.exe", scratchpad)
+
+        scratchpad.append_text.assert_called_once_with(
+            "private test transcript")
+        instance._paste.assert_not_called()
+
+    def test_opening_scratchpad_does_not_redirect_queued_normal_dictation(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.scratchpad = mock.Mock()
+        instance._paste = mock.Mock()
+
+        instance._deliver_text("normal transcript", "notepad.exe", None)
+
+        instance._paste.assert_called_once_with(
+            "normal transcript", "notepad.exe")
+        instance.scratchpad.append_text.assert_not_called()
+
     def test_recording_is_blocked_while_startup_model_is_loading(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}

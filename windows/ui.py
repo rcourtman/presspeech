@@ -682,7 +682,6 @@ class ScratchpadWindow:
         root.mainloop()
         self.root = None
         self.app.scratchpad = None
-        self.app.paste_target = "paste"
 
     def toggle(self):
         if self.app.recording:
@@ -690,7 +689,6 @@ class ScratchpadWindow:
             self.btn.config(text="Dictate (or use the hotkey)")
         else:
             if self.app.start_recording():
-                self.app.paste_target = "scratchpad"
                 self.btn.config(text="Stop")
 
     def append_text(self, text):
