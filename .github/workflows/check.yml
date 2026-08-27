@@ -119,6 +119,42 @@ jobs:
           abort "winget installs must pin the community source:\n#{unscoped_winget.join("\n")}" unless unscoped_winget.empty?
           abort "winget installs must pin an exact version:\n#{unpinned_winget.join("\n")}" unless unpinned_winget.empty?
           RUBY
+      - name: Windows CUDA dependency consistency
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          cuda_requirements = Path("windows/requirements-cuda.txt").read_text(
+              encoding="utf-8")
+          torch_pins = re.findall(
+              r"(?m)^torch==\d+\.\d+\.\d+\+cu(\d+)$", cuda_requirements)
+          index_pins = re.findall(
+              r"(?m)^--index-url https://download\.pytorch\.org/whl/cu(\d+)$",
+              cuda_requirements)
+          if len(torch_pins) != 1:
+              raise SystemExit("requirements-cuda.txt must pin one exact CUDA Torch build")
+          if index_pins != torch_pins:
+              raise SystemExit("CUDA Torch build and package index versions must match")
+
+          install_paths = [
+              Path("README.md"),
+              Path("CONTRIBUTING.md"),
+              Path("windows/README.md"),
+              Path(".github/workflows/windows-release.yml"),
+          ]
+          direct_installs = []
+          for path in install_paths:
+              text = path.read_text(encoding="utf-8")
+              if "-r requirements-cuda.txt" not in text:
+                  raise SystemExit(f"{path} does not install requirements-cuda.txt")
+              if re.search(r"(?im)^.*\bpip\s+install\b[^\n]*\btorch(?:==|\s|$)", text):
+                  direct_installs.append(str(path))
+          if direct_installs:
+              raise SystemExit(
+                  "CUDA Torch installs must use requirements-cuda.txt: " +
+                  ", ".join(direct_installs))
+          PY
       - name: Docs syntax
         run: |
           python3 - <<'PY'

@@ -219,7 +219,7 @@ For the Windows implementation:
 cd windows
 py -3.12 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m pip install "torch==2.13.0+cu126" --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\python -m pip install -r requirements-cuda.txt
 .venv\Scripts\python -m unittest discover -s tests -v
 run.bat
 ```

@@ -66,7 +66,7 @@ For Windows development, use Python 3.12 from the project virtual environment:
 cd windows
 py -3.12 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\python -m pip install -r requirements-cuda.txt
 .venv\Scripts\python -m unittest discover -s tests -v
 .venv\Scripts\python app.py --selftest
 ```

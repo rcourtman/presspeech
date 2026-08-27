@@ -11,5 +11,5 @@ transformers>=5.14.1,<6
 sentencepiece>=0.2.0
 librosa>=0.11.0
 
-# PyTorch with CUDA 12 (for Parakeet-TDT on the GPU). Install with:
-#   pip install "torch==2.13.0+cu126" --index-url https://download.pytorch.org/whl/cu126
+# PyTorch uses its own package index, so its exact CUDA build lives in
+# requirements-cuda.txt and is installed in a separate pip invocation.

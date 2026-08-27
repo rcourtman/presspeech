@@ -1,0 +1,4 @@
+--index-url https://download.pytorch.org/whl/cu126
+
+# Keep the 2.5 GB CUDA runtime deterministic across source and release builds.
+torch==2.13.0+cu126
