@@ -7065,6 +7065,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             enterPermissionBlockedState(missing: missing, reason: "hotkey press")
             return
         }
+        // Snapshot the destination before audio startup, which can block while
+        // rebuilding the engine. A focus change during that work must make the
+        // eventual delivery fail closed, not retarget it to the new window.
+        let pasteTarget = currentDictationPasteTarget()
         cancelAudioIdleStop()
         do {
             didTouchAudioEngine = true
@@ -7078,7 +7082,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             recordStartupFailure(stage: .audioInput, error: error, reason: "hotkey press")
             return
         }
-        recordingPasteTarget = currentDictationPasteTarget()
+        recordingPasteTarget = pasteTarget
         isRecording = true
         if setupChecklistWindow?.isVisible == true {
             hotkeyTestSucceeded = true
