@@ -157,6 +157,34 @@ class DownloadTests(unittest.TestCase):
             self.assertFalse(os.path.exists(path + ".part"))
         self.assertEqual(progress[-1], (len(payload), len(payload)))
 
+    def test_download_does_not_open_the_predictable_legacy_partial_path(self):
+        payload = b"safe installer"
+        update, digest = self.make_update(payload)
+
+        def opener(request, timeout):
+            if request.full_url.endswith("checksum"):
+                text = "%s  %s\n" % (digest, update["installer_name"])
+                return Response(text.encode("ascii"))
+            return Response(payload)
+
+        with tempfile.TemporaryDirectory() as directory:
+            legacy_partial = os.path.join(
+                directory, update["installer_name"] + ".part")
+            marker = b"unrelated user data"
+            with open(legacy_partial, "wb") as handle:
+                handle.write(marker)
+
+            updates.download_update(update, directory, opener=opener)
+
+            with open(legacy_partial, "rb") as handle:
+                self.assertEqual(handle.read(), marker)
+            leftovers = [
+                name for name in os.listdir(directory)
+                if (name.endswith(".part") and
+                    name != os.path.basename(legacy_partial))
+            ]
+            self.assertEqual(leftovers, [])
+
     def test_mismatched_checksum_is_rejected(self):
         payload = b"tampered"
         update, _digest = self.make_update(payload, checksum="a" * 64)

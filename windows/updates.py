@@ -229,7 +229,6 @@ def download_update(update, destination=None, progress=None,
     destination = destination or tempfile.gettempdir()
     os.makedirs(destination, exist_ok=True)
     final_path = os.path.join(destination, update["installer_name"])
-    partial_path = final_path + ".part"
     checksum = _read_checksum(update, opener, timeout)
     api_digest = update.get("installer_digest", "").lower()
     if api_digest and api_digest != checksum:
@@ -237,30 +236,42 @@ def download_update(update, destination=None, progress=None,
     expected_size = int(update.get("installer_size", 0) or 0)
     digest = hashlib.sha256()
     downloaded = 0
+    partial_path = None
+    partial_fd = None
     try:
-        with _open_release_asset(_request(url), opener, timeout) as response, \
-                open(partial_path, "wb") as output:
+        with _open_release_asset(_request(url), opener, timeout) as response:
             final_url = getattr(response, "geturl", lambda: url)()
             _checked_download_url(final_url)
-            while True:
-                # The release API's size is part of the verified asset
-                # metadata. Read one sentinel byte beyond it so a broken or
-                # hostile response cannot fill the temp drive before the size
-                # mismatch is rejected.
-                read_size = 1024 * 1024
-                if expected_size:
-                    read_size = min(read_size, expected_size - downloaded + 1)
-                block = response.read(read_size)
-                if not block:
-                    break
-                downloaded += len(block)
-                if expected_size and downloaded > expected_size:
-                    raise UpdateError(
-                        "installer download exceeded the release size")
-                output.write(block)
-                digest.update(block)
-                if progress is not None:
-                    progress(downloaded, expected_size)
+            # An exclusive random staging file prevents a pre-created link at
+            # the old predictable .part path from redirecting/truncating some
+            # other user-writable file when the download starts.
+            partial_fd, partial_path = tempfile.mkstemp(
+                prefix=update["installer_name"] + ".",
+                suffix=".part",
+                dir=destination,
+            )
+            output = os.fdopen(partial_fd, "wb")
+            partial_fd = None
+            with output:
+                while True:
+                    # The release API's size is part of the verified asset
+                    # metadata. Read one sentinel byte beyond it so a broken or
+                    # hostile response cannot fill the temp drive before the size
+                    # mismatch is rejected.
+                    read_size = 1024 * 1024
+                    if expected_size:
+                        read_size = min(read_size, expected_size - downloaded + 1)
+                    block = response.read(read_size)
+                    if not block:
+                        break
+                    downloaded += len(block)
+                    if expected_size and downloaded > expected_size:
+                        raise UpdateError(
+                            "installer download exceeded the release size")
+                    output.write(block)
+                    digest.update(block)
+                    if progress is not None:
+                        progress(downloaded, expected_size)
         if expected_size and downloaded != expected_size:
             raise UpdateError("installer download size did not match the release")
         if digest.hexdigest().lower() != checksum:
@@ -268,8 +279,14 @@ def download_update(update, destination=None, progress=None,
         os.replace(partial_path, final_path)
         return final_path
     except Exception as exc:
+        if partial_fd is not None:
+            try:
+                os.close(partial_fd)
+            except OSError:
+                pass
         try:
-            os.remove(partial_path)
+            if partial_path is not None:
+                os.remove(partial_path)
         except OSError:
             pass
         if isinstance(exc, UpdateError):
