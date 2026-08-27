@@ -137,13 +137,13 @@ def _inflect(lower):
     if lower.endswith("izing"):
         base = BRITISH.get(lower[:-3] + "e")
         if base:
-            return base + "ing"
+            return base[:-1] + "ing" if base.endswith("e") else base + "ing"
     if lower.endswith("ized"):
-        base = BRITISH.get(lower[:-2])
+        base = BRITISH.get(lower[:-1])
         if base:
             return base + "d"
     if lower.endswith("izes"):
-        base = BRITISH.get(lower[:-2])
+        base = BRITISH.get(lower[:-1])
         if base:
             return base + "s"
     for suffix in ("es", "s", "ed", "ing", "er", "est", "ly"):
