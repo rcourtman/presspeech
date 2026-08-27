@@ -387,7 +387,7 @@ class DownloadTests(unittest.TestCase):
     def test_cleanup_helper_is_limited_to_private_update_directories(self):
         launched = mock.Mock()
         with tempfile.TemporaryDirectory(
-                prefix="Presspeech maintainer's ") as temp_root, \
+                prefix="Presspeech user's ") as temp_root, \
                 mock.patch.object(updates.tempfile, "gettempdir",
                                   return_value=temp_root):
             directory = tempfile.mkdtemp(
@@ -402,7 +402,7 @@ class DownloadTests(unittest.TestCase):
                 command[-1]).decode("utf-16le")
             self.assertEqual(command[0], "powershell.exe")
             self.assertIn("-EncodedCommand", command)
-            self.assertIn("Presspeech maintainer''s ", script)
+            self.assertIn("Presspeech user''s ", script)
             self.assertIn("Remove-Item -LiteralPath $installer", script)
             self.assertIn("Remove-Item -LiteralPath $directory", script)
             self.assertNotIn("-Recurse", script)
