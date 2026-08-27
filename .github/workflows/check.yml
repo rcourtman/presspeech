@@ -132,8 +132,13 @@ jobs:
           unless workflow.match?(atomic_create)
             abort "Windows releases must attach both assets during release creation"
           end
-          if workflow.match?(/\bgh\s+release\s+upload\b/)
-            abort "Windows releases must not replace published assets"
+          unless workflow.match?(/gh\s+release\s+upload\s+\$tag/) &&
+              workflow.include?("validate-release-state.ps1")
+            abort "Interrupted Windows drafts must use guarded recovery"
+          end
+          if workflow.match?(/\bgh\s+release\s+upload[^\n]*--clobber/) ||
+              workflow.match?(/\bgh\s+release\s+delete\b/)
+            abort "Windows draft recovery must not replace releases or assets"
           end
           RUBY
       - name: Windows CUDA dependency consistency

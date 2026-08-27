@@ -154,9 +154,59 @@ jobs:
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
             -AllowMissing
           $installer = "windows/dist/installer/Presspeech-Setup-$version-x64.exe"
-          $releaseJson = gh release view $tag `
-            --json isDraft,isPrerelease,tagName 2>$null
+          $releaseJson = gh api `
+            "repos/rcourtman/presspeech/releases/tags/$tag" 2>$null
           if ($LASTEXITCODE -ne 0) {
+            $releaseJson = ""
+          }
+          $disposition = .\windows\validate-release-state.ps1 `
+            -ReleaseJson $releaseJson `
+            -Tag $tag `
+            -Version $version `
+            -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+            -Installer $installer `
+            -Checksum "$installer.sha256"
+          if ($disposition -like "upload-*" -or
+              $disposition -ceq "publish-draft") {
+            # Resume only an exact matching private draft. Existing assets must
+            # match the local build, and uploads never clobber an asset, so this
+            # recovery path cannot replace anything already published.
+            .\windows\validate-release-tag.ps1 `
+              -Tag $tag `
+              -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
+            if ($disposition -ceq "upload-both") {
+              gh release upload $tag $installer "$installer.sha256"
+            } elseif ($disposition -ceq "upload-installer") {
+              gh release upload $tag $installer
+            } elseif ($disposition -ceq "upload-checksum") {
+              gh release upload $tag "$installer.sha256"
+            }
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not resume interrupted draft release $tag"
+            }
+            $releaseJson = gh api `
+              "repos/rcourtman/presspeech/releases/tags/$tag"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not read resumed draft release $tag"
+            }
+            $disposition = .\windows\validate-release-state.ps1 `
+              -ReleaseJson $releaseJson `
+              -Tag $tag `
+              -Version $version `
+              -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+              -Installer $installer `
+              -Checksum "$installer.sha256"
+            if ($disposition -ceq "publish-draft") {
+              gh release edit $tag --draft=false --prerelease
+              if ($LASTEXITCODE -ne 0) {
+                throw "Could not publish resumed draft release $tag"
+              }
+              $disposition = "verify-published"
+            } elseif ($disposition -cne "verify-published") {
+              throw "Resumed draft is incomplete: $disposition"
+            }
+          }
+          if ($disposition -ceq "create") {
             # Supplying both assets to `gh release create` makes the CLI stage
             # a draft, upload the complete pair, and publish only after both
             # uploads succeed. An interrupted job therefore cannot expose a
@@ -168,12 +218,11 @@ jobs:
               --prerelease `
               --title "Presspeech for Windows $version" `
               --notes-file $notes
-          } else {
-            $release = $releaseJson | ConvertFrom-Json
-            if ($release.tagName -ne $tag -or $release.isDraft -or
-                -not $release.isPrerelease) {
-              throw "Existing $tag release is not the expected published prerelease"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not atomically publish Windows release $tag"
             }
+          } elseif ($disposition -cne "verify-published") {
+            throw "Unexpected Windows release disposition: $disposition"
           }
           # targetCommitish can retain stale creation metadata after a tag is
           # moved. Verify the actual tag ref before trusting any assets.
@@ -189,6 +238,16 @@ jobs:
             "repos/rcourtman/presspeech/releases/tags/$tag"
           if ($LASTEXITCODE -ne 0) {
             throw "Could not read the published Windows release"
+          }
+          $publishedDisposition = .\windows\validate-release-state.ps1 `
+            -ReleaseJson $publishedJson `
+            -Tag $tag `
+            -Version $version `
+            -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+            -Installer $installer `
+            -Checksum "$installer.sha256"
+          if ($publishedDisposition -cne "verify-published") {
+            throw "Windows release did not reach the published state"
           }
           .\windows\validate-release-assets.ps1 `
             -ReleaseJson $publishedJson `
