@@ -275,6 +275,20 @@ class TextRegressionTests(unittest.TestCase):
             instance._apply_text("Parakeet is already correct."),
             "Parakeet is already correct.")
 
+    def test_dictionary_replacements_are_inserted_literally(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "dictionary": [["project folder", r"C:\Users\me\Presspeech"],
+                           ["capture group", r"\1"]],
+            "remove_fillers": False,
+            "british": False,
+            "suffix": "none",
+        }
+
+        self.assertEqual(
+            instance._apply_text("Open project folder, then type capture group."),
+            r"Open C:\Users\me\Presspeech, then type \1.")
+
     def test_filler_removal_repairs_sentence_capitalization(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {

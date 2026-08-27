@@ -1037,7 +1037,12 @@ class PresspeechApp:
         for spoken, replacement in self.settings["dictionary"]:
             if spoken:
                 pattern = r"(?<!\w)%s(?!\w)" % re.escape(spoken)
-                text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+                # A replacement string makes backslashes and ``\1`` special to
+                # re.sub. Shortcuts promise exact reusable text, including
+                # Windows paths and source snippets, so return it literally.
+                text = re.sub(
+                    pattern, lambda _match, value=replacement: value,
+                    text, flags=re.IGNORECASE)
         if self.settings["remove_fillers"]:
             text = _remove_fillers(text)
         if self.settings.get("british"):

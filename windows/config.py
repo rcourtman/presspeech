@@ -61,15 +61,77 @@ MODEL_LABELS = {
 
 SUFFIXES = {"space": " ", "newline": "\n", "none": ""}
 
+_ENUM_SETTINGS = {
+    "hotkey": set(HOTKEYS),
+    "trigger": {"hold", "toggle"},
+    "model": set(MODELS),
+    "precision": {"auto", "fp16", "bf16"},
+    "suffix": set(SUFFIXES),
+}
+_NONNEGATIVE_INT_SETTINGS = {
+    "last_update_check_epoch",
+    "capture_benchmark_remaining",
+    "gpu_idle_unload_sec",
+}
+
+
+def _valid_dictionary(value):
+    """Keep well-formed string pairs without losing the rest of the dictionary."""
+    if not isinstance(value, list):
+        return None
+    return [
+        rule for rule in value
+        if (isinstance(rule, list) and len(rule) == 2 and
+            all(isinstance(part, str) for part in rule))
+    ]
+
+
+def _default_settings():
+    # DEFAULTS is public documentation for settings and contains a list. Each
+    # load must own that list so a caller cannot alter later fallback results.
+    return {
+        key: value.copy() if isinstance(value, list) else value
+        for key, value in DEFAULTS.items()
+    }
+
+
+def _validated_settings(payload):
+    """Overlay known, correctly shaped persisted values on safe defaults."""
+    settings = _default_settings()
+    if not isinstance(payload, dict):
+        return settings
+    for key, default in DEFAULTS.items():
+        if key not in payload:
+            continue
+        value = payload[key]
+        if key == "dictionary":
+            rules = _valid_dictionary(value)
+            if rules is not None:
+                settings[key] = rules
+            continue
+        # Use exact types so JSON integers cannot silently enable booleans and
+        # booleans cannot enter timer/index arithmetic (bool subclasses int).
+        if type(value) is not type(default):
+            continue
+        if key in _ENUM_SETTINGS and value not in _ENUM_SETTINGS[key]:
+            continue
+        if key == "input_device" and not value:
+            continue
+        if key in _NONNEGATIVE_INT_SETTINGS and value < 0:
+            continue
+        if key == "capture_benchmark_index" and value < 1:
+            continue
+        settings[key] = value
+    return settings
+
 
 def load():
-    settings = dict(DEFAULTS)
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
-            settings.update(json.load(fh))
+            payload = json.load(fh)
     except (OSError, ValueError):
-        pass
-    return settings
+        return _default_settings()
+    return _validated_settings(payload)
 
 
 def save(settings):
