@@ -86,6 +86,17 @@ let AUDIO_IDLE_STOP_DELAY_SECONDS: TimeInterval = 5
 let AUDIO_CONFIGURATION_CHANGE_SUPPRESSION_SECONDS: TimeInterval = 1
 let MODEL_DOWNLOAD_HEADROOM_BYTES: Int64 = 500 * 1024 * 1024
 
+/// macOS can transiently report no screens during display sleep or
+/// reconfiguration. In that state the optional HUD stays hidden and the
+/// recording-level timer will place it once a screen becomes available.
+func recordingHUDFrame(size: NSSize, visibleFrame: NSRect?) -> NSRect? {
+    guard let visibleFrame else { return nil }
+    return NSRect(x: visibleFrame.midX - (size.width / 2),
+                  y: visibleFrame.minY + 84,
+                  width: size.width,
+                  height: size.height)
+}
+
 let SETTINGS_SUITE = "com.local.presspeech"
 let CORRECTIONS_FILE_UTI = "com.local.presspeech.corrections"
 let CORRECTIONS_FILE_EXTENSION = "presspeech-corrections"
@@ -6754,9 +6765,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if shouldAnimate {
             animateRecordingHUDIn(panel)
         } else {
+            guard let frame = currentRecordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE) else {
+                panel.orderOut(nil)
+                return
+            }
             recordingHUDAnimationToken += 1
             panel.alphaValue = 1
-            panel.setFrame(recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE), display: true)
+            panel.setFrame(frame, display: true)
             panel.orderFrontRegardless()
         }
     }
@@ -6779,12 +6794,18 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         recordingHUDAnimationToken += 1
         guard panel.isVisible else {
             panel.alphaValue = 1
-            panel.setFrame(recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE), display: false)
+            if let frame = currentRecordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE) {
+                panel.setFrame(frame, display: false)
+            }
             return
         }
 
         let token = recordingHUDAnimationToken
-        let collapsedFrame = recordingHUDFrame(size: RECORDING_HUD_COLLAPSED_SIZE)
+        guard let collapsedFrame = currentRecordingHUDFrame(size: RECORDING_HUD_COLLAPSED_SIZE) else {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            return
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = RECORDING_HUD_ANIMATE_OUT_SECONDS
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -6796,8 +6817,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 guard self.recordingHUDAnimationToken == token else { return }
                 panel.orderOut(nil)
                 panel.alphaValue = 1
-                panel.setFrame(self.recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE),
-                               display: false)
+                if let frame = self.currentRecordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE) {
+                    panel.setFrame(frame, display: false)
+                }
             }
         }
     }
@@ -6824,8 +6846,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func animateRecordingHUDIn(_ panel: NSPanel) {
         recordingHUDAnimationToken += 1
-        let startFrame = recordingHUDFrame(size: RECORDING_HUD_COLLAPSED_SIZE)
-        let finalFrame = recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE)
+        guard let visibleFrame = screenForRecordingHUD()?.visibleFrame,
+              let startFrame = recordingHUDFrame(size: RECORDING_HUD_COLLAPSED_SIZE,
+                                                  visibleFrame: visibleFrame),
+              let finalFrame = recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE,
+                                                  visibleFrame: visibleFrame) else {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            return
+        }
         panel.alphaValue = 0.7
         panel.setFrame(startFrame, display: true)
         panel.orderFrontRegardless()
@@ -6837,24 +6866,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    private func recordingHUDFrame(size: NSSize) -> NSRect {
-        let screen = screenForRecordingHUD()
-        let visible = screen.visibleFrame
-        return NSRect(x: visible.midX - (size.width / 2),
-                      y: visible.minY + 84,
-                      width: size.width,
-                      height: size.height)
+    private func currentRecordingHUDFrame(size: NSSize) -> NSRect? {
+        recordingHUDFrame(size: size,
+                          visibleFrame: screenForRecordingHUD()?.visibleFrame)
     }
 
-    private func screenForRecordingHUD() -> NSScreen {
+    private func screenForRecordingHUD() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
         if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) {
             return screen
         }
-        if let screen = NSScreen.main ?? NSScreen.screens.first {
-            return screen
-        }
-        preconditionFailure("NSScreen.screens unexpectedly empty")
+        return NSScreen.main ?? NSScreen.screens.first
     }
 
     private func scheduleDelayedBusyHUD() {
@@ -13509,6 +13531,18 @@ private enum PresspeechSelfTest {
     }
 
     private static func testRecordingLifecycle() throws {
+        try expect(
+            recordingHUDFrame(size: NSSize(width: 232, height: 54),
+                              visibleFrame: NSRect(x: 100, y: 40, width: 1_000, height: 700)),
+            equals: NSRect(x: 484, y: 124, width: 232, height: 54),
+            "recording HUD should stay centered above the active screen's lower edge"
+        )
+        try expect(
+            recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE, visibleFrame: nil),
+            equals: NSRect?.none,
+            "recording HUD should stay hidden while macOS reports no screens"
+        )
+
         try expect(
             MAXIMUM_RECORDING_LENGTH_CHOICES.map(\.seconds),
             equals: [60, 120, 300, 600],
