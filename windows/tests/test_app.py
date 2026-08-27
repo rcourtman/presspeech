@@ -304,6 +304,34 @@ class TextRegressionTests(unittest.TestCase):
             instance._apply_text("Open project folder, then type capture group."),
             r"Open C:\Users\me\Presspeech, then type \1.")
 
+    def test_dictionary_prefers_longer_overlapping_phrases(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "dictionary": [["parakeet", "bird"],
+                           ["parakeet tdt", "Parakeet TDT"]],
+            "remove_fillers": False,
+            "british": False,
+            "suffix": "none",
+        }
+
+        self.assertEqual(
+            instance._apply_text("Parakeet TDT and parakeet."),
+            "Parakeet TDT and bird.")
+
+    def test_dictionary_does_not_rewrite_replacement_text(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "dictionary": [["project folder", "second phrase"],
+                           ["second phrase", "rewritten"]],
+            "remove_fillers": False,
+            "british": False,
+            "suffix": "none",
+        }
+
+        self.assertEqual(
+            instance._apply_text("project folder and second phrase"),
+            "second phrase and rewritten")
+
     def test_filler_removal_repairs_sentence_capitalization(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {

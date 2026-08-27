@@ -190,6 +190,33 @@ def _remove_fillers(text):
     return _restore_filler_capitalization(result, capitalization_targets)
 
 
+def _apply_dictionary_rules(text, rules):
+    """Apply longest non-overlapping rules once against the original text."""
+    active = [
+        (index, spoken, replacement)
+        for index, (spoken, replacement) in enumerate(rules)
+        if spoken
+    ]
+    # Prefer the most specific phrase regardless of the order rules were added.
+    # The original order remains a deterministic tie-breaker for equal phrases.
+    active.sort(key=lambda rule: (-len(rule[1]), rule[1].casefold(), rule[0]))
+    matches = []
+    for _index, spoken, replacement in active:
+        pattern = r"(?<!\w)%s(?!\w)" % re.escape(spoken)
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            start, end = match.span()
+            if any(start < other_end and other_start < end
+                   for other_start, other_end, _replacement in matches):
+                continue
+            matches.append((start, end, replacement))
+
+    # Every range belongs to the untouched transcript, so replacement text is
+    # inserted literally and can never trigger a later dictionary rule.
+    for start, end, replacement in sorted(matches, reverse=True):
+        text = text[:start] + replacement + text[end:]
+    return text
+
+
 def _make_cue_wave(frequency, duration=0.055, volume=0.14, sample_rate=24000):
     """Build a short, softly faded mono WAV for native Windows playback."""
     frame_count = int(duration * sample_rate)
@@ -1079,15 +1106,7 @@ class PresspeechApp:
         self._log("scratchpad transcription discarded; window closed")
 
     def _apply_text(self, text):
-        for spoken, replacement in self.settings["dictionary"]:
-            if spoken:
-                pattern = r"(?<!\w)%s(?!\w)" % re.escape(spoken)
-                # A replacement string makes backslashes and ``\1`` special to
-                # re.sub. Shortcuts promise exact reusable text, including
-                # Windows paths and source snippets, so return it literally.
-                text = re.sub(
-                    pattern, lambda _match, value=replacement: value,
-                    text, flags=re.IGNORECASE)
+        text = _apply_dictionary_rules(text, self.settings["dictionary"])
         if self.settings["remove_fillers"]:
             text = _remove_fillers(text)
         if self.settings.get("british"):
