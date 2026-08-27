@@ -19,6 +19,23 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.assertEqual(engine._parakeet_bucket_seconds(30.01), 60)
         self.assertEqual(engine._parakeet_bucket_seconds(61.0), 90)
 
+    def test_parakeet_generation_limit_follows_encoder_capacity(self):
+        torch = mock.Mock()
+        torch.tensor.return_value = "input length"
+        features = mock.Mock()
+        features.shape = (1, 1501, 128)
+        features.device = "cuda"
+        model = mock.Mock()
+        model.max_symbols_per_step = 10
+        model.encoder._get_subsampling_output_length.return_value.item.return_value = 188
+
+        limit = engine._parakeet_max_new_tokens(model, features, torch)
+
+        self.assertEqual(limit, 1880)
+        torch.tensor.assert_called_once_with([1501], device="cuda")
+        model.encoder._get_subsampling_output_length.assert_called_once_with(
+            "input length")
+
     def test_processor_is_explicitly_configured_for_tdt(self):
         processor = types.SimpleNamespace(decoder_type=None)
         returned = engine._configure_parakeet_processor(processor)

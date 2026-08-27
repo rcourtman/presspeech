@@ -71,6 +71,15 @@ def _parakeet_bucket_seconds(audio_seconds):
     return int((audio_seconds + 29) // 30 * 30)
 
 
+def _parakeet_max_new_tokens(model, input_features, torch_module):
+    """Size generation from Parakeet's encoder capacity, not a library default."""
+    encoder_length = model.encoder._get_subsampling_output_length(
+        torch_module.tensor(
+            [input_features.shape[1]], device=input_features.device)
+    ).item()
+    return max(1, model.max_symbols_per_step * encoder_length)
+
+
 class Transcriber:
     def __init__(self, precision="auto"):
         self.lock = threading.Lock()
@@ -262,7 +271,13 @@ class Transcriber:
         }
         transferred = time.perf_counter()
         with torch.no_grad():
-            output = model.generate(**inputs, return_dict_in_generate=True)
+            max_new_tokens = _parakeet_max_new_tokens(
+                model, inputs["input_features"], torch)
+            output = model.generate(
+                **inputs,
+                return_dict_in_generate=True,
+                max_new_tokens=max_new_tokens,
+            )
         generated = time.perf_counter()
         decoded, _timestamps = processor.decode(
             output.sequences, durations=output.durations, skip_special_tokens=True)
