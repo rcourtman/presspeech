@@ -594,7 +594,11 @@ class SettingsWindow:
 
         self.listbox = tk.Listbox(f, width=52, height=6)
         self.listbox.grid(row=row, column=0, columnspan=3, sticky="ew", pady=4)
-        for spoken, replacement in s["dictionary"]:
+        # The listbox text is only a presentation. Re-parsing its arrow
+        # separator would corrupt rules that legitimately contain that
+        # character and would strip exact shortcut whitespace on every save.
+        self.dictionary_rules = [list(rule) for rule in s["dictionary"]]
+        for spoken, replacement in self.dictionary_rules:
             self.listbox.insert("end", "%s \u2192 %s" % (spoken, replacement))
         row += 1
 
@@ -616,6 +620,7 @@ class SettingsWindow:
         replacement = self.var_replace.get()
         if not spoken:
             return
+        self.dictionary_rules.append([spoken, replacement])
         self.listbox.insert("end", "%s \u2192 %s" % (spoken, replacement))
         self.var_spoken.set("")
         self.var_replace.set("")
@@ -623,7 +628,9 @@ class SettingsWindow:
     def _remove_rule(self):
         selection = self.listbox.curselection()
         if selection:
-            self.listbox.delete(selection[0])
+            index = selection[0]
+            del self.dictionary_rules[index]
+            self.listbox.delete(index)
 
     def _save(self):
         s = self.app.settings
@@ -646,12 +653,7 @@ class SettingsWindow:
             self.app._set_indicator(None)
         s["check_updates"] = bool(self.var_check_updates.get())
         s["autostart"] = bool(self.var_autostart.get())
-        rules = []
-        for line in self.listbox.get(0, "end"):
-            if "\u2192" in line:
-                spoken, replacement = line.split("\u2192", 1)
-                rules.append([spoken.strip(), replacement.strip()])
-        s["dictionary"] = rules
+        s["dictionary"] = [list(rule) for rule in self.dictionary_rules]
         cfg.save(s)
         self.app.apply_autostart()
         self.status.config(text="Saved. Hotkey changes apply immediately.")
