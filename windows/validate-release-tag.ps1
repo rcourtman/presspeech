@@ -90,11 +90,11 @@ if (-not $Remote) {
 }
 
 $tagRef = "refs/tags/$Tag"
-$remoteLines = @(& git ls-remote --exit-code $Remote $tagRef "$tagRef^{}")
+# A missing ref is valid with -AllowMissing. Avoid --exit-code because its
+# status 2 survives the handled case and makes the calling PowerShell step fail.
+$remoteLines = @(& git ls-remote $Remote $tagRef "$tagRef^{}")
 $gitStatus = $LASTEXITCODE
-if ($gitStatus -eq 2) {
-    $remoteLines = @()
-} elseif ($gitStatus -ne 0) {
+if ($gitStatus -ne 0) {
     throw "Could not read release tag $Tag from Git remote $Remote"
 }
 
