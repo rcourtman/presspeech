@@ -274,6 +274,8 @@ class UpdateWindow:
         self.root = None
         self.events = queue.Queue()
         self.cancel_download = threading.Event()
+        self.download_lock = threading.Lock()
+        self.downloaded_installer = None
         threading.Thread(target=self._build, daemon=True).start()
 
     def _build(self):
@@ -308,21 +310,64 @@ class UpdateWindow:
         self.app.update_window = None
 
     def _download(self):
+        self._discard_completed_download()
         self.cancel_download.clear()
         self.download_button.config(state="disabled")
         self.status.config(text="Downloading…")
         threading.Thread(target=self._download_worker, daemon=True).start()
 
     def _download_worker(self):
+        destination = None
+        path = None
         try:
-            destination = os.path.join(tempfile.gettempdir(), "Presspeech")
+            # Isolate each window so a late cleanup from a closed window can
+            # never remove a newer window's installer with the same asset name.
+            destination = tempfile.mkdtemp(prefix="Presspeech-update-")
             path = updates.download_update(
                 self.update, destination,
                 lambda done, total: self.events.put(("progress", done, total)),
                 cancelled=self.cancel_download.is_set)
-            self.events.put(("ready", path))
+            # Closing can race with the final cancellation check inside the
+            # downloader. Transfer ownership under a lock so either the open
+            # window receives the verified path or the closing window removes
+            # it; a completed multi-gigabyte installer must not be orphaned.
+            with self.download_lock:
+                if self.cancel_download.is_set():
+                    discard = True
+                else:
+                    self.downloaded_installer = path
+                    discard = False
+            if discard:
+                self._remove_downloaded_installer(path)
+            else:
+                self.events.put(("ready", path))
         except Exception as exc:
+            if path is not None:
+                self._remove_downloaded_installer(path)
+            elif destination is not None:
+                try:
+                    os.rmdir(destination)
+                except OSError:
+                    pass
             self.events.put(("error", str(exc)))
+
+    @staticmethod
+    def _remove_downloaded_installer(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        try:
+            os.rmdir(os.path.dirname(path))
+        except OSError:
+            pass
+
+    def _discard_completed_download(self):
+        with self.download_lock:
+            path = self.downloaded_installer
+            self.downloaded_installer = None
+        if path is not None:
+            self._remove_downloaded_installer(path)
 
     def _poll(self):
         if self.root is None:
@@ -365,6 +410,7 @@ class UpdateWindow:
 
     def _close(self):
         self.cancel_download.set()
+        self._discard_completed_download()
         try:
             self.root.destroy()
         except Exception:

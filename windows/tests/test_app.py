@@ -34,6 +34,8 @@ class UpdateWindowTests(unittest.TestCase):
         window.root = mock.Mock()
         window.events = app.ui.queue.Queue()
         window.cancel_download = app.threading.Event()
+        window.download_lock = app.threading.Lock()
+        window.downloaded_installer = None
         return window
 
     def test_closing_window_cancels_an_active_download(self):
@@ -46,16 +48,53 @@ class UpdateWindowTests(unittest.TestCase):
 
     def test_download_worker_forwards_window_cancellation(self):
         window = self.make_window()
+
+        def finish_download(_update, destination, *_args, **_kwargs):
+            path = app.os.path.join(destination, "installer.exe")
+            with open(path, "wb") as handle:
+                handle.write(b"verified installer")
+            return path
+
         with mock.patch.object(
                 app.ui.updates, "download_update",
-                return_value=r"C:\Temp\Presspeech\installer.exe") as download:
+                side_effect=finish_download) as download:
             window._download_worker()
 
         cancelled = download.call_args.kwargs["cancelled"]
         self.assertFalse(cancelled())
-        self.assertEqual(
-            window.events.get_nowait(),
-            ("ready", r"C:\Temp\Presspeech\installer.exe"))
+        event = window.events.get_nowait()
+        self.assertEqual(event, ("ready", window.downloaded_installer))
+        self.assertTrue(app.os.path.exists(window.downloaded_installer))
+        window._close()
+
+    def test_close_racing_ready_event_removes_completed_installer(self):
+        window = self.make_window()
+
+        class ClosingQueue(app.ui.queue.Queue):
+            def put(self, item, *args, **kwargs):
+                window._close()
+                return super().put(item, *args, **kwargs)
+
+        window.events = ClosingQueue()
+        created = {}
+
+        def finish_download(_update, destination, *_args, **_kwargs):
+            created["path"] = app.os.path.join(destination, "installer.exe")
+            with open(created["path"], "wb") as handle:
+                handle.write(b"verified installer")
+            return created["path"]
+
+        with mock.patch.object(
+                app.ui.updates, "download_update",
+                side_effect=finish_download):
+            window._download_worker()
+
+        installer = created["path"]
+        self.assertFalse(app.os.path.exists(installer))
+        self.assertFalse(app.os.path.exists(app.os.path.dirname(installer)))
+        self.assertTrue(window.cancel_download.is_set())
+        self.assertIsNone(window.downloaded_installer)
+        self.assertEqual(window.events.get_nowait(), ("ready", installer))
 
 
 class InputSelectionTests(unittest.TestCase):
