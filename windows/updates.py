@@ -39,12 +39,28 @@ def parse_version(value):
     return tuple(int(part) for part in match.groups())
 
 
-def _assets_by_name(release):
-    return {
-        asset.get("name", ""): asset
-        for asset in release.get("assets", [])
-        if asset.get("state", "uploaded") == "uploaded"
-    }
+def _published_assets(release, expected_names):
+    """Return the exact uploaded asset set, or None for malformed metadata."""
+    assets = release.get("assets")
+    if not isinstance(assets, list) or len(assets) != len(expected_names):
+        return None
+    assets_by_name = {}
+    for asset in assets:
+        if not isinstance(asset, dict) or asset.get("state") != "uploaded":
+            return None
+        name = asset.get("name")
+        if (not isinstance(name, str) or name not in expected_names or
+                name in assets_by_name):
+            return None
+        assets_by_name[name] = asset
+    return assets_by_name if set(assets_by_name) == expected_names else None
+
+
+def _canonical_asset_url(tag, name):
+    return (
+        "https://github.com/rcourtman/presspeech/releases/download/%s/%s"
+        % (tag, name)
+    )
 
 
 def select_update(releases, current_version):
@@ -52,7 +68,8 @@ def select_update(releases, current_version):
     current = parse_version(current_version)
     candidates = []
     for release in releases:
-        if release.get("draft"):
+        if (not isinstance(release, dict) or release.get("draft") or
+                release.get("prerelease") is not True):
             continue
         try:
             version = parse_version(release.get("tag_name", ""))
@@ -63,34 +80,44 @@ def select_update(releases, current_version):
         version_text = ".".join(str(part) for part in version)
         installer_name = "Presspeech-Setup-%s-x64.exe" % version_text
         checksum_name = installer_name + ".sha256"
-        assets = _assets_by_name(release)
+        assets = _published_assets(release, {installer_name, checksum_name})
+        if assets is None:
+            continue
         installer = assets.get(installer_name)
         checksum = assets.get(checksum_name)
-        if not installer or not checksum:
-            continue
         installer_url = installer.get("browser_download_url", "")
         checksum_url = checksum.get("browser_download_url", "")
+        tag = release.get("tag_name", "")
+        if (installer_url != _canonical_asset_url(tag, installer_name) or
+                checksum_url != _canonical_asset_url(tag, checksum_name)):
+            continue
         try:
             _checked_download_url(installer_url)
             _checked_download_url(checksum_url)
-        except UpdateError:
+            installer_size = int(installer.get("size", 0) or 0)
+            checksum_size = int(checksum.get("size", 0) or 0)
+        except (UpdateError, TypeError, ValueError, OverflowError):
             continue
-        installer_size = int(installer.get("size", 0) or 0)
-        if installer_size <= 0:
-            continue
-        digest = str(installer.get("digest", ""))
-        if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest):
+        installer_digest = str(installer.get("digest", ""))
+        checksum_digest = str(checksum.get("digest", ""))
+        if (installer_size <= 0 or checksum_size <= 0 or checksum_size > 8192 or
+                not re.fullmatch(
+                    r"sha256:[0-9a-fA-F]{64}", installer_digest) or
+                not re.fullmatch(
+                    r"sha256:[0-9a-fA-F]{64}", checksum_digest)):
             continue
         candidates.append((version, {
             "version": version_text,
-            "tag": release.get("tag_name", ""),
+            "tag": tag,
             "release_url": release.get("html_url", ""),
             "body": release.get("body", ""),
             "installer_name": installer_name,
             "installer_url": installer_url,
             "installer_size": installer_size,
-            "installer_digest": digest.partition(":")[2].lower(),
+            "installer_digest": installer_digest.partition(":")[2].lower(),
             "checksum_url": checksum_url,
+            "checksum_size": checksum_size,
+            "checksum_digest": checksum_digest.partition(":")[2].lower(),
         }))
     return max(candidates, key=lambda item: item[0])[1] if candidates else None
 
@@ -176,14 +203,24 @@ def parse_checksum(text, expected_name):
 def _read_checksum(update, opener, timeout):
     url = _checked_download_url(update["checksum_url"])
     try:
+        expected_size = int(update.get("checksum_size", 0) or 0)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise UpdateError("release checksum metadata was invalid") from exc
+    expected_digest = str(update.get("checksum_digest", "")).lower()
+    if (expected_size <= 0 or expected_size > 8192 or
+            not re.fullmatch(r"[0-9a-f]{64}", expected_digest)):
+        raise UpdateError("release checksum metadata was invalid")
+    try:
         with _open_release_asset(_request(url), opener, timeout) as response:
             final_url = getattr(response, "geturl", lambda: url)()
             _checked_download_url(final_url)
-            payload = response.read(8193)
+            payload = response.read(expected_size + 1)
     except Exception as exc:
         raise UpdateError("could not download the release checksum: %s" % exc) from exc
-    if len(payload) > 8192:
-        raise UpdateError("release checksum file was unexpectedly large")
+    if len(payload) != expected_size:
+        raise UpdateError("release checksum size did not match the release")
+    if hashlib.sha256(payload).hexdigest().lower() != expected_digest:
+        raise UpdateError("release checksum SHA-256 verification failed")
     try:
         return parse_checksum(payload.decode("ascii"), update["installer_name"])
     except UnicodeDecodeError as exc:

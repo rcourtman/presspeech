@@ -38,6 +38,7 @@ class CountingResponse(Response):
 
 def release(version, complete=True, draft=False):
     installer = "Presspeech-Setup-%s-x64.exe" % version
+    checksum = ("a" * 64 + "  " + installer + "\n").encode("ascii")
     assets = [{
         "name": installer,
         "state": "uploaded",
@@ -54,6 +55,8 @@ def release(version, complete=True, draft=False):
             "browser_download_url":
                 "https://github.com/rcourtman/presspeech/releases/download/"
                 "windows-v%s/%s.sha256" % (version, installer),
+            "size": len(checksum),
+            "digest": "sha256:" + hashlib.sha256(checksum).hexdigest(),
         })
     return {
         "tag_name": "windows-v" + version,
@@ -94,6 +97,30 @@ class UpdateSelectionTests(unittest.TestCase):
         candidate["assets"][0]["digest"] = None
         self.assertIsNone(updates.select_update([candidate], "0.1.0"))
 
+    def test_ignores_non_prerelease_or_inexact_asset_sets(self):
+        stable = release("0.1.1")
+        stable["prerelease"] = False
+        extra = release("0.1.2")
+        extra["assets"].append({
+            "name": "unexpected.txt",
+            "state": "uploaded",
+        })
+        duplicate = release("0.1.3")
+        duplicate["assets"][1] = dict(duplicate["assets"][0])
+        missing_state = release("0.1.4")
+        del missing_state["assets"][0]["state"]
+        for candidate in (stable, extra, duplicate, missing_state):
+            with self.subTest(tag=candidate["tag_name"]):
+                self.assertIsNone(
+                    updates.select_update([candidate], "0.1.0"))
+
+    def test_ignores_allowed_host_with_noncanonical_asset_path(self):
+        candidate = release("0.1.1")
+        candidate["assets"][0]["browser_download_url"] = (
+            "https://github.com/rcourtman/presspeech/releases/download/"
+            "windows-v0.1.0/Presspeech-Setup-0.1.1-x64.exe")
+        self.assertIsNone(updates.select_update([candidate], "0.1.0"))
+
     def test_fetch_uses_fixed_privacy_safe_headers(self):
         seen = {}
 
@@ -131,12 +158,15 @@ class DownloadTests(unittest.TestCase):
     def make_update(self, payload, checksum=None):
         name = "Presspeech-Setup-0.1.1-x64.exe"
         digest = checksum or hashlib.sha256(payload).hexdigest()
+        checksum_payload = ("%s  %s\n" % (digest, name)).encode("ascii")
         return {
             "installer_name": name,
             "installer_url": "https://github.com/installer",
             "installer_size": len(payload),
             "installer_digest": digest,
             "checksum_url": "https://github.com/checksum",
+            "checksum_size": len(checksum_payload),
+            "checksum_digest": hashlib.sha256(checksum_payload).hexdigest(),
         }, digest
 
     def test_download_is_verified_and_moved_atomically(self):
@@ -199,6 +229,38 @@ class DownloadTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(updates.UpdateError):
+                updates.download_update(update, directory, opener=opener)
+            self.assertEqual(os.listdir(directory), [])
+
+    def test_checksum_asset_metadata_is_verified_before_parsing(self):
+        payload = b"safe installer"
+        update, digest = self.make_update(payload)
+
+        def opener(request, timeout):
+            if request.full_url.endswith("checksum"):
+                text = "%s  %s\n" % (digest, update["installer_name"])
+                return Response(text.encode("ascii") + b"x")
+            return Response(payload)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "checksum size did not match"):
+                updates.download_update(update, directory, opener=opener)
+            self.assertEqual(os.listdir(directory), [])
+
+    def test_checksum_asset_digest_is_verified_before_parsing(self):
+        payload = b"safe installer"
+        update, digest = self.make_update(payload)
+
+        def opener(request, timeout):
+            if request.full_url.endswith("checksum"):
+                text = "%s *%s\n" % (digest, update["installer_name"])
+                return Response(text.encode("ascii"))
+            return Response(payload)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "checksum SHA-256 verification failed"):
                 updates.download_update(update, directory, opener=opener)
             self.assertEqual(os.listdir(directory), [])
 
