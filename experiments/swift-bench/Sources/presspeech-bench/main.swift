@@ -1144,12 +1144,14 @@ struct PresspeechBench {
             log("note: \(backends.count) backends in one process — memory is cumulative; run one --backend per process for clean per-model numbers")
         }
 
+        var failedBackends = 0
         for backend in backends {
             log("preparing \(backend.name)…")
             let prepT0 = Date()
             do {
                 try await backend.prepare(warmupSamples: warmup)
             } catch {
+                failedBackends += 1
                 log("  prepare(\(backend.name)) FAILED: \(error)")
                 continue
             }
@@ -1176,8 +1178,13 @@ struct PresspeechBench {
                           redactTranscripts: args.redactTranscripts,
                           criticalTerms: criticalTerms)
             } catch {
+                failedBackends += 1
                 log("  run(\(backend.name)) FAILED: \(error)")
             }
+        }
+        if failedBackends > 0 {
+            log("presspeech-bench: \(failedBackends) backend(s) failed")
+            exit(1)
         }
     }
 }
