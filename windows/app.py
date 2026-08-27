@@ -557,8 +557,12 @@ class PresspeechApp:
             self.start_recording()
 
     def _on_release(self, key):
-        if self._injecting_keys:
-            return
+        # Releases must always repair physical-key state. A user can release
+        # Left Ctrl (or the configured hotkey itself) during the short Ctrl+V
+        # injection window; dropping that callback would leave Ctrl marked as
+        # held or the hotkey transaction stuck until another matching release.
+        # Injected releases are harmless here: they either discard an absent
+        # key or finish a real transaction that began before injection.
         self._pressed_keys.discard(key)
         if key in KEY_MAP["right alt"]:
             # pynput may use a different alias for the same physical key on

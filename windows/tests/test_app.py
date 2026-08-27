@@ -273,6 +273,34 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.request_stop.assert_called_once_with()
         self.assertEqual(instance._pressed_keys, set())
 
+    def test_modifier_release_during_paste_does_not_leave_altgr_state_stuck(self):
+        instance = self.make_app()
+
+        instance._on_press(app.pkb.Key.ctrl_l)
+        instance._injecting_keys = True
+        instance._on_release(app.pkb.Key.ctrl_l)
+        instance._injecting_keys = False
+        instance._on_press(app.pkb.Key.alt_gr)
+        instance._on_release(app.pkb.Key.alt_r)
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_called_once_with()
+        self.assertEqual(instance._pressed_keys, set())
+
+    def test_hotkey_release_during_paste_completes_held_transaction(self):
+        instance = self.make_app()
+
+        instance._on_press(app.pkb.Key.alt_gr)
+        instance._injecting_keys = True
+        instance._on_release(app.pkb.Key.alt_r)
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_called_once_with()
+        self.assertFalse(instance._key_held)
+        self.assertEqual(instance._held_hotkey_keys, frozenset())
+        self.assertIsNone(instance._held_hotkey_trigger)
+        self.assertEqual(instance._pressed_keys, set())
+
     def test_hold_release_uses_hotkey_and_trigger_captured_on_press(self):
         instance = self.make_app()
 
