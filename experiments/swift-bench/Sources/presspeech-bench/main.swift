@@ -749,11 +749,23 @@ func wordEditDistance(_ ref: [String], _ hyp: [String]) -> Int {
     return prev[m]
 }
 
-func werPercent(reference: String, hypothesis: String) -> Double {
+struct WordErrorScore {
+    let errors: Int
+    let referenceWords: Int
+
+    var percent: Double {
+        guard referenceWords > 0 else { return errors == 0 ? 0 : 100 }
+        return Double(errors) / Double(referenceWords) * 100
+    }
+}
+
+func wordErrorScore(reference: String, hypothesis: String) -> WordErrorScore {
     let ref = werTokens(reference)
     let hyp = werTokens(hypothesis)
-    guard !ref.isEmpty else { return hyp.isEmpty ? 0 : 100 }
-    return Double(wordEditDistance(ref, hyp)) / Double(ref.count) * 100
+    return WordErrorScore(
+        errors: wordEditDistance(ref, hyp),
+        referenceWords: ref.count
+    )
 }
 
 struct CriticalTermScore {
@@ -832,6 +844,13 @@ func runBenchSelfTests() throws {
     try expect(score.total == 2, "critical-term recall should count only terms present in reference")
     try expect(abs(score.recallPercent - 50) < 0.001, "critical-term recall percentage should be weighted")
     try expect(score.unexpected == 1, "critical-term scoring should count insertions absent from the reference")
+    let wordErrors = wordErrorScore(
+        reference: "one two three four",
+        hypothesis: "one too three"
+    )
+    try expect(wordErrors.errors == 2, "WER should expose edit-error counts for corpus aggregation")
+    try expect(wordErrors.referenceWords == 4, "WER should expose reference-word counts for corpus aggregation")
+    try expect(abs(wordErrors.percent - 50) < 0.001, "WER percentage should derive from the exact counts")
 
     print("presspeech-bench self-test passed")
 }
@@ -911,9 +930,13 @@ func summarize(_ name: String,
     print("  \(name)")
     print("    latency:  p50=\(fmtMs(p50))  min=\(fmtMs(mn))  max=\(fmtMs(mx))")
     print("    memory:   peak=\(fmtMB(peak))  Δ-from-start=\(fmtMB(delta))")
-    func werTag(_ text: String) -> String {
-        guard let reference else { return "" }
-        return " [WER \(String(format: "%.1f%%", werPercent(reference: reference, hypothesis: text)))]"
+    func wordErrorTags(_ text: String) -> (wer: String, counts: String) {
+        guard let reference else { return ("", "") }
+        let score = wordErrorScore(reference: reference, hypothesis: text)
+        return (
+            " [WER \(String(format: "%.1f%%", score.percent))]",
+            " [word-errors=\(score.errors) reference-words=\(score.referenceWords)]"
+        )
     }
     func finalWordTag(_ text: String) -> String {
         guard let reference,
@@ -936,12 +959,14 @@ func summarize(_ name: String,
     }
     if texts.count == 1, let only = texts.first {
         let display = redactTranscripts ? redactedTextLabel(only) : "\"\(only)\""
-        print("    transcript:\(werTag(only))\(finalWordTag(only))\(criticalTermTag(only)) \(display)")
+        let wordErrors = wordErrorTags(only)
+        print("    transcript:\(wordErrors.wer)\(finalWordTag(only))\(criticalTermTag(only))\(wordErrors.counts) \(display)")
     } else {
         print("    transcripts (\(texts.count) distinct):")
         for t in texts.sorted() {
             let display = redactTranscripts ? redactedTextLabel(t) : "\"\(t)\""
-            print("      •\(werTag(t))\(finalWordTag(t))\(criticalTermTag(t)) \(display)")
+            let wordErrors = wordErrorTags(t)
+            print("      •\(wordErrors.wer)\(finalWordTag(t))\(criticalTermTag(t))\(wordErrors.counts) \(display)")
         }
     }
 }

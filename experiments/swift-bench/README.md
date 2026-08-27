@@ -161,17 +161,21 @@ Then run:
   --trials 3
 ```
 
-Reports are ignored and privacy-redacted by default. They include average and
+Reports are ignored and privacy-redacted by default. They include corpus and
 worst WER, weighted exact critical-term recall, unexpected critical-term
 insertions, p50 inference latency, peak process memory, model-cache footprint,
 and preparation time. A pairwise policy table compares each vocabulary lane
 with unbiased `sliding-v3`, reporting net critical hits, unexpected insertions,
-average WER change, and counts of clean wins, costly wins, and pure losses.
+corpus WER change, and counts of clean wins, costly wins, and pure losses.
 When repeated trials yield different transcripts, each per-clip row is a
 conservative envelope: worst WER, lowest critical-term recall, and highest
 unexpected-insertion count observed. Pass
 `--show-transcripts` or `--show-paths` only for local reports that are safe to
 share.
+
+Corpus WER is the total edit-error count divided by total reference words, so
+longer clips contribute proportionally instead of each clip receiving equal
+weight. Worst WER remains the most adverse individual trial output per clip.
 
 Critical terms deliberately use exact surface forms after case/punctuation
 normalization. Include every canonical vocabulary form: an occurrence beyond

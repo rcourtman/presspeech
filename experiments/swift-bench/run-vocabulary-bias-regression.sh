@@ -78,11 +78,16 @@ clip_id_for() {
     fi
 }
 
-extract_max_wer_percent() {
+extract_worst_wer_metrics() {
     local log_file="$1"
-    grep -Eo 'WER [0-9]+([.][0-9]+)?%' "$log_file" \
-        | sed -E 's/WER ([0-9.]+)%/\1/' \
-        | awk 'BEGIN { max = "" } { if (max == "" || $1 > max) max = $1 } END { if (max == "") print "unknown"; else print max }'
+    sed -nE 's/.*\[WER ([0-9.]+)%\].*\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\1\t\2\t\3/p' "$log_file" \
+        | awk -F '\t' '
+            !seen || $1 > worst { worst = $1; errors = $2; words = $3; seen = 1 }
+            END {
+                if (seen) printf("%s\t%s\t%s\n", worst, errors, words)
+                else print "unknown\tunknown\tunknown"
+            }
+        '
 }
 
 extract_critical_metrics() {
@@ -153,9 +158,12 @@ summary_row() {
         NR > 1 && $2 == variant {
             count += 1
             if ($3 != "unknown") {
-                wer_sum += $3
                 if (wer_seen == 0 || $3 > worst_wer) worst_wer = $3
                 wer_seen += 1
+            }
+            if ($12 != "unknown" && $13 != "unknown") {
+                wer_errors += $12
+                reference_words += $13
             }
             if ($4 != "unknown" && $5 != "unknown") {
                 critical_matched += $4
@@ -172,14 +180,14 @@ summary_row() {
             if ($11 != "unknown") { prep_sum += $11; prep_seen += 1 }
         }
         END {
-            avg_wer = wer_seen ? sprintf("%.2f", wer_sum / wer_seen) : "unknown"
+            corpus_wer = reference_words ? sprintf("%.2f", wer_errors / reference_words * 100) : "unknown"
             worst = wer_seen ? sprintf("%.1f", worst_wer) : "unknown"
             critical = critical_total ? sprintf("%.1f", critical_matched / critical_total * 100) : "unknown"
             avg_p50 = p50_seen ? sprintf("%.1f", p50_sum / p50_seen) : "unknown"
             peak = peak_seen ? sprintf("%.1f", max_peak) : "unknown"
             cache = cache_seen ? sprintf("%.1f", max_cache) : "unknown"
             prep = prep_seen ? sprintf("%.1f", prep_sum / prep_seen) : "unknown"
-            printf("| `%s` | %d | %s | %s | %d/%d | %s | %d | %s | %s | %s | %s |\n", variant, count, avg_wer, worst, critical_matched, critical_total, critical, critical_unexpected, avg_p50, peak, cache, prep)
+            printf("| `%s` | %d | %s | %s | %d/%d | %s | %d | %s | %s | %s | %s |\n", variant, count, corpus_wer, worst, critical_matched, critical_total, critical, critical_unexpected, avg_p50, peak, cache, prep)
         }
     ' "$tsv"
 }
@@ -193,18 +201,25 @@ comparison_row() {
             baseline_wer[$1] = $3
             baseline_hits[$1] = $4
             baseline_unexpected[$1] = $7
+            baseline_errors[$1] = $12
+            baseline_words[$1] = $13
         }
         NR > 1 && $2 == candidate {
             candidate_wer[$1] = $3
             candidate_hits[$1] = $4
             candidate_unexpected[$1] = $7
+            candidate_errors[$1] = $12
+            candidate_words[$1] = $13
         }
         END {
             for (clip in candidate_wer) {
                 if (!(clip in baseline_wer) ||
                     baseline_wer[clip] == "unknown" || candidate_wer[clip] == "unknown" ||
                     baseline_hits[clip] == "unknown" || candidate_hits[clip] == "unknown" ||
-                    baseline_unexpected[clip] == "unknown" || candidate_unexpected[clip] == "unknown") {
+                    baseline_unexpected[clip] == "unknown" || candidate_unexpected[clip] == "unknown" ||
+                    baseline_errors[clip] == "unknown" || candidate_errors[clip] == "unknown" ||
+                    baseline_words[clip] == "unknown" || candidate_words[clip] == "unknown" ||
+                    baseline_words[clip] != candidate_words[clip]) {
                     continue
                 }
                 comparable += 1
@@ -212,7 +227,8 @@ comparison_row() {
                 unexpected_delta += candidate_unexpected[clip] - baseline_unexpected[clip]
                 wer_delta = candidate_wer[clip] - baseline_wer[clip]
                 total_hit_delta += hit_delta
-                total_wer_delta += wer_delta
+                total_error_delta += candidate_errors[clip] - baseline_errors[clip]
+                total_reference_words += baseline_words[clip]
 
                 # These categories mirror the per-clip review that exposed
                 # the original vocabulary policy recall/quality tradeoff.
@@ -221,8 +237,8 @@ comparison_row() {
                 else if (hit_delta <= 0 && wer_delta > 0) pure_losses += 1
                 else other += 1
             }
-            avg_wer_delta = comparable ? sprintf("%+.2f", total_wer_delta / comparable) : "unknown"
-            printf("| `%s` | %d | %+d | %+d | %s | %d | %d | %d | %d |\n", candidate, comparable, total_hit_delta, unexpected_delta, avg_wer_delta, clean_wins, costly_wins, pure_losses, other)
+            corpus_wer_delta = total_reference_words ? sprintf("%+.2f", total_error_delta / total_reference_words * 100) : "unknown"
+            printf("| `%s` | %d | %+d | %+d | %s | %d | %d | %d | %d |\n", candidate, comparable, total_hit_delta, unexpected_delta, corpus_wer_delta, clean_wins, costly_wins, pure_losses, other)
         }
     ' "$tsv"
 }
@@ -266,9 +282,9 @@ run_self_test() {
         echo '  model-cache: total=812.3 MB components=parakeet-v3=600.0 MB,ctc-110m=212.3 MB'
         echo '    latency:  p50=  140.2 ms  min=  138.0 ms  max=  145.0 ms'
         echo '    memory:   peak=  88.4 MB  Δ-from-start=  80.0 MB'
-        echo '    transcript: [WER 12.5%] [critical-terms matched=7 total=8 recall=87.5% unexpected=2] <redacted 42 chars>'
+        echo '    transcript: [WER 12.5%] [critical-terms matched=7 total=8 recall=87.5% unexpected=2] [word-errors=1 reference-words=8] <redacted 42 chars>'
     } >"$log"
-    assert_eq "$(extract_max_wer_percent "$log")" "12.5" "WER parser"
+    assert_eq "$(extract_worst_wer_metrics "$log")" $'12.5\t1\t8' "WER parser"
     assert_eq "$(extract_critical_metrics "$log")" $'7\t8\t87.5\t2' "critical-term parser"
     assert_eq "$(extract_p50_ms "$log")" "140.2" "latency parser"
     assert_eq "$(extract_peak_mb "$log")" "88.4" "memory parser"
@@ -278,8 +294,8 @@ run_self_test() {
     local variable_log="$tmpdir/variable.log"
     {
         echo '    transcripts (2 distinct):'
-        echo '      • [WER 20.0%] [critical-terms matched=1 total=2 recall=50.0% unexpected=0] <redacted 20 chars>'
-        echo '      • [WER 10.0%] [critical-terms matched=2 total=2 recall=100.0% unexpected=3] <redacted 22 chars>'
+        echo '      • [WER 20.0%] [critical-terms matched=1 total=2 recall=50.0% unexpected=0] [word-errors=2 reference-words=10] <redacted 20 chars>'
+        echo '      • [WER 10.0%] [critical-terms matched=2 total=2 recall=100.0% unexpected=3] [word-errors=1 reference-words=10] <redacted 22 chars>'
     } >"$variable_log"
     assert_eq "$(extract_critical_metrics "$variable_log")" $'1\t2\t50.0\t3' "variable-output critical-term envelope"
 
@@ -291,23 +307,23 @@ run_self_test() {
 
     local tsv="$tmpdir/results.tsv"
     {
-        printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\n'
-        printf '001\tv3\t10.0\t1\t2\t50.0\t2\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '002\tv3\t20.0\t2\t2\t100.0\t1\t120.0\t42.0\t600.0\t1100.0\n'
-        printf '001\tsliding-v3\t10.0\t1\t2\t50.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '002\tsliding-v3\t20.0\t1\t2\t50.0\t1\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '003\tsliding-v3\t5.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '004\tsliding-v3\t10.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '001\tsliding-vocab\t10.0\t2\t2\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '002\tsliding-vocab\t25.0\t2\t2\t100.0\t2\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '003\tsliding-vocab\t8.0\t1\t1\t100.0\t1\t100.0\t40.0\t600.0\t1000.0\n'
-        printf '004\tsliding-vocab\t8.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
+        printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\n'
+        printf '001\tv3\t10.0\t1\t2\t50.0\t2\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
+        printf '002\tv3\t20.0\t2\t2\t100.0\t1\t120.0\t42.0\t600.0\t1100.0\t1\t5\n'
+        printf '001\tsliding-v3\t10.0\t1\t2\t50.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
+        printf '002\tsliding-v3\t20.0\t1\t2\t50.0\t1\t100.0\t40.0\t600.0\t1000.0\t1\t5\n'
+        printf '003\tsliding-v3\t5.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t20\n'
+        printf '004\tsliding-v3\t10.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
+        printf '001\tsliding-vocab\t10.0\t2\t2\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
+        printf '002\tsliding-vocab\t40.0\t2\t2\t100.0\t2\t100.0\t40.0\t600.0\t1000.0\t2\t5\n'
+        printf '003\tsliding-vocab\t10.0\t1\t1\t100.0\t1\t100.0\t40.0\t600.0\t1000.0\t2\t20\n'
+        printf '004\tsliding-vocab\t0.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t0\t10\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     summary_row "$tsv" v3 >"$summary"
-    assert_contains "$summary" '| `v3` | 2 | 15.00 | 20.0 | 3/4 | 75.0 | 3 | 110.0 | 42.0 | 600.0 | 1050.0 |'
+    assert_contains "$summary" '| `v3` | 2 | 13.33 | 20.0 | 3/4 | 75.0 | 3 | 110.0 | 42.0 | 600.0 | 1050.0 |'
     comparison_row "$tsv" sliding-v3 sliding-vocab >"$summary"
-    assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +1.50 | 1 | 1 | 1 | 1 |'
+    assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +2.22 | 1 | 1 | 1 | 1 |'
 
     local secret_path="$tmpdir/Private Polish Benchmark"
     REDACT_PATHS=1
@@ -449,7 +465,7 @@ tsv="$OUTDIR/$timestamp-vocabulary-bias.tsv"
 raw_dir="$OUTDIR/$timestamp-vocabulary-bias-logs"
 mkdir -p "$raw_dir"
 
-printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\n' >"$tsv"
+printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\n' >"$tsv"
 
 {
     echo "# Presspeech Vocabulary-Bias Comparison"
@@ -514,7 +530,8 @@ for clip in "${clips[@]}"; do
             exit 1
         fi
 
-        wer="$(extract_max_wer_percent "$log_file")"
+        wer_metrics="$(extract_worst_wer_metrics "$log_file")"
+        IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"
         critical="$(extract_critical_metrics "$log_file")"
         if [[ -n "$critical" ]]; then
             IFS=$'\t' read -r critical_matched critical_total critical_recall critical_unexpected <<<"$critical"
@@ -533,9 +550,10 @@ for clip in "${clips[@]}"; do
         [[ -n "$cache" ]] || cache="unknown"
         [[ -n "$prepare" ]] || prepare="unknown"
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
-            "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" >>"$tsv"
+            "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" \
+            "$word_errors" "$reference_words" >>"$tsv"
         printf '| `%s` | `%s` | %s | %s/%s | %s | %s | %s | %s | %s | %s |\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
             "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" >>"$report"
@@ -546,7 +564,7 @@ done
     echo
     echo "## Summary"
     echo
-    echo "| Variant | Clips | Avg WER % | Worst WER % | Critical hits | Critical recall % | Unexpected critical insertions | Avg p50 ms | Max peak MB | Cache MB | Avg prepare ms |"
+    echo "| Variant | Clips | Corpus WER % | Worst WER % | Critical hits | Critical recall % | Unexpected critical insertions | Avg p50 ms | Max peak MB | Cache MB | Avg prepare ms |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     summary_row "$tsv" v3
     summary_row "$tsv" sliding-v3
@@ -557,7 +575,7 @@ done
     echo
     echo "Compared with unbiased \`sliding-v3\` using the per-clip conservative envelopes; lower WER and fewer unexpected insertions are better."
     echo
-    echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Avg WER delta (points) | Clean wins | Costly wins | Pure losses | Other |"
+    echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clean wins | Costly wins | Pure losses | Other |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
     comparison_row "$tsv" sliding-v3 sliding-vocab
     comparison_row "$tsv" sliding-v3 sliding-vocab-conservative
