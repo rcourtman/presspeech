@@ -4363,22 +4363,44 @@ private enum ClipboardPasteInserter {
 }
 
 @MainActor
+private func directUnicodeInsertionOutcome(
+    chunks: [[UInt16]],
+    targetStillFocused: () -> Bool,
+    postChunk: ([UInt16]) -> Bool,
+    copyWithoutPasting: () -> TextInsertionOutcome
+) -> TextInsertionOutcome {
+    for chunk in chunks {
+        // Direct Unicode typing is a sequence of independent key events, not
+        // one atomic paste. Revalidate before every chunk so switching focus
+        // during a long fallback cannot redirect the remaining transcript.
+        guard targetStillFocused() else { return copyWithoutPasting() }
+        // A failed chunk would leave a gap. Stop immediately instead of
+        // emitting later text after content we know was not delivered.
+        guard postChunk(chunk) else { return .failed }
+    }
+    return .inserted
+}
+
+@MainActor
 private enum DirectUnicodeInserter {
     private static let maxUTF16UnitsPerEvent = 20
 
     static func insert(_ text: String,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
-        guard dictationPasteTargetMatches(expectedTarget,
-                                          currentDictationPasteTarget()) else {
-            return TextInserter.copyWithoutPasting(text)
-        }
         let source = CGEventSource(stateID: .combinedSessionState)
-        var didPostAll = true
-
-        for chunk in unicodeInsertionChunks(for: text, maxUTF16UnitsPerEvent: maxUTF16UnitsPerEvent) {
-            didPostAll = post(chunk, source: source) && didPostAll
-        }
-        return didPostAll ? .inserted : .failed
+        let chunks = unicodeInsertionChunks(
+            for: text,
+            maxUTF16UnitsPerEvent: maxUTF16UnitsPerEvent
+        )
+        return directUnicodeInsertionOutcome(
+            chunks: chunks,
+            targetStillFocused: {
+                dictationPasteTargetMatches(expectedTarget,
+                                             currentDictationPasteTarget())
+            },
+            postChunk: { post($0, source: source) },
+            copyWithoutPasting: { TextInserter.copyWithoutPasting(text) }
+        )
     }
 
     private static func post(_ units: [UInt16], source: CGEventSource?) -> Bool {
@@ -11537,6 +11559,56 @@ private enum PresspeechSelfTest {
             unicodeInsertionChunks(for: "abc", maxUTF16UnitsPerEvent: 0),
             equals: [],
             "direct Unicode chunking should reject invalid chunk sizes"
+        )
+        let focusBoundUnicodeProbe = MainActor.assumeIsolated {
+            var focusChecks = [true, false]
+            var postedChunks: [[UInt16]] = []
+            var copied = false
+            let outcome = directUnicodeInsertionOutcome(
+                chunks: [[1, 2], [3, 4], [5, 6]],
+                targetStillFocused: { focusChecks.removeFirst() },
+                postChunk: {
+                    postedChunks.append($0)
+                    return true
+                },
+                copyWithoutPasting: {
+                    copied = true
+                    return .copiedWithoutPasting
+                }
+            )
+            return (outcome: outcome, postedChunks: postedChunks, copied: copied)
+        }
+        try expect(
+            focusBoundUnicodeProbe.outcome,
+            equals: .copiedWithoutPasting,
+            "direct Unicode insertion should fail closed when focus changes between chunks"
+        )
+        try expect(
+            focusBoundUnicodeProbe.postedChunks,
+            equals: [[1, 2]],
+            "direct Unicode insertion should not post chunks after focus changes"
+        )
+        try expect(
+            focusBoundUnicodeProbe.copied,
+            equals: true,
+            "an interrupted Direct Unicode fallback should preserve the transcript on the clipboard"
+        )
+        let failedUnicodePostProbe = MainActor.assumeIsolated {
+            var attempts = 0
+            return directUnicodeInsertionOutcome(
+                chunks: [[1], [2]],
+                targetStillFocused: { true },
+                postChunk: { _ in
+                    attempts += 1
+                    return false
+                },
+                copyWithoutPasting: { .copiedWithoutPasting }
+            ) == .failed && attempts == 1
+        }
+        try expect(
+            failedUnicodePostProbe,
+            equals: true,
+            "direct Unicode insertion should stop after the first failed chunk"
         )
         try expect(
             clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
