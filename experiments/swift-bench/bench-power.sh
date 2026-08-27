@@ -188,6 +188,37 @@ write_power_report() {
     } >"$report"
 }
 
+summarize_power_log() {
+    local log_file="$1"
+    awk '
+        function numeric(value) {
+            return value ~ /^[0-9]+([.][0-9]+)?$/
+        }
+        /^CPU Power:/ && numeric($3) { cpu_sum += $3; cpu_n += 1 }
+        /^GPU Power:/ && numeric($3) { gpu_sum += $3; gpu_n += 1 }
+        /^ANE Power:/ && numeric($3) { ane_sum += $3; ane_n += 1 }
+        END {
+            if (cpu_n > 0) printf("CPU Power avg: %.1f mW (%d samples)\n", cpu_sum / cpu_n, cpu_n);
+            if (gpu_n > 0) printf("GPU Power avg: %.1f mW (%d samples)\n", gpu_sum / gpu_n, gpu_n);
+            if (ane_n > 0) printf("ANE Power avg: %.1f mW (%d samples)\n", ane_sum / ane_n, ane_n);
+            if (cpu_n + gpu_n + ane_n == 0) {
+                print "No CPU/GPU/ANE power lines parsed; inspect raw powermetrics output.";
+                exit 1;
+            }
+        }
+    ' "$log_file"
+}
+
+assert_eq() {
+    local actual="$1"
+    local expected="$2"
+    local label="$3"
+    if [[ "$actual" != "$expected" ]]; then
+        echo "self-test failed for $label: expected '$expected', got '$actual'" >&2
+        exit 1
+    fi
+}
+
 assert_contains() {
     local file="$1"
     local needle="$2"
@@ -251,6 +282,26 @@ run_self_test() {
         echo "transcript: [WER 0.0%] <redacted ${#secret_transcript} chars>"
     } >"$bench_log"
     printf 'CPU Power avg: 123.0 mW (2 samples)\n' >"$power_log"
+
+    local parser_log="$self_tmp/parser.powermetrics.txt"
+    {
+        echo 'CPU Power: 100 mW'
+        echo 'GPU Power: unavailable mW'
+        echo 'ANE Power: 50.5 mW'
+        echo 'CPU Power: 200 mW'
+    } >"$parser_log"
+    local expected_summary
+    expected_summary=$'CPU Power avg: 150.0 mW (2 samples)\nANE Power avg: 50.5 mW (1 samples)'
+    assert_eq "$(summarize_power_log "$parser_log")" "$expected_summary" "power summary parser"
+
+    local empty_parser_log="$self_tmp/empty.powermetrics.txt"
+    echo 'GPU Power: unavailable mW' >"$empty_parser_log"
+    local empty_summary
+    if empty_summary="$(summarize_power_log "$empty_parser_log")"; then
+        echo "self-test expected missing power metrics to fail validation" >&2
+        exit 1
+    fi
+    assert_eq "$empty_summary" "No CPU/GPU/ANE power lines parsed; inspect raw powermetrics output." "missing power metrics"
 
     write_power_report "$report" "$timestamp" "CPU Power avg: 123.0 mW (2 samples)" "$bench_log"
     assert_contains "$report" "- Audio: <redacted path>"
@@ -464,19 +515,10 @@ bench_status=0
 cleanup
 trap - EXIT INT TERM
 
-power_summary="$(
-    awk '
-        /^CPU Power:/ { cpu_sum += $3; cpu_n += 1 }
-        /^GPU Power:/ { gpu_sum += $3; gpu_n += 1 }
-        /^ANE Power:/ { ane_sum += $3; ane_n += 1 }
-        END {
-            if (cpu_n > 0) printf("CPU Power avg: %.1f mW (%d samples)\n", cpu_sum / cpu_n, cpu_n);
-            if (gpu_n > 0) printf("GPU Power avg: %.1f mW (%d samples)\n", gpu_sum / gpu_n, gpu_n);
-            if (ane_n > 0) printf("ANE Power avg: %.1f mW (%d samples)\n", ane_sum / ane_n, ane_n);
-            if (cpu_n + gpu_n + ane_n == 0) print "No CPU/GPU/ANE power lines parsed; inspect raw powermetrics output.";
-        }
-    ' "$power_log"
-)"
+power_metrics_valid=1
+if ! power_summary="$(summarize_power_log "$power_log")"; then
+    power_metrics_valid=0
+fi
 
 write_power_report "$report" "$timestamp" "$power_summary" "$bench_log"
 
@@ -484,4 +526,8 @@ echo "report: $report"
 if [[ "$bench_status" -ne 0 ]]; then
     echo "benchmark failed with status $bench_status; see $bench_log" >&2
     exit "$bench_status"
+fi
+if [[ "$power_metrics_valid" -ne 1 ]]; then
+    echo "power benchmark produced no parseable samples; see $power_log" >&2
+    exit 1
 fi
