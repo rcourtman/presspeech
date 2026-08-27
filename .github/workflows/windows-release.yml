@@ -82,8 +82,8 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --no-cache-dir -r requirements.txt -r requirements-build.txt
-          python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu126
-          winget install --id JRSoftware.InnoSetup --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          python -m pip install --no-cache-dir "torch==2.13.0+cu126" --index-url https://download.pytorch.org/whl/cu126
+          winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --force --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
       - name: Import optional signing certificate
         env:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}

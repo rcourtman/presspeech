@@ -55,7 +55,7 @@ For development, install Python 3.12 and create a project virtual environment:
 ```bat
 py -3.12 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\python -m pip install "torch==2.13.0+cu126" --index-url https://download.pytorch.org/whl/cu126
 run.bat
 ```
 

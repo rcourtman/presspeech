@@ -12,4 +12,4 @@ sentencepiece>=0.2.0
 librosa>=0.11.0
 
 # PyTorch with CUDA 12 (for Parakeet-TDT on the GPU). Install with:
-#   pip install torch --index-url https://download.pytorch.org/whl/cu126
+#   pip install "torch==2.13.0+cu126" --index-url https://download.pytorch.org/whl/cu126
