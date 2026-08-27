@@ -166,7 +166,10 @@ worst WER, weighted exact critical-term recall, unexpected critical-term
 insertions, p50 inference latency, peak process memory, model-cache footprint,
 and preparation time. A pairwise policy table compares each vocabulary lane
 with unbiased `sliding-v3`, reporting net critical hits, unexpected insertions,
-average WER change, and counts of clean wins, costly wins, and pure losses. Pass
+average WER change, and counts of clean wins, costly wins, and pure losses.
+When repeated trials yield different transcripts, each per-clip row is a
+conservative envelope: worst WER, lowest critical-term recall, and highest
+unexpected-insertion count observed. Pass
 `--show-transcripts` or `--show-paths` only for local reports that are safe to
 share.
 

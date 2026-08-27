@@ -88,8 +88,22 @@ extract_max_wer_percent() {
 extract_critical_metrics() {
     local log_file="$1"
     sed -nE 's/.*critical-terms matched=([0-9]+) total=([0-9]+) recall=([0-9.]+)% unexpected=([0-9]+).*/\1\t\2\t\3\t\4/p' "$log_file" \
-        | sort -t $'\t' -k3,3n -k4,4nr \
-        | head -n 1
+        | awk -F '\t' '
+            {
+                if (!seen || $3 < lowest_recall) {
+                    matched = $1
+                    total = $2
+                    lowest_recall = $3
+                }
+                if (!seen || $4 > highest_unexpected) highest_unexpected = $4
+                seen = 1
+            }
+            END {
+                if (seen) {
+                    printf("%s\t%s\t%s\t%s\n", matched, total, lowest_recall, highest_unexpected)
+                }
+            }
+        '
 }
 
 extract_p50_ms() {
@@ -260,6 +274,14 @@ run_self_test() {
     assert_eq "$(extract_peak_mb "$log")" "88.4" "memory parser"
     assert_eq "$(extract_cache_mb "$log")" "812.3" "cache parser"
     assert_eq "$(extract_prepare_ms "$log")" "1234.5" "prepare parser"
+
+    local variable_log="$tmpdir/variable.log"
+    {
+        echo '    transcripts (2 distinct):'
+        echo '      • [WER 20.0%] [critical-terms matched=1 total=2 recall=50.0% unexpected=0] <redacted 20 chars>'
+        echo '      • [WER 10.0%] [critical-terms matched=2 total=2 recall=100.0% unexpected=3] <redacted 22 chars>'
+    } >"$variable_log"
+    assert_eq "$(extract_critical_metrics "$variable_log")" $'1\t2\t50.0\t3' "variable-output critical-term envelope"
 
     local filtered_log="$tmpdir/filtered.log"
     run_benchmark_to_log "$filtered_log" printf '%s\n' \
@@ -446,6 +468,8 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "> count exact canonical surface forms after case/punctuation normalization."
     echo "> An unexpected insertion is an occurrence beyond the reference count. Model cache is"
     echo "> logical on-disk size after preparation, not measured network traffic."
+    echo "> Variable trial output is summarized conservatively per clip: worst WER, lowest"
+    echo "> critical-term recall, and highest unexpected-insertion count observed."
     echo
     echo "## Per-Clip Results"
     echo
@@ -531,7 +555,7 @@ done
     echo
     echo "## Vocabulary Policy Deltas"
     echo
-    echo "Compared with unbiased \`sliding-v3\`; lower WER and fewer unexpected insertions are better."
+    echo "Compared with unbiased \`sliding-v3\` using the per-clip conservative envelopes; lower WER and fewer unexpected insertions are better."
     echo
     echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Avg WER delta (points) | Clean wins | Costly wins | Pure losses | Other |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
