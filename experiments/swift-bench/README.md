@@ -164,7 +164,9 @@ Then run:
 Reports are ignored and privacy-redacted by default. They include average and
 worst WER, weighted exact critical-term recall, unexpected critical-term
 insertions, p50 inference latency, peak process memory, model-cache footprint,
-and preparation time. Pass
+and preparation time. A pairwise policy table compares each vocabulary lane
+with unbiased `sliding-v3`, reporting net critical hits, unexpected insertions,
+average WER change, and counts of clean wins, costly wins, and pure losses. Pass
 `--show-transcripts` or `--show-paths` only for local reports that are safe to
 share.
 

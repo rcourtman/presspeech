@@ -170,6 +170,49 @@ summary_row() {
     ' "$tsv"
 }
 
+comparison_row() {
+    local tsv="$1"
+    local baseline="$2"
+    local candidate="$3"
+    awk -F '\t' -v baseline="$baseline" -v candidate="$candidate" '
+        NR > 1 && $2 == baseline {
+            baseline_wer[$1] = $3
+            baseline_hits[$1] = $4
+            baseline_unexpected[$1] = $7
+        }
+        NR > 1 && $2 == candidate {
+            candidate_wer[$1] = $3
+            candidate_hits[$1] = $4
+            candidate_unexpected[$1] = $7
+        }
+        END {
+            for (clip in candidate_wer) {
+                if (!(clip in baseline_wer) ||
+                    baseline_wer[clip] == "unknown" || candidate_wer[clip] == "unknown" ||
+                    baseline_hits[clip] == "unknown" || candidate_hits[clip] == "unknown" ||
+                    baseline_unexpected[clip] == "unknown" || candidate_unexpected[clip] == "unknown") {
+                    continue
+                }
+                comparable += 1
+                hit_delta = candidate_hits[clip] - baseline_hits[clip]
+                unexpected_delta += candidate_unexpected[clip] - baseline_unexpected[clip]
+                wer_delta = candidate_wer[clip] - baseline_wer[clip]
+                total_hit_delta += hit_delta
+                total_wer_delta += wer_delta
+
+                # These categories mirror the per-clip review that exposed
+                # the original vocabulary policy recall/quality tradeoff.
+                if (hit_delta > 0 && wer_delta <= 0) clean_wins += 1
+                else if (hit_delta > 0 && wer_delta > 0) costly_wins += 1
+                else if (hit_delta <= 0 && wer_delta > 0) pure_losses += 1
+                else other += 1
+            }
+            avg_wer_delta = comparable ? sprintf("%+.2f", total_wer_delta / comparable) : "unknown"
+            printf("| `%s` | %d | %+d | %+d | %s | %d | %d | %d | %d |\n", candidate, comparable, total_hit_delta, unexpected_delta, avg_wer_delta, clean_wins, costly_wins, pure_losses, other)
+        }
+    ' "$tsv"
+}
+
 assert_eq() {
     local actual="$1"
     local expected="$2"
@@ -229,10 +272,20 @@ run_self_test() {
         printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\n'
         printf '001\tv3\t10.0\t1\t2\t50.0\t2\t100.0\t40.0\t600.0\t1000.0\n'
         printf '002\tv3\t20.0\t2\t2\t100.0\t1\t120.0\t42.0\t600.0\t1100.0\n'
+        printf '001\tsliding-v3\t10.0\t1\t2\t50.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '002\tsliding-v3\t20.0\t1\t2\t50.0\t1\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '003\tsliding-v3\t5.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '004\tsliding-v3\t10.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '001\tsliding-vocab\t10.0\t2\t2\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '002\tsliding-vocab\t25.0\t2\t2\t100.0\t2\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '003\tsliding-vocab\t8.0\t1\t1\t100.0\t1\t100.0\t40.0\t600.0\t1000.0\n'
+        printf '004\tsliding-vocab\t8.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     summary_row "$tsv" v3 >"$summary"
     assert_contains "$summary" '| `v3` | 2 | 15.00 | 20.0 | 3/4 | 75.0 | 3 | 110.0 | 42.0 | 600.0 | 1050.0 |'
+    comparison_row "$tsv" sliding-v3 sliding-vocab >"$summary"
+    assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +1.50 | 1 | 1 | 1 | 1 |'
 
     local secret_path="$tmpdir/Private Polish Benchmark"
     REDACT_PATHS=1
@@ -475,6 +528,17 @@ done
     summary_row "$tsv" sliding-v3
     summary_row "$tsv" sliding-vocab
     summary_row "$tsv" sliding-vocab-conservative
+    echo
+    echo "## Vocabulary Policy Deltas"
+    echo
+    echo "Compared with unbiased \`sliding-v3\`; lower WER and fewer unexpected insertions are better."
+    echo
+    echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Avg WER delta (points) | Clean wins | Costly wins | Pure losses | Other |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+    comparison_row "$tsv" sliding-v3 sliding-vocab
+    comparison_row "$tsv" sliding-v3 sliding-vocab-conservative
+    echo
+    echo "Clean wins gain critical hits without worse WER; costly wins gain hits with worse WER; pure losses worsen WER without gaining hits. Other results do not fit those three decision categories."
     echo
     echo "Raw bench logs: $(path_label "$raw_dir")"
     echo "Machine-readable TSV: $(path_label "$tsv")"
