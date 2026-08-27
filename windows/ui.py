@@ -399,11 +399,16 @@ class UpdateWindow:
                         try:
                             self.app.launch_update(event[1], self.update)
                         except Exception as exc:
+                            self._discard_completed_download()
                             self.status.config(text="Install failed")
+                            self.progress.config(value=0)
                             self.download_button.config(state="normal")
                             messagebox.showerror(
                                 "Update failed", str(exc), parent=self.root)
                     else:
+                        self._discard_completed_download()
+                        self.status.config(text="Ready to download")
+                        self.progress.config(value=0)
                         self.download_button.config(state="normal")
         except queue.Empty:
             pass

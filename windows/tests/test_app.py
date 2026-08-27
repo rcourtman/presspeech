@@ -36,7 +36,21 @@ class UpdateWindowTests(unittest.TestCase):
         window.cancel_download = app.threading.Event()
         window.download_lock = app.threading.Lock()
         window.downloaded_installer = None
+        window.status = mock.Mock()
+        window.progress = mock.MagicMock()
+        window.progress.__getitem__.return_value = 100
+        window.download_button = mock.Mock()
         return window
+
+    def stage_ready_installer(self, window):
+        directory = app.ui.tempfile.mkdtemp(
+            prefix=app.ui.updates.UPDATE_DIRECTORY_PREFIX)
+        path = app.os.path.join(directory, "installer.exe")
+        with open(path, "wb") as handle:
+            handle.write(b"verified installer")
+        window.downloaded_installer = path
+        window.events.put(("ready", path))
+        return path
 
     def test_closing_window_cancels_an_active_download(self):
         window = self.make_window()
@@ -95,6 +109,40 @@ class UpdateWindowTests(unittest.TestCase):
         self.assertTrue(window.cancel_download.is_set())
         self.assertIsNone(window.downloaded_installer)
         self.assertEqual(window.events.get_nowait(), ("ready", installer))
+
+    def test_declining_install_discards_completed_download(self):
+        window = self.make_window()
+        installer = self.stage_ready_installer(window)
+
+        with mock.patch.object(app.ui.messagebox, "askyesno", return_value=False):
+            window._poll()
+
+        self.assertIsNone(window.downloaded_installer)
+        self.assertFalse(app.os.path.exists(installer))
+        self.assertFalse(app.os.path.exists(app.os.path.dirname(installer)))
+        window.app.launch_update.assert_not_called()
+        window.status.config.assert_called_with(text="Ready to download")
+        window.progress.config.assert_called_with(value=0)
+        window.download_button.config.assert_called_with(state="normal")
+
+    def test_failed_install_launch_discards_completed_download(self):
+        window = self.make_window()
+        installer = self.stage_ready_installer(window)
+        window.app.launch_update.side_effect = RuntimeError("launch failed")
+
+        with mock.patch.object(app.ui.messagebox, "askyesno", return_value=True), \
+                mock.patch.object(app.ui.messagebox, "showerror") as showerror:
+            window._poll()
+
+        self.assertIsNone(window.downloaded_installer)
+        self.assertFalse(app.os.path.exists(installer))
+        self.assertFalse(app.os.path.exists(app.os.path.dirname(installer)))
+        window.app.launch_update.assert_called_once_with(installer, window.update)
+        window.status.config.assert_called_with(text="Install failed")
+        window.progress.config.assert_called_with(value=0)
+        window.download_button.config.assert_called_with(state="normal")
+        showerror.assert_called_once_with(
+            "Update failed", "launch failed", parent=window.root)
 
 
 class InputSelectionTests(unittest.TestCase):
