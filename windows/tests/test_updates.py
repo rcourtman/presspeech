@@ -23,6 +23,17 @@ class Response(io.BytesIO):
         return self.url
 
 
+class CountingResponse(Response):
+    def __init__(self, payload, url="https://github.com/file"):
+        super().__init__(payload, url)
+        self.bytes_read = 0
+
+    def read(self, size=-1):
+        block = super().read(size)
+        self.bytes_read += len(block)
+        return block
+
+
 def release(version, complete=True, draft=False):
     installer = "Presspeech-Setup-%s-x64.exe" % version
     assets = [{
@@ -159,6 +170,25 @@ class DownloadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(updates.UpdateError):
                 updates.download_update(update, directory, opener=opener)
+            self.assertEqual(os.listdir(directory), [])
+
+    def test_oversized_download_stops_after_the_first_excess_byte(self):
+        payload = b"unexpectedly large installer payload"
+        update, digest = self.make_update(payload)
+        update["installer_size"] = 4
+        installer_response = CountingResponse(payload)
+
+        def opener(request, timeout):
+            if request.full_url.endswith("checksum"):
+                text = "%s  %s\n" % (digest, update["installer_name"])
+                return Response(text.encode("ascii"))
+            return installer_response
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "exceeded the release size"):
+                updates.download_update(update, directory, opener=opener)
+            self.assertEqual(installer_response.bytes_read, 5)
             self.assertEqual(os.listdir(directory), [])
 
     def test_unexpected_download_host_is_rejected(self):

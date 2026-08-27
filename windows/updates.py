@@ -211,12 +211,22 @@ def download_update(update, destination=None, progress=None,
             final_url = getattr(response, "geturl", lambda: url)()
             _checked_download_url(final_url)
             while True:
-                block = response.read(1024 * 1024)
+                # The release API's size is part of the verified asset
+                # metadata. Read one sentinel byte beyond it so a broken or
+                # hostile response cannot fill the temp drive before the size
+                # mismatch is rejected.
+                read_size = 1024 * 1024
+                if expected_size:
+                    read_size = min(read_size, expected_size - downloaded + 1)
+                block = response.read(read_size)
                 if not block:
                     break
+                downloaded += len(block)
+                if expected_size and downloaded > expected_size:
+                    raise UpdateError(
+                        "installer download exceeded the release size")
                 output.write(block)
                 digest.update(block)
-                downloaded += len(block)
                 if progress is not None:
                     progress(downloaded, expected_size)
         if expected_size and downloaded != expected_size:
