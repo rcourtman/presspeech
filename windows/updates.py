@@ -16,7 +16,11 @@ RELEASES_API = (
     "https://api.github.com/repos/rcourtman/presspeech/releases?per_page=100")
 USER_AGENT = "presspeech-windows-update-check"
 API_VERSION = "2026-03-10"
-TAG_RE = re.compile(r"^windows-v(\d+)\.(\d+)\.(\d+)$")
+VERSION_COMPONENT_RE = r"(0|[1-9]\d*)"
+TAG_RE = re.compile(
+    r"^windows-v%s\.%s\.%s$" % ((VERSION_COMPONENT_RE,) * 3))
+PLAIN_VERSION_RE = re.compile(
+    r"^%s\.%s\.%s$" % ((VERSION_COMPONENT_RE,) * 3))
 CHECKSUM_RE = re.compile(r"^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$")
 ALLOWED_DOWNLOAD_HOSTS = {
     "github.com",
@@ -35,7 +39,7 @@ def parse_version(value):
     match = TAG_RE.fullmatch(value)
     if match:
         return tuple(int(part) for part in match.groups())
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", value)
+    match = PLAIN_VERSION_RE.fullmatch(value)
     if not match:
         raise ValueError("invalid version: %s" % value)
     return tuple(int(part) for part in match.groups())

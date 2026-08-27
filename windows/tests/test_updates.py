@@ -72,6 +72,19 @@ class UpdateSelectionTests(unittest.TestCase):
         self.assertEqual(updates.parse_version("windows-v1.2.3"), (1, 2, 3))
         self.assertEqual(updates.parse_version("1.2.3"), (1, 2, 3))
 
+    def test_version_parser_rejects_noncanonical_leading_zeroes(self):
+        for value in ("windows-v01.2.3", "1.02.3", "1.2.03"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                updates.parse_version(value)
+
+    def test_ignores_noncanonical_windows_release_tag(self):
+        candidate = release("0.1.1")
+        candidate["tag_name"] = "windows-v00.1.1"
+        for asset in candidate["assets"]:
+            asset["browser_download_url"] = asset["browser_download_url"].replace(
+                "windows-v0.1.1", "windows-v00.1.1")
+        self.assertIsNone(updates.select_update([candidate], "0.1.0"))
+
     def test_selects_newest_complete_windows_release(self):
         releases = [
             release("0.1.1"),
