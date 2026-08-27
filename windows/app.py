@@ -1201,34 +1201,31 @@ class PresspeechApp:
         process_name = paste_target.process_name
         route = _paste_route(process_name)
         time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
-        current_target = _foreground_paste_target()
-        if not _paste_target_matches(paste_target, current_target):
-            self._log(
-                "paste skipped; focus changed from %s to %s" % (
-                    process_name or "unknown",
-                    current_target.process_name or "unknown",
-                ))
-            self.notify(
-                "Transcript copied, not pasted",
-                "The focused window changed while Presspeech was "
-                "transcribing. Paste from the clipboard when ready.")
+        if not self._paste_target_still_focused(paste_target):
             return
         keyboard = pkb.Controller()
         modifiers = [pkb.Key.ctrl_l]
         if route == "moonlight":
             # Moonlight's client-side shortcut types clipboard text on the host.
             modifiers.extend((pkb.Key.alt_l, pkb.Key.shift_l))
-            self._log("paste route: Moonlight clipboard typing")
-        elif route == "rdp":
-            self._log("paste route: Remote Desktop clipboard")
-        else:
-            self._log("paste route: local (%s)" % (process_name or "unknown"))
         self._injecting_keys = True
         pressed = []
         try:
             for key in modifiers:
                 keyboard.press(key)
                 pressed.append(key)
+            # pynput emits each key event separately. A mouse click can move
+            # focus after Ctrl (or Moonlight's longer modifier chord) but
+            # before V, so revalidate at the last point before the event that
+            # actually exposes the clipboard contents.
+            if not self._paste_target_still_focused(paste_target):
+                return
+            if route == "moonlight":
+                self._log("paste route: Moonlight clipboard typing")
+            elif route == "rdp":
+                self._log("paste route: Remote Desktop clipboard")
+            else:
+                self._log("paste route: local (%s)" % (process_name or "unknown"))
             keyboard.press("v")
             keyboard.release("v")
         finally:
@@ -1237,6 +1234,21 @@ class PresspeechApp:
             # Let hook callbacks consume the injected releases before re-enabling PTT.
             time.sleep(0.02)
             self._injecting_keys = False
+
+    def _paste_target_still_focused(self, paste_target):
+        current_target = _foreground_paste_target()
+        if _paste_target_matches(paste_target, current_target):
+            return True
+        self._log(
+            "paste skipped; focus changed from %s to %s" % (
+                paste_target.process_name or "unknown",
+                current_target.process_name or "unknown",
+            ))
+        self.notify(
+            "Transcript copied, not pasted",
+            "The focused window changed while Presspeech was transcribing. "
+            "Paste from the clipboard when ready.")
+        return False
 
     # ---------------- windows ----------------
 

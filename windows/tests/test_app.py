@@ -683,6 +683,48 @@ class TextRegressionTests(unittest.TestCase):
             "The focused window changed while Presspeech was transcribing. "
             "Paste from the clipboard when ready.")
 
+    def test_focus_change_during_shortcut_never_emits_paste_key(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._injecting_keys = False
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        # Moonlight has the longest shortcut (Ctrl+Alt+Shift+V), making
+        # modifier cleanup and the final pre-V check especially important.
+        target = app.PasteTarget("moonlight.exe", 1234, 41)
+        replacement = app.PasteTarget("calculator.exe", 5678, 42)
+
+        with mock.patch.object(app.pyperclip, "copy") as copy, \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target",
+                    side_effect=[target, replacement]), \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("private transcript", target)
+
+        keyboard = controller.return_value
+        copy.assert_called_once_with("private transcript")
+        keyboard.press.assert_has_calls([
+            mock.call(app.pkb.Key.ctrl_l),
+            mock.call(app.pkb.Key.alt_l),
+            mock.call(app.pkb.Key.shift_l),
+        ])
+        self.assertEqual(keyboard.press.call_count, 3)
+        keyboard.release.assert_has_calls([
+            mock.call(app.pkb.Key.shift_l),
+            mock.call(app.pkb.Key.alt_l),
+            mock.call(app.pkb.Key.ctrl_l),
+        ])
+        self.assertEqual(keyboard.release.call_count, 3)
+        self.assertNotIn(mock.call("v"), keyboard.press.call_args_list)
+        self.assertNotIn(mock.call("v"), keyboard.release.call_args_list)
+        self.assertFalse(instance._injecting_keys)
+        instance.notify.assert_called_once_with(
+            "Transcript copied, not pasted",
+            "The focused window changed while Presspeech was transcribing. "
+            "Paste from the clipboard when ready.")
+        instance._log.assert_called_once_with(
+            "paste skipped; focus changed from moonlight.exe to calculator.exe")
+
     def test_original_window_still_receives_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._injecting_keys = False
