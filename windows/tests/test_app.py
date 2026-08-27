@@ -338,14 +338,35 @@ class TextRegressionTests(unittest.TestCase):
                 app.updates, "locked_verified_installer",
                 return_value=Guard()) as verify, \
                 mock.patch.object(app.subprocess, "Popen") as launch, \
+                mock.patch.object(
+                    app.updates, "schedule_installer_cleanup") as cleanup, \
                 mock.patch.object(app.time, "sleep"):
             launch.side_effect = lambda *_args, **_kwargs: events.append("launched")
             instance.launch_update(installer, update)
         verify.assert_called_once_with(update, installer)
         launch.assert_called_once_with(
             [installer], cwd=app.os.path.dirname(installer))
+        cleanup.assert_called_once_with(installer)
         self.assertEqual(events, ["locked", "launched", "unlocked"])
         instance.exit_app.assert_called_once_with()
+
+    def test_exit_discards_a_completed_update_before_hard_exit(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._restore_playback_after_recording = mock.Mock()
+        instance.indicator = mock.Mock()
+        instance.listener = None
+        instance.scratchpad = None
+        instance.settings_window = None
+        instance.setup_window = None
+        instance.update_window = mock.Mock()
+        instance.icon = None
+
+        with mock.patch.object(app.os, "_exit") as hard_exit:
+            instance.exit_app()
+
+        instance.update_window.cancel_download.set.assert_called_once_with()
+        instance.update_window._discard_completed_download.assert_called_once_with()
+        hard_exit.assert_called_once_with(0)
 
     def test_failed_launch_revalidation_never_runs_installer(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

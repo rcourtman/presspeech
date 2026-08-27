@@ -470,6 +470,12 @@ class PresspeechApp:
         self.indicator.close()
         if self.listener is not None:
             self.listener.stop()
+        if self.update_window is not None:
+            # os._exit() skips normal thread finalization, so explicitly
+            # cancel an active transfer and discard any verified installer
+            # still owned by the update window.
+            self.update_window.cancel_download.set()
+            self.update_window._discard_completed_download()
         for win in (self.scratchpad, self.settings_window,
                     self.setup_window, self.update_window):
             if win is not None and win.root is not None:
@@ -1117,6 +1123,12 @@ class PresspeechApp:
         """Revalidate and run an installer after the second user approval."""
         with updates.locked_verified_installer(update, installer_path):
             subprocess.Popen([installer_path], cwd=os.path.dirname(installer_path))
+        try:
+            updates.schedule_installer_cleanup(installer_path)
+        except Exception as exc:
+            # The installer is already running. Cleanup failure must not turn a
+            # successful, explicitly approved update into a second launch.
+            self._log("could not schedule update installer cleanup: %s" % exc)
         time.sleep(0.15)
         self.exit_app()
 

@@ -1,10 +1,12 @@
 """Privacy-safe, checksum-verified Windows release updates."""
 
+import base64
 import contextlib
 import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 import urllib.parse
 import urllib.request
@@ -21,12 +23,16 @@ TAG_RE = re.compile(
     r"^windows-v%s\.%s\.%s$" % ((VERSION_COMPONENT_RE,) * 3))
 PLAIN_VERSION_RE = re.compile(
     r"^%s\.%s\.%s$" % ((VERSION_COMPONENT_RE,) * 3))
+INSTALLER_NAME_RE = re.compile(
+    r"^Presspeech-Setup-%s\.%s\.%s-x64\.exe$" %
+    ((VERSION_COMPONENT_RE,) * 3))
 CHECKSUM_RE = re.compile(r"^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$")
 ALLOWED_DOWNLOAD_HOSTS = {
     "github.com",
     "objects.githubusercontent.com",
     "release-assets.githubusercontent.com",
 }
+UPDATE_DIRECTORY_PREFIX = "Presspeech-update-"
 
 
 class UpdateError(RuntimeError):
@@ -391,6 +397,52 @@ def verify_installer(update, installer_path):
     """Revalidate an approved installer path without launching it."""
     with locked_verified_installer(update, installer_path):
         pass
+
+
+def schedule_installer_cleanup(installer_path, launcher=None):
+    """Remove an in-app update after Windows releases the running image."""
+    installer_path = os.path.abspath(installer_path)
+    directory = os.path.dirname(installer_path)
+    temp_root = os.path.abspath(tempfile.gettempdir())
+    if (os.path.normcase(os.path.dirname(directory)) !=
+            os.path.normcase(temp_root) or
+            not os.path.basename(directory).startswith(
+                UPDATE_DIRECTORY_PREFIX) or
+            not INSTALLER_NAME_RE.fullmatch(os.path.basename(installer_path))):
+        raise UpdateError("refusing to clean an unexpected installer directory")
+
+    # Presspeech exits with os._exit() after CreateProcess succeeds because
+    # native CUDA threads cannot be finalized reliably. A detached system
+    # helper therefore owns the downloaded installer cleanup. It retries while
+    # the running image is locked, removes only the verified installer, and
+    # removes the directory only if it is then empty.
+    quoted_path = installer_path.replace("'", "''")
+    script = (
+        "$installer = '%s'; "
+        "$directory = [IO.Path]::GetDirectoryName($installer); "
+        "for ($attempt = 0; $attempt -lt 3600; $attempt++) { "
+        "Remove-Item -LiteralPath $installer -Force "
+        "-ErrorAction SilentlyContinue; "
+        "if (-not (Test-Path -LiteralPath $installer)) { "
+        "Remove-Item -LiteralPath $directory -Force "
+        "-ErrorAction SilentlyContinue; break }; "
+        "Start-Sleep -Seconds 1 }"
+    ) % quoted_path
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    command = [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle", "Hidden",
+        "-EncodedCommand", encoded,
+    ]
+    launch = launcher or subprocess.Popen
+    return launch(
+        command,
+        close_fds=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
 
 
 def download_update(update, destination=None, progress=None,

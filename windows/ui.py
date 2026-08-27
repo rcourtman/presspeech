@@ -322,7 +322,8 @@ class UpdateWindow:
         try:
             # Isolate each window so a late cleanup from a closed window can
             # never remove a newer window's installer with the same asset name.
-            destination = tempfile.mkdtemp(prefix="Presspeech-update-")
+            destination = tempfile.mkdtemp(
+                prefix=updates.UPDATE_DIRECTORY_PREFIX)
             path = updates.download_update(
                 self.update, destination,
                 lambda done, total: self.events.put(("progress", done, total)),

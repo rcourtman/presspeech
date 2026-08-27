@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import io
 import json
@@ -5,7 +6,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from unittest import mock
 
 import updates
 
@@ -380,6 +383,63 @@ class DownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(
                     updates.UpdateError, "metadata was invalid"):
                 updates.verify_installer(update, path)
+
+    def test_cleanup_helper_is_limited_to_private_update_directories(self):
+        launched = mock.Mock()
+        with tempfile.TemporaryDirectory(
+                prefix="Presspeech maintainer's ") as temp_root, \
+                mock.patch.object(updates.tempfile, "gettempdir",
+                                  return_value=temp_root):
+            directory = tempfile.mkdtemp(
+                prefix=updates.UPDATE_DIRECTORY_PREFIX, dir=temp_root)
+            path = os.path.join(
+                directory, "Presspeech-Setup-1.2.3-x64.exe")
+
+            updates.schedule_installer_cleanup(path, launcher=launched)
+
+            command = launched.call_args.args[0]
+            script = base64.b64decode(
+                command[-1]).decode("utf-16le")
+            self.assertEqual(command[0], "powershell.exe")
+            self.assertIn("-EncodedCommand", command)
+            self.assertIn("Presspeech maintainer''s ", script)
+            self.assertIn("Remove-Item -LiteralPath $installer", script)
+            self.assertIn("Remove-Item -LiteralPath $directory", script)
+            self.assertNotIn("-Recurse", script)
+            self.assertTrue(launched.call_args.kwargs["close_fds"])
+
+            outside = os.path.join(
+                temp_root, "ordinary", "Presspeech-Setup-1.2.3-x64.exe")
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "unexpected installer directory"):
+                updates.schedule_installer_cleanup(
+                    outside, launcher=launched)
+
+    @unittest.skipUnless(os.name == "nt", "Windows cleanup helper")
+    def test_cleanup_helper_removes_released_installer_and_directory(self):
+        directory = tempfile.mkdtemp(prefix=updates.UPDATE_DIRECTORY_PREFIX)
+        path = os.path.join(directory, "Presspeech-Setup-1.2.3-x64.exe")
+        try:
+            with open(path, "wb") as handle:
+                handle.write(b"verified installer")
+
+            helper = updates.schedule_installer_cleanup(path)
+            helper.wait(timeout=15)
+            deadline = time.time() + 2
+            while os.path.exists(directory) and time.time() < deadline:
+                time.sleep(0.05)
+
+            self.assertFalse(os.path.exists(path))
+            self.assertFalse(os.path.exists(directory))
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            try:
+                os.rmdir(directory)
+            except OSError:
+                pass
 
     @unittest.skipUnless(os.name == "nt", "Windows sharing semantics")
     def test_launch_lock_denies_replacement_until_process_creation(self):
