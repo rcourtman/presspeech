@@ -1115,8 +1115,8 @@ class PresspeechApp:
 
     def launch_update(self, installer_path, update):
         """Revalidate and run an installer after the second user approval."""
-        updates.verify_installer(update, installer_path)
-        subprocess.Popen([installer_path], cwd=os.path.dirname(installer_path))
+        with updates.locked_verified_installer(update, installer_path):
+            subprocess.Popen([installer_path], cwd=os.path.dirname(installer_path))
         time.sleep(0.15)
         self.exit_app()
 

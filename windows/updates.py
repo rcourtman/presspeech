@@ -1,5 +1,6 @@
 """Privacy-safe, checksum-verified Windows release updates."""
 
+import contextlib
 import hashlib
 import json
 import os
@@ -189,8 +190,7 @@ def _read_checksum(update, opener, timeout):
         raise UpdateError("release checksum was not plain text") from exc
 
 
-def verify_installer(update, installer_path):
-    """Revalidate an approved installer path immediately before execution."""
+def _installer_metadata(update, installer_path):
     expected_name = str(update.get("installer_name", ""))
     expected_digest = str(update.get("installer_digest", "")).lower()
     try:
@@ -201,24 +201,124 @@ def verify_installer(update, installer_path):
             expected_size <= 0 or
             not re.fullmatch(r"[0-9a-f]{64}", expected_digest)):
         raise UpdateError("installer metadata was invalid")
+    return expected_size, expected_digest
+
+
+def _open_locked_installer(installer_path):
+    """Open a Windows file while denying write/delete sharing."""
+    if os.name != "nt":
+        return open(installer_path, "rb")
+
+    # Keep the native handle open across CreateProcess. FILE_SHARE_READ lets
+    # Windows load the executable while the missing WRITE and DELETE share
+    # flags prevent another process from changing or replacing the approved
+    # path between the final hash check and process creation.
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    generic_read = 0x80000000
+    file_share_read = 0x00000001
+    open_existing = 3
+    file_attribute_normal = 0x00000080
+    file_flag_open_reparse_point = 0x00200000
+    file_attribute_directory = 0x00000010
+    file_attribute_reparse_point = 0x00000400
+    invalid_handle_value = ctypes.c_void_p(-1).value
+
+    class ByHandleFileInformation(ctypes.Structure):
+        _fields_ = [
+            ("file_attributes", wintypes.DWORD),
+            ("creation_time", wintypes.FILETIME),
+            ("last_access_time", wintypes.FILETIME),
+            ("last_write_time", wintypes.FILETIME),
+            ("volume_serial_number", wintypes.DWORD),
+            ("file_size_high", wintypes.DWORD),
+            ("file_size_low", wintypes.DWORD),
+            ("number_of_links", wintypes.DWORD),
+            ("file_index_high", wintypes.DWORD),
+            ("file_index_low", wintypes.DWORD),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    get_information = kernel32.GetFileInformationByHandle
+    get_information.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ByHandleFileInformation),
+    ]
+    get_information.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+
+    handle = create_file(
+        installer_path,
+        generic_read,
+        file_share_read,
+        None,
+        open_existing,
+        file_attribute_normal | file_flag_open_reparse_point,
+        None,
+    )
+    if handle == invalid_handle_value:
+        raise ctypes.WinError(ctypes.get_last_error())
     try:
-        if os.path.islink(installer_path) or not os.path.isfile(installer_path):
+        information = ByHandleFileInformation()
+        if not get_information(handle, ctypes.byref(information)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if information.file_attributes & (
+                file_attribute_directory | file_attribute_reparse_point):
             raise UpdateError("verified installer is no longer available")
-        if os.path.getsize(installer_path) != expected_size:
-            raise UpdateError("installer changed after verification")
-        digest = hashlib.sha256()
-        with open(installer_path, "rb") as handle:
+        file_descriptor = msvcrt.open_osfhandle(
+            handle, os.O_RDONLY | os.O_BINARY)
+        handle = None
+        return os.fdopen(file_descriptor, "rb")
+    finally:
+        if handle is not None:
+            close_handle(handle)
+
+
+@contextlib.contextmanager
+def locked_verified_installer(update, installer_path):
+    """Hold a verified installer immutable through process creation."""
+    expected_size, expected_digest = _installer_metadata(
+        update, installer_path)
+    try:
+        if os.name != "nt" and os.path.islink(installer_path):
+            raise UpdateError("verified installer is no longer available")
+        with _open_locked_installer(installer_path) as handle:
+            if os.fstat(handle.fileno()).st_size != expected_size:
+                raise UpdateError("installer changed after verification")
+            digest = hashlib.sha256()
             while True:
                 block = handle.read(1024 * 1024)
                 if not block:
                     break
                 digest.update(block)
+            if digest.hexdigest().lower() != expected_digest:
+                raise UpdateError("installer changed after verification")
+            yield
     except UpdateError:
         raise
     except OSError as exc:
         raise UpdateError("could not revalidate the installer") from exc
-    if digest.hexdigest().lower() != expected_digest:
-        raise UpdateError("installer changed after verification")
+
+
+def verify_installer(update, installer_path):
+    """Revalidate an approved installer path without launching it."""
+    with locked_verified_installer(update, installer_path):
+        pass
 
 
 def download_update(update, destination=None, progress=None,

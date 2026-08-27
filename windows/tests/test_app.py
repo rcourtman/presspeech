@@ -254,20 +254,33 @@ class TextRegressionTests(unittest.TestCase):
         instance.exit_app = mock.Mock()
         update = {"installer_digest": "a" * 64}
         installer = r"C:\Temp\Presspeech-Setup-0.1.7-x64.exe"
-        with mock.patch.object(app.updates, "verify_installer") as verify, \
+        events = []
+
+        class Guard:
+            def __enter__(self):
+                events.append("locked")
+
+            def __exit__(self, *_args):
+                events.append("unlocked")
+
+        with mock.patch.object(
+                app.updates, "locked_verified_installer",
+                return_value=Guard()) as verify, \
                 mock.patch.object(app.subprocess, "Popen") as launch, \
                 mock.patch.object(app.time, "sleep"):
+            launch.side_effect = lambda *_args, **_kwargs: events.append("launched")
             instance.launch_update(installer, update)
         verify.assert_called_once_with(update, installer)
         launch.assert_called_once_with(
             [installer], cwd=app.os.path.dirname(installer))
+        self.assertEqual(events, ["locked", "launched", "unlocked"])
         instance.exit_app.assert_called_once_with()
 
     def test_failed_launch_revalidation_never_runs_installer(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.exit_app = mock.Mock()
         with mock.patch.object(
-                app.updates, "verify_installer",
+                app.updates, "locked_verified_installer",
                 side_effect=app.updates.UpdateError(
                     "installer changed after verification")), \
                 mock.patch.object(app.subprocess, "Popen") as launch:

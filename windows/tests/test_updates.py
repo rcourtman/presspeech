@@ -2,6 +2,8 @@ import hashlib
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -268,6 +270,46 @@ class DownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(
                     updates.UpdateError, "metadata was invalid"):
                 updates.verify_installer(update, path)
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing semantics")
+    def test_launch_lock_denies_replacement_until_process_creation(self):
+        payload = b"safe installer"
+        update, _digest = self.make_update(payload)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, update["installer_name"])
+            replacement = os.path.join(directory, "replacement.exe")
+            with open(path, "wb") as handle:
+                handle.write(payload)
+            with open(replacement, "wb") as handle:
+                handle.write(payload)
+
+            with updates.locked_verified_installer(update, path):
+                with self.assertRaises(PermissionError):
+                    os.replace(replacement, path)
+
+            os.replace(replacement, path)
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing semantics")
+    def test_launch_lock_allows_windows_to_load_the_executable(self):
+        executable = sys.executable
+        digest = hashlib.sha256()
+        with open(executable, "rb") as handle:
+            while True:
+                block = handle.read(1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+        update = {
+            "installer_name": os.path.basename(executable),
+            "installer_size": os.path.getsize(executable),
+            "installer_digest": digest.hexdigest(),
+        }
+
+        with updates.locked_verified_installer(update, executable):
+            result = subprocess.run(
+                [executable, "-c", "pass"], check=False, timeout=15)
+
+        self.assertEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":
