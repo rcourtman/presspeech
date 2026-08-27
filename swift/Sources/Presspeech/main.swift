@@ -53,6 +53,7 @@ let MAX_MAX_RECORDING_SECONDS: TimeInterval = 600
 // no paste-consumed acknowledgement, which is why restoration remains
 // an opt-in, best-effort behavior.
 let CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 0.4
+let PASTE_TARGET_AX_TIMEOUT_SECONDS: Float = 0.25
 let UPDATE_CHECK_FIRST_DELAY_SECONDS: TimeInterval = 30
 let UPDATE_CHECK_INTERVAL_SECONDS: TimeInterval = 6 * 3600  // 6h
 let UPDATE_REMIND_LATER_SECONDS: TimeInterval = 24 * 3600  // 24h
@@ -4012,6 +4013,62 @@ enum TextInsertionStrategy: String {
     }
 }
 
+/// The exact application window that owned the cursor when a recording began.
+/// Accessibility permission is already a runtime requirement for synthetic
+/// paste events, so using the focused AX window does not broaden Presspeech's
+/// permission footprint. Keeping the opaque element (rather than a title or
+/// document URL) also avoids retaining private window metadata.
+struct DictationPasteTarget {
+    let processIdentifier: pid_t
+    let focusedWindow: AXUIElement
+}
+
+enum TextInsertionOutcome: Equatable {
+    case inserted
+    case copiedWithoutPasting
+    case failed
+}
+
+@MainActor
+func currentDictationPasteTarget() -> DictationPasteTarget? {
+    let systemWide = AXUIElementCreateSystemWide()
+    var applicationValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(systemWide,
+                                        kAXFocusedApplicationAttribute as CFString,
+                                        &applicationValue) == .success,
+          let applicationValue,
+          CFGetTypeID(applicationValue) == AXUIElementGetTypeID() else { return nil }
+
+    let application = applicationValue as! AXUIElement
+    _ = AXUIElementSetMessagingTimeout(application, PASTE_TARGET_AX_TIMEOUT_SECONDS)
+    var processIdentifier: pid_t = 0
+    guard AXUIElementGetPid(application, &processIdentifier) == .success,
+          processIdentifier > 0 else { return nil }
+
+    var windowValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(application,
+                                        kAXFocusedWindowAttribute as CFString,
+                                        &windowValue) == .success,
+          let windowValue,
+          CFGetTypeID(windowValue) == AXUIElementGetTypeID() else { return nil }
+
+    return DictationPasteTarget(processIdentifier: processIdentifier,
+                                focusedWindow: windowValue as! AXUIElement)
+}
+
+@MainActor
+func dictationPasteTargetMatches(_ expected: DictationPasteTarget,
+                                 _ current: DictationPasteTarget?) -> Bool {
+    guard let current,
+          expected.processIdentifier == current.processIdentifier else { return false }
+    return CFEqual(expected.focusedWindow, current.focusedWindow)
+}
+
+func dictationDeliveryRoute(capturedTargetAvailable: Bool,
+                            targetStillFocused: Bool) -> TextInsertionOutcome {
+    capturedTargetAvailable && targetStillFocused ? .inserted : .copiedWithoutPasting
+}
+
 func textInsertionStrategyChain(primary: TextInsertionStrategy) -> [TextInsertionStrategy] {
     switch primary {
     case .clipboardPaste:
@@ -4083,28 +4140,43 @@ enum TextInserter {
     @discardableResult
     static func insert(_ text: String,
                        strategy: TextInsertionStrategy = defaultStrategy,
-                       restoreClipboard: Bool = false) -> Bool {
+                       restoreClipboard: Bool = false,
+                       expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         for candidate in textInsertionStrategyChain(primary: strategy) {
-            if insert(text, using: candidate, restoreClipboard: restoreClipboard) {
+            let outcome = insert(text,
+                                 using: candidate,
+                                 restoreClipboard: restoreClipboard,
+                                 expectedTarget: expectedTarget)
+            if outcome == .inserted {
                 if candidate != strategy {
                     log("text insertion fallback succeeded: \(candidate.displayName)")
                 }
-                return true
+                return outcome
             }
+            if outcome == .copiedWithoutPasting { return outcome }
             log("text insertion attempt failed: \(candidate.displayName)")
         }
-        return false
+        return .failed
     }
 
     private static func insert(_ text: String,
                                using strategy: TextInsertionStrategy,
-                               restoreClipboard: Bool) -> Bool {
+                               restoreClipboard: Bool,
+                               expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         switch strategy {
         case .clipboardPaste:
-            return ClipboardPasteInserter.insert(text, restoreClipboard: restoreClipboard)
+            return ClipboardPasteInserter.insert(text,
+                                                 restoreClipboard: restoreClipboard,
+                                                 expectedTarget: expectedTarget)
         case .directUnicode:
-            return DirectUnicodeInserter.insert(text)
+            return DirectUnicodeInserter.insert(text, expectedTarget: expectedTarget)
         }
+    }
+
+    static func copyWithoutPasting(_ text: String) -> TextInsertionOutcome {
+        ClipboardPasteInserter.write(text, to: .general)
+            ? .copiedWithoutPasting
+            : .failed
     }
 }
 
@@ -4201,7 +4273,14 @@ private enum ClipboardPasteInserter {
         return pb.writeObjects([item])
     }
 
-    static func insert(_ text: String, restoreClipboard: Bool = false) -> Bool {
+    static func insert(_ text: String,
+                       restoreClipboard: Bool = false,
+                       expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
+        guard dictationPasteTargetMatches(expectedTarget,
+                                          currentDictationPasteTarget()) else {
+            return TextInserter.copyWithoutPasting(text)
+        }
+
         let pb = NSPasteboard.general
         var previous: Snapshot?
         if restoreClipboard {
@@ -4223,9 +4302,19 @@ private enum ClipboardPasteInserter {
 
         guard write(text, to: pb, transient: previous != nil) else {
             log("pasteboard write failed")
-            return false
+            return .failed
         }
         let writeChangeCount = pb.changeCount
+
+        // A lazy pasteboard provider can make the optional snapshot above
+        // block long enough for the user to focus another window. Recheck at
+        // the last possible point before posting Command+V. Rewrite the
+        // transcript without temporary-paste markers so a focus change
+        // degrades to an ordinary manual paste instead of losing the words.
+        guard dictationPasteTargetMatches(expectedTarget,
+                                          currentDictationPasteTarget()) else {
+            return TextInserter.copyWithoutPasting(text)
+        }
 
         let steps = clipboardPasteKeyboardEventSteps(commandKey: virtualKeyCommand,
                                                      pasteKey: virtualKeyV)
@@ -4237,7 +4326,7 @@ private enum ClipboardPasteInserter {
             if let previous {
                 restore(previous, to: pb, expectedChangeCount: writeChangeCount)
             }
-            return false
+            return .failed
         }
 
         if let previous {
@@ -4247,7 +4336,7 @@ private enum ClipboardPasteInserter {
                 }
             }
         }
-        return true
+        return .inserted
     }
 
     private static func post(_ steps: [KeyboardEventStep]) -> Bool {
@@ -4277,14 +4366,19 @@ private enum ClipboardPasteInserter {
 private enum DirectUnicodeInserter {
     private static let maxUTF16UnitsPerEvent = 20
 
-    static func insert(_ text: String) -> Bool {
+    static func insert(_ text: String,
+                       expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
+        guard dictationPasteTargetMatches(expectedTarget,
+                                          currentDictationPasteTarget()) else {
+            return TextInserter.copyWithoutPasting(text)
+        }
         let source = CGEventSource(stateID: .combinedSessionState)
         var didPostAll = true
 
         for chunk in unicodeInsertionChunks(for: text, maxUTF16UnitsPerEvent: maxUTF16UnitsPerEvent) {
             didPostAll = post(chunk, source: source) && didPostAll
         }
-        return didPostAll
+        return didPostAll ? .inserted : .failed
     }
 
     private static func post(_ units: [UInt16], source: CGEventSource?) -> Bool {
@@ -5854,6 +5948,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private var isRecording = false
     private var isBusy = false
+    private var recordingPasteTarget: DictationPasteTarget?
     private var isReady = false
     private var isCoreRuntimeReady = false
     private var isSpeechModelReady = false
@@ -6230,6 +6325,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         isSpeechModelReady = false
         isRecording = false
         isBusy = false
+        recordingPasteTarget = nil
         pendingAudioRouteRefresh = false
         shouldResumeRuntimeAfterWake = false
         didLogDeferredWakeRecovery = false
@@ -6277,6 +6373,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             isReady = false
             isRecording = false
             isBusy = false
+            recordingPasteTarget = nil
             startupFailure = nil
             startupStatusTitle = "Falling back to \(fallback.shortName)…"
             speechModelStartupProgressFraction = nil
@@ -6302,6 +6399,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         isReady = false
         isRecording = false
         isBusy = false
+        recordingPasteTarget = nil
         speechModelStartupProgressFraction = nil
         stopRecordingLevelMeter()
 
@@ -6516,6 +6614,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         isReady = false
         isRecording = false
         isBusy = false
+        recordingPasteTarget = nil
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
@@ -6952,10 +7051,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             try audio.startRecording(inputDevicePreference: settings.inputDevice)
         } catch {
+            recordingPasteTarget = nil
             stopAudioEngineImmediately()
             recordStartupFailure(stage: .audioInput, error: error, reason: "hotkey press")
             return
         }
+        recordingPasteTarget = currentDictationPasteTarget()
         isRecording = true
         if setupChecklistWindow?.isVisible == true {
             hotkeyTestSucceeded = true
@@ -6989,6 +7090,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let dur: Double
         switch recordingReleaseAction(capturedSampleCount: samples.count) {
         case .discardTooShort(let duration):
+            recordingPasteTarget = nil
             dur = duration
             log("release: clip too short (\(String(format: "%.2f", dur)) s), discarding")
             setMenuBarState(.idle)
@@ -7008,6 +7110,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         Task { @MainActor in
             var dictationFailed = false
+            defer { recordingPasteTarget = nil }
             do {
                 let t0 = Date()
                 let text = try await asr.transcribe(samples: samples,
@@ -7044,13 +7147,27 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                             enterPermissionBlockedState(missing: missing, reason: "paste")
                             return
                         }
-                        let inserted = TextInserter.insert(pastedText(from: cleaned, suffix: settings.pasteSuffix),
-                                                           restoreClipboard: settings.restoreClipboardAfterPaste)
-                        if inserted {
+                        let deliveredText = pastedText(from: cleaned,
+                                                       suffix: settings.pasteSuffix)
+                        let insertionOutcome: TextInsertionOutcome
+                        if let expectedTarget = recordingPasteTarget {
+                            insertionOutcome = TextInserter.insert(
+                                deliveredText,
+                                restoreClipboard: settings.restoreClipboardAfterPaste,
+                                expectedTarget: expectedTarget
+                            )
+                        } else {
+                            insertionOutcome = TextInserter.copyWithoutPasting(deliveredText)
+                        }
+                        switch insertionOutcome {
+                        case .inserted:
                             if settings.playFeedbackSounds {
                                 Sounds.playDone()
                             }
-                        } else {
+                        case .copiedWithoutPasting:
+                            log("paste skipped; focused window changed; transcript copied")
+                            dictationFailed = true
+                        case .failed:
                             log("text insertion failed")
                             dictationFailed = true
                         }
@@ -7079,10 +7196,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func cancelActiveRecording(reason: String, runDeferredRefresh: Bool = true) {
         guard isRecording || audio.isRunning else {
+            recordingPasteTarget = nil
             hotkey.resetToggleState()
             return
         }
 
+        recordingPasteTarget = nil
         cancelMaxDurationAutoRelease()
         _ = audio.endRecording()
         isRecording = false
@@ -11388,6 +11507,24 @@ private enum PresspeechSelfTest {
             TextInserter.defaultStrategyDescription,
             equals: "Clipboard paste with Direct Unicode typing fallback",
             "diagnostics should describe the insertion fallback chain"
+        )
+        try expect(
+            dictationDeliveryRoute(capturedTargetAvailable: true,
+                                    targetStillFocused: true),
+            equals: .inserted,
+            "dictation should paste only while its captured target remains focused"
+        )
+        try expect(
+            dictationDeliveryRoute(capturedTargetAvailable: true,
+                                    targetStillFocused: false),
+            equals: .copiedWithoutPasting,
+            "a focus change should leave dictation on the clipboard without pasting"
+        )
+        try expect(
+            dictationDeliveryRoute(capturedTargetAvailable: false,
+                                    targetStillFocused: false),
+            equals: .copiedWithoutPasting,
+            "an unavailable target snapshot should fail closed to clipboard-only delivery"
         )
         let unicodeChunks = unicodeInsertionChunks(for: "ab👩‍💻cd", maxUTF16UnitsPerEvent: 4)
             .map { String(decoding: $0, as: UTF16.self) }

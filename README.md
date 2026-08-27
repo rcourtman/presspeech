@@ -123,6 +123,11 @@ Default workflow:
 3. Release.
 4. Presspeech pastes the transcript at the cursor.
 
+Each recording stays bound to the window that was focused when it began. If
+you change windows while Presspeech is transcribing, it copies the transcript
+to the clipboard and signals a failed automatic paste instead of sending your
+words to the new window. Paste manually when you are ready.
+
 Useful menu items:
 
 - **Setup Checklist…** — model, permissions, and hotkey readiness

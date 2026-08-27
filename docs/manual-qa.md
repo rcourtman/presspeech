@@ -33,6 +33,10 @@ cd swift
 
 ## Dictation
 
+- Start dictating into a text field, switch to a different window before
+  transcription finishes, and confirm no text is pasted into the new window.
+  Confirm the transcript is available on the clipboard for manual paste and
+  Presspeech plays/shows its failed-paste cue.
 - Test hold mode: hold the hotkey, speak, release, and confirm text pastes
   at the cursor.
 - Test toggle mode: press once to start, press again to stop.
