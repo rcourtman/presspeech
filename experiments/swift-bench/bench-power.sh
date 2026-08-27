@@ -72,6 +72,17 @@ path_label() {
     fi
 }
 
+artifact_path_label() {
+    if [[ "$REDACT_PATHS" -eq 1 ]]; then
+        # Generated filenames contain only the timestamp, redacted fixture
+        # stem, and sanitized backend. Keep those useful while withholding a
+        # caller-supplied output directory that may itself identify a fixture.
+        printf '%s' "${1##*/}"
+    else
+        printf '%s' "$1"
+    fi
+}
+
 transcript_output_label() {
     if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
         printf 'redacted'
@@ -172,8 +183,8 @@ write_power_report() {
         echo
         echo "Raw files:"
         echo
-        echo "- $bench_log"
-        echo "- $power_log"
+        echo "- $(artifact_path_label "$bench_log")"
+        echo "- $(artifact_path_label "$power_log")"
     } >"$report"
 }
 
@@ -203,12 +214,13 @@ run_self_test() {
     local secret_dir="$self_tmp/Private Battery Client"
     local secret_stem="confidential-board-demo"
     local secret_transcript="private battery transcript"
-    mkdir -p "$secret_dir" "$self_tmp/out"
+    mkdir -p "$secret_dir"
     touch "$secret_dir/$secret_stem.wav"
     printf '%s\n' "$secret_transcript" >"$secret_dir/$secret_stem.txt"
 
     FILE="$secret_dir/$secret_stem.wav"
-    OUTDIR="$self_tmp/out"
+    OUTDIR="$secret_dir/$secret_stem-results"
+    mkdir -p "$OUTDIR"
     BACKEND="v3"
     TRIALS="2"
     UNIFIED_TRAILING_SILENCE_MS="250"
@@ -221,7 +233,8 @@ run_self_test() {
     local timestamp="20260101T000000Z"
     local stem="$secret_stem"
     local safe_backend="v3"
-    local prefix="$OUTDIR/$timestamp-$(report_stem_for "$stem")-$safe_backend"
+    local prefix
+    prefix="$OUTDIR/$timestamp-$(report_stem_for "$stem")-$safe_backend"
     local report="$prefix.md"
     bench_log="$prefix.bench.txt"
     power_log="$prefix.powermetrics.txt"
@@ -247,6 +260,8 @@ run_self_test() {
     assert_not_contains "$report" "$secret_stem"
     assert_not_contains "$report" "$secret_transcript"
     assert_not_contains "$report" "Unified trailing silence"
+    assert_contains "$report" "- $timestamp-audio-v3.bench.txt"
+    assert_contains "$report" "- $timestamp-audio-v3.powermetrics.txt"
 
     BACKEND="nemotron-multilingual"
     write_power_report "$report" "$timestamp" "CPU Power avg: 123.0 mW (2 samples)" "$bench_log"
