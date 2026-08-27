@@ -104,14 +104,36 @@ extract_final_word_retained() {
 
 extract_max_wer_percent() {
     local log_file="$1"
-    grep -Eo 'WER [0-9]+([.][0-9]+)?%' "$log_file" \
-        | sed -E 's/WER ([0-9.]+)%/\1/' \
-        | awk 'BEGIN { max = "" } { if (max == "" || $1 > max) max = $1 } END { if (max == "") print "unknown"; else print max }'
+    awk '
+        match($0, /\[WER [0-9]+([.][0-9]+)?%\]/) {
+            value = substr($0, RSTART + 5, RLENGTH - 7)
+            if (max == "" || value > max) max = value
+        }
+        END { if (max == "") print "unknown"; else print max }
+    ' "$log_file"
 }
 
 extract_p50_ms() {
     local log_file="$1"
     sed -nE 's/.*latency:[[:space:]]+p50=[[:space:]]*([0-9.]+) ms.*/\1/p' "$log_file" | head -n 1
+}
+
+validate_metrics() {
+    local name
+    local value
+    local missing=()
+    while [[ $# -gt 0 ]]; do
+        name="$1"
+        value="$2"
+        shift 2
+        if [[ -z "$value" || "$value" == "unknown" ]]; then
+            missing+=( "$name" )
+        fi
+    done
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+        printf 'benchmark output missing required metrics: %s\n' "$(IFS=,; echo "${missing[*]}")" >&2
+        return 1
+    fi
 }
 
 assert_eq() {
@@ -234,12 +256,24 @@ run_self_test() {
     local mock="$self_tmp/mock.log"
     {
         echo 'latency:  p50=  123.4 ms  min=  120.0 ms  max=  130.0 ms'
-        echo 'transcript: [WER 16.7%] [final-word retained=false expected="sure" actual-last="not"] "Why would anyone be not"'
+        echo 'transcript: [WER 16.7%] [final-word retained=false expected="sure" actual-last="not"] "literal [WER 99.0%]"'
     } >"$mock"
 
     assert_eq "$(extract_final_word_retained "$mock")" "false" "retention parser"
     assert_eq "$(extract_max_wer_percent "$mock")" "16.7" "WER parser"
     assert_eq "$(extract_p50_ms "$mock")" "123.4" "latency parser"
+    assert_eq "$(extract_max_wer_percent /dev/null)" "unknown" "missing WER parser"
+    validate_metrics max-WER 16.7 final-word-retained false p50 123.4
+
+    local validation_log="$self_tmp/validation.log"
+    if validate_metrics max-WER unknown p50 "" >"$validation_log" 2>&1; then
+        echo "self-test expected missing metrics to fail validation" >&2
+        exit 1
+    fi
+    if ! grep -Fq -- "benchmark output missing required metrics: max-WER,p50" "$validation_log"; then
+        echo "self-test expected missing-metrics error message" >&2
+        exit 1
+    fi
     assert_eq "$(effective_cut_ms 150 50)" "100" "effective cut"
     assert_eq "$(effective_cut_ms 50 150)" "0" "grace caps at full tail"
 
@@ -454,6 +488,10 @@ for entry in "${CLIPS[@]}"; do
                 retained="$(extract_final_word_retained "$log_file")"
                 p50="$(extract_p50_ms "$log_file")"
                 [[ -n "$p50" ]] || p50="unknown"
+                if ! validate_metrics max-WER "$wer" final-word-retained "$retained" p50 "$p50"; then
+                    echo "invalid benchmark output for $phrase cut=$cut_ms grace=$grace_ms backend=$backend trailing=$trailing_ms" >&2
+                    exit 1
+                fi
 
                 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                     "$phrase" "$cut_ms" "$grace_ms" "$effective_cut" "$backend" "$trailing_ms" "$wer" "$retained" "$p50" >>"$tsv"
