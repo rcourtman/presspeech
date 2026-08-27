@@ -119,6 +119,23 @@ jobs:
           abort "winget installs must pin the community source:\n#{unscoped_winget.join("\n")}" unless unscoped_winget.empty?
           abort "winget installs must pin an exact version:\n#{unpinned_winget.join("\n")}" unless unpinned_winget.empty?
           RUBY
+      - name: Release publication safety
+        run: |
+          ruby - <<'RUBY'
+          workflow = File.read(".github/workflows/windows-release.yml")
+          atomic_create = %r{
+            gh\s+release\s+create\s+\$tag\s+`\s*
+            \$installer\s+`\s*
+            "\$installer\.sha256"\s+`
+          }x
+
+          unless workflow.match?(atomic_create)
+            abort "Windows releases must attach both assets during release creation"
+          end
+          if workflow.match?(/\bgh\s+release\s+upload\b/)
+            abort "Windows releases must not replace published assets"
+          end
+          RUBY
       - name: Windows CUDA dependency consistency
         run: |
           python3 - <<'PY'

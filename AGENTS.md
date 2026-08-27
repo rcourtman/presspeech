@@ -139,9 +139,11 @@ labelled clearly as such. Its required `expected_sha` input is the exact
 from any other ref and moved refs before building, serializes same-version jobs,
 requires the repository and Windows push workflows to be green for the exact
 approved commit, rejects an existing same-version tag on any other commit,
-verifies the tag again after the build before creating the release and before
-replacing release assets, and checks the published asset names, sizes, SHA-256
-digests, and URLs against the local build before reporting success.
+verifies the tag again after the build before creating the release, uploads both
+assets while the release is still a draft, publishes only after both uploads
+succeed, treats an existing published release's assets as immutable, and checks
+the published asset names, sizes, SHA-256 digests, and URLs against the local
+build before reporting success.
 
 The Windows updater is a security boundary. Accept only `windows-vX.Y.Z`
 releases with the exact versioned installer and `.sha256` asset names. Keep

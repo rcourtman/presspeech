@@ -162,10 +162,12 @@ the workflow stops before the build if it was dispatched from another ref, the
 branch has moved, the repository or Windows push workflows are not green for
 that exact commit, or the version's existing release tag points to a different
 commit. Same-version jobs are serialized, and the tag is verified again after
-the build before creating the release and before replacing release assets. The
-workflow then compares GitHub's published asset names, sizes, SHA-256 digests,
-and download URLs with the local installer and checksum before reporting a
-successful release.
+the build before creating the release. The installer and checksum are uploaded
+while the release is still a draft, and it is published only after both uploads
+succeed. Existing published assets are never replaced: a rerun must reproduce
+them exactly. The workflow compares GitHub's published asset names, sizes,
+SHA-256 digests, and download URLs with the local installer and checksum before
+reporting a successful release.
 If the repository later receives a code-signing
 certificate, add its base64 PFX and password as
 `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`; the same build

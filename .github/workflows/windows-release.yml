@@ -23,7 +23,7 @@ permissions:
 
 concurrency:
   # Signing timestamps make repeated builds non-identical. Never let two jobs
-  # race to replace the same version's release assets.
+  # race to publish the same version.
   group: windows-release-${{ inputs.version }}
   cancel-in-progress: false
 
@@ -153,10 +153,17 @@ jobs:
             -Tag $tag `
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
             -AllowMissing
+          $installer = "windows/dist/installer/Presspeech-Setup-$version-x64.exe"
           $releaseJson = gh release view $tag `
             --json isDraft,isPrerelease,tagName 2>$null
           if ($LASTEXITCODE -ne 0) {
+            # Supplying both assets to `gh release create` makes the CLI stage
+            # a draft, upload the complete pair, and publish only after both
+            # uploads succeed. An interrupted job therefore cannot expose a
+            # release with a missing installer or checksum.
             gh release create $tag `
+              $installer `
+              "$installer.sha256" `
               --target $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
               --prerelease `
               --title "Presspeech for Windows $version" `
@@ -169,18 +176,15 @@ jobs:
             }
           }
           # targetCommitish can retain stale creation metadata after a tag is
-          # moved. Verify the actual tag ref before replacing any assets.
+          # moved. Verify the actual tag ref before trusting any assets.
           .\windows\validate-release-tag.ps1 `
             -Tag $tag `
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
-          $installer = "windows/dist/installer/Presspeech-Setup-$version-x64.exe"
-          gh release upload $tag $installer "$installer.sha256" --clobber
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not upload Windows release assets"
-          }
           # The updater consumes the REST API's exact names, sizes, hashes, and
-          # URLs. Confirm that public metadata contract after upload rather than
-          # treating a successful CLI process as sufficient publication proof.
+          # URLs. Confirm that public metadata contract rather than treating a
+          # successful CLI process as sufficient publication proof. On a rerun,
+          # this also makes published assets immutable: they must match the
+          # rebuilt files exactly instead of being deleted and re-uploaded.
           $publishedJson = gh api `
             "repos/rcourtman/presspeech/releases/tags/$tag"
           if ($LASTEXITCODE -ne 0) {
