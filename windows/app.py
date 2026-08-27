@@ -421,6 +421,8 @@ class PresspeechApp:
         self.listener = None
         self._mutex_handle = None
         self._key_held = False
+        self._held_hotkey_keys = frozenset()
+        self._held_hotkey_trigger = None
         self._injecting_keys = False
         self._recording_target_process = ""
         self._recording_scratchpad = None
@@ -524,13 +526,20 @@ class PresspeechApp:
     def _on_press(self, key):
         if self._injecting_keys:
             return
-        if not self._is_hotkey(key):
+        hotkey_keys = KEY_MAP.get(self.settings["hotkey"], set())
+        if key not in hotkey_keys:
             return
         if self._key_held:
             return
         self._key_held = True
+        # Settings apply immediately, but the release must complete the same
+        # key-down transaction even if its hotkey or trigger mode is changed
+        # while the key is held. Keep every alias because pynput can report
+        # Right Alt as alt_gr on press and alt_r on release (or vice versa).
+        self._held_hotkey_keys = frozenset(hotkey_keys)
+        self._held_hotkey_trigger = self.settings["trigger"]
         self._log("key down: %s" % (key,))
-        if self.settings["trigger"] == "toggle":
+        if self._held_hotkey_trigger == "toggle":
             if self.recording:
                 self.request_stop()
             else:
@@ -541,11 +550,14 @@ class PresspeechApp:
     def _on_release(self, key):
         if self._injecting_keys:
             return
-        if not self._is_hotkey(key):
+        if not self._key_held or key not in self._held_hotkey_keys:
             return
         self._key_held = False
+        trigger = self._held_hotkey_trigger
+        self._held_hotkey_keys = frozenset()
+        self._held_hotkey_trigger = None
         self._log("key up: %s" % (key,))
-        if self.settings["trigger"] != "toggle":
+        if trigger != "toggle":
             self.request_stop()
 
     def toggle_dictate(self, icon=None, item=None):

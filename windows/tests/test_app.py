@@ -223,6 +223,19 @@ class InputSelectionTests(unittest.TestCase):
 
 
 class HotkeyRegressionTests(unittest.TestCase):
+    def make_app(self, hotkey="right alt", trigger="hold"):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"hotkey": hotkey, "trigger": trigger}
+        instance._key_held = False
+        instance._held_hotkey_keys = frozenset()
+        instance._held_hotkey_trigger = None
+        instance._injecting_keys = False
+        instance.recording = False
+        instance.start_recording = mock.Mock()
+        instance.request_stop = mock.Mock()
+        instance._log = mock.Mock()
+        return instance
+
     def test_left_alt_does_not_treat_altgr_as_the_hotkey(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"hotkey": "left alt"}
@@ -235,6 +248,30 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_gr))
         self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_r))
         self.assertFalse(instance._is_hotkey(app.pkb.Key.alt_l))
+
+    def test_hold_release_uses_hotkey_and_trigger_captured_on_press(self):
+        instance = self.make_app()
+
+        instance._on_press(app.pkb.Key.alt_gr)
+        instance.settings.update({"hotkey": "left ctrl", "trigger": "toggle"})
+        instance._on_release(app.pkb.Key.alt_r)
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_called_once_with()
+        self.assertFalse(instance._key_held)
+        self.assertEqual(instance._held_hotkey_keys, frozenset())
+        self.assertIsNone(instance._held_hotkey_trigger)
+
+    def test_toggle_release_does_not_adopt_new_hold_mode(self):
+        instance = self.make_app(trigger="toggle")
+
+        instance._on_press(app.pkb.Key.alt_r)
+        instance.settings["trigger"] = "hold"
+        instance._on_release(app.pkb.Key.alt_gr)
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_not_called()
+        self.assertFalse(instance._key_held)
 
 
 class TextRegressionTests(unittest.TestCase):
