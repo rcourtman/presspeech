@@ -186,10 +186,52 @@ filter_librispeech_transcript_members() {
 
 safe_remove_generated_dir() {
     local dir="$1"
-    case "$dir" in
-        ""|"/"|".") echo "refusing to remove unsafe fixture directory: $dir" >&2; exit 1 ;;
-    esac
-    rm -rf "$dir"
+    local trimmed_dir="$dir"
+    local canonical_dir=""
+    local expected_marker="Presspeech generated public speech fixtures"
+    local expected_readme="Generated public Presspeech benchmark fixtures."
+    local expected_manifest=$'clip_id\tsource\tsplit\toriginal_id\toriginal_audio\tlicense\treference'
+
+    while [[ "$trimmed_dir" != "/" && "$trimmed_dir" == */ ]]; do
+        trimmed_dir="${trimmed_dir%/}"
+    done
+    if [[ -z "$trimmed_dir" || "$trimmed_dir" == "." || "$trimmed_dir" == ".." ||
+          "$trimmed_dir" == */. || "$trimmed_dir" == */.. ||
+          ! -d "$trimmed_dir" || -L "$trimmed_dir" ]]; then
+        echo "refusing to remove unowned fixture directory: $dir" >&2
+        return 1
+    fi
+    canonical_dir="$(cd "$trimmed_dir" && pwd -P)"
+    local current_dir
+    current_dir="$(pwd -P)"
+    if [[ "$canonical_dir" == "/" || "$canonical_dir" == "$current_dir" ||
+          "$current_dir" == "$canonical_dir/"* ]]; then
+        echo "refusing to remove unsafe fixture directory: $dir" >&2
+        return 1
+    fi
+
+    local marker="$canonical_dir/.presspeech-public-fixtures"
+    local readme="$canonical_dir/README.txt"
+    local manifest="$canonical_dir/manifest.tsv"
+
+    # New imports get an ownership marker before the first conversion so an
+    # interrupted run remains safely replaceable. Accept the exact legacy
+    # README + manifest header for fixture sets created before that marker.
+    if [[ -f "$marker" && ! -L "$marker" &&
+          "$(cat "$marker")" == "$expected_marker" ]]; then
+        rm -rf -- "$canonical_dir"
+        return
+    fi
+    if [[ -f "$readme" && ! -L "$readme" &&
+          -f "$manifest" && ! -L "$manifest" &&
+          "$(head -n 1 "$readme")" == "$expected_readme" &&
+          "$(head -n 1 "$manifest")" == "$expected_manifest" ]]; then
+        rm -rf -- "$canonical_dir"
+        return
+    fi
+
+    echo "refusing to remove unowned fixture directory: $dir" >&2
+    return 1
 }
 
 assert_eq() {
@@ -273,6 +315,45 @@ run_self_test() {
     select_librispeech_entries "$transcript_root" "dev-clean" 1 2 "$selected"
     assert_file_contains "$selected" $'1-2-0001\tLibriSpeech/dev-clean/1/2/1-2-0001.flac\tSECOND ROW'
     assert_file_contains "$selected" $'3-4-0000\tLibriSpeech/dev-clean/3/4/3-4-0000.flac\tTHIRD ROW'
+
+    local unowned_dir="$tmpdir/unowned"
+    mkdir -p "$unowned_dir"
+    printf 'keep me\n' >"$unowned_dir/user-data.txt"
+    assert_failure "unowned fixture replacement" safe_remove_generated_dir "$unowned_dir"
+    [[ -f "$unowned_dir/user-data.txt" ]] || {
+        echo "self-test expected unowned fixture data to remain" >&2
+        exit 1
+    }
+
+    local symlink_target="$tmpdir/symlink-target"
+    local symlink_dir="$tmpdir/symlink-fixtures"
+    mkdir -p "$symlink_target"
+    printf 'Presspeech generated public speech fixtures\n' >"$symlink_target/.presspeech-public-fixtures"
+    ln -s "$symlink_target" "$symlink_dir"
+    assert_failure "symlink fixture replacement" safe_remove_generated_dir "$symlink_dir/"
+    [[ -f "$symlink_target/.presspeech-public-fixtures" ]] || {
+        echo "self-test expected symlink target to remain" >&2
+        exit 1
+    }
+
+    local marked_dir="$tmpdir/marked"
+    mkdir -p "$marked_dir"
+    printf 'Presspeech generated public speech fixtures\n' >"$marked_dir/.presspeech-public-fixtures"
+    assert_success "marked fixture replacement" safe_remove_generated_dir "$marked_dir"
+    [[ ! -e "$marked_dir" ]] || {
+        echo "self-test expected marked fixture directory removal" >&2
+        exit 1
+    }
+
+    local legacy_dir="$tmpdir/legacy"
+    mkdir -p "$legacy_dir"
+    printf 'Generated public Presspeech benchmark fixtures.\n' >"$legacy_dir/README.txt"
+    printf 'clip_id\tsource\tsplit\toriginal_id\toriginal_audio\tlicense\treference\n' >"$legacy_dir/manifest.tsv"
+    assert_success "legacy fixture replacement" safe_remove_generated_dir "$legacy_dir"
+    [[ ! -e "$legacy_dir" ]] || {
+        echo "self-test expected legacy fixture directory removal" >&2
+        exit 1
+    }
 
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --count >"$missing_value_log" 2>&1; then
@@ -445,6 +526,7 @@ echo "extracting selected audio..."
 tar -xzf "$archive_path" -C "$tmpdir/audio" -T "$audio_members"
 
 mkdir -p "$fixture_dir"
+printf 'Presspeech generated public speech fixtures\n' >"$fixture_dir/.presspeech-public-fixtures"
 manifest="$fixture_dir/manifest.tsv"
 {
     printf 'clip_id\tsource\tsplit\toriginal_id\toriginal_audio\tlicense\treference\n'
