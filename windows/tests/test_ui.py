@@ -22,6 +22,7 @@ class DictionarySettingsTests(unittest.TestCase):
         window.var_spoken = mock.Mock()
         window.var_replace = mock.Mock()
         window.listbox = mock.Mock()
+        window.status = mock.Mock()
         return window
 
     def test_add_rule_keeps_arrow_and_exact_replacement_whitespace(self):
@@ -37,6 +38,31 @@ class DictionarySettingsTests(unittest.TestCase):
         )
         window.listbox.insert.assert_called_once_with(
             "end", "maps to arrow \u2192   A \u2192 B  ")
+
+    def test_add_rule_rejects_an_oversized_source(self):
+        window = self.make_window()
+        window.var_spoken.get.return_value = (
+            "s" * (ui.cfg.MAX_DICTIONARY_SPOKEN_BYTES + 1))
+        window.var_replace.get.return_value = "replacement"
+
+        window._add_rule()
+
+        self.assertEqual(window.dictionary_rules, [])
+        window.listbox.insert.assert_not_called()
+        window.status.config.assert_called_once_with(
+            text="Rule not added. Check the text length or remove an existing rule.")
+
+    def test_add_rule_rejects_more_than_the_rule_limit(self):
+        rules = [["source-%d" % index, "replacement"]
+                 for index in range(ui.cfg.MAX_DICTIONARY_RULES)]
+        window = self.make_window(rules)
+        window.var_spoken.get.return_value = "one too many"
+        window.var_replace.get.return_value = "replacement"
+
+        window._add_rule()
+
+        self.assertEqual(window.dictionary_rules, rules)
+        window.listbox.insert.assert_not_called()
 
     def test_remove_rule_uses_selected_structured_rule(self):
         window = self.make_window([

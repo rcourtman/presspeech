@@ -9,6 +9,12 @@ VERSION = "0.1.10"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 
+# Match the macOS dictionary boundary. Every rule becomes a regex scan over
+# each transcript, so persisted input must not make text processing unbounded.
+MAX_DICTIONARY_RULES = 512
+MAX_DICTIONARY_SPOKEN_BYTES = 512
+MAX_DICTIONARY_REPLACEMENT_BYTES = 4096
+
 DEFAULTS = {
     "hotkey": "right alt",
     "trigger": "hold",
@@ -75,15 +81,37 @@ _NONNEGATIVE_INT_SETTINGS = {
 }
 
 
-def _valid_dictionary(value):
-    """Keep well-formed string pairs without losing the rest of the dictionary."""
+def _within_utf8_limit(value, limit):
+    # UTF-8 uses at least one byte per Unicode code point. Avoid allocating an
+    # encoded copy when a corrupt setting is already visibly over the limit.
+    if len(value) > limit:
+        return False
+    try:
+        return len(value.encode("utf-8")) <= limit
+    except UnicodeEncodeError:
+        return False
+
+
+def validated_dictionary(value):
+    """Return the bounded, well-formed subset of persisted dictionary rules."""
     if not isinstance(value, list):
         return None
-    return [
-        rule for rule in value
-        if (isinstance(rule, list) and len(rule) == 2 and
-            all(isinstance(part, str) for part in rule))
-    ]
+    result = []
+    for rule in value:
+        if not (isinstance(rule, list) and len(rule) == 2 and
+                all(isinstance(part, str) for part in rule)):
+            continue
+        spoken, replacement = rule
+        if (not spoken.strip() or "\0" in spoken or "\0" in replacement or
+                not _within_utf8_limit(
+                    spoken, MAX_DICTIONARY_SPOKEN_BYTES) or
+                not _within_utf8_limit(
+                    replacement, MAX_DICTIONARY_REPLACEMENT_BYTES)):
+            continue
+        result.append([spoken, replacement])
+        if len(result) == MAX_DICTIONARY_RULES:
+            break
+    return result
 
 
 def _default_settings():
@@ -105,7 +133,7 @@ def _validated_settings(payload):
             continue
         value = payload[key]
         if key == "dictionary":
-            rules = _valid_dictionary(value)
+            rules = validated_dictionary(value)
             if rules is not None:
                 settings[key] = rules
             continue

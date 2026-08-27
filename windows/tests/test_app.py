@@ -369,6 +369,15 @@ class TextRegressionTests(unittest.TestCase):
             instance._apply_text("project folder and second phrase"),
             "second phrase and rewritten")
 
+    def test_dictionary_runtime_keeps_the_rule_count_bounded(self):
+        rules = [["unused-%d" % index, "replacement"]
+                 for index in range(config.MAX_DICTIONARY_RULES)]
+        rules.append(["target phrase", "changed"])
+
+        self.assertEqual(
+            app._apply_dictionary_rules("target phrase", rules),
+            "target phrase")
+
     def test_filler_removal_repairs_sentence_capitalization(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {

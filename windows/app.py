@@ -194,8 +194,8 @@ def _apply_dictionary_rules(text, rules):
     """Apply longest non-overlapping rules once against the original text."""
     active = [
         (index, spoken, replacement)
-        for index, (spoken, replacement) in enumerate(rules)
-        if spoken
+        for index, (spoken, replacement) in enumerate(
+            cfg.validated_dictionary(rules) or [])
     ]
     # Prefer the most specific phrase regardless of the order rules were added.
     # The original order remains a deterministic tie-breaker for equal phrases.

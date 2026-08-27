@@ -620,10 +620,17 @@ class SettingsWindow:
         replacement = self.var_replace.get()
         if not spoken:
             return
-        self.dictionary_rules.append([spoken, replacement])
+        candidate = cfg.validated_dictionary(
+            self.dictionary_rules + [[spoken, replacement]])
+        if candidate is None or len(candidate) != len(self.dictionary_rules) + 1:
+            self.status.config(
+                text="Rule not added. Check the text length or remove an existing rule.")
+            return
+        self.dictionary_rules = candidate
         self.listbox.insert("end", "%s \u2192 %s" % (spoken, replacement))
         self.var_spoken.set("")
         self.var_replace.set("")
+        self.status.config(text="")
 
     def _remove_rule(self):
         selection = self.listbox.curselection()
@@ -653,7 +660,7 @@ class SettingsWindow:
             self.app._set_indicator(None)
         s["check_updates"] = bool(self.var_check_updates.get())
         s["autostart"] = bool(self.var_autostart.get())
-        s["dictionary"] = [list(rule) for rule in self.dictionary_rules]
+        s["dictionary"] = cfg.validated_dictionary(self.dictionary_rules) or []
         cfg.save(s)
         self.app.apply_autostart()
         self.status.config(text="Saved. Hotkey changes apply immediately.")

@@ -73,6 +73,36 @@ class ConfigLoadTests(unittest.TestCase):
             ["empty replacement", ""],
         ])
 
+    def test_dictionary_rejects_oversized_and_nul_rules(self):
+        self.write({
+            "dictionary": [
+                ["valid", "replacement"],
+                ["", "empty source"],
+                ["   ", "blank source"],
+                ["nul\0source", "replacement"],
+                ["source", "nul\0replacement"],
+                ["unpaired-\ud800", "replacement"],
+                ["s" * (config.MAX_DICTIONARY_SPOKEN_BYTES + 1), "replacement"],
+                ["source", "r" * (config.MAX_DICTIONARY_REPLACEMENT_BYTES + 1)],
+                ["é" * config.MAX_DICTIONARY_SPOKEN_BYTES, "too many UTF-8 bytes"],
+            ],
+        })
+
+        self.assertEqual(config.load()["dictionary"], [
+            ["valid", "replacement"],
+        ])
+
+    def test_dictionary_rule_count_is_bounded(self):
+        rules = [["source-%d" % index, "replacement"]
+                 for index in range(config.MAX_DICTIONARY_RULES + 3)]
+        self.write({"dictionary": rules})
+
+        loaded = config.load()["dictionary"]
+
+        self.assertEqual(len(loaded), config.MAX_DICTIONARY_RULES)
+        self.assertEqual(loaded[-1][0], "source-%d" %
+                         (config.MAX_DICTIONARY_RULES - 1))
+
     def test_malformed_json_falls_back_to_defaults(self):
         with open(self.path, "w", encoding="utf-8") as handle:
             handle.write("{not json")
