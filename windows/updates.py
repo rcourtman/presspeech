@@ -189,6 +189,38 @@ def _read_checksum(update, opener, timeout):
         raise UpdateError("release checksum was not plain text") from exc
 
 
+def verify_installer(update, installer_path):
+    """Revalidate an approved installer path immediately before execution."""
+    expected_name = str(update.get("installer_name", ""))
+    expected_digest = str(update.get("installer_digest", "")).lower()
+    try:
+        expected_size = int(update.get("installer_size", 0) or 0)
+    except (TypeError, ValueError) as exc:
+        raise UpdateError("installer metadata was invalid") from exc
+    if (not expected_name or os.path.basename(installer_path) != expected_name or
+            expected_size <= 0 or
+            not re.fullmatch(r"[0-9a-f]{64}", expected_digest)):
+        raise UpdateError("installer metadata was invalid")
+    try:
+        if os.path.islink(installer_path) or not os.path.isfile(installer_path):
+            raise UpdateError("verified installer is no longer available")
+        if os.path.getsize(installer_path) != expected_size:
+            raise UpdateError("installer changed after verification")
+        digest = hashlib.sha256()
+        with open(installer_path, "rb") as handle:
+            while True:
+                block = handle.read(1024 * 1024)
+                if not block:
+                    break
+                digest.update(block)
+    except UpdateError:
+        raise
+    except OSError as exc:
+        raise UpdateError("could not revalidate the installer") from exc
+    if digest.hexdigest().lower() != expected_digest:
+        raise UpdateError("installer changed after verification")
+
+
 def download_update(update, destination=None, progress=None,
                     opener=None, timeout=30):
     """Download an installer atomically and verify its published SHA-256."""

@@ -137,13 +137,16 @@ labelled clearly as such. Its required `expected_sha` input is the exact
 40-character `main` commit approved for release; the workflow rejects dispatches
 from any other ref and moved refs before building, serializes same-version jobs,
 rejects an existing same-version tag on any other commit, and verifies the tag
-again before replacing release assets.
+again after the build before creating the release and before replacing release
+assets.
 
 The Windows updater is a security boundary. Accept only `windows-vX.Y.Z`
 releases with the exact versioned installer and `.sha256` asset names. Keep
 downloads HTTPS-only and restricted to GitHub release hosts, verify the asset
 size and SHA-256 before launch, and require explicit user approval before both
-download and install. Its User-Agent must remain fixed and must not carry the
+download and install. Revalidate the downloaded file immediately before process
+creation so the approved path cannot silently change between those steps. Its
+User-Agent must remain fixed and must not carry the
 app version, device details, settings, transcripts, or usage identifiers.
 
 ## Swift concurrency model — important

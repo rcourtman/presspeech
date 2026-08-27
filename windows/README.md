@@ -103,7 +103,8 @@ while recording.
   device's previous mute state afterwards
 - A click-through **Listening… / Transcribing…** indicator on the active display
 - Optional daily GitHub update checks; downloads and installation require
-  approval and the installer is verified by size and SHA-256
+  approval, and the installer is verified by size and SHA-256 after download
+  and again immediately before launch
 - Dictionary: map a misheard phrase or spoken shortcut to exact text
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)
@@ -159,8 +160,8 @@ backends and native runtime modules were actually packaged. The manual
 `expected_sha` input must be the exact 40-character `main` commit being released;
 the workflow stops before the build if it was dispatched from another ref, the
 branch has moved, or the version's existing release tag points to a different
-commit. Same-version jobs are serialized, and the tag is verified again before
-replacing release assets.
+commit. Same-version jobs are serialized, and the tag is verified again after
+the build before creating the release and before replacing release assets.
 If the repository later receives a code-signing
 certificate, add its base64 PFX and password as
 `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`; the same build

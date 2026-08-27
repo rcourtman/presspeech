@@ -125,6 +125,13 @@ jobs:
           if (-not (Test-Path -LiteralPath $notes)) {
             throw "Missing release notes: $notes"
           }
+          # The build is intentionally long. Recheck immediately before any
+          # public release mutation so a conflicting tag cannot sit unnoticed
+          # between the pre-build validation and release creation.
+          .\windows\validate-release-tag.ps1 `
+            -Tag $tag `
+            -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
+            -AllowMissing
           $releaseJson = gh release view $tag `
             --json isDraft,isPrerelease,tagName 2>$null
           if ($LASTEXITCODE -ne 0) {

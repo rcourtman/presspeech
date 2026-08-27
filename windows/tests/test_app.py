@@ -249,6 +249,33 @@ class TextRegressionTests(unittest.TestCase):
         self.assertTrue(app._update_check_due(1000, 1000 + day))
         self.assertTrue(app._update_check_due("invalid", 1000))
 
+    def test_update_is_revalidated_after_approval_before_launch(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.exit_app = mock.Mock()
+        update = {"installer_digest": "a" * 64}
+        installer = r"C:\Temp\Presspeech-Setup-0.1.7-x64.exe"
+        with mock.patch.object(app.updates, "verify_installer") as verify, \
+                mock.patch.object(app.subprocess, "Popen") as launch, \
+                mock.patch.object(app.time, "sleep"):
+            instance.launch_update(installer, update)
+        verify.assert_called_once_with(update, installer)
+        launch.assert_called_once_with(
+            [installer], cwd=app.os.path.dirname(installer))
+        instance.exit_app.assert_called_once_with()
+
+    def test_failed_launch_revalidation_never_runs_installer(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.exit_app = mock.Mock()
+        with mock.patch.object(
+                app.updates, "verify_installer",
+                side_effect=app.updates.UpdateError(
+                    "installer changed after verification")), \
+                mock.patch.object(app.subprocess, "Popen") as launch:
+            with self.assertRaises(app.updates.UpdateError):
+                instance.launch_update("installer.exe", {})
+        launch.assert_not_called()
+        instance.exit_app.assert_not_called()
+
     def test_diagnostics_exclude_private_dictionary_contents(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {

@@ -347,7 +347,13 @@ class UpdateWindow:
                             "Install update",
                             "Close Presspeech and run the verified installer now?",
                             parent=self.root):
-                        self.app.launch_update(event[1])
+                        try:
+                            self.app.launch_update(event[1], self.update)
+                        except Exception as exc:
+                            self.status.config(text="Install failed")
+                            self.download_button.config(state="normal")
+                            messagebox.showerror(
+                                "Update failed", str(exc), parent=self.root)
                     else:
                         self.download_button.config(state="normal")
         except queue.Empty:

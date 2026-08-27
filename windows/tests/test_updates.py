@@ -215,6 +215,32 @@ class DownloadTests(unittest.TestCase):
                 handler.redirect_request(
                     request, None, 302, "Found", {}, redirect_url)
 
+    def test_installer_is_revalidated_before_launch(self):
+        payload = b"safe installer"
+        update, _digest = self.make_update(payload)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, update["installer_name"])
+            with open(path, "wb") as handle:
+                handle.write(payload)
+            updates.verify_installer(update, path)
+
+            with open(path, "wb") as handle:
+                handle.write(b"evil installer")
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "changed after verification"):
+                updates.verify_installer(update, path)
+
+    def test_launch_revalidation_requires_the_exact_asset_name(self):
+        payload = b"safe installer"
+        update, _digest = self.make_update(payload)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "renamed-installer.exe")
+            with open(path, "wb") as handle:
+                handle.write(payload)
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "metadata was invalid"):
+                updates.verify_installer(update, path)
+
 
 if __name__ == "__main__":
     unittest.main()
