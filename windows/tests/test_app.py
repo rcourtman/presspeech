@@ -222,6 +222,21 @@ class InputSelectionTests(unittest.TestCase):
         probe.assert_not_called()
 
 
+class HotkeyRegressionTests(unittest.TestCase):
+    def test_left_alt_does_not_treat_altgr_as_the_hotkey(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"hotkey": "left alt"}
+
+        self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_l))
+        self.assertFalse(instance._is_hotkey(app.pkb.Key.alt_gr))
+        self.assertFalse(instance._is_hotkey(app.pkb.Key.alt_r))
+
+        instance.settings["hotkey"] = "right alt"
+        self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_gr))
+        self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_r))
+        self.assertFalse(instance._is_hotkey(app.pkb.Key.alt_l))
+
+
 class TextRegressionTests(unittest.TestCase):
     def test_packaged_selftest_loads_every_lazy_runtime_dependency(self):
         loaded = {}

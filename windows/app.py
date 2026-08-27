@@ -33,7 +33,10 @@ from british import to_british
 
 KEY_MAP = {
     "right alt": {pkb.Key.alt_gr, pkb.Key.alt_r},
-    "left alt": {pkb.Key.alt_l, pkb.Key.alt_gr},
+    # Windows/pynput can report the physical Right Alt key as either alt_gr or
+    # alt_r. AltGr must not also satisfy the explicit Left Alt choice: doing so
+    # can start dictation while a user types alternate-layout characters.
+    "left alt": {pkb.Key.alt_l},
     "right ctrl": {pkb.Key.ctrl_r},
     "left ctrl": {pkb.Key.ctrl_l},
     "right shift": {pkb.Key.shift_r},
