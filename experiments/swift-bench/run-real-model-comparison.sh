@@ -158,6 +158,45 @@ validate_metrics() {
     fi
 }
 
+publish_report_artifacts() {
+    local stage_dir="$1"
+    local staged_report="$2"
+    local staged_tsv="$3"
+    local staged_raw_dir="$4"
+    local final_report="$5"
+    local final_tsv="$6"
+    local final_raw_dir="$7"
+
+    if [[ ! -f "$staged_report" || ! -f "$staged_tsv" || ! -d "$staged_raw_dir" ]]; then
+        echo "model comparison staging artifacts are incomplete" >&2
+        return 1
+    fi
+    if [[ -e "$final_report" || -e "$final_tsv" || -e "$final_raw_dir" ]]; then
+        echo "refusing to replace existing model comparison artifacts" >&2
+        return 1
+    fi
+
+    # Publish the human-facing report last. If an unexpected move fails, roll
+    # back only paths that this function created so no partial run looks final.
+    local moved_raw=0
+    local moved_tsv=0
+    if ! mv "$staged_raw_dir" "$final_raw_dir"; then
+        return 1
+    fi
+    moved_raw=1
+    if ! mv "$staged_tsv" "$final_tsv"; then
+        rm -rf -- "$final_raw_dir"
+        return 1
+    fi
+    moved_tsv=1
+    if ! mv "$staged_report" "$final_report"; then
+        [[ "$moved_tsv" -eq 0 ]] || rm -f -- "$final_tsv"
+        [[ "$moved_raw" -eq 0 ]] || rm -rf -- "$final_raw_dir"
+        return 1
+    fi
+    rmdir "$stage_dir"
+}
+
 backend_summary_row() {
     local tsv="$1"
     local backend="$2"
@@ -244,6 +283,49 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$validation_log" "benchmark output missing required metrics: max-WER,final-word-retained"
+
+    local stage_dir="$tmpdir/staged"
+    local final_dir="$tmpdir/published"
+    mkdir -p "$stage_dir/raw" "$final_dir"
+    printf 'complete report\n' >"$stage_dir/report.md"
+    printf 'header\nrow\n' >"$stage_dir/results.tsv"
+    printf 'bench output\n' >"$stage_dir/raw/clip-v3.bench.txt"
+    publish_report_artifacts \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$stage_dir/results.tsv" \
+        "$stage_dir/raw" \
+        "$final_dir/report.md" \
+        "$final_dir/results.tsv" \
+        "$final_dir/raw"
+    assert_contains "$final_dir/report.md" "complete report"
+    assert_contains "$final_dir/results.tsv" "row"
+    assert_contains "$final_dir/raw/clip-v3.bench.txt" "bench output"
+    [[ ! -e "$stage_dir" ]] || {
+        echo "self-test expected successful report staging cleanup" >&2
+        exit 1
+    }
+
+    stage_dir="$tmpdir/collision-stage"
+    mkdir -p "$stage_dir/raw"
+    printf 'new report\n' >"$stage_dir/report.md"
+    printf 'new results\n' >"$stage_dir/results.tsv"
+    printf 'new log\n' >"$stage_dir/raw/log.txt"
+    local collision_log="$tmpdir/collision.log"
+    if publish_report_artifacts \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$stage_dir/results.tsv" \
+        "$stage_dir/raw" \
+        "$final_dir/report.md" \
+        "$final_dir/other-results.tsv" \
+        "$final_dir/other-raw" >"$collision_log" 2>&1; then
+        echo "self-test expected report publication collision to fail" >&2
+        exit 1
+    fi
+    assert_contains "$collision_log" "refusing to replace existing model comparison artifacts"
+    assert_contains "$final_dir/report.md" "complete report"
+    assert_contains "$stage_dir/report.md" "new report"
 
     local tsv="$tmpdir/results.tsv"
     {
@@ -399,16 +481,35 @@ fi
 
 mkdir -p "$OUTDIR"
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-compare.XXXXXX")"
-cleanup() { rm -rf "$tmpdir"; }
+stage_dir=""
+cleanup() {
+    rm -rf "$tmpdir"
+    if [[ -n "$stage_dir" ]]; then
+        rm -rf -- "$stage_dir"
+    fi
+}
 trap cleanup EXIT INT TERM
 
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-report="$OUTDIR/$timestamp-model-comparison.md"
-tsv="$OUTDIR/$timestamp-model-comparison.tsv"
-raw_dir="$OUTDIR/$timestamp-model-comparison-logs"
+final_report="$OUTDIR/$timestamp-model-comparison.md"
+final_tsv="$OUTDIR/$timestamp-model-comparison.tsv"
+final_raw_dir="$OUTDIR/$timestamp-model-comparison-logs"
+if [[ -e "$final_report" || -e "$final_tsv" || -e "$final_raw_dir" ]]; then
+    echo "model comparison artifacts already exist for timestamp $timestamp" >&2
+    exit 1
+fi
+reserved_stage_dir="$OUTDIR/.$timestamp-model-comparison.incomplete"
+if ! mkdir "$reserved_stage_dir"; then
+    echo "could not reserve model comparison output for timestamp $timestamp" >&2
+    exit 1
+fi
+stage_dir="$reserved_stage_dir"
+report="$stage_dir/report.md"
+tsv="$stage_dir/results.tsv"
+raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
 printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\n' >"$tsv"
@@ -458,7 +559,7 @@ for clip in "${clips[@]}"; do
         echo "benchmarking clip $clip_id backend=$backend..."
         if ! "${bench_args[@]}" >"$log_file" 2>&1; then
             cat "$log_file" >&2
-            echo "benchmark failed for clip $clip_id backend=$backend; see $log_file" >&2
+            echo "benchmark failed for clip $clip_id backend=$backend" >&2
             exit 1
         fi
 
@@ -467,7 +568,8 @@ for clip in "${clips[@]}"; do
         p50="$(extract_p50_ms "$log_file")"
         [[ -n "$p50" ]] || p50="unknown"
         if ! validate_metrics max-WER "$wer" final-word-retained "$retained" p50 "$p50"; then
-            echo "invalid benchmark output for clip $clip_id backend=$backend; see $(path_label "$log_file")" >&2
+            cat "$log_file" >&2
+            echo "invalid benchmark output for clip $clip_id backend=$backend" >&2
             exit 1
         fi
         trailing="na"
@@ -491,9 +593,19 @@ done
     backend_summary_row "$tsv" "v3"
     backend_summary_row "$tsv" "unified"
     echo
-    echo "$(raw_logs_label): $(path_label "$raw_dir")"
-    echo "Machine-readable TSV: $(path_label "$tsv")"
+    echo "$(raw_logs_label): $(path_label "$final_raw_dir")"
+    echo "Machine-readable TSV: $(path_label "$final_tsv")"
 } >>"$report"
 
-echo "report: $report"
-echo "tsv: $tsv"
+publish_report_artifacts \
+    "$stage_dir" \
+    "$report" \
+    "$tsv" \
+    "$raw_dir" \
+    "$final_report" \
+    "$final_tsv" \
+    "$final_raw_dir"
+stage_dir=""
+
+echo "report: $final_report"
+echo "tsv: $final_tsv"
