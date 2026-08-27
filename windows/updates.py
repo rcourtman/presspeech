@@ -394,14 +394,18 @@ def verify_installer(update, installer_path):
 
 
 def download_update(update, destination=None, progress=None,
-                    opener=None, timeout=30):
+                    opener=None, timeout=30, cancelled=None):
     """Download an installer atomically and verify its published SHA-256."""
+    if cancelled is not None and cancelled():
+        raise UpdateError("installer download was cancelled")
     url = _checked_download_url(update["installer_url"])
     _checked_download_url(update["checksum_url"])
     destination = destination or tempfile.gettempdir()
     os.makedirs(destination, exist_ok=True)
     final_path = os.path.join(destination, update["installer_name"])
     checksum = _read_checksum(update, opener, timeout)
+    if cancelled is not None and cancelled():
+        raise UpdateError("installer download was cancelled")
     api_digest = update.get("installer_digest", "").lower()
     if api_digest and api_digest != checksum:
         raise UpdateError("GitHub asset digest and checksum file disagree")
@@ -426,6 +430,8 @@ def download_update(update, destination=None, progress=None,
             partial_fd = None
             with output:
                 while True:
+                    if cancelled is not None and cancelled():
+                        raise UpdateError("installer download was cancelled")
                     # The release API's size is part of the verified asset
                     # metadata. Read one sentinel byte beyond it so a broken or
                     # hostile response cannot fill the temp drive before the size
@@ -436,6 +442,8 @@ def download_update(update, destination=None, progress=None,
                     block = response.read(read_size)
                     if not block:
                         break
+                    if cancelled is not None and cancelled():
+                        raise UpdateError("installer download was cancelled")
                     downloaded += len(block)
                     if expected_size and downloaded > expected_size:
                         raise UpdateError(
@@ -448,6 +456,8 @@ def download_update(update, destination=None, progress=None,
             raise UpdateError("installer download size did not match the release")
         if digest.hexdigest().lower() != checksum:
             raise UpdateError("installer SHA-256 verification failed")
+        if cancelled is not None and cancelled():
+            raise UpdateError("installer download was cancelled")
         os.replace(partial_path, final_path)
         return final_path
     except Exception as exc:

@@ -311,6 +311,26 @@ class DownloadTests(unittest.TestCase):
             self.assertEqual(installer_response.bytes_read, 5)
             self.assertEqual(os.listdir(directory), [])
 
+    def test_cancelled_download_stops_after_the_current_read(self):
+        payload = b"x" * (2 * 1024 * 1024)
+        update, digest = self.make_update(payload)
+        installer_response = CountingResponse(payload)
+
+        def opener(request, timeout):
+            if request.full_url.endswith("checksum"):
+                text = "%s  %s\n" % (digest, update["installer_name"])
+                return Response(text.encode("ascii"))
+            return installer_response
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "download was cancelled"):
+                updates.download_update(
+                    update, directory, opener=opener,
+                    cancelled=lambda: installer_response.bytes_read > 0)
+            self.assertEqual(installer_response.bytes_read, 1024 * 1024)
+            self.assertEqual(os.listdir(directory), [])
+
     def test_unexpected_download_host_is_rejected(self):
         update, _digest = self.make_update(b"safe")
         update["installer_url"] = "https://example.com/installer.exe"

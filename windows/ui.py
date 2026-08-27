@@ -273,6 +273,7 @@ class UpdateWindow:
         self.update = update
         self.root = None
         self.events = queue.Queue()
+        self.cancel_download = threading.Event()
         threading.Thread(target=self._build, daemon=True).start()
 
     def _build(self):
@@ -307,6 +308,7 @@ class UpdateWindow:
         self.app.update_window = None
 
     def _download(self):
+        self.cancel_download.clear()
         self.download_button.config(state="disabled")
         self.status.config(text="Downloading…")
         threading.Thread(target=self._download_worker, daemon=True).start()
@@ -316,7 +318,8 @@ class UpdateWindow:
             destination = os.path.join(tempfile.gettempdir(), "Presspeech")
             path = updates.download_update(
                 self.update, destination,
-                lambda done, total: self.events.put(("progress", done, total)))
+                lambda done, total: self.events.put(("progress", done, total)),
+                cancelled=self.cancel_download.is_set)
             self.events.put(("ready", path))
         except Exception as exc:
             self.events.put(("error", str(exc)))
@@ -361,6 +364,7 @@ class UpdateWindow:
         self.root.after(100, self._poll)
 
     def _close(self):
+        self.cancel_download.set()
         try:
             self.root.destroy()
         except Exception:

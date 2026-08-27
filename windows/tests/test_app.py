@@ -26,6 +26,38 @@ HOST_APIS = [
 ]
 
 
+class UpdateWindowTests(unittest.TestCase):
+    def make_window(self):
+        window = app.ui.UpdateWindow.__new__(app.ui.UpdateWindow)
+        window.app = mock.Mock()
+        window.update = {"version": "0.1.1"}
+        window.root = mock.Mock()
+        window.events = app.ui.queue.Queue()
+        window.cancel_download = app.threading.Event()
+        return window
+
+    def test_closing_window_cancels_an_active_download(self):
+        window = self.make_window()
+
+        window._close()
+
+        self.assertTrue(window.cancel_download.is_set())
+        window.root.destroy.assert_called_once_with()
+
+    def test_download_worker_forwards_window_cancellation(self):
+        window = self.make_window()
+        with mock.patch.object(
+                app.ui.updates, "download_update",
+                return_value=r"C:\Temp\Presspeech\installer.exe") as download:
+            window._download_worker()
+
+        cancelled = download.call_args.kwargs["cancelled"]
+        self.assertFalse(cancelled())
+        self.assertEqual(
+            window.events.get_nowait(),
+            ("ready", r"C:\Temp\Presspeech\installer.exe"))
+
+
 class InputSelectionTests(unittest.TestCase):
     def make_app(self, selected="auto"):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
