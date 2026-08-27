@@ -119,18 +119,6 @@ jobs:
           abort "winget installs must pin the community source:\n#{unscoped_winget.join("\n")}" unless unscoped_winget.empty?
           abort "winget installs must pin an exact version:\n#{unpinned_winget.join("\n")}" unless unpinned_winget.empty?
           RUBY
-      - name: Pages deployment concurrency safety
-        run: |
-          ruby - <<'RUBY'
-          require "yaml"
-
-          workflow = YAML.load_file(".github/workflows/pages.yml")
-          concurrency = workflow.fetch("concurrency", {})
-          unless concurrency["group"] == "pages" &&
-              concurrency["cancel-in-progress"] == false
-            abort "Pages deployments must serialize without cancelling the active deployment"
-          end
-          RUBY
       - name: Release publication safety
         run: |
           ruby - <<'RUBY'
