@@ -5,7 +5,7 @@ import os
 import threading
 
 APP_NAME = "Presspeech"
-VERSION = "0.1.7"
+VERSION = "0.1.8"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 
