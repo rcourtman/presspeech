@@ -6,6 +6,7 @@ param(
     [string]$ExpectedSha = "",
     [string]$Installer = "",
     [string]$Checksum = "",
+    [string]$Notes = "",
     [switch]$SelfTest
 )
 
@@ -17,7 +18,8 @@ function Get-PresspeechReleaseDisposition(
     [string]$ReleaseVersion,
     [string]$ApprovedSha,
     [string]$InstallerPath,
-    [string]$ChecksumPath
+    [string]$ChecksumPath,
+    [string]$NotesPath
 ) {
     if ($ReleaseVersion -notmatch `
             '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or
@@ -40,7 +42,8 @@ function Get-PresspeechReleaseDisposition(
         throw "GitHub returned invalid release metadata"
     }
     foreach ($property in @(
-        "tag_name", "name", "target_commitish", "draft", "prerelease", "assets"
+        "tag_name", "name", "target_commitish", "draft", "prerelease", "assets",
+        "body"
     )) {
         if ($property -notin $release.PSObject.Properties.Name) {
             throw "GitHub returned incomplete release metadata"
@@ -59,6 +62,22 @@ function Get-PresspeechReleaseDisposition(
     }
     if (-not $release.prerelease) {
         throw "Existing $ReleaseTag release is not a Windows prerelease"
+    }
+
+    $notesFile = Get-Item -LiteralPath $NotesPath
+    if ($notesFile.Name -cne "$ReleaseVersion.md") {
+        throw "Local release notes do not have the expected versioned name"
+    }
+    if ($release.body -isnot [string]) {
+        throw "GitHub returned invalid release notes metadata"
+    }
+    # GitHub's REST API returns Markdown bodies with CRLF even when the
+    # committed notes use LF. Compare content after line-ending normalization.
+    $expectedBody = [IO.File]::ReadAllText($notesFile.FullName)
+    $expectedBody = $expectedBody.Replace("`r`n", "`n").Replace("`r", "`n")
+    $actualBody = $release.body.Replace("`r`n", "`n").Replace("`r", "`n")
+    if ($actualBody -cne $expectedBody) {
+        throw "Existing $ReleaseTag release notes do not match the approved file"
     }
     if (-not $release.draft) {
         return "verify-published"
@@ -162,6 +181,7 @@ if ($SelfTest) {
         $installerName = "Presspeech-Setup-$version-x64.exe"
         $installerPath = Join-Path $selfTestRoot $installerName
         $checksumPath = "$installerPath.sha256"
+        $notesPath = Join-Path $selfTestRoot "$version.md"
         [IO.File]::WriteAllBytes($installerPath, [byte[]](1, 2, 3, 4))
         $installerDigest = (
             Get-FileHash -LiteralPath $installerPath -Algorithm SHA256
@@ -169,6 +189,10 @@ if ($SelfTest) {
         [IO.File]::WriteAllText(
             $checksumPath,
             "$installerDigest  $installerName`n",
+            [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText(
+            $notesPath,
+            "Approved notes.`n`nExact release details.`n",
             [Text.UTF8Encoding]::new($false))
         $checksumDigest = (
             Get-FileHash -LiteralPath $checksumPath -Algorithm SHA256
@@ -198,29 +222,32 @@ if ($SelfTest) {
             draft = $true
             prerelease = $true
             assets = @()
+            body = "Approved notes.`r`n`r`nExact release details.`r`n"
         }
         $emptyDraftJson = $release | ConvertTo-Json -Depth 4 -Compress
         if ((Get-PresspeechReleaseDisposition `
-                "" $tag $version $approved $installerPath $checksumPath) -cne
+                "" $tag $version $approved $installerPath $checksumPath `
+                $notesPath) -cne
                 "create") {
             throw "missing release-state self-test returned the wrong disposition"
         }
         if ((Get-PresspeechReleaseDisposition `
                 $emptyDraftJson $tag $version $approved `
-                $installerPath $checksumPath) -cne "upload-both") {
+                $installerPath $checksumPath $notesPath) -cne "upload-both") {
             throw "empty draft self-test returned the wrong disposition"
         }
         $release.assets = @($installerAsset)
         $installerDraftJson = $release | ConvertTo-Json -Depth 4 -Compress
         if ((Get-PresspeechReleaseDisposition `
                 $installerDraftJson $tag $version $approved `
-                $installerPath $checksumPath) -cne "upload-checksum") {
+                $installerPath $checksumPath $notesPath) -cne "upload-checksum") {
             throw "installer draft self-test returned the wrong disposition"
         }
         $release.assets = @($checksumAsset)
         if ((Get-PresspeechReleaseDisposition `
                 ($release | ConvertTo-Json -Depth 4 -Compress) `
-                $tag $version $approved $installerPath $checksumPath) -cne
+                $tag $version $approved $installerPath $checksumPath `
+                $notesPath) -cne
                 "upload-installer") {
             throw "checksum draft self-test returned the wrong disposition"
         }
@@ -228,13 +255,14 @@ if ($SelfTest) {
         $completeDraftJson = $release | ConvertTo-Json -Depth 4 -Compress
         if ((Get-PresspeechReleaseDisposition `
                 $completeDraftJson $tag $version $approved `
-                $installerPath $checksumPath) -cne "publish-draft") {
+                $installerPath $checksumPath $notesPath) -cne "publish-draft") {
             throw "complete draft self-test returned the wrong disposition"
         }
         $release.draft = $false
         if ((Get-PresspeechReleaseDisposition `
                 ($release | ConvertTo-Json -Depth 4 -Compress) `
-                $tag $version $approved $installerPath $checksumPath) -cne
+                $tag $version $approved $installerPath $checksumPath `
+                $notesPath) -cne
                 "verify-published") {
             throw "published release self-test returned the wrong disposition"
         }
@@ -251,7 +279,8 @@ if ($SelfTest) {
             Assert-PresspeechRejected {
                 Get-PresspeechReleaseDisposition `
                     ($invalid | ConvertTo-Json -Depth 4 -Compress) `
-                    $tag $version $approved $installerPath $checksumPath
+                    $tag $version $approved $installerPath $checksumPath `
+                    $notesPath
             } $testCase.Message
         }
 
@@ -260,26 +289,35 @@ if ($SelfTest) {
         Assert-PresspeechRejected {
             Get-PresspeechReleaseDisposition `
                 ($invalidAsset | ConvertTo-Json -Depth 4 -Compress) `
-                $tag $version $approved $installerPath $checksumPath
+                $tag $version $approved $installerPath $checksumPath $notesPath
         } "*does not match the locally verified draft asset"
         $unexpectedAsset = $completeDraftJson | ConvertFrom-Json
         $unexpectedAsset.assets[0].name = "unexpected.exe"
         Assert-PresspeechRejected {
             Get-PresspeechReleaseDisposition `
                 ($unexpectedAsset | ConvertTo-Json -Depth 4 -Compress) `
-                $tag $version $approved $installerPath $checksumPath
+                $tag $version $approved $installerPath $checksumPath $notesPath
         } "*contains unexpected draft asset*"
+
+        $alteredNotes = $completeDraftJson | ConvertFrom-Json
+        $alteredNotes.body = "Different release notes.`r`n"
+        Assert-PresspeechRejected {
+            Get-PresspeechReleaseDisposition `
+                ($alteredNotes | ConvertTo-Json -Depth 4 -Compress) `
+                $tag $version $approved $installerPath $checksumPath $notesPath
+        } "Existing * release notes do not match the approved file"
 
         $incomplete = $emptyDraftJson | ConvertFrom-Json
         $incomplete.PSObject.Properties.Remove("name")
         Assert-PresspeechRejected {
             Get-PresspeechReleaseDisposition `
                 ($incomplete | ConvertTo-Json -Depth 4 -Compress) `
-                $tag $version $approved $installerPath $checksumPath
+                $tag $version $approved $installerPath $checksumPath $notesPath
         } "GitHub returned incomplete release metadata"
         Assert-PresspeechRejected {
             Get-PresspeechReleaseDisposition `
-                "not-json" $tag $version $approved $installerPath $checksumPath
+                "not-json" $tag $version $approved $installerPath $checksumPath `
+                $notesPath
         } "GitHub returned invalid release metadata"
     } finally {
         Remove-Item -LiteralPath $selfTestRoot -Recurse -Force
@@ -289,4 +327,4 @@ if ($SelfTest) {
 }
 
 Get-PresspeechReleaseDisposition `
-    $ReleaseJson $Tag $Version $ExpectedSha $Installer $Checksum
+    $ReleaseJson $Tag $Version $ExpectedSha $Installer $Checksum $Notes

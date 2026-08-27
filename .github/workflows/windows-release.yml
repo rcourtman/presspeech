@@ -165,7 +165,8 @@ jobs:
             -Version $version `
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
             -Installer $installer `
-            -Checksum "$installer.sha256"
+            -Checksum "$installer.sha256" `
+            -Notes $notes
           if ($disposition -ceq "create") {
             # Supplying both assets to `gh release create` makes the CLI stage
             # a draft, upload the complete pair, and publish only after both
@@ -192,7 +193,8 @@ jobs:
                 -Version $version `
                 -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
                 -Installer $installer `
-                -Checksum "$installer.sha256"
+                -Checksum "$installer.sha256" `
+                -Notes $notes
             } else {
               $disposition = "verify-published"
             }
@@ -226,7 +228,8 @@ jobs:
               -Version $version `
               -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
               -Installer $installer `
-              -Checksum "$installer.sha256"
+              -Checksum "$installer.sha256" `
+              -Notes $notes
             if ($disposition -ceq "publish-draft") {
               gh release edit $tag --draft=false --prerelease
               if ($LASTEXITCODE -ne 0) {
@@ -261,7 +264,8 @@ jobs:
             -Version $version `
             -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
             -Installer $installer `
-            -Checksum "$installer.sha256"
+            -Checksum "$installer.sha256" `
+            -Notes $notes
           if ($publishedDisposition -cne "verify-published") {
             throw "Windows release did not reach the published state"
           }
