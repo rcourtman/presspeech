@@ -116,6 +116,52 @@ backend_is_aggregate() {
     [[ "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
 }
 
+expected_backend_count() {
+    case "$1" in
+        fluid) printf '5' ;;
+        both) printf '6' ;;
+        *) printf '1' ;;
+    esac
+}
+
+validate_benchmark_output() {
+    local log_file="$1"
+    local expected_backends="$2"
+    local require_reference="$3"
+    awk -v expected="$expected_backends" -v require_ref="$require_reference" '
+        function inspect_result(line) {
+            results += 1
+            if (require_ref == 1 &&
+                (line !~ /\[WER [0-9]+([.][0-9]+)?%\]/ ||
+                 line !~ /\[final-word retained=(true|false)([[:space:]]|\])/ ||
+                 line !~ /\[word-errors=[0-9]+ reference-words=[0-9]+\]/)) {
+                incomplete_results += 1
+            }
+        }
+        /^    latency:[[:space:]]+p50=[[:space:]]*[0-9]+([.][0-9]+)? ms/ {
+            latencies += 1
+        }
+        /^    transcript:/ {
+            groups += 1
+            inspect_result($0)
+        }
+        /^    transcripts \([0-9]+ distinct\):/ {
+            groups += 1
+        }
+        /^      [^[:space:]]/ {
+            inspect_result($0)
+        }
+        END {
+            if (latencies != expected || groups != expected ||
+                results < groups || incomplete_results > 0) {
+                printf("benchmark output missing required metrics: expected-backends=%d latency-groups=%d transcript-groups=%d transcript-results=%d incomplete-reference-results=%d\n",
+                       expected, latencies, groups, results, incomplete_results) > "/dev/stderr"
+                exit 1
+            }
+        }
+    ' "$log_file"
+}
+
 single_backend_summary_row() {
     local report="$1"
     awk -v backend="$BACKEND" '
@@ -346,12 +392,12 @@ run_self_test() {
 
     local summary_source="$tmpdir/summary-source.md"
     {
-        echo 'latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms'
-        echo 'transcripts (2 distinct):'
-        echo '  • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] <redacted 3 chars>'
-        echo '  • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] "literal [WER 99.0%]"'
-        echo 'latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms'
-        echo 'transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] <redacted 3 chars>'
+        echo '    latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms'
+        echo '    transcripts (2 distinct):'
+        echo '      • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] [word-errors=0 reference-words=1] <redacted 3 chars>'
+        echo '      • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] [word-errors=1 reference-words=25] "literal [WER 99.0%]"'
+        echo '    latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms'
+        echo '    transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] [word-errors=1 reference-words=10] <redacted 3 chars>'
     } >"$summary_source"
     BACKEND="v3"
     # shellcheck disable=SC2016 # Markdown backticks are intentional literals.
@@ -360,6 +406,29 @@ run_self_test() {
     append_single_backend_summary "$summary_source"
     assert_contains "$summary_source" "## Summary"
     assert_contains "$summary_source" "$expected_summary"
+    validate_benchmark_output "$summary_source" 2 1
+    assert_eq "$(expected_backend_count v3)" "1" "single backend count"
+    assert_eq "$(expected_backend_count fluid)" "5" "fluid backend count"
+    assert_eq "$(expected_backend_count both)" "6" "all backend count"
+
+    local no_reference_source="$tmpdir/no-reference-source.log"
+    {
+        echo '    latency:  p50=  80.0 ms  min=  79.0 ms  max=  81.0 ms'
+        echo '    transcript: <redacted 3 chars>'
+    } >"$no_reference_source"
+    validate_benchmark_output "$no_reference_source" 1 0
+
+    local incomplete_source="$tmpdir/incomplete-source.log"
+    {
+        echo '    latency:  p50=  80.0 ms  min=  79.0 ms  max=  81.0 ms'
+        echo '    transcript: [WER 0.0%] <redacted 3 chars>'
+    } >"$incomplete_source"
+    local validation_log="$tmpdir/validation.log"
+    if validate_benchmark_output "$incomplete_source" 1 1 >"$validation_log" 2>&1; then
+        echo "self-test expected incomplete benchmark metrics to fail validation" >&2
+        exit 1
+    fi
+    assert_contains "$validation_log" "benchmark output missing required metrics:"
 
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
@@ -525,6 +594,7 @@ swift build -c release >/dev/null
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_backend="$(printf '%s' "$BACKEND" | tr -c '[:alnum:]_.-' '-')"
 report="$OUTDIR/$timestamp-$safe_backend.md"
+backend_count="$(expected_backend_count "$BACKEND")"
 
 write_report_header "$report" "$timestamp" "${#clips[@]}"
 
@@ -560,13 +630,30 @@ for clip in "${clips[@]}"; do
     write_clip_section_header "$report" "$clip_number" "$clip_id" "$stem" "$clip" "$ref"
 
     echo "benchmarking clip $clip_number..."
-    if ! "${bench_args[@]}" >>"$report" 2>&1; then
+    log_file="$tmpdir/$clip_id.log"
+    if ! "${bench_args[@]}" >"$log_file" 2>&1; then
+        cat "$log_file" >>"$report"
         {
             echo '```'
             echo
             echo "Benchmark failed for clip $clip_number."
         } >>"$report"
         echo "benchmark failed for clip $clip_number; see $report" >&2
+        exit 1
+    fi
+    cat "$log_file" >>"$report"
+
+    require_reference=0
+    if [[ -f "$ref" ]]; then
+        require_reference=1
+    fi
+    if ! validate_benchmark_output "$log_file" "$backend_count" "$require_reference"; then
+        {
+            echo '```'
+            echo
+            echo "Benchmark output was incomplete for clip $clip_number."
+        } >>"$report"
+        echo "invalid benchmark output for clip $clip_number; see $report" >&2
         exit 1
     fi
 
