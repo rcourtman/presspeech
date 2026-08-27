@@ -114,10 +114,22 @@ extract_critical_metrics() {
     sed -nE 's/.*critical-terms matched=([0-9]+) total=([0-9]+) recall=([0-9.]+)% unexpected=([0-9]+).*/\1\t\2\t\3\t\4/p' "$log_file" \
         | awk -F '\t' '
             {
-                if (!seen || $3 < lowest_recall) {
+                matched_ratio = $1
+                total_ratio = $2
+                # Match CriticalTermScore.recallPercent when the reference
+                # contains no critical terms. Compare the exact fraction:
+                # printed recall is rounded to one decimal and distinct trial
+                # outcomes can otherwise tie at the display boundary.
+                if (total_ratio == 0) {
+                    matched_ratio = 1
+                    total_ratio = 1
+                }
+                if (!seen || matched_ratio * lowest_total_ratio < lowest_matched_ratio * total_ratio) {
                     matched = $1
                     total = $2
                     lowest_recall = $3
+                    lowest_matched_ratio = matched_ratio
+                    lowest_total_ratio = total_ratio
                 }
                 if (!seen || $4 > highest_unexpected) highest_unexpected = $4
                 seen = 1
@@ -320,6 +332,13 @@ run_self_test() {
     } >"$variable_log"
     assert_eq "$(extract_critical_metrics "$variable_log")" $'1\t2\t50.0\t3' "variable-output critical-term envelope"
     assert_eq "$(extract_worst_wer_metrics "$variable_log")" $'20.0\t2\t10' "variable-output worst WER"
+
+    local rounded_recall_log="$tmpdir/rounded-recall.log"
+    {
+        echo '      • [critical-terms matched=1998 total=2000 recall=99.9% unexpected=0] <redacted 20 chars>'
+        echo '      • [critical-terms matched=1997 total=2000 recall=99.9% unexpected=1] <redacted 22 chars>'
+    } >"$rounded_recall_log"
+    assert_eq "$(extract_critical_metrics "$rounded_recall_log")" $'1997\t2000\t99.9\t1' "rounded recall exact worst-trial selection"
 
     local rounded_wer_log="$tmpdir/rounded-wer.log"
     {
