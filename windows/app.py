@@ -472,10 +472,8 @@ class PresspeechApp:
             self.listener.stop()
         if self.update_window is not None:
             # os._exit() skips normal thread finalization, so explicitly
-            # cancel an active transfer and discard any verified installer
-            # still owned by the update window.
-            self.update_window.cancel_download.set()
-            self.update_window._discard_completed_download()
+            # hand updater cleanup off before terminating daemon threads.
+            self.update_window.cancel_and_cleanup()
         for win in (self.scratchpad, self.settings_window,
                     self.setup_window, self.update_window):
             if win is not None and win.root is not None:

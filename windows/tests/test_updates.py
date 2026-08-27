@@ -211,14 +211,20 @@ class DownloadTests(unittest.TestCase):
             return Response(payload)
 
         progress = []
+        staging = []
         with tempfile.TemporaryDirectory() as directory:
             path = updates.download_update(
                 update, directory, lambda done, total: progress.append((done, total)),
-                opener=opener)
+                opener=opener,
+                staging=lambda partial: staging.append(
+                    (partial, os.path.exists(partial))))
             with open(path, "rb") as handle:
                 self.assertEqual(handle.read(), payload)
             self.assertFalse(os.path.exists(path + ".part"))
         self.assertEqual(progress[-1], (len(payload), len(payload)))
+        self.assertEqual(len(staging), 1)
+        self.assertTrue(staging[0][1])
+        self.assertTrue(staging[0][0].endswith(".part"))
 
     def test_download_does_not_open_the_predictable_legacy_partial_path(self):
         payload = b"safe installer"
@@ -334,6 +340,33 @@ class DownloadTests(unittest.TestCase):
             self.assertEqual(installer_response.bytes_read, 1024 * 1024)
             self.assertEqual(os.listdir(directory), [])
 
+    def test_cancelled_download_does_not_create_a_staging_file(self):
+        payload = b"safe installer"
+        update, digest = self.make_update(payload)
+        cancelled = {"value": False}
+
+        class CancellingResponse(Response):
+            def geturl(self):
+                cancelled["value"] = True
+                return super().geturl()
+
+        def opener(request, timeout):
+            if request.full_url.endswith("checksum"):
+                text = "%s  %s\n" % (digest, update["installer_name"])
+                return Response(text.encode("ascii"))
+            return CancellingResponse(payload)
+
+        staged = []
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "download was cancelled"):
+                updates.download_update(
+                    update, directory, opener=opener,
+                    cancelled=lambda: cancelled["value"],
+                    staging=staged.append)
+            self.assertEqual(staged, [])
+            self.assertEqual(os.listdir(directory), [])
+
     def test_unexpected_download_host_is_rejected(self):
         update, _digest = self.make_update(b"safe")
         update["installer_url"] = "https://example.com/installer.exe"
@@ -414,6 +447,65 @@ class DownloadTests(unittest.TestCase):
                     updates.UpdateError, "unexpected installer directory"):
                 updates.schedule_installer_cleanup(
                     outside, launcher=launched)
+
+    def test_abandoned_download_cleanup_targets_only_its_exact_paths(self):
+        launched = mock.Mock()
+        with tempfile.TemporaryDirectory(
+                prefix="Presspeech user's ") as temp_root, \
+                mock.patch.object(updates.tempfile, "gettempdir",
+                                  return_value=temp_root):
+            directory = tempfile.mkdtemp(
+                prefix=updates.UPDATE_DIRECTORY_PREFIX, dir=temp_root)
+            partial = os.path.join(
+                directory,
+                "Presspeech-Setup-1.2.3-x64.exe.random123.part")
+
+            updates.schedule_abandoned_download_cleanup(
+                partial, launcher=launched)
+
+            command = launched.call_args.args[0]
+            script = base64.b64decode(
+                command[-1]).decode("utf-16le")
+            self.assertIn("Presspeech user''s ", script)
+            self.assertIn("$partial = ", script)
+            self.assertIn("$installer = ", script)
+            self.assertIn("random123.part", script)
+            self.assertNotIn("-Recurse", script)
+            self.assertTrue(launched.call_args.kwargs["close_fds"])
+
+            unexpected = os.path.join(directory, "unrelated.part")
+            with self.assertRaisesRegex(
+                    updates.UpdateError, "unexpected download path"):
+                updates.schedule_abandoned_download_cleanup(
+                    unexpected, launcher=launched)
+
+    @unittest.skipUnless(os.name == "nt", "Windows cleanup helper")
+    def test_abandoned_download_cleanup_removes_partial_and_directory(self):
+        directory = tempfile.mkdtemp(prefix=updates.UPDATE_DIRECTORY_PREFIX)
+        partial = os.path.join(
+            directory,
+            "Presspeech-Setup-1.2.3-x64.exe.random123.part")
+        try:
+            with open(partial, "wb") as handle:
+                handle.write(b"partial installer")
+
+            helper = updates.schedule_abandoned_download_cleanup(partial)
+            helper.wait(timeout=15)
+            deadline = time.time() + 2
+            while os.path.exists(directory) and time.time() < deadline:
+                time.sleep(0.05)
+
+            self.assertFalse(os.path.exists(partial))
+            self.assertFalse(os.path.exists(directory))
+        finally:
+            try:
+                os.remove(partial)
+            except OSError:
+                pass
+            try:
+                os.rmdir(directory)
+            except OSError:
+                pass
 
     @unittest.skipUnless(os.name == "nt", "Windows cleanup helper")
     def test_cleanup_helper_removes_released_installer_and_directory(self):

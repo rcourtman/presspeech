@@ -276,6 +276,10 @@ class UpdateWindow:
         self.cancel_download = threading.Event()
         self.download_lock = threading.Lock()
         self.downloaded_installer = None
+        self.active_download_directory = None
+        self.active_staging_path = None
+        self.download_finished = threading.Event()
+        self.download_finished.set()
         threading.Thread(target=self._build, daemon=True).start()
 
     def _build(self):
@@ -312,6 +316,7 @@ class UpdateWindow:
     def _download(self):
         self._discard_completed_download()
         self.cancel_download.clear()
+        self.download_finished.clear()
         self.download_button.config(state="disabled")
         self.status.config(text="Downloading…")
         threading.Thread(target=self._download_worker, daemon=True).start()
@@ -324,10 +329,18 @@ class UpdateWindow:
             # never remove a newer window's installer with the same asset name.
             destination = tempfile.mkdtemp(
                 prefix=updates.UPDATE_DIRECTORY_PREFIX)
+            with self.download_lock:
+                self.active_download_directory = destination
+
+            def remember_staging(staging_path):
+                with self.download_lock:
+                    self.active_staging_path = staging_path
+
             path = updates.download_update(
                 self.update, destination,
                 lambda done, total: self.events.put(("progress", done, total)),
-                cancelled=self.cancel_download.is_set)
+                cancelled=self.cancel_download.is_set,
+                staging=remember_staging)
             # Closing can race with the final cancellation check inside the
             # downloader. Transfer ownership under a lock so either the open
             # window receives the verified path or the closing window removes
@@ -351,6 +364,11 @@ class UpdateWindow:
                 except OSError:
                     pass
             self.events.put(("error", str(exc)))
+        finally:
+            with self.download_lock:
+                self.active_download_directory = None
+                self.active_staging_path = None
+            self.download_finished.set()
 
     @staticmethod
     def _remove_downloaded_installer(path):
@@ -369,6 +387,29 @@ class UpdateWindow:
             self.downloaded_installer = None
         if path is not None:
             self._remove_downloaded_installer(path)
+
+    def cancel_and_cleanup(self):
+        """Cancel updater work and hand off cleanup if it stays blocked."""
+        self.cancel_download.set()
+        self._discard_completed_download()
+        if self.download_finished.wait(timeout=1.0):
+            return
+        with self.download_lock:
+            destination = self.active_download_directory
+            staging_path = self.active_staging_path
+        if staging_path is not None:
+            try:
+                updates.schedule_abandoned_download_cleanup(staging_path)
+            except Exception as exc:
+                self.app._log(
+                    "could not schedule interrupted update cleanup: %s" % exc)
+        elif destination is not None:
+            # Before the random staging file is created the private directory
+            # is empty, so it can be removed synchronously without recursion.
+            try:
+                os.rmdir(destination)
+            except OSError:
+                pass
 
     def _poll(self):
         if self.root is None:
@@ -415,8 +456,7 @@ class UpdateWindow:
         self.root.after(100, self._poll)
 
     def _close(self):
-        self.cancel_download.set()
-        self._discard_completed_download()
+        self.cancel_and_cleanup()
         try:
             self.root.destroy()
         except Exception:

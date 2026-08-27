@@ -36,6 +36,10 @@ class UpdateWindowTests(unittest.TestCase):
         window.cancel_download = app.threading.Event()
         window.download_lock = app.threading.Lock()
         window.downloaded_installer = None
+        window.active_download_directory = None
+        window.active_staging_path = None
+        window.download_finished = app.threading.Event()
+        window.download_finished.set()
         window.status = mock.Mock()
         window.progress = mock.MagicMock()
         window.progress.__getitem__.return_value = 100
@@ -143,6 +147,32 @@ class UpdateWindowTests(unittest.TestCase):
         window.download_button.config.assert_called_with(state="normal")
         showerror.assert_called_once_with(
             "Update failed", "launch failed", parent=window.root)
+
+    def test_hard_exit_hands_a_stalled_partial_download_to_cleanup(self):
+        window = self.make_window()
+        directory = app.ui.tempfile.mkdtemp(
+            prefix=app.ui.updates.UPDATE_DIRECTORY_PREFIX)
+        partial = app.os.path.join(
+            directory,
+            "Presspeech-Setup-1.2.3-x64.exe.random123.part")
+        with open(partial, "wb") as handle:
+            handle.write(b"partial installer")
+        window.active_download_directory = directory
+        window.active_staging_path = partial
+        window.download_finished.clear()
+
+        with mock.patch.object(
+                window.download_finished, "wait", return_value=False) as wait, \
+                mock.patch.object(
+                    app.ui.updates,
+                    "schedule_abandoned_download_cleanup") as cleanup:
+            window.cancel_and_cleanup()
+
+        self.assertTrue(window.cancel_download.is_set())
+        wait.assert_called_once_with(timeout=1.0)
+        cleanup.assert_called_once_with(partial)
+        app.os.remove(partial)
+        app.os.rmdir(directory)
 
 
 class InputSelectionTests(unittest.TestCase):
@@ -412,8 +442,7 @@ class TextRegressionTests(unittest.TestCase):
         with mock.patch.object(app.os, "_exit") as hard_exit:
             instance.exit_app()
 
-        instance.update_window.cancel_download.set.assert_called_once_with()
-        instance.update_window._discard_completed_download.assert_called_once_with()
+        instance.update_window.cancel_and_cleanup.assert_called_once_with()
         hard_exit.assert_called_once_with(0)
 
     def test_failed_launch_revalidation_never_runs_installer(self):

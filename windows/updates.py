@@ -26,6 +26,9 @@ PLAIN_VERSION_RE = re.compile(
 INSTALLER_NAME_RE = re.compile(
     r"^Presspeech-Setup-%s\.%s\.%s-x64\.exe$" %
     ((VERSION_COMPONENT_RE,) * 3))
+PARTIAL_INSTALLER_NAME_RE = re.compile(
+    r"^(Presspeech-Setup-%s\.%s\.%s-x64\.exe)\."
+    r"[A-Za-z0-9_-]{1,64}\.part$" % ((VERSION_COMPONENT_RE,) * 3))
 CHECKSUM_RE = re.compile(r"^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$")
 ALLOWED_DOWNLOAD_HOSTS = {
     "github.com",
@@ -445,8 +448,61 @@ def schedule_installer_cleanup(installer_path, launcher=None):
     )
 
 
+def schedule_abandoned_download_cleanup(partial_path, launcher=None):
+    """Remove one interrupted in-app download after Presspeech hard-exits."""
+    partial_path = os.path.abspath(partial_path)
+    directory = os.path.dirname(partial_path)
+    temp_root = os.path.abspath(tempfile.gettempdir())
+    partial_name = os.path.basename(partial_path)
+    match = PARTIAL_INSTALLER_NAME_RE.fullmatch(partial_name)
+    if (os.path.normcase(os.path.dirname(directory)) !=
+            os.path.normcase(temp_root) or
+            not os.path.basename(directory).startswith(
+                UPDATE_DIRECTORY_PREFIX) or
+            match is None):
+        raise UpdateError("refusing to clean an unexpected download path")
+    installer_path = os.path.join(directory, match.group(1))
+
+    # The worker normally removes its random staging file in its exception
+    # path. Presspeech must nevertheless use os._exit() because CUDA runtime
+    # threads do not finalize reliably. If a network read has not returned by
+    # then, a detached helper retries the two exact paths the worker can own:
+    # its random partial and the verified final name it may race to create.
+    quoted_partial = partial_path.replace("'", "''")
+    quoted_installer = installer_path.replace("'", "''")
+    script = (
+        "$partial = '%s'; $installer = '%s'; "
+        "$directory = [IO.Path]::GetDirectoryName($partial); "
+        "for ($attempt = 0; $attempt -lt 120; $attempt++) { "
+        "Remove-Item -LiteralPath $partial -Force "
+        "-ErrorAction SilentlyContinue; "
+        "Remove-Item -LiteralPath $installer -Force "
+        "-ErrorAction SilentlyContinue; "
+        "if ((-not (Test-Path -LiteralPath $partial)) -and "
+        "(-not (Test-Path -LiteralPath $installer))) { "
+        "Remove-Item -LiteralPath $directory -Force "
+        "-ErrorAction SilentlyContinue; break }; "
+        "Start-Sleep -Seconds 1 }"
+    ) % (quoted_partial, quoted_installer)
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    command = [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle", "Hidden",
+        "-EncodedCommand", encoded,
+    ]
+    launch = launcher or subprocess.Popen
+    return launch(
+        command,
+        close_fds=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
 def download_update(update, destination=None, progress=None,
-                    opener=None, timeout=30, cancelled=None):
+                    opener=None, timeout=30, cancelled=None, staging=None):
     """Download an installer atomically and verify its published SHA-256."""
     if cancelled is not None and cancelled():
         raise UpdateError("installer download was cancelled")
@@ -470,6 +526,8 @@ def download_update(update, destination=None, progress=None,
         with _open_release_asset(_request(url), opener, timeout) as response:
             final_url = getattr(response, "geturl", lambda: url)()
             _checked_download_url(final_url)
+            if cancelled is not None and cancelled():
+                raise UpdateError("installer download was cancelled")
             # An exclusive random staging file prevents a pre-created link at
             # the old predictable .part path from redirecting/truncating some
             # other user-writable file when the download starts.
@@ -478,6 +536,8 @@ def download_update(update, destination=None, progress=None,
                 suffix=".part",
                 dir=destination,
             )
+            if staging is not None:
+                staging(partial_path)
             output = os.fdopen(partial_fd, "wb")
             partial_fd = None
             with output:
