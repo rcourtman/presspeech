@@ -34,7 +34,7 @@
     {
       "name": "windows_update_check",
       "when": "At most once every 24 hours when automatic checks are enabled, plus manual checks from the tray menu",
-      "destination": "api.github.com/repos/rcourtman/presspeech/releases?per_page=30",
+      "destination": "api.github.com/repos/rcourtman/presspeech/releases?per_page=100",
       "purpose": "Find a newer complete windows-vX.Y.Z release and offer it to the user",
       "user_triggered": false,
       "can_disable": true,

@@ -83,6 +83,20 @@ class UpdateSelectionTests(unittest.TestCase):
         selected = updates.select_update(releases, "0.1.0")
         self.assertEqual(selected["version"], "0.1.3")
 
+    def test_selects_windows_release_beyond_old_thirty_release_window(self):
+        releases = [
+            {
+                "tag_name": "v9.9.%d" % index,
+                "draft": False,
+                "prerelease": False,
+                "assets": [],
+            }
+            for index in range(99)
+        ]
+        releases.append(release("0.1.1"))
+        selected = updates.select_update(releases, "0.1.0")
+        self.assertEqual(selected["version"], "0.1.1")
+
     def test_returns_none_when_current_is_newest(self):
         self.assertIsNone(updates.select_update([release("0.1.0")], "0.1.0"))
 
@@ -122,6 +136,7 @@ class UpdateSelectionTests(unittest.TestCase):
         self.assertIsNone(updates.select_update([candidate], "0.1.0"))
 
     def test_fetch_uses_fixed_privacy_safe_headers(self):
+        self.assertTrue(updates.RELEASES_API.endswith("?per_page=100"))
         seen = {}
 
         def opener(request, timeout):

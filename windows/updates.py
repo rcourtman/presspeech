@@ -10,8 +10,10 @@ import urllib.parse
 import urllib.request
 
 
+# Keep one privacy-auditable request while using GitHub's maximum page size so
+# macOS releases do not quickly push the newest Windows prerelease out of view.
 RELEASES_API = (
-    "https://api.github.com/repos/rcourtman/presspeech/releases?per_page=30")
+    "https://api.github.com/repos/rcourtman/presspeech/releases?per_page=100")
 USER_AGENT = "presspeech-windows-update-check"
 API_VERSION = "2026-03-10"
 TAG_RE = re.compile(r"^windows-v(\d+)\.(\d+)\.(\d+)$")

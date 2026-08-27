@@ -68,7 +68,7 @@ Pasted text goes through the system clipboard. On macOS the transcript stays on 
 Documented network calls:
 
 1. Speech model downloads from `huggingface.co`: macOS downloads the FluidAudio CoreML model on first launch, after an integrity failure, or after a user-triggered cache reset; Windows downloads its selected local model on first launch. No dictation audio is sent. If `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or `HUGGINGFACEHUB_API_TOKEN` is set, FluidAudio may attach it to macOS model requests; most users have none set.
-2. Optional update checks: macOS queries `api.github.com/repos/rcourtman/presspeech/releases/latest` with fixed User-Agent `presspeech-update-check`; Windows queries `api.github.com/repos/rcourtman/presspeech/releases?per_page=30` with fixed User-Agent `presspeech-windows-update-check`. Neither sends the app version, device details, settings, transcripts, or usage identifiers.
+2. Optional update checks: macOS queries `api.github.com/repos/rcourtman/presspeech/releases/latest` with fixed User-Agent `presspeech-update-check`; Windows queries `api.github.com/repos/rcourtman/presspeech/releases?per_page=100` with fixed User-Agent `presspeech-windows-update-check`. Neither sends the app version, device details, settings, transcripts, or usage identifiers.
 3. User-approved install/update downloads: the signed macOS archive directly or through Homebrew, or a Windows installer whose published size and SHA-256 are verified before launch.
 
 For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe local reports with runtime metadata and bounded recent log lines. The reports exclude transcript text and dictionary/correction contents.
