@@ -119,27 +119,40 @@ backend_is_aggregate() {
 single_backend_summary_row() {
     local report="$1"
     awk -v backend="$BACKEND" '
+        function flush_wer() {
+            if (clip_wer_seen == 0) return
+            wer_sum += clip_worst_wer
+            if (wer_seen == 0 || clip_worst_wer > worst_wer) {
+                worst_wer = clip_worst_wer
+            }
+            wer_seen += 1
+            final_fail += clip_final_fail
+            clip_wer_seen = 0
+            clip_worst_wer = 0
+            clip_final_fail = 0
+        }
         /latency:.*p50=/ {
+            # A backend emits latency before either one stable transcript or
+            # several distinct transcript bullets. Close the preceding clip
+            # here so variability still contributes one conservative WER row.
+            flush_wer()
             p50 = $0
             sub(/^.*p50=[[:space:]]*/, "", p50)
             sub(/ ms.*$/, "", p50)
             p50_sum += p50
             p50_seen += 1
         }
-        /transcript: \[WER [0-9.]+%\]/ {
-            wer = $0
-            sub(/^.*\[WER /, "", wer)
-            sub(/%\].*$/, "", wer)
-            wer_sum += wer
-            if (wer_seen == 0 || wer > worst_wer) {
-                worst_wer = wer
-            }
-            wer_seen += 1
-            if ($0 ~ /final-word retained=false/) {
-                final_fail += 1
+        /\[WER [0-9.]+%\]/ {
+            match($0, /\[WER [0-9.]+%\]/)
+            wer = substr($0, RSTART + 5, RLENGTH - 7) + 0
+            if (clip_wer_seen == 0 || wer > clip_worst_wer) clip_worst_wer = wer
+            clip_wer_seen += 1
+            if ($0 ~ /\[WER [0-9.]+%\] \[final-word retained=false/) {
+                clip_final_fail = 1
             }
         }
         END {
+            flush_wer()
             rows = p50_seen > wer_seen ? p50_seen : wer_seen
             avg_wer = wer_seen > 0 ? sprintf("%.2f", wer_sum / wer_seen) : "unknown"
             worst = wer_seen > 0 ? sprintf("%.1f", worst_wer) : "unknown"
@@ -155,13 +168,15 @@ append_single_backend_summary() {
     if backend_is_aggregate; then
         return
     fi
+    local summary_row
+    summary_row="$(single_backend_summary_row "$report")"
     {
         echo
         echo "## Summary"
         echo
         echo "| Backend | Clip rows | Average WER % | Worst WER % | Final-word failures | Average p50 ms |"
         echo "|---|---:|---:|---:|---:|---:|"
-        single_backend_summary_row "$report"
+        printf '%s\n' "$summary_row"
     } >>"$report"
 }
 
@@ -332,12 +347,19 @@ run_self_test() {
     local summary_source="$tmpdir/summary-source.md"
     {
         echo 'latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms'
-        echo 'transcript: [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] <redacted 3 chars>'
+        echo 'transcripts (2 distinct):'
+        echo '  • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] <redacted 3 chars>'
+        echo '  • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] "literal [WER 99.0%]"'
         echo 'latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms'
         echo 'transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] <redacted 3 chars>'
     } >"$summary_source"
     BACKEND="v3"
-    assert_eq "$(single_backend_summary_row "$summary_source")" '| `v3` | 2 | 5.00 | 10.0 | 1 | 60.0 |' "single-backend summary"
+    # shellcheck disable=SC2016 # Markdown backticks are intentional literals.
+    local expected_summary='| `v3` | 2 | 7.00 | 10.0 | 2 | 60.0 |'
+    assert_eq "$(single_backend_summary_row "$summary_source")" "$expected_summary" "variable-output single-backend summary"
+    append_single_backend_summary "$summary_source"
+    assert_contains "$summary_source" "## Summary"
+    assert_contains "$summary_source" "$expected_summary"
 
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
