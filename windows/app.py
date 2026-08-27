@@ -657,7 +657,13 @@ class PresspeechApp:
             # Delivery belongs to this recording. Model work is serialized and
             # can finish after a scratchpad is opened, replaced, or closed; a
             # mutable app-wide target could redirect an earlier transcript.
-            self._recording_scratchpad = getattr(self, "scratchpad", None)
+            scratchpad = getattr(self, "scratchpad", None)
+            if (paste_target.process_identifier == os.getpid() and
+                    paste_target.window_handle ==
+                    getattr(scratchpad, "window_handle", 0)):
+                self._recording_scratchpad = scratchpad
+            else:
+                self._recording_scratchpad = None
         self._log("recording started")
         self._set_indicator("listening")
         self._wake_model_if_idle()
@@ -1155,7 +1161,14 @@ class PresspeechApp:
             return
         if (scratchpad_target is getattr(self, "scratchpad", None) and
                 getattr(scratchpad_target, "root", None) is not None):
-            scratchpad_target.append_text(text)
+            if _paste_target_matches(
+                    paste_target, _foreground_paste_target()):
+                scratchpad_target.append_text(text)
+            else:
+                # Preserve the same focus-change behavior as normal app
+                # delivery. _paste copies the transcript, rechecks the target,
+                # and refuses to inject Ctrl+V into the newly focused window.
+                self._paste(text, paste_target)
             return
         # Try Dictation is a private sink. If its window disappeared while the
         # model was working, dropping the result is safer than pasting it into

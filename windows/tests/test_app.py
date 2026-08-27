@@ -514,16 +514,42 @@ class TextRegressionTests(unittest.TestCase):
         instance.transcriber = mock.Mock()
         instance.transcriber.loaded.return_value = True
         instance.scratchpad = mock.Mock()
+        instance.scratchpad.window_handle = 1234
         instance._wake_model_if_idle = mock.Mock()
         instance._schedule_recording_limit = mock.Mock()
         with mock.patch.object(
                 app, "_foreground_paste_target",
-                return_value=app.PasteTarget("presspeech.exe", 1234)), \
+                return_value=app.PasteTarget(
+                    "presspeech.exe", 1234, app.os.getpid())), \
                 mock.patch.object(app.threading, "Thread"), \
                 mock.patch.object(app.PresspeechApp, "_log"):
             instance.start_recording()
 
         self.assertIs(instance._recording_scratchpad, instance.scratchpad)
+
+    def test_background_scratchpad_does_not_redirect_another_apps_dictation(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = False
+        instance.buffer = []
+        instance._rec_epoch = 0
+        instance._model_idle_epoch = 0
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.model_status = "ready"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.scratchpad = mock.Mock()
+        instance.scratchpad.window_handle = 4321
+        instance._wake_model_if_idle = mock.Mock()
+        instance._schedule_recording_limit = mock.Mock()
+        with mock.patch.object(
+                app, "_foreground_paste_target",
+                return_value=app.PasteTarget("notepad.exe", 1234, 99)), \
+                mock.patch.object(app.threading, "Thread"), \
+                mock.patch.object(app.PresspeechApp, "_log"):
+            instance.start_recording()
+
+        self.assertIsNone(instance._recording_scratchpad)
 
     def test_closed_scratchpad_transcript_is_discarded_not_pasted(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -548,14 +574,34 @@ class TextRegressionTests(unittest.TestCase):
         scratchpad.root = mock.Mock()
         instance.scratchpad = scratchpad
         instance._paste = mock.Mock()
+        target = app.PasteTarget("presspeech.exe", 1234, app.os.getpid())
 
-        instance._deliver_text(
-            "private test transcript", app.PasteTarget("notepad.exe", 1234),
-            scratchpad)
+        with mock.patch.object(
+                app, "_foreground_paste_target", return_value=target):
+            instance._deliver_text(
+                "private test transcript", target, scratchpad)
 
         scratchpad.append_text.assert_called_once_with(
             "private test transcript")
         instance._paste.assert_not_called()
+
+    def test_focus_change_does_not_append_to_captured_scratchpad(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        scratchpad = mock.Mock()
+        scratchpad.root = mock.Mock()
+        instance.scratchpad = scratchpad
+        instance._paste = mock.Mock()
+        target = app.PasteTarget("presspeech.exe", 1234, app.os.getpid())
+
+        with mock.patch.object(
+                app, "_foreground_paste_target",
+                return_value=app.PasteTarget("notepad.exe", 4321, 99)):
+            instance._deliver_text(
+                "private test transcript", target, scratchpad)
+
+        scratchpad.append_text.assert_not_called()
+        instance._paste.assert_called_once_with(
+            "private test transcript", target)
 
     def test_opening_scratchpad_does_not_redirect_queued_normal_dictation(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

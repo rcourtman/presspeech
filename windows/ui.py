@@ -676,6 +676,7 @@ class ScratchpadWindow:
     def __init__(self, app):
         self.app = app
         self.root = None
+        self.window_handle = 0
         threading.Thread(target=self._build, daemon=True).start()
 
     def _build(self):
@@ -688,7 +689,14 @@ class ScratchpadWindow:
         self.btn = ttk.Button(root, text="Dictate (or use the hotkey)", command=self.toggle)
         self.btn.pack(pady=(0, 8))
         root.protocol("WM_DELETE_WINDOW", self._close)
+        root.update_idletasks()
+        user32 = ctypes.windll.user32
+        user32.GetParent.argtypes = [ctypes.c_void_p]
+        user32.GetParent.restype = ctypes.c_void_p
+        client_handle = root.winfo_id()
+        self.window_handle = int(user32.GetParent(client_handle) or client_handle)
         root.mainloop()
+        self.window_handle = 0
         self.root = None
         self.app.scratchpad = None
 
