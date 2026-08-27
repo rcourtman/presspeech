@@ -421,6 +421,7 @@ class PresspeechApp:
         self.listener = None
         self._mutex_handle = None
         self._key_held = False
+        self._pressed_keys = set()
         self._held_hotkey_keys = frozenset()
         self._held_hotkey_trigger = None
         self._injecting_keys = False
@@ -526,8 +527,16 @@ class PresspeechApp:
     def _on_press(self, key):
         if self._injecting_keys:
             return
+        self._pressed_keys.add(key)
         hotkey_keys = KEY_MAP.get(self.settings["hotkey"], set())
         if key not in hotkey_keys:
+            return
+        # Windows implements AltGr as synthetic Left Ctrl + physical Right
+        # Alt. Treat only bare Right Alt as the configured one-key hotkey, so
+        # entering alternate-layout characters cannot begin dictation.
+        if (self.settings["hotkey"] == "right alt" and
+                pkb.Key.ctrl_l in self._pressed_keys):
+            self._log("right alt ignored while left ctrl is held (AltGr chord)")
             return
         if self._key_held:
             return
@@ -550,6 +559,11 @@ class PresspeechApp:
     def _on_release(self, key):
         if self._injecting_keys:
             return
+        self._pressed_keys.discard(key)
+        if key in KEY_MAP["right alt"]:
+            # pynput may use a different alias for the same physical key on
+            # release, so clear both tracked Right Alt representations.
+            self._pressed_keys.difference_update(KEY_MAP["right alt"])
         if not self._key_held or key not in self._held_hotkey_keys:
             return
         self._key_held = False

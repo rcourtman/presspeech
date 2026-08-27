@@ -227,6 +227,7 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"hotkey": hotkey, "trigger": trigger}
         instance._key_held = False
+        instance._pressed_keys = set()
         instance._held_hotkey_keys = frozenset()
         instance._held_hotkey_trigger = None
         instance._injecting_keys = False
@@ -248,6 +249,29 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_gr))
         self.assertTrue(instance._is_hotkey(app.pkb.Key.alt_r))
         self.assertFalse(instance._is_hotkey(app.pkb.Key.alt_l))
+
+    def test_altgr_chord_does_not_start_right_alt_dictation(self):
+        instance = self.make_app()
+
+        instance._on_press(app.pkb.Key.ctrl_l)
+        instance._on_press(app.pkb.Key.alt_gr)
+        instance._on_release(app.pkb.Key.alt_gr)
+        instance._on_release(app.pkb.Key.ctrl_l)
+
+        instance.start_recording.assert_not_called()
+        instance.request_stop.assert_not_called()
+        self.assertFalse(instance._key_held)
+        self.assertEqual(instance._pressed_keys, set())
+
+    def test_bare_right_alt_still_starts_and_stops_dictation(self):
+        instance = self.make_app()
+
+        instance._on_press(app.pkb.Key.alt_gr)
+        instance._on_release(app.pkb.Key.alt_r)
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_called_once_with()
+        self.assertEqual(instance._pressed_keys, set())
 
     def test_hold_release_uses_hotkey_and_trigger_captured_on_press(self):
         instance = self.make_app()
