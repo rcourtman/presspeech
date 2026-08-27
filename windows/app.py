@@ -376,13 +376,8 @@ def _foreground_paste_target():
         return PasteTarget("", 0)
 
 
-def _foreground_process_name():
-    """Return the executable owning the foreground window, or an empty string."""
-    return _foreground_paste_target().process_name
-
-
 def _paste_target_matches(expected, current):
-    """Match an exact window owner, falling back only for legacy callers."""
+    """Match an exact window owner, using its executable if PID is unavailable."""
     if (not expected.window_handle or
             current.window_handle != expected.window_handle):
         return False
@@ -1179,28 +1174,32 @@ class PresspeechApp:
     def _paste(self, text, paste_target=PasteTarget("", 0)):
         pyperclip.copy(text)
         if not isinstance(paste_target, PasteTarget):
-            # Keep source callers and older tests compatible while binding all
-            # normal app recordings to an exact foreground-window snapshot.
+            # Legacy callers cannot prove which window owned the cursor when
+            # recording began, so normalize them into the same fail-closed
+            # clipboard-only path as an unavailable Win32 snapshot.
             paste_target = PasteTarget(str(paste_target or ""), 0)
+        if not paste_target.window_handle:
+            self._log("paste skipped; no foreground window was captured")
+            self.notify(
+                "Transcript copied, not pasted",
+                "Presspeech couldn't identify the window focused when "
+                "recording began. Paste from the clipboard when ready.")
+            return
         process_name = paste_target.process_name
         route = _paste_route(process_name)
         time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
-        if paste_target.window_handle:
-            current_target = _foreground_paste_target()
-            if not _paste_target_matches(paste_target, current_target):
-                self._log(
-                    "paste skipped; focus changed from %s to %s" % (
-                        process_name or "unknown",
-                        current_target.process_name or "unknown",
-                    ))
-                self.notify(
-                    "Transcript copied, not pasted",
-                    "The focused window changed while Presspeech was "
-                    "transcribing. Paste from the clipboard when ready.")
-                return
-        elif not process_name:
-            process_name = _foreground_process_name()
-            route = _paste_route(process_name)
+        current_target = _foreground_paste_target()
+        if not _paste_target_matches(paste_target, current_target):
+            self._log(
+                "paste skipped; focus changed from %s to %s" % (
+                    process_name or "unknown",
+                    current_target.process_name or "unknown",
+                ))
+            self.notify(
+                "Transcript copied, not pasted",
+                "The focused window changed while Presspeech was "
+                "transcribing. Paste from the clipboard when ready.")
+            return
         keyboard = pkb.Controller()
         modifiers = [pkb.Key.ctrl_l]
         if route == "moonlight":

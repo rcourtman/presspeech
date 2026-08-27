@@ -592,6 +592,29 @@ class TextRegressionTests(unittest.TestCase):
         instance._log.assert_called_once_with(
             "paste skipped; focus changed from notepad.exe to calculator.exe")
 
+    def test_missing_recording_target_copies_without_pasting(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        with mock.patch.object(app.pyperclip, "copy") as copy, \
+                mock.patch.object(app.time, "sleep") as sleep, \
+                mock.patch.object(
+                    app, "_foreground_paste_target") as foreground, \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("private transcript", app.PasteTarget("", 0))
+
+        copy.assert_called_once_with("private transcript")
+        sleep.assert_not_called()
+        foreground.assert_not_called()
+        controller.assert_not_called()
+        instance._log.assert_called_once_with(
+            "paste skipped; no foreground window was captured")
+        instance.notify.assert_called_once_with(
+            "Transcript copied, not pasted",
+            "Presspeech couldn't identify the window focused when recording "
+            "began. Paste from the clipboard when ready.")
+
     def test_reused_window_handle_from_another_process_never_receives_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
