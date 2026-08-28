@@ -17,6 +17,9 @@ the production app.
 | Tag | Stack | Where it runs |
 |---|---|---|
 | **`v3`** | FluidAudio Swift SDK → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
+| **`v3-vocab`** | production `v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
+| **`v3-vocab-conservative`** | `v3-vocab` + FluidAudio's short-term taper and spotter similarity floors | Apple Neural Engine |
+| **`v3-vocab-no-rescue`** | `v3-vocab` with acoustic-only spotter rescue disabled | Apple Neural Engine |
 | **`sliding-v3`** | FluidAudio sliding-window manager → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
 | **`sliding-vocab`** | `sliding-v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
 | **`sliding-vocab-conservative`** | `sliding-vocab` + FluidAudio's short-term taper and spotter similarity floors | Apple Neural Engine |
@@ -127,18 +130,23 @@ For a quick non-ASR check of argument parsing and report redaction:
 
 ## Custom-vocabulary regression
 
-FluidAudio exposes custom vocabulary through its sliding-window Parakeet v3
-manager, not through the direct `AsrManager` call used by Presspeech. The
-vocabulary runner therefore compares five isolated processes so engine-path
-changes are not misattributed to vocabulary biasing:
+FluidAudio's auxiliary CTC vocabulary rescorer accepts the transcript and token
+timings returned by the direct `AsrManager` call used by Presspeech. Its
+sliding-window manager also exposes a convenience integration. The vocabulary
+runner therefore compares eight isolated processes so engine-path changes are
+not misattributed to vocabulary biasing:
 
 1. production `v3`;
-2. `sliding-v3` without vocabulary boosting;
-3. `sliding-vocab` with the auxiliary CTC model and rescorer;
-4. `sliding-vocab-conservative` with FluidAudio's recommended short-term
+2. `v3-vocab` with the auxiliary CTC model and default rescorer;
+3. `v3-vocab-conservative` with FluidAudio's recommended short-term taper and
+   spotter similarity floors;
+4. `v3-vocab-no-rescue`, which disables acoustic-only spotter rescue;
+5. `sliding-v3` without vocabulary boosting;
+6. `sliding-vocab` with the auxiliary CTC model and rescorer;
+7. `sliding-vocab-conservative` with FluidAudio's recommended short-term
    taper (pivot 5) and spotter-rescue similarity floors (0.30 single-word,
    0.50 multi-word); and
-5. `sliding-vocab-no-rescue`, which disables the acoustic-only spotter rescue
+8. `sliding-vocab-no-rescue`, which disables the acoustic-only spotter rescue
    that upstream identifies as the dominant source of short-term false
    replacements while leaving the string-similarity path active.
 
@@ -176,10 +184,11 @@ revisions, whether the benchmark source was clean, and the benchmark
 executable's SHA-256, plus the macOS and Swift versions. Thresholded runs require
 a clean Git checkout so a shared report is tied to exact reviewable source; use
 `--no-threshold` for exploratory local modifications. A pairwise policy table
-compares each vocabulary lane with unbiased `sliding-v3`, reporting net critical
-hits, unexpected insertions, corpus WER change, and counts of clean wins, costly
-wins, and pure losses. A separate product-candidate screen compares each policy
-directly with production `v3` and fails the command unless at least one has
+compares direct-v3 lanes with production `v3` and sliding lanes with unbiased
+`sliding-v3`, reporting net critical hits, unexpected insertions, corpus WER
+change, and counts of clean wins, costly wins, and pure losses. A separate
+product-candidate screen evaluates only the three direct-v3 policies and fails
+the command unless at least one has
 complete comparable clips, gains a critical-term hit, adds no unexpected
 insertions or WER either in aggregate or on any individual clip, loses no
 critical-term hits on an individual clip, and keeps average p50 latency within

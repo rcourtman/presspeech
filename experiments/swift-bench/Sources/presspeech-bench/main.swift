@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -50,9 +50,8 @@ struct CLIArgs {
     var nemotronMultilingualChunkMs = DEFAULT_NEMOTRON_MULTILINGUAL_CHUNK_MS
     // Optional Parakeet v3 language/script hint. `nil` keeps auto-detection.
     var language: Language? = nil
-    // The vocabulary path is accepted only by the sliding vocabulary
-    // backends. It stays outside production until the benchmark proves a
-    // quality win.
+    // The vocabulary path is accepted only by explicit vocabulary backends.
+    // It stays outside production until the benchmark proves a quality win.
     var customVocabulary: URL? = nil
     // Plain-text canonical terms whose exact surface-form recall is reported
     // without printing term or transcript content.
@@ -139,10 +138,18 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
+                         v3-vocab
+                              production v3 path plus auxiliary CTC vocabulary rescoring;
+                              requires --custom-vocabulary
+                         v3-vocab-conservative
+                              v3-vocab with FluidAudio's recommended short-term taper
+                              and spotter similarity floors
+                         v3-vocab-no-rescue
+                              v3-vocab with acoustic-only spotter rescue disabled
                          sliding-v3
                               Parakeet v3 through FluidAudio's sliding-window manager
                          sliding-vocab
@@ -174,7 +181,7 @@ func parseArgs() -> CLIArgs {
                          default: auto)
               --custom-vocabulary <path>
                          simple text or FluidAudio JSON vocabulary file; valid only
-                         with a sliding-vocab* backend
+                         with a v3-vocab* or sliding-vocab* backend
               --critical-terms <path>
                          plain text, one canonical word or phrase per line; report
                          exact surface-form recall without printing term content
@@ -510,14 +517,14 @@ final class FluidBackend: ASRBackend {
     }
 }
 
-// ----- FluidAudio sliding-window Parakeet v3 + vocabulary rescoring ------
+// ----- Production v3 + vocabulary rescoring ----------------------------
 //
-// FluidAudio exposes custom vocabulary on the sliding-window manager rather
-// than the production app's direct AsrManager call. The unbiased variant is
-// intentionally benchmarked alongside the vocabulary variant so changes from
-// the engine path are not mistaken for vocabulary gains.
+// Keep the production AsrManager path unchanged, then run FluidAudio's shared
+// auxiliary CTC session against the ASR result and its token timings. This is
+// the exact architecture a Presspeech vocabulary beta would use; benchmarking
+// it separately avoids attributing sliding-window engine changes to boosting.
 
-enum SlidingVocabularyPolicy {
+enum VocabularyPolicy {
     case standard
     case conservative
     case noSpotterRescue
@@ -538,11 +545,88 @@ enum SlidingVocabularyPolicy {
     }
 }
 
+final class DirectVocabularyBackend: ASRBackend {
+    let name: String
+    private let language: Language?
+    private let customVocabularyURL: URL
+    private let vocabularyPolicy: VocabularyPolicy
+    private var asr: AsrManager!
+    private var boosting: VocabularyBoostingSession!
+
+    var modelCacheComponents: [(label: String, url: URL)] {
+        [
+            ("parakeet-v3", modelCacheDirectory(for: .parakeetV3)),
+            ("ctc-110m", CtcModels.defaultCacheDirectory()),
+        ]
+    }
+
+    init(language: Language?, customVocabularyURL: URL, vocabularyPolicy: VocabularyPolicy) {
+        self.language = language
+        self.customVocabularyURL = customVocabularyURL
+        self.vocabularyPolicy = vocabularyPolicy
+        switch vocabularyPolicy {
+        case .standard:
+            self.name = "fluid-ParakeetTDTv3+Vocabulary"
+        case .conservative:
+            self.name = "fluid-ParakeetTDTv3+VocabularyConservative"
+        case .noSpotterRescue:
+            self.name = "fluid-ParakeetTDTv3+VocabularyNoRescue"
+        }
+    }
+
+    func prepare(warmupSamples: [Float]) async throws {
+        let models = try await AsrModels.downloadAndLoad(version: .v3)
+        asr = AsrManager(config: .default, models: models)
+        let loaded = try await CustomVocabularyContext.loadWithCtcTokens(
+            from: customVocabularyURL.path
+        )
+        guard !loaded.vocab.terms.isEmpty else {
+            throw NSError(
+                domain: "presspeech-bench",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "custom vocabulary contains no usable terms"]
+            )
+        }
+        boosting = try await VocabularyBoostingSession(
+            vocabulary: loaded.vocab,
+            ctcModels: loaded.models,
+            config: vocabularyPolicy.config
+        )
+        log("  custom vocabulary ready (\(loaded.vocab.terms.count) terms; content redacted)")
+        _ = try await run(samples: warmupSamples)
+    }
+
+    func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
+        var state = try TdtDecoderState()
+        let t0 = Date()
+        let result = try await asr.transcribe(samples, decoderState: &state, language: language)
+        let text: String
+        if let timings = result.tokenTimings,
+           let rescored = await boosting.rescore(
+               text: result.text,
+               tokenTimings: timings,
+               audioSamples: samples
+           ) {
+            text = rescored.text
+        } else {
+            text = result.text
+        }
+        return (text, Date().timeIntervalSince(t0))
+    }
+}
+
+// ----- FluidAudio sliding-window Parakeet v3 + vocabulary rescoring ------
+//
+// FluidAudio exposes custom vocabulary on the sliding-window manager rather
+// than the production app's direct AsrManager call. The unbiased variant is
+// intentionally benchmarked alongside the vocabulary variant so changes from
+// the engine path are not mistaken for vocabulary gains.
+
 final class SlidingWindowBackend: ASRBackend {
     let name: String
     private let language: Language?
     private let customVocabularyURL: URL?
-    private let vocabularyPolicy: SlidingVocabularyPolicy
+    private let vocabularyPolicy: VocabularyPolicy
     private var models: AsrModels!
     private var vocabulary: CustomVocabularyContext?
     private var ctcModels: CtcModels?
@@ -558,7 +642,7 @@ final class SlidingWindowBackend: ASRBackend {
     init(
         language: Language?,
         customVocabularyURL: URL?,
-        vocabularyPolicy: SlidingVocabularyPolicy = .standard
+        vocabularyPolicy: VocabularyPolicy = .standard
     ) {
         self.language = language
         self.customVocabularyURL = customVocabularyURL
@@ -910,10 +994,10 @@ func runBenchSelfTests() throws {
     try expect(positiveTrialCount("-1") == nil, "trial parser should reject negative integers")
     try expect(positiveTrialCount("three") == nil, "trial parser should reject non-integers")
     try expect(
-        SlidingVocabularyPolicy.standard.config == nil,
+        VocabularyPolicy.standard.config == nil,
         "standard vocabulary policy should preserve FluidAudio defaults"
     )
-    let conservativeConfig = SlidingVocabularyPolicy.conservative.config
+    let conservativeConfig = VocabularyPolicy.conservative.config
     try expect(
         conservativeConfig?.shortTermCbwTaperPivot == 5 &&
             conservativeConfig?.spotterRescueMinSimilarity == 0.30 &&
@@ -922,7 +1006,7 @@ func runBenchSelfTests() throws {
         "conservative vocabulary policy should apply only taper and similarity floors"
     )
     try expect(
-        SlidingVocabularyPolicy.noSpotterRescue.config?.spotterRescueEnabled == false,
+        VocabularyPolicy.noSpotterRescue.config?.spotterRescueEnabled == false,
         "no-rescue vocabulary policy should disable acoustic-only rescue"
     )
 
@@ -1111,6 +1195,9 @@ struct PresspeechBench {
         let args = parseArgs()
 
         let vocabularyBackends = [
+            "v3-vocab",
+            "v3-vocab-conservative",
+            "v3-vocab-no-rescue",
             "sliding-vocab",
             "sliding-vocab-conservative",
             "sliding-vocab-no-rescue",
@@ -1120,7 +1207,7 @@ struct PresspeechBench {
             exit(2)
         }
         if !vocabularyBackends.contains(args.backend), args.customVocabulary != nil {
-            FileHandle.standardError.write(Data("--custom-vocabulary is valid only with a sliding vocabulary backend\n".utf8))
+            FileHandle.standardError.write(Data("--custom-vocabulary is valid only with a vocabulary backend\n".utf8))
             exit(2)
         }
 
@@ -1138,10 +1225,10 @@ struct PresspeechBench {
         if vocabularyBackends.contains(args.backend) {
             runSummary += ", custom-vocabulary=enabled"
         }
-        if args.backend == "sliding-vocab-conservative" {
+        if args.backend == "v3-vocab-conservative" || args.backend == "sliding-vocab-conservative" {
             runSummary += ", vocabulary-policy=conservative"
         }
-        if args.backend == "sliding-vocab-no-rescue" {
+        if args.backend == "v3-vocab-no-rescue" || args.backend == "sliding-vocab-no-rescue" {
             runSummary += ", vocabulary-policy=no-spotter-rescue"
         }
         log(runSummary)
@@ -1182,7 +1269,8 @@ struct PresspeechBench {
         let warmup = samples
 
         let known = [
-            "apple", "v3", "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
+            "apple", "v3", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
+            "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
             "sliding-vocab-no-rescue", "unified",
             "nemotron-en", "nemotron-multilingual",
             "110m", "fluid", "both",
@@ -1207,6 +1295,26 @@ struct PresspeechBench {
                     name: "fluid-ParakeetTDTv3",
                     version: .v3,
                     language: args.language
+                )
+            )
+        }
+        if args.backend == "v3-vocab" ||
+            args.backend == "v3-vocab-conservative" ||
+            args.backend == "v3-vocab-no-rescue" {
+            let policy: VocabularyPolicy
+            switch args.backend {
+            case "v3-vocab-conservative":
+                policy = .conservative
+            case "v3-vocab-no-rescue":
+                policy = .noSpotterRescue
+            default:
+                policy = .standard
+            }
+            backends.append(
+                DirectVocabularyBackend(
+                    language: args.language,
+                    customVocabularyURL: args.customVocabulary!,
+                    vocabularyPolicy: policy
                 )
             )
         }
