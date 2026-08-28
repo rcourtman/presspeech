@@ -27,6 +27,7 @@ MAX_CANDIDATE_WER="20.0"
 SELF_TEST=0
 KEEP_TEMP=0
 tmpdir=""
+stage_dir=""
 
 usage() {
     cat <<'USAGE'
@@ -134,6 +135,34 @@ validate_metrics() {
         printf 'benchmark output missing required metrics: %s\n' "$(IFS=,; echo "${missing[*]}")" >&2
         return 1
     fi
+}
+
+publish_report_artifacts() {
+    local stage_dir="$1"
+    local staged_report="$2"
+    local staged_tsv="$3"
+    local final_report="$4"
+    local final_tsv="$5"
+
+    if [[ ! -f "$staged_report" || ! -f "$staged_tsv" ]]; then
+        echo "tail-word staging artifacts are incomplete" >&2
+        return 1
+    fi
+    if [[ -e "$final_report" || -e "$final_tsv" ]]; then
+        echo "refusing to replace existing tail-word artifacts" >&2
+        return 1
+    fi
+
+    # Publish the human-facing report last. If its move unexpectedly fails,
+    # remove only the TSV created here so no partial run looks final.
+    if ! mv "$staged_tsv" "$final_tsv"; then
+        return 1
+    fi
+    if ! mv "$staged_report" "$final_report"; then
+        rm -f -- "$final_tsv"
+        return 1
+    fi
+    rmdir "$stage_dir"
 }
 
 assert_eq() {
@@ -286,6 +315,48 @@ run_self_test() {
         exit 1
     fi
 
+    local stage_dir="$self_tmp/staged"
+    local final_dir="$self_tmp/published"
+    mkdir -p "$stage_dir" "$final_dir"
+    printf 'complete report\n' >"$stage_dir/report.md"
+    printf 'header\nrow\n' >"$stage_dir/results.tsv"
+    publish_report_artifacts \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$stage_dir/results.tsv" \
+        "$final_dir/report.md" \
+        "$final_dir/results.tsv"
+    if ! grep -Fq -- "complete report" "$final_dir/report.md" ||
+        ! grep -Fq -- "row" "$final_dir/results.tsv"; then
+        echo "self-test expected complete tail-word artifacts to be published" >&2
+        exit 1
+    fi
+    if [[ -e "$stage_dir" ]]; then
+        echo "self-test expected successful report staging cleanup" >&2
+        exit 1
+    fi
+
+    stage_dir="$self_tmp/collision-stage"
+    mkdir -p "$stage_dir"
+    printf 'new report\n' >"$stage_dir/report.md"
+    printf 'new results\n' >"$stage_dir/results.tsv"
+    local collision_log="$self_tmp/collision.log"
+    if publish_report_artifacts \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$stage_dir/results.tsv" \
+        "$final_dir/report.md" \
+        "$final_dir/other-results.tsv" >"$collision_log" 2>&1; then
+        echo "self-test expected report publication collision to fail" >&2
+        exit 1
+    fi
+    if ! grep -Fq -- "refusing to replace existing tail-word artifacts" "$collision_log" ||
+        ! grep -Fq -- "complete report" "$final_dir/report.md" ||
+        ! grep -Fq -- "new report" "$stage_dir/report.md"; then
+        echo "self-test expected collision to preserve staged and published artifacts" >&2
+        exit 1
+    fi
+
     validate_ms_list "--cut-ms-list" "0,100 250"
 
     local bad_list_log="$self_tmp/bad-list.log"
@@ -308,6 +379,9 @@ cleanup() {
         rm -rf "$tmpdir"
     elif [[ -n "$tmpdir" ]]; then
         echo "kept temp files: $tmpdir"
+    fi
+    if [[ -n "$stage_dir" ]]; then
+        rm -rf -- "$stage_dir"
     fi
 }
 
@@ -408,8 +482,20 @@ echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-report="$OUTDIR/$timestamp-tail-word.md"
-tsv="$OUTDIR/$timestamp-tail-word.tsv"
+final_report="$OUTDIR/$timestamp-tail-word.md"
+final_tsv="$OUTDIR/$timestamp-tail-word.tsv"
+if [[ -e "$final_report" || -e "$final_tsv" ]]; then
+    echo "tail-word artifacts already exist for timestamp $timestamp" >&2
+    exit 1
+fi
+reserved_stage_dir="$OUTDIR/.$timestamp-tail-word.incomplete"
+if ! mkdir "$reserved_stage_dir"; then
+    echo "could not reserve tail-word output for timestamp $timestamp" >&2
+    exit 1
+fi
+stage_dir="$reserved_stage_dir"
+report="$stage_dir/report.md"
+tsv="$stage_dir/results.tsv"
 
 {
     echo "# Presspeech Tail-Word Regression"
@@ -520,10 +606,17 @@ if [[ "$failures" -gt 0 ]]; then
         echo
         printf -- '- %s\n' "${failure_details[@]}"
     } >>"$report"
+    publish_report_artifacts \
+        "$stage_dir" \
+        "$report" \
+        "$tsv" \
+        "$final_report" \
+        "$final_tsv"
+    stage_dir=""
     printf 'tail-word regression failed %d candidate threshold(s):\n' "$failures" >&2
     printf '  %s\n' "${failure_details[@]}" >&2
-    echo "report: $report" >&2
-    echo "tsv: $tsv" >&2
+    echo "report: $final_report" >&2
+    echo "tsv: $final_tsv" >&2
     exit 1
 fi
 
@@ -534,5 +627,13 @@ fi
     echo "Candidate threshold passed."
 } >>"$report"
 
-echo "report: $report"
-echo "tsv: $tsv"
+publish_report_artifacts \
+    "$stage_dir" \
+    "$report" \
+    "$tsv" \
+    "$final_report" \
+    "$final_tsv"
+stage_dir=""
+
+echo "report: $final_report"
+echo "tsv: $final_tsv"
