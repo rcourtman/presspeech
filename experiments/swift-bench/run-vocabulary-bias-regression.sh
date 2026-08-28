@@ -36,7 +36,7 @@ Options:
   --self-test              run parser, aggregation, and redaction tests only
   -h, --help               show this help
 
-The four variants run in separate processes so memory measurements stay
+The five variants run in separate processes so memory measurements stay
 isolated:
   v3             production AsrManager path
   sliding-v3     SlidingWindowAsrManager without vocabulary boosting
@@ -44,6 +44,8 @@ isolated:
   sliding-vocab-conservative
                   the same rescorer with FluidAudio's recommended short-term
                   taper (pivot 5) and spotter similarity floors (0.30/0.50)
+  sliding-vocab-no-rescue
+                  the same rescorer with acoustic-only spotter rescue disabled
 
 Critical-term recall, precision, and unexpected insertions are exact after
 case/punctuation normalization. List every canonical vocabulary form, including
@@ -674,7 +676,7 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Clips: ${#clips[@]}"
     echo "- Transcript output: $([[ "$REDACT_TRANSCRIPTS" -eq 1 ]] && echo redacted || echo included)"
     echo
-    echo "> Production v3, unbiased sliding v3, and both CTC-rescored policies run"
+    echo "> Production v3, unbiased sliding v3, and all three CTC-rescored policies run"
     echo "> in separate processes. Critical-term recall and unexpected insertions"
     echo "> count exact canonical surface forms after case/punctuation normalization."
     echo "> An unexpected insertion is an occurrence beyond the reference count. Model cache is"
@@ -702,7 +704,7 @@ for clip in "${clips[@]}"; do
     afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
     cp "$ref" "$tmpdir/$clip_id.txt"
 
-    for variant in v3 sliding-v3 sliding-vocab sliding-vocab-conservative; do
+    for variant in v3 sliding-v3 sliding-vocab sliding-vocab-conservative sliding-vocab-no-rescue; do
         log_file="$raw_dir/$clip_id-$variant.bench.txt"
         bench_args=(
             ".build/release/presspeech-bench"
@@ -712,7 +714,9 @@ for clip in "${clips[@]}"; do
             "--critical-terms" "$CRITICAL_TERMS"
             "--trials" "$TRIALS"
         )
-        if [[ "$variant" == "sliding-vocab" || "$variant" == "sliding-vocab-conservative" ]]; then
+        if [[ "$variant" == "sliding-vocab" ||
+              "$variant" == "sliding-vocab-conservative" ||
+              "$variant" == "sliding-vocab-no-rescue" ]]; then
             bench_args+=( "--custom-vocabulary" "$VOCABULARY" )
         fi
         if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
@@ -776,6 +780,7 @@ done
     summary_row "$tsv" sliding-v3
     summary_row "$tsv" sliding-vocab
     summary_row "$tsv" sliding-vocab-conservative
+    summary_row "$tsv" sliding-vocab-no-rescue
     echo
     echo "## Vocabulary Policy Deltas"
     echo
@@ -785,6 +790,7 @@ done
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
     comparison_row "$tsv" sliding-v3 sliding-vocab
     comparison_row "$tsv" sliding-v3 sliding-vocab-conservative
+    comparison_row "$tsv" sliding-v3 sliding-vocab-no-rescue
     echo
     echo "Clean wins gain critical hits without worse WER; costly wins gain hits with worse WER; pure losses worsen WER without gaining hits. Other results do not fit those three decision categories."
     echo

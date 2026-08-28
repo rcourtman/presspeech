@@ -11,8 +11,8 @@
 //   * FluidAudio's `AsrManager` running Parakeet TDT v3 via CoreML
 //     on the ANE (model downloaded from HuggingFace on first run,
 //     ~600 MB, cached thereafter).
-//   * FluidAudio's sliding-window Parakeet v3 path, with and without
-//     the auxiliary CTC custom-vocabulary rescorer.
+//   * FluidAudio's sliding-window Parakeet v3 path, without vocabulary and
+//     with standard, conservative, or spotter-rescue-disabled CTC rescoring.
 //   * Candidate FluidAudio Parakeet Unified, Nemotron English, and
 //     Nemotron 3.5 multilingual paths, also via CoreML on the ANE.
 //

@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -139,7 +139,7 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
@@ -151,6 +151,9 @@ func parseArgs() -> CLIArgs {
                          sliding-vocab-conservative
                               sliding-vocab with FluidAudio's recommended short-term
                               taper and spotter similarity floors
+                         sliding-vocab-no-rescue
+                              sliding-vocab with FluidAudio's acoustic-only spotter
+                              rescue disabled to reduce false replacements
                          unified
                               FluidAudio Parakeet Unified 0.6B offline batch
                          nemotron-en
@@ -171,7 +174,7 @@ func parseArgs() -> CLIArgs {
                          default: auto)
               --custom-vocabulary <path>
                          simple text or FluidAudio JSON vocabulary file; valid only
-                         with --backend sliding-vocab or sliding-vocab-conservative
+                         with a sliding-vocab* backend
               --critical-terms <path>
                          plain text, one canonical word or phrase per line; report
                          exact surface-form recall without printing term content
@@ -514,11 +517,32 @@ final class FluidBackend: ASRBackend {
 // intentionally benchmarked alongside the vocabulary variant so changes from
 // the engine path are not mistaken for vocabulary gains.
 
+enum SlidingVocabularyPolicy {
+    case standard
+    case conservative
+    case noSpotterRescue
+
+    var config: VocabularyRescorer.Config? {
+        switch self {
+        case .standard:
+            return nil
+        case .conservative:
+            return VocabularyRescorer.Config(
+                shortTermCbwTaperPivot: 5,
+                spotterRescueMinSimilarity: 0.30,
+                spotterRescueMultiWordMinSimilarity: 0.50
+            )
+        case .noSpotterRescue:
+            return VocabularyRescorer.Config(spotterRescueEnabled: false)
+        }
+    }
+}
+
 final class SlidingWindowBackend: ASRBackend {
     let name: String
     private let language: Language?
     private let customVocabularyURL: URL?
-    private let conservativeVocabulary: Bool
+    private let vocabularyPolicy: SlidingVocabularyPolicy
     private var models: AsrModels!
     private var vocabulary: CustomVocabularyContext?
     private var ctcModels: CtcModels?
@@ -534,17 +558,22 @@ final class SlidingWindowBackend: ASRBackend {
     init(
         language: Language?,
         customVocabularyURL: URL?,
-        conservativeVocabulary: Bool = false
+        vocabularyPolicy: SlidingVocabularyPolicy = .standard
     ) {
         self.language = language
         self.customVocabularyURL = customVocabularyURL
-        self.conservativeVocabulary = conservativeVocabulary
+        self.vocabularyPolicy = vocabularyPolicy
         if customVocabularyURL == nil {
             self.name = "fluid-ParakeetTDTv3Sliding"
-        } else if conservativeVocabulary {
-            self.name = "fluid-ParakeetTDTv3Sliding+VocabularyConservative"
         } else {
-            self.name = "fluid-ParakeetTDTv3Sliding+Vocabulary"
+            switch vocabularyPolicy {
+            case .standard:
+                self.name = "fluid-ParakeetTDTv3Sliding+Vocabulary"
+            case .conservative:
+                self.name = "fluid-ParakeetTDTv3Sliding+VocabularyConservative"
+            case .noSpotterRescue:
+                self.name = "fluid-ParakeetTDTv3Sliding+VocabularyNoRescue"
+            }
         }
     }
 
@@ -573,17 +602,10 @@ final class SlidingWindowBackend: ASRBackend {
         let manager = SlidingWindowAsrManager(config: config)
         try await manager.loadModels(models)
         if let vocabulary, let ctcModels {
-            let rescorerConfig = conservativeVocabulary
-                ? VocabularyRescorer.Config(
-                    shortTermCbwTaperPivot: 5,
-                    spotterRescueMinSimilarity: 0.30,
-                    spotterRescueMultiWordMinSimilarity: 0.50
-                )
-                : nil
             try await manager.configureVocabularyBoosting(
                 vocabulary: vocabulary,
                 ctcModels: ctcModels,
-                config: rescorerConfig
+                config: vocabularyPolicy.config
             )
         }
         try await manager.startStreaming()
@@ -887,6 +909,22 @@ func runBenchSelfTests() throws {
     try expect(positiveTrialCount("0") == nil, "trial parser should reject zero")
     try expect(positiveTrialCount("-1") == nil, "trial parser should reject negative integers")
     try expect(positiveTrialCount("three") == nil, "trial parser should reject non-integers")
+    try expect(
+        SlidingVocabularyPolicy.standard.config == nil,
+        "standard vocabulary policy should preserve FluidAudio defaults"
+    )
+    let conservativeConfig = SlidingVocabularyPolicy.conservative.config
+    try expect(
+        conservativeConfig?.shortTermCbwTaperPivot == 5 &&
+            conservativeConfig?.spotterRescueMinSimilarity == 0.30 &&
+            conservativeConfig?.spotterRescueMultiWordMinSimilarity == 0.50 &&
+            conservativeConfig?.spotterRescueEnabled == true,
+        "conservative vocabulary policy should apply only taper and similarity floors"
+    )
+    try expect(
+        SlidingVocabularyPolicy.noSpotterRescue.config?.spotterRescueEnabled == false,
+        "no-rescue vocabulary policy should disable acoustic-only rescue"
+    )
 
     try expect(
         phraseOccurrenceCount(["szypańskim"], in: ["ze", "szypańskim", "i", "szypańskim"]) == 2,
@@ -1072,7 +1110,11 @@ struct PresspeechBench {
         }
         let args = parseArgs()
 
-        let vocabularyBackends = ["sliding-vocab", "sliding-vocab-conservative"]
+        let vocabularyBackends = [
+            "sliding-vocab",
+            "sliding-vocab-conservative",
+            "sliding-vocab-no-rescue",
+        ]
         if vocabularyBackends.contains(args.backend), args.customVocabulary == nil {
             FileHandle.standardError.write(Data("--backend \(args.backend) requires --custom-vocabulary\n".utf8))
             exit(2)
@@ -1098,6 +1140,9 @@ struct PresspeechBench {
         }
         if args.backend == "sliding-vocab-conservative" {
             runSummary += ", vocabulary-policy=conservative"
+        }
+        if args.backend == "sliding-vocab-no-rescue" {
+            runSummary += ", vocabulary-policy=no-spotter-rescue"
         }
         log(runSummary)
         let samples = try load16kMono(url: args.file)
@@ -1137,7 +1182,8 @@ struct PresspeechBench {
         let warmup = samples
 
         let known = [
-            "apple", "v3", "sliding-v3", "sliding-vocab", "sliding-vocab-conservative", "unified",
+            "apple", "v3", "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
+            "sliding-vocab-no-rescue", "unified",
             "nemotron-en", "nemotron-multilingual",
             "110m", "fluid", "both",
         ]
@@ -1182,7 +1228,16 @@ struct PresspeechBench {
                 SlidingWindowBackend(
                     language: args.language,
                     customVocabularyURL: args.customVocabulary,
-                    conservativeVocabulary: true
+                    vocabularyPolicy: .conservative
+                )
+            )
+        }
+        if args.backend == "sliding-vocab-no-rescue" {
+            backends.append(
+                SlidingWindowBackend(
+                    language: args.language,
+                    customVocabularyURL: args.customVocabulary,
+                    vocabularyPolicy: .noSpotterRescue
                 )
             )
         }
