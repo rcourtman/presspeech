@@ -112,9 +112,6 @@ private let LEGACY_CORRECTIONS_FILE_EXTENSION = "parakey-corrections"
 let MAX_TRANSCRIPT_CORRECTIONS = 512
 let MAX_TRANSCRIPT_CORRECTION_SOURCE_BYTES = 512
 let MAX_TRANSCRIPT_CORRECTION_REPLACEMENT_BYTES = 4096
-let MAX_CUSTOM_VOCABULARY_TERMS = 512
-let MAX_CUSTOM_VOCABULARY_TERM_BYTES = 256
-let MIN_CUSTOM_VOCABULARY_TERM_CHARACTERS = 3
 
 /// Visible state of the menu-bar item. Idle/loading/busy use the
 /// template image so macOS handles light/dark menu bars. Recording and
@@ -906,8 +903,6 @@ enum ModelIntegrityError: LocalizedError {
 enum ModelIntegrity {
     static let parakeetV3Repository = "FluidInference/parakeet-tdt-0.6b-v3-coreml"
     static let parakeetV3RepositoryCommit = "aed02740059203c4a87495924f685de3722ae9ce"
-    static let customVocabularyRepository = "FluidInference/parakeet-ctc-110m-coreml"
-    static let customVocabularyRepositoryCommit = "accdafd8cf8a2ff1cabe3c11e54416b405d409aa"
     private static let sha256Characters = Set("0123456789abcdefABCDEF")
 
     private static let parakeetV3StrictDirectories = [
@@ -943,40 +938,11 @@ enum ModelIntegrity {
         // END GENERATED PARAKEET_V3_MODEL_MANIFEST
     ]
 
-    private static let customVocabularyStrictDirectories = [
-        "AudioEncoder.mlmodelc",
-        "MelSpectrogram.mlmodelc",
-    ]
-
-    private static let customVocabularyFiles = [
-        // BEGIN GENERATED CUSTOM_VOCABULARY_MODEL_MANIFEST
-        ModelFileDigest(relativePath: "AudioEncoder.mlmodelc/analytics/coremldata.bin", sha256: "8906c823e9bb3bf6b16d9f0308f98cd70573526333ad85dd767dc3f9ae6b25fa"),
-        ModelFileDigest(relativePath: "AudioEncoder.mlmodelc/coremldata.bin", sha256: "a88b002b58193b4c31211754cdfdf220a85f9651dc61caf336ab84400cbc191a"),
-        ModelFileDigest(relativePath: "AudioEncoder.mlmodelc/metadata.json", sha256: "4f288bfe5cbe867ef1e592cdae33578b2fe59ada69182fc12209879558f985c2"),
-        ModelFileDigest(relativePath: "AudioEncoder.mlmodelc/model.mil", sha256: "2f84ef93a69115e55f3b5d8ce695b3c937de1833d4d229620634fae967cd587e"),
-        ModelFileDigest(relativePath: "AudioEncoder.mlmodelc/weights/weight.bin", sha256: "af0734b4a5d7465ad9e8bb170f0c53c5e6b91ebb75a9bdf88d3f59ae4ad6aebd"),
-        ModelFileDigest(relativePath: "MelSpectrogram.mlmodelc/analytics/coremldata.bin", sha256: "22f2a8cba1de25c984050566b534a1d8caf22a82f9fe6c1c6f3149a0dd7e8ae3"),
-        ModelFileDigest(relativePath: "MelSpectrogram.mlmodelc/coremldata.bin", sha256: "3a32ec67c76aa0aa2faef518413c311493e89aeb7fa11289fa4b8653ab8a160c"),
-        ModelFileDigest(relativePath: "MelSpectrogram.mlmodelc/metadata.json", sha256: "5e11d21a65c02bcfc37db43e941978e5d60d59e0efeadfda08e41f33b4f835d3"),
-        ModelFileDigest(relativePath: "MelSpectrogram.mlmodelc/model.mil", sha256: "0a7cb5693b39667295218bac5c7c09053f6bcd4b32699a83d06ac35d14ac6b79"),
-        ModelFileDigest(relativePath: "MelSpectrogram.mlmodelc/weights/weight.bin", sha256: "0a89c055bfde9022029d3cc59a23e949385e063974460d8eaec3a7614c3eaaa8"),
-        ModelFileDigest(relativePath: "tokenizer.json", sha256: "9f7c517c0bf644b1b690ab037bab4d4c53aecd38e047e7154d011013ab9160db"),
-        ModelFileDigest(relativePath: "vocab.json", sha256: "319d386eead79aadc80df9c3ecc8340d1a727efb7c02a8847eb940380dd61e1f"),
-        // END GENERATED CUSTOM_VOCABULARY_MODEL_MANIFEST
-    ]
-
     static func verifyParakeetV3Model(at directory: URL) throws {
         try verifyFiles(root: directory,
                         expectedFiles: parakeetV3Files,
                         strictDirectories: parakeetV3StrictDirectories)
         log("ASR: verified \(parakeetV3Files.count) model files from \(parakeetV3Repository) @ \(parakeetV3RepositoryCommit)")
-    }
-
-    static func verifyCustomVocabularyModel(at directory: URL) throws {
-        try verifyFiles(root: directory,
-                        expectedFiles: customVocabularyFiles,
-                        strictDirectories: customVocabularyStrictDirectories)
-        log("ASR: verified \(customVocabularyFiles.count) custom-vocabulary model files from \(customVocabularyRepository) @ \(customVocabularyRepositoryCommit)")
     }
 
     static func verifyFiles(root: URL,
@@ -1336,40 +1302,6 @@ func normalizedTranscriptCorrections(_ corrections: [TranscriptCorrection]) -> [
     }
 
     return result
-}
-
-/// Normalize the opt-in decoder vocabulary without ever logging its contents.
-/// FluidAudio's CTC spotter ignores terms shorter than three characters; reject
-/// them here so the UI cannot claim that a silently skipped term is active.
-func normalizedCustomVocabularyTerms(_ terms: [String]) -> [String] {
-    let allowed = CharacterSet.letters
-        .union(.whitespaces)
-        .union(CharacterSet(charactersIn: "-'"))
-    var result: [String] = []
-    var seen = Set<String>()
-
-    for raw in terms {
-        let term = raw.precomposedStringWithCanonicalMapping
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
-        let key = term.lowercased()
-        guard !term.isEmpty,
-              term.count >= MIN_CUSTOM_VOCABULARY_TERM_CHARACTERS,
-              term.utf8.count <= MAX_CUSTOM_VOCABULARY_TERM_BYTES,
-              term.rangeOfCharacter(from: allowed.inverted) == nil,
-              seen.insert(key).inserted else { continue }
-        guard result.count < MAX_CUSTOM_VOCABULARY_TERMS else { break }
-        result.append(term)
-    }
-    return result
-}
-
-func customVocabularyTerms(fromEditorText text: String) -> (terms: [String], valid: Bool) {
-    let lines = text.components(separatedBy: .newlines)
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-    let terms = normalizedCustomVocabularyTerms(lines)
-    return (terms, terms.count == lines.count)
 }
 
 /// First line of the import-confirmation dialog. When the file holds
@@ -1844,7 +1776,6 @@ final class Settings: @unchecked Sendable {
     private static let keySkippedVersions = "skipped_versions"
     private static let keyTranscriptCorrections = "transcript_corrections"
     private static let keyTranscriptCorrectionsSyncFile = "transcript_corrections_sync_file"
-    private static let keyCustomVocabularyTerms = "custom_vocabulary_terms"
     private static let keyDictationLanguage = "dictation_language"
     private static let keySpeechModelProfile = "speech_model_profile"
     private static let keyInitialSpeechModelChoiceRequired = "initial_speech_model_choice_required"
@@ -2182,22 +2113,6 @@ final class Settings: @unchecked Sendable {
                 defaults.set(normalized, forKey: Self.keyTranscriptCorrectionsSyncFile)
             } else {
                 defaults.removeObject(forKey: Self.keyTranscriptCorrectionsSyncFile)
-            }
-        }
-    }
-
-    var customVocabularyTerms: [String] {
-        get {
-            normalizedCustomVocabularyTerms(
-                (defaults.array(forKey: Self.keyCustomVocabularyTerms) as? [String]) ?? []
-            )
-        }
-        set {
-            let terms = normalizedCustomVocabularyTerms(newValue)
-            if terms.isEmpty {
-                defaults.removeObject(forKey: Self.keyCustomVocabularyTerms)
-            } else {
-                defaults.set(terms, forKey: Self.keyCustomVocabularyTerms)
             }
         }
     }
@@ -3607,55 +3522,9 @@ private enum LoadedSpeechEngine {
     case parakeetV3(AsrManager)
 }
 
-/// Presspeech-owned wrapper around FluidAudio's vocabulary primitives. Calling
-/// the lower-level API avoids the upstream convenience session's per-word debug
-/// messages, preserving Presspeech's no-transcript-logging contract.
-private struct CustomVocabularyBiaser: Sendable {
-    let vocabulary: CustomVocabularyContext
-    let spotter: CtcKeywordSpotter
-    let rescorer: VocabularyRescorer
-    let sizeConfig: ContextBiasingConstants.VocabSizeConfig
-
-    init(vocabulary: CustomVocabularyContext, models: CtcModels) async throws {
-        self.vocabulary = vocabulary
-        self.spotter = CtcKeywordSpotter(models: models, blankId: models.vocabulary.count)
-        self.sizeConfig = ContextBiasingConstants.rescorerConfig(
-            forVocabSize: vocabulary.terms.count
-        )
-        self.rescorer = try await VocabularyRescorer.create(
-            spotter: spotter,
-            vocabulary: vocabulary,
-            config: VocabularyRescorer.Config(spotterRescueEnabled: false),
-            ctcModelDirectory: CtcModels.defaultCacheDirectory()
-        )
-    }
-
-    func rescore(_ result: ASRResult, samples: [Float]) async throws -> VocabularyRescorer.RescoreOutput? {
-        guard let timings = result.tokenTimings, !timings.isEmpty, !samples.isEmpty else { return nil }
-        let spotted = try await spotter.spotKeywordsWithLogProbs(
-            audioSamples: samples,
-            customVocabulary: vocabulary,
-            minScore: nil
-        )
-        guard !spotted.logProbs.isEmpty else { return nil }
-        let output = rescorer.ctcTokenRescore(
-            transcript: result.text,
-            tokenTimings: timings,
-            logProbs: spotted.logProbs,
-            frameDuration: spotted.frameDuration,
-            cbw: sizeConfig.cbw,
-            marginSeconds: ContextBiasingConstants.defaultMarginSeconds,
-            minSimilarity: max(sizeConfig.minSimilarity, vocabulary.minSimilarity)
-        )
-        return output.wasModified ? output : nil
-    }
-}
-
 actor TranscriptionWorker {
     private var engine: LoadedSpeechEngine?
     private var loadedProfile: SpeechModelProfile?
-    private var customVocabularyBiaser: CustomVocabularyBiaser?
-    private var configuredCustomVocabularyTerms: [String] = []
     private(set) var ready = false
     /// Reentrancy backstop — see the comment above. True for the full
     /// duration of transcribe(), including across its await.
@@ -3706,69 +3575,6 @@ actor TranscriptionWorker {
         return AsrManager(config: .default, models: models)
     }
 
-    func configureCustomVocabulary(_ requestedTerms: [String]) async throws {
-        let terms = normalizedCustomVocabularyTerms(requestedTerms)
-        guard !terms.isEmpty else {
-            customVocabularyBiaser = nil
-            configuredCustomVocabularyTerms = []
-            log("ASR: custom vocabulary disabled")
-            return
-        }
-        if customVocabularyBiaser != nil, configuredCustomVocabularyTerms == terms {
-            log("ASR: custom vocabulary already ready (\(terms.count) terms)")
-            return
-        }
-
-        log("ASR: preparing custom vocabulary (\(terms.count) terms; content redacted)…")
-        let t0 = Date()
-        let directory = CtcModels.defaultCacheDirectory()
-        let modelsRoot = directory.deletingLastPathComponent()
-        if !CtcModels.modelsExist(at: directory) {
-            try await ModelHub.download(.parakeetCtc110m, to: modelsRoot)
-        }
-        do {
-            try ModelIntegrity.verifyCustomVocabularyModel(at: directory)
-        } catch {
-            log("ASR: custom-vocabulary model integrity check failed; redownloading once: \(error.localizedDescription)")
-            ModelHub.clearCache(for: .parakeetCtc110m, directory: modelsRoot)
-            try await ModelHub.download(.parakeetCtc110m, to: modelsRoot)
-            try ModelIntegrity.verifyCustomVocabularyModel(at: directory)
-        }
-        // CtcModels.load normally retries a failed CoreML load by replacing the
-        // cache. Hold FluidAudio offline across this load so no post-verification
-        // retry can swap in bytes that Presspeech has not hashed.
-        let previousOfflineMode = ModelHub.offlineMode
-        ModelHub.offlineMode = true
-        let models: CtcModels
-        do {
-            models = try await CtcModels.load(from: directory)
-        } catch {
-            ModelHub.offlineMode = previousOfflineMode
-            throw error
-        }
-        ModelHub.offlineMode = previousOfflineMode
-        let tokenizer = try await CtcTokenizer.load(from: directory)
-        let tokenized = terms.compactMap { term -> CustomVocabularyTerm? in
-            let ids = tokenizer.encode(term)
-            guard !ids.isEmpty else { return nil }
-            return CustomVocabularyTerm(text: term, ctcTokenIds: ids)
-        }
-        guard tokenized.count == terms.count else {
-            throw NSError(
-                domain: "Presspeech",
-                code: -9,
-                userInfo: [NSLocalizedDescriptionKey: "One or more custom-vocabulary terms could not be tokenized."]
-            )
-        }
-        let vocabulary = CustomVocabularyContext(terms: tokenized)
-        customVocabularyBiaser = try await CustomVocabularyBiaser(
-            vocabulary: vocabulary,
-            models: models
-        )
-        configuredCustomVocabularyTerms = terms
-        log("ASR: custom vocabulary ready (\(terms.count) terms) in \(String(format: "%.2f", Date().timeIntervalSince(t0))) s")
-    }
-
     func transcribe(samples: [Float], language: Language? = nil) async throws -> String {
         guard let engine else { throw NSError(domain: "Presspeech", code: -2) }
         guard !inFlight else {
@@ -3782,19 +3588,6 @@ actor TranscriptionWorker {
         case .parakeetV3(let asr):
             var state = try TdtDecoderState()
             let result = try await asr.transcribe(samples, decoderState: &state, language: language)
-            if let customVocabularyBiaser {
-                do {
-                    if let rescored = try await customVocabularyBiaser.rescore(result, samples: samples) {
-                        let applied = rescored.replacements.filter(\.shouldReplace).count
-                        log("ASR: custom vocabulary applied \(applied) replacement\(applied == 1 ? "" : "s")")
-                        return rescored.text
-                    }
-                } catch {
-                    // Vocabulary assistance is optional. Preserve a successful
-                    // base transcript if the auxiliary CTC pass fails.
-                    log("ASR: custom vocabulary pass failed; using base transcript: \(error.localizedDescription)")
-                }
-            }
             return result.text
         }
     }
@@ -3802,8 +3595,6 @@ actor TranscriptionWorker {
     func unload() async {
         engine = nil
         loadedProfile = nil
-        customVocabularyBiaser = nil
-        configuredCustomVocabularyTerms = []
         ready = false
         log("ASR: unloaded")
     }
@@ -5167,7 +4958,7 @@ func diagnosticsReportText(from snapshot: DiagnosticsReportSnapshot) -> String {
     \(diagnosticBulletLines(snapshot.recentLogLines, emptyText: "No recent log lines available"))
 
     Logs: \(snapshot.logPath)
-    Privacy: transcript text, text-correction contents, and custom-vocabulary contents are not included.
+    Privacy: transcript text and text-correction contents are not included.
     """
 }
 
@@ -6567,7 +6358,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         prepareForStartupAttempt()
         let speechModelProfile = settings.speechModelProfile
-        let customVocabularyTerms = settings.customVocabularyTerms
 
         // Load ASR FIRST, then audio + hotkey. Reversing this order
         // makes the first-launch CoreML compile of the ANE Encoder
@@ -6587,13 +6377,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         self?.updateSpeechModelStartupProgress(progress)
                     }
                 }
-                guard !Task.isCancelled, !isTerminating else { return }
-                if !customVocabularyTerms.isEmpty {
-                    startupStatusTitle = "Preparing custom vocabulary…"
-                    speechModelStartupProgressFraction = nil
-                    rebuildMenu()
-                }
-                try await asr.configureCustomVocabulary(customVocabularyTerms)
                 guard !Task.isCancelled, !isTerminating else { return }
                 fallbackSpeechModelProfileAfterStartupFailure = nil
                 isSpeechModelReady = true
@@ -8244,7 +8027,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 "Recent transcripts: \(RECENT_TRANSCRIPT_LIMIT_DISPLAY[settings.recentTranscriptLimit] ?? settings.recentTranscriptLimit.rawValue) (\(history.count) in memory)",
                 "Text corrections: \(settings.transcriptCorrections.count) configured",
                 "Text correction sync: \(settings.transcriptCorrectionsSyncFile.isEmpty ? "off" : "configured")",
-                "Custom vocabulary: \(settings.customVocabularyTerms.count) terms configured",
                 "Text insertion: \(TextInserter.defaultStrategyDescription)",
                 "Restore clipboard after paste: \(settings.restoreClipboardAfterPaste)",
                 "Recording waveform: \(settings.showRecordingWaveform)",
@@ -8822,7 +8604,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         sub.addItem(buildPasteSuffixSettingsItem())
         sub.addItem(buildRecentTranscriptLimitSettingsItem())
         sub.addItem(buildCorrectionsItem())
-        sub.addItem(buildCustomVocabularyItem())
 
         let formatting = NSMenuItem(title: "Spoken formatting commands",
                                     action: #selector(toggleSpokenFormattingCommands(_:)),
@@ -9389,122 +9170,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         parent.submenu = sub
         return parent
-    }
-
-    private func buildCustomVocabularyItem() -> NSMenuItem {
-        let terms = settings.customVocabularyTerms
-        let title = terms.isEmpty ? "Custom Vocabulary (Beta)" : "Custom Vocabulary (Beta) (\(terms.count))"
-        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        let sub = NSMenu()
-        sub.autoenablesItems = false
-
-        let status = NSMenuItem(
-            title: terms.isEmpty ? "Off" : "On-device boosting enabled",
-            action: nil,
-            keyEquivalent: ""
-        )
-        status.isEnabled = false
-        sub.addItem(status)
-
-        let edit = NSMenuItem(
-            title: terms.isEmpty ? "Add Terms…" : "Edit Terms…",
-            action: #selector(editCustomVocabularyClicked(_:)),
-            keyEquivalent: ""
-        )
-        edit.target = self
-        edit.isEnabled = !isRecording && !isBusy && startupTask == nil && !isTerminating
-        edit.toolTip = "Bias local recognition toward proper nouns and specialist terms."
-        sub.addItem(edit)
-
-        if !terms.isEmpty {
-            let disable = NSMenuItem(
-                title: "Turn Off…",
-                action: #selector(disableCustomVocabularyClicked(_:)),
-                keyEquivalent: ""
-            )
-            disable.target = self
-            disable.isEnabled = edit.isEnabled
-            sub.addItem(disable)
-        }
-
-        sub.addItem(.separator())
-        let note = NSMenuItem(title: "Uses an additional ~100 MB local model", action: nil, keyEquivalent: "")
-        note.isEnabled = false
-        sub.addItem(note)
-        parent.submenu = sub
-        return parent
-    }
-
-    @objc private func editCustomVocabularyClicked(_ sender: NSMenuItem) {
-        guard !isRecording, !isBusy, startupTask == nil, !isTerminating else { return }
-        guard let terms = showCustomVocabularyEditor(existing: settings.customVocabularyTerms) else { return }
-        let existing = settings.customVocabularyTerms
-        guard terms != existing else { return }
-
-        if existing.isEmpty, !terms.isEmpty {
-            showAppForModal()
-            let alert = NSAlert()
-            alert.messageText = "Enable Custom Vocabulary?"
-            alert.informativeText = """
-                Presspeech will download and verify an additional ~100 MB speech model from Hugging Face, then run a second local recognition pass after each dictation. Audio and vocabulary terms stay on this Mac.
-
-                The first preparation can take a few minutes. This beta uses conservative matching; add each inflected form separately.
-                """
-            alert.addButton(withTitle: "Enable & Download")
-            alert.addButton(withTitle: "Cancel")
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
-        }
-        applyCustomVocabularyTerms(terms)
-    }
-
-    @objc private func disableCustomVocabularyClicked(_ sender: NSMenuItem) {
-        guard !settings.customVocabularyTerms.isEmpty,
-              !isRecording, !isBusy, startupTask == nil, !isTerminating else { return }
-        showAppForModal()
-        let alert = NSAlert()
-        alert.messageText = "Turn Off Custom Vocabulary?"
-        alert.informativeText = "Your saved terms will be removed. The downloaded local model remains cached and no network request is made while custom vocabulary is off."
-        alert.addButton(withTitle: "Turn Off")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        applyCustomVocabularyTerms([])
-    }
-
-    private func applyCustomVocabularyTerms(_ terms: [String]) {
-        settings.customVocabularyTerms = terms
-        log("custom vocabulary setting changed (\(terms.count) terms; content redacted)")
-        startStartup(reason: "custom vocabulary change")
-    }
-
-    private func showCustomVocabularyEditor(existing: [String]) -> [String]? {
-        showAppForModal()
-        let alert = NSAlert()
-        alert.messageText = existing.isEmpty ? "Add Custom Vocabulary" : "Edit Custom Vocabulary"
-        alert.informativeText = """
-            Enter one exact word or phrase per line. Use letters, spaces, apostrophes, and hyphens; terms must be at least 3 characters. Add inflected forms separately. At most \(MAX_CUSTOM_VOCABULARY_TERMS) terms are kept.
-            """
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        let editor = correctionTextEditor(
-            frame: NSRect(x: 0, y: 0, width: 560, height: 260),
-            text: existing.joined(separator: "\n")
-        )
-        alert.accessoryView = editor.scrollView
-        alert.window.initialFirstResponder = editor.textView
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-
-        let parsed = customVocabularyTerms(fromEditorText: editor.textView.string)
-        guard parsed.valid else {
-            showAppForModal()
-            let invalid = NSAlert()
-            invalid.alertStyle = .warning
-            invalid.messageText = "Custom Vocabulary Not Saved"
-            invalid.informativeText = "Remove duplicate, too-short, overlong, or unsupported entries. Use one unique term per non-empty line and no more than \(MAX_CUSTOM_VOCABULARY_TERMS) terms."
-            invalid.addButton(withTitle: "OK")
-            invalid.runModal()
-            return nil
-        }
-        return parsed.terms
     }
 
     private func correctionMenuTitle(_ correction: TranscriptCorrection) -> String {
@@ -11216,8 +10881,6 @@ private enum PresspeechSelfTest {
             return runSuite("history", testRecentTranscriptLimit)
         case "corrections":
             return runSuite("corrections", testTranscriptCorrections)
-        case "vocabulary":
-            return runSuite("vocabulary", testCustomVocabulary)
         case "fillers":
             return runSuite("fillers", testFillerWordRemoval)
         case "audio-level":
@@ -11275,7 +10938,6 @@ private enum PresspeechSelfTest {
         try testPasteSuffixFormatting()
         try testRecentTranscriptLimit()
         try testTranscriptCorrections()
-        try testCustomVocabulary()
         try testFillerWordRemoval()
         try testAudioLevelMetering()
         try testAudioConversion()
@@ -11290,49 +10952,6 @@ private enum PresspeechSelfTest {
         try testPrivateLogAppend()
         try testDiagnostics()
         try testIdentityMigration()
-    }
-
-    private static func testCustomVocabulary() throws {
-        let normalized = normalizedCustomVocabularyTerms([
-            "  Szypański  ",
-            "Szypański",
-            "Fluid   Audio",
-            "fluid audio",
-            "O'Connor",
-            "Jean-Luc",
-            "ab",
-            "term: alias",
-            String(repeating: "x", count: MAX_CUSTOM_VOCABULARY_TERM_BYTES + 1),
-        ])
-        try expect(
-            normalized,
-            equals: ["Szypański", "Fluid Audio", "O'Connor", "Jean-Luc"],
-            "custom vocabulary should normalize Unicode and whitespace and reject duplicates or unsafe terms"
-        )
-        let parsed = customVocabularyTerms(fromEditorText: "NVIDIA\n\nFluid Audio\n")
-        try expect(parsed.terms,
-                   equals: ["NVIDIA", "Fluid Audio"],
-                   "custom vocabulary editor should ignore blank lines")
-        try expect(parsed.valid,
-                   equals: true,
-                   "custom vocabulary editor should accept valid unique lines")
-        try expect(customVocabularyTerms(fromEditorText: "NVIDIA\nnvidia").valid,
-                   equals: false,
-                   "custom vocabulary editor should reject duplicate normalized terms")
-        try expect(
-            normalizedCustomVocabularyTerms(
-                (0..<(MAX_CUSTOM_VOCABULARY_TERMS + 2)).map { "term number \($0)" }
-            ).count,
-            equals: 0,
-            "custom vocabulary should reject numeric terms rather than silently changing them"
-        )
-        try expect(
-            normalizedCustomVocabularyTerms(
-                (0..<(MAX_CUSTOM_VOCABULARY_TERMS + 2)).map { "term " + String(repeating: "a", count: $0 + 3) }
-            ).count <= MAX_CUSTOM_VOCABULARY_TERMS,
-            equals: true,
-            "custom vocabulary should stay bounded"
-        )
     }
 
     private static func testIdentityMigration() throws {
@@ -11501,7 +11120,7 @@ private enum PresspeechSelfTest {
                    "diagnostics report should include the speech model")
         try expect(report.contains("Recent log lines:"), equals: true,
                    "diagnostics report should include the recent log section")
-        try expect(report.contains("Privacy: transcript text, text-correction contents, and custom-vocabulary contents are not included."),
+        try expect(report.contains("Privacy: transcript text and text-correction contents are not included."),
                    equals: true,
                    "diagnostics report should state the privacy boundary")
 

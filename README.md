@@ -144,10 +144,6 @@ Useful menu items:
   mishearings or map a spoken phrase to exact reusable text; rules are
   deterministic, local, and portable through export/import or a
   user-chosen sync file
-- **Settings → Text → Custom Vocabulary (Beta)** — opt into conservative
-  on-device recognition bias for proper nouns and specialist terms; this uses
-  an additional ~100 MB verified local model and requires each inflected form
-  as a separate entry
 - **Settings → Text → Spoken formatting commands** — opt in to exact
   commands such as “new line”, “new paragraph”, “bullet point”, “comma”,
   and “open quote”
@@ -168,12 +164,10 @@ Presspeech is local-first:
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
-- Custom-vocabulary terms stay in local preferences and are never logged.
 
 Network calls are limited to:
 
 - speech model download from Hugging Face (first launch, integrity-failure re-download, or user-triggered cache reset),
-- an optional ~100 MB custom-vocabulary model download from Hugging Face only after the user enables that beta feature (and again after an integrity failure),
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers),
 - user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows verifies the release asset's size and SHA-256 before offering to run it and again immediately before launch.
 

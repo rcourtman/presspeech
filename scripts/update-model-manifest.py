@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate Presspeech's pinned speech-model SHA-256 manifests.
+"""Regenerate Presspeech's pinned speech-model SHA-256 manifest.
 
 The v3 Parakeet CoreML repository contains a mix of LFS-backed files
 and small Git blobs. Hugging Face exposes SHA-256 directly for the LFS
@@ -44,40 +44,6 @@ SAFE_REPO = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 SAFE_REVISION = re.compile(r"^[A-Za-z0-9._/-]+$")
 SWIFT_REPO_RE = re.compile(r'(static let parakeetV3Repository = ")([^"]+)(")')
 SWIFT_REVISION_RE = re.compile(r'(static let parakeetV3RepositoryCommit = ")([^"]+)(")')
-
-MODEL_SETTINGS = {
-    "parakeet-v3": {
-        "repo": DEFAULT_REPO,
-        "bundles": DEFAULT_BUNDLES,
-        "extra_files": DEFAULT_EXTRA_FILES,
-        "begin_marker": BEGIN_MARKER,
-        "end_marker": END_MARKER,
-        "repo_re": SWIFT_REPO_RE,
-        "revision_re": SWIFT_REVISION_RE,
-    },
-    "custom-vocabulary": {
-        "repo": "FluidInference/parakeet-ctc-110m-coreml",
-        "bundles": ["AudioEncoder.mlmodelc", "MelSpectrogram.mlmodelc"],
-        "extra_files": ["tokenizer.json", "vocab.json"],
-        "begin_marker": "// BEGIN GENERATED CUSTOM_VOCABULARY_MODEL_MANIFEST",
-        "end_marker": "// END GENERATED CUSTOM_VOCABULARY_MODEL_MANIFEST",
-        "repo_re": re.compile(r'(static let customVocabularyRepository = ")([^"]+)(")'),
-        "revision_re": re.compile(r'(static let customVocabularyRepositoryCommit = ")([^"]+)(")'),
-    },
-}
-
-
-def select_model(name: str) -> None:
-    global DEFAULT_REPO, DEFAULT_BUNDLES, DEFAULT_EXTRA_FILES
-    global BEGIN_MARKER, END_MARKER, SWIFT_REPO_RE, SWIFT_REVISION_RE
-    settings = MODEL_SETTINGS[name]
-    DEFAULT_REPO = settings["repo"]
-    DEFAULT_BUNDLES = settings["bundles"]
-    DEFAULT_EXTRA_FILES = settings["extra_files"]
-    BEGIN_MARKER = settings["begin_marker"]
-    END_MARKER = settings["end_marker"]
-    SWIFT_REPO_RE = settings["repo_re"]
-    SWIFT_REVISION_RE = settings["revision_re"]
 
 
 class ManifestError(RuntimeError):
@@ -430,8 +396,7 @@ def run_self_test() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", choices=sorted(MODEL_SETTINGS), default="parakeet-v3")
-    parser.add_argument("--repo", default=None)
+    parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument(
         "--revision",
         default=None,
@@ -449,10 +414,6 @@ def main() -> int:
     if args.self_test:
         run_self_test()
         return 0
-
-    select_model(args.model)
-    if args.repo is None:
-        args.repo = DEFAULT_REPO
 
     if args.revision is None:
         args.revision = revision_from_source(args.source)
