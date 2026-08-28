@@ -996,6 +996,74 @@ func wordEditDistance(_ ref: [String], _ hyp: [String]) -> Int {
     return prev[m]
 }
 
+/// Return the exact-token pairs from a minimum-edit word alignment. Ties use a
+/// stable diagonal/deletion/insertion order rather than seeking extra matches:
+/// a delete+insert path must not make a displaced term look recovered when an
+/// equally short pair of substitutions identifies it as misplaced.
+func exactWordAlignment(_ ref: [String], _ hyp: [String]) -> [Int: Int] {
+    let n = ref.count, m = hyp.count
+    var errors = Array(repeating: Array(repeating: 0, count: m + 1), count: n + 1)
+    // 0 = start, 1 = diagonal, 2 = delete reference token, 3 = insert hypothesis token.
+    var steps = Array(repeating: Array(repeating: UInt8(0), count: m + 1), count: n + 1)
+
+    if n > 0 {
+        for i in 1...n {
+            errors[i][0] = i
+            steps[i][0] = 2
+        }
+    }
+    if m > 0 {
+        for j in 1...m {
+            errors[0][j] = j
+            steps[0][j] = 3
+        }
+    }
+
+    if n > 0, m > 0 {
+        for i in 1...n {
+            for j in 1...m {
+                let isExact = ref[i - 1] == hyp[j - 1]
+                var bestErrors = errors[i - 1][j - 1] + (isExact ? 0 : 1)
+                var bestStep: UInt8 = 1
+
+                let deletionErrors = errors[i - 1][j] + 1
+                if deletionErrors < bestErrors {
+                    bestErrors = deletionErrors
+                    bestStep = 2
+                }
+                let insertionErrors = errors[i][j - 1] + 1
+                if insertionErrors < bestErrors {
+                    bestErrors = insertionErrors
+                    bestStep = 3
+                }
+                errors[i][j] = bestErrors
+                steps[i][j] = bestStep
+            }
+        }
+    }
+
+    var alignment: [Int: Int] = [:]
+    var i = n, j = m
+    while i > 0 || j > 0 {
+        switch steps[i][j] {
+        case 1:
+            if ref[i - 1] == hyp[j - 1] {
+                alignment[i - 1] = j - 1
+            }
+            i -= 1
+            j -= 1
+        case 2:
+            i -= 1
+        case 3:
+            j -= 1
+        default:
+            // Only the initialized origin has no predecessor.
+            return alignment
+        }
+    }
+    return alignment
+}
+
 struct WordErrorScore {
     let errors: Int
     let referenceWords: Int
@@ -1026,15 +1094,19 @@ struct CriticalTermScore {
     }
 }
 
-func phraseOccurrenceCount(_ phrase: [String], in words: [String]) -> Int {
-    guard !phrase.isEmpty, phrase.count <= words.count else { return 0 }
-    var count = 0
+func phraseOccurrenceStarts(_ phrase: [String], in words: [String]) -> [Int] {
+    guard !phrase.isEmpty, phrase.count <= words.count else { return [] }
+    var starts: [Int] = []
     for start in 0...(words.count - phrase.count) {
         if Array(words[start..<(start + phrase.count)]) == phrase {
-            count += 1
+            starts.append(start)
         }
     }
-    return count
+    return starts
+}
+
+func phraseOccurrenceCount(_ phrase: [String], in words: [String]) -> Int {
+    phraseOccurrenceStarts(phrase, in: words).count
 }
 
 func criticalTermScore(reference: String,
@@ -1042,17 +1114,31 @@ func criticalTermScore(reference: String,
                        terms: [String]) -> CriticalTermScore {
     let referenceWords = werTokens(reference)
     let hypothesisWords = werTokens(hypothesis)
+    let exactAlignment = exactWordAlignment(referenceWords, hypothesisWords)
     var matched = 0
     var total = 0
     var unexpected = 0
     for term in terms {
         let phrase = werTokens(term)
         guard !phrase.isEmpty else { continue }
-        let expected = phraseOccurrenceCount(phrase, in: referenceWords)
-        let actual = phraseOccurrenceCount(phrase, in: hypothesisWords)
-        total += expected
-        matched += min(expected, actual)
-        unexpected += max(0, actual - expected)
+        let expectedStarts = phraseOccurrenceStarts(phrase, in: referenceWords)
+        let actualStarts = phraseOccurrenceStarts(phrase, in: hypothesisWords)
+        let actualStartSet = Set(actualStarts)
+        var alignedActualStarts: Set<Int> = []
+        for referenceStart in expectedStarts {
+            guard let hypothesisStart = exactAlignment[referenceStart],
+                  actualStartSet.contains(hypothesisStart)
+            else { continue }
+            let fullyAligned = phrase.indices.allSatisfy { offset in
+                exactAlignment[referenceStart + offset] == hypothesisStart + offset
+            }
+            if fullyAligned {
+                alignedActualStarts.insert(hypothesisStart)
+            }
+        }
+        total += expectedStarts.count
+        matched += alignedActualStarts.count
+        unexpected += actualStarts.count - alignedActualStarts.count
     }
     return CriticalTermScore(
         matched: matched,
@@ -1465,6 +1551,37 @@ func runBenchSelfTests() throws {
     try expect(score.total == 2, "critical-term recall should count only terms present in reference")
     try expect(abs(score.recallPercent - 50) < 0.001, "critical-term recall percentage should be weighted")
     try expect(score.unexpected == 1, "critical-term scoring should count insertions absent from the reference")
+    let displacedScore = criticalTermScore(
+        reference: "alpha Szypański beta ordinary",
+        hypothesis: "alpha incorrect beta Szypański",
+        terms: ["Szypański"]
+    )
+    try expect(
+        displacedScore.matched == 0,
+        "a displaced critical term should not count as its reference occurrence"
+    )
+    try expect(
+        displacedScore.unexpected == 1,
+        "a displaced critical term should count as an unexpected insertion"
+    )
+    let swappedScore = criticalTermScore(
+        reference: "Szypański ordinary",
+        hypothesis: "ordinary Szypański",
+        terms: ["Szypański"]
+    )
+    try expect(
+        swappedScore.matched == 0 && swappedScore.unexpected == 1,
+        "alignment ties should not turn a swapped critical term into a hit"
+    )
+    let shiftedScore = criticalTermScore(
+        reference: "alpha Nowy Sącz beta",
+        hypothesis: "alpha filler Nowy Sącz beta",
+        terms: ["Nowy Sącz"]
+    )
+    try expect(
+        shiftedScore.matched == 1 && shiftedScore.unexpected == 0,
+        "an insertion before a correctly aligned phrase should preserve its hit"
+    )
     let wordErrors = wordErrorScore(
         reference: "one two three four",
         hypothesis: "one too three"

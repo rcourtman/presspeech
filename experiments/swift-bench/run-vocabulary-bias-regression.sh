@@ -104,14 +104,15 @@ isolated:
   sliding-vocab-no-rescue
                   the same rescorer with acoustic-only spotter rescue disabled
 
-Critical-term recall, precision, and unexpected insertions are exact after
-case/punctuation normalization. List every canonical vocabulary form, including
-forms absent from some clips, and list inflections separately; FluidAudio aliases
-are alternate matches, not morphological generators. Duplicate normalized forms
-are rejected rather than double-counted. After FluidAudio parses and sanitizes
-the text or JSON vocabulary, its canonical forms must exactly match the critical
-terms under scoring normalization. Unscored vocabulary terms and unrelated
-critical terms are rejected so neither false insertions nor gains can be hidden.
+Critical-term recall, precision, and unexpected insertions require exact,
+word-aligned occurrences after case/punctuation normalization. List every
+canonical vocabulary form, including forms absent from some clips, and list
+inflections separately; FluidAudio aliases are alternate matches, not
+morphological generators. Duplicate normalized forms are rejected rather than
+double-counted. After FluidAudio parses and sanitizes the text or JSON vocabulary,
+its canonical forms must exactly match the critical terms under scoring
+normalization. Unscored vocabulary terms and unrelated critical terms are
+rejected so neither false insertions nor gains can be hidden.
 
 The product-candidate screen compares each direct-v3 vocabulary policy with
 production v3; sliding-window lanes remain mechanism diagnostics. It requires
@@ -1706,8 +1707,8 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "> Production v3, four direct-v3 vocabulary policies, unbiased sliding v3,"
     echo "> and three sliding-window vocabulary policies run"
     echo "> in separate processes. Critical-term recall and unexpected insertions"
-    echo "> count exact canonical surface forms after case/punctuation normalization."
-    echo "> An unexpected insertion is an occurrence beyond the reference count. Model cache is"
+    echo "> count exact, word-aligned canonical surface forms after case/punctuation normalization."
+    echo "> An unexpected insertion is a canonical occurrence not aligned to the reference. Model cache is"
     echo "> logical on-disk size after preparation, not measured network traffic."
     echo "> Variable trial output is summarized conservatively per clip: worst WER, lowest"
     echo "> critical-term recall, highest unexpected-insertion count, and the resulting"

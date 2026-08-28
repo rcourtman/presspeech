@@ -316,14 +316,15 @@ weight. Worst WER remains the most adverse individual trial output per clip.
 Worst-trial selection and vocabulary-policy win/loss categories use exact edit
 counts; the one-decimal WER shown in per-clip tables is display-only.
 
-Critical terms deliberately use exact surface forms after case/punctuation
-normalization. Include every canonical vocabulary form: an occurrence beyond
-the reference count is reported as an unexpected insertion even when that term
-is absent from the clip. FluidAudio aliases are alternate acoustic/string
-matches, but an accepted candidate is replaced with its canonical term; aliases
-do not generate grammatical inflections. List every inflected form that the
-benchmark expects to preserve. Entries that are empty or duplicate after this
-normalization are rejected instead of being silently double-counted.
+Critical terms deliberately require exact, word-aligned surface forms after
+case/punctuation normalization. A canonical form elsewhere in the hypothesis
+does not hide a missed reference occurrence: it is reported as an unexpected
+insertion instead. Include every canonical vocabulary form. FluidAudio aliases
+are alternate acoustic/string matches, but an accepted candidate is replaced
+with its canonical term; aliases do not generate grammatical inflections. List
+every inflected form that the benchmark expects to preserve. Entries that are
+empty or duplicate after this normalization are rejected instead of being
+silently double-counted.
 After FluidAudio parses and sanitizes either vocabulary format, the resulting
 canonical forms must exactly match the critical-term forms under the same
 normalization (aliases are not canonical forms). The run rejects an unscored
