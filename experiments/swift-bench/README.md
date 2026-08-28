@@ -187,9 +187,11 @@ language and from the same push-to-talk workflow in which none of the configured
 critical terms occurs. It always uses the target `--language` hint. Those clips
 run through every policy, and the product-candidate screen rejects any new term
 insertion or WER regression. This matters when the main corpus was selected
-specifically because it contains target names. At least one same-language
-control clip is required to pass the thresholded product-candidate screen; omit
-the directory only for a `--no-threshold` exploratory run.
+specifically because it contains target names. A thresholded product-candidate
+run requires at least 10 same-language controls containing at least 1,000
+reference words in total, so a tiny clean sample cannot clear a policy whose
+known risk is occasional over-firing. Omit the directory only for a
+`--no-threshold` exploratory run.
 
 An additional cross-language corpus can broaden the safety check, but cannot
 satisfy the same-language requirement. Supply both its directory and explicit
@@ -235,9 +237,9 @@ lanes with production `v3` and sliding lanes with unbiased `sliding-v3`,
 reporting net critical hits, unexpected insertions, corpus WER change, and
 counts of clean wins, costly wins, and pure losses. A separate product-candidate
 screen evaluates only the three direct-v3 policies and fails the command unless
-at least one has
-complete comparable clips, at least one same-language negative-control clip,
-gains a critical-term hit, adds no unexpected insertions or WER either in
+at least one has complete comparable clips, at least 10 same-language
+negative-control clips with at least 1,000 reference words, gains a
+critical-term hit, adds no unexpected insertions or WER either in
 aggregate or on any individual clip, loses no critical-term hits on an
 individual clip, and keeps average p50 latency within 2x production. Optional
 cross-language controls are included in every comparison but never satisfy the

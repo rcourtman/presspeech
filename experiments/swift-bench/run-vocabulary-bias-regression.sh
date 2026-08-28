@@ -30,7 +30,11 @@ MAX_CRITICAL_REGRESSED_CLIPS="0"
 MAX_WER_REGRESSED_CLIPS="0"
 MAX_UNEXPECTED_REGRESSED_CLIPS="0"
 MAX_PRODUCTION_LATENCY_RATIO="2.00"
-MIN_NEGATIVE_CONTROL_CLIPS="1"
+# Over-fire can be sparse and vocabulary-specific. Require both varied
+# dictation boundaries and enough ordinary speech before a zero-insertion
+# result is allowed to support a product candidate.
+MIN_NEGATIVE_CONTROL_CLIPS="10"
+MIN_NEGATIVE_CONTROL_REFERENCE_WORDS="1000"
 SELF_TEST=0
 
 BENCHMARK_SOURCE_PATHS=(
@@ -93,8 +97,9 @@ The product-candidate screen compares each direct-v3 vocabulary policy with
 production v3; sliding-window lanes remain mechanism diagnostics. It requires
 complete comparable clips, at least one net critical-term hit,
 no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected
-insertions or WER, at least one same-language negative-control clip, and average
-p50 latency no more than 2x production. Passing
+insertions or WER, at least 10 same-language negative-control clips containing
+at least 1,000 reference words in total, and average p50 latency no more than
+2x production. Passing
 is necessary evidence for product evaluation, not approval to ship. Thresholded
 runs also require a clean Git checkout so a shared report identifies the exact
 reviewable benchmark source; use --no-threshold for locally modified experiments.
@@ -487,13 +492,17 @@ candidate_assessment() {
         -v max_wer_regressed_clips="$MAX_WER_REGRESSED_CLIPS" \
         -v max_unexpected_regressed_clips="$MAX_UNEXPECTED_REGRESSED_CLIPS" \
         -v max_latency_ratio="$MAX_PRODUCTION_LATENCY_RATIO" \
-        -v min_negative_controls="$MIN_NEGATIVE_CONTROL_CLIPS" '
+        -v min_negative_controls="$MIN_NEGATIVE_CONTROL_CLIPS" \
+        -v min_negative_words="$MIN_NEGATIVE_CONTROL_REFERENCE_WORDS" '
         function add_blocker(message) {
             blockers = blockers (blockers == "" ? "" : "; ") message
         }
         NR > 1 && $2 == baseline {
             baseline_count += 1
-            if ($1 ~ /^n[0-9]+/) baseline_negative_controls += 1
+            if ($1 ~ /^n[0-9]+/) {
+                baseline_negative_controls += 1
+                baseline_negative_words += $13
+            }
             baseline_hits[$1] = $4
             baseline_total[$1] = $5
             baseline_unexpected[$1] = $7
@@ -543,7 +552,8 @@ candidate_assessment() {
             latency_ratio = comparable ? candidate_latency_sum / baseline_latency_sum : 0
 
             if (!complete) add_blocker("incomplete comparable clips")
-            if (baseline_negative_controls < min_negative_controls) add_blocker("same-language negative-control clips missing")
+            if (baseline_negative_controls < min_negative_controls) add_blocker("same-language negative-control clips below " min_negative_controls)
+            if (baseline_negative_words < min_negative_words) add_blocker("same-language negative-control reference words below " min_negative_words)
             if (total_hit_delta < min_hit_gain) add_blocker("critical-hit gain below +" min_hit_gain)
             if (critical_regressed_clips > max_critical_regressed_clips) add_blocker("per-clip critical-term recall regressed")
             if (unexpected_delta > max_unexpected_delta) add_blocker("unexpected insertions increased")
@@ -555,8 +565,9 @@ candidate_assessment() {
             verdict = blockers == "" ? "passes" : "blocked"
             wer_display = total_reference_words ? sprintf("%+.2f", wer_delta) : "unknown"
             latency_display = comparable ? sprintf("%.2f", latency_ratio) : "unknown"
-            printf("%s\t%d\t%d\t%+d\t%+d\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n",
-                candidate, comparable, baseline_count, total_hit_delta,
+            printf("%s\t%d\t%d\t%d\t%d\t%+d\t%+d\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n",
+                candidate, comparable, baseline_count, baseline_negative_controls,
+                baseline_negative_words, total_hit_delta,
                 unexpected_delta, wer_display, critical_regressed_clips,
                 unexpected_regressed_clips, wer_regressed_clips, latency_display,
                 verdict, blockers)
@@ -566,14 +577,14 @@ candidate_assessment() {
 
 candidate_assessment_row() {
     local assessment="$1"
-    local candidate comparable baseline_count hit_delta unexpected_delta
+    local candidate comparable baseline_count negative_controls negative_words hit_delta unexpected_delta
     local wer_delta critical_regressed unexpected_regressed wer_regressed latency_ratio verdict blockers
-    IFS=$'\t' read -r candidate comparable baseline_count hit_delta \
+    IFS=$'\t' read -r candidate comparable baseline_count negative_controls negative_words hit_delta \
         unexpected_delta wer_delta critical_regressed unexpected_regressed wer_regressed \
         latency_ratio verdict blockers <<<"$assessment"
-    printf '| `%s` | %s/%s | %s | %s | %s | %s | %s | %s | %sx | **%s** | %s |\n' \
-        "$candidate" "$comparable" "$baseline_count" "$hit_delta" \
-        "$unexpected_delta" "$wer_delta" "$critical_regressed" "$unexpected_regressed" \
+    printf '| `%s` | %s/%s | %s / %s | %s | %s | %s | %s | %s | %s | %sx | **%s** | %s |\n' \
+        "$candidate" "$comparable" "$baseline_count" "$negative_controls" "$negative_words" \
+        "$hit_delta" "$unexpected_delta" "$wer_delta" "$critical_regressed" "$unexpected_regressed" \
         "$wer_regressed" "$latency_ratio" \
         "$verdict" "${blockers:---}"
 }
@@ -746,31 +757,44 @@ run_self_test() {
 
     local blocked_assessment
     blocked_assessment="$(candidate_assessment "$tsv" sliding-v3 sliding-vocab)"
-    assert_contains <(printf '%s\n' "$blocked_assessment") $'sliding-vocab\t4\t4\t+2\t+2\t+0.15\t0\t2\t3\t1.00\tblocked\tunexpected insertions increased; corpus WER regressed; per-clip unexpected insertions increased; per-clip WER regressions present'
+    assert_contains <(printf '%s\n' "$blocked_assessment") $'sliding-vocab\t4\t4\t1\t2000\t+2\t+2\t+0.15\t0\t2\t3\t1.00\tblocked\tsame-language negative-control clips below 10; unexpected insertions increased; corpus WER regressed; per-clip unexpected insertions increased; per-clip WER regressions present'
 
     {
         head -n 1 "$tsv"
         awk -F '\t' 'NR > 1 && $2 == "sliding-v3"' "$tsv"
+        for ((index = 5; index <= 13; index += 1)); do
+            printf 'n%03d\tsliding-v3\t0.0\t0\t0\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t0\t0\t100.0\n' "$index"
+        done
         printf '001\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t10\t100.0\n'
         printf '002\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t1\t150.0\t40.0\t700.0\t1000.0\t0\t5\t66.7\n'
         printf '003\tsliding-vocab-no-rescue\t0.0\t1\t1\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t20\t100.0\n'
         printf 'n004\tsliding-vocab-no-rescue\t0.0\t0\t0\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t2000\t100.0\n'
+        for ((index = 5; index <= 13; index += 1)); do
+            printf 'n%03d\tsliding-vocab-no-rescue\t0.0\t0\t0\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t0\t100.0\n' "$index"
+        done
     } >"$tmpdir/passing.tsv"
     local passing_assessment
     passing_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
-    assert_eq "$passing_assessment" $'sliding-vocab-no-rescue\t4\t4\t+2\t+0\t-0.20\t0\t0\t0\t1.50\tpasses\t' "passing candidate assessment"
+    assert_eq "$passing_assessment" $'sliding-vocab-no-rescue\t13\t13\t10\t2000\t+2\t+0\t-0.20\t0\t0\t0\t1.50\tpasses\t' "passing candidate assessment"
     candidate_assessment_row "$passing_assessment" >"$summary"
-    assert_contains "$summary" '| `sliding-vocab-no-rescue` | 4/4 | +2 | +0 | -0.20 | 0 | 0 | 0 | 1.50x | **passes** | -- |'
+    assert_contains "$summary" '| `sliding-vocab-no-rescue` | 13/13 | 10 / 2000 | +2 | +0 | -0.20 | 0 | 0 | 0 | 1.50x | **passes** | -- |'
 
-    sed 's/^n004/004/' "$tmpdir/passing.tsv" >"$tmpdir/no-negative-controls.tsv"
+    sed 's/^n/0/' "$tmpdir/passing.tsv" >"$tmpdir/no-negative-controls.tsv"
     local no_negative_assessment
     no_negative_assessment="$(candidate_assessment "$tmpdir/no-negative-controls.tsv" sliding-v3 sliding-vocab-no-rescue)"
-    assert_contains <(printf '%s\n' "$no_negative_assessment") $'blocked\tsame-language negative-control clips missing'
+    assert_contains <(printf '%s\n' "$no_negative_assessment") $'blocked\tsame-language negative-control clips below 10; same-language negative-control reference words below 1000'
 
-    sed 's/^n004/x004/' "$tmpdir/passing.tsv" >"$tmpdir/cross-language-only.tsv"
+    sed 's/^n/x/' "$tmpdir/passing.tsv" >"$tmpdir/cross-language-only.tsv"
     local cross_language_only_assessment
     cross_language_only_assessment="$(candidate_assessment "$tmpdir/cross-language-only.tsv" sliding-v3 sliding-vocab-no-rescue)"
-    assert_contains <(printf '%s\n' "$cross_language_only_assessment") $'blocked\tsame-language negative-control clips missing'
+    assert_contains <(printf '%s\n' "$cross_language_only_assessment") $'blocked\tsame-language negative-control clips below 10; same-language negative-control reference words below 1000'
+
+    sed $'s/\t2000\t100.0$/\t999\t100.0/' \
+        "$tmpdir/passing.tsv" >"$tmpdir/insufficient-negative-words.tsv"
+    local insufficient_negative_words_assessment
+    insufficient_negative_words_assessment="$(candidate_assessment "$tmpdir/insufficient-negative-words.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_contains <(printf '%s\n' "$insufficient_negative_words_assessment") \
+        $'blocked\tsame-language negative-control reference words below 1000'
 
     # Aggregate improvements must not hide a costly per-clip vocabulary win or
     # an insertion that happens to be offset on another clip.
@@ -779,7 +803,7 @@ run_self_test() {
         "$tmpdir/passing.tsv" >"$tmpdir/masked-regressions.tsv"
     local masked_assessment
     masked_assessment="$(candidate_assessment "$tmpdir/masked-regressions.tsv" sliding-v3 sliding-vocab-no-rescue)"
-    assert_eq "$masked_assessment" $'sliding-vocab-no-rescue\t4\t4\t+2\t+0\t-0.10\t0\t1\t1\t1.50\tblocked\tper-clip unexpected insertions increased; per-clip WER regressions present' "masked per-clip regressions"
+    assert_eq "$masked_assessment" $'sliding-vocab-no-rescue\t13\t13\t10\t2000\t+2\t+0\t-0.10\t0\t1\t1\t1.50\tblocked\tper-clip unexpected insertions increased; per-clip WER regressions present' "masked per-clip regressions"
 
     # Net recall gains must not hide a vocabulary term lost on another clip.
     sed -e $'s/^001\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0/001\tsliding-vocab-no-rescue\t0.0\t0\t2\t0.0/' \
@@ -787,7 +811,7 @@ run_self_test() {
         "$tmpdir/passing.tsv" >"$tmpdir/masked-critical-regression.tsv"
     local masked_critical_assessment
     masked_critical_assessment="$(candidate_assessment "$tmpdir/masked-critical-regression.tsv" sliding-v3 sliding-vocab-no-rescue)"
-    assert_eq "$masked_critical_assessment" $'sliding-vocab-no-rescue\t4\t4\t+1\t+0\t-0.20\t1\t0\t0\t1.50\tblocked\tper-clip critical-term recall regressed' "masked per-clip critical-term regression"
+    assert_eq "$masked_critical_assessment" $'sliding-vocab-no-rescue\t13\t13\t10\t2000\t+1\t+0\t-0.20\t1\t0\t0\t1.50\tblocked\tper-clip critical-term recall regressed' "masked per-clip critical-term regression"
 
     local secret_path="$tmpdir/Private Polish Benchmark"
     REDACT_PATHS=1
@@ -1117,7 +1141,7 @@ if [[ -n "$CROSS_LANGUAGE_CONTROL_DIR" ]]; then
 fi
 
 if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "${#negative_clips[@]}" -lt "$MIN_NEGATIVE_CONTROL_CLIPS" ]]; then
-    echo "thresholded vocabulary runs require at least $MIN_NEGATIVE_CONTROL_CLIPS same-language negative-control clip" >&2
+    echo "thresholded vocabulary runs require at least $MIN_NEGATIVE_CONTROL_CLIPS same-language negative-control clips" >&2
     echo "supply --negative-control-dir from the target workflow, or use --no-threshold for exploration" >&2
     exit 1
 fi
@@ -1405,10 +1429,10 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clip, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
-    echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
-    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
+    echo "| Candidate | Comparable clips | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
 } >>"$report"
 
 candidate_passes=0
@@ -1416,7 +1440,11 @@ candidate_blockers=()
 for candidate in v3-vocab v3-vocab-conservative v3-vocab-no-rescue; do
     assessment="$(candidate_assessment "$tsv" v3 "$candidate")"
     candidate_assessment_row "$assessment" >>"$report"
-    IFS=$'\t' read -r assessed_candidate _ _ _ _ _ _ _ _ _ verdict blockers <<<"$assessment"
+    IFS=$'\t' read -r assessed_candidate assessed_comparable assessed_baseline_count \
+        assessed_negative_controls assessed_negative_words assessed_hit_delta \
+        assessed_unexpected_delta assessed_wer_delta assessed_critical_regressed \
+        assessed_unexpected_regressed assessed_wer_regressed assessed_latency_ratio \
+        verdict blockers <<<"$assessment"
     if [[ "$verdict" == "passes" ]]; then
         candidate_passes=$((candidate_passes + 1))
     else
