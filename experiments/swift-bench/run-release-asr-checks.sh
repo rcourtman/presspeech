@@ -82,6 +82,15 @@ assert_contains() {
     fi
 }
 
+assert_not_contains() {
+    local file="$1"
+    local needle="$2"
+    if grep -Fq -- "$needle" "$file"; then
+        echo "self-test expected output not to contain: $needle" >&2
+        exit 1
+    fi
+}
+
 run_self_test() {
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-release-asr-self-test.XXXXXX")"
@@ -103,6 +112,30 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$missing_value_log" "--trials requires a value"
+
+    local missing_real_log="$tmpdir/missing-real.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --require-real-audio >"$missing_real_log" 2>&1; then
+        echo "self-test expected a required missing real corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$missing_real_log" \
+        "no private real-dictation clips found in $tmpdir/missing-real"
+    assert_not_contains "$missing_real_log" "running helper self-tests"
+
+    local missing_public_log="$tmpdir/missing-public.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --require-public-audio >"$missing_public_log" 2>&1; then
+        echo "self-test expected a required missing public corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$missing_public_log" \
+        "no public speech clips found in $tmpdir/missing-public"
+    assert_not_contains "$missing_public_log" "running helper self-tests"
 
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
@@ -168,6 +201,20 @@ if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     exit 2
 fi
 
+# Required fixture sets are invocation preconditions. Validate both before
+# helper checks or benchmarks can create reports, so a release gate cannot do
+# partial work and only then discover that its requested coverage is absent.
+real_count="$(supported_audio_count "$REAL_AUDIO_DIR")"
+public_count="$(supported_audio_count "$PUBLIC_AUDIO_DIR")"
+if [[ "$REQUIRE_REAL_AUDIO" -eq 1 && "$real_count" -eq 0 ]]; then
+    echo "no private real-dictation clips found in $REAL_AUDIO_DIR" >&2
+    exit 1
+fi
+if [[ "$REQUIRE_PUBLIC_AUDIO" -eq 1 && "$public_count" -eq 0 ]]; then
+    echo "no public speech clips found in $PUBLIC_AUDIO_DIR" >&2
+    exit 1
+fi
+
 echo "running helper self-tests..."
 ./run-tail-word-regression.sh --self-test
 ./add-real-dictation-fixture.sh --self-test
@@ -189,12 +236,7 @@ if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
     fi
 fi
 
-real_count="$(supported_audio_count "$REAL_AUDIO_DIR")"
 if [[ "$real_count" -eq 0 ]]; then
-    if [[ "$REQUIRE_REAL_AUDIO" -eq 1 ]]; then
-        echo "no private real-dictation clips found in $REAL_AUDIO_DIR" >&2
-        exit 1
-    fi
     echo
     echo "no private real-dictation clips found in $REAL_AUDIO_DIR; skipped real-audio WER gates"
 else
@@ -221,12 +263,7 @@ else
     fi
 fi
 
-public_count="$(supported_audio_count "$PUBLIC_AUDIO_DIR")"
 if [[ "$public_count" -eq 0 ]]; then
-    if [[ "$REQUIRE_PUBLIC_AUDIO" -eq 1 ]]; then
-        echo "no public speech clips found in $PUBLIC_AUDIO_DIR" >&2
-        exit 1
-    fi
     echo
     echo "no public speech clips found in $PUBLIC_AUDIO_DIR; skipped public WER gates"
     echo
