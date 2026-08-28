@@ -180,6 +180,45 @@ validate_metrics() {
     fi
 }
 
+publish_report_artifacts() {
+    local stage_dir="$1"
+    local staged_report="$2"
+    local staged_tsv="$3"
+    local staged_raw_dir="$4"
+    local final_report="$5"
+    local final_tsv="$6"
+    local final_raw_dir="$7"
+
+    if [[ ! -f "$staged_report" || ! -f "$staged_tsv" || ! -d "$staged_raw_dir" ]]; then
+        echo "vocabulary-bias staging artifacts are incomplete" >&2
+        return 1
+    fi
+    if [[ -e "$final_report" || -e "$final_tsv" || -e "$final_raw_dir" ]]; then
+        echo "refusing to replace existing vocabulary-bias artifacts" >&2
+        return 1
+    fi
+
+    # Publish the human-facing report last. If an unexpected move fails, roll
+    # back only paths that this function created so no partial run looks final.
+    local moved_raw=0
+    local moved_tsv=0
+    if ! mv "$staged_raw_dir" "$final_raw_dir"; then
+        return 1
+    fi
+    moved_raw=1
+    if ! mv "$staged_tsv" "$final_tsv"; then
+        rm -rf -- "$final_raw_dir"
+        return 1
+    fi
+    moved_tsv=1
+    if ! mv "$staged_report" "$final_report"; then
+        [[ "$moved_tsv" -eq 0 ]] || rm -f -- "$final_tsv"
+        [[ "$moved_raw" -eq 0 ]] || rm -rf -- "$final_raw_dir"
+        return 1
+    fi
+    rmdir "$stage_dir"
+}
+
 run_benchmark_to_log() {
     local log_file="$1"
     shift
@@ -352,6 +391,49 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$validation_log" "benchmark output missing required metrics: wer,p50"
+
+    local stage_dir="$tmpdir/staged"
+    local final_dir="$tmpdir/published"
+    mkdir -p "$stage_dir/raw" "$final_dir"
+    printf 'complete report\n' >"$stage_dir/report.md"
+    printf 'header\nrow\n' >"$stage_dir/results.tsv"
+    printf 'bench output\n' >"$stage_dir/raw/clip-v3.bench.txt"
+    publish_report_artifacts \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$stage_dir/results.tsv" \
+        "$stage_dir/raw" \
+        "$final_dir/report.md" \
+        "$final_dir/results.tsv" \
+        "$final_dir/raw"
+    assert_contains "$final_dir/report.md" "complete report"
+    assert_contains "$final_dir/results.tsv" "row"
+    assert_contains "$final_dir/raw/clip-v3.bench.txt" "bench output"
+    [[ ! -e "$stage_dir" ]] || {
+        echo "self-test expected successful report staging cleanup" >&2
+        exit 1
+    }
+
+    stage_dir="$tmpdir/collision-stage"
+    mkdir -p "$stage_dir/raw"
+    printf 'new report\n' >"$stage_dir/report.md"
+    printf 'new results\n' >"$stage_dir/results.tsv"
+    printf 'new log\n' >"$stage_dir/raw/log.txt"
+    local collision_log="$tmpdir/collision.log"
+    if publish_report_artifacts \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$stage_dir/results.tsv" \
+        "$stage_dir/raw" \
+        "$final_dir/report.md" \
+        "$final_dir/other-results.tsv" \
+        "$final_dir/other-raw" >"$collision_log" 2>&1; then
+        echo "self-test expected report publication collision to fail" >&2
+        exit 1
+    fi
+    assert_contains "$collision_log" "refusing to replace existing vocabulary-bias artifacts"
+    assert_contains "$final_dir/report.md" "complete report"
+    assert_contains "$stage_dir/report.md" "new report"
 
     local variable_log="$tmpdir/variable.log"
     {
@@ -532,16 +614,35 @@ fi
 
 mkdir -p "$OUTDIR"
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-bias.XXXXXX")"
-cleanup() { rm -rf "$tmpdir"; }
+stage_dir=""
+cleanup() {
+    rm -rf "$tmpdir"
+    if [[ -n "$stage_dir" ]]; then
+        rm -rf -- "$stage_dir"
+    fi
+}
 trap cleanup EXIT INT TERM
 
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-report="$OUTDIR/$timestamp-vocabulary-bias.md"
-tsv="$OUTDIR/$timestamp-vocabulary-bias.tsv"
-raw_dir="$OUTDIR/$timestamp-vocabulary-bias-logs"
+final_report="$OUTDIR/$timestamp-vocabulary-bias.md"
+final_tsv="$OUTDIR/$timestamp-vocabulary-bias.tsv"
+final_raw_dir="$OUTDIR/$timestamp-vocabulary-bias-logs"
+if [[ -e "$final_report" || -e "$final_tsv" || -e "$final_raw_dir" ]]; then
+    echo "vocabulary-bias artifacts already exist for timestamp $timestamp" >&2
+    exit 1
+fi
+reserved_stage_dir="$OUTDIR/.$timestamp-vocabulary-bias.incomplete"
+if ! mkdir "$reserved_stage_dir"; then
+    echo "could not reserve vocabulary-bias output for timestamp $timestamp" >&2
+    exit 1
+fi
+stage_dir="$reserved_stage_dir"
+report="$stage_dir/report.md"
+tsv="$stage_dir/results.tsv"
+raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
 printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\n' >"$tsv"
@@ -670,9 +771,19 @@ done
     echo
     echo "Clean wins gain critical hits without worse WER; costly wins gain hits with worse WER; pure losses worsen WER without gaining hits. Other results do not fit those three decision categories."
     echo
-    echo "Raw bench logs: $(path_label "$raw_dir")"
-    echo "Machine-readable TSV: $(path_label "$tsv")"
+    echo "Raw bench logs: $(path_label "$final_raw_dir")"
+    echo "Machine-readable TSV: $(path_label "$final_tsv")"
 } >>"$report"
 
-echo "report: $report"
-echo "tsv: $tsv"
+publish_report_artifacts \
+    "$stage_dir" \
+    "$report" \
+    "$tsv" \
+    "$raw_dir" \
+    "$final_report" \
+    "$final_tsv" \
+    "$final_raw_dir"
+stage_dir=""
+
+echo "report: $final_report"
+echo "tsv: $final_tsv"
