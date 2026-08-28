@@ -224,8 +224,8 @@ fixture, its target/same-language/cross-language assignment, the vocabulary and
 critical-term files, and the macOS and Swift
 versions. The input fingerprint depends on paired file contents rather than
 private names, so a copied or renamed frozen corpus remains comparable while
-any benchmark input or target/same-language/cross-language assignment change is
-visible. Keeping
+any benchmark input, target/same-language/cross-language assignment, language
+hint, or trial-count change is visible. Keeping
 the component hashes folded
 into one report value also avoids exposing a separately guessable digest for a
 short private vocabulary. Thresholded runs require a clean Git checkout so a

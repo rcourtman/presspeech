@@ -170,12 +170,18 @@ benchmark_inputs_sha256() {
     local cross_language_fixture_digest="$3"
     local vocabulary="$4"
     local critical_terms="$5"
-    printf 'target-fixture-set\t%s\nnegative-control-fixture-set\t%s\ncross-language-control-fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\n' \
+    local language="$6"
+    local cross_language_control_language="$7"
+    local trials="$8"
+    printf 'target-fixture-set\t%s\nnegative-control-fixture-set\t%s\ncross-language-control-fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\nlanguage\t%s\ncross-language-control-language\t%s\ntrials\t%s\n' \
         "$target_fixture_digest" \
         "$negative_fixture_digest" \
         "$cross_language_fixture_digest" \
         "$(file_sha256 "$vocabulary")" \
         "$(file_sha256 "$critical_terms")" \
+        "$language" \
+        "$cross_language_control_language" \
+        "$trials" \
         | shasum -a 256 | awk '{print $1}'
 }
 
@@ -840,8 +846,11 @@ run_self_test() {
         "none" \
         "none" \
         "$fixtures/vocabulary.txt" \
-        "$fixtures/critical-terms.txt")" \
-        "9286185010ac55281d4aeeb688ed594492076d24411d3c940d3f8d43a6339aaf" \
+        "$fixtures/critical-terms.txt" \
+        "pl" \
+        "" \
+        "3")" \
+        "ed454fc0255f05b43f6dfb1643f6b3d4ac832d392bb21b5b4a68165331eefaec" \
         "complete benchmark-input digest"
     local first_fixture_digest
     local second_fixture_digest
@@ -849,20 +858,45 @@ run_self_test() {
     second_fixture_digest="$(fixture_set_sha256 "$fixtures/second.wav")"
     if [[ "$(benchmark_inputs_sha256 \
         "$first_fixture_digest" "$second_fixture_digest" "none" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" == \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "" "3")" == \
         "$(benchmark_inputs_sha256 \
         "$second_fixture_digest" "$first_fixture_digest" "none" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" ]]; then
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "" "3")" ]]; then
         echo "self-test expected target/control assignment to affect provenance" >&2
         exit 1
     fi
     if [[ "$(benchmark_inputs_sha256 \
         "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" == \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3")" == \
         "$(benchmark_inputs_sha256 \
         "$fixture_digest" "$second_fixture_digest" "$first_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" ]]; then
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3")" ]]; then
         echo "self-test expected same/cross-language control assignment to affect provenance" >&2
+        exit 1
+    fi
+    local benchmark_configuration_digest
+    benchmark_configuration_digest="$(benchmark_inputs_sha256 \
+        "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3")"
+    if [[ "$(benchmark_inputs_sha256 \
+        "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "auto" "en" "3")" == \
+        "$benchmark_configuration_digest" ]]; then
+        echo "self-test expected target language changes to alter provenance" >&2
+        exit 1
+    fi
+    if [[ "$(benchmark_inputs_sha256 \
+        "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "de" "3")" == \
+        "$benchmark_configuration_digest" ]]; then
+        echo "self-test expected cross-language hint changes to alter provenance" >&2
+        exit 1
+    fi
+    if [[ "$(benchmark_inputs_sha256 \
+        "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "5")" == \
+        "$benchmark_configuration_digest" ]]; then
+        echo "self-test expected trial-count changes to alter provenance" >&2
         exit 1
     fi
     assert_eq "$(clip_id_for p 7 'private name')" "p007" "redacted target clip ID"
@@ -1117,7 +1151,8 @@ if [[ "${#cross_language_clips[@]}" -gt 0 ]]; then
 fi
 benchmark_input_sha256="$(benchmark_inputs_sha256 \
     "$target_fixture_sha256" "$negative_fixture_sha256" "$cross_language_fixture_sha256" \
-    "$VOCABULARY" "$CRITICAL_TERMS")"
+    "$VOCABULARY" "$CRITICAL_TERMS" "$LANGUAGE" \
+    "$CROSS_LANGUAGE_CONTROL_LANGUAGE" "$TRIALS")"
 if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     echo "could not fingerprint benchmark inputs" >&2
     exit 1
