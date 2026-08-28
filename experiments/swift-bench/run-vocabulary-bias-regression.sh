@@ -325,6 +325,33 @@ extract_worst_wer_metrics() {
         '
 }
 
+extract_best_wer_metrics() {
+    local log_file="$1"
+    sed -nE 's/.*\[WER ([0-9.]+)%\].*\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\1\t\2\t\3/p' "$log_file" \
+        | awk -F '\t' '
+            {
+                numerator = $2
+                denominator = $3
+                if (denominator == 0) {
+                    numerator = numerator == 0 ? 0 : 1
+                    denominator = 1
+                }
+                if (!seen || numerator * best_denominator < best_numerator * denominator) {
+                    best = $1
+                    errors = $2
+                    words = $3
+                    best_numerator = numerator
+                    best_denominator = denominator
+                    seen = 1
+                }
+            }
+            END {
+                if (seen) printf("%s\t%s\t%s\n", best, errors, words)
+                else print "unknown\tunknown\tunknown"
+            }
+        '
+}
+
 extract_critical_metrics() {
     local log_file="$1"
     sed -nE 's/.*critical-terms matched=([0-9]+) total=([0-9]+) recall=([0-9.]+)% unexpected=([0-9]+).*/\1\t\2\t\3\t\4/p' "$log_file" \
@@ -353,6 +380,35 @@ extract_critical_metrics() {
             END {
                 if (seen) {
                     printf("%s\t%s\t%s\t%s\n", matched, total, lowest_recall, highest_unexpected)
+                }
+            }
+        '
+}
+
+extract_best_critical_metrics() {
+    local log_file="$1"
+    sed -nE 's/.*critical-terms matched=([0-9]+) total=([0-9]+) recall=([0-9.]+)% unexpected=([0-9]+).*/\1\t\2\t\3\t\4/p' "$log_file" \
+        | awk -F '\t' '
+            {
+                matched_ratio = $1
+                total_ratio = $2
+                if (total_ratio == 0) {
+                    matched_ratio = 1
+                    total_ratio = 1
+                }
+                if (!seen || matched_ratio * highest_total_ratio > highest_matched_ratio * total_ratio) {
+                    matched = $1
+                    total = $2
+                    highest_recall = $3
+                    highest_matched_ratio = matched_ratio
+                    highest_total_ratio = total_ratio
+                }
+                if (!seen || $4 < lowest_unexpected) lowest_unexpected = $4
+                seen = 1
+            }
+            END {
+                if (seen) {
+                    printf("%s\t%s\t%s\t%s\n", matched, total, highest_recall, lowest_unexpected)
                 }
             }
         '
@@ -677,11 +733,14 @@ candidate_assessment() {
                 baseline_negative_controls += 1
                 baseline_negative_words += $13
             }
-            baseline_hits[$1] = $4
+            # Compare the adverse candidate envelope with the favorable
+            # baseline envelope. Worst-versus-worst lets one unstable bad
+            # production trial hide a candidate regression.
+            baseline_hits[$1] = $16 == "" ? $4 : $16
             baseline_total[$1] = $5
-            baseline_unexpected[$1] = $7
+            baseline_unexpected[$1] = $17 == "" ? $7 : $17
             baseline_latency[$1] = $8
-            baseline_errors[$1] = $12
+            baseline_errors[$1] = $15 == "" ? $12 : $15
             baseline_words[$1] = $13
         }
         NR > 1 && $2 == candidate {
@@ -819,7 +878,9 @@ run_self_test() {
         echo '    transcript: [WER 12.5%] [critical-terms matched=7 total=8 recall=87.5% unexpected=2] [word-errors=1 reference-words=8] <redacted 42 chars>'
     } >"$log"
     assert_eq "$(extract_worst_wer_metrics "$log")" $'12.5\t1\t8' "WER parser"
+    assert_eq "$(extract_best_wer_metrics "$log")" $'12.5\t1\t8' "best WER parser"
     assert_eq "$(extract_critical_metrics "$log")" $'7\t8\t87.5\t2' "critical-term parser"
+    assert_eq "$(extract_best_critical_metrics "$log")" $'7\t8\t87.5\t2' "best critical-term parser"
     assert_eq "$(critical_precision_percent 7 2)" "77.8" "critical-term precision"
     assert_eq "$(critical_precision_percent 0 0)" "100.0" "empty critical-term precision"
     assert_eq "$(extract_p50_ms "$log")" "140.2" "latency parser"
@@ -1001,7 +1062,9 @@ MOCK
         echo '      • [WER 10.0%] [critical-terms matched=2 total=2 recall=100.0% unexpected=3] [word-errors=1 reference-words=10] <redacted 22 chars>'
     } >"$variable_log"
     assert_eq "$(extract_critical_metrics "$variable_log")" $'1\t2\t50.0\t3' "variable-output critical-term envelope"
+    assert_eq "$(extract_best_critical_metrics "$variable_log")" $'2\t2\t100.0\t0' "variable-output favorable critical-term envelope"
     assert_eq "$(extract_worst_wer_metrics "$variable_log")" $'20.0\t2\t10' "variable-output worst WER"
+    assert_eq "$(extract_best_wer_metrics "$variable_log")" $'10.0\t1\t10' "variable-output best WER"
 
     local rounded_recall_log="$tmpdir/rounded-recall.log"
     {
@@ -1009,6 +1072,7 @@ MOCK
         echo '      • [critical-terms matched=1997 total=2000 recall=99.9% unexpected=1] <redacted 22 chars>'
     } >"$rounded_recall_log"
     assert_eq "$(extract_critical_metrics "$rounded_recall_log")" $'1997\t2000\t99.9\t1' "rounded recall exact worst-trial selection"
+    assert_eq "$(extract_best_critical_metrics "$rounded_recall_log")" $'1998\t2000\t99.9\t0' "rounded recall exact best-trial selection"
 
     local rounded_wer_log="$tmpdir/rounded-wer.log"
     {
@@ -1016,6 +1080,7 @@ MOCK
         echo '      • [WER 0.1%] [word-errors=2 reference-words=2000] <redacted 22 chars>'
     } >"$rounded_wer_log"
     assert_eq "$(extract_worst_wer_metrics "$rounded_wer_log")" $'0.1\t2\t2000' "rounded WER exact worst-trial selection"
+    assert_eq "$(extract_best_wer_metrics "$rounded_wer_log")" $'0.1\t1\t2000' "rounded WER exact best-trial selection"
 
     local filtered_log="$tmpdir/filtered.log"
     run_benchmark_to_log "$filtered_log" printf '%s\n' \
@@ -1157,6 +1222,19 @@ MOCK
     local masked_critical_assessment
     masked_critical_assessment="$(candidate_assessment "$tmpdir/masked-critical-regression.tsv" sliding-v3 sliding-vocab-no-rescue)"
     assert_eq "$masked_critical_assessment" $'sliding-vocab-no-rescue\t35\t35\t25\t1135\t50\t10\t2000\t+1\t+0\t-0.13\t1\t0\t0\t1.50\tblocked\tper-clip critical-term recall regressed' "masked per-clip critical-term regression"
+
+    # Repeated-trial instability in production must not make a vocabulary
+    # candidate look safe. The descriptive row records production's adverse
+    # trial, while the appended extrema retain its clean trial for the gate.
+    {
+        printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\tcritical_precision_percent\tbest_word_errors\thighest_critical_matched\tlowest_critical_unexpected\n'
+        printf 'p001\tv3\t100.0\t0\t1\t0.0\t2\t100.0\t40.0\t600.0\t1000.0\t10\t10\t0.0\t0\t1\t0\n'
+        printf 'p001\tv3-vocab\t10.0\t1\t1\t100.0\t1\t150.0\t40.0\t700.0\t1000.0\t1\t10\t50.0\t0\t1\t0\n'
+    } >"$tmpdir/unstable-baseline.tsv"
+    local unstable_baseline_assessment
+    unstable_baseline_assessment="$(candidate_assessment "$tmpdir/unstable-baseline.tsv" v3 v3-vocab)"
+    assert_contains <(printf '%s\n' "$unstable_baseline_assessment") \
+        $'critical-hit gain below +1; unexpected insertions increased; corpus WER regressed; per-clip unexpected insertions increased; per-clip WER regressions present'
 
     REFERENCES_HAND_AUDITED="$original_candidate_reference_audit"
     TRIALS="$original_candidate_trials"
@@ -1749,7 +1827,7 @@ tsv="$stage_dir/results.tsv"
 raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
-printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\tcritical_precision_percent\n' >"$tsv"
+printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\tcritical_precision_percent\tbest_word_errors\thighest_critical_matched\tlowest_critical_unexpected\n' >"$tsv"
 
 {
     echo "# Presspeech Vocabulary-Bias Comparison"
@@ -1850,6 +1928,8 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
 
         wer_metrics="$(extract_worst_wer_metrics "$log_file")"
         IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"
+        best_wer_metrics="$(extract_best_wer_metrics "$log_file")"
+        IFS=$'\t' read -r _ best_word_errors best_reference_words <<<"$best_wer_metrics"
         critical="$(extract_critical_metrics "$log_file")"
         if [[ -n "$critical" ]]; then
             IFS=$'\t' read -r critical_matched critical_total critical_recall critical_unexpected <<<"$critical"
@@ -1858,6 +1938,14 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
             critical_total="unknown"
             critical_recall="unknown"
             critical_unexpected="unknown"
+        fi
+        best_critical="$(extract_best_critical_metrics "$log_file")"
+        if [[ -n "$best_critical" ]]; then
+            IFS=$'\t' read -r highest_critical_matched best_critical_total _ lowest_critical_unexpected <<<"$best_critical"
+        else
+            highest_critical_matched="unknown"
+            best_critical_total="unknown"
+            lowest_critical_unexpected="unknown"
         fi
         p50="$(extract_p50_ms "$log_file")"
         peak="$(extract_peak_mb "$log_file")"
@@ -1872,6 +1960,10 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
             wer "$wer" word-errors "$word_errors" reference-words "$reference_words" \
             critical-matched "$critical_matched" critical-total "$critical_total" \
             critical-recall "$critical_recall" critical-unexpected "$critical_unexpected" \
+            best-word-errors "$best_word_errors" best-reference-words "$best_reference_words" \
+            highest-critical-matched "$highest_critical_matched" \
+            best-critical-total "$best_critical_total" \
+            lowest-critical-unexpected "$lowest_critical_unexpected" \
             p50 "$p50" peak "$peak" cache "$cache" prepare "$prepare"; then
             echo "invalid benchmark output for clip $clip_id variant=$variant; see $(path_label "$log_file")" >&2
             exit 1
@@ -1882,10 +1974,17 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
         fi
         critical_precision="$(critical_precision_percent "$critical_matched" "$critical_unexpected")"
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        if [[ "$best_reference_words" != "$reference_words" ||
+              "$best_critical_total" != "$critical_total" ]]; then
+            echo "inconsistent trial reference metrics for clip $clip_id variant=$variant" >&2
+            exit 1
+        fi
+
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
             "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" \
-            "$word_errors" "$reference_words" "$critical_precision" >>"$tsv"
+            "$word_errors" "$reference_words" "$critical_precision" "$best_word_errors" \
+            "$highest_critical_matched" "$lowest_critical_unexpected" >>"$tsv"
         printf '| `%s` | `%s` | %s | %s/%s | %s | %s | %s | %s | %s | %s | %s |\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
             "$critical_recall" "$critical_precision" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" >>"$report"
@@ -1926,7 +2025,7 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with production \`v3\`. A policy passes only with human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with production \`v3\`. Repeated-trial safety compares each candidate's adverse extrema with production's favorable extrema, so a bad production trial cannot hide a candidate regression. A policy passes only with human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
     echo "| Candidate | Comparable clips | Target evidence (clips / words / critical occurrences) | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"

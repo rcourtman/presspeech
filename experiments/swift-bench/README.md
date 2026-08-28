@@ -298,7 +298,11 @@ aggregate or on any individual clip, loses no critical-term hits on an
 individual clip, and keeps average p50 latency within 2x production. Optional
 cross-language controls are included in every comparison but never satisfy the
 same-language requirement. The per-clip checks prevent gains on some utterances
-from masking vocabulary-caused regressions on others. Passing this strict screen
+from masking vocabulary-caused regressions on others. For repeated-trial safety,
+the gate compares each candidate's worst WER, lowest recall, and highest
+insertion count with production's best WER, highest recall, and lowest insertion
+count. A single bad production trial therefore cannot make a candidate look
+non-regressing. Passing this strict screen
 is necessary evidence for product evaluation, not approval to ship; use
 `--no-threshold` for exploratory runs that should always publish their report.
 Disabling threshold enforcement does not waive the screen's evidence rules:
