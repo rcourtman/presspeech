@@ -27,6 +27,7 @@ SELF_TEST=0
 power_pid=""
 tmpdir=""
 bench_file=""
+stage_dir=""
 
 usage() {
     cat <<'USAGE'
@@ -144,6 +145,52 @@ cleanup() {
     if [[ -n "$tmpdir" ]]; then
         rm -rf "$tmpdir"
     fi
+}
+
+cleanup_all() {
+    cleanup
+    if [[ -n "$stage_dir" ]]; then
+        rm -rf -- "$stage_dir"
+    fi
+}
+
+publish_power_artifacts() {
+    local publish_stage_dir="$1"
+    local staged_report="$2"
+    local staged_bench_log="$3"
+    local staged_power_log="$4"
+    local final_report="$5"
+    local final_bench_log="$6"
+    local final_power_log="$7"
+
+    if [[ ! -f "$staged_report" || ! -f "$staged_bench_log" || ! -f "$staged_power_log" ]]; then
+        echo "power benchmark staging artifacts are incomplete" >&2
+        return 1
+    fi
+    if [[ -e "$final_report" || -e "$final_bench_log" || -e "$final_power_log" ]]; then
+        echo "refusing to replace existing power benchmark artifacts" >&2
+        return 1
+    fi
+
+    # The Markdown report is the completion marker. Publish it only after both
+    # raw logs are in place, rolling back paths created by a failed move.
+    local moved_bench=0
+    local moved_power=0
+    if ! mv "$staged_bench_log" "$final_bench_log"; then
+        return 1
+    fi
+    moved_bench=1
+    if ! mv "$staged_power_log" "$final_power_log"; then
+        rm -f -- "$final_bench_log"
+        return 1
+    fi
+    moved_power=1
+    if ! mv "$staged_report" "$final_report"; then
+        [[ "$moved_power" -eq 0 ]] || rm -f -- "$final_power_log"
+        [[ "$moved_bench" -eq 0 ]] || rm -f -- "$final_bench_log"
+        return 1
+    fi
+    rmdir "$publish_stage_dir"
 }
 
 write_power_report() {
@@ -319,6 +366,50 @@ run_self_test() {
     assert_contains "$report" "- Nemotron multilingual language: en-US"
     assert_contains "$report" "- Nemotron multilingual chunk: 2240 ms"
 
+    stage_dir="$self_tmp/staged"
+    local final_dir="$self_tmp/published"
+    mkdir -p "$stage_dir" "$final_dir"
+    local staged_report="$stage_dir/result.md"
+    local staged_bench="$stage_dir/result.bench.txt"
+    local staged_power="$stage_dir/result.powermetrics.txt"
+    local final_report="$final_dir/result.md"
+    local final_bench="$final_dir/result.bench.txt"
+    local final_power="$final_dir/result.powermetrics.txt"
+    printf 'complete report\n' >"$staged_report"
+    printf 'bench output\n' >"$staged_bench"
+    printf 'power output\n' >"$staged_power"
+    publish_power_artifacts \
+        "$stage_dir" \
+        "$staged_report" "$staged_bench" "$staged_power" \
+        "$final_report" "$final_bench" "$final_power"
+    stage_dir=""
+    assert_contains "$final_report" "complete report"
+    assert_contains "$final_bench" "bench output"
+    assert_contains "$final_power" "power output"
+
+    stage_dir="$self_tmp/collision-stage"
+    mkdir -p "$stage_dir"
+    printf 'new report\n' >"$stage_dir/result.md"
+    printf 'new bench output\n' >"$stage_dir/result.bench.txt"
+    printf 'new power output\n' >"$stage_dir/result.powermetrics.txt"
+    local collision_log="$self_tmp/collision.log"
+    if publish_power_artifacts \
+        "$stage_dir" \
+        "$stage_dir/result.md" \
+        "$stage_dir/result.bench.txt" \
+        "$stage_dir/result.powermetrics.txt" \
+        "$final_report" \
+        "$final_dir/other.bench.txt" \
+        "$final_dir/other.powermetrics.txt" >"$collision_log" 2>&1; then
+        echo "self-test expected power artifact collision to fail" >&2
+        exit 1
+    fi
+    assert_contains "$collision_log" "refusing to replace existing power benchmark artifacts"
+    assert_contains "$final_report" "complete report"
+    assert_contains "$stage_dir/result.md" "new report"
+    rm -rf "$stage_dir"
+    stage_dir=""
+
     local missing_value_log="$self_tmp/missing-value.log"
     if bash "$SCRIPT_PATH" --out-dir >"$missing_value_log" 2>&1; then
         echo "self-test expected --out-dir without a value to fail" >&2
@@ -466,15 +557,28 @@ stem="$(basename "$FILE")"
 stem="${stem%.*}"
 report_stem="$(report_stem_for "$stem")"
 safe_backend="$(printf '%s' "$BACKEND" | tr -c '[:alnum:]_.-' '-')"
-prefix="$OUTDIR/$timestamp-$report_stem-$safe_backend"
-bench_log="$prefix.bench.txt"
-power_log="$prefix.powermetrics.txt"
-report="$prefix.md"
+artifact_stem="$timestamp-$report_stem-$safe_backend"
+final_prefix="$OUTDIR/$artifact_stem"
+final_bench_log="$final_prefix.bench.txt"
+final_power_log="$final_prefix.powermetrics.txt"
+final_report="$final_prefix.md"
+if [[ -e "$final_report" || -e "$final_bench_log" || -e "$final_power_log" ]]; then
+    echo "power benchmark artifacts already exist for timestamp $timestamp" >&2
+    exit 1
+fi
+reserved_stage_dir="$OUTDIR/.$artifact_stem.incomplete"
+if ! mkdir "$reserved_stage_dir"; then
+    echo "could not reserve power benchmark output for timestamp $timestamp" >&2
+    exit 1
+fi
+stage_dir="$reserved_stage_dir"
+bench_log="$stage_dir/$artifact_stem.bench.txt"
+power_log="$stage_dir/$artifact_stem.powermetrics.txt"
+report="$stage_dir/$artifact_stem.md"
+trap cleanup_all EXIT INT TERM
 
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
-
-trap cleanup EXIT INT TERM
 
 prepare_bench_file
 
@@ -491,7 +595,7 @@ if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
     bench_args+=( "--redact-transcripts" )
 fi
 
-echo "sampling power to $power_log..."
+echo "sampling power for $(artifact_path_label "$final_power_log")..."
 sudo powermetrics \
     --sample-rate "$SAMPLE_MS" \
     --sample-count -1 \
@@ -504,7 +608,7 @@ sleep 1
 if ! kill -0 "$power_pid" >/dev/null 2>&1; then
     power_status=1
     wait "$power_pid" 2>/dev/null || power_status="$?"
-    echo "powermetrics exited before the benchmark started; see $power_log" >&2
+    echo "powermetrics exited before the benchmark started" >&2
     exit "$power_status"
 fi
 
@@ -513,21 +617,32 @@ bench_status=0
 "${bench_args[@]}" >"$bench_log" 2>&1 || bench_status="$?"
 
 cleanup
-trap - EXIT INT TERM
 
 power_metrics_valid=1
 if ! power_summary="$(summarize_power_log "$power_log")"; then
     power_metrics_valid=0
 fi
 
-write_power_report "$report" "$timestamp" "$power_summary" "$bench_log"
-
-echo "report: $report"
 if [[ "$bench_status" -ne 0 ]]; then
-    echo "benchmark failed with status $bench_status; see $bench_log" >&2
+    cat "$bench_log" >&2
+    echo "benchmark failed with status $bench_status" >&2
     exit "$bench_status"
 fi
 if [[ "$power_metrics_valid" -ne 1 ]]; then
-    echo "power benchmark produced no parseable samples; see $power_log" >&2
+    echo "power benchmark produced no parseable samples" >&2
     exit 1
 fi
+
+write_power_report "$report" "$timestamp" "$power_summary" "$bench_log"
+publish_power_artifacts \
+    "$stage_dir" \
+    "$report" \
+    "$bench_log" \
+    "$power_log" \
+    "$final_report" \
+    "$final_bench_log" \
+    "$final_power_log"
+stage_dir=""
+trap - EXIT INT TERM
+
+echo "report: $final_report"
