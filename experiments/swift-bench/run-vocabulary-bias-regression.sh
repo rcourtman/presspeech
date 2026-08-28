@@ -124,6 +124,11 @@ fluid_audio_revision() {
     sed -nE 's/.*revision: "([0-9a-f]{40})".*/\1/p' "$package_file" | head -n 1
 }
 
+macos_deployment_target() {
+    local package_file="$1"
+    sed -nE 's/.*\.macOS\("([0-9]+\.[0-9]+)"\).*/\1/p' "$package_file" | head -n 1
+}
+
 file_sha256() {
     shasum -a 256 "$1" | awk '{print $1}'
 }
@@ -739,9 +744,18 @@ run_self_test() {
     assert_contains "$missing_value_log" "--vocabulary requires a value"
 
     local package_file="$tmpdir/Package.swift"
-    printf '%s\n' '.package(url: "https://example.invalid/FluidAudio.git", revision: "0123456789abcdef0123456789abcdef01234567")' >"$package_file"
+    {
+        printf '%s\n' '.macOS("14.0"),'
+        printf '%s\n' '.package(url: "https://example.invalid/FluidAudio.git", revision: "0123456789abcdef0123456789abcdef01234567")'
+    } >"$package_file"
     assert_eq "$(fluid_audio_revision "$package_file")" \
         "0123456789abcdef0123456789abcdef01234567" "FluidAudio revision parser"
+    assert_eq "$(macos_deployment_target "$package_file")" "14.0" \
+        "macOS deployment target parser"
+    assert_eq \
+        "$(macos_deployment_target "$REPO_ROOT/experiments/swift-bench/Package.swift")" \
+        "$(macos_deployment_target "$REPO_ROOT/swift/Package.swift")" \
+        "vocabulary benchmark matches the product macOS floor"
     printf 'benchmark artifact\n' >"$tmpdir/artifact"
     assert_eq "$(file_sha256 "$tmpdir/artifact")" \
         "add96b142ed74d852093d6f139dc83383b18c53840cea5761e4e93353ee5f836" \

@@ -32,6 +32,11 @@ the production app.
 
 ## How to run
 
+The FluidAudio backends, including every `v3-vocab` variant, run on the
+same Apple Silicon macOS 14+ floor as Presspeech. The optional `apple`
+backend requires macOS 26 and a macOS 26 SDK; older SDKs compile the
+FluidAudio-only runner without that backend.
+
 ```sh
 cd experiments/swift-bench
 

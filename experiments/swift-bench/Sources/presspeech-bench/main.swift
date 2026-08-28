@@ -338,6 +338,7 @@ func directoryLogicalBytes(at url: URL) -> UInt64 {
 
 // ----- Apple SpeechAnalyzer / DictationTranscriber ---------------------
 
+#if compiler(>=6.2)
 @available(macOS 26, *)
 final class AppleBackend: ASRBackend {
     let name = "apple-SpeechAnalyzer"
@@ -463,6 +464,7 @@ final class AppleBackend: ASRBackend {
         return buf
     }
 }
+#endif
 
 // ----- FluidAudio (Parakeet → CoreML → ANE) -----------------------------
 //
@@ -1282,12 +1284,17 @@ struct PresspeechBench {
         var backends: [ASRBackend] = []
         var failedBackends = 0
         if args.backend == "apple" || args.backend == "both" {
+#if compiler(>=6.2)
             if #available(macOS 26, *) {
                 backends.append(AppleBackend())
             } else {
                 failedBackends += 1
                 log("apple backend unavailable — requires macOS 26+")
             }
+#else
+            failedBackends += 1
+            log("apple backend unavailable — requires the macOS 26 SDK and Swift 6.2+")
+#endif
         }
         if args.backend == "v3" || args.backend == "fluid" || args.backend == "both" {
             backends.append(

@@ -22,18 +22,19 @@
 // the canonical "is the inference path still healthy?" check for any
 // future backend / model swap.
 //
-// macOS 26 is required for `SpeechAnalyzer` / `DictationTranscriber`.
-// FluidAudio itself targets macOS 14+, so the gating factor is
-// Apple's framework, not the dependency. Keep the FluidAudio revision
-// pinned to the production app by default so benchmark numbers do not
-// drift under us; temporarily change this only when evaluating an
-// upstream FluidAudio bump.
+// FluidAudio benchmarks run on Presspeech's macOS 14+ product floor.
+// Only the optional Apple `SpeechAnalyzer` / `DictationTranscriber`
+// backend requires macOS 26; its implementation and construction are
+// availability-gated in main.swift. Keep the FluidAudio revision pinned
+// to the production app by default so benchmark numbers do not drift
+// under us; temporarily change this only when evaluating an upstream
+// FluidAudio bump.
 import PackageDescription
 
 let package = Package(
     name: "presspeech-bench",
     platforms: [
-        .macOS("26.0"),  // SpeechAnalyzer / DictationTranscriber are Tahoe-only.
+        .macOS("14.0"),
     ],
     products: [
         .executable(name: "presspeech-bench", targets: ["presspeech-bench"]),
