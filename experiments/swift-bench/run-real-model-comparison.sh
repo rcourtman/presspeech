@@ -124,15 +124,37 @@ extract_final_word_retained() {
     fi
 }
 
-extract_max_wer_percent() {
+extract_worst_wer_metrics() {
     local log_file="$1"
-    awk '
-        match($0, /\[WER [0-9]+([.][0-9]+)?%\]/) {
-            value = substr($0, RSTART + 5, RLENGTH - 7)
-            if (max == "" || value > max) max = value
+    # Match the benchmark-owned tags at the start of each result line. An
+    # unredacted dictated transcript can itself contain strings resembling
+    # metric tags and must not be able to spoof the report parser.
+    sed -nE 's/^[[:space:]]*(transcript:|[^[:space:]]+)[[:space:]]+\[WER ([0-9.]+)%\][[:space:]]+\[final-word retained=(true|false)([^]]*)\][[:space:]]+\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\2\t\5\t\6/p' "$log_file" \
+        | awk -F '\t' '
+        {
+            numerator = $2
+            denominator = $3
+            # Match WordErrorScore.percent for an empty reference.
+            if (denominator == 0) {
+                numerator = numerator == 0 ? 0 : 1
+                denominator = 1
+            }
+            # Printed WER is rounded to one decimal. Compare exact edit-count
+            # fractions so a display tie cannot hide the worse trial.
+            if (!seen || numerator * worst_denominator > worst_numerator * denominator) {
+                worst = $1
+                errors = $2
+                words = $3
+                worst_numerator = numerator
+                worst_denominator = denominator
+                seen = 1
+            }
         }
-        END { if (max == "") print "unknown"; else print max }
-    ' "$log_file"
+        END {
+            if (seen) printf("%s\t%s\t%s\n", worst, errors, words)
+            else print "unknown\tunknown\tunknown"
+        }
+    '
 }
 
 extract_p50_ms() {
@@ -203,14 +225,15 @@ backend_summary_row() {
     awk -F '\t' -v backend="$backend" '
         NR > 1 && $2 == backend {
             count += 1
-            if ($4 == "unknown") {
-                unknown_wer += 1
-            } else {
-                wer_sum += $4
+            if ($4 != "unknown") {
                 if (wer_seen == 0 || $4 > worst_wer) {
                     worst_wer = $4
                 }
                 wer_seen += 1
+            }
+            if ($7 != "unknown" && $8 != "unknown") {
+                word_errors += $7
+                reference_words += $8
             }
             if ($5 == "false") {
                 final_fail += 1
@@ -225,10 +248,10 @@ backend_summary_row() {
                 printf("| `%s` | 0 | unknown | unknown | unknown | unknown |\n", backend)
                 exit
             }
-            avg_wer = wer_seen > 0 ? sprintf("%.1f", wer_sum / wer_seen) : "unknown"
+            corpus_wer = reference_words > 0 ? sprintf("%.2f", word_errors / reference_words * 100) : "unknown"
             worst = wer_seen > 0 ? sprintf("%.1f", worst_wer) : "unknown"
             avg_p50 = p50_seen > 0 ? sprintf("%.1f", p50_sum / p50_seen) : "unknown"
-            printf("| `%s` | %d | %s | %s | %d | %s |\n", backend, count, avg_wer, worst, final_fail, avg_p50)
+            printf("| `%s` | %d | %s | %s | %d | %s |\n", backend, count, corpus_wer, worst, final_fail, avg_p50)
         }
     ' "$tsv"
 }
@@ -269,13 +292,20 @@ run_self_test() {
     local log="$tmpdir/mock.log"
     {
         echo 'latency:  p50=  123.4 ms  min=  120.0 ms  max=  130.0 ms'
-        echo 'transcript: [WER 16.7%] [final-word retained=false expected="sure" actual-last="not"] "literal [WER 99.0%]"'
+        echo 'transcript: [WER 16.7%] [final-word retained=false expected="sure" actual-last="not"] [word-errors=1 reference-words=6] "literal [WER 99.0%] [word-errors=99 reference-words=1]"'
     } >"$log"
     assert_eq "$(extract_final_word_retained "$log")" "false" "final-word parser"
-    assert_eq "$(extract_max_wer_percent "$log")" "16.7" "WER parser"
+    assert_eq "$(extract_worst_wer_metrics "$log")" $'16.7\t1\t6' "WER parser"
     assert_eq "$(extract_p50_ms "$log")" "123.4" "latency parser"
-    assert_eq "$(extract_max_wer_percent /dev/null)" "unknown" "missing WER parser"
-    validate_metrics max-WER 16.7 final-word-retained false p50 123.4
+    assert_eq "$(extract_worst_wer_metrics /dev/null)" $'unknown\tunknown\tunknown' "missing WER parser"
+    validate_metrics max-WER 16.7 word-errors 1 reference-words 6 final-word-retained false p50 123.4
+
+    local rounded_wer_log="$tmpdir/rounded-wer.log"
+    {
+        echo 'transcript: [WER 0.1%] [final-word retained=true] [word-errors=1 reference-words=2000] <redacted 20 chars>'
+        echo 'transcript: [WER 0.1%] [final-word retained=false] [word-errors=2 reference-words=2000] <redacted 22 chars>'
+    } >"$rounded_wer_log"
+    assert_eq "$(extract_worst_wer_metrics "$rounded_wer_log")" $'0.1\t2\t2000' "rounded WER exact worst-trial selection"
 
     local validation_log="$tmpdir/validation.log"
     if validate_metrics max-WER unknown final-word-retained "" >"$validation_log" 2>&1; then
@@ -329,14 +359,16 @@ run_self_test() {
 
     local tsv="$tmpdir/results.tsv"
     {
-        printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\n'
-        printf '001\tv3\tna\t0.0\ttrue\t50.0\n'
-        printf '002\tv3\tna\t10.0\tfalse\t70.0\n'
-        printf '001\tunified\t250\t5.0\ttrue\t40.0\n'
+        printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\tword_errors\treference_words\n'
+        printf '001\tv3\tna\t100.0\ttrue\t50.0\t1\t1\n'
+        printf '002\tv3\tna\t1.0\tfalse\t70.0\t1\t100\n'
+        printf '001\tunified\t250\t5.0\ttrue\t40.0\t1\t20\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     backend_summary_row "$tsv" "v3" >"$summary"
-    assert_contains "$summary" '| `v3` | 2 | 5.0 | 10.0 | 1 | 60.0 |'
+    # Exact corpus weighting is 2/101 (1.98%), not the misleading 50.5%
+    # produced by averaging the two displayed clip percentages.
+    assert_contains "$summary" '| `v3` | 2 | 1.98 | 100.0 | 1 | 60.0 |'
     assert_not_contains "$summary" '\n'
 
     CORPUS_KIND="public"
@@ -512,7 +544,7 @@ tsv="$stage_dir/results.tsv"
 raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
-printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\n' >"$tsv"
+printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\tword_errors\treference_words\n' >"$tsv"
 
 {
     echo "# $(report_title)"
@@ -563,11 +595,14 @@ for clip in "${clips[@]}"; do
             exit 1
         fi
 
-        wer="$(extract_max_wer_percent "$log_file")"
+        wer_metrics="$(extract_worst_wer_metrics "$log_file")"
+        IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"
         retained="$(extract_final_word_retained "$log_file")"
         p50="$(extract_p50_ms "$log_file")"
         [[ -n "$p50" ]] || p50="unknown"
-        if ! validate_metrics max-WER "$wer" final-word-retained "$retained" p50 "$p50"; then
+        if ! validate_metrics \
+            max-WER "$wer" word-errors "$word_errors" reference-words "$reference_words" \
+            final-word-retained "$retained" p50 "$p50"; then
             cat "$log_file" >&2
             echo "invalid benchmark output for clip $clip_id backend=$backend" >&2
             exit 1
@@ -577,8 +612,9 @@ for clip in "${clips[@]}"; do
             trailing="$UNIFIED_TRAILING_SILENCE_MS"
         fi
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$clip_id" "$backend" "$trailing" "$wer" "$retained" "$p50" >>"$tsv"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$clip_id" "$backend" "$trailing" "$wer" "$retained" "$p50" \
+            "$word_errors" "$reference_words" >>"$tsv"
         printf '| `%s` | `%s` | %s | %s | %s | %s |\n' \
             "$clip_id" "$backend" "$trailing" "$wer" "$retained" "$p50" >>"$report"
     done
@@ -588,7 +624,7 @@ done
     echo
     echo "## Summary"
     echo
-    echo "| Backend | Clip rows | Average WER % | Worst WER % | Final-word failures | Average p50 ms |"
+    echo "| Backend | Clip rows | Corpus WER % | Worst WER % | Final-word failures | Average p50 ms |"
     echo "|---|---:|---:|---:|---:|---:|"
     backend_summary_row "$tsv" "v3"
     backend_summary_row "$tsv" "unified"

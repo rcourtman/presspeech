@@ -87,8 +87,11 @@ Then run:
 
 The comparison script normalizes audio through `afconvert`, runs v3 and
 Unified against every clip, and writes ignored Markdown/TSV reports under
-`real-results/` with average WER, worst WER, final-word failures, and p50
-latency by backend. Transcript text, fixture filenames, and local paths are
+`real-results/` with corpus WER, worst WER, final-word failures, and p50
+latency by backend. Corpus WER is computed from exact edit and reference-word
+counts, so longer clips contribute proportionally; worst-trial selection also
+uses those exact counts rather than the rounded display percentage. Transcript
+text, fixture filenames, and local paths are
 redacted by default while WER, latency, and retention numbers remain
 visible. Pass `--show-transcripts` and `--show-paths` only for local
 reports you do not intend to share.
