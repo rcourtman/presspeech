@@ -57,7 +57,7 @@
             </article>
             <article class="card">
               <h3>No transcript logs</h3>
-              <p>Logs include timing and length metadata only. Transcript content is not written to disk.</p>
+              <p>Logs include timing and length metadata only. Transcript and custom-vocabulary contents are not written to disk.</p>
             </article>
           </div>
         </div>
@@ -65,7 +65,7 @@
 
       <section>
         <div class="wrap">
-          <span class="section-eyebrow">Three call types, fully listed</span>
+          <span class="section-eyebrow">Four call types, fully listed</span>
           <h2>Network calls</h2>
           <p>This is the complete network surface of Presspeech itself and its install/update path.</p>
           <div class="table-scroll">
@@ -85,6 +85,12 @@
                   <td><code>huggingface.co</code></td>
                   <td>macOS downloads the FluidAudio Parakeet TDT v3 CoreML model (about 500-600 MB) on first launch, after an integrity failure, or after a user-triggered cache reset. Windows downloads its selected local model; the default Parakeet cache is about 2.5 GB. No dictation audio is sent. If <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> is set, FluidAudio may attach it to macOS model requests; most users have none set.</td>
                   <td>Required for each platform's local transcription.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Optional vocabulary model</th>
+                  <td><code>huggingface.co</code></td>
+                  <td>After the user explicitly enables Custom Vocabulary (Beta), macOS downloads and verifies an additional ~100 MB Parakeet CTC model for local rescoring. No audio, transcript, vocabulary terms, settings, or usage data is sent.</td>
+                  <td>Off by default; disable it from Settings → Text.</td>
                 </tr>
                 <tr>
                   <th scope="row">Periodic update check</th>

@@ -61,6 +61,11 @@ What that means for trust:
   `FluidInference/parakeet-tdt-0.6b-v3-coreml` repository commit; a
   legitimate upstream model change must ship as an explicit Presspeech
   update with refreshed hashes from `scripts/update-model-manifest.py`.
+- The optional custom-vocabulary beta follows the same trust boundary.
+  After the user explicitly enables it, Presspeech downloads the
+  auxiliary `FluidInference/parakeet-ctc-110m-coreml` model, verifies
+  every loaded model, tokenizer, and vocabulary file against a
+  commit-pinned SHA-256 manifest, and only then lets CoreML load it.
 - FluidAudio reads `REGISTRY_URL` and `MODEL_REGISTRY_URL` from the
   process environment to override the download base URL. Presspeech
   refuses to launch if either is set — they are a persistence vector

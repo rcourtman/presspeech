@@ -23,6 +23,16 @@
       "data_sent": "Standard HTTPS request metadata; no dictation audio, transcript, settings, or usage data"
     },
     {
+      "name": "macos_custom_vocabulary_model_download",
+      "when": "Only after the user explicitly enables Custom Vocabulary (Beta), until the auxiliary model is cached locally; again if that cache fails its integrity check",
+      "destination": "huggingface.co",
+      "purpose": "FluidAudio downloads the Parakeet CTC 110M CoreML model used for local vocabulary rescoring",
+      "approximate_size": "100 MB",
+      "user_triggered": true,
+      "can_disable": true,
+      "data_sent": "Standard HTTPS request metadata; no dictation audio, transcript, vocabulary terms, settings, or usage data"
+    },
+    {
       "name": "macos_update_check",
       "when": "Every 6 hours when automatic update checks are enabled, plus one check shortly after launch",
       "destination": "api.github.com/repos/rcourtman/presspeech/releases/latest",
@@ -63,6 +73,7 @@
     "windows_logs": "%APPDATA%\\Presspeech\\log.txt",
     "windows_model_cache": "%USERPROFILE%\\.cache\\huggingface",
     "transcripts": "macOS recent transcript history is configurable, stays in memory only, and clears on quit; Windows does not keep an in-app transcript history",
-    "clipboard": "On macOS, pasted transcripts stay on the system pasteboard by default; users can opt into guarded best-effort restoration of the previous clipboard, which is skipped if the snapshot is incomplete or another process has copied newer content. On Windows, the transcript remains on the clipboard until overwritten"
+    "clipboard": "On macOS, pasted transcripts stay on the system pasteboard by default; users can opt into guarded best-effort restoration of the previous clipboard, which is skipped if the snapshot is incomplete or another process has copied newer content. On Windows, the transcript remains on the clipboard until overwritten",
+    "custom_vocabulary": "Opt-in macOS custom-vocabulary terms are stored in local preferences; term contents are excluded from diagnostics and logs"
   }
 }
