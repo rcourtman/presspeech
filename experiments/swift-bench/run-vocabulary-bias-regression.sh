@@ -107,8 +107,10 @@ Same-language negative controls always use the target --language hint. Optional
 cross-language controls require their own explicit language hint and supplement,
 rather than satisfy, the same-language requirement. All control references must
 contain none of the critical terms under the benchmark's exact normalization.
-Every target and control audio file must be byte-distinct; exact renamed copies
-do not provide independent evidence and are rejected.
+Every target and control audio file must be distinct both as supplied and after
+normalization to the benchmark's 16 kHz mono WAV format. Exact renamed,
+rewrapped, or losslessly converted copies do not provide independent evidence
+and are rejected.
 Target IDs begin with `p`, same-language control IDs with `n`, and cross-language
 control IDs with `x`.
 USAGE
@@ -171,17 +173,31 @@ fixture_set_sha256() {
     done | sort | shasum -a 256 | awk '{print $1}'
 }
 
-validate_unique_audio_content() {
+duplicate_content_digest() {
     local clip
-    local duplicate_digest
-    duplicate_digest="$({
+    {
         for clip in "$@"; do
             file_sha256 "$clip"
         done
-    } | sort | uniq -d | head -n 1)"
+    } | sort | uniq -d | head -n 1
+}
+
+validate_unique_source_audio_content() {
+    local duplicate_digest
+    duplicate_digest="$(duplicate_content_digest "$@")"
     if [[ -n "$duplicate_digest" ]]; then
-        echo "benchmark corpora contain byte-identical audio files" >&2
+        echo "benchmark corpora contain byte-identical source audio files" >&2
         echo "each target and control clip must be an independent recording or segment" >&2
+        return 1
+    fi
+}
+
+validate_unique_normalized_audio_content() {
+    local duplicate_digest
+    duplicate_digest="$(duplicate_content_digest "$@")"
+    if [[ -n "$duplicate_digest" ]]; then
+        echo "benchmark corpora contain audio files that normalize to byte-identical 16 kHz mono WAV" >&2
+        echo "rewrapping or losslessly converting one recording does not make an independent control" >&2
         return 1
     fi
 }
@@ -871,15 +887,30 @@ run_self_test() {
     printf 'reference two\n' >"$fixtures/second.txt"
     printf 'Szypański\n' >"$fixtures/vocabulary.txt"
     printf 'Szypański\n' >"$fixtures/critical-terms.txt"
-    validate_unique_audio_content "$fixtures/first.wav" "$fixtures/second.wav"
+    validate_unique_source_audio_content "$fixtures/first.wav" "$fixtures/second.wav"
     cp "$fixtures/first.wav" "$fixtures/copied.wav"
-    if validate_unique_audio_content \
+    if validate_unique_source_audio_content \
         "$fixtures/first.wav" "$fixtures/second.wav" "$fixtures/copied.wav" \
         >/dev/null 2>&1; then
         echo "self-test expected renamed audio copies to be rejected" >&2
         exit 1
     fi
     rm "$fixtures/copied.wav"
+    mkdir "$fixtures/normalized"
+    printf 'normalized audio one\n' >"$fixtures/normalized/first.wav"
+    printf 'normalized audio two\n' >"$fixtures/normalized/second.wav"
+    validate_unique_normalized_audio_content \
+        "$fixtures/normalized/first.wav" "$fixtures/normalized/second.wav"
+    cp "$fixtures/normalized/first.wav" "$fixtures/normalized/rewrapped.wav"
+    if validate_unique_normalized_audio_content \
+        "$fixtures/normalized/first.wav" \
+        "$fixtures/normalized/second.wav" \
+        "$fixtures/normalized/rewrapped.wav" >"$tmpdir/normalized-duplicate.log" 2>&1; then
+        echo "self-test expected normalized audio copies to be rejected" >&2
+        exit 1
+    fi
+    assert_contains "$tmpdir/normalized-duplicate.log" \
+        "rewrapping or losslessly converting one recording does not make an independent control"
     local fixture_digest
     fixture_digest="$(fixture_set_sha256 \
         "$fixtures/first.wav" "$fixtures/second.wav")"
@@ -1189,7 +1220,7 @@ if [[ -n "$duplicate_clip" ]]; then
     echo "target and control corpora overlap: $duplicate_clip" >&2
     exit 1
 fi
-if ! validate_unique_audio_content "${clips[@]}"; then
+if ! validate_unique_source_audio_content "${clips[@]}"; then
     exit 1
 fi
 
@@ -1239,6 +1270,55 @@ platform_description="$(sw_vers -productName) $(sw_vers -productVersion) ($(unam
 swift_toolchain="$(swift --version | sed -n '1p')"
 if [[ -z "$platform_description" || -z "$swift_toolchain" ]]; then
     echo "could not identify the benchmark platform and Swift toolchain" >&2
+    exit 1
+fi
+
+# Normalize the complete corpus before running any ASR lane. Source-file hashes
+# catch renamed copies, while canonical output hashes also catch the same audio
+# rewrapped or losslessly converted into a different supported container.
+normalized_clips=()
+clip_ids=()
+clip_groups=()
+clip_languages=()
+clip_index=0
+target_index=0
+negative_index=0
+cross_language_index=0
+target_clip_count="${#target_clips[@]}"
+same_language_end=$((target_clip_count + ${#negative_clips[@]}))
+for clip in "${clips[@]}"; do
+    clip_index=$((clip_index + 1))
+    if [[ "$clip_index" -le "$target_clip_count" ]]; then
+        clip_group="p"
+        target_index=$((target_index + 1))
+        group_index="$target_index"
+        clip_language="$LANGUAGE"
+    elif [[ "$clip_index" -le "$same_language_end" ]]; then
+        clip_group="n"
+        negative_index=$((negative_index + 1))
+        group_index="$negative_index"
+        clip_language="$LANGUAGE"
+    else
+        clip_group="x"
+        cross_language_index=$((cross_language_index + 1))
+        group_index="$cross_language_index"
+        clip_language="$CROSS_LANGUAGE_CONTROL_LANGUAGE"
+    fi
+    stem="$(basename "$clip")"
+    stem="${stem%.*}"
+    clip_id="$(clip_id_for "$clip_group" "$group_index" "$stem")"
+    normalized="$tmpdir/$clip_id.wav"
+    ref="${clip%.*}.txt"
+
+    echo "normalizing clip $clip_id..."
+    afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
+    cp "$ref" "$tmpdir/$clip_id.txt"
+    normalized_clips+=( "$normalized" )
+    clip_ids+=( "$clip_id" )
+    clip_groups+=( "$clip_group" )
+    clip_languages+=( "$clip_language" )
+done
+if ! validate_unique_normalized_audio_content "${normalized_clips[@]}"; then
     exit 1
 fi
 
@@ -1319,40 +1399,11 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
 } >"$report"
 
-clip_index=0
-target_index=0
-negative_index=0
-cross_language_index=0
-target_clip_count="${#target_clips[@]}"
-same_language_end=$((target_clip_count + ${#negative_clips[@]}))
-for clip in "${clips[@]}"; do
-    clip_index=$((clip_index + 1))
-    if [[ "$clip_index" -le "$target_clip_count" ]]; then
-        clip_group="p"
-        target_index=$((target_index + 1))
-        group_index="$target_index"
-        clip_language="$LANGUAGE"
-    elif [[ "$clip_index" -le "$same_language_end" ]]; then
-        clip_group="n"
-        negative_index=$((negative_index + 1))
-        group_index="$negative_index"
-        clip_language="$LANGUAGE"
-    else
-        clip_group="x"
-        cross_language_index=$((cross_language_index + 1))
-        group_index="$cross_language_index"
-        clip_language="$CROSS_LANGUAGE_CONTROL_LANGUAGE"
-    fi
-    stem="$(basename "$clip")"
-    stem="${stem%.*}"
-    clip_id="$(clip_id_for "$clip_group" "$group_index" "$stem")"
-    normalized="$tmpdir/$clip_id.wav"
-    ref="${clip%.*}.txt"
-
-    echo "normalizing clip $clip_id..."
-    afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
-    cp "$ref" "$tmpdir/$clip_id.txt"
-
+for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1)); do
+    normalized="${normalized_clips[$clip_offset]}"
+    clip_id="${clip_ids[$clip_offset]}"
+    clip_group="${clip_groups[$clip_offset]}"
+    clip_language="${clip_languages[$clip_offset]}"
     for variant in v3 v3-vocab v3-vocab-conservative v3-vocab-no-rescue sliding-v3 sliding-vocab sliding-vocab-conservative sliding-vocab-no-rescue; do
         log_file="$raw_dir/$clip_id-$variant.bench.txt"
         bench_args=(
