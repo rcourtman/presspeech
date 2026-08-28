@@ -174,7 +174,14 @@ insertions, critical-term precision, p50 inference latency, peak process
 memory, model-cache footprint, and preparation time. A pairwise policy table
 compares each vocabulary lane with unbiased `sliding-v3`, reporting net critical
 hits, unexpected insertions, corpus WER change, and counts of clean wins, costly
-wins, and pure losses.
+wins, and pure losses. A separate product-candidate screen compares each policy
+directly with production `v3` and fails the command unless at least one has
+complete comparable clips, gains a critical-term hit, adds no unexpected
+insertions or corpus WER, has no pure-loss clips, and keeps average p50 latency
+within 2x production. Passing this strict screen is necessary evidence for
+product evaluation, not approval to ship; use `--no-threshold` for exploratory
+runs that should always publish their report.
+
 When repeated trials yield different transcripts, each per-clip row is a
 conservative envelope: worst WER, lowest critical-term recall, and highest
 unexpected-insertion count observed. Pass

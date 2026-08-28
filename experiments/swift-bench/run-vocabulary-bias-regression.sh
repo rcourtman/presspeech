@@ -18,6 +18,12 @@ LANGUAGE="auto"
 TRIALS="3"
 REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
+REQUIRE_CANDIDATE_PASS=1
+MIN_CRITICAL_HIT_GAIN="1"
+MAX_UNEXPECTED_INSERTION_DELTA="0"
+MAX_WER_REGRESSION_POINTS="0.00"
+MAX_PURE_LOSSES="0"
+MAX_PRODUCTION_LATENCY_RATIO="2.00"
 SELF_TEST=0
 
 usage() {
@@ -33,6 +39,8 @@ Options:
   --trials <n>             measured trials per clip/variant (default: 3)
   --show-transcripts       include references and hypotheses in raw logs
   --show-paths             include fixture and configuration paths in reports
+  --no-threshold           write the report but do not fail when no policy
+                           clears the product-candidate screen
   --self-test              run parser, aggregation, and redaction tests only
   -h, --help               show this help
 
@@ -52,6 +60,12 @@ case/punctuation normalization. List every canonical vocabulary form, including
 forms absent from some clips, and list inflections separately; FluidAudio aliases
 are alternate matches, not morphological generators. Duplicate normalized forms
 are rejected rather than double-counted.
+
+The product-candidate screen compares each vocabulary policy with production
+v3. It requires complete comparable clips, at least one net critical-term hit,
+no increase in unexpected insertions or corpus WER, no pure-loss clips, and
+average p50 latency no more than 2x production. Passing is necessary evidence
+for product evaluation, not approval to ship.
 USAGE
 }
 
@@ -348,6 +362,98 @@ comparison_row() {
     ' "$tsv"
 }
 
+candidate_assessment() {
+    local tsv="$1"
+    local baseline="$2"
+    local candidate="$3"
+    awk -F '\t' \
+        -v baseline="$baseline" \
+        -v candidate="$candidate" \
+        -v min_hit_gain="$MIN_CRITICAL_HIT_GAIN" \
+        -v max_unexpected_delta="$MAX_UNEXPECTED_INSERTION_DELTA" \
+        -v max_wer_regression="$MAX_WER_REGRESSION_POINTS" \
+        -v max_pure_losses="$MAX_PURE_LOSSES" \
+        -v max_latency_ratio="$MAX_PRODUCTION_LATENCY_RATIO" '
+        function add_blocker(message) {
+            blockers = blockers (blockers == "" ? "" : "; ") message
+        }
+        NR > 1 && $2 == baseline {
+            baseline_count += 1
+            baseline_hits[$1] = $4
+            baseline_total[$1] = $5
+            baseline_unexpected[$1] = $7
+            baseline_latency[$1] = $8
+            baseline_errors[$1] = $12
+            baseline_words[$1] = $13
+        }
+        NR > 1 && $2 == candidate {
+            candidate_count += 1
+            candidate_hits[$1] = $4
+            candidate_total[$1] = $5
+            candidate_unexpected[$1] = $7
+            candidate_latency[$1] = $8
+            candidate_errors[$1] = $12
+            candidate_words[$1] = $13
+        }
+        END {
+            for (clip in candidate_hits) {
+                if (!(clip in baseline_hits) ||
+                    baseline_hits[clip] == "unknown" || candidate_hits[clip] == "unknown" ||
+                    baseline_total[clip] == "unknown" || candidate_total[clip] == "unknown" ||
+                    baseline_total[clip] != candidate_total[clip] ||
+                    baseline_unexpected[clip] == "unknown" || candidate_unexpected[clip] == "unknown" ||
+                    baseline_latency[clip] == "unknown" || candidate_latency[clip] == "unknown" ||
+                    baseline_errors[clip] == "unknown" || candidate_errors[clip] == "unknown" ||
+                    baseline_words[clip] == "unknown" || candidate_words[clip] == "unknown" ||
+                    baseline_words[clip] != candidate_words[clip] || baseline_latency[clip] <= 0) {
+                    continue
+                }
+                comparable += 1
+                hit_delta = candidate_hits[clip] - baseline_hits[clip]
+                total_hit_delta += hit_delta
+                unexpected_delta += candidate_unexpected[clip] - baseline_unexpected[clip]
+                error_delta = candidate_errors[clip] - baseline_errors[clip]
+                total_error_delta += error_delta
+                total_reference_words += baseline_words[clip]
+                baseline_latency_sum += baseline_latency[clip]
+                candidate_latency_sum += candidate_latency[clip]
+                if (hit_delta <= 0 && error_delta > 0) pure_losses += 1
+            }
+
+            complete = baseline_count > 0 && candidate_count == baseline_count && comparable == baseline_count
+            wer_delta = total_reference_words ? total_error_delta / total_reference_words * 100 : 0
+            latency_ratio = comparable ? candidate_latency_sum / baseline_latency_sum : 0
+
+            if (!complete) add_blocker("incomplete comparable clips")
+            if (total_hit_delta < min_hit_gain) add_blocker("critical-hit gain below +" min_hit_gain)
+            if (unexpected_delta > max_unexpected_delta) add_blocker("unexpected insertions increased")
+            if (!total_reference_words || wer_delta > max_wer_regression + 0.0000001) add_blocker("corpus WER regressed")
+            if (pure_losses > max_pure_losses) add_blocker("pure-loss clips present")
+            if (!comparable || latency_ratio > max_latency_ratio + 0.0000001) add_blocker("latency exceeded " max_latency_ratio "x production")
+
+            verdict = blockers == "" ? "passes" : "blocked"
+            wer_display = total_reference_words ? sprintf("%+.2f", wer_delta) : "unknown"
+            latency_display = comparable ? sprintf("%.2f", latency_ratio) : "unknown"
+            printf("%s\t%d\t%d\t%+d\t%+d\t%s\t%d\t%s\t%s\t%s\n",
+                candidate, comparable, baseline_count, total_hit_delta,
+                unexpected_delta, wer_display, pure_losses, latency_display,
+                verdict, blockers)
+        }
+    ' "$tsv"
+}
+
+candidate_assessment_row() {
+    local assessment="$1"
+    local candidate comparable baseline_count hit_delta unexpected_delta
+    local wer_delta pure_losses latency_ratio verdict blockers
+    IFS=$'\t' read -r candidate comparable baseline_count hit_delta \
+        unexpected_delta wer_delta pure_losses latency_ratio verdict blockers <<<"$assessment"
+    printf '| `%s` | %s/%s | %s | %s | %s | %s | %sx | **%s** | %s |\n' \
+        "$candidate" "$comparable" "$baseline_count" "$hit_delta" \
+        "$unexpected_delta" "$wer_delta" "$pure_losses" "$latency_ratio" \
+        "$verdict" "${blockers:---}"
+}
+
 assert_eq() {
     local actual="$1"
     local expected="$2"
@@ -503,6 +609,24 @@ run_self_test() {
     comparison_row "$tsv" sliding-v3 sliding-vocab >"$summary"
     assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +0.15 | 1 | 1 | 2 | 0 |'
 
+    local blocked_assessment
+    blocked_assessment="$(candidate_assessment "$tsv" sliding-v3 sliding-vocab)"
+    assert_contains <(printf '%s\n' "$blocked_assessment") $'sliding-vocab\t4\t4\t+2\t+2\t+0.15\t2\t1.00\tblocked\tunexpected insertions increased; corpus WER regressed; pure-loss clips present'
+
+    {
+        head -n 1 "$tsv"
+        awk -F '\t' 'NR > 1 && $2 == "sliding-v3"' "$tsv"
+        printf '001\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t10\t100.0\n'
+        printf '002\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t1\t150.0\t40.0\t700.0\t1000.0\t0\t5\t66.7\n'
+        printf '003\tsliding-vocab-no-rescue\t0.0\t1\t1\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t20\t100.0\n'
+        printf '004\tsliding-vocab-no-rescue\t0.0\t1\t1\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t2000\t100.0\n'
+    } >"$tmpdir/passing.tsv"
+    local passing_assessment
+    passing_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_eq "$passing_assessment" $'sliding-vocab-no-rescue\t4\t4\t+2\t+0\t-0.20\t0\t1.50\tpasses\t' "passing candidate assessment"
+    candidate_assessment_row "$passing_assessment" >"$summary"
+    assert_contains "$summary" '| `sliding-vocab-no-rescue` | 4/4 | +2 | +0 | -0.20 | 0 | 1.50x | **passes** | -- |'
+
     local secret_path="$tmpdir/Private Polish Benchmark"
     REDACT_PATHS=1
     {
@@ -561,6 +685,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --show-paths)
             REDACT_PATHS=0
+            shift
+            ;;
+        --no-threshold)
+            REQUIRE_CANDIDATE_PASS=0
             shift
             ;;
         --self-test)
@@ -794,8 +922,65 @@ done
     echo
     echo "Clean wins gain critical hits without worse WER; costly wins gain hits with worse WER; pure losses worsen WER without gaining hits. Other results do not fit those three decision categories."
     echo
+    echo "## Product Candidate Screen"
+    echo
+    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, no increase in unexpected insertions or corpus WER, no pure-loss clips, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. This is a necessary evidence screen, not approval to ship."
+    echo
+    echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Pure losses | p50 / production | Verdict | Blockers |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---|---|"
+} >>"$report"
+
+candidate_passes=0
+candidate_blockers=()
+for candidate in sliding-vocab sliding-vocab-conservative sliding-vocab-no-rescue; do
+    assessment="$(candidate_assessment "$tsv" v3 "$candidate")"
+    candidate_assessment_row "$assessment" >>"$report"
+    IFS=$'\t' read -r assessed_candidate _ _ _ _ _ _ _ verdict blockers <<<"$assessment"
+    if [[ "$verdict" == "passes" ]]; then
+        candidate_passes=$((candidate_passes + 1))
+    else
+        candidate_blockers+=( "$assessed_candidate: $blockers" )
+    fi
+done
+
+{
+    echo
     echo "Raw bench logs: $(path_label "$final_raw_dir")"
     echo "Machine-readable TSV: $(path_label "$final_tsv")"
+} >>"$report"
+
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$candidate_passes" -eq 0 ]]; then
+    {
+        echo
+        echo "## Threshold Result"
+        echo
+        echo "No vocabulary policy cleared the product-candidate screen."
+    } >>"$report"
+    publish_report_artifacts \
+        "$stage_dir" \
+        "$report" \
+        "$tsv" \
+        "$raw_dir" \
+        "$final_report" \
+        "$final_tsv" \
+        "$final_raw_dir"
+    stage_dir=""
+    echo "vocabulary-bias regression: no policy cleared the product-candidate screen" >&2
+    printf '  %s\n' "${candidate_blockers[@]}" >&2
+    echo "report: $final_report" >&2
+    echo "tsv: $final_tsv" >&2
+    exit 1
+fi
+
+{
+    echo
+    echo "## Threshold Result"
+    echo
+    if [[ "$candidate_passes" -gt 0 ]]; then
+        echo "$candidate_passes vocabulary policy candidate(s) cleared the product-candidate screen."
+    else
+        echo "Threshold enforcement disabled; no vocabulary policy cleared the product-candidate screen."
+    fi
 } >>"$report"
 
 publish_report_artifacts \
