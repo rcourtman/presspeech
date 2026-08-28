@@ -180,15 +180,21 @@ Reports are ignored and privacy-redacted by default. They include corpus and
 worst WER, weighted exact critical-term recall, unexpected critical-term
 insertions, critical-term precision, p50 inference latency, peak process
 memory, model-cache footprint, preparation time, the Presspeech and FluidAudio
-revisions, whether the benchmark source was clean, and the benchmark
-executable's SHA-256, plus the macOS and Swift versions. Thresholded runs require
-a clean Git checkout so a shared report is tied to exact reviewable source; use
-`--no-threshold` for exploratory local modifications. A pairwise policy table
-compares direct-v3 lanes with production `v3` and sliding lanes with unbiased
-`sliding-v3`, reporting net critical hits, unexpected insertions, corpus WER
-change, and counts of clean wins, costly wins, and pure losses. A separate
-product-candidate screen evaluates only the three direct-v3 policies and fails
-the command unless at least one has
+revisions, whether the benchmark source was clean, the benchmark executable's
+SHA-256, a single content fingerprint covering every paired audio/reference
+fixture plus the vocabulary and critical-term files, and the macOS and Swift
+versions. The input fingerprint depends on paired file contents rather than
+private names, so a copied or renamed frozen corpus remains comparable while
+any benchmark input change is visible. Keeping the component hashes folded
+into one report value also avoids exposing a separately guessable digest for a
+short private vocabulary. Thresholded runs require a clean Git checkout so a
+shared report is tied to exact reviewable source; use `--no-threshold` for
+exploratory local modifications. A pairwise policy table compares direct-v3
+lanes with production `v3` and sliding lanes with unbiased `sliding-v3`,
+reporting net critical hits, unexpected insertions, corpus WER change, and
+counts of clean wins, costly wins, and pure losses. A separate product-candidate
+screen evaluates only the three direct-v3 policies and fails the command unless
+at least one has
 complete comparable clips, gains a critical-term hit, adds no unexpected
 insertions or WER either in aggregate or on any individual clip, loses no
 critical-term hits on an individual clip, and keeps average p50 latency within

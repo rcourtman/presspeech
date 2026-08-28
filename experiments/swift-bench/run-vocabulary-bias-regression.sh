@@ -128,6 +128,28 @@ file_sha256() {
     shasum -a 256 "$1" | awk '{print $1}'
 }
 
+fixture_set_sha256() {
+    local clip
+    local ref
+    for clip in "$@"; do
+        ref="${clip%.*}.txt"
+        # Hash the paired contents, not their private names. Sorting the pair
+        # digests makes a copied or renamed frozen corpus retain its identity.
+        printf '%s\t%s\n' "$(file_sha256 "$clip")" "$(file_sha256 "$ref")"
+    done | sort | shasum -a 256 | awk '{print $1}'
+}
+
+benchmark_inputs_sha256() {
+    local fixture_digest="$1"
+    local vocabulary="$2"
+    local critical_terms="$3"
+    printf 'fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\n' \
+        "$fixture_digest" \
+        "$(file_sha256 "$vocabulary")" \
+        "$(file_sha256 "$critical_terms")" \
+        | shasum -a 256 | awk '{print $1}'
+}
+
 clip_id_for() {
     local index="$1"
     local stem="$2"
@@ -725,6 +747,38 @@ run_self_test() {
         "add96b142ed74d852093d6f139dc83383b18c53840cea5761e4e93353ee5f836" \
         "benchmark artifact digest"
 
+    local fixtures="$tmpdir/Private fixtures"
+    mkdir "$fixtures"
+    printf 'audio one\n' >"$fixtures/first.wav"
+    printf 'reference one\n' >"$fixtures/first.txt"
+    printf 'audio two\n' >"$fixtures/second.wav"
+    printf 'reference two\n' >"$fixtures/second.txt"
+    printf 'Szypański\n' >"$fixtures/vocabulary.txt"
+    printf 'Szypański\n' >"$fixtures/critical-terms.txt"
+    local fixture_digest
+    fixture_digest="$(fixture_set_sha256 \
+        "$fixtures/first.wav" "$fixtures/second.wav")"
+    assert_eq "$fixture_digest" \
+        "513130324aab465f3aa0b7db6455a134198bb0c233b4065573f5be48a99d8773" \
+        "fixture-set digest"
+    mv "$fixtures/first.wav" "$fixtures/renamed.wav"
+    mv "$fixtures/first.txt" "$fixtures/renamed.txt"
+    assert_eq "$(fixture_set_sha256 \
+        "$fixtures/second.wav" "$fixtures/renamed.wav")" \
+        "$fixture_digest" "fixture digest ignores names and ordering"
+    assert_eq "$(benchmark_inputs_sha256 \
+        "$fixture_digest" \
+        "$fixtures/vocabulary.txt" \
+        "$fixtures/critical-terms.txt")" \
+        "15afb59283f8c5e65576e6dc7fde1ea3c31780d1ec8c1caf596a12e9e581bde1" \
+        "complete benchmark-input digest"
+    printf 'changed reference\n' >"$fixtures/renamed.txt"
+    if [[ "$(fixture_set_sha256 \
+        "$fixtures/renamed.wav" "$fixtures/second.wav")" == "$fixture_digest" ]]; then
+        echo "self-test expected fixture content changes to alter provenance" >&2
+        exit 1
+    fi
+
     local original_repo_root="$REPO_ROOT"
     local current_source_state
     current_source_state="$(benchmark_source_state)"
@@ -875,6 +929,14 @@ if [[ "${#missing_refs[@]}" -gt 0 ]]; then
     exit 1
 fi
 
+fixture_sha256="$(fixture_set_sha256 "${clips[@]}")"
+benchmark_input_sha256="$(benchmark_inputs_sha256 \
+    "$fixture_sha256" "$VOCABULARY" "$CRITICAL_TERMS")"
+if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "could not fingerprint benchmark inputs" >&2
+    exit 1
+fi
+
 mkdir -p "$OUTDIR"
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-bias.XXXXXX")"
 stage_dir=""
@@ -940,6 +1002,7 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Input directory: $(path_label "$INPUT_DIR")"
     echo "- Vocabulary: $(path_label "$VOCABULARY")"
     echo "- Critical terms: $(path_label "$CRITICAL_TERMS")"
+    echo "- Benchmark inputs SHA-256: $benchmark_input_sha256"
     echo "- Language hint: $LANGUAGE"
     echo "- Trials per clip/variant: $TRIALS"
     echo "- Clips: ${#clips[@]}"
