@@ -772,6 +772,8 @@ final class SlidingWindowBackend: ASRBackend {
                 self.name = "fluid-ParakeetTDTv3Sliding+VocabularyConservative"
             case .noSpotterRescue:
                 self.name = "fluid-ParakeetTDTv3Sliding+VocabularyNoRescue"
+            case .exactSimilarity:
+                preconditionFailure("exact-similarity vocabulary policy is direct-v3 only")
             }
         }
     }
