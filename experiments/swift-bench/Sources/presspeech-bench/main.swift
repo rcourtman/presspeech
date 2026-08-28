@@ -7,6 +7,7 @@
 //
 // Usage:
 //   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --reference-metrics --reference-file path/to/reference.txt --critical-terms path/to/terms.txt
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -139,6 +140,7 @@ func parseArgs() -> CLIArgs {
         case "-h", "--help":
             print("""
             usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+                   presspeech-bench --reference-metrics --reference-file <txt> --critical-terms <txt>
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
@@ -188,6 +190,9 @@ func parseArgs() -> CLIArgs {
               --critical-terms <path>
                          plain text, one canonical word or phrase per line; report
                          exact surface-form recall without printing term content
+              --reference-metrics --reference-file <path>
+                         inspect one reference without loading audio or an ASR model;
+                         prints only normalized word and critical-occurrence counts
               --unified-trailing-silence-ms <n>
                          append n ms of silence before Unified transcription
                          (default: \(UNIFIED_MODEL_TRAILING_SILENCE_MS), matching Presspeech)
@@ -1103,6 +1108,93 @@ func loadCriticalTerms(from url: URL) throws -> [String] {
     return try parseCriticalTerms(contents)
 }
 
+struct ReferenceMetrics: Equatable {
+    let referenceWords: Int
+    let criticalOccurrences: Int
+}
+
+func referenceMetrics(reference: String, criticalTerms: [String]) -> ReferenceMetrics {
+    let wordCount = wordErrorScore(reference: reference, hypothesis: "").referenceWords
+    let occurrenceCount = criticalTermScore(
+        reference: reference,
+        hypothesis: "",
+        terms: criticalTerms
+    ).total
+    return ReferenceMetrics(
+        referenceWords: wordCount,
+        criticalOccurrences: occurrenceCount
+    )
+}
+
+enum ReferenceMetricsCommandError: LocalizedError {
+    case invalidArguments
+    case unreadableReference
+    case unreadableCriticalTerms
+    case noCriticalTerms
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidArguments:
+            return "reference metrics requires --reference-file <txt> and --critical-terms <txt>"
+        case .unreadableReference:
+            return "reference metrics could not read the reference file"
+        case .unreadableCriticalTerms:
+            return "reference metrics could not read the critical-terms file"
+        case .noCriticalTerms:
+            return "reference metrics requires at least one usable critical term"
+        }
+    }
+}
+
+/// Count evidence before any audio or model is loaded. Output deliberately
+/// contains only aggregate counts so the vocabulary runner can preflight
+/// private references without leaking their text or paths into shared logs.
+func runReferenceMetricsCommand(arguments: [String]) throws {
+    var referenceFile: URL?
+    var criticalTermsFile: URL?
+    var index = 0
+    while index < arguments.count {
+        switch arguments[index] {
+        case "--reference-file":
+            guard index + 1 < arguments.count else {
+                throw ReferenceMetricsCommandError.invalidArguments
+            }
+            referenceFile = URL(fileURLWithPath: arguments[index + 1])
+            index += 2
+        case "--critical-terms":
+            guard index + 1 < arguments.count else {
+                throw ReferenceMetricsCommandError.invalidArguments
+            }
+            criticalTermsFile = URL(fileURLWithPath: arguments[index + 1])
+            index += 2
+        default:
+            throw ReferenceMetricsCommandError.invalidArguments
+        }
+    }
+    guard let referenceFile, let criticalTermsFile else {
+        throw ReferenceMetricsCommandError.invalidArguments
+    }
+
+    let reference: String
+    do {
+        reference = try String(contentsOf: referenceFile, encoding: .utf8)
+    } catch {
+        throw ReferenceMetricsCommandError.unreadableReference
+    }
+    let criticalTermContents: String
+    do {
+        criticalTermContents = try String(contentsOf: criticalTermsFile, encoding: .utf8)
+    } catch {
+        throw ReferenceMetricsCommandError.unreadableCriticalTerms
+    }
+    let criticalTerms = try parseCriticalTerms(criticalTermContents)
+    guard !criticalTerms.isEmpty else {
+        throw ReferenceMetricsCommandError.noCriticalTerms
+    }
+    let metrics = referenceMetrics(reference: reference, criticalTerms: criticalTerms)
+    print("reference-metrics reference-words=\(metrics.referenceWords) critical-occurrences=\(metrics.criticalOccurrences)")
+}
+
 enum VocabularyEvaluationContractError: LocalizedError {
     case emptyNormalizedCanonicalTerm(entry: Int)
     case duplicateNormalizedCanonicalTerm(entry: Int, firstEntry: Int)
@@ -1380,6 +1472,12 @@ func runBenchSelfTests() throws {
     try expect(wordErrors.errors == 2, "WER should expose edit-error counts for corpus aggregation")
     try expect(wordErrors.referenceWords == 4, "WER should expose reference-word counts for corpus aggregation")
     try expect(abs(wordErrors.percent - 50) < 0.001, "WER percentage should derive from the exact counts")
+    let preflightMetrics = referenceMetrics(
+        reference: "Szypański met Nowy Sącz. Szypański returned.",
+        criticalTerms: ["Szypański", "Nowy Sącz", "Absent"]
+    )
+    try expect(preflightMetrics.referenceWords == 6, "reference preflight should use WER tokenization")
+    try expect(preflightMetrics.criticalOccurrences == 3, "reference preflight should count exact critical occurrences")
 
     print("presspeech-bench self-test passed")
 }
@@ -1507,6 +1605,12 @@ struct PresspeechBench {
     static func main() async throws {
         if CommandLine.arguments.dropFirst() == ["--self-test"] {
             try runBenchSelfTests()
+            return
+        }
+        if CommandLine.arguments.dropFirst().first == "--reference-metrics" {
+            try runReferenceMetricsCommand(
+                arguments: Array(CommandLine.arguments.dropFirst(2))
+            )
             return
         }
         let args = parseArgs()

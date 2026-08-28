@@ -191,10 +191,14 @@ The negative-control directory should contain ordinary speech in the same
 language and from the same push-to-talk workflow in which none of the configured
 critical terms occurs. It always uses the target `--language` hint. Those clips
 run through every policy, and the product-candidate screen rejects any new term
-insertion or WER regression. The target corpus must contain at least 25 distinct
-clips, 1,000 reference words, and 50 critical-term occurrences for a thresholded
-run. Every target and control reference must also be listened to and corrected
-by a human; pass `--references-hand-audited` only after that review. A transcript
+insertion or WER regression. Before loading an ASR model, the runner uses the
+benchmark executable's exact normalization to count reference words and critical
+occurrences and to reject contaminated controls. This avoids hundreds of model
+runs when a corpus cannot meet the evidence floor. The target corpus must contain
+at least 25 distinct clips, 1,000 reference words, and 50 critical-term
+occurrences for a thresholded run. Every target and control reference must also
+be listened to and corrected by a human; pass `--references-hand-audited` only
+after that review. A transcript
 from another ASR can be a starting point, but cannot be the ground truth for a
 thresholded run without human verification. Use `--no-threshold` for exploratory
 runs with unaudited references. These bounds are below the first real-user

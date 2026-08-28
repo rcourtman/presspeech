@@ -43,6 +43,7 @@ MIN_TARGET_CRITICAL_OCCURRENCES="50"
 MIN_NEGATIVE_CONTROL_CLIPS="10"
 MIN_NEGATIVE_CONTROL_REFERENCE_WORDS="1000"
 SELF_TEST=0
+BENCH_EXECUTABLE=".build/release/presspeech-bench"
 
 BENCHMARK_SOURCE_PATHS=(
     "experiments/swift-bench/Package.swift"
@@ -383,6 +384,53 @@ validate_negative_control_reference() {
         echo "negative controls must contain none of the configured critical terms" >&2
         return 1
     fi
+}
+
+parse_reference_metrics() {
+    local output="$1"
+    if [[ "$output" =~ ^reference-metrics\ reference-words=([0-9]+)\ critical-occurrences=([0-9]+)$ ]]; then
+        printf '%s\t%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+        return 0
+    fi
+    echo "invalid privacy-safe reference metrics output" >&2
+    return 1
+}
+
+preflight_reference_corpus() {
+    local group="$1"
+    shift
+    local clips=( "$@" )
+    local words=0
+    local occurrences=0
+    local index=0
+    local clip ref output metrics clip_words clip_occurrences clip_id stem
+    for clip in "${clips[@]}"; do
+        index=$((index + 1))
+        ref="${clip%.*}.txt"
+        if ! output="$("$BENCH_EXECUTABLE" \
+            --reference-metrics \
+            --reference-file "$ref" \
+            --critical-terms "$CRITICAL_TERMS")"; then
+            echo "reference preflight failed for ${group}$(printf '%03d' "$index")" >&2
+            return 1
+        fi
+        if ! metrics="$(parse_reference_metrics "$output")"; then
+            echo "reference preflight failed for ${group}$(printf '%03d' "$index")" >&2
+            return 1
+        fi
+        IFS=$'\t' read -r clip_words clip_occurrences <<<"$metrics"
+        words=$((words + clip_words))
+        occurrences=$((occurrences + clip_occurrences))
+        if [[ "$group" == "n" || "$group" == "x" ]] && \
+            [[ "$clip_occurrences" -ne 0 ]]; then
+            stem="$(basename "$clip")"
+            stem="${stem%.*}"
+            clip_id="$(clip_id_for "$group" "$index" "$stem")"
+            echo "negative-control reference contains $clip_occurrences critical-term occurrence(s) for clip $clip_id" >&2
+            return 1
+        fi
+    done
+    printf '%s\t%s\n' "$words" "$occurrences"
 }
 
 publish_report_artifacts() {
@@ -730,6 +778,63 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$negative_validation_log" "negative-control reference contains 1 critical-term occurrence(s) for clip n002"
+    assert_eq "$(parse_reference_metrics 'reference-metrics reference-words=1295 critical-occurrences=68')" \
+        $'1295\t68' "reference preflight parser"
+    local invalid_reference_metrics_log="$tmpdir/invalid-reference-metrics.log"
+    if parse_reference_metrics 'reference: private transcript' >"$invalid_reference_metrics_log" 2>&1; then
+        echo "self-test expected transcript-bearing reference metrics to fail" >&2
+        exit 1
+    fi
+    assert_contains "$invalid_reference_metrics_log" "invalid privacy-safe reference metrics output"
+
+    local mock_bench="$tmpdir/mock-presspeech-bench"
+    cat >"$mock_bench" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+reference=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --reference-metrics) shift ;;
+        --reference-file) reference="$2"; shift 2 ;;
+        --critical-terms) shift 2 ;;
+        *) exit 2 ;;
+    esac
+done
+case "$(cat "$reference")" in
+    target-one) echo 'reference-metrics reference-words=600 critical-occurrences=25' ;;
+    target-two) echo 'reference-metrics reference-words=695 critical-occurrences=43' ;;
+    clean-control) echo 'reference-metrics reference-words=1000 critical-occurrences=0' ;;
+    contaminated-control) echo 'reference-metrics reference-words=100 critical-occurrences=1' ;;
+    *) exit 1 ;;
+esac
+MOCK
+    chmod +x "$mock_bench"
+    local original_bench_executable="$BENCH_EXECUTABLE"
+    BENCH_EXECUTABLE="$mock_bench"
+    local preflight_fixtures="$tmpdir/preflight-fixtures"
+    mkdir "$preflight_fixtures"
+    printf 'target-one\n' >"$preflight_fixtures/private-positive-a.txt"
+    printf 'target-two\n' >"$preflight_fixtures/private-positive-b.txt"
+    printf 'clean-control\n' >"$preflight_fixtures/private-control-a.txt"
+    printf 'contaminated-control\n' >"$preflight_fixtures/private-control-b.txt"
+    assert_eq "$(preflight_reference_corpus p \
+        "$preflight_fixtures/private-positive-a.wav" \
+        "$preflight_fixtures/private-positive-b.wav")" \
+        $'1295\t68' "target reference preflight aggregation"
+    assert_eq "$(preflight_reference_corpus n \
+        "$preflight_fixtures/private-control-a.wav")" \
+        $'1000\t0' "negative-control reference preflight aggregation"
+    local contaminated_preflight_log="$tmpdir/contaminated-preflight.log"
+    if preflight_reference_corpus n \
+        "$preflight_fixtures/private-control-b.wav" \
+        >"$contaminated_preflight_log" 2>&1; then
+        echo "self-test expected preflight to reject a contaminated control" >&2
+        exit 1
+    fi
+    assert_contains "$contaminated_preflight_log" \
+        "negative-control reference contains 1 critical-term occurrence(s) for clip n001"
+    assert_not_contains "$contaminated_preflight_log" "private-control-b"
+    BENCH_EXECUTABLE="$original_bench_executable"
 
     local original_threshold="$REQUIRE_CANDIDATE_PASS"
     local original_reference_audit="$REFERENCES_HAND_AUDITED"
@@ -1355,7 +1460,7 @@ if [[ ! "$fluid_revision" =~ ^[0-9a-f]{40}$ ]]; then
     echo "could not identify the exact FluidAudio revision from Package.swift" >&2
     exit 1
 fi
-benchmark_sha256="$(file_sha256 .build/release/presspeech-bench)"
+benchmark_sha256="$(file_sha256 "$BENCH_EXECUTABLE")"
 if [[ ! "$benchmark_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     echo "could not identify the benchmark executable SHA-256" >&2
     exit 1
@@ -1366,6 +1471,40 @@ if [[ -z "$platform_description" || -z "$swift_toolchain" ]]; then
     echo "could not identify the benchmark platform and Swift toolchain" >&2
     exit 1
 fi
+
+# Reject corpus blockers before loading either ASR model or starting the nine
+# policy lanes. The helper uses the benchmark executable's exact WER and
+# critical-term normalization and prints counts only, keeping private reference
+# text and paths out of shared logs.
+target_preflight="$(preflight_reference_corpus p "${target_clips[@]}")" || exit 1
+IFS=$'\t' read -r target_preflight_words target_preflight_occurrences <<<"$target_preflight"
+negative_preflight_words=0
+if [[ "${#negative_clips[@]}" -gt 0 ]]; then
+    negative_preflight="$(preflight_reference_corpus n "${negative_clips[@]}")" || exit 1
+    IFS=$'\t' read -r negative_preflight_words _ <<<"$negative_preflight"
+fi
+if [[ "${#cross_language_clips[@]}" -gt 0 ]]; then
+    preflight_reference_corpus x "${cross_language_clips[@]}" >/dev/null || exit 1
+fi
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && \
+      "$target_preflight_words" -lt "$MIN_TARGET_REFERENCE_WORDS" ]]; then
+    echo "thresholded vocabulary runs require at least $MIN_TARGET_REFERENCE_WORDS target reference words (found $target_preflight_words)" >&2
+    echo "supply a broader positive corpus, or use --no-threshold for exploration" >&2
+    exit 1
+fi
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && \
+      "$target_preflight_occurrences" -lt "$MIN_TARGET_CRITICAL_OCCURRENCES" ]]; then
+    echo "thresholded vocabulary runs require at least $MIN_TARGET_CRITICAL_OCCURRENCES target critical-term occurrences (found $target_preflight_occurrences)" >&2
+    echo "supply a broader positive corpus, or use --no-threshold for exploration" >&2
+    exit 1
+fi
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && \
+      "$negative_preflight_words" -lt "$MIN_NEGATIVE_CONTROL_REFERENCE_WORDS" ]]; then
+    echo "thresholded vocabulary runs require at least $MIN_NEGATIVE_CONTROL_REFERENCE_WORDS same-language negative-control reference words (found $negative_preflight_words)" >&2
+    echo "supply broader same-language controls, or use --no-threshold for exploration" >&2
+    exit 1
+fi
+echo "reference preflight: target=$target_preflight_words words/$target_preflight_occurrences critical occurrences; same-language controls=$negative_preflight_words words"
 
 # Normalize the complete corpus before running any ASR lane. Source-file hashes
 # catch renamed copies, while canonical output hashes also catch the same audio
@@ -1506,7 +1645,7 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
     for variant in v3 v3-vocab v3-vocab-conservative v3-vocab-no-rescue v3-vocab-exact-similarity sliding-v3 sliding-vocab sliding-vocab-conservative sliding-vocab-no-rescue; do
         log_file="$raw_dir/$clip_id-$variant.bench.txt"
         bench_args=(
-            ".build/release/presspeech-bench"
+            "$BENCH_EXECUTABLE"
             "--file" "$normalized"
             "--backend" "$variant"
             "--language" "$clip_language"
