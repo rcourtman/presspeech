@@ -47,6 +47,7 @@ SELF_TEST=0
 BENCH_EXECUTABLE=".build/release/presspeech-bench"
 
 BENCHMARK_SOURCE_PATHS=(
+    "experiments/swift-bench/Info.plist"
     "experiments/swift-bench/Package.swift"
     "experiments/swift-bench/Package.resolved"
     "experiments/swift-bench/Sources/presspeech-bench"
@@ -513,16 +514,15 @@ run_benchmark_to_log() {
     local log_file="$1"
     shift
     if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
-        # FluidAudio release builds suppress debug transcript lines, but its
-        # vocabulary loader can emit warning text containing a term (Polish
-        # diacritics intentionally trigger that warning). Filter the pipe
-        # before it reaches disk so the default raw logs are genuinely
-        # content-free rather than redacted after the fact.
+        # FluidAudio release builds suppress debug transcript lines, but
+        # warnings and errors are mirrored to stderr. Vocabulary terms, source
+        # spans, or paths can occur in those payloads, and upstream category
+        # names are not a stable privacy boundary. Redact every structured
+        # FluidAudio console payload before it reaches disk rather than trying
+        # to maintain a category allow/deny list. Keep the level and category
+        # so failures remain attributable without retaining private content.
         "$@" 2>&1 | sed -E \
-            -e '/\[FluidAudio\.CustomVocabulary\]/s/] .*/] <redacted vocabulary diagnostic>/' \
-            -e '/\[FluidAudio\.VocabularyRescorer/s/] .*/] <redacted vocabulary diagnostic>/' \
-            -e '/\[FluidAudio\.SlidingWindowASR\].*Chunk [0-9]+:/s/(Chunk [0-9]+: ).*(, time:)/\1<redacted transcript>\2/' \
-            -e '/\[FluidAudio\.SlidingWindowASR\].*(CONFIRMED|VOLATILE)/s/(] (CONFIRMED|VOLATILE)).*/\1 <redacted transcript state>/' \
+            -e '/^\[[^]]+\] \[(DEBUG|INFO|NOTICE|WARN|ERROR|FAULT)\] \[FluidAudio\.[^]]+\]/s/^((\[[^]]+\] ){2}\[FluidAudio\.[^]]+\]).*/\1 <redacted upstream diagnostic>/' \
             >"$log_file"
     else
         "$@" >"$log_file" 2>&1
@@ -979,9 +979,20 @@ MOCK
 
     local filtered_log="$tmpdir/filtered.log"
     run_benchmark_to_log "$filtered_log" printf '%s\n' \
-        "[10:00:00.000] [WARN] [FluidAudio.CustomVocabulary] Term 'Szypański': contains diacritics"
+        "[10:00:00.000] [WARN] [FluidAudio.CustomVocabulary] Term 'Szypański': contains diacritics" \
+        "[10:00:00.001] [WARN] [FluidAudio.VocabBoosting] Failed near Szypański" \
+        "[10:00:00.002] [ERROR] [FluidAudio.AsrModels] Private path: /Users/example/Secret" \
+        "    transcript: [WER 0.0%] [word-errors=0 reference-words=1] <redacted 9 chars>"
     assert_not_contains "$filtered_log" "Szypański"
-    assert_contains "$filtered_log" "redacted vocabulary diagnostic"
+    assert_not_contains "$filtered_log" "/Users/example/Secret"
+    assert_contains "$filtered_log" \
+        "[FluidAudio.CustomVocabulary] <redacted upstream diagnostic>"
+    assert_contains "$filtered_log" \
+        "[FluidAudio.VocabBoosting] <redacted upstream diagnostic>"
+    assert_contains "$filtered_log" \
+        "[FluidAudio.AsrModels] <redacted upstream diagnostic>"
+    assert_contains "$filtered_log" \
+        "transcript: [WER 0.0%] [word-errors=0 reference-words=1] <redacted 9 chars>"
 
     local tsv="$tmpdir/results.tsv"
     {
@@ -1103,6 +1114,10 @@ MOCK
         "$(macos_deployment_target "$REPO_ROOT/experiments/swift-bench/Package.swift")" \
         "$(macos_deployment_target "$REPO_ROOT/swift/Package.swift")" \
         "vocabulary benchmark matches the product macOS floor"
+    if [[ " ${BENCHMARK_SOURCE_PATHS[*]} " != *" experiments/swift-bench/Info.plist "* ]]; then
+        echo "self-test expected the linked benchmark Info.plist in source provenance" >&2
+        exit 1
+    fi
     printf 'benchmark artifact\n' >"$tmpdir/artifact"
     assert_eq "$(file_sha256 "$tmpdir/artifact")" \
         "add96b142ed74d852093d6f139dc83383b18c53840cea5761e4e93353ee5f836" \

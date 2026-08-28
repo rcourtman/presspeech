@@ -261,7 +261,12 @@ not replace same-language, push-to-talk controls:
   --trials 3
 ```
 
-Reports are ignored and privacy-redacted by default. They include corpus and
+Reports are ignored and privacy-redacted by default. The raw logs replace every
+structured FluidAudio diagnostic payload with its level and category, rather
+than relying on an upstream category list; dependency errors are also reduced
+to a content-free marker. This keeps vocabulary terms, transcript fragments,
+and private paths out of artifacts even when upstream adds a new warning path.
+They include corpus and
 worst WER, weighted exact critical-term recall, unexpected critical-term
 insertions, critical-term precision, p50 inference latency, peak process
 memory, model-cache footprint, preparation time, the Presspeech and FluidAudio

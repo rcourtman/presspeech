@@ -1595,6 +1595,20 @@ func runBenchSelfTests() throws {
     )
     try expect(preflightMetrics.referenceWords == 6, "reference preflight should use WER tokenization")
     try expect(preflightMetrics.criticalOccurrences == 3, "reference preflight should count exact critical occurrences")
+    let privateFailure = NSError(
+        domain: "benchmark-self-test",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Szypański at /Users/example/Private"]
+    )
+    try expect(
+        benchmarkErrorDescription(privateFailure, redactSensitiveText: true) ==
+            "<redacted error detail>",
+        "private benchmark failures should redact dependency error details"
+    )
+    try expect(
+        benchmarkErrorDescription(privateFailure, redactSensitiveText: false).contains("Szypański"),
+        "explicit transcript/path output should retain benchmark error details"
+    )
 
     print("presspeech-bench self-test passed")
 }
@@ -1713,6 +1727,13 @@ func summarize(_ name: String,
             print("      •\(wordErrors.wer)\(finalWordTag(t))\(criticalTermTag(t))\(wordErrors.counts) \(display)")
         }
     }
+}
+
+/// Benchmark failures can include vocabulary text or caller-supplied paths in
+/// dependency error descriptions. Default private-corpus runs retain the stage
+/// and backend name, but not that unbounded error payload.
+func benchmarkErrorDescription(_ error: Error, redactSensitiveText: Bool) -> String {
+    redactSensitiveText ? "<redacted error detail>" : String(describing: error)
 }
 
 // MARK: - Main
@@ -1944,7 +1965,11 @@ struct PresspeechBench {
                 try await backend.prepare(warmupSamples: warmup)
             } catch {
                 failedBackends += 1
-                log("  prepare(\(backend.name)) FAILED: \(error)")
+                let detail = benchmarkErrorDescription(
+                    error,
+                    redactSensitiveText: args.redactTranscripts
+                )
+                log("  prepare(\(backend.name)) FAILED: \(detail)")
                 continue
             }
             let prepDt = Date().timeIntervalSince(prepT0)
@@ -1971,7 +1996,11 @@ struct PresspeechBench {
                           criticalTerms: criticalTerms)
             } catch {
                 failedBackends += 1
-                log("  run(\(backend.name)) FAILED: \(error)")
+                let detail = benchmarkErrorDescription(
+                    error,
+                    redactSensitiveText: args.redactTranscripts
+                )
+                log("  run(\(backend.name)) FAILED: \(detail)")
             }
         }
         if failedBackends > 0 {
