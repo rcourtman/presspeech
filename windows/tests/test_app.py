@@ -221,6 +221,16 @@ class InputSelectionTests(unittest.TestCase):
             self.assertIsNone(instance._get_input_device())
         probe.assert_not_called()
 
+    def test_failed_probe_closes_the_created_microphone_stream(self):
+        stream = mock.Mock()
+        stream.start.side_effect = OSError("device became unavailable")
+
+        with mock.patch.object(app.sd, "InputStream", return_value=stream):
+            self.assertFalse(app.PresspeechApp._probe_input(3, 16000))
+
+        stream.stop.assert_called_once_with()
+        stream.close.assert_called_once_with()
+
 
 class HotkeyRegressionTests(unittest.TestCase):
     def make_app(self, hotkey="right alt", trigger="hold"):

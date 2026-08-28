@@ -1065,20 +1065,30 @@ class PresspeechApp:
     @staticmethod
     def _probe_input(idx, rate):
         got = threading.Event()
+        stream = None
 
         def cb(indata, frames, t, status):
             got.set()
 
         try:
-            s = sd.InputStream(device=idx, samplerate=rate, channels=1, dtype="float32",
-                               callback=cb)
-            s.start()
+            stream = sd.InputStream(
+                device=idx, samplerate=rate, channels=1, dtype="float32",
+                callback=cb)
+            stream.start()
             ok = got.wait(0.8)
-            s.stop()
-            s.close()
             return ok
         except Exception:
             return False
+        finally:
+            if stream is not None:
+                try:
+                    stream.stop()
+                except Exception:
+                    pass
+                try:
+                    stream.close()
+                except Exception:
+                    pass
 
     # ---------------- transcription ----------------
 
