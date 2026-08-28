@@ -162,6 +162,28 @@ validate_benchmark_output() {
     ' "$log_file"
 }
 
+publish_report_artifact() {
+    local stage_dir="$1"
+    local staged_report="$2"
+    local final_report="$3"
+
+    if [[ ! -f "$staged_report" ]]; then
+        echo "real-dictation report staging artifact is incomplete" >&2
+        return 1
+    fi
+    if [[ -e "$final_report" ]]; then
+        echo "refusing to replace existing real-dictation report" >&2
+        return 1
+    fi
+
+    # Keep the timestamped report hidden until every clip and the summary have
+    # succeeded. A failed run is diagnostic output, not a benchmark artifact.
+    if ! mv "$staged_report" "$final_report"; then
+        return 1
+    fi
+    rmdir "$stage_dir"
+}
+
 single_backend_summary_row() {
     local report="$1"
     awk -v backend="$BACKEND" '
@@ -430,6 +452,39 @@ run_self_test() {
     fi
     assert_contains "$validation_log" "benchmark output missing required metrics:"
 
+    local stage_dir="$tmpdir/staged"
+    local final_dir="$tmpdir/published"
+    mkdir -p "$stage_dir" "$final_dir"
+    printf 'complete report\n' >"$stage_dir/report.md"
+    [[ ! -e "$final_dir/report.md" ]] || {
+        echo "self-test found a report before publication" >&2
+        exit 1
+    }
+    publish_report_artifact \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$final_dir/report.md"
+    assert_contains "$final_dir/report.md" "complete report"
+    [[ ! -e "$stage_dir" ]] || {
+        echo "self-test expected successful report staging cleanup" >&2
+        exit 1
+    }
+
+    stage_dir="$tmpdir/collision-stage"
+    mkdir -p "$stage_dir"
+    printf 'new report\n' >"$stage_dir/report.md"
+    local collision_log="$tmpdir/collision.log"
+    if publish_report_artifact \
+        "$stage_dir" \
+        "$stage_dir/report.md" \
+        "$final_dir/report.md" >"$collision_log" 2>&1; then
+        echo "self-test expected report publication collision to fail" >&2
+        exit 1
+    fi
+    assert_contains "$collision_log" "refusing to replace existing real-dictation report"
+    assert_contains "$final_dir/report.md" "complete report"
+    assert_contains "$stage_dir/report.md" "new report"
+
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
         echo "self-test expected --trials without a value to fail" >&2
@@ -585,7 +640,13 @@ fi
 
 mkdir -p "$OUTDIR"
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-dictation.XXXXXX")"
-cleanup() { rm -rf "$tmpdir"; }
+stage_dir=""
+cleanup() {
+    rm -rf "$tmpdir"
+    if [[ -n "$stage_dir" ]]; then
+        rm -rf -- "$stage_dir"
+    fi
+}
 trap cleanup EXIT INT TERM
 
 echo "building presspeech-bench..."
@@ -593,7 +654,18 @@ swift build -c release >/dev/null
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_backend="$(printf '%s' "$BACKEND" | tr -c '[:alnum:]_.-' '-')"
-report="$OUTDIR/$timestamp-$safe_backend.md"
+final_report="$OUTDIR/$timestamp-$safe_backend.md"
+if [[ -e "$final_report" ]]; then
+    echo "real-dictation report already exists for timestamp $timestamp and backend $safe_backend" >&2
+    exit 1
+fi
+reserved_stage_dir="$OUTDIR/.$timestamp-$safe_backend.incomplete"
+if ! mkdir "$reserved_stage_dir"; then
+    echo "could not reserve real-dictation output for timestamp $timestamp and backend $safe_backend" >&2
+    exit 1
+fi
+stage_dir="$reserved_stage_dir"
+report="$stage_dir/report.md"
 backend_count="$(expected_backend_count "$BACKEND")"
 
 write_report_header "$report" "$timestamp" "${#clips[@]}"
@@ -632,13 +704,8 @@ for clip in "${clips[@]}"; do
     echo "benchmarking clip $clip_number..."
     log_file="$tmpdir/$clip_id.log"
     if ! "${bench_args[@]}" >"$log_file" 2>&1; then
-        cat "$log_file" >>"$report"
-        {
-            echo '```'
-            echo
-            echo "Benchmark failed for clip $clip_number."
-        } >>"$report"
-        echo "benchmark failed for clip $clip_number; see $report" >&2
+        cat "$log_file" >&2
+        echo "benchmark failed for clip $clip_number" >&2
         exit 1
     fi
     cat "$log_file" >>"$report"
@@ -648,12 +715,8 @@ for clip in "${clips[@]}"; do
         require_reference=1
     fi
     if ! validate_benchmark_output "$log_file" "$backend_count" "$require_reference"; then
-        {
-            echo '```'
-            echo
-            echo "Benchmark output was incomplete for clip $clip_number."
-        } >>"$report"
-        echo "invalid benchmark output for clip $clip_number; see $report" >&2
+        cat "$log_file" >&2
+        echo "invalid benchmark output for clip $clip_number" >&2
         exit 1
     fi
 
@@ -662,4 +725,7 @@ done
 
 append_single_backend_summary "$report"
 
-echo "report: $report"
+publish_report_artifact "$stage_dir" "$report" "$final_report"
+stage_dir=""
+
+echo "report: $final_report"
