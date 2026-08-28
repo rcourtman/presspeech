@@ -20,6 +20,7 @@ the production app.
 | **`v3-vocab`** | production `v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
 | **`v3-vocab-conservative`** | `v3-vocab` + FluidAudio's short-term taper and spotter similarity floors | Apple Neural Engine |
 | **`v3-vocab-no-rescue`** | `v3-vocab` with acoustic-only spotter rescue disabled | Apple Neural Engine |
+| **`v3-vocab-exact-similarity`** | production `v3` + only legacy-selected candidate-evidence replacements with exact normalized scorer similarity | Apple Neural Engine |
 | **`sliding-v3`** | FluidAudio sliding-window manager → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
 | **`sliding-vocab`** | `sliding-v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
 | **`sliding-vocab-conservative`** | `sliding-vocab` + FluidAudio's short-term taper and spotter similarity floors | Apple Neural Engine |
@@ -138,7 +139,7 @@ For a quick non-ASR check of argument parsing and report redaction:
 FluidAudio's auxiliary CTC vocabulary rescorer accepts the transcript and token
 timings returned by the direct `AsrManager` call used by Presspeech. Its
 sliding-window manager also exposes a convenience integration. The vocabulary
-runner therefore compares eight isolated processes so engine-path changes are
+runner therefore compares nine isolated processes so engine-path changes are
 not misattributed to vocabulary biasing:
 
 1. production `v3`;
@@ -146,12 +147,15 @@ not misattributed to vocabulary biasing:
 3. `v3-vocab-conservative` with FluidAudio's recommended short-term taper and
    spotter similarity floors;
 4. `v3-vocab-no-rescue`, which disables acoustic-only spotter rescue;
-5. `sliding-v3` without vocabulary boosting;
-6. `sliding-vocab` with the auxiliary CTC model and rescorer;
-7. `sliding-vocab-conservative` with FluidAudio's recommended short-term
+5. `v3-vocab-exact-similarity`, which uses FluidAudio's non-mutating candidate
+   evidence and applies only candidates selected by legacy overlap arbitration
+   whose normalized scorer similarity is exactly 1.0;
+6. `sliding-v3` without vocabulary boosting;
+7. `sliding-vocab` with the auxiliary CTC model and rescorer;
+8. `sliding-vocab-conservative` with FluidAudio's recommended short-term
    taper (pivot 5) and spotter-rescue similarity floors (0.30 single-word,
    0.50 multi-word); and
-8. `sliding-vocab-no-rescue`, which disables the acoustic-only spotter rescue
+9. `sliding-vocab-no-rescue`, which disables the acoustic-only spotter rescue
    that upstream identifies as the dominant source of short-term false
    replacements while leaving the string-similarity path active.
 
@@ -244,7 +248,7 @@ exploratory local modifications. A pairwise policy table compares direct-v3
 lanes with production `v3` and sliding lanes with unbiased `sliding-v3`,
 reporting net critical hits, unexpected insertions, corpus WER change, and
 counts of clean wins, costly wins, and pure losses. A separate product-candidate
-screen evaluates only the three direct-v3 policies and fails the command unless
+screen evaluates only the four direct-v3 policies and fails the command unless
 at least one has complete comparable clips, at least 25 target clips containing
 at least 1,000 reference words and 50 critical-term occurrences, at least 10
 same-language negative-control clips with distinct source and normalized audio
@@ -257,6 +261,14 @@ same-language requirement. The per-clip checks prevent gains on some utterances
 from masking vocabulary-caused regressions on others. Passing this strict screen
 is necessary evidence for product evaluation, not approval to ship; use
 `--no-threshold` for exploratory runs that should always publish their report.
+
+The exact-similarity lane is a precision experiment, not a claim that a match is
+semantically safe. FluidAudio defines `similarity == 1.0` over its normalized
+scorer input, which can ignore case or punctuation and can concatenate compound
+words. The lane also requires an upstream-proven UTF-8 source range and fails
+closed rather than guessing a mutation span. It still has to clear the same
+target, negative-control, WER, insertion, recall, and latency screen as every
+other direct-v3 policy.
 
 When repeated trials yield different transcripts, each per-clip row is a
 conservative envelope: worst WER, lowest critical-term recall, and highest

@@ -77,7 +77,7 @@ Options:
   --self-test              run parser, aggregation, and redaction tests only
   -h, --help               show this help
 
-The eight variants run in separate processes so memory measurements stay
+The nine variants run in separate processes so memory measurements stay
 isolated:
   v3             production AsrManager path
   v3-vocab       production v3 plus auxiliary CTC rescoring
@@ -85,6 +85,9 @@ isolated:
                   v3-vocab with short-term taper and similarity floors
   v3-vocab-no-rescue
                   v3-vocab with acoustic-only spotter rescue disabled
+  v3-vocab-exact-similarity
+                  v3-vocab candidate evidence, applying only legacy-selected
+                  replacements with exact normalized scorer similarity
   sliding-v3     SlidingWindowAsrManager without vocabulary boosting
   sliding-vocab  the same sliding path plus the auxiliary CTC rescorer
   sliding-vocab-conservative
@@ -1423,7 +1426,7 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Total clips: ${#clips[@]}"
     echo "- Transcript output: $([[ "$REDACT_TRANSCRIPTS" -eq 1 ]] && echo redacted || echo included)"
     echo
-    echo "> Production v3, three direct-v3 vocabulary policies, unbiased sliding v3,"
+    echo "> Production v3, four direct-v3 vocabulary policies, unbiased sliding v3,"
     echo "> and three sliding-window vocabulary policies run"
     echo "> in separate processes. Critical-term recall and unexpected insertions"
     echo "> count exact canonical surface forms after case/punctuation normalization."
@@ -1446,7 +1449,7 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
     clip_id="${clip_ids[$clip_offset]}"
     clip_group="${clip_groups[$clip_offset]}"
     clip_language="${clip_languages[$clip_offset]}"
-    for variant in v3 v3-vocab v3-vocab-conservative v3-vocab-no-rescue sliding-v3 sliding-vocab sliding-vocab-conservative sliding-vocab-no-rescue; do
+    for variant in v3 v3-vocab v3-vocab-conservative v3-vocab-no-rescue v3-vocab-exact-similarity sliding-v3 sliding-vocab sliding-vocab-conservative sliding-vocab-no-rescue; do
         log_file="$raw_dir/$clip_id-$variant.bench.txt"
         bench_args=(
             ".build/release/presspeech-bench"
@@ -1459,6 +1462,7 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
         if [[ "$variant" == "v3-vocab" ||
               "$variant" == "v3-vocab-conservative" ||
               "$variant" == "v3-vocab-no-rescue" ||
+              "$variant" == "v3-vocab-exact-similarity" ||
               "$variant" == "sliding-vocab" ||
               "$variant" == "sliding-vocab-conservative" ||
               "$variant" == "sliding-vocab-no-rescue" ]]; then
@@ -1529,6 +1533,7 @@ done
     summary_row "$tsv" v3-vocab
     summary_row "$tsv" v3-vocab-conservative
     summary_row "$tsv" v3-vocab-no-rescue
+    summary_row "$tsv" v3-vocab-exact-similarity
     summary_row "$tsv" sliding-v3
     summary_row "$tsv" sliding-vocab
     summary_row "$tsv" sliding-vocab-conservative
@@ -1543,6 +1548,7 @@ done
     comparison_row "$tsv" v3 v3-vocab
     comparison_row "$tsv" v3 v3-vocab-conservative
     comparison_row "$tsv" v3 v3-vocab-no-rescue
+    comparison_row "$tsv" v3 v3-vocab-exact-similarity
     comparison_row "$tsv" sliding-v3 sliding-vocab
     comparison_row "$tsv" sliding-v3 sliding-vocab-conservative
     comparison_row "$tsv" sliding-v3 sliding-vocab-no-rescue
@@ -1559,7 +1565,7 @@ done
 
 candidate_passes=0
 candidate_blockers=()
-for candidate in v3-vocab v3-vocab-conservative v3-vocab-no-rescue; do
+for candidate in v3-vocab v3-vocab-conservative v3-vocab-no-rescue v3-vocab-exact-similarity; do
     assessment="$(candidate_assessment "$tsv" v3 "$candidate")"
     candidate_assessment_row "$assessment" >>"$report"
     IFS=$'\t' read -r assessed_candidate assessed_comparable assessed_baseline_count \

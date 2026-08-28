@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
@@ -138,7 +138,7 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
@@ -150,6 +150,9 @@ func parseArgs() -> CLIArgs {
                               and spotter similarity floors
                          v3-vocab-no-rescue
                               v3-vocab with acoustic-only spotter rescue disabled
+                         v3-vocab-exact-similarity
+                              applies only legacy-selected candidates whose normalized
+                              scorer similarity is exactly 1.0
                          sliding-v3
                               Parakeet v3 through FluidAudio's sliding-window manager
                          sliding-vocab
@@ -526,10 +529,11 @@ final class FluidBackend: ASRBackend {
 // the exact architecture a Presspeech vocabulary beta would use; benchmarking
 // it separately avoids attributing sliding-window engine changes to boosting.
 
-enum VocabularyPolicy {
+enum VocabularyPolicy: Equatable {
     case standard
     case conservative
     case noSpotterRescue
+    case exactSimilarity
 
     var config: VocabularyRescorer.Config? {
         switch self {
@@ -543,8 +547,54 @@ enum VocabularyPolicy {
             )
         case .noSpotterRescue:
             return VocabularyRescorer.Config(spotterRescueEnabled: false)
+        case .exactSimilarity:
+            return nil
         }
     }
+}
+
+/// Apply only candidates that the legacy overlap arbitration selected and
+/// whose normalized scorer input exactly matched a configured canonical form
+/// or alias. FluidAudio documents that `similarity == 1` is not raw-text or
+/// semantic equality, so this remains a benchmark policy rather than a product
+/// safety claim. Missing or overlapping byte provenance fails closed.
+func exactSimilarityVocabularyText(
+    from output: VocabularyRescorer.CandidateEvidenceOutput
+) -> String {
+    struct Replacement {
+        let range: Range<Int>
+        let text: String
+    }
+
+    var replacements: [Replacement] = []
+    let utf8 = output.baseText.utf8
+    for candidate in output.candidates
+    where candidate.legacyOutcome == .applied && candidate.similarity == 1.0 {
+        guard let byteRange = candidate.baseTextUTF8Range,
+              byteRange.lowerBound >= 0,
+              byteRange.upperBound <= utf8.count,
+              byteRange.lowerBound < byteRange.upperBound
+        else { return output.baseText }
+
+        let lowerUTF8 = utf8.index(utf8.startIndex, offsetBy: byteRange.lowerBound)
+        let upperUTF8 = utf8.index(utf8.startIndex, offsetBy: byteRange.upperBound)
+        guard String.Index(lowerUTF8, within: output.baseText) != nil,
+              String.Index(upperUTF8, within: output.baseText) != nil
+        else { return output.baseText }
+        replacements.append(Replacement(range: byteRange, text: candidate.canonicalTerm))
+    }
+
+    replacements.sort { $0.range.lowerBound < $1.range.lowerBound }
+    for pair in zip(replacements, replacements.dropFirst())
+    where pair.0.range.upperBound > pair.1.range.lowerBound {
+        return output.baseText
+    }
+
+    var bytes = Data(output.baseText.utf8)
+    for replacement in replacements.reversed() {
+        bytes.replaceSubrange(replacement.range, with: replacement.text.utf8)
+    }
+    return String(data: bytes, encoding: .utf8) ?? output.baseText
 }
 
 final class DirectVocabularyBackend: ASRBackend {
@@ -555,6 +605,10 @@ final class DirectVocabularyBackend: ASRBackend {
     private let vocabularyPolicy: VocabularyPolicy
     private var asr: AsrManager!
     private var boosting: VocabularyBoostingSession!
+    private var vocabulary: CustomVocabularyContext!
+    private var spotter: CtcKeywordSpotter!
+    private var rescorer: VocabularyRescorer!
+    private var vocabSizeConfig: ContextBiasingConstants.VocabSizeConfig!
 
     var modelCacheComponents: [(label: String, url: URL)] {
         [
@@ -580,6 +634,8 @@ final class DirectVocabularyBackend: ASRBackend {
             self.name = "fluid-ParakeetTDTv3+VocabularyConservative"
         case .noSpotterRescue:
             self.name = "fluid-ParakeetTDTv3+VocabularyNoRescue"
+        case .exactSimilarity:
+            self.name = "fluid-ParakeetTDTv3+VocabularyExactSimilarity"
         }
     }
 
@@ -602,11 +658,27 @@ final class DirectVocabularyBackend: ASRBackend {
                 criticalTerms: criticalTerms
             )
         }
-        boosting = try await VocabularyBoostingSession(
-            vocabulary: loaded.vocab,
-            ctcModels: loaded.models,
-            config: vocabularyPolicy.config
-        )
+        if vocabularyPolicy == .exactSimilarity {
+            vocabulary = loaded.vocab
+            spotter = CtcKeywordSpotter(
+                models: loaded.models,
+                blankId: loaded.models.vocabulary.count
+            )
+            rescorer = try await VocabularyRescorer.create(
+                spotter: spotter,
+                vocabulary: vocabulary,
+                ctcModelDirectory: CtcModels.defaultCacheDirectory()
+            )
+            vocabSizeConfig = ContextBiasingConstants.rescorerConfig(
+                forVocabSize: vocabulary.terms.count
+            )
+        } else {
+            boosting = try await VocabularyBoostingSession(
+                vocabulary: loaded.vocab,
+                ctcModels: loaded.models,
+                config: vocabularyPolicy.config
+            )
+        }
         log("  custom vocabulary ready (\(loaded.vocab.terms.count) terms; content redacted)")
         _ = try await run(samples: warmupSamples)
     }
@@ -615,15 +687,40 @@ final class DirectVocabularyBackend: ASRBackend {
         var state = try TdtDecoderState()
         let t0 = Date()
         let result = try await asr.transcribe(samples, decoderState: &state, language: language)
+        guard let timings = result.tokenTimings, !timings.isEmpty, !samples.isEmpty else {
+            return (result.text, Date().timeIntervalSince(t0))
+        }
+
+        if vocabularyPolicy != .exactSimilarity {
+            let rescored = await boosting.rescore(
+                text: result.text,
+                tokenTimings: timings,
+                audioSamples: samples
+            )
+            return (rescored?.text ?? result.text, Date().timeIntervalSince(t0))
+        }
+
         let text: String
-        if let timings = result.tokenTimings,
-           let rescored = await boosting.rescore(
-               text: result.text,
-               tokenTimings: timings,
-               audioSamples: samples
-           ) {
-            text = rescored.text
-        } else {
+        do {
+            let spotResult = try await spotter.spotKeywordsWithLogProbs(
+                audioSamples: samples,
+                customVocabulary: vocabulary,
+                minScore: nil
+            )
+            let minSimilarity = max(vocabSizeConfig.minSimilarity, vocabulary.minSimilarity)
+            let evidence = rescorer.ctcTokenEvaluateCandidates(
+                transcript: result.text,
+                tokenTimings: timings,
+                logProbs: spotResult.logProbs,
+                frameDuration: spotResult.frameDuration,
+                cbw: vocabSizeConfig.cbw,
+                marginSeconds: 0.5,
+                minSimilarity: minSimilarity
+            )
+            text = exactSimilarityVocabularyText(from: evidence)
+        } catch {
+            // Match FluidAudio's fail-open VocabularyBoostingSession contract:
+            // optional vocabulary scoring must never break base transcription.
             text = result.text
         }
         return (text, Date().timeIntervalSince(t0))
@@ -1089,6 +1186,88 @@ func runBenchSelfTests() throws {
         VocabularyPolicy.noSpotterRescue.config?.spotterRescueEnabled == false,
         "no-rescue vocabulary policy should disable acoustic-only rescue"
     )
+    try expect(
+        VocabularyPolicy.exactSimilarity.config == nil,
+        "exact-similarity policy should evaluate FluidAudio's default candidate evidence"
+    )
+
+    let evidenceBaseText = "Meet szypanski and ordinary."
+    let exactCandidate = VocabularyRescorer.CandidateEvidence(
+        candidateID: 0,
+        origin: .termCentricSingleWord,
+        basePhrase: "szypanski",
+        canonicalTerm: "Szypański",
+        matchedAlias: "szypanski",
+        similarity: 1.0,
+        rawVocabularyCTCScore: -2,
+        rawOriginalCTCScore: -3,
+        effectiveBoost: 1,
+        wordRange: 1..<2,
+        tokenRange: nil,
+        baseTextUTF8Range: 5..<14,
+        startTime: nil,
+        endTime: nil,
+        comparisonPassed: true,
+        legacyOutcome: .applied,
+        reason: "self-test"
+    )
+    let fuzzyCandidate = VocabularyRescorer.CandidateEvidence(
+        candidateID: 1,
+        origin: .termCentricSingleWord,
+        basePhrase: "ordinary",
+        canonicalTerm: "Extraordinary",
+        matchedAlias: nil,
+        similarity: 0.9,
+        rawVocabularyCTCScore: -2,
+        rawOriginalCTCScore: -3,
+        effectiveBoost: 1,
+        wordRange: 3..<4,
+        tokenRange: nil,
+        baseTextUTF8Range: 19..<27,
+        startTime: nil,
+        endTime: nil,
+        comparisonPassed: true,
+        legacyOutcome: .applied,
+        reason: "self-test"
+    )
+    let evidence = VocabularyRescorer.CandidateEvidenceOutput(
+        baseText: evidenceBaseText,
+        baseWords: ["Meet", "szypanski", "and", "ordinary"],
+        candidates: [exactCandidate, fuzzyCandidate]
+    )
+    try expect(
+        exactSimilarityVocabularyText(from: evidence) == "Meet Szypański and ordinary.",
+        "exact-similarity policy should apply selected byte-proven replacements only"
+    )
+    let missingProvenanceCandidate = VocabularyRescorer.CandidateEvidence(
+        candidateID: 2,
+        origin: .spotterRescue,
+        basePhrase: "szypanski",
+        canonicalTerm: "Szypański",
+        matchedAlias: "szypanski",
+        similarity: 1.0,
+        rawVocabularyCTCScore: -2,
+        rawOriginalCTCScore: -3,
+        effectiveBoost: 1,
+        wordRange: 1..<2,
+        tokenRange: nil,
+        baseTextUTF8Range: nil,
+        startTime: nil,
+        endTime: nil,
+        comparisonPassed: true,
+        legacyOutcome: .applied,
+        reason: "self-test"
+    )
+    try expect(
+        exactSimilarityVocabularyText(
+            from: VocabularyRescorer.CandidateEvidenceOutput(
+                baseText: evidenceBaseText,
+                baseWords: evidence.baseWords,
+                candidates: [exactCandidate, missingProvenanceCandidate]
+            )
+        ) == evidenceBaseText,
+        "exact-similarity policy should fail closed when mutation provenance is missing"
+    )
 
     try expect(
         phraseOccurrenceCount(["szypańskim"], in: ["ze", "szypańskim", "i", "szypańskim"]) == 2,
@@ -1334,6 +1513,7 @@ struct PresspeechBench {
             "v3-vocab",
             "v3-vocab-conservative",
             "v3-vocab-no-rescue",
+            "v3-vocab-exact-similarity",
             "sliding-vocab",
             "sliding-vocab-conservative",
             "sliding-vocab-no-rescue",
@@ -1366,6 +1546,9 @@ struct PresspeechBench {
         }
         if args.backend == "v3-vocab-no-rescue" || args.backend == "sliding-vocab-no-rescue" {
             runSummary += ", vocabulary-policy=no-spotter-rescue"
+        }
+        if args.backend == "v3-vocab-exact-similarity" {
+            runSummary += ", vocabulary-policy=exact-normalized-similarity"
         }
         log(runSummary)
         let samples = try load16kMono(url: args.file)
@@ -1406,6 +1589,7 @@ struct PresspeechBench {
 
         let known = [
             "apple", "v3", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
+            "v3-vocab-exact-similarity",
             "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
             "sliding-vocab-no-rescue", "unified",
             "nemotron-en", "nemotron-multilingual",
@@ -1441,13 +1625,16 @@ struct PresspeechBench {
         }
         if args.backend == "v3-vocab" ||
             args.backend == "v3-vocab-conservative" ||
-            args.backend == "v3-vocab-no-rescue" {
+            args.backend == "v3-vocab-no-rescue" ||
+            args.backend == "v3-vocab-exact-similarity" {
             let policy: VocabularyPolicy
             switch args.backend {
             case "v3-vocab-conservative":
                 policy = .conservative
             case "v3-vocab-no-rescue":
                 policy = .noSpotterRescue
+            case "v3-vocab-exact-similarity":
+                policy = .exactSimilarity
             default:
                 policy = .standard
             }
