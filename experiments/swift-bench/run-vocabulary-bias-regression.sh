@@ -107,6 +107,8 @@ Same-language negative controls always use the target --language hint. Optional
 cross-language controls require their own explicit language hint and supplement,
 rather than satisfy, the same-language requirement. All control references must
 contain none of the critical terms under the benchmark's exact normalization.
+Every target and control audio file must be byte-distinct; exact renamed copies
+do not provide independent evidence and are rejected.
 Target IDs begin with `p`, same-language control IDs with `n`, and cross-language
 control IDs with `x`.
 USAGE
@@ -167,6 +169,21 @@ fixture_set_sha256() {
         # digests makes a copied or renamed frozen corpus retain its identity.
         printf '%s\t%s\n' "$(file_sha256 "$clip")" "$(file_sha256 "$ref")"
     done | sort | shasum -a 256 | awk '{print $1}'
+}
+
+validate_unique_audio_content() {
+    local clip
+    local duplicate_digest
+    duplicate_digest="$({
+        for clip in "$@"; do
+            file_sha256 "$clip"
+        done
+    } | sort | uniq -d | head -n 1)"
+    if [[ -n "$duplicate_digest" ]]; then
+        echo "benchmark corpora contain byte-identical audio files" >&2
+        echo "each target and control clip must be an independent recording or segment" >&2
+        return 1
+    fi
 }
 
 benchmark_inputs_sha256() {
@@ -854,6 +871,15 @@ run_self_test() {
     printf 'reference two\n' >"$fixtures/second.txt"
     printf 'Szypański\n' >"$fixtures/vocabulary.txt"
     printf 'Szypański\n' >"$fixtures/critical-terms.txt"
+    validate_unique_audio_content "$fixtures/first.wav" "$fixtures/second.wav"
+    cp "$fixtures/first.wav" "$fixtures/copied.wav"
+    if validate_unique_audio_content \
+        "$fixtures/first.wav" "$fixtures/second.wav" "$fixtures/copied.wav" \
+        >/dev/null 2>&1; then
+        echo "self-test expected renamed audio copies to be rejected" >&2
+        exit 1
+    fi
+    rm "$fixtures/copied.wav"
     local fixture_digest
     fixture_digest="$(fixture_set_sha256 \
         "$fixtures/first.wav" "$fixtures/second.wav")"
@@ -1161,6 +1187,9 @@ fi
 duplicate_clip="$(printf '%s\n' "${clips[@]}" | sort | uniq -d | head -n 1)"
 if [[ -n "$duplicate_clip" ]]; then
     echo "target and control corpora overlap: $duplicate_clip" >&2
+    exit 1
+fi
+if ! validate_unique_audio_content "${clips[@]}"; then
     exit 1
 fi
 
