@@ -251,9 +251,16 @@ validate_release_notes_file() {
 latest_macos_release_tag() {
     local repository="$1"
     # Windows prerelease tags share this repository. Restrict generated macOS
-    # notes to the vX.Y.Z line so a recent windows-vX.Y.Z tag cannot truncate
-    # the macOS change list.
-    git -C "$repository" describe --tags --abbrev=0 --match 'v[0-9]*'
+    # notes to reachable, canonical vX.Y.Z tags so neither a Windows tag nor a
+    # nearby tag such as v1-wip can truncate the macOS change list. Git's
+    # --match patterns are globs, so 'v[0-9]*' alone is not that constraint.
+    git -C "$repository" tag --merged HEAD --list 'v*' --sort=-version:refname \
+        | awk '
+            /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ && !found {
+                print
+                found = 1
+            }
+        '
 }
 
 rewrite_cask_file() {
@@ -419,15 +426,22 @@ run_release_script_self_test() {
     local tag_probe
     tag_probe="$({
         git() {
-            [[ "$#" -eq 7 && "$1" == "-C" && "$2" == "/self-test/repository" &&
-               "$3" == "describe" && "$4" == "--tags" && "$5" == "--abbrev=0" &&
-               "$6" == "--match" && "$7" == "v[0-9]*" ]] || return 1
-            printf '%s\n' "v1.2.3"
+            [[ "$#" -eq 8 && "$1" == "-C" && "$2" == "/self-test/repository" &&
+               "$3" == "tag" && "$4" == "--merged" && "$5" == "HEAD" &&
+               "$6" == "--list" && "$7" == "v*" &&
+               "$8" == "--sort=-version:refname" ]] || return 1
+            printf '%s\n' \
+                "v9-wip" \
+                "v2.0.0-rc1" \
+                "v1.10.0" \
+                "v1.9.0" \
+                "v01.8.0" \
+                "windows-v9.0.0"
         }
         latest_macos_release_tag "/self-test/repository"
     })"
-    assert_self_test_equals "$tag_probe" "v1.2.3" \
-        "macOS release notes should ignore newer Windows tags"
+    assert_self_test_equals "$tag_probe" "v1.10.0" \
+        "macOS release notes should use the newest canonical macOS tag"
 
     check_no_attribution_text "self-test generated notes" "$(printf -- '- Release v9.8.7\n- Improve update checks')"
 
