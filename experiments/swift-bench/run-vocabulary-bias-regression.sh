@@ -221,6 +221,16 @@ validate_unique_normalized_audio_content() {
     fi
 }
 
+normalize_audio_file() {
+    local input="$1"
+    local output="$2"
+    # Match presspeech-bench's AVAudioConverter input boundary. Explicit
+    # downmixing matters for duplicate detection: otherwise a stereo source
+    # and an equivalent mono rewrap can retain different channel layouts and
+    # evade the canonical-content comparison below.
+    afconvert -f WAVE -d LEF32@16000 -c 1 --mix "$input" "$output"
+}
+
 benchmark_inputs_sha256() {
     local target_fixture_digest="$1"
     local negative_fixture_digest="$2"
@@ -1090,6 +1100,25 @@ MOCK
     fi
     assert_contains "$tmpdir/normalized-duplicate.log" \
         "rewrapping or losslessly converting one recording does not make an independent control"
+    local mock_bin="$tmpdir/mock-bin"
+    mkdir "$mock_bin"
+    cat >"$mock_bin/afconvert" <<'MOCK_AFCONVERT'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" >"$MOCK_AFCONVERT_ARGS"
+cp "${@: -2:1}" "${@: -1}"
+MOCK_AFCONVERT
+    chmod +x "$mock_bin/afconvert"
+    local normalized_output="$fixtures/normalized/explicit-mono.wav"
+    MOCK_AFCONVERT_ARGS="$tmpdir/afconvert-args" \
+        PATH="$mock_bin:$PATH" \
+        normalize_audio_file "$fixtures/first.wav" "$normalized_output"
+    assert_eq "$(cat "$tmpdir/afconvert-args")" \
+        "$(printf '%s\n' -f WAVE -d LEF32@16000 -c 1 --mix \
+            "$fixtures/first.wav" "$normalized_output")" \
+        "canonical audio conversion arguments"
+    assert_eq "$(cat "$normalized_output")" "audio one" \
+        "canonical audio conversion output"
     local fixture_digest
     fixture_digest="$(fixture_set_sha256 \
         "$fixtures/first.wav" "$fixtures/second.wav")"
@@ -1544,7 +1573,7 @@ for clip in "${clips[@]}"; do
     ref="${clip%.*}.txt"
 
     echo "normalizing clip $clip_id..."
-    afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
+    normalize_audio_file "$clip" "$normalized"
     cp "$ref" "$tmpdir/$clip_id.txt"
     normalized_clips+=( "$normalized" )
     clip_ids+=( "$clip_id" )
