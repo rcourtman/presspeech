@@ -31,12 +31,16 @@ def canonical_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+def normalized_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+
 def input_fingerprint() -> str:
     digest = hashlib.sha256()
     for relative in INPUTS:
         digest.update(relative.as_posix().encode("utf-8"))
         digest.update(b"\0")
-        digest.update((ROOT / relative).read_bytes())
+        digest.update(normalized_text(ROOT / relative).encode("utf-8"))
         digest.update(b"\0")
     return digest.hexdigest()
 

@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,14 @@ import release_requirements
 
 
 class ReleaseRequirementTests(unittest.TestCase):
+    def test_input_fingerprint_normalizes_windows_line_endings(self):
+        path = self.enterContext(tempfile.TemporaryDirectory())
+        fixture = Path(path) / "requirements.txt"
+        fixture.write_bytes(b"alpha==1\r\nbeta==2\r\n")
+        self.assertEqual(
+            release_requirements.normalized_text(fixture), "alpha==1\nbeta==2\n"
+        )
+
     def test_committed_lock_is_current(self):
         text = release_requirements.LOCK.read_text(encoding="utf-8")
         pins = release_requirements.validate(text)
