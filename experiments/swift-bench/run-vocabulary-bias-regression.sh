@@ -13,11 +13,12 @@ REPO_ROOT="$(cd ../.. && pwd)"
 
 INPUT_DIR="real-audio"
 NEGATIVE_CONTROL_DIR=""
+CROSS_LANGUAGE_CONTROL_DIR=""
 OUTDIR="vocabulary-results"
 VOCABULARY=""
 CRITICAL_TERMS=""
 LANGUAGE="auto"
-NEGATIVE_CONTROL_LANGUAGE=""
+CROSS_LANGUAGE_CONTROL_LANGUAGE=""
 TRIALS="3"
 REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
@@ -46,15 +47,18 @@ usage: ./run-vocabulary-bias-regression.sh --vocabulary <path> --critical-terms 
 Options:
   --input-dir <path>       audio + same-stem .txt references (default: real-audio)
   --negative-control-dir <path>
-                           optional unrelated audio + references in which no
-                           critical term occurs; included in the safety screen
+                           same-language, same-workflow audio + references in
+                           which no critical term occurs; required by the screen
+  --cross-language-control-dir <path>
+                           optional additional audio + references in another
+                           language in which no critical term occurs
   --out-dir <path>         ignored report directory (default: vocabulary-results)
   --vocabulary <path>      FluidAudio text or JSON custom vocabulary (required)
   --critical-terms <path>  canonical surface forms, one per line (required)
   --language <auto|code>   Parakeet v3 language/script hint (default: auto)
-  --negative-control-language <auto|code>
-                           language hint for negative controls (default: the
-                           value of --language)
+  --cross-language-control-language <auto|code>
+                           language hint for cross-language controls (required
+                           with --cross-language-control-dir)
   --trials <n>             measured trials per clip/variant (default: 3)
   --show-transcripts       include references and hypotheses in raw logs
   --show-paths             include fixture and configuration paths in reports
@@ -89,14 +93,17 @@ The product-candidate screen compares each direct-v3 vocabulary policy with
 production v3; sliding-window lanes remain mechanism diagnostics. It requires
 complete comparable clips, at least one net critical-term hit,
 no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected
-insertions or WER, at least one negative-control clip, and average p50 latency
-no more than 2x production. Passing
+insertions or WER, at least one same-language negative-control clip, and average
+p50 latency no more than 2x production. Passing
 is necessary evidence for product evaluation, not approval to ship. Thresholded
 runs also require a clean Git checkout so a shared report identifies the exact
 reviewable benchmark source; use --no-threshold for locally modified experiments.
-When supplied, negative-control references must contain none of the critical
-terms under the benchmark's exact normalization. Their clip IDs begin with `n`;
-target-corpus IDs begin with `p`.
+Same-language negative controls always use the target --language hint. Optional
+cross-language controls require their own explicit language hint and supplement,
+rather than satisfy, the same-language requirement. All control references must
+contain none of the critical terms under the benchmark's exact normalization.
+Target IDs begin with `p`, same-language control IDs with `n`, and cross-language
+control IDs with `x`.
 USAGE
 }
 
@@ -160,11 +167,13 @@ fixture_set_sha256() {
 benchmark_inputs_sha256() {
     local target_fixture_digest="$1"
     local negative_fixture_digest="$2"
-    local vocabulary="$3"
-    local critical_terms="$4"
-    printf 'target-fixture-set\t%s\nnegative-control-fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\n' \
+    local cross_language_fixture_digest="$3"
+    local vocabulary="$4"
+    local critical_terms="$5"
+    printf 'target-fixture-set\t%s\nnegative-control-fixture-set\t%s\ncross-language-control-fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\n' \
         "$target_fixture_digest" \
         "$negative_fixture_digest" \
+        "$cross_language_fixture_digest" \
         "$(file_sha256 "$vocabulary")" \
         "$(file_sha256 "$critical_terms")" \
         | shasum -a 256 | awk '{print $1}'
@@ -528,7 +537,7 @@ candidate_assessment() {
             latency_ratio = comparable ? candidate_latency_sum / baseline_latency_sum : 0
 
             if (!complete) add_blocker("incomplete comparable clips")
-            if (baseline_negative_controls < min_negative_controls) add_blocker("negative-control clips missing")
+            if (baseline_negative_controls < min_negative_controls) add_blocker("same-language negative-control clips missing")
             if (total_hit_delta < min_hit_gain) add_blocker("critical-hit gain below +" min_hit_gain)
             if (critical_regressed_clips > max_critical_regressed_clips) add_blocker("per-clip critical-term recall regressed")
             if (unexpected_delta > max_unexpected_delta) add_blocker("unexpected insertions increased")
@@ -750,7 +759,12 @@ run_self_test() {
     sed 's/^n004/004/' "$tmpdir/passing.tsv" >"$tmpdir/no-negative-controls.tsv"
     local no_negative_assessment
     no_negative_assessment="$(candidate_assessment "$tmpdir/no-negative-controls.tsv" sliding-v3 sliding-vocab-no-rescue)"
-    assert_contains <(printf '%s\n' "$no_negative_assessment") $'blocked\tnegative-control clips missing'
+    assert_contains <(printf '%s\n' "$no_negative_assessment") $'blocked\tsame-language negative-control clips missing'
+
+    sed 's/^n004/x004/' "$tmpdir/passing.tsv" >"$tmpdir/cross-language-only.tsv"
+    local cross_language_only_assessment
+    cross_language_only_assessment="$(candidate_assessment "$tmpdir/cross-language-only.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_contains <(printf '%s\n' "$cross_language_only_assessment") $'blocked\tsame-language negative-control clips missing'
 
     # Aggregate improvements must not hide a costly per-clip vocabulary win or
     # an insertion that happens to be offset on another clip.
@@ -824,26 +838,37 @@ run_self_test() {
     assert_eq "$(benchmark_inputs_sha256 \
         "$fixture_digest" \
         "none" \
+        "none" \
         "$fixtures/vocabulary.txt" \
         "$fixtures/critical-terms.txt")" \
-        "7abb1b806eee08690bafa9286f74c2d751ec70acc41810a5bed10730e1e1c1e5" \
+        "9286185010ac55281d4aeeb688ed594492076d24411d3c940d3f8d43a6339aaf" \
         "complete benchmark-input digest"
     local first_fixture_digest
     local second_fixture_digest
     first_fixture_digest="$(fixture_set_sha256 "$fixtures/renamed.wav")"
     second_fixture_digest="$(fixture_set_sha256 "$fixtures/second.wav")"
     if [[ "$(benchmark_inputs_sha256 \
-        "$first_fixture_digest" "$second_fixture_digest" \
+        "$first_fixture_digest" "$second_fixture_digest" "none" \
         "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" == \
         "$(benchmark_inputs_sha256 \
-        "$second_fixture_digest" "$first_fixture_digest" \
+        "$second_fixture_digest" "$first_fixture_digest" "none" \
         "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" ]]; then
         echo "self-test expected target/control assignment to affect provenance" >&2
+        exit 1
+    fi
+    if [[ "$(benchmark_inputs_sha256 \
+        "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" == \
+        "$(benchmark_inputs_sha256 \
+        "$fixture_digest" "$second_fixture_digest" "$first_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" ]]; then
+        echo "self-test expected same/cross-language control assignment to affect provenance" >&2
         exit 1
     fi
     assert_eq "$(clip_id_for p 7 'private name')" "p007" "redacted target clip ID"
     REDACT_PATHS=0
     assert_eq "$(clip_id_for n 4 'public clip')" "n004-public-clip" "visible negative-control clip ID"
+    assert_eq "$(clip_id_for x 5 'cross clip')" "x005-cross-clip" "visible cross-language clip ID"
     REDACT_PATHS=1
     printf 'changed reference\n' >"$fixtures/renamed.txt"
     if [[ "$(fixture_set_sha256 \
@@ -885,6 +910,11 @@ while [[ $# -gt 0 ]]; do
             NEGATIVE_CONTROL_DIR="$2"
             shift 2
             ;;
+        --cross-language-control-dir)
+            need_value "$@"
+            CROSS_LANGUAGE_CONTROL_DIR="$2"
+            shift 2
+            ;;
         --out-dir)
             need_value "$@"
             OUTDIR="$2"
@@ -905,10 +935,15 @@ while [[ $# -gt 0 ]]; do
             LANGUAGE="$2"
             shift 2
             ;;
-        --negative-control-language)
+        --cross-language-control-language)
             need_value "$@"
-            NEGATIVE_CONTROL_LANGUAGE="$2"
+            CROSS_LANGUAGE_CONTROL_LANGUAGE="$2"
             shift 2
+            ;;
+        --negative-control-language)
+            echo "--negative-control-language was replaced; same-language controls now always use --language" >&2
+            echo "use --cross-language-control-dir with --cross-language-control-language for an additional corpus" >&2
+            exit 2
             ;;
         --trials)
             need_value "$@"
@@ -964,8 +999,17 @@ if [[ -n "$NEGATIVE_CONTROL_DIR" && ! -d "$NEGATIVE_CONTROL_DIR" ]]; then
     echo "negative-control directory not found: $NEGATIVE_CONTROL_DIR" >&2
     exit 1
 fi
-if [[ -z "$NEGATIVE_CONTROL_LANGUAGE" ]]; then
-    NEGATIVE_CONTROL_LANGUAGE="$LANGUAGE"
+if [[ -n "$CROSS_LANGUAGE_CONTROL_DIR" && ! -d "$CROSS_LANGUAGE_CONTROL_DIR" ]]; then
+    echo "cross-language control directory not found: $CROSS_LANGUAGE_CONTROL_DIR" >&2
+    exit 1
+fi
+if [[ -n "$CROSS_LANGUAGE_CONTROL_DIR" && -z "$CROSS_LANGUAGE_CONTROL_LANGUAGE" ]]; then
+    echo "--cross-language-control-language is required with --cross-language-control-dir" >&2
+    exit 2
+fi
+if [[ -z "$CROSS_LANGUAGE_CONTROL_DIR" && -n "$CROSS_LANGUAGE_CONTROL_LANGUAGE" ]]; then
+    echo "--cross-language-control-language requires --cross-language-control-dir" >&2
+    exit 2
 fi
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
@@ -1023,7 +1067,28 @@ if [[ -n "$NEGATIVE_CONTROL_DIR" ]]; then
     fi
 fi
 
-clips=( "${target_clips[@]}" "${negative_clips[@]}" )
+cross_language_clips=()
+if [[ -n "$CROSS_LANGUAGE_CONTROL_DIR" ]]; then
+    while IFS= read -r clip; do
+        cross_language_clips+=( "$clip" )
+    done < <(
+        find "$CROSS_LANGUAGE_CONTROL_DIR" -type f \
+            \( -iname '*.wav' -o -iname '*.aiff' -o -iname '*.aif' -o -iname '*.caf' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.flac' \) \
+            | sort
+    )
+    if [[ "${#cross_language_clips[@]}" -eq 0 ]]; then
+        echo "no supported audio files found in $CROSS_LANGUAGE_CONTROL_DIR" >&2
+        exit 1
+    fi
+fi
+
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "${#negative_clips[@]}" -lt "$MIN_NEGATIVE_CONTROL_CLIPS" ]]; then
+    echo "thresholded vocabulary runs require at least $MIN_NEGATIVE_CONTROL_CLIPS same-language negative-control clip" >&2
+    echo "supply --negative-control-dir from the target workflow, or use --no-threshold for exploration" >&2
+    exit 1
+fi
+
+clips=( "${target_clips[@]}" "${negative_clips[@]}" "${cross_language_clips[@]}" )
 missing_refs=()
 for clip in "${clips[@]}"; do
     ref="${clip%.*}.txt"
@@ -1037,7 +1102,7 @@ fi
 
 duplicate_clip="$(printf '%s\n' "${clips[@]}" | sort | uniq -d | head -n 1)"
 if [[ -n "$duplicate_clip" ]]; then
-    echo "target and negative-control corpora overlap: $duplicate_clip" >&2
+    echo "target and control corpora overlap: $duplicate_clip" >&2
     exit 1
 fi
 
@@ -1046,8 +1111,12 @@ negative_fixture_sha256="none"
 if [[ "${#negative_clips[@]}" -gt 0 ]]; then
     negative_fixture_sha256="$(fixture_set_sha256 "${negative_clips[@]}")"
 fi
+cross_language_fixture_sha256="none"
+if [[ "${#cross_language_clips[@]}" -gt 0 ]]; then
+    cross_language_fixture_sha256="$(fixture_set_sha256 "${cross_language_clips[@]}")"
+fi
 benchmark_input_sha256="$(benchmark_inputs_sha256 \
-    "$target_fixture_sha256" "$negative_fixture_sha256" \
+    "$target_fixture_sha256" "$negative_fixture_sha256" "$cross_language_fixture_sha256" \
     "$VOCABULARY" "$CRITICAL_TERMS")"
 if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     echo "could not fingerprint benchmark inputs" >&2
@@ -1118,18 +1187,29 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Swift toolchain: $swift_toolchain"
     echo "- Target input directory: $(path_label "$INPUT_DIR")"
     if [[ -n "$NEGATIVE_CONTROL_DIR" ]]; then
-        echo "- Negative-control input directory: $(path_label "$NEGATIVE_CONTROL_DIR")"
+        echo "- Same-language negative-control input directory: $(path_label "$NEGATIVE_CONTROL_DIR")"
     else
-        echo "- Negative-control input directory: not supplied"
+        echo "- Same-language negative-control input directory: not supplied"
+    fi
+    if [[ -n "$CROSS_LANGUAGE_CONTROL_DIR" ]]; then
+        echo "- Cross-language control input directory: $(path_label "$CROSS_LANGUAGE_CONTROL_DIR")"
+    else
+        echo "- Cross-language control input directory: not supplied"
     fi
     echo "- Vocabulary: $(path_label "$VOCABULARY")"
     echo "- Critical terms: $(path_label "$CRITICAL_TERMS")"
     echo "- Benchmark inputs SHA-256: $benchmark_input_sha256"
     echo "- Language hint: $LANGUAGE"
-    echo "- Negative-control language hint: $NEGATIVE_CONTROL_LANGUAGE"
+    echo "- Same-language negative-control language hint: $LANGUAGE"
+    if [[ -n "$CROSS_LANGUAGE_CONTROL_DIR" ]]; then
+        echo "- Cross-language control language hint: $CROSS_LANGUAGE_CONTROL_LANGUAGE"
+    else
+        echo "- Cross-language control language hint: not supplied"
+    fi
     echo "- Trials per clip/variant: $TRIALS"
     echo "- Target clips: ${#target_clips[@]}"
-    echo "- Negative-control clips: ${#negative_clips[@]}"
+    echo "- Same-language negative-control clips: ${#negative_clips[@]}"
+    echo "- Cross-language control clips: ${#cross_language_clips[@]}"
     echo "- Total clips: ${#clips[@]}"
     echo "- Transcript output: $([[ "$REDACT_TRANSCRIPTS" -eq 1 ]] && echo redacted || echo included)"
     echo
@@ -1141,8 +1221,9 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "> logical on-disk size after preparation, not measured network traffic."
     echo "> Variable trial output is summarized conservatively per clip: worst WER, lowest"
     echo "> critical-term recall, highest unexpected-insertion count, and the resulting"
-    echo "> lower-bound critical-term precision. Target clip IDs begin with \`p\`;"
-    echo "> negative-control IDs begin with \`n\` and must have zero reference occurrences."
+    echo "> lower-bound critical-term precision. Target clip IDs begin with \`p\`,"
+    echo "> same-language control IDs with \`n\`, and cross-language control IDs with \`x\`."
+    echo "> Every control reference must have zero critical-term occurrences."
     echo
     echo "## Per-Clip Results"
     echo
@@ -1153,18 +1234,26 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
 clip_index=0
 target_index=0
 negative_index=0
+cross_language_index=0
+target_clip_count="${#target_clips[@]}"
+same_language_end=$((target_clip_count + ${#negative_clips[@]}))
 for clip in "${clips[@]}"; do
     clip_index=$((clip_index + 1))
-    if [[ "$clip_index" -le "${#target_clips[@]}" ]]; then
+    if [[ "$clip_index" -le "$target_clip_count" ]]; then
         clip_group="p"
         target_index=$((target_index + 1))
         group_index="$target_index"
         clip_language="$LANGUAGE"
-    else
+    elif [[ "$clip_index" -le "$same_language_end" ]]; then
         clip_group="n"
         negative_index=$((negative_index + 1))
         group_index="$negative_index"
-        clip_language="$NEGATIVE_CONTROL_LANGUAGE"
+        clip_language="$LANGUAGE"
+    else
+        clip_group="x"
+        cross_language_index=$((cross_language_index + 1))
+        group_index="$cross_language_index"
+        clip_language="$CROSS_LANGUAGE_CONTROL_LANGUAGE"
     fi
     stem="$(basename "$clip")"
     stem="${stem%.*}"
@@ -1233,7 +1322,7 @@ for clip in "${clips[@]}"; do
             echo "invalid benchmark output for clip $clip_id variant=$variant; see $(path_label "$log_file")" >&2
             exit 1
         fi
-        if [[ "$clip_group" == "n" ]] && \
+        if [[ "$clip_group" == "n" || "$clip_group" == "x" ]] && \
             ! validate_negative_control_reference "$clip_id" "$critical_total"; then
             exit 1
         fi
@@ -1281,7 +1370,7 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} negative-control clip, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clip, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
     echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"

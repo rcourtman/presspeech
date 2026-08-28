@@ -182,18 +182,19 @@ Then run:
   --trials 3
 ```
 
-The negative-control directory should contain ordinary speech from
-the same workflow in which none of the configured critical terms occurs. Those
-clips run through every policy, and the product-candidate screen rejects any
-new term insertion or WER regression. This matters when the main corpus was
-selected specifically because it contains target names. The runner verifies
-that negative-control references contain zero critical-term occurrences and
-fingerprints target and control corpora separately, so moving a clip between
-groups changes report provenance. At least one control clip is required to pass
-the thresholded product-candidate screen; omit the directory only for a
-`--no-threshold` exploratory run. Use `--negative-control-language en` when a
-public English corpus is intentionally added as a second, cross-language safety
-control to a non-English target corpus.
+The negative-control directory should contain ordinary speech in the same
+language and from the same push-to-talk workflow in which none of the configured
+critical terms occurs. It always uses the target `--language` hint. Those clips
+run through every policy, and the product-candidate screen rejects any new term
+insertion or WER regression. This matters when the main corpus was selected
+specifically because it contains target names. At least one same-language
+control clip is required to pass the thresholded product-candidate screen; omit
+the directory only for a `--no-threshold` exploratory run.
+
+An additional cross-language corpus can broaden the safety check, but cannot
+satisfy the same-language requirement. Supply both its directory and explicit
+language hint with `--cross-language-control-dir` and
+`--cross-language-control-language`.
 
 For a reproducible public negative control, fetch a disjoint LibriSpeech split
 and pass it alongside the private target corpus. Public audiobook speech does
@@ -204,8 +205,9 @@ not replace same-language, push-to-talk controls:
   --split test-clean --count 25 --start-index 100
 ./run-vocabulary-bias-regression.sh \
   --input-dir polish-benchmark \
-  --negative-control-dir public-audio/librispeech-test-clean \
-  --negative-control-language en \
+  --negative-control-dir polish-negative-controls \
+  --cross-language-control-dir public-audio/librispeech-test-clean \
+  --cross-language-control-language en \
   --vocabulary vocabulary.txt \
   --critical-terms critical-terms.txt \
   --language pl \
@@ -218,11 +220,12 @@ insertions, critical-term precision, p50 inference latency, peak process
 memory, model-cache footprint, preparation time, the Presspeech and FluidAudio
 revisions, whether the benchmark source was clean, the benchmark executable's
 SHA-256, a single content fingerprint covering every paired audio/reference
-fixture, its target/control assignment, the vocabulary and critical-term files,
-and the macOS and Swift
+fixture, its target/same-language/cross-language assignment, the vocabulary and
+critical-term files, and the macOS and Swift
 versions. The input fingerprint depends on paired file contents rather than
 private names, so a copied or renamed frozen corpus remains comparable while
-any benchmark input or target/control assignment change is visible. Keeping
+any benchmark input or target/same-language/cross-language assignment change is
+visible. Keeping
 the component hashes folded
 into one report value also avoids exposing a separately guessable digest for a
 short private vocabulary. Thresholded runs require a clean Git checkout so a
@@ -233,13 +236,15 @@ reporting net critical hits, unexpected insertions, corpus WER change, and
 counts of clean wins, costly wins, and pure losses. A separate product-candidate
 screen evaluates only the three direct-v3 policies and fails the command unless
 at least one has
-complete comparable clips, gains a critical-term hit, adds no unexpected
-insertions or WER either in aggregate or on any individual clip, loses no
-critical-term hits on an individual clip, and keeps average p50 latency within
-2x production. The per-clip checks prevent gains on some utterances from masking
-vocabulary-caused regressions on others. Passing this strict screen is necessary
-evidence for product evaluation, not approval to ship; use `--no-threshold` for
-exploratory runs that should always publish their report.
+complete comparable clips, at least one same-language negative-control clip,
+gains a critical-term hit, adds no unexpected insertions or WER either in
+aggregate or on any individual clip, loses no critical-term hits on an
+individual clip, and keeps average p50 latency within 2x production. Optional
+cross-language controls are included in every comparison but never satisfy the
+same-language requirement. The per-clip checks prevent gains on some utterances
+from masking vocabulary-caused regressions on others. Passing this strict screen
+is necessary evidence for product evaluation, not approval to ship; use
+`--no-threshold` for exploratory runs that should always publish their report.
 
 When repeated trials yield different transcripts, each per-clip row is a
 conservative envelope: worst WER, lowest critical-term recall, and highest
