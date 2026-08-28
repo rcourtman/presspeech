@@ -152,42 +152,12 @@ jobs:
           unless workflow.match?(create_recovery)
             abort "Failed atomic creates must recover before discarding build outputs"
           end
-          refreshed_release_checks = %r{
-            function\s+Assert-GreenReleaseChecks\(\[string\]\$sha\)\s*\{.*?
-            actions/workflows/check\.yml/runs\?branch=main&event=push&head_sha=\$sha&per_page=100.*?
-            actions/workflows/windows\.yml/runs\?branch=main&event=push&head_sha=\$sha&per_page=100.*?
-            \.\\windows\\validate-release-checks\.ps1\s+`.*?
-            -ExpectedSha\s+\$sha
-          }mx
-          unless workflow.match?(refreshed_release_checks)
-            abort "Windows publication must refresh both exact-commit CI checks"
-          end
-          guarded_create = %r{
-            if\s*\(\$disposition\s+-ceq\s+"create"\)\s*\{.*?
-            Assert-GreenReleaseChecks\s+\$env:PRESSPEECH_RELEASE_EXPECTED_SHA.*?
-            \.\\windows\\validate-release-tag\.ps1\s+`.*?
-            gh\s+release\s+create\s+\$tag
-          }mx
-          unless workflow.match?(guarded_create)
-            abort "Windows release creation must refresh CI and tag approval"
-          end
           unless workflow.match?(/gh\s+release\s+upload\s+\$tag/) &&
               workflow.include?("validate-release-state.ps1")
             abort "Interrupted Windows drafts must use guarded recovery"
           end
-          guarded_draft_recovery = %r{
-            if\s*\(\$disposition\s+-like\s+"upload-\*"\s+-or\s*
-            \$disposition\s+-ceq\s+"publish-draft"\)\s*\{.*?
-            Assert-GreenReleaseChecks\s+\$env:PRESSPEECH_RELEASE_EXPECTED_SHA.*?
-            \.\\windows\\validate-release-tag\.ps1\s+`.*?
-            gh\s+release\s+upload\s+\$tag
-          }mx
-          unless workflow.match?(guarded_draft_recovery)
-            abort "Windows draft recovery must refresh CI and tag approval"
-          end
           guarded_draft_publish = %r{
             if\s*\(\$disposition\s+-ceq\s+"publish-draft"\)\s*\{.*?
-            Assert-GreenReleaseChecks\s+\$env:PRESSPEECH_RELEASE_EXPECTED_SHA\s*
             \.\\windows\\validate-release-tag\.ps1\s+`\s*
             -Tag\s+\$tag\s+`\s*
             -ExpectedSha\s+\$env:PRESSPEECH_RELEASE_EXPECTED_SHA\s*

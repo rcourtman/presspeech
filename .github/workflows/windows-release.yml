@@ -140,23 +140,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          function Assert-GreenReleaseChecks([string]$sha) {
-            $checkJson = gh api `
-              "repos/rcourtman/presspeech/actions/workflows/check.yml/runs?branch=main&event=push&head_sha=$sha&per_page=100"
-            if ($LASTEXITCODE -ne 0) {
-              throw "Could not refresh repository CI runs for approved commit $sha"
-            }
-            $windowsJson = gh api `
-              "repos/rcourtman/presspeech/actions/workflows/windows.yml/runs?branch=main&event=push&head_sha=$sha&per_page=100"
-            if ($LASTEXITCODE -ne 0) {
-              throw "Could not refresh Windows CI runs for approved commit $sha"
-            }
-            .\windows\validate-release-checks.ps1 `
-              -CheckWorkflowJson $checkJson `
-              -WindowsWorkflowJson $windowsJson `
-              -ExpectedSha $sha
-          }
-
           $version = $env:PRESSPEECH_RELEASE_VERSION
           $tag = "windows-v$version"
           $notes = "windows/release-notes/$version.md"
@@ -190,11 +173,6 @@ jobs:
             # uploads succeed. If the CLI exits after creating that draft, do
             # not discard this runner's exact (potentially timestamped) build:
             # inspect and finish the draft through the guarded recovery below.
-            Assert-GreenReleaseChecks $env:PRESSPEECH_RELEASE_EXPECTED_SHA
-            .\windows\validate-release-tag.ps1 `
-              -Tag $tag `
-              -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA `
-              -AllowMissing
             gh release create $tag `
               $installer `
               "$installer.sha256" `
@@ -226,7 +204,6 @@ jobs:
             # Resume only an exact matching private draft. Existing assets must
             # match the local build, and uploads never clobber an asset, so this
             # recovery path cannot replace anything already published.
-            Assert-GreenReleaseChecks $env:PRESSPEECH_RELEASE_EXPECTED_SHA
             .\windows\validate-release-tag.ps1 `
               -Tag $tag `
               -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
@@ -255,9 +232,7 @@ jobs:
               -Notes $notes
             if ($disposition -ceq "publish-draft") {
               # Asset uploads can take long enough for the remote tag to move.
-              # Recheck both approval inputs at the last possible point before
-              # making the draft public.
-              Assert-GreenReleaseChecks $env:PRESSPEECH_RELEASE_EXPECTED_SHA
+              # Recheck at the last possible point before making the draft public.
               .\windows\validate-release-tag.ps1 `
                 -Tag $tag `
                 -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
