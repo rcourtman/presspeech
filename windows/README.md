@@ -145,14 +145,26 @@ results, virtual environments, caches, and logs are ignored by Git.
 
 ## Build the installer
 
-Install Inno Setup 6 and the pinned build dependency, then run the release
-script from `windows/`:
+Release builds use CPython 3.12.14 and the fully resolved Windows dependency
+set in `requirements-release.txt`; source-development installs intentionally
+retain the lower bounds in `requirements.txt`. Install Inno Setup 6, create a
+clean release environment, then run the build script from `windows/`:
 
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact
-.\.venv\Scripts\python -m pip install -r requirements-build.txt
-powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -Version 0.1.10
+py -3.12 -m venv .release-venv
+.\.release-venv\Scripts\python -m pip install --only-binary=:all: -r requirements-release.txt
+.\.release-venv\Scripts\python -m pip install --no-deps -r requirements-cuda.txt
+.\.release-venv\Scripts\python -m pip check
+powershell -ExecutionPolicy Bypass -File .\build-release.ps1 `
+  -Version 0.1.10 -Python .\.release-venv\Scripts\python.exe
 ```
+
+`build-release.ps1` refuses to package with a different Python patch or any
+missing/drifted dependency. When an intentional dependency update changes an
+input requirements file, install [uv](https://docs.astral.sh/uv/) and regenerate
+the resolved set from the repository root with
+`python windows/release_requirements.py`.
 
 The build uses a short temporary staging path to avoid Windows path-length
 failures and writes the installer plus checksum under `dist\installer`. Build

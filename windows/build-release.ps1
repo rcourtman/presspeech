@@ -37,6 +37,12 @@ $Python = (Resolve-Path -LiteralPath $Python).Path
 if ($SkipInstaller -and $ReusePackage) {
     throw "SkipInstaller and ReusePackage cannot be used together."
 }
+if (-not $ReusePackage) {
+    & $Python (Join-Path $windowsRoot "release_requirements.py") --verify-environment
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release Python environment does not match requirements-release.txt."
+    }
+}
 
 if (-not $SkipInstaller -and -not $InnoCompiler) {
     $candidates = @(

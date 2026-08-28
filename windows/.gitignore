@@ -1,4 +1,5 @@
 .venv/
+.release-venv/
 __pycache__/
 *.py[cod]
 benchmarks/
