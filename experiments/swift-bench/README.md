@@ -301,6 +301,9 @@ same-language requirement. The per-clip checks prevent gains on some utterances
 from masking vocabulary-caused regressions on others. Passing this strict screen
 is necessary evidence for product evaluation, not approval to ship; use
 `--no-threshold` for exploratory runs that should always publish their report.
+Disabling threshold enforcement does not waive the screen's evidence rules:
+an unaudited, single-trial, or locally modified run is reported as blocked
+rather than being labelled a passing product candidate.
 
 The exact-similarity lane is a precision experiment, not a claim that a match is
 semantically safe. FluidAudio defines `similarity == 1.0` over its normalized

@@ -44,6 +44,7 @@ MIN_TARGET_CRITICAL_OCCURRENCES="50"
 # result is allowed to support a product candidate.
 MIN_NEGATIVE_CONTROL_CLIPS="10"
 MIN_NEGATIVE_CONTROL_REFERENCE_WORDS="1000"
+BENCHMARK_SOURCE_STATE="unavailable"
 SELF_TEST=0
 BENCH_EXECUTABLE=".build/release/presspeech-bench"
 
@@ -657,7 +658,11 @@ candidate_assessment() {
         -v min_target_words="$MIN_TARGET_REFERENCE_WORDS" \
         -v min_target_occurrences="$MIN_TARGET_CRITICAL_OCCURRENCES" \
         -v min_negative_controls="$MIN_NEGATIVE_CONTROL_CLIPS" \
-        -v min_negative_words="$MIN_NEGATIVE_CONTROL_REFERENCE_WORDS" '
+        -v min_negative_words="$MIN_NEGATIVE_CONTROL_REFERENCE_WORDS" \
+        -v references_hand_audited="$REFERENCES_HAND_AUDITED" \
+        -v trials="$TRIALS" \
+        -v min_candidate_trials="$MIN_CANDIDATE_TRIALS" \
+        -v source_state="$BENCHMARK_SOURCE_STATE" '
         function add_blocker(message) {
             blockers = blockers (blockers == "" ? "" : "; ") message
         }
@@ -721,6 +726,9 @@ candidate_assessment() {
             latency_ratio = comparable ? candidate_latency_sum / baseline_latency_sum : 0
 
             if (!complete) add_blocker("incomplete comparable clips")
+            if (references_hand_audited != 1) add_blocker("references not declared hand-audited")
+            if (trials < min_candidate_trials) add_blocker("measured trials below " min_candidate_trials)
+            if (source_state != "clean") add_blocker("benchmark source is not clean")
             if (baseline_target_clips < min_target_clips) add_blocker("target clips below " min_target_clips)
             if (baseline_target_words < min_target_words) add_blocker("target reference words below " min_target_words)
             if (baseline_target_occurrences < min_target_occurrences) add_blocker("target critical-term occurrences below " min_target_occurrences)
@@ -1048,6 +1056,12 @@ MOCK
     comparison_row "$tsv" sliding-v3 sliding-vocab >"$summary"
     assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +0.15 | 1 | 1 | 2 | 0 |'
 
+    local original_candidate_reference_audit="$REFERENCES_HAND_AUDITED"
+    local original_candidate_trials="$TRIALS"
+    local original_candidate_source_state="$BENCHMARK_SOURCE_STATE"
+    REFERENCES_HAND_AUDITED=1
+    TRIALS=3
+    BENCHMARK_SOURCE_STATE="clean"
     local blocked_assessment
     blocked_assessment="$(candidate_assessment "$tsv" sliding-v3 sliding-vocab)"
     assert_contains <(printf '%s\n' "$blocked_assessment") $'sliding-vocab\t4\t4\t3\t35\t5\t1\t2000\t+2\t+2\t+0.15\t0\t2\t3\t1.00\tblocked\ttarget clips below 25; target reference words below 1000; target critical-term occurrences below 50; same-language negative-control clips below 10; unexpected insertions increased; corpus WER regressed; per-clip unexpected insertions increased; per-clip WER regressions present'
@@ -1084,6 +1098,32 @@ MOCK
     candidate_assessment_row "$passing_assessment" >"$summary"
     assert_contains "$summary" '| `sliding-vocab-no-rescue` | 35/35 | 25 / 1135 / 50 | 10 / 2000 | +2 | +0 | -0.13 | 0 | 0 | 0 | 1.50x | **passes** | -- |'
 
+    # --no-threshold controls command failure, not the truth of the screen.
+    # Exploratory reports must retain prerequisite blockers rather than turn
+    # unaudited or irreproducible evidence into a passing product candidate.
+    REQUIRE_CANDIDATE_PASS=0
+    REFERENCES_HAND_AUDITED=0
+    local unaudited_assessment
+    unaudited_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_contains <(printf '%s\n' "$unaudited_assessment") \
+        $'blocked\treferences not declared hand-audited'
+    REFERENCES_HAND_AUDITED=1
+
+    TRIALS=1
+    local single_trial_assessment
+    single_trial_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_contains <(printf '%s\n' "$single_trial_assessment") \
+        $'blocked\tmeasured trials below 3'
+    TRIALS=3
+
+    BENCHMARK_SOURCE_STATE="modified"
+    local modified_source_assessment
+    modified_source_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_contains <(printf '%s\n' "$modified_source_assessment") \
+        $'blocked\tbenchmark source is not clean'
+    BENCHMARK_SOURCE_STATE="clean"
+    REQUIRE_CANDIDATE_PASS="$original_threshold"
+
     sed 's/^n/0/' "$tmpdir/passing.tsv" >"$tmpdir/no-negative-controls.tsv"
     local no_negative_assessment
     no_negative_assessment="$(candidate_assessment "$tmpdir/no-negative-controls.tsv" sliding-v3 sliding-vocab-no-rescue)"
@@ -1117,6 +1157,10 @@ MOCK
     local masked_critical_assessment
     masked_critical_assessment="$(candidate_assessment "$tmpdir/masked-critical-regression.tsv" sliding-v3 sliding-vocab-no-rescue)"
     assert_eq "$masked_critical_assessment" $'sliding-vocab-no-rescue\t35\t35\t25\t1135\t50\t10\t2000\t+1\t+0\t-0.13\t1\t0\t0\t1.50\tblocked\tper-clip critical-term recall regressed' "masked per-clip critical-term regression"
+
+    REFERENCES_HAND_AUDITED="$original_candidate_reference_audit"
+    TRIALS="$original_candidate_trials"
+    BENCHMARK_SOURCE_STATE="$original_candidate_source_state"
 
     local secret_path="$tmpdir/Private Polish Benchmark"
     REDACT_PATHS=1
@@ -1457,12 +1501,12 @@ if ! command -v shasum >/dev/null 2>&1; then
 fi
 
 source_revision="$(benchmark_source_revision)"
-source_state="$(benchmark_source_state)"
+BENCHMARK_SOURCE_STATE="$(benchmark_source_state)"
 if [[ ! "$source_revision" =~ ^[0-9a-f]{40}$ ]]; then
     source_revision="unavailable"
 fi
-if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$source_state" != "clean" ]]; then
-    echo "thresholded vocabulary runs require a clean Git checkout (source state: $source_state)" >&2
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$BENCHMARK_SOURCE_STATE" != "clean" ]]; then
+    echo "thresholded vocabulary runs require a clean Git checkout (source state: $BENCHMARK_SOURCE_STATE)" >&2
     echo "commit or restore benchmark source changes, or use --no-threshold for exploration" >&2
     exit 1
 fi
@@ -1712,7 +1756,7 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo
     echo "- Date: $timestamp"
     echo "- Presspeech source revision: $source_revision"
-    echo "- Benchmark source state: $source_state"
+    echo "- Benchmark source state: $BENCHMARK_SOURCE_STATE"
     echo "- FluidAudio revision: $fluid_revision"
     echo "- Benchmark executable SHA-256: $benchmark_sha256"
     echo "- Platform: $platform_description"
