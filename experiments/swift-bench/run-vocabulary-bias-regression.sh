@@ -91,7 +91,10 @@ Critical-term recall, precision, and unexpected insertions are exact after
 case/punctuation normalization. List every canonical vocabulary form, including
 forms absent from some clips, and list inflections separately; FluidAudio aliases
 are alternate matches, not morphological generators. Duplicate normalized forms
-are rejected rather than double-counted.
+are rejected rather than double-counted. After FluidAudio parses and sanitizes
+the text or JSON vocabulary, its canonical forms must exactly match the critical
+terms under scoring normalization. Unscored vocabulary terms and unrelated
+critical terms are rejected so neither false insertions nor gains can be hidden.
 
 The product-candidate screen compares each direct-v3 vocabulary policy with
 production v3; sliding-window lanes remain mechanism diagnostics. It requires

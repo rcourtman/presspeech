@@ -551,6 +551,7 @@ final class DirectVocabularyBackend: ASRBackend {
     let name: String
     private let language: Language?
     private let customVocabularyURL: URL
+    private let criticalTerms: [String]?
     private let vocabularyPolicy: VocabularyPolicy
     private var asr: AsrManager!
     private var boosting: VocabularyBoostingSession!
@@ -562,9 +563,15 @@ final class DirectVocabularyBackend: ASRBackend {
         ]
     }
 
-    init(language: Language?, customVocabularyURL: URL, vocabularyPolicy: VocabularyPolicy) {
+    init(
+        language: Language?,
+        customVocabularyURL: URL,
+        criticalTerms: [String]?,
+        vocabularyPolicy: VocabularyPolicy
+    ) {
         self.language = language
         self.customVocabularyURL = customVocabularyURL
+        self.criticalTerms = criticalTerms
         self.vocabularyPolicy = vocabularyPolicy
         switch vocabularyPolicy {
         case .standard:
@@ -587,6 +594,12 @@ final class DirectVocabularyBackend: ASRBackend {
                 domain: "presspeech-bench",
                 code: 4,
                 userInfo: [NSLocalizedDescriptionKey: "custom vocabulary contains no usable terms"]
+            )
+        }
+        if let criticalTerms {
+            try validateVocabularyEvaluationContract(
+                vocabulary: loaded.vocab,
+                criticalTerms: criticalTerms
             )
         }
         boosting = try await VocabularyBoostingSession(
@@ -628,6 +641,7 @@ final class SlidingWindowBackend: ASRBackend {
     let name: String
     private let language: Language?
     private let customVocabularyURL: URL?
+    private let criticalTerms: [String]?
     private let vocabularyPolicy: VocabularyPolicy
     private var models: AsrModels!
     private var vocabulary: CustomVocabularyContext?
@@ -644,10 +658,12 @@ final class SlidingWindowBackend: ASRBackend {
     init(
         language: Language?,
         customVocabularyURL: URL?,
+        criticalTerms: [String]? = nil,
         vocabularyPolicy: VocabularyPolicy = .standard
     ) {
         self.language = language
         self.customVocabularyURL = customVocabularyURL
+        self.criticalTerms = criticalTerms
         self.vocabularyPolicy = vocabularyPolicy
         if customVocabularyURL == nil {
             self.name = "fluid-ParakeetTDTv3Sliding"
@@ -674,6 +690,12 @@ final class SlidingWindowBackend: ASRBackend {
                     domain: "presspeech-bench",
                     code: 4,
                     userInfo: [NSLocalizedDescriptionKey: "custom vocabulary contains no usable terms"]
+                )
+            }
+            if let criticalTerms {
+                try validateVocabularyEvaluationContract(
+                    vocabulary: loaded.vocab,
+                    criticalTerms: criticalTerms
                 )
             }
             vocabulary = loaded.vocab
@@ -982,6 +1004,62 @@ func loadCriticalTerms(from url: URL) throws -> [String] {
     return try parseCriticalTerms(contents)
 }
 
+enum VocabularyEvaluationContractError: LocalizedError {
+    case emptyNormalizedCanonicalTerm(entry: Int)
+    case duplicateNormalizedCanonicalTerm(entry: Int, firstEntry: Int)
+    case coverageMismatch(unscoredCanonicalTerms: Int, unrelatedCriticalTerms: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyNormalizedCanonicalTerm(let entry):
+            return "custom-vocabulary canonical entry \(entry) is empty under critical-term normalization"
+        case .duplicateNormalizedCanonicalTerm(let entry, let firstEntry):
+            return "custom-vocabulary canonical entry \(entry) duplicates normalized entry \(firstEntry)"
+        case .coverageMismatch(let unscoredCanonicalTerms, let unrelatedCriticalTerms):
+            return "critical-terms must exactly cover parsed custom-vocabulary canonical forms " +
+                "(unscored canonical terms: \(unscoredCanonicalTerms), " +
+                "unrelated critical terms: \(unrelatedCriticalTerms))"
+        }
+    }
+}
+
+/// Ensure recall and insertion scoring describe the vocabulary actually loaded
+/// by FluidAudio. Validate after upstream parsing so sanitization and both the
+/// simple-text and JSON formats cannot make the configured and scored term sets
+/// diverge. Error messages intentionally expose counts and entry positions only.
+func validateVocabularyEvaluationContract(
+    vocabulary: CustomVocabularyContext,
+    criticalTerms: [String]
+) throws {
+    var canonicalEntries: [String: Int] = [:]
+    for (offset, term) in vocabulary.terms.enumerated() {
+        let entry = offset + 1
+        let tokens = werTokens(term.text)
+        guard !tokens.isEmpty else {
+            throw VocabularyEvaluationContractError.emptyNormalizedCanonicalTerm(entry: entry)
+        }
+        let key = tokens.joined(separator: "\u{0}")
+        if let firstEntry = canonicalEntries[key] {
+            throw VocabularyEvaluationContractError.duplicateNormalizedCanonicalTerm(
+                entry: entry,
+                firstEntry: firstEntry
+            )
+        }
+        canonicalEntries[key] = entry
+    }
+
+    let scoredTerms = Set(criticalTerms.map { werTokens($0).joined(separator: "\u{0}") })
+    let canonicalTerms = Set(canonicalEntries.keys)
+    let unscoredCanonicalTerms = canonicalTerms.subtracting(scoredTerms).count
+    let unrelatedCriticalTerms = scoredTerms.subtracting(canonicalTerms).count
+    if unscoredCanonicalTerms != 0 || unrelatedCriticalTerms != 0 {
+        throw VocabularyEvaluationContractError.coverageMismatch(
+            unscoredCanonicalTerms: unscoredCanonicalTerms,
+            unrelatedCriticalTerms: unrelatedCriticalTerms
+        )
+    }
+}
+
 enum BenchSelfTestError: Error {
     case failed(String)
 }
@@ -1049,6 +1127,62 @@ func runBenchSelfTests() throws {
         rejectedEmpty = entry == 1
     }
     try expect(rejectedEmpty, "critical-term parser should reject punctuation-only entries")
+    let coveredVocabulary = CustomVocabularyContext(terms: [
+        CustomVocabularyTerm(text: "Szypański"),
+        CustomVocabularyTerm(text: "Nowy Sącz", aliases: ["Nowego Sącza"]),
+    ])
+    try validateVocabularyEvaluationContract(
+        vocabulary: coveredVocabulary,
+        criticalTerms: ["szypan\u{301}ski!", "Nowy Sącz"]
+    )
+    var rejectedCoverageMismatch = false
+    do {
+        try validateVocabularyEvaluationContract(
+            vocabulary: coveredVocabulary,
+            criticalTerms: ["Szypański", "Unrelated term"]
+        )
+    } catch VocabularyEvaluationContractError.coverageMismatch(
+        let unscoredCanonicalTerms,
+        let unrelatedCriticalTerms
+    ) {
+        rejectedCoverageMismatch = unscoredCanonicalTerms == 1 && unrelatedCriticalTerms == 1
+    }
+    try expect(
+        rejectedCoverageMismatch,
+        "vocabulary evaluation should require exact canonical critical-term coverage"
+    )
+    var rejectedDuplicateCanonical = false
+    do {
+        try validateVocabularyEvaluationContract(
+            vocabulary: CustomVocabularyContext(terms: [
+                CustomVocabularyTerm(text: "Szypański"),
+                CustomVocabularyTerm(text: "szypan\u{301}ski!"),
+            ]),
+            criticalTerms: ["Szypański"]
+        )
+    } catch VocabularyEvaluationContractError.duplicateNormalizedCanonicalTerm(
+        let entry,
+        let firstEntry
+    ) {
+        rejectedDuplicateCanonical = entry == 2 && firstEntry == 1
+    }
+    try expect(
+        rejectedDuplicateCanonical,
+        "vocabulary evaluation should reject duplicate normalized canonical terms"
+    )
+    var rejectedEmptyCanonical = false
+    do {
+        try validateVocabularyEvaluationContract(
+            vocabulary: CustomVocabularyContext(terms: [CustomVocabularyTerm(text: "---")]),
+            criticalTerms: []
+        )
+    } catch VocabularyEvaluationContractError.emptyNormalizedCanonicalTerm(let entry) {
+        rejectedEmptyCanonical = entry == 1
+    }
+    try expect(
+        rejectedEmptyCanonical,
+        "vocabulary evaluation should reject empty normalized canonical terms"
+    )
     let score = criticalTermScore(
         reference: "Rozmawiałem z Szypańskim i Szypańskim.",
         hypothesis: "Rozmawiałem z Szypańskim, Szymańskim i Nieobecny.",
@@ -1321,6 +1455,7 @@ struct PresspeechBench {
                 DirectVocabularyBackend(
                     language: args.language,
                     customVocabularyURL: args.customVocabulary!,
+                    criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms,
                     vocabularyPolicy: policy
                 )
             )
@@ -1334,7 +1469,8 @@ struct PresspeechBench {
             backends.append(
                 SlidingWindowBackend(
                     language: args.language,
-                    customVocabularyURL: args.customVocabulary
+                    customVocabularyURL: args.customVocabulary,
+                    criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms
                 )
             )
         }
@@ -1343,6 +1479,7 @@ struct PresspeechBench {
                 SlidingWindowBackend(
                     language: args.language,
                     customVocabularyURL: args.customVocabulary,
+                    criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms,
                     vocabularyPolicy: .conservative
                 )
             )
@@ -1352,6 +1489,7 @@ struct PresspeechBench {
                 SlidingWindowBackend(
                     language: args.language,
                     customVocabularyURL: args.customVocabulary,
+                    criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms,
                     vocabularyPolicy: .noSpotterRescue
                 )
             )

@@ -272,6 +272,12 @@ matches, but an accepted candidate is replaced with its canonical term; aliases
 do not generate grammatical inflections. List every inflected form that the
 benchmark expects to preserve. Entries that are empty or duplicate after this
 normalization are rejected instead of being silently double-counted.
+After FluidAudio parses and sanitizes either vocabulary format, the resulting
+canonical forms must exactly match the critical-term forms under the same
+normalization (aliases are not canonical forms). The run rejects an unscored
+vocabulary term, an unrelated critical term, or duplicate/empty normalized
+canonical terms. This prevents the candidate screen from hiding a configured
+term's false insertions or attributing unrelated transcript changes to boosting.
 
 ## Public speech regression
 
