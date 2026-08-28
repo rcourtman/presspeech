@@ -187,6 +187,28 @@ Then run:
   --trials 3
 ```
 
+Before committing to the full nine-policy run, use the same arguments with
+`--preflight-only`. It builds only the benchmark helper, validates paired
+sidecars, reference counts, control contamination, source and normalized-audio
+duplicates, audit status, evidence floors, and input provenance, then exits
+without loading an ASR model:
+
+```sh
+./run-vocabulary-bias-regression.sh \
+  --input-dir polish-benchmark \
+  --negative-control-dir polish-negative-controls \
+  --vocabulary vocabulary.txt \
+  --critical-terms critical-terms.txt \
+  --language pl \
+  --references-hand-audited \
+  --preflight-only
+```
+
+The summary contains aggregate counts and one folded input fingerprint, not
+transcripts, vocabulary entries, fixture names, or local paths. Add
+`--no-threshold` when checking an incomplete exploratory corpus; that mode
+reports that the product-candidate evidence floors were not enforced.
+
 The negative-control directory should contain ordinary speech in the same
 language and from the same push-to-talk workflow in which none of the configured
 critical terms occurs. It always uses the target `--language` hint. Those clips

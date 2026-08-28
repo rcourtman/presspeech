@@ -24,6 +24,7 @@ REFERENCES_HAND_AUDITED=0
 REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
 REQUIRE_CANDIDATE_PASS=1
+PREFLIGHT_ONLY=0
 MIN_CRITICAL_HIT_GAIN="1"
 MAX_UNEXPECTED_INSERTION_DELTA="0"
 MAX_WER_REGRESSION_POINTS="0.00"
@@ -75,6 +76,8 @@ Options:
   --references-hand-audited
                            confirm every reference was checked against its
                            audio by a human; required by the candidate screen
+  --preflight-only         validate and summarize the frozen corpus without
+                           loading an ASR model or running policy comparisons
   --show-transcripts       include references and hypotheses in raw logs
   --show-paths             include fixture and configuration paths in reports
   --no-threshold           write the report but do not fail when no policy
@@ -404,6 +407,29 @@ parse_reference_metrics() {
     fi
     echo "invalid privacy-safe reference metrics output" >&2
     return 1
+}
+
+print_preflight_summary() {
+    local target_clips="$1"
+    local target_words="$2"
+    local target_occurrences="$3"
+    local negative_clips="$4"
+    local negative_words="$5"
+    local cross_language_clips="$6"
+    local input_digest="$7"
+
+    echo "vocabulary-bias preflight passed"
+    echo "  target evidence: $target_clips clips, $target_words words, $target_occurrences critical occurrences"
+    echo "  same-language controls: $negative_clips clips, $negative_words words"
+    echo "  cross-language controls: $cross_language_clips clips"
+    echo "  benchmark inputs SHA-256: $input_digest"
+    if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 ]]; then
+        echo "  product-candidate evidence floors: met"
+    else
+        echo "  product-candidate evidence floors: not enforced (--no-threshold)"
+    fi
+    echo "  ASR models loaded: no"
+    echo "  policy comparisons run: no"
 }
 
 preflight_reference_corpus() {
@@ -796,6 +822,19 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$invalid_reference_metrics_log" "invalid privacy-safe reference metrics output"
+
+    local preflight_summary="$tmpdir/preflight-summary.log"
+    REQUIRE_CANDIDATE_PASS=1
+    print_preflight_summary 25 1295 68 10 1000 25 \
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+        >"$preflight_summary"
+    assert_contains "$preflight_summary" \
+        "target evidence: 25 clips, 1295 words, 68 critical occurrences"
+    assert_contains "$preflight_summary" \
+        "same-language controls: 10 clips, 1000 words"
+    assert_contains "$preflight_summary" "product-candidate evidence floors: met"
+    assert_contains "$preflight_summary" "ASR models loaded: no"
+    assert_not_contains "$preflight_summary" "Szypański"
 
     local mock_bench="$tmpdir/mock-presspeech-bench"
     cat >"$mock_bench" <<'MOCK'
@@ -1285,6 +1324,10 @@ while [[ $# -gt 0 ]]; do
             REFERENCES_HAND_AUDITED=1
             shift
             ;;
+        --preflight-only)
+            PREFLIGHT_ONLY=1
+            shift
+            ;;
         --show-transcripts)
             REDACT_TRANSCRIPTS=0
             shift
@@ -1470,7 +1513,6 @@ if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     exit 1
 fi
 
-mkdir -p "$OUTDIR"
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-bias.XXXXXX")"
 stage_dir=""
 cleanup() {
@@ -1584,6 +1626,19 @@ if ! validate_unique_normalized_audio_content "${normalized_clips[@]}"; then
     exit 1
 fi
 
+if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
+    print_preflight_summary \
+        "${#target_clips[@]}" \
+        "$target_preflight_words" \
+        "$target_preflight_occurrences" \
+        "${#negative_clips[@]}" \
+        "$negative_preflight_words" \
+        "${#cross_language_clips[@]}" \
+        "$benchmark_input_sha256"
+    exit 0
+fi
+
+mkdir -p "$OUTDIR"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 final_report="$OUTDIR/$timestamp-vocabulary-bias.md"
 final_tsv="$OUTDIR/$timestamp-vocabulary-bias.tsv"
