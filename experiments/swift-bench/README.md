@@ -175,6 +175,37 @@ Then run:
 ```sh
 ./run-vocabulary-bias-regression.sh \
   --input-dir polish-benchmark \
+  --negative-control-dir polish-negative-controls \
+  --vocabulary vocabulary.txt \
+  --critical-terms critical-terms.txt \
+  --language pl \
+  --trials 3
+```
+
+The negative-control directory should contain ordinary speech from
+the same workflow in which none of the configured critical terms occurs. Those
+clips run through every policy, and the product-candidate screen rejects any
+new term insertion or WER regression. This matters when the main corpus was
+selected specifically because it contains target names. The runner verifies
+that negative-control references contain zero critical-term occurrences and
+fingerprints target and control corpora separately, so moving a clip between
+groups changes report provenance. At least one control clip is required to pass
+the thresholded product-candidate screen; omit the directory only for a
+`--no-threshold` exploratory run. Use `--negative-control-language en` when a
+public English corpus is intentionally added as a second, cross-language safety
+control to a non-English target corpus.
+
+For a reproducible public negative control, fetch a disjoint LibriSpeech split
+and pass it alongside the private target corpus. Public audiobook speech does
+not replace same-language, push-to-talk controls:
+
+```sh
+./fetch-public-speech-fixtures.sh \
+  --split test-clean --count 25 --start-index 100
+./run-vocabulary-bias-regression.sh \
+  --input-dir polish-benchmark \
+  --negative-control-dir public-audio/librispeech-test-clean \
+  --negative-control-language en \
   --vocabulary vocabulary.txt \
   --critical-terms critical-terms.txt \
   --language pl \
@@ -187,10 +218,12 @@ insertions, critical-term precision, p50 inference latency, peak process
 memory, model-cache footprint, preparation time, the Presspeech and FluidAudio
 revisions, whether the benchmark source was clean, the benchmark executable's
 SHA-256, a single content fingerprint covering every paired audio/reference
-fixture plus the vocabulary and critical-term files, and the macOS and Swift
+fixture, its target/control assignment, the vocabulary and critical-term files,
+and the macOS and Swift
 versions. The input fingerprint depends on paired file contents rather than
 private names, so a copied or renamed frozen corpus remains comparable while
-any benchmark input change is visible. Keeping the component hashes folded
+any benchmark input or target/control assignment change is visible. Keeping
+the component hashes folded
 into one report value also avoids exposing a separately guessable digest for a
 short private vocabulary. Thresholded runs require a clean Git checkout so a
 shared report is tied to exact reviewable source; use `--no-threshold` for

@@ -12,10 +12,12 @@ cd "$(dirname "$SCRIPT_PATH")"
 REPO_ROOT="$(cd ../.. && pwd)"
 
 INPUT_DIR="real-audio"
+NEGATIVE_CONTROL_DIR=""
 OUTDIR="vocabulary-results"
 VOCABULARY=""
 CRITICAL_TERMS=""
 LANGUAGE="auto"
+NEGATIVE_CONTROL_LANGUAGE=""
 TRIALS="3"
 REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
@@ -27,6 +29,7 @@ MAX_CRITICAL_REGRESSED_CLIPS="0"
 MAX_WER_REGRESSED_CLIPS="0"
 MAX_UNEXPECTED_REGRESSED_CLIPS="0"
 MAX_PRODUCTION_LATENCY_RATIO="2.00"
+MIN_NEGATIVE_CONTROL_CLIPS="1"
 SELF_TEST=0
 
 BENCHMARK_SOURCE_PATHS=(
@@ -42,10 +45,16 @@ usage: ./run-vocabulary-bias-regression.sh --vocabulary <path> --critical-terms 
 
 Options:
   --input-dir <path>       audio + same-stem .txt references (default: real-audio)
+  --negative-control-dir <path>
+                           optional unrelated audio + references in which no
+                           critical term occurs; included in the safety screen
   --out-dir <path>         ignored report directory (default: vocabulary-results)
   --vocabulary <path>      FluidAudio text or JSON custom vocabulary (required)
   --critical-terms <path>  canonical surface forms, one per line (required)
   --language <auto|code>   Parakeet v3 language/script hint (default: auto)
+  --negative-control-language <auto|code>
+                           language hint for negative controls (default: the
+                           value of --language)
   --trials <n>             measured trials per clip/variant (default: 3)
   --show-transcripts       include references and hypotheses in raw logs
   --show-paths             include fixture and configuration paths in reports
@@ -80,10 +89,14 @@ The product-candidate screen compares each direct-v3 vocabulary policy with
 production v3; sliding-window lanes remain mechanism diagnostics. It requires
 complete comparable clips, at least one net critical-term hit,
 no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected
-insertions or WER, and average p50 latency no more than 2x production. Passing
+insertions or WER, at least one negative-control clip, and average p50 latency
+no more than 2x production. Passing
 is necessary evidence for product evaluation, not approval to ship. Thresholded
 runs also require a clean Git checkout so a shared report identifies the exact
 reviewable benchmark source; use --no-threshold for locally modified experiments.
+When supplied, negative-control references must contain none of the critical
+terms under the benchmark's exact normalization. Their clip IDs begin with `n`;
+target-corpus IDs begin with `p`.
 USAGE
 }
 
@@ -145,23 +158,26 @@ fixture_set_sha256() {
 }
 
 benchmark_inputs_sha256() {
-    local fixture_digest="$1"
-    local vocabulary="$2"
-    local critical_terms="$3"
-    printf 'fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\n' \
-        "$fixture_digest" \
+    local target_fixture_digest="$1"
+    local negative_fixture_digest="$2"
+    local vocabulary="$3"
+    local critical_terms="$4"
+    printf 'target-fixture-set\t%s\nnegative-control-fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\n' \
+        "$target_fixture_digest" \
+        "$negative_fixture_digest" \
         "$(file_sha256 "$vocabulary")" \
         "$(file_sha256 "$critical_terms")" \
         | shasum -a 256 | awk '{print $1}'
 }
 
 clip_id_for() {
-    local index="$1"
-    local stem="$2"
+    local group="$1"
+    local index="$2"
+    local stem="$3"
     if [[ "$REDACT_PATHS" -eq 1 ]]; then
-        printf '%03d' "$index"
+        printf '%s%03d' "$group" "$index"
     else
-        printf '%03d-%s' "$index" "$stem" | tr -c '[:alnum:]_.-' '-'
+        printf '%s%03d-%s' "$group" "$index" "$stem" | tr -c '[:alnum:]_.-' '-'
     fi
 }
 
@@ -273,6 +289,16 @@ validate_metrics() {
     done
     if [[ "${#missing[@]}" -gt 0 ]]; then
         printf 'benchmark output missing required metrics: %s\n' "$(IFS=,; echo "${missing[*]}")" >&2
+        return 1
+    fi
+}
+
+validate_negative_control_reference() {
+    local clip_id="$1"
+    local critical_total="$2"
+    if [[ "$critical_total" -ne 0 ]]; then
+        echo "negative-control reference contains $critical_total critical-term occurrence(s) for clip $clip_id" >&2
+        echo "negative controls must contain none of the configured critical terms" >&2
         return 1
     fi
 }
@@ -445,12 +471,14 @@ candidate_assessment() {
         -v max_critical_regressed_clips="$MAX_CRITICAL_REGRESSED_CLIPS" \
         -v max_wer_regressed_clips="$MAX_WER_REGRESSED_CLIPS" \
         -v max_unexpected_regressed_clips="$MAX_UNEXPECTED_REGRESSED_CLIPS" \
-        -v max_latency_ratio="$MAX_PRODUCTION_LATENCY_RATIO" '
+        -v max_latency_ratio="$MAX_PRODUCTION_LATENCY_RATIO" \
+        -v min_negative_controls="$MIN_NEGATIVE_CONTROL_CLIPS" '
         function add_blocker(message) {
             blockers = blockers (blockers == "" ? "" : "; ") message
         }
         NR > 1 && $2 == baseline {
             baseline_count += 1
+            if ($1 ~ /^n[0-9]+/) baseline_negative_controls += 1
             baseline_hits[$1] = $4
             baseline_total[$1] = $5
             baseline_unexpected[$1] = $7
@@ -500,6 +528,7 @@ candidate_assessment() {
             latency_ratio = comparable ? candidate_latency_sum / baseline_latency_sum : 0
 
             if (!complete) add_blocker("incomplete comparable clips")
+            if (baseline_negative_controls < min_negative_controls) add_blocker("negative-control clips missing")
             if (total_hit_delta < min_hit_gain) add_blocker("critical-hit gain below +" min_hit_gain)
             if (critical_regressed_clips > max_critical_regressed_clips) add_blocker("per-clip critical-term recall regressed")
             if (unexpected_delta > max_unexpected_delta) add_blocker("unexpected insertions increased")
@@ -591,6 +620,13 @@ run_self_test() {
         wer 12.5 word-errors 1 reference-words 8 \
         critical-matched 7 critical-total 8 critical-recall 87.5 \
         critical-unexpected 2 p50 140.2 peak 88.4 cache 812.3 prepare 1234.5
+    validate_negative_control_reference n001 0
+    local negative_validation_log="$tmpdir/negative-validation.log"
+    if validate_negative_control_reference n002 1 >"$negative_validation_log" 2>&1; then
+        echo "self-test expected a contaminated negative control to fail" >&2
+        exit 1
+    fi
+    assert_contains "$negative_validation_log" "negative-control reference contains 1 critical-term occurrence(s) for clip n002"
 
     local validation_log="$tmpdir/validation.log"
     if validate_metrics wer unknown p50 "" >"$validation_log" 2>&1; then
@@ -679,13 +715,13 @@ run_self_test() {
         printf '001\tsliding-v3\t10.0\t1\t2\t50.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\t100.0\n'
         printf '002\tsliding-v3\t20.0\t1\t2\t50.0\t1\t100.0\t40.0\t600.0\t1000.0\t1\t5\t50.0\n'
         printf '003\tsliding-v3\t5.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t20\t100.0\n'
-        printf '004\tsliding-v3\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t2000\t100.0\n'
+        printf 'n004\tsliding-v3\t0.1\t0\t0\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t2000\t100.0\n'
         printf '001\tsliding-vocab\t10.0\t2\t2\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\t100.0\n'
         printf '002\tsliding-vocab\t40.0\t2\t2\t100.0\t2\t100.0\t40.0\t600.0\t1000.0\t2\t5\t50.0\n'
         printf '003\tsliding-vocab\t10.0\t1\t1\t100.0\t1\t100.0\t40.0\t600.0\t1000.0\t2\t20\t50.0\n'
         # The displayed WER ties after rounding, but the exact count exposes
         # one additional error and must classify this clip as a pure loss.
-        printf '004\tsliding-vocab\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t2\t2000\t100.0\n'
+        printf 'n004\tsliding-vocab\t0.1\t0\t0\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t2\t2000\t100.0\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     summary_row "$tsv" v3 >"$summary"
@@ -703,13 +739,18 @@ run_self_test() {
         printf '001\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t10\t100.0\n'
         printf '002\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t1\t150.0\t40.0\t700.0\t1000.0\t0\t5\t66.7\n'
         printf '003\tsliding-vocab-no-rescue\t0.0\t1\t1\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t20\t100.0\n'
-        printf '004\tsliding-vocab-no-rescue\t0.0\t1\t1\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t2000\t100.0\n'
+        printf 'n004\tsliding-vocab-no-rescue\t0.0\t0\t0\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t2000\t100.0\n'
     } >"$tmpdir/passing.tsv"
     local passing_assessment
     passing_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
     assert_eq "$passing_assessment" $'sliding-vocab-no-rescue\t4\t4\t+2\t+0\t-0.20\t0\t0\t0\t1.50\tpasses\t' "passing candidate assessment"
     candidate_assessment_row "$passing_assessment" >"$summary"
     assert_contains "$summary" '| `sliding-vocab-no-rescue` | 4/4 | +2 | +0 | -0.20 | 0 | 0 | 0 | 1.50x | **passes** | -- |'
+
+    sed 's/^n004/004/' "$tmpdir/passing.tsv" >"$tmpdir/no-negative-controls.tsv"
+    local no_negative_assessment
+    no_negative_assessment="$(candidate_assessment "$tmpdir/no-negative-controls.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_contains <(printf '%s\n' "$no_negative_assessment") $'blocked\tnegative-control clips missing'
 
     # Aggregate improvements must not hide a costly per-clip vocabulary win or
     # an insertion that happens to be offset on another clip.
@@ -782,10 +823,28 @@ run_self_test() {
         "$fixture_digest" "fixture digest ignores names and ordering"
     assert_eq "$(benchmark_inputs_sha256 \
         "$fixture_digest" \
+        "none" \
         "$fixtures/vocabulary.txt" \
         "$fixtures/critical-terms.txt")" \
-        "15afb59283f8c5e65576e6dc7fde1ea3c31780d1ec8c1caf596a12e9e581bde1" \
+        "7abb1b806eee08690bafa9286f74c2d751ec70acc41810a5bed10730e1e1c1e5" \
         "complete benchmark-input digest"
+    local first_fixture_digest
+    local second_fixture_digest
+    first_fixture_digest="$(fixture_set_sha256 "$fixtures/renamed.wav")"
+    second_fixture_digest="$(fixture_set_sha256 "$fixtures/second.wav")"
+    if [[ "$(benchmark_inputs_sha256 \
+        "$first_fixture_digest" "$second_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" == \
+        "$(benchmark_inputs_sha256 \
+        "$second_fixture_digest" "$first_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt")" ]]; then
+        echo "self-test expected target/control assignment to affect provenance" >&2
+        exit 1
+    fi
+    assert_eq "$(clip_id_for p 7 'private name')" "p007" "redacted target clip ID"
+    REDACT_PATHS=0
+    assert_eq "$(clip_id_for n 4 'public clip')" "n004-public-clip" "visible negative-control clip ID"
+    REDACT_PATHS=1
     printf 'changed reference\n' >"$fixtures/renamed.txt"
     if [[ "$(fixture_set_sha256 \
         "$fixtures/renamed.wav" "$fixtures/second.wav")" == "$fixture_digest" ]]; then
@@ -821,6 +880,11 @@ while [[ $# -gt 0 ]]; do
             INPUT_DIR="$2"
             shift 2
             ;;
+        --negative-control-dir)
+            need_value "$@"
+            NEGATIVE_CONTROL_DIR="$2"
+            shift 2
+            ;;
         --out-dir)
             need_value "$@"
             OUTDIR="$2"
@@ -839,6 +903,11 @@ while [[ $# -gt 0 ]]; do
         --language)
             need_value "$@"
             LANGUAGE="$2"
+            shift 2
+            ;;
+        --negative-control-language)
+            need_value "$@"
+            NEGATIVE_CONTROL_LANGUAGE="$2"
             shift 2
             ;;
         --trials)
@@ -891,6 +960,13 @@ if [[ ! -d "$INPUT_DIR" ]]; then
     echo "input directory not found: $INPUT_DIR" >&2
     exit 1
 fi
+if [[ -n "$NEGATIVE_CONTROL_DIR" && ! -d "$NEGATIVE_CONTROL_DIR" ]]; then
+    echo "negative-control directory not found: $NEGATIVE_CONTROL_DIR" >&2
+    exit 1
+fi
+if [[ -z "$NEGATIVE_CONTROL_LANGUAGE" ]]; then
+    NEGATIVE_CONTROL_LANGUAGE="$LANGUAGE"
+fi
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
     exit 2
@@ -919,19 +995,35 @@ if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$source_state" != "clean" ]]; then
     exit 1
 fi
 
-clips=()
+target_clips=()
 while IFS= read -r clip; do
-    clips+=( "$clip" )
+    target_clips+=( "$clip" )
 done < <(
     find "$INPUT_DIR" -type f \
         \( -iname '*.wav' -o -iname '*.aiff' -o -iname '*.aif' -o -iname '*.caf' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.flac' \) \
         | sort
 )
-if [[ "${#clips[@]}" -eq 0 ]]; then
+if [[ "${#target_clips[@]}" -eq 0 ]]; then
     echo "no supported audio files found in $INPUT_DIR" >&2
     exit 1
 fi
 
+negative_clips=()
+if [[ -n "$NEGATIVE_CONTROL_DIR" ]]; then
+    while IFS= read -r clip; do
+        negative_clips+=( "$clip" )
+    done < <(
+        find "$NEGATIVE_CONTROL_DIR" -type f \
+            \( -iname '*.wav' -o -iname '*.aiff' -o -iname '*.aif' -o -iname '*.caf' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.flac' \) \
+            | sort
+    )
+    if [[ "${#negative_clips[@]}" -eq 0 ]]; then
+        echo "no supported audio files found in $NEGATIVE_CONTROL_DIR" >&2
+        exit 1
+    fi
+fi
+
+clips=( "${target_clips[@]}" "${negative_clips[@]}" )
 missing_refs=()
 for clip in "${clips[@]}"; do
     ref="${clip%.*}.txt"
@@ -943,9 +1035,20 @@ if [[ "${#missing_refs[@]}" -gt 0 ]]; then
     exit 1
 fi
 
-fixture_sha256="$(fixture_set_sha256 "${clips[@]}")"
+duplicate_clip="$(printf '%s\n' "${clips[@]}" | sort | uniq -d | head -n 1)"
+if [[ -n "$duplicate_clip" ]]; then
+    echo "target and negative-control corpora overlap: $duplicate_clip" >&2
+    exit 1
+fi
+
+target_fixture_sha256="$(fixture_set_sha256 "${target_clips[@]}")"
+negative_fixture_sha256="none"
+if [[ "${#negative_clips[@]}" -gt 0 ]]; then
+    negative_fixture_sha256="$(fixture_set_sha256 "${negative_clips[@]}")"
+fi
 benchmark_input_sha256="$(benchmark_inputs_sha256 \
-    "$fixture_sha256" "$VOCABULARY" "$CRITICAL_TERMS")"
+    "$target_fixture_sha256" "$negative_fixture_sha256" \
+    "$VOCABULARY" "$CRITICAL_TERMS")"
 if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     echo "could not fingerprint benchmark inputs" >&2
     exit 1
@@ -1013,13 +1116,21 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Benchmark executable SHA-256: $benchmark_sha256"
     echo "- Platform: $platform_description"
     echo "- Swift toolchain: $swift_toolchain"
-    echo "- Input directory: $(path_label "$INPUT_DIR")"
+    echo "- Target input directory: $(path_label "$INPUT_DIR")"
+    if [[ -n "$NEGATIVE_CONTROL_DIR" ]]; then
+        echo "- Negative-control input directory: $(path_label "$NEGATIVE_CONTROL_DIR")"
+    else
+        echo "- Negative-control input directory: not supplied"
+    fi
     echo "- Vocabulary: $(path_label "$VOCABULARY")"
     echo "- Critical terms: $(path_label "$CRITICAL_TERMS")"
     echo "- Benchmark inputs SHA-256: $benchmark_input_sha256"
     echo "- Language hint: $LANGUAGE"
+    echo "- Negative-control language hint: $NEGATIVE_CONTROL_LANGUAGE"
     echo "- Trials per clip/variant: $TRIALS"
-    echo "- Clips: ${#clips[@]}"
+    echo "- Target clips: ${#target_clips[@]}"
+    echo "- Negative-control clips: ${#negative_clips[@]}"
+    echo "- Total clips: ${#clips[@]}"
     echo "- Transcript output: $([[ "$REDACT_TRANSCRIPTS" -eq 1 ]] && echo redacted || echo included)"
     echo
     echo "> Production v3, three direct-v3 vocabulary policies, unbiased sliding v3,"
@@ -1030,7 +1141,8 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "> logical on-disk size after preparation, not measured network traffic."
     echo "> Variable trial output is summarized conservatively per clip: worst WER, lowest"
     echo "> critical-term recall, highest unexpected-insertion count, and the resulting"
-    echo "> lower-bound critical-term precision."
+    echo "> lower-bound critical-term precision. Target clip IDs begin with \`p\`;"
+    echo "> negative-control IDs begin with \`n\` and must have zero reference occurrences."
     echo
     echo "## Per-Clip Results"
     echo
@@ -1039,11 +1151,24 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
 } >"$report"
 
 clip_index=0
+target_index=0
+negative_index=0
 for clip in "${clips[@]}"; do
     clip_index=$((clip_index + 1))
+    if [[ "$clip_index" -le "${#target_clips[@]}" ]]; then
+        clip_group="p"
+        target_index=$((target_index + 1))
+        group_index="$target_index"
+        clip_language="$LANGUAGE"
+    else
+        clip_group="n"
+        negative_index=$((negative_index + 1))
+        group_index="$negative_index"
+        clip_language="$NEGATIVE_CONTROL_LANGUAGE"
+    fi
     stem="$(basename "$clip")"
     stem="${stem%.*}"
-    clip_id="$(clip_id_for "$clip_index" "$stem")"
+    clip_id="$(clip_id_for "$clip_group" "$group_index" "$stem")"
     normalized="$tmpdir/$clip_id.wav"
     ref="${clip%.*}.txt"
 
@@ -1057,7 +1182,7 @@ for clip in "${clips[@]}"; do
             ".build/release/presspeech-bench"
             "--file" "$normalized"
             "--backend" "$variant"
-            "--language" "$LANGUAGE"
+            "--language" "$clip_language"
             "--critical-terms" "$CRITICAL_TERMS"
             "--trials" "$TRIALS"
         )
@@ -1108,6 +1233,10 @@ for clip in "${clips[@]}"; do
             echo "invalid benchmark output for clip $clip_id variant=$variant; see $(path_label "$log_file")" >&2
             exit 1
         fi
+        if [[ "$clip_group" == "n" ]] && \
+            ! validate_negative_control_reference "$clip_id" "$critical_total"; then
+            exit 1
+        fi
         critical_precision="$(critical_precision_percent "$critical_matched" "$critical_unexpected")"
 
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
@@ -1152,7 +1281,7 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} negative-control clip, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. This is a necessary evidence screen, not approval to ship."
     echo
     echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
