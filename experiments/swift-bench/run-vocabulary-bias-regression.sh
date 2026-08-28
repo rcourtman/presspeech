@@ -32,6 +32,7 @@ MAX_CRITICAL_REGRESSED_CLIPS="0"
 MAX_WER_REGRESSED_CLIPS="0"
 MAX_UNEXPECTED_REGRESSED_CLIPS="0"
 MAX_PRODUCTION_LATENCY_RATIO="2.00"
+MIN_CANDIDATE_TRIALS="3"
 # The only real-dictation vocabulary result so far used 40 target clips,
 # 1,295 reference words, and 68 critical-term occurrences. Do not let a much
 # smaller, hand-picked success case clear the product-candidate screen.
@@ -117,7 +118,8 @@ rejected so neither false insertions nor gains can be hidden.
 
 The product-candidate screen compares each direct-v3 vocabulary policy with
 production v3; sliding-window lanes remain mechanism diagnostics. It requires
-human-audited references, complete comparable clips, at least one net
+human-audited references, at least three measured trials per clip/variant,
+complete comparable clips, at least one net
 critical-term hit,
 no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected
 insertions or WER, at least 10 same-language negative-control clips containing
@@ -264,6 +266,18 @@ validate_reference_audit_claim() {
         echo "thresholded vocabulary runs require human-audited reference transcripts" >&2
         echo "listen to every clip and correct its sidecar, then pass --references-hand-audited" >&2
         echo "use --no-threshold for exploratory runs with machine-generated or unaudited references" >&2
+        return 1
+    fi
+}
+
+validate_trial_count() {
+    if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
+        echo "--trials must be a positive integer" >&2
+        return 1
+    fi
+    if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$TRIALS" -lt "$MIN_CANDIDATE_TRIALS" ]]; then
+        echo "thresholded vocabulary runs require at least $MIN_CANDIDATE_TRIALS measured trials per clip/variant" >&2
+        echo "use --no-threshold for faster exploratory runs" >&2
         return 1
     fi
 }
@@ -904,6 +918,24 @@ MOCK
     REQUIRE_CANDIDATE_PASS="$original_threshold"
     REFERENCES_HAND_AUDITED="$original_reference_audit"
 
+    local original_trials="$TRIALS"
+    REQUIRE_CANDIDATE_PASS=1
+    TRIALS=2
+    local trial_validation_log="$tmpdir/trial-validation.log"
+    if validate_trial_count >"$trial_validation_log" 2>&1; then
+        echo "self-test expected a two-trial candidate run to fail validation" >&2
+        exit 1
+    fi
+    assert_contains "$trial_validation_log" \
+        "thresholded vocabulary runs require at least 3 measured trials"
+    TRIALS=3
+    validate_trial_count
+    REQUIRE_CANDIDATE_PASS=0
+    TRIALS=1
+    validate_trial_count
+    REQUIRE_CANDIDATE_PASS="$original_threshold"
+    TRIALS="$original_trials"
+
     local validation_log="$tmpdir/validation.log"
     if validate_metrics wer unknown p50 "" >"$validation_log" 2>&1; then
         echo "self-test expected missing metrics to fail validation" >&2
@@ -1405,8 +1437,7 @@ if [[ -z "$CROSS_LANGUAGE_CONTROL_DIR" && -n "$CROSS_LANGUAGE_CONTROL_LANGUAGE" 
     echo "--cross-language-control-language requires --cross-language-control-dir" >&2
     exit 2
 fi
-if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
-    echo "--trials must be a positive integer" >&2
+if ! validate_trial_count; then
     exit 2
 fi
 if ! validate_reference_audit_claim; then
@@ -1708,6 +1739,7 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
         echo "- Cross-language control language hint: not supplied"
     fi
     echo "- Trials per clip/variant: $TRIALS"
+    echo "- Product-candidate minimum trials per clip/variant: $MIN_CANDIDATE_TRIALS"
     if [[ "$REFERENCES_HAND_AUDITED" -eq 1 ]]; then
         echo "- Reference transcripts: hand-audited against the audio"
     else
@@ -1850,7 +1882,7 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with production \`v3\`. A policy passes only with human-audited references, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with production \`v3\`. A policy passes only with human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
     echo "| Candidate | Comparable clips | Target evidence (clips / words / critical occurrences) | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"

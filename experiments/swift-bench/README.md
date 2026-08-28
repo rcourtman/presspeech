@@ -287,7 +287,8 @@ lanes with production `v3` and sliding lanes with unbiased `sliding-v3`,
 reporting net critical hits, unexpected insertions, corpus WER change, and
 counts of clean wins, costly wins, and pure losses. A separate product-candidate
 screen evaluates only the four direct-v3 policies and fails the command unless
-the references are declared human-audited and at least one policy has complete
+the references are declared human-audited, the run uses at least three measured
+trials per clip/variant, and at least one policy has complete
 comparable clips, at least 25 target clips containing
 at least 1,000 reference words and 50 critical-term occurrences, at least 10
 same-language negative-control clips with distinct source and normalized audio
@@ -313,7 +314,9 @@ When repeated trials yield different transcripts, each per-clip row is a
 conservative envelope: worst WER, lowest critical-term recall, and highest
 unexpected-insertion count observed. Pass
 `--show-transcripts` or `--show-paths` only for local reports that are safe to
-share.
+share. Thresholded product-candidate runs require at least three trials so this
+envelope cannot be bypassed with a single observation; `--no-threshold` keeps
+one-trial exploratory runs available.
 
 Corpus WER is the total edit-error count divided by total reference words, so
 longer clips contribute proportionally instead of each clip receiving equal
