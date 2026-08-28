@@ -1,12 +1,12 @@
 name: windows
 
 on:
+  # Release publication requires a green Windows push run for the exact main
+  # commit being approved. Do not path-filter main pushes: otherwise an
+  # unrelated docs, benchmark, or macOS change after the last Windows change
+  # leaves the current release commit permanently ineligible.
   push:
     branches: [main]
-    paths:
-      - "windows/**"
-      - ".github/workflows/windows-release.yml"
-      - ".github/workflows/windows.yml"
   pull_request:
     paths:
       - "windows/**"

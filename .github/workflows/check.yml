@@ -122,6 +122,17 @@ jobs:
       - name: Release publication safety
         run: |
           ruby - <<'RUBY'
+          require "yaml"
+
+          ci_workflow = YAML.load_file(".github/workflows/windows.yml")
+          # YAML 1.1 parsers treat the unquoted `on` key as boolean true.
+          triggers = ci_workflow["on"] || ci_workflow[true]
+          push = triggers.is_a?(Hash) ? triggers["push"] : nil
+          unless push.is_a?(Hash) && Array(push["branches"]).include?("main") &&
+              !push.key?("paths") && !push.key?("paths-ignore")
+            abort "Windows CI must run on every main push required by release approval"
+          end
+
           workflow = File.read(".github/workflows/windows-release.yml")
           atomic_create = %r{
             gh\s+release\s+create\s+\$tag\s+`\s*
