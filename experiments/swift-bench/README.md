@@ -171,7 +171,11 @@ Then run:
 Reports are ignored and privacy-redacted by default. They include corpus and
 worst WER, weighted exact critical-term recall, unexpected critical-term
 insertions, critical-term precision, p50 inference latency, peak process
-memory, model-cache footprint, and preparation time. A pairwise policy table
+memory, model-cache footprint, preparation time, the Presspeech and FluidAudio
+revisions, whether the benchmark source was clean, and the benchmark
+executable's SHA-256, plus the macOS and Swift versions. Thresholded runs require
+a clean Git checkout so a shared report is tied to exact reviewable source; use
+`--no-threshold` for exploratory local modifications. A pairwise policy table
 compares each vocabulary lane with unbiased `sliding-v3`, reporting net critical
 hits, unexpected insertions, corpus WER change, and counts of clean wins, costly
 wins, and pure losses. A separate product-candidate screen compares each policy

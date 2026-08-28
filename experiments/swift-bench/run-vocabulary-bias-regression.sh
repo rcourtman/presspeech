@@ -9,6 +9,7 @@ export LC_ALL=C
 
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$SCRIPT_PATH")"
+REPO_ROOT="$(cd ../.. && pwd)"
 
 INPUT_DIR="real-audio"
 OUTDIR="vocabulary-results"
@@ -27,6 +28,13 @@ MAX_WER_REGRESSED_CLIPS="0"
 MAX_UNEXPECTED_REGRESSED_CLIPS="0"
 MAX_PRODUCTION_LATENCY_RATIO="2.00"
 SELF_TEST=0
+
+BENCHMARK_SOURCE_PATHS=(
+    "experiments/swift-bench/Package.swift"
+    "experiments/swift-bench/Package.resolved"
+    "experiments/swift-bench/Sources/presspeech-bench"
+    "experiments/swift-bench/run-vocabulary-bias-regression.sh"
+)
 
 usage() {
     cat <<'USAGE'
@@ -67,7 +75,9 @@ The product-candidate screen compares each vocabulary policy with production
 v3. It requires complete comparable clips, at least one net critical-term hit,
 no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected
 insertions or WER, and average p50 latency no more than 2x production. Passing
-is necessary evidence for product evaluation, not approval to ship.
+is necessary evidence for product evaluation, not approval to ship. Thresholded
+runs also require a clean Git checkout so a shared report identifies the exact
+reviewable benchmark source; use --no-threshold for locally modified experiments.
 USAGE
 }
 
@@ -85,6 +95,31 @@ path_label() {
     else
         printf '%s' "$1"
     fi
+}
+
+benchmark_source_revision() {
+    git -C "$REPO_ROOT" rev-parse --verify HEAD 2>/dev/null || true
+}
+
+benchmark_source_state() {
+    if ! git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        printf 'unavailable'
+        return
+    fi
+    if [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all -- "${BENCHMARK_SOURCE_PATHS[@]}")" ]]; then
+        printf 'modified'
+    else
+        printf 'clean'
+    fi
+}
+
+fluid_audio_revision() {
+    local package_file="${1:-Package.swift}"
+    sed -nE 's/.*revision: "([0-9a-f]{40})".*/\1/p' "$package_file" | head -n 1
+}
+
+file_sha256() {
+    shasum -a 256 "$1" | awk '{print $1}'
 }
 
 clip_id_for() {
@@ -497,7 +532,11 @@ assert_not_contains() {
 run_self_test() {
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-self-test.XXXXXX")"
-    trap 'rm -rf "$tmpdir"' EXIT INT TERM
+    local quoted_tmpdir
+    printf -v quoted_tmpdir '%q' "$tmpdir"
+    # Expand now so cleanup retains the path after this function's locals leave scope.
+    # shellcheck disable=SC2064
+    trap "rm -rf -- $quoted_tmpdir" EXIT INT TERM
 
     local log="$tmpdir/mock.log"
     {
@@ -671,6 +710,31 @@ run_self_test() {
     fi
     assert_contains "$missing_value_log" "--vocabulary requires a value"
 
+    local package_file="$tmpdir/Package.swift"
+    printf '%s\n' '.package(url: "https://example.invalid/FluidAudio.git", revision: "0123456789abcdef0123456789abcdef01234567")' >"$package_file"
+    assert_eq "$(fluid_audio_revision "$package_file")" \
+        "0123456789abcdef0123456789abcdef01234567" "FluidAudio revision parser"
+    printf 'benchmark artifact\n' >"$tmpdir/artifact"
+    assert_eq "$(file_sha256 "$tmpdir/artifact")" \
+        "add96b142ed74d852093d6f139dc83383b18c53840cea5761e4e93353ee5f836" \
+        "benchmark artifact digest"
+
+    local original_repo_root="$REPO_ROOT"
+    local current_source_state
+    current_source_state="$(benchmark_source_state)"
+    if [[ "$current_source_state" != "clean" && "$current_source_state" != "modified" ]]; then
+        echo "self-test expected the checked-out benchmark source to be available" >&2
+        exit 1
+    fi
+    if ! [[ "$(benchmark_source_revision)" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "self-test expected a full benchmark source revision" >&2
+        exit 1
+    fi
+    REPO_ROOT="$tmpdir/not-a-repository"
+    mkdir "$REPO_ROOT"
+    assert_eq "$(benchmark_source_state)" "unavailable" "unavailable benchmark source provenance"
+    REPO_ROOT="$original_repo_root"
+
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
     echo "vocabulary-bias regression self-test passed"
@@ -761,6 +825,25 @@ if ! command -v afconvert >/dev/null 2>&1; then
     echo "afconvert is required to normalize audio" >&2
     exit 1
 fi
+if ! command -v git >/dev/null 2>&1; then
+    echo "git is required to record benchmark source provenance" >&2
+    exit 1
+fi
+if ! command -v shasum >/dev/null 2>&1; then
+    echo "shasum is required to record benchmark artifact provenance" >&2
+    exit 1
+fi
+
+source_revision="$(benchmark_source_revision)"
+source_state="$(benchmark_source_state)"
+if [[ ! "$source_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    source_revision="unavailable"
+fi
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$source_state" != "clean" ]]; then
+    echo "thresholded vocabulary runs require a clean Git checkout (source state: $source_state)" >&2
+    echo "commit or restore benchmark source changes, or use --no-threshold for exploration" >&2
+    exit 1
+fi
 
 clips=()
 while IFS= read -r clip; do
@@ -800,6 +883,23 @@ trap cleanup EXIT INT TERM
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
+fluid_revision="$(fluid_audio_revision)"
+if [[ ! "$fluid_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "could not identify the exact FluidAudio revision from Package.swift" >&2
+    exit 1
+fi
+benchmark_sha256="$(file_sha256 .build/release/presspeech-bench)"
+if [[ ! "$benchmark_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "could not identify the benchmark executable SHA-256" >&2
+    exit 1
+fi
+platform_description="$(sw_vers -productName) $(sw_vers -productVersion) ($(uname -m))"
+swift_toolchain="$(swift --version | sed -n '1p')"
+if [[ -z "$platform_description" || -z "$swift_toolchain" ]]; then
+    echo "could not identify the benchmark platform and Swift toolchain" >&2
+    exit 1
+fi
+
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 final_report="$OUTDIR/$timestamp-vocabulary-bias.md"
 final_tsv="$OUTDIR/$timestamp-vocabulary-bias.tsv"
@@ -825,6 +925,12 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "# Presspeech Vocabulary-Bias Comparison"
     echo
     echo "- Date: $timestamp"
+    echo "- Presspeech source revision: $source_revision"
+    echo "- Benchmark source state: $source_state"
+    echo "- FluidAudio revision: $fluid_revision"
+    echo "- Benchmark executable SHA-256: $benchmark_sha256"
+    echo "- Platform: $platform_description"
+    echo "- Swift toolchain: $swift_toolchain"
     echo "- Input directory: $(path_label "$INPUT_DIR")"
     echo "- Vocabulary: $(path_label "$VOCABULARY")"
     echo "- Critical terms: $(path_label "$CRITICAL_TERMS")"
