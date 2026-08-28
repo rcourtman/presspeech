@@ -183,6 +183,7 @@ Then run:
   --vocabulary vocabulary.txt \
   --critical-terms critical-terms.txt \
   --language pl \
+  --references-hand-audited \
   --trials 3
 ```
 
@@ -192,7 +193,12 @@ critical terms occurs. It always uses the target `--language` hint. Those clips
 run through every policy, and the product-candidate screen rejects any new term
 insertion or WER regression. The target corpus must contain at least 25 distinct
 clips, 1,000 reference words, and 50 critical-term occurrences for a thresholded
-run. These bounds are below the first real-user vocabulary corpus (40 clips,
+run. Every target and control reference must also be listened to and corrected
+by a human; pass `--references-hand-audited` only after that review. A transcript
+from another ASR can be a starting point, but cannot be the ground truth for a
+thresholded run without human verification. Use `--no-threshold` for exploratory
+runs with unaudited references. These bounds are below the first real-user
+vocabulary corpus (40 clips,
 1,295 words, and 68 occurrences), but prevent one hand-picked recovery from
 clearing a policy whose observed effects varied substantially by clip. This
 matters when the main corpus was selected
@@ -225,6 +231,7 @@ not replace same-language, push-to-talk controls:
   --vocabulary vocabulary.txt \
   --critical-terms critical-terms.txt \
   --language pl \
+  --references-hand-audited \
   --trials 3
 ```
 
@@ -239,7 +246,7 @@ critical-term files, and the macOS and Swift
 versions. The input fingerprint depends on paired file contents rather than
 private names, so a copied or renamed frozen corpus remains comparable while
 any benchmark input, target/same-language/cross-language assignment, language
-hint, or trial-count change is visible. Keeping
+hint, trial-count change, or reference-audit declaration is visible. Keeping
 the component hashes folded
 into one report value also avoids exposing a separately guessable digest for a
 short private vocabulary. Thresholded runs require a clean Git checkout so a
@@ -249,7 +256,8 @@ lanes with production `v3` and sliding lanes with unbiased `sliding-v3`,
 reporting net critical hits, unexpected insertions, corpus WER change, and
 counts of clean wins, costly wins, and pure losses. A separate product-candidate
 screen evaluates only the four direct-v3 policies and fails the command unless
-at least one has complete comparable clips, at least 25 target clips containing
+the references are declared human-audited and at least one policy has complete
+comparable clips, at least 25 target clips containing
 at least 1,000 reference words and 50 critical-term occurrences, at least 10
 same-language negative-control clips with distinct source and normalized audio
 and at least 1,000 reference words, gains a

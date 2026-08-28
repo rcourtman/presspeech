@@ -20,6 +20,7 @@ CRITICAL_TERMS=""
 LANGUAGE="auto"
 CROSS_LANGUAGE_CONTROL_LANGUAGE=""
 TRIALS="3"
+REFERENCES_HAND_AUDITED=0
 REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
 REQUIRE_CANDIDATE_PASS=1
@@ -70,6 +71,9 @@ Options:
                            language hint for cross-language controls (required
                            with --cross-language-control-dir)
   --trials <n>             measured trials per clip/variant (default: 3)
+  --references-hand-audited
+                           confirm every reference was checked against its
+                           audio by a human; required by the candidate screen
   --show-transcripts       include references and hypotheses in raw logs
   --show-paths             include fixture and configuration paths in reports
   --no-threshold           write the report but do not fail when no policy
@@ -107,7 +111,8 @@ critical terms are rejected so neither false insertions nor gains can be hidden.
 
 The product-candidate screen compares each direct-v3 vocabulary policy with
 production v3; sliding-window lanes remain mechanism diagnostics. It requires
-complete comparable clips, at least one net critical-term hit,
+human-audited references, complete comparable clips, at least one net
+critical-term hit,
 no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected
 insertions or WER, at least 10 same-language negative-control clips containing
 at least 1,000 reference words in total, and average p50 latency no more than
@@ -224,7 +229,8 @@ benchmark_inputs_sha256() {
     local language="$6"
     local cross_language_control_language="$7"
     local trials="$8"
-    printf 'target-fixture-set\t%s\nnegative-control-fixture-set\t%s\ncross-language-control-fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\nlanguage\t%s\ncross-language-control-language\t%s\ntrials\t%s\n' \
+    local references_hand_audited="$9"
+    printf 'target-fixture-set\t%s\nnegative-control-fixture-set\t%s\ncross-language-control-fixture-set\t%s\nvocabulary\t%s\ncritical-terms\t%s\nlanguage\t%s\ncross-language-control-language\t%s\ntrials\t%s\nreferences-hand-audited\t%s\n' \
         "$target_fixture_digest" \
         "$negative_fixture_digest" \
         "$cross_language_fixture_digest" \
@@ -233,7 +239,17 @@ benchmark_inputs_sha256() {
         "$language" \
         "$cross_language_control_language" \
         "$trials" \
+        "$references_hand_audited" \
         | shasum -a 256 | awk '{print $1}'
+}
+
+validate_reference_audit_claim() {
+    if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$REFERENCES_HAND_AUDITED" -ne 1 ]]; then
+        echo "thresholded vocabulary runs require human-audited reference transcripts" >&2
+        echo "listen to every clip and correct its sidecar, then pass --references-hand-audited" >&2
+        echo "use --no-threshold for exploratory runs with machine-generated or unaudited references" >&2
+        return 1
+    fi
 }
 
 clip_id_for() {
@@ -715,6 +731,24 @@ run_self_test() {
     fi
     assert_contains "$negative_validation_log" "negative-control reference contains 1 critical-term occurrence(s) for clip n002"
 
+    local original_threshold="$REQUIRE_CANDIDATE_PASS"
+    local original_reference_audit="$REFERENCES_HAND_AUDITED"
+    REQUIRE_CANDIDATE_PASS=1
+    REFERENCES_HAND_AUDITED=0
+    local audit_validation_log="$tmpdir/reference-audit-validation.log"
+    if validate_reference_audit_claim >"$audit_validation_log" 2>&1; then
+        echo "self-test expected unaudited references to fail the candidate screen" >&2
+        exit 1
+    fi
+    assert_contains "$audit_validation_log" "require human-audited reference transcripts"
+    REFERENCES_HAND_AUDITED=1
+    validate_reference_audit_claim
+    REQUIRE_CANDIDATE_PASS=0
+    REFERENCES_HAND_AUDITED=0
+    validate_reference_audit_claim
+    REQUIRE_CANDIDATE_PASS="$original_threshold"
+    REFERENCES_HAND_AUDITED="$original_reference_audit"
+
     local validation_log="$tmpdir/validation.log"
     if validate_metrics wer unknown p50 "" >"$validation_log" 2>&1; then
         echo "self-test expected missing metrics to fail validation" >&2
@@ -970,8 +1004,9 @@ run_self_test() {
         "$fixtures/critical-terms.txt" \
         "pl" \
         "" \
-        "3")" \
-        "ed454fc0255f05b43f6dfb1643f6b3d4ac832d392bb21b5b4a68165331eefaec" \
+        "3" \
+        "1")" \
+        "e961f18f0ea9c68b315bdcf7b0d2d02e63450507f4391ba6e4d7c133add798e9" \
         "complete benchmark-input digest"
     local first_fixture_digest
     local second_fixture_digest
@@ -979,45 +1014,52 @@ run_self_test() {
     second_fixture_digest="$(fixture_set_sha256 "$fixtures/second.wav")"
     if [[ "$(benchmark_inputs_sha256 \
         "$first_fixture_digest" "$second_fixture_digest" "none" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "" "3")" == \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "" "3" "1")" == \
         "$(benchmark_inputs_sha256 \
         "$second_fixture_digest" "$first_fixture_digest" "none" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "" "3")" ]]; then
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "" "3" "1")" ]]; then
         echo "self-test expected target/control assignment to affect provenance" >&2
         exit 1
     fi
     if [[ "$(benchmark_inputs_sha256 \
         "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3")" == \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3" "1")" == \
         "$(benchmark_inputs_sha256 \
         "$fixture_digest" "$second_fixture_digest" "$first_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3")" ]]; then
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3" "1")" ]]; then
         echo "self-test expected same/cross-language control assignment to affect provenance" >&2
         exit 1
     fi
     local benchmark_configuration_digest
     benchmark_configuration_digest="$(benchmark_inputs_sha256 \
         "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3")"
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3" "1")"
     if [[ "$(benchmark_inputs_sha256 \
         "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "auto" "en" "3")" == \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "auto" "en" "3" "1")" == \
         "$benchmark_configuration_digest" ]]; then
         echo "self-test expected target language changes to alter provenance" >&2
         exit 1
     fi
     if [[ "$(benchmark_inputs_sha256 \
         "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "de" "3")" == \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "de" "3" "1")" == \
         "$benchmark_configuration_digest" ]]; then
         echo "self-test expected cross-language hint changes to alter provenance" >&2
         exit 1
     fi
     if [[ "$(benchmark_inputs_sha256 \
         "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
-        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "5")" == \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "5" "1")" == \
         "$benchmark_configuration_digest" ]]; then
         echo "self-test expected trial-count changes to alter provenance" >&2
+        exit 1
+    fi
+    if [[ "$(benchmark_inputs_sha256 \
+        "$fixture_digest" "$first_fixture_digest" "$second_fixture_digest" \
+        "$fixtures/vocabulary.txt" "$fixtures/critical-terms.txt" "pl" "en" "3" "0")" == \
+        "$benchmark_configuration_digest" ]]; then
+        echo "self-test expected reference-audit status to alter provenance" >&2
         exit 1
     fi
     assert_eq "$(clip_id_for p 7 'private name')" "p007" "redacted target clip ID"
@@ -1105,6 +1147,10 @@ while [[ $# -gt 0 ]]; do
             TRIALS="$2"
             shift 2
             ;;
+        --references-hand-audited)
+            REFERENCES_HAND_AUDITED=1
+            shift
+            ;;
         --show-transcripts)
             REDACT_TRANSCRIPTS=0
             shift
@@ -1168,6 +1214,9 @@ if [[ -z "$CROSS_LANGUAGE_CONTROL_DIR" && -n "$CROSS_LANGUAGE_CONTROL_LANGUAGE" 
 fi
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
+    exit 2
+fi
+if ! validate_reference_audit_claim; then
     exit 2
 fi
 if ! command -v afconvert >/dev/null 2>&1; then
@@ -1281,7 +1330,7 @@ fi
 benchmark_input_sha256="$(benchmark_inputs_sha256 \
     "$target_fixture_sha256" "$negative_fixture_sha256" "$cross_language_fixture_sha256" \
     "$VOCABULARY" "$CRITICAL_TERMS" "$LANGUAGE" \
-    "$CROSS_LANGUAGE_CONTROL_LANGUAGE" "$TRIALS")"
+    "$CROSS_LANGUAGE_CONTROL_LANGUAGE" "$TRIALS" "$REFERENCES_HAND_AUDITED")"
 if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     echo "could not fingerprint benchmark inputs" >&2
     exit 1
@@ -1420,6 +1469,11 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
         echo "- Cross-language control language hint: not supplied"
     fi
     echo "- Trials per clip/variant: $TRIALS"
+    if [[ "$REFERENCES_HAND_AUDITED" -eq 1 ]]; then
+        echo "- Reference transcripts: hand-audited against the audio"
+    else
+        echo "- Reference transcripts: not declared hand-audited (exploratory run)"
+    fi
     echo "- Target clips: ${#target_clips[@]}"
     echo "- Same-language negative-control clips: ${#negative_clips[@]}"
     echo "- Cross-language control clips: ${#cross_language_clips[@]}"
@@ -1557,7 +1611,7 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with production \`v3\`. A policy passes only with complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with production \`v3\`. A policy passes only with human-audited references, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
     echo "| Candidate | Comparable clips | Target evidence (clips / words / critical occurrences) | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
