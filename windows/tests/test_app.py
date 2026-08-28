@@ -1266,6 +1266,50 @@ class ModelIdleTests(unittest.TestCase):
 
 
 class StartupTests(unittest.TestCase):
+    def test_fresh_non_cuda_install_selects_cpu_model(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "setup_complete": False,
+        }
+        instance.transcriber = mock.Mock()
+        instance.transcriber._device = "cpu"
+        instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        with mock.patch.object(app.engine, "cuda_available", return_value=False), \
+                mock.patch.object(app.cfg, "save") as save, \
+                mock.patch.object(app.PresspeechApp, "_log"):
+            instance._preload_model_worker()
+
+        self.assertEqual(instance.settings["model"], "base.en")
+        save.assert_called_once_with(instance.settings)
+        instance.transcriber.load.assert_called_once_with(
+            "base.en", notify=instance.notify)
+        self.assertIn("Whisper base.en on CPU", instance.model_status_detail)
+        instance.notify.assert_any_call(
+            "CPU speech model selected",
+            "NVIDIA CUDA is unavailable; using Whisper base.en on CPU. "
+            "You can choose another model in Settings.")
+
+    def test_fresh_cuda_install_keeps_parakeet_default(self):
+        settings = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "setup_complete": False,
+        }
+        self.assertEqual(
+            app._startup_model(settings, cuda_available=True),
+            "parakeet-tdt-0.6b-v3")
+
+    def test_explicit_first_run_choice_preserves_parakeet_without_cuda(self):
+        settings = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "model_explicit": True,
+            "setup_complete": False,
+        }
+        self.assertEqual(
+            app._startup_model(settings, cuda_available=False),
+            "parakeet-tdt-0.6b-v3")
+
     def test_startup_worker_preloads_configured_model(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}

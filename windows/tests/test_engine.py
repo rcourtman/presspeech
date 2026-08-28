@@ -7,6 +7,17 @@ import engine
 
 
 class ParakeetConfigurationTests(unittest.TestCase):
+    def test_cuda_probe_fails_closed_when_torch_is_unavailable(self):
+        with mock.patch.dict(sys.modules, {"torch": None}):
+            self.assertFalse(engine.cuda_available())
+
+    def test_cuda_probe_uses_packaged_torch_capability(self):
+        torch = types.ModuleType("torch")
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = True
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            self.assertTrue(engine.cuda_available())
+
     def test_candidate_model_names_use_their_transformers_backends(self):
         self.assertTrue(engine.is_nemotron("nemotron-speech-streaming-en-0.6b"))
         self.assertTrue(engine.is_moonshine("moonshine-streaming-medium"))

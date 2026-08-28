@@ -14,10 +14,10 @@
     },
     {
       "name": "windows_first_launch_model_download",
-      "when": "First Windows launch until the NVIDIA Parakeet TDT v3 model weights are cached locally",
+      "when": "First Windows launch until the automatically selected local model is cached; again after the user selects an uncached model in Settings",
       "destination": "huggingface.co",
-      "purpose": "Transformers downloads the Parakeet TDT v3 model weights for local CUDA inference",
-      "approximate_size": "2.5 GB",
+      "purpose": "Download local speech-model weights: Parakeet TDT v3 when NVIDIA CUDA is usable, or Whisper base.en for the automatic CPU first-run path; other models are user-selectable",
+      "approximate_size": "About 2.5 GB for Parakeet TDT v3 or 141 MiB for Whisper base.en",
       "user_triggered": false,
       "can_disable": false,
       "data_sent": "Standard HTTPS request metadata; no dictation audio, transcript, settings, or usage data"

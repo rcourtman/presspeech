@@ -512,10 +512,10 @@ class SettingsWindow:
 
         ttk.Label(f, text="Speech model").grid(row=row, column=0, sticky="w", pady=2)
         self.var_model = ttk.Combobox(f, values=[cfg.MODEL_LABELS[m] for m in cfg.MODELS],
-                                      state="readonly", width=26)
+                                      state="readonly", width=42)
         self.var_model.set(cfg.MODEL_LABELS.get(s["model"], cfg.MODEL_LABELS[cfg.MODELS[0]]))
         self.var_model.grid(row=row, column=1, sticky="w", padx=10, pady=2)
-        ttk.Label(f, text="GPU models need the NVIDIA runtime").grid(
+        ttk.Label(f, text="No CUDA? First setup uses base.en on CPU").grid(
             row=row, column=2, sticky="w", foreground="#666")
         row += 1
 
@@ -650,6 +650,7 @@ class SettingsWindow:
         if s["input_device"] != old_input_device:
             self.app.input_device = None
         s["model"] = label_to_value.get(self.var_model.get(), cfg.DEFAULTS["model"])
+        s["model_explicit"] = True
         s["suffix"] = self.var_suffix.get() or cfg.DEFAULTS["suffix"]
         s["remove_fillers"] = bool(self.var_fillers.get())
         s["british"] = bool(self.var_british.get())

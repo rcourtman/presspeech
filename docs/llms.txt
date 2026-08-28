@@ -6,7 +6,8 @@ Core facts:
 - Category: local dictation, speech-to-text, push-to-talk transcription.
 - Platforms: Apple Silicon Macs on macOS 14 Sonoma or later; Windows 10 or 11 x64.
 - macOS engine: FluidAudio, CoreML, and the Apple Neural Engine with multilingual Parakeet TDT v3.
-- Windows engine: local Parakeet TDT v3 on CUDA, with optional faster-whisper models.
+- Windows engine: local Parakeet TDT v3 on CUDA; fresh non-CUDA systems use
+  Whisper base.en with int8 CPU inference, with additional local models selectable.
 - macOS direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.
 - Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.
 - Setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
@@ -18,7 +19,8 @@ Core facts:
 - Clipboard: macOS leaves the transcript on the pasteboard by default and offers an opt-in guarded restore of the previous contents; Windows leaves the transcript on the clipboard until it is overwritten.
 - Network surface: platform model downloads from huggingface.co, optional GitHub update checks with fixed platform User-Agents and no version/device/user identifiers, and user-approved install/update downloads. See the machine-readable list below.
 - macOS footprint: about 8.3 MB signed zip; model cache is about 500-600 MB.
-- Windows footprint: about 4.4 GB installed; the default model cache is about 2.5 GB.
+- Windows footprint: about 4.4 GB installed; first-run model cache is about
+  141 MiB on CPU-only systems or about 2.5 GB with CUDA Parakeet.
 - Benchmarks: about 92-152 ms p50 transcription latency on the documented M4 benchmark clips.
 - Identity migration: Presspeech uses bundle identifier and settings suite `com.local.presspeech`. Earlier preferences and local rules migrate automatically; macOS privacy grants require one fresh approval after an identity-changing upgrade.
 

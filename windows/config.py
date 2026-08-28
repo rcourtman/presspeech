@@ -20,6 +20,7 @@ DEFAULTS = {
     "trigger": "hold",
     "input_device": "auto",
     "model": "parakeet-tdt-0.6b-v3",
+    "model_explicit": False,
     "precision": "fp16",
     "suffix": "space",
     "remove_fillers": True,
@@ -57,9 +58,9 @@ MODELS = [
 ]
 
 MODEL_LABELS = {
-    "nemotron-speech-streaming-en-0.6b": "Nemotron English 0.6B (GPU \u00b7 accurate + fast)",
-    "parakeet-tdt-0.6b-v3": "Parakeet TDT v3 (GPU \u00b7 best)",
-    "turbo": "Whisper turbo (GPU \u00b7 fast)",
+    "nemotron-speech-streaming-en-0.6b": "Nemotron English 0.6B (NVIDIA GPU recommended)",
+    "parakeet-tdt-0.6b-v3": "Parakeet TDT v3 (NVIDIA GPU recommended)",
+    "turbo": "Whisper turbo (NVIDIA GPU recommended)",
     "small.en": "Whisper small.en",
     "medium.en": "Whisper medium.en",
     "base.en": "Whisper base.en (CPU \u00b7 fastest)",

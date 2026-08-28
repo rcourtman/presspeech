@@ -5,13 +5,14 @@ Fast, private, local push-to-talk dictation for Windows — a Windows port of
 speak, release, and the transcript is typed at the cursor. No cloud, no
 accounts, no telemetry — speech recognition runs entirely on your machine.
 
-Default engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family
+Preferred engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family
 Presspeech uses on macOS. On an NVIDIA GPU (CUDA) it transcribes with
 punctuation and capitalization in a fraction of real time (~50× realtime on an
 RTX 3070). Parakeet loads in FP16 on CUDA to halve resident model tensors, with
-an automatic FP32 retry if the half-precision load fails. Whisper
-(`faster-whisper`) models are available as faster/lighter alternatives and as
-automatic fallback.
+an automatic FP32 retry if the half-precision load fails. On a fresh PC where
+the packaged runtime cannot use CUDA, Presspeech instead selects Whisper
+base.en with int8 CPU inference. The other Parakeet, Nemotron, and Whisper
+models remain available in Settings, and explicit choices are not overridden.
 
 ## Install
 
@@ -31,11 +32,15 @@ the release page.
 Requirements:
 
 - Windows 10 or 11, x64
-- About 4.4 GB for the app and 2.5 GB for the first-run model cache
-- A current NVIDIA driver is strongly recommended for fast Parakeet inference
+- About 4.4 GB for the app, plus about 141 MiB for the CPU default or 2.5 GB
+  for the CUDA Parakeet model cache
+- A current NVIDIA driver is recommended for the fastest and most accurate
+  default; Windows PCs without usable CUDA automatically start with the smaller
+  Whisper base.en CPU model
 
-First launch downloads the Parakeet model once (~2.5 GB) into
-`%USERPROFILE%\.cache\huggingface`, then loads and warms it in the background.
+First launch detects whether the packaged Torch runtime can use NVIDIA CUDA,
+then downloads either Parakeet (~2.5 GB) or Whisper base.en (~141 MiB) into
+`%USERPROFILE%\.cache\huggingface`, and loads and warms it in the background.
 Each Presspeech release pins its Transformers-backed Hugging Face models to
 the immutable snapshots exercised by native QA, so a fresh install cannot
 silently receive different model files from the same app version.
@@ -97,7 +102,8 @@ while recording.
 - Hotkey: right/left Alt, Ctrl, Shift, Win, or F8–F12
 - Trigger: hold-to-talk or press-to-toggle
 - Microphone: automatic selection or a specific safe Windows input device
-- Engine/model: Parakeet TDT v3 (GPU, best), Whisper turbo/small/medium/base
+- Engine/model: Parakeet TDT v3 and Nemotron (NVIDIA GPU recommended), or
+  Whisper turbo/small/medium/base (base.en is the CPU first-run default)
 - After pasting: space / newline / nothing
 - Remove filler words (um, uh, er, …)
 - British English spelling (color → colour, realize → realise)

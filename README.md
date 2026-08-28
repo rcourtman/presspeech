@@ -52,8 +52,9 @@ Download the self-contained installer—Python is not required:
 
 The installer is currently unsigned, so SmartScreen may show **Unknown
 publisher**. Choose **More info → Run anyway** after checking the release
-checksum. The installed app is about 4.4 GB and the first-run Parakeet model
-download is about 2.5 GB. A current NVIDIA GPU driver is strongly recommended.
+checksum. The installed app is about 4.4 GB. On a fresh PC with NVIDIA CUDA,
+the default Parakeet model download is about 2.5 GB; without usable CUDA,
+Presspeech selects the smaller Whisper base.en CPU model (about 141 MiB).
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.

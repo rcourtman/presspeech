@@ -73,6 +73,7 @@ POST_ROLL_SEC = POST_ROLL_MAX_SEC
 MAX_RECORDING_SEC = 120.0
 MODEL_WARMUP_SEC = 8.0
 MODEL_IDLE_WAKE_SEC = 60.0
+CPU_FIRST_RUN_MODEL = "base.en"
 PASTE_DELAY_SEC = 0.01
 RDP_PASTE_DELAY_SEC = 0.08
 
@@ -408,6 +409,17 @@ def _autostart_command(executable, source_path, frozen=False):
         if os.path.exists(candidate):
             executable = candidate
     return '"%s" "%s"' % (executable, os.path.abspath(source_path))
+
+
+def _startup_model(settings, cuda_available):
+    """Choose a usable first-run default without overriding later choices."""
+    configured = settings["model"]
+    if (not settings.get("setup_complete", True)
+            and not settings.get("model_explicit", False)
+            and configured == cfg.DEFAULTS["model"]
+            and not cuda_available):
+        return CPU_FIRST_RUN_MODEL
+    return configured
 
 
 def _make_icon(color):
@@ -1410,7 +1422,20 @@ class PresspeechApp:
 
     def _preload_model_worker(self):
         """Warm the configured model in the tray process before the first dictation."""
-        model_name = self.settings["model"]
+        configured_model = self.settings["model"]
+        model_name = _startup_model(
+            self.settings, engine.cuda_available())
+        cpu_first_run = model_name != configured_model
+        if cpu_first_run:
+            self.settings["model"] = model_name
+            cfg.save(self.settings)
+            self._log(
+                "NVIDIA CUDA unavailable on first run; selected CPU model: %s"
+                % model_name)
+            self.notify(
+                "CPU speech model selected",
+                "NVIDIA CUDA is unavailable; using Whisper base.en on CPU. "
+                "You can choose another model in Settings.")
         self.model_status = "loading"
         self.model_status_detail = "Loading %s" % model_name
         self._set_indicator("loading")
@@ -1440,8 +1465,13 @@ class PresspeechApp:
             return
         model_dtype = getattr(self.transcriber.model, "dtype", "unknown")
         self.model_status = "ready"
-        self.model_status_detail = "%s on %s (%s)" % (
-            model_name, getattr(self.transcriber, "_device", "unknown"), model_dtype)
+        if cpu_first_run:
+            self.model_status_detail = (
+                "Whisper base.en on CPU (NVIDIA CUDA unavailable)")
+        else:
+            self.model_status_detail = "%s on %s (%s)" % (
+                model_name, getattr(self.transcriber, "_device", "unknown"),
+                model_dtype)
         self._log("model ready: %s (%s)" % (model_name, model_dtype))
         self._schedule_model_idle_unload()
         self._set_indicator(None)

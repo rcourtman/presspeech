@@ -46,6 +46,15 @@ def is_moonshine(model_name):
     return model_name == MOONSHINE_NAME
 
 
+def cuda_available():
+    """Return whether the packaged Torch runtime can use NVIDIA CUDA."""
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
 def _configure_parakeet_processor(processor):
     """Avoid repeatedly inferring the known decoder type from the full vocabulary."""
     processor.decoder_type = "tdt"
@@ -174,7 +183,7 @@ class Transcriber:
 
     def _load_whisper(self, model_name, notify):
         from faster_whisper import WhisperModel
-        device = "cuda" if self._cuda_available() else "cpu"
+        device = "cuda" if cuda_available() else "cpu"
         compute = "float16" if device == "cuda" else "int8"
         if notify is not None:
             notify("Presspeech", "Loading Whisper %s on %s..." % (model_name, device))
@@ -321,11 +330,3 @@ class Transcriber:
             output = model.generate(**inputs, max_length=max_length)
         decoded = processor.decode(output[0], skip_special_tokens=True)
         return decoded.strip()
-
-    @staticmethod
-    def _cuda_available():
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except Exception:
-            return False

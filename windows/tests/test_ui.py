@@ -120,6 +120,7 @@ class DictionarySettingsTests(unittest.TestCase):
             window._save()
 
         self.assertEqual(window.app.settings["dictionary"], rules)
+        self.assertTrue(window.app.settings["model_explicit"])
         self.assertIsNot(window.app.settings["dictionary"], window.dictionary_rules)
         window.listbox.get.assert_not_called()
         save.assert_called_once_with(window.app.settings)

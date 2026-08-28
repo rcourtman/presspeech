@@ -83,7 +83,7 @@
                 <tr>
                   <th scope="row">Model download</th>
                   <td><code>huggingface.co</code></td>
-                  <td>macOS downloads the FluidAudio Parakeet TDT v3 CoreML model (about 500-600 MB) on first launch, after an integrity failure, or after a user-triggered cache reset. Windows downloads its selected local model; the default Parakeet cache is about 2.5 GB. No dictation audio is sent. If <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> is set, FluidAudio may attach it to macOS model requests; most users have none set.</td>
+                  <td>macOS downloads the FluidAudio Parakeet TDT v3 CoreML model (about 500-600 MB) on first launch, after an integrity failure, or after a user-triggered cache reset. Windows downloads its selected local model; fresh systems use Parakeet (about 2.5 GB) when CUDA is usable or Whisper base.en (about 141 MiB) on CPU. No dictation audio is sent. If <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> is set, FluidAudio may attach it to macOS model requests; most users have none set.</td>
                   <td>Required for each platform's local transcription.</td>
                 </tr>
                 <tr>
