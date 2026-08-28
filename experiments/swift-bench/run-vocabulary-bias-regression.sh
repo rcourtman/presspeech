@@ -45,10 +45,11 @@ isolated:
                   the same rescorer with FluidAudio's recommended short-term
                   taper (pivot 5) and spotter similarity floors (0.30/0.50)
 
-Critical-term recall and unexpected insertions are exact after case/punctuation
-normalization. List every canonical vocabulary form, including forms absent from
-some clips, and list inflections separately; FluidAudio aliases are alternate
-matches, not morphological generators.
+Critical-term recall, precision, and unexpected insertions are exact after
+case/punctuation normalization. List every canonical vocabulary form, including
+forms absent from some clips, and list inflections separately; FluidAudio aliases
+are alternate matches, not morphological generators. Duplicate normalized forms
+are rejected rather than double-counted.
 USAGE
 }
 
@@ -140,6 +141,16 @@ extract_critical_metrics() {
                 }
             }
         '
+}
+
+critical_precision_percent() {
+    local matched="$1"
+    local unexpected="$2"
+    awk -v matched="$matched" -v unexpected="$unexpected" 'BEGIN {
+        predicted = matched + unexpected
+        if (predicted == 0) print "100.0"
+        else printf "%.1f\n", matched / predicted * 100
+    }'
 }
 
 extract_p50_ms() {
@@ -271,11 +282,13 @@ summary_row() {
             corpus_wer = reference_words ? sprintf("%.2f", wer_errors / reference_words * 100) : "unknown"
             worst = wer_seen ? sprintf("%.1f", worst_wer) : "unknown"
             critical = critical_total ? sprintf("%.1f", critical_matched / critical_total * 100) : "unknown"
+            critical_predictions = critical_matched + critical_unexpected
+            precision = critical_predictions ? sprintf("%.1f", critical_matched / critical_predictions * 100) : "100.0"
             avg_p50 = p50_seen ? sprintf("%.1f", p50_sum / p50_seen) : "unknown"
             peak = peak_seen ? sprintf("%.1f", max_peak) : "unknown"
             cache = cache_seen ? sprintf("%.1f", max_cache) : "unknown"
             prep = prep_seen ? sprintf("%.1f", prep_sum / prep_seen) : "unknown"
-            printf("| `%s` | %d | %s | %s | %d/%d | %s | %d | %s | %s | %s | %s |\n", variant, count, corpus_wer, worst, critical_matched, critical_total, critical, critical_unexpected, avg_p50, peak, cache, prep)
+            printf("| `%s` | %d | %s | %s | %d/%d | %s | %s | %d | %s | %s | %s | %s |\n", variant, count, corpus_wer, worst, critical_matched, critical_total, critical, precision, critical_unexpected, avg_p50, peak, cache, prep)
         }
     ' "$tsv"
 }
@@ -376,6 +389,8 @@ run_self_test() {
     } >"$log"
     assert_eq "$(extract_worst_wer_metrics "$log")" $'12.5\t1\t8' "WER parser"
     assert_eq "$(extract_critical_metrics "$log")" $'7\t8\t87.5\t2' "critical-term parser"
+    assert_eq "$(critical_precision_percent 7 2)" "77.8" "critical-term precision"
+    assert_eq "$(critical_precision_percent 0 0)" "100.0" "empty critical-term precision"
     assert_eq "$(extract_p50_ms "$log")" "140.2" "latency parser"
     assert_eq "$(extract_peak_mb "$log")" "88.4" "memory parser"
     assert_eq "$(extract_cache_mb "$log")" "812.3" "cache parser"
@@ -466,23 +481,23 @@ run_self_test() {
 
     local tsv="$tmpdir/results.tsv"
     {
-        printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\n'
-        printf '001\tv3\t10.0\t1\t2\t50.0\t2\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
-        printf '002\tv3\t20.0\t2\t2\t100.0\t1\t120.0\t42.0\t600.0\t1100.0\t1\t5\n'
-        printf '001\tsliding-v3\t10.0\t1\t2\t50.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
-        printf '002\tsliding-v3\t20.0\t1\t2\t50.0\t1\t100.0\t40.0\t600.0\t1000.0\t1\t5\n'
-        printf '003\tsliding-v3\t5.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t20\n'
-        printf '004\tsliding-v3\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t2000\n'
-        printf '001\tsliding-vocab\t10.0\t2\t2\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\n'
-        printf '002\tsliding-vocab\t40.0\t2\t2\t100.0\t2\t100.0\t40.0\t600.0\t1000.0\t2\t5\n'
-        printf '003\tsliding-vocab\t10.0\t1\t1\t100.0\t1\t100.0\t40.0\t600.0\t1000.0\t2\t20\n'
+        printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\tcritical_precision_percent\n'
+        printf '001\tv3\t10.0\t1\t2\t50.0\t2\t100.0\t40.0\t600.0\t1000.0\t1\t10\t33.3\n'
+        printf '002\tv3\t20.0\t2\t2\t100.0\t1\t120.0\t42.0\t600.0\t1100.0\t1\t5\t66.7\n'
+        printf '001\tsliding-v3\t10.0\t1\t2\t50.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\t100.0\n'
+        printf '002\tsliding-v3\t20.0\t1\t2\t50.0\t1\t100.0\t40.0\t600.0\t1000.0\t1\t5\t50.0\n'
+        printf '003\tsliding-v3\t5.0\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t20\t100.0\n'
+        printf '004\tsliding-v3\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t2000\t100.0\n'
+        printf '001\tsliding-vocab\t10.0\t2\t2\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t1\t10\t100.0\n'
+        printf '002\tsliding-vocab\t40.0\t2\t2\t100.0\t2\t100.0\t40.0\t600.0\t1000.0\t2\t5\t50.0\n'
+        printf '003\tsliding-vocab\t10.0\t1\t1\t100.0\t1\t100.0\t40.0\t600.0\t1000.0\t2\t20\t50.0\n'
         # The displayed WER ties after rounding, but the exact count exposes
         # one additional error and must classify this clip as a pure loss.
-        printf '004\tsliding-vocab\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t2\t2000\n'
+        printf '004\tsliding-vocab\t0.1\t1\t1\t100.0\t0\t100.0\t40.0\t600.0\t1000.0\t2\t2000\t100.0\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     summary_row "$tsv" v3 >"$summary"
-    assert_contains "$summary" '| `v3` | 2 | 13.33 | 20.0 | 3/4 | 75.0 | 3 | 110.0 | 42.0 | 600.0 | 1050.0 |'
+    assert_contains "$summary" '| `v3` | 2 | 13.33 | 20.0 | 3/4 | 75.0 | 50.0 | 3 | 110.0 | 42.0 | 600.0 | 1050.0 |'
     comparison_row "$tsv" sliding-v3 sliding-vocab >"$summary"
     assert_contains "$summary" '| `sliding-vocab` | 4 | +2 | +2 | +0.15 | 1 | 1 | 2 | 0 |'
 
@@ -645,7 +660,7 @@ tsv="$stage_dir/results.tsv"
 raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
-printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\n' >"$tsv"
+printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\tcritical_precision_percent\n' >"$tsv"
 
 {
     echo "# Presspeech Vocabulary-Bias Comparison"
@@ -665,12 +680,13 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "> An unexpected insertion is an occurrence beyond the reference count. Model cache is"
     echo "> logical on-disk size after preparation, not measured network traffic."
     echo "> Variable trial output is summarized conservatively per clip: worst WER, lowest"
-    echo "> critical-term recall, and highest unexpected-insertion count observed."
+    echo "> critical-term recall, highest unexpected-insertion count, and the resulting"
+    echo "> lower-bound critical-term precision."
     echo
     echo "## Per-Clip Results"
     echo
-    echo "| Clip | Variant | WER % | Critical hits | Critical recall % | Unexpected critical insertions | p50 ms | Peak MB | Cache MB | Prepare ms |"
-    echo "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+    echo "| Clip | Variant | WER % | Critical hits | Critical recall % | Critical precision % | Unexpected critical insertions | p50 ms | Peak MB | Cache MB | Prepare ms |"
+    echo "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
 } >"$report"
 
 clip_index=0
@@ -738,14 +754,15 @@ for clip in "${clips[@]}"; do
             echo "invalid benchmark output for clip $clip_id variant=$variant; see $(path_label "$log_file")" >&2
             exit 1
         fi
+        critical_precision="$(critical_precision_percent "$critical_matched" "$critical_unexpected")"
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
             "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" \
-            "$word_errors" "$reference_words" >>"$tsv"
-        printf '| `%s` | `%s` | %s | %s/%s | %s | %s | %s | %s | %s | %s |\n' \
+            "$word_errors" "$reference_words" "$critical_precision" >>"$tsv"
+        printf '| `%s` | `%s` | %s | %s/%s | %s | %s | %s | %s | %s | %s | %s |\n' \
             "$clip_id" "$variant" "$wer" "$critical_matched" "$critical_total" \
-            "$critical_recall" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" >>"$report"
+            "$critical_recall" "$critical_precision" "$critical_unexpected" "$p50" "$peak" "$cache" "$prepare" >>"$report"
     done
 done
 
@@ -753,8 +770,8 @@ done
     echo
     echo "## Summary"
     echo
-    echo "| Variant | Clips | Corpus WER % | Worst WER % | Critical hits | Critical recall % | Unexpected critical insertions | Avg p50 ms | Max peak MB | Cache MB | Avg prepare ms |"
-    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+    echo "| Variant | Clips | Corpus WER % | Worst WER % | Critical hits | Critical recall % | Critical precision % | Unexpected critical insertions | Avg p50 ms | Max peak MB | Cache MB | Avg prepare ms |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     summary_row "$tsv" v3
     summary_row "$tsv" sliding-v3
     summary_row "$tsv" sliding-vocab

@@ -163,10 +163,11 @@ Then run:
 
 Reports are ignored and privacy-redacted by default. They include corpus and
 worst WER, weighted exact critical-term recall, unexpected critical-term
-insertions, p50 inference latency, peak process memory, model-cache footprint,
-and preparation time. A pairwise policy table compares each vocabulary lane
-with unbiased `sliding-v3`, reporting net critical hits, unexpected insertions,
-corpus WER change, and counts of clean wins, costly wins, and pure losses.
+insertions, critical-term precision, p50 inference latency, peak process
+memory, model-cache footprint, and preparation time. A pairwise policy table
+compares each vocabulary lane with unbiased `sliding-v3`, reporting net critical
+hits, unexpected insertions, corpus WER change, and counts of clean wins, costly
+wins, and pure losses.
 When repeated trials yield different transcripts, each per-clip row is a
 conservative envelope: worst WER, lowest critical-term recall, and highest
 unexpected-insertion count observed. Pass
@@ -185,7 +186,8 @@ the reference count is reported as an unexpected insertion even when that term
 is absent from the clip. FluidAudio aliases are alternate acoustic/string
 matches, but an accepted candidate is replaced with its canonical term; aliases
 do not generate grammatical inflections. List every inflected form that the
-benchmark expects to preserve.
+benchmark expects to preserve. Entries that are empty or duplicate after this
+normalization are rejected instead of being silently double-counted.
 
 ## Public speech regression
 

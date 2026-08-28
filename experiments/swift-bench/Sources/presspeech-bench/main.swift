@@ -827,12 +827,51 @@ func criticalTermScore(reference: String,
     )
 }
 
-func loadCriticalTerms(from url: URL) throws -> [String] {
-    let contents = try String(contentsOf: url, encoding: .utf8)
-    return contents.split(whereSeparator: \.isNewline).compactMap { line in
+enum CriticalTermsFileError: LocalizedError {
+    case emptyNormalizedTerm(entry: Int)
+    case duplicateNormalizedTerm(entry: Int, firstEntry: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyNormalizedTerm(let entry):
+            return "critical-terms entry \(entry) is empty after normalization"
+        case .duplicateNormalizedTerm(let entry, let firstEntry):
+            return "critical-terms entry \(entry) duplicates normalized entry \(firstEntry)"
+        }
+    }
+}
+
+func parseCriticalTerms(_ contents: String) throws -> [String] {
+    let terms = contents.split(whereSeparator: \.isNewline).compactMap { line in
         let value = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty || value.hasPrefix("#") ? nil : value
     }
+    var normalizedEntries: [String: Int] = [:]
+    for (offset, term) in terms.enumerated() {
+        let entry = offset + 1
+        let tokens = werTokens(term)
+        guard !tokens.isEmpty else {
+            throw CriticalTermsFileError.emptyNormalizedTerm(entry: entry)
+        }
+        // Scoring is performed on normalized token phrases. Reject entries
+        // that become identical under that same normalization; otherwise a
+        // single occurrence is silently counted more than once in recall and
+        // unexpected-insertion totals.
+        let key = tokens.joined(separator: "\u{0}")
+        if let firstEntry = normalizedEntries[key] {
+            throw CriticalTermsFileError.duplicateNormalizedTerm(
+                entry: entry,
+                firstEntry: firstEntry
+            )
+        }
+        normalizedEntries[key] = entry
+    }
+    return terms
+}
+
+func loadCriticalTerms(from url: URL) throws -> [String] {
+    let contents = try String(contentsOf: url, encoding: .utf8)
+    return try parseCriticalTerms(contents)
 }
 
 enum BenchSelfTestError: Error {
@@ -867,6 +906,25 @@ func runBenchSelfTests() throws {
         canonicalScore.matched == 1 && canonicalScore.total == 1,
         "critical-term scoring should match decomposed model output"
     )
+    let uniqueTerms = try parseCriticalTerms("# private terms\nSzypański\nNowy Sącz\n")
+    try expect(uniqueTerms.count == 2, "critical-term parser should ignore comments")
+    var rejectedDuplicate = false
+    do {
+        _ = try parseCriticalTerms("Szypański\nszypan\u{301}ski!\n")
+    } catch CriticalTermsFileError.duplicateNormalizedTerm(let entry, let firstEntry) {
+        rejectedDuplicate = entry == 2 && firstEntry == 1
+    }
+    try expect(
+        rejectedDuplicate,
+        "critical-term parser should reject canonically equivalent duplicates"
+    )
+    var rejectedEmpty = false
+    do {
+        _ = try parseCriticalTerms("---\n")
+    } catch CriticalTermsFileError.emptyNormalizedTerm(let entry) {
+        rejectedEmpty = entry == 1
+    }
+    try expect(rejectedEmpty, "critical-term parser should reject punctuation-only entries")
     let score = criticalTermScore(
         reference: "Rozmawiałem z Szypańskim i Szypańskim.",
         hypothesis: "Rozmawiałem z Szypańskim, Szymańskim i Nieobecny.",
