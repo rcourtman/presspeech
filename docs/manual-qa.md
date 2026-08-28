@@ -33,10 +33,17 @@ cd swift
 
 ## Dictation
 
-- Start dictating into a text field, switch to a different window before
-  transcription finishes, and confirm no text is pasted into the new window.
-  Confirm the transcript is available on the clipboard for manual paste and
-  Presspeech plays/shows its failed-paste cue.
+- Start dictating into a text field, switch to another window in the same app
+  before transcription finishes, and confirm no text is pasted into the new
+  window. Repeat with a window in another app. Confirm in both cases that the
+  transcript is available on the clipboard for manual paste and Presspeech
+  plays/shows its failed-paste cue.
+- Repeat the focus-change check immediately after pressing the hotkey, before
+  the waveform appears, so a cold or rebuilding audio engine cannot retarget
+  the transcript during startup.
+- Enable **Restore clipboard after paste**, trigger the focus-change path, and
+  confirm the transcript remains available for manual paste rather than being
+  replaced by the old clipboard contents.
 - Test hold mode: hold the hotkey, speak, release, and confirm text pastes
   at the cursor.
 - Test toggle mode: press once to start, press again to stop.

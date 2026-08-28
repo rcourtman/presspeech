@@ -234,6 +234,28 @@ increment_build_number() {
     printf '%s\n' "$((current_build + 1))"
 }
 
+validate_release_notes_file() {
+    local notes_file="$1"
+    local version="$2"
+    local first_line=""
+
+    [[ -f "$notes_file" ]] || die "release notes not found: $notes_file"
+    IFS= read -r first_line <"$notes_file" || true
+    [[ "$first_line" == "# Presspeech $version" ]] \
+        || die "release notes must start with '# Presspeech $version': $notes_file"
+    awk 'NR > 1 && /[^[:space:]]/ { found = 1 } END { exit !found }' "$notes_file" \
+        || die "release notes have no content after the heading: $notes_file"
+    check_no_attribution_file "release notes" "$notes_file"
+}
+
+latest_macos_release_tag() {
+    local repository="$1"
+    # Windows prerelease tags share this repository. Restrict generated macOS
+    # notes to the vX.Y.Z line so a recent windows-vX.Y.Z tag cannot truncate
+    # the macOS change list.
+    git -C "$repository" describe --tags --abbrev=0 --match 'v[0-9]*'
+}
+
 rewrite_cask_file() {
     local cask_file="$1"
     local new_version="$2"
@@ -386,8 +408,26 @@ run_release_script_self_test() {
     local tmpdir
     tmpdir="$(mktemp -d)"
     local notes_file="$tmpdir/notes.md"
-    printf '%s\n' "Plain release notes" >"$notes_file"
-    check_no_attribution_file "self-test release notes" "$notes_file"
+    printf '%s\n\n%s\n' "# Presspeech 9.8.7" "Release details." >"$notes_file"
+    validate_release_notes_file "$notes_file" "9.8.7"
+    assert_self_test_fails "accepted a release-note heading for another version" \
+        validate_release_notes_file "$notes_file" "9.8.8"
+    printf '%s\n' "# Presspeech 9.8.7" >"$notes_file"
+    assert_self_test_fails "accepted empty release notes" \
+        validate_release_notes_file "$notes_file" "9.8.7"
+
+    local tag_probe
+    tag_probe="$({
+        git() {
+            [[ "$#" -eq 7 && "$1" == "-C" && "$2" == "/self-test/repository" &&
+               "$3" == "describe" && "$4" == "--tags" && "$5" == "--abbrev=0" &&
+               "$6" == "--match" && "$7" == "v[0-9]*" ]] || return 1
+            printf '%s\n' "v1.2.3"
+        }
+        latest_macos_release_tag "/self-test/repository"
+    })"
+    assert_self_test_equals "$tag_probe" "v1.2.3" \
+        "macOS release notes should ignore newer Windows tags"
 
     check_no_attribution_text "self-test generated notes" "$(printf -- '- Release v9.8.7\n- Improve update checks')"
 
@@ -541,6 +581,13 @@ new_version="$(compute_target_version "$current_version" "$BUMP" "$TARGET")"
 new_build="$(increment_build_number "$current_build")"
 
 say "Version: $current_version (build $current_build) -> $new_version (build $new_build)"
+
+NOTES_FILE="$SWIFT_DIR/release-notes/v$new_version.md"
+if [[ -f "$NOTES_FILE" ]]; then
+    # Validate hand-written notes before QA, signing, and notarisation rather
+    # than discovering a stale heading at the publication boundary.
+    validate_release_notes_file "$NOTES_FILE" "$new_version"
+fi
 
 if git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/v$new_version" >/dev/null; then
     die "tag v$new_version already exists locally -- pick a different version (or delete the stale local tag first)"
@@ -697,7 +744,6 @@ fi
 say "Committing version bump"
 release_commit_message="Release v$new_version"
 release_title="v$new_version"
-NOTES_FILE="$SWIFT_DIR/release-notes/v$new_version.md"
 USE_NOTES_FILE=0
 notes=""
 
@@ -712,9 +758,9 @@ check_no_attribution_text "release title" "$release_title"
 # release-note wording issue does not leave remote state half-published.
 if [[ -f "$NOTES_FILE" ]]; then
     USE_NOTES_FILE=1
-    check_no_attribution_file "release notes" "$NOTES_FILE"
+    validate_release_notes_file "$NOTES_FILE" "$new_version"
 else
-    prev_tag="$(git -C "$PROJECT_DIR" describe --tags --abbrev=0 2>/dev/null || true)"
+    prev_tag="$(latest_macos_release_tag "$PROJECT_DIR" 2>/dev/null || true)"
     if [[ -n "$prev_tag" ]]; then
         prior_notes="$(git -C "$PROJECT_DIR" log --pretty='- %s' "$prev_tag..HEAD")"
         notes="$(printf -- '- %s\n%s' "$release_commit_message" "$prior_notes")"
