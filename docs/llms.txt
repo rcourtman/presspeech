@@ -11,7 +11,7 @@ Core facts:
 - macOS direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.
 - Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.
 - Setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
-- Windows install and requirements: https://github.com/rcourtman/presspeech/blob/main/windows/README.md.
+- Windows install and requirements: https://rcourtman.github.io/presspeech/windows.html.
 - First-use test: both apps provide a focused private scratchpad for verifying the hotkey and paste flow.
 - Deterministic voice tools: both apps map spoken phrases to exact text; macOS also offers optional spoken formatting for new lines, paragraphs, bullets, punctuation, quotes, and parentheses.
 - Privacy: no cloud transcription, no telemetry, no transcript persistence.
@@ -26,7 +26,8 @@ Core facts:
 
 Important pages:
 - Home: https://rcourtman.github.io/presspeech/
-- Install: https://rcourtman.github.io/presspeech/install.html
+- Install on macOS: https://rcourtman.github.io/presspeech/install.html
+- Windows install: https://rcourtman.github.io/presspeech/windows.html
 - Agent install prompt: https://rcourtman.github.io/presspeech/install/agents.md
 - Privacy: https://rcourtman.github.io/presspeech/privacy.html
 - Network calls JSON: https://rcourtman.github.io/presspeech/privacy/network-calls.json

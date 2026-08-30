@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 INFO_PLIST = ROOT / "swift" / "Info.plist"
+WINDOWS_CONFIG = ROOT / "windows" / "config.py"
 DEFAULT_RELEASE_ZIP = ROOT / "swift" / "dist" / "Presspeech.zip"
 METADATA_PATH = DOCS / "site-metadata.json"
 
@@ -32,8 +33,10 @@ DIAGNOSTICS_SUMMARY = "privacy-safe diagnostics report with app state, permissio
 
 SYNCED_PATHS = [
     ROOT / "README.md",
+    ROOT / "windows" / "README.md",
     DOCS / "index.html",
     DOCS / "install.html",
+    DOCS / "windows.html",
     DOCS / "install" / "agents.md",
     DOCS / "faq.html",
     DOCS / "llms.txt",
@@ -180,6 +183,16 @@ def read_app_version() -> str:
     return version
 
 
+def read_windows_version() -> str:
+    text = read_text(WINDOWS_CONFIG)
+    matches = re.findall(r'^VERSION\s*=\s*"(\d+\.\d+\.\d+)"\s*$', text, flags=re.M)
+    if len(matches) != 1:
+        raise SyncError(
+            f"{WINDOWS_CONFIG}: expected one canonical VERSION assignment, found {len(matches)}"
+        )
+    return matches[0]
+
+
 def release_size(bytes_count: int) -> str:
     mib = bytes_count / (1024 * 1024)
     if mib < 10:
@@ -218,6 +231,7 @@ def build_metadata(args: argparse.Namespace) -> dict[str, object]:
     return {
         "schema": 1,
         "version": read_app_version(),
+        "windows_version": read_windows_version(),
         "release_zip_bytes": release_zip_bytes,
         "release_zip_size": release_size(release_zip_bytes),
         "model_cache_size": MODEL_CACHE_SIZE,
@@ -232,6 +246,7 @@ def metadata_text(metadata: dict[str, object]) -> str:
 def sync_readme(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     size = str(metadata["release_zip_size"])
+    windows_version = str(metadata["windows_version"])
     text = replace_regex(
         text,
         r"\*\*[\d.]+ MB release zip\*\*",
@@ -242,6 +257,47 @@ def sync_readme(path: Path, metadata: dict[str, object]) -> str:
         text,
         r'- \*\*(?:Copy Diagnostics|Copy/Save Diagnostics)\*\* — .*',
         "- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, and bounded recent logs",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"- \[Download Presspeech for Windows \d+\.\d+\.\d+\]"
+        r"\(https://github\.com/rcourtman/presspeech/releases/download/"
+        r"windows-v\d+\.\d+\.\d+/Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe\)",
+        f"- [Download Presspeech for Windows {windows_version}]"
+        f"(https://github.com/rcourtman/presspeech/releases/download/"
+        f"windows-v{windows_version}/Presspeech-Setup-{windows_version}-x64.exe)",
+        path=path,
+    )
+    return text
+
+
+def sync_windows_readme(path: Path, metadata: dict[str, object]) -> str:
+    text = read_text(path)
+    version = str(metadata["windows_version"])
+    text = replace_regex(
+        text,
+        r"- \[Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe\]"
+        r"\(https://github\.com/rcourtman/presspeech/releases/download/"
+        r"windows-v\d+\.\d+\.\d+/Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe\)",
+        f"- [Presspeech-Setup-{version}-x64.exe]"
+        f"(https://github.com/rcourtman/presspeech/releases/download/"
+        f"windows-v{version}/Presspeech-Setup-{version}-x64.exe)",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"- \[Release notes and SHA-256 checksum\]"
+        r"\(https://github\.com/rcourtman/presspeech/releases/tag/"
+        r"windows-v\d+\.\d+\.\d+\)",
+        f"- [Release notes and SHA-256 checksum]"
+        f"(https://github.com/rcourtman/presspeech/releases/tag/windows-v{version})",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"  -Version \d+\.\d+\.\d+ -Python ",
+        f"  -Version {version} -Python ",
         path=path,
     )
     return text
@@ -319,8 +375,8 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
 
     text = replace_regex(
         text,
-        r"<title>Install Presspeech - .*?</title>",
-        "<title>Install Presspeech - Direct Download and Homebrew Cask</title>",
+        r"<title>Install Presspeech(?: on macOS)? - .*?</title>",
+        "<title>Install Presspeech on macOS - Direct Download or Homebrew</title>",
         path=path,
     )
     text = replace_regex(
@@ -377,6 +433,27 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     return text
 
 
+def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
+    text = read_text(path)
+    version = str(metadata["windows_version"])
+
+    replacements = [
+        (r'"softwareVersion": "\d+\.\d+\.\d+"', f'"softwareVersion": "{version}"', 1),
+        (r"windows-v\d+\.\d+\.\d+", f"windows-v{version}", 1),
+        (
+            r"Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe",
+            f"Presspeech-Setup-{version}-x64.exe",
+            1,
+        ),
+        (r"Download Windows \d+\.\d+\.\d+", f"Download Windows {version}", 1),
+    ]
+    for pattern, replacement, minimum in replacements:
+        text, count = re.subn(pattern, replacement, text)
+        if count < minimum:
+            raise SyncError(f"{path}: expected at least {minimum} matches for {pattern!r}")
+    return text
+
+
 def sync_agents_md(path: Path, metadata: dict[str, object]) -> str:
     del path, metadata
     return AGENTS_MD
@@ -427,6 +504,22 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             "- Privacy: no cloud transcription, no telemetry, no transcript persistence.\n" + diagnostics_line,
             path=path,
         )
+    text = text.replace(
+        "- Windows install and requirements: "
+        "https://github.com/rcourtman/presspeech/blob/main/windows/README.md.",
+        "- Windows install and requirements: "
+        "https://rcourtman.github.io/presspeech/windows.html.",
+        1,
+    )
+    windows_page = "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
+    if windows_page not in text:
+        text = replace_literal(
+            text,
+            "- Install: https://rcourtman.github.io/presspeech/install.html\n",
+            "- Install on macOS: https://rcourtman.github.io/presspeech/install.html\n"
+            + windows_page,
+            path=path,
+        )
     return text
 
 
@@ -468,6 +561,24 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             diagnostics_sentence + "\nMachine-readable network surface:\n",
             path=path,
         )
+    text = text.replace(
+        "The current Windows installer, requirements, checksum link, and source-development steps are maintained in:\n"
+        "https://github.com/rcourtman/presspeech/blob/main/windows/README.md",
+        "The current Windows installer, requirements, checksum verification, and first-run steps are maintained at:\n"
+        "https://rcourtman.github.io/presspeech/windows.html",
+        1,
+    )
+    text = text.replace(
+        "- Windows guide: https://github.com/rcourtman/presspeech/blob/main/windows/README.md",
+        "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
+        "- Windows technical guide: https://github.com/rcourtman/presspeech/blob/main/windows/README.md",
+        1,
+    )
+    text = text.replace(
+        "- Install: https://rcourtman.github.io/presspeech/install.html",
+        "- Install on macOS: https://rcourtman.github.io/presspeech/install.html",
+        1,
+    )
     return text
 
 
@@ -490,8 +601,10 @@ def sync_sitemap(path: Path, metadata: dict[str, object]) -> str:
 
 SYNCERS = {
     ROOT / "README.md": sync_readme,
+    ROOT / "windows" / "README.md": sync_windows_readme,
     DOCS / "index.html": sync_index,
     DOCS / "install.html": sync_install_html,
+    DOCS / "windows.html": sync_windows_html,
     DOCS / "install" / "agents.md": sync_agents_md,
     DOCS / "faq.html": sync_faq,
     DOCS / "llms.txt": sync_llms,
@@ -587,7 +700,10 @@ def diff_text(path: Path, current: str, expected: str) -> str:
 
 
 def run_self_test() -> None:
-    metadata: dict[str, object] = {"last_updated": "2026-01-02"}
+    metadata: dict[str, object] = {
+        "last_updated": "2026-01-02",
+        "windows_version": "9.8.7",
+    }
     with tempfile.TemporaryDirectory() as tmp:
         sitemap = Path(tmp) / "sitemap.xml"
         sitemap.write_text(
@@ -605,6 +721,32 @@ def run_self_test() -> None:
             pass
         else:
             raise SyncError("self-test: sitemap without <lastmod> entries did not fail loudly")
+
+        windows_page = Path(tmp) / "windows.html"
+        windows_page.write_text(
+            '"softwareVersion": "1.2.3"\n'
+            'windows-v1.2.3\n'
+            'Presspeech-Setup-1.2.3-x64.exe\n'
+            'Download Windows 1.2.3\n',
+            encoding="utf-8",
+        )
+        synced_windows_page = sync_windows_html(windows_page, metadata)
+        if "1.2.3" in synced_windows_page or synced_windows_page.count("9.8.7") != 4:
+            raise SyncError("self-test: Windows page release references were not all synced")
+
+        windows_readme = Path(tmp) / "windows-readme.md"
+        windows_readme.write_text(
+            "- [Presspeech-Setup-1.2.3-x64.exe]"
+            "(https://github.com/rcourtman/presspeech/releases/download/"
+            "windows-v1.2.3/Presspeech-Setup-1.2.3-x64.exe)\n"
+            "- [Release notes and SHA-256 checksum]"
+            "(https://github.com/rcourtman/presspeech/releases/tag/windows-v1.2.3)\n"
+            "  -Version 1.2.3 -Python .\\python.exe\n",
+            encoding="utf-8",
+        )
+        synced_windows_readme = sync_windows_readme(windows_readme, metadata)
+        if "1.2.3" in synced_windows_readme or synced_windows_readme.count("9.8.7") != 5:
+            raise SyncError("self-test: Windows README release references were not all synced")
 
         compare_dir = Path(tmp) / "compare"
         compare_dir.mkdir()

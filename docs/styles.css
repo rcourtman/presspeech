@@ -192,6 +192,15 @@ section,
   max-width: 22ch;
 }
 
+.page-title .note {
+  max-width: 72ch;
+  margin-top: 22px;
+}
+
+.page-title .note p {
+  font-size: 1rem;
+}
+
 .hero p,
 .page-title p {
   max-width: 56ch;

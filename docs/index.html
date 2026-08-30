@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Presspeech - Local Push-to-Talk Dictation for Apple Silicon Macs</title>
-    <meta name="description" content="Presspeech is a free, local, push-to-talk dictation app for Apple Silicon Macs. It runs the local Parakeet TDT v3 CoreML model on the Apple Neural Engine with no cloud transcription or telemetry.">
+    <title>Presspeech - Local Push-to-Talk Dictation for Mac and Windows</title>
+    <meta name="description" content="Presspeech is free, private push-to-talk dictation for Apple Silicon Macs and Windows PCs. Speech recognition runs locally with no cloud transcription, account, subscription, or telemetry.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
     <meta property="og:title" content="Presspeech - Local Push-to-Talk Dictation">
-    <meta property="og:description" content="Hold a key, speak, release. Text appears at the cursor in about 100 ms. Local speech recognition on Apple Silicon.">
+    <meta property="og:description" content="Hold a key, speak, release. Free local push-to-talk dictation for Apple Silicon Macs and Windows PCs.">
     <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:url" content="https://rcourtman.github.io/presspeech/">
     <meta property="og:type" content="website">
@@ -61,7 +61,8 @@
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
-          <a href="install.html">Install</a>
+          <a href="install.html">macOS</a>
+          <a href="windows.html">Windows</a>
           <a href="privacy.html">Privacy</a>
           <a href="benchmarks.html">Benchmarks</a>
           <a href="faq.html">FAQ</a>
@@ -77,10 +78,10 @@
           <h1>Private dictation into any Mac app.</h1>
           <p>Hold a key, speak, release. Presspeech pastes text at the cursor in about 100 ms with no account, no subscription, and no cloud transcription. Apple Silicon, macOS 14+.</p>
           <p class="quiet">The current Presspeech identity migrates saved preferences and local dictionary rules from earlier builds. macOS privacy permissions require one fresh grant.</p>
-          <p class="quiet">Looking for Windows? The separate local CUDA tray app and current installer are documented in the <a href="https://github.com/rcourtman/presspeech/blob/main/windows/README.md">Windows guide</a>.</p>
           <div class="actions">
             <a class="button" href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Download Presspeech.zip</a>
-            <a class="button secondary" href="install.html">Install options</a>
+            <a class="button secondary" href="install.html">macOS install options</a>
+            <a class="button secondary" href="windows.html">Windows installer</a>
             <a class="button secondary" href="compare/">Compare tools</a>
           </div>
           <div class="install-line" aria-label="Homebrew install command">
@@ -150,6 +151,25 @@
           </figure>
         </div>
       </div>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Choose your platform</span>
+          <h2>One private workflow, two native integrations</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>macOS</h3>
+              <p>The released Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The notarised zip is small; the local model downloads on first launch.</p>
+              <p><a href="install.html">Install on Apple Silicon and macOS 14+</a></p>
+            </article>
+            <article class="card">
+              <h3>Windows prerelease</h3>
+              <p>The Windows tray app uses CUDA Parakeet when available and automatically selects a smaller Whisper CPU model on fresh PCs without usable CUDA.</p>
+              <p><a href="windows.html">Check requirements, verify the installer, and set up Windows</a></p>
+            </article>
+          </div>
+        </div>
+      </section>
 
       <section>
         <div class="wrap">

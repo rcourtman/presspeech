@@ -15,8 +15,8 @@ Presspeech is free MIT-licensed local push-to-talk dictation with separate macOS
 brew install --cask rcourtman/presspeech/presspeech
 ```
 
-The Windows tray app runs local Parakeet TDT v3 on CUDA and is distributed as a prerelease installer. Current Windows requirements and download links are in:
-https://github.com/rcourtman/presspeech/blob/main/windows/README.md
+The Windows tray app runs local Parakeet TDT v3 on CUDA and is distributed as a prerelease installer. Current Windows requirements, checksum verification, and download links are at:
+https://rcourtman.github.io/presspeech/windows.html
 
 Both apps include a first-use Try Dictation scratchpad and deterministic local phrase replacements; macOS additionally supports spoken formatting commands. The macOS app uses the `com.local.presspeech` identity; earlier preferences and local rules migrate automatically, while macOS privacy grants require one fresh approval after an identity-changing upgrade.
 

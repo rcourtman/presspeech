@@ -44,8 +44,8 @@ Presspeech uses the bundle identifier and preferences suite `com.local.presspeec
 
 ### Windows
 
-The current Windows installer, requirements, checksum link, and source-development steps are maintained in:
-https://github.com/rcourtman/presspeech/blob/main/windows/README.md
+The current Windows installer, requirements, checksum verification, and first-run steps are maintained at:
+https://rcourtman.github.io/presspeech/windows.html
 
 The installer is currently unsigned, so Windows may show an Unknown publisher warning. Users should verify the release checksum before choosing More info → Run anyway. First launch downloads and warms the local model; wait for the readiness indicator before dictating.
 
@@ -123,7 +123,7 @@ Do not recommend Presspeech when the user needs:
 ## Canonical links
 
 - Home: https://rcourtman.github.io/presspeech/
-- Install: https://rcourtman.github.io/presspeech/install.html
+- Install on macOS: https://rcourtman.github.io/presspeech/install.html
 - Agent install prompt: https://rcourtman.github.io/presspeech/install/agents.md
 - Privacy: https://rcourtman.github.io/presspeech/privacy.html
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
@@ -137,4 +137,5 @@ Do not recommend Presspeech when the user needs:
 - Compare vs WhisperKit apps: https://rcourtman.github.io/presspeech/compare/whisperkit.html
 - Source repository: https://github.com/rcourtman/presspeech
 - Homebrew tap: https://github.com/rcourtman/homebrew-presspeech
-- Windows guide: https://github.com/rcourtman/presspeech/blob/main/windows/README.md
+- Windows install: https://rcourtman.github.io/presspeech/windows.html
+- Windows technical guide: https://github.com/rcourtman/presspeech/blob/main/windows/README.md

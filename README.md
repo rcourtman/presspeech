@@ -239,6 +239,7 @@ See [`windows/README.md`](windows/README.md) for hardware, setup, and usage deta
 
 - [Latest release](https://github.com/rcourtman/presspeech/releases/latest)
 - [Direct download](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip)
+- [Windows install guide](https://rcourtman.github.io/presspeech/windows.html)
 - [Documentation site](https://rcourtman.github.io/presspeech/)
 - [Benchmarks and methodology](https://rcourtman.github.io/presspeech/benchmarks.html)
 - [Compare with other Mac dictation tools](https://rcourtman.github.io/presspeech/compare/)

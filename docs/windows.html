@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presspeech for Windows - Local Push-to-Talk Dictation</title>
+    <meta name="description" content="Install the Presspeech Windows prerelease for private, local push-to-talk dictation. Check requirements, verify the installer, finish first-run model setup, and dictate into any app.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/windows.html">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Presspeech for Windows - Local Push-to-Talk Dictation">
+    <meta property="og:description" content="Hold Right Alt, speak, and release. Presspeech transcribes locally on a Windows PC and pastes the result at the cursor.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/windows.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="styles.css">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
+        "name": "Presspeech for Windows",
+        "description": "Free MIT-licensed local push-to-talk dictation for Windows. Speech recognition runs on the PC with no cloud transcription, account, subscription, or telemetry.",
+        "operatingSystem": "Windows 10 or Windows 11, x64",
+        "applicationCategory": "UtilitiesApplication",
+        "applicationSubCategory": "Speech recognition, dictation, transcription",
+        "softwareVersion": "0.1.10",
+        "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10",
+        "downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe",
+        "installUrl": "https://rcourtman.github.io/presspeech/windows.html",
+        "codeRepository": "https://github.com/rcourtman/presspeech/tree/main/windows",
+        "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
+        "softwareRequirements": [
+          "Windows 10 or Windows 11, x64",
+          "About 4.4 GB for the installed app",
+          "A microphone and an internet connection for the first model download"
+        ],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
+        <div class="nav-links">
+          <a href="install.html">macOS</a>
+          <a href="windows.html" aria-current="page">Windows</a>
+          <a href="privacy.html">Privacy</a>
+          <a href="benchmarks.html">Benchmarks</a>
+          <a href="faq.html">FAQ</a>
+          <a href="compare/">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Windows prerelease</span>
+        <h1>Private dictation on your Windows PC</h1>
+        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and pastes the result into the app that had focus when you started—without an account, subscription, telemetry, or cloud transcription.</p>
+        <div class="actions">
+          <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe">Download Windows 0.1.10</a>
+          <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10">Release notes and checksum</a>
+          <a class="button secondary" href="install.html">Install on macOS</a>
+        </div>
+        <div class="note warn">
+          <p><strong>This prerelease is not code-signed.</strong> Windows may show <strong>Unknown publisher</strong>, and managed PCs or Windows 11 Smart App Control may block it. Verify that the download came from this repository and compare its SHA-256 checksum before deciding whether to run it. Never bypass a warning for a file from another source.</p>
+        </div>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Before you download</span>
+          <h2>Requirements and download size</h2>
+          <div class="facts">
+            <div class="fact"><strong>Windows 10 or 11</strong><span>A 64-bit x64 PC. Windows on Arm is not supported.</span></div>
+            <div class="fact"><strong>4.4 GB installed</strong><span>The installer includes the Python and speech runtimes; Python is not required separately.</span></div>
+            <div class="fact"><strong>NVIDIA CUDA optional</strong><span>A current NVIDIA driver gives the fastest Parakeet path. CPU-only PCs use the smaller Whisper base.en model.</span></div>
+            <div class="fact"><strong>First-run model</strong><span>About 2.5 GB with CUDA Parakeet, or about 141 MiB for the CPU default.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Install safely</span>
+          <h2>Download, verify, and run</h2>
+          <ol class="steps">
+            <li>
+              <strong>Download the current installer and checksum</strong>
+              <p>Get <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe">Presspeech-Setup-0.1.10-x64.exe</a> and its <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe.sha256">published SHA-256 file</a> from the same GitHub release.</p>
+            </li>
+            <li>
+              <strong>Compare the SHA-256 value</strong>
+              <p>In PowerShell, run the command below from your Downloads folder. The hash must match the value in the downloaded <code>.sha256</code> file exactly.</p>
+              <pre><code>Get-FileHash .\Presspeech-Setup-0.1.10-x64.exe -Algorithm SHA256
+Get-Content .\Presspeech-Setup-0.1.10-x64.exe.sha256</code></pre>
+            </li>
+            <li>
+              <strong>Run the installer</strong>
+              <p>The current build is unsigned. If Microsoft Defender SmartScreen shows <strong>Windows protected your PC</strong>, confirm the filename and verified hash before choosing <strong>More info → Run anyway</strong>. If policy does not offer that choice, do not try to circumvent it.</p>
+            </li>
+            <li>
+              <strong>Launch Presspeech</strong>
+              <p>Open it from the Start Menu. It installs for your user account under <code>%LOCALAPPDATA%\Programs\Presspeech</code> and appears in <strong>Settings → Apps → Installed apps</strong> for normal removal.</p>
+            </li>
+          </ol>
+          <p class="quiet">Why the warning? <a href="https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation">Microsoft explains that unsigned downloads start without publisher reputation</a>; each new unsigned version may prompt again.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">First launch</span>
+          <h2>Wait for the local model</h2>
+          <ol class="steps">
+            <li>
+              <strong>Check the selected path</strong>
+              <p>Presspeech tests the packaged CUDA runtime. A usable NVIDIA setup selects multilingual Parakeet TDT v3; otherwise a fresh installation selects English-only Whisper base.en for CPU use.</p>
+            </li>
+            <li>
+              <strong>Let preparation finish</strong>
+              <p>The first-run window shows the model, microphone, hotkey, and Start with Windows setting. Keep Presspeech open until <strong>Preparing speech model…</strong> disappears.</p>
+            </li>
+            <li>
+              <strong>Allow microphone access</strong>
+              <p>Windows asks on the first recording. Presspeech captures audio only while dictation is active, transcribes it in memory, and then discards it.</p>
+            </li>
+            <li>
+              <strong>Try a private test</strong>
+              <p>Open the tray menu and choose <strong>Try Dictation…</strong>. Hold Right Alt, speak, release, and check the result without pasting into another app.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Everyday use</span>
+          <h2>Hold. Speak. Release.</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>Dictate anywhere</h3>
+              <p>Hold <strong>Right Alt</strong> by default. A high cue confirms recording; release to transcribe and paste. Hotkeys, hold/toggle behavior, microphone, text suffix, audio cues, and models are configurable.</p>
+            </article>
+            <article class="card">
+              <h3>Focus stays protected</h3>
+              <p>A recording is bound to the window where it began. If focus changes during transcription, Presspeech leaves the text on the clipboard and notifies you instead of pasting into the wrong window.</p>
+            </article>
+            <article class="card">
+              <h3>Remote desktop aware</h3>
+              <p>Moonlight and Microsoft Remote Desktop receive dedicated clipboard paste handling. Normal Windows apps retain the standard fast Ctrl+V path.</p>
+            </article>
+            <article class="card">
+              <h3>Updates require approval</h3>
+              <p>Optional update checks read public GitHub release metadata. Presspeech downloads an installer only after approval, then verifies its published size and SHA-256 before offering to run it.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Privacy</span>
+          <h2>Speech stays on the PC</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>No transcription service</h3>
+              <p>Model files download from Hugging Face during setup, but dictation audio is not uploaded. There is no account, analytics SDK, crash reporter, or transcript history.</p>
+            </article>
+            <article class="card">
+              <h3>Diagnostics omit your words</h3>
+              <p>Copy Diagnostics reports runtime state, timings, and character counts. It excludes transcript text, audio, and dictionary contents.</p>
+            </article>
+          </div>
+          <p>See the <a href="privacy.html">privacy page</a> and <a href="privacy/network-calls.json">machine-readable network-call inventory</a> for the complete cross-platform network surface.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">More detail</span>
+          <h2>Support and source installation</h2>
+          <p>The <a href="https://github.com/rcourtman/presspeech/blob/main/windows/README.md">Windows technical guide</a> covers every setting, model choices, source setup, testing, packaging, and diagnostics. Report problems through <a href="https://github.com/rcourtman/presspeech/issues">GitHub Issues</a> with your Windows version, selected model, GPU and driver details, and whether the model reached Ready. Do not include dictated text.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Windows prerelease install guide for Presspeech.</span>
+        <span><a href="./">Home</a> · <a href="install.html">macOS</a> · <a href="privacy.html">Privacy</a> · <a href="https://github.com/rcourtman/presspeech/tree/main/windows">Source</a></span>
+      </div>
+    </footer>
+  </body>
+</html>
