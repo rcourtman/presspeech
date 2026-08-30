@@ -41,9 +41,11 @@ Requirements:
 First launch detects whether the packaged Torch runtime can use NVIDIA CUDA,
 then downloads either Parakeet (~2.5 GB) or Whisper base.en (~141 MiB) into
 `%USERPROFILE%\.cache\huggingface`, and loads and warms it in the background.
-Each Presspeech release pins its Transformers-backed Hugging Face models to
-the immutable snapshots exercised by native QA, so a fresh install cannot
-silently receive different model files from the same app version.
+Each Presspeech release pins every Windows Hugging Face model to an exact
+repository commit reviewed for that app version, so a fresh install cannot
+silently receive a different snapshot. Windows relies on the immutable Hugging
+Face snapshot identity; unlike the macOS model cache, it does not independently
+verify every downloaded model file against a SHA-256 manifest.
 The first-run readiness window shows model loading, microphone selection, the
 push-to-talk key, and Start with Windows in one place. Wait until it says the
 model is ready before the first dictation. **Try Dictation** remains disabled

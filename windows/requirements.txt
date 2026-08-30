@@ -1,4 +1,4 @@
-faster-whisper>=1.0.0
+faster-whisper>=1.2.1
 sounddevice>=0.4.6
 pynput>=1.7.6
 pystray>=0.19.5

@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 import engine
+import config
 
 
 class ParakeetConfigurationTests(unittest.TestCase):
@@ -95,6 +96,36 @@ class ParakeetConfigurationTests(unittest.TestCase):
              .from_pretrained.assert_called_once_with(
                  engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
                  dtype="float32"))
+
+    def test_selectable_whisper_models_have_immutable_snapshots(self):
+        transformers_models = {
+            engine.NEMOTRON_NAME,
+            "parakeet-tdt-0.6b-v3",
+        }
+        self.assertEqual(
+            set(config.MODELS) - transformers_models,
+            set(engine.WHISPER_MODELS),
+        )
+        for repository, revision in engine.WHISPER_MODELS.values():
+            self.assertIn("/", repository)
+            self.assertRegex(revision, r"^[0-9a-f]{40}$")
+
+    def test_whisper_uses_reviewed_repository_and_revision(self):
+        faster_whisper = types.ModuleType("faster_whisper")
+        faster_whisper.WhisperModel = mock.Mock()
+        with mock.patch.dict(sys.modules, {"faster_whisper": faster_whisper}), \
+                mock.patch.object(engine, "cuda_available", return_value=False):
+            transcriber = engine.Transcriber()
+            transcriber._load_whisper("base.en", None)
+
+        repository, revision = engine.WHISPER_MODELS["base.en"]
+        faster_whisper.WhisperModel.assert_called_once_with(
+            repository, revision=revision, device="cpu", compute_type="int8")
+
+    def test_unknown_whisper_model_fails_before_backend_import(self):
+        with mock.patch.dict(sys.modules, {"faster_whisper": None}):
+            with self.assertRaisesRegex(ValueError, "unsupported Whisper model"):
+                engine.Transcriber()._load_whisper("unreviewed/model", None)
 
     def test_parakeet_load_fallbacks_keep_the_reviewed_revision(self):
         torch = types.ModuleType("torch")

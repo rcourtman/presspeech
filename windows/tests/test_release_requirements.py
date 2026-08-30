@@ -9,6 +9,12 @@ import release_requirements
 
 
 class ReleaseRequirementTests(unittest.TestCase):
+    def test_faster_whisper_floor_supports_snapshot_revisions(self):
+        requirements = (release_requirements.ROOT / "windows/requirements.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("faster-whisper>=1.2.1\n", requirements)
+
     def test_input_fingerprint_normalizes_windows_line_endings(self):
         path = self.enterContext(tempfile.TemporaryDirectory())
         fixture = Path(path) / "requirements.txt"

@@ -25,6 +25,28 @@ PARAKEET_REVISION = "541d1f99c6b0c3cd0b11a95167540bb8edefd82b"
 NEMOTRON_REVISION = "ebe59e5a817142986528bbbee5dba8db7b38ed50"
 MOONSHINE_REVISION = "57b843633a8c183cadf6699ffa761377a933a866"
 
+# faster-whisper's short model names otherwise resolve through its mutable
+# alias table and the repositories' main branches. Keep both parts explicit so
+# a Presspeech release always downloads the CTranslate2 snapshots it reviewed.
+WHISPER_MODELS = {
+    "base.en": (
+        "Systran/faster-whisper-base.en",
+        "3d3d5dee26484f91867d81cb899cfcf72b96be6c",
+    ),
+    "small.en": (
+        "Systran/faster-whisper-small.en",
+        "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+    ),
+    "medium.en": (
+        "Systran/faster-whisper-medium.en",
+        "a29b04bd15381511a9af671baec01072039215e3",
+    ),
+    "turbo": (
+        "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+        "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+    ),
+}
+
 NEMOTRON_NAME = "nemotron-speech-streaming-en-0.6b"
 MOONSHINE_NAME = "moonshine-streaming-medium"
 
@@ -182,12 +204,17 @@ class Transcriber:
         self._device = device
 
     def _load_whisper(self, model_name, notify):
+        try:
+            repository, revision = WHISPER_MODELS[model_name]
+        except KeyError:
+            raise ValueError("unsupported Whisper model: %s" % model_name) from None
         from faster_whisper import WhisperModel
         device = "cuda" if cuda_available() else "cpu"
         compute = "float16" if device == "cuda" else "int8"
         if notify is not None:
             notify("Presspeech", "Loading Whisper %s on %s..." % (model_name, device))
-        self.model = WhisperModel(model_name, device=device, compute_type=compute)
+        self.model = WhisperModel(
+            repository, revision=revision, device=device, compute_type=compute)
         self.backend = "whisper"
         self._device = device
 
