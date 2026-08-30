@@ -46,7 +46,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>MIT licensed. github.com/rcourtman/presspeech</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Presspeech records audio while you hold the dictation hotkey, then transcribes it locally on your Mac.</string>
+	<string>Presspeech records audio only while dictation is active, then transcribes it locally on your Mac.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

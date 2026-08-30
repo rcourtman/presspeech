@@ -131,6 +131,9 @@ words to the new window. Paste manually when you are ready.
 
 Useful menu items:
 
+- **Start Dictation / Stop and Transcribe** — control a recording from the
+  menu without using the global hotkey; these named actions also work with
+  macOS Voice Control
 - **Setup Checklist…** — model, permissions, and hotkey readiness
 - **Support → Try Dictation…** — a private scratchpad for verifying the
   hotkey and first transcription without switching apps
@@ -175,7 +178,7 @@ Network calls are limited to:
 ## How It Works
 
 ```text
-CGEventTap hotkey
+CGEventTap hotkey or accessible menu action
   → AVAudioEngine capture
   → 16 kHz mono Float32 audio
   → FluidAudio / Parakeet TDT v3 CoreML model / ANE

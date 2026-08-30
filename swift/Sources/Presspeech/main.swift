@@ -125,6 +125,16 @@ enum MenuBarState {
     case error
 }
 
+func menuBarAccessibilityValue(for state: MenuBarState) -> String {
+    switch state {
+    case .loading: return "Loading"
+    case .idle: return "Ready"
+    case .recording: return "Recording"
+    case .busy: return "Transcribing"
+    case .error: return "Needs attention"
+    }
+}
+
 enum RecordingHUDMode {
     case recording
     case transcribing
@@ -2768,6 +2778,12 @@ private struct HotkeyTransitionState {
         toggleActive = false
     }
 
+    mutating func recordingDidStartOutsideHotkey(triggerMode: TriggerMode) {
+        if triggerMode == .toggle {
+            toggleActive = true
+        }
+    }
+
     /// `canStartRecording` mirrors the app-side guard on handlePress
     /// (ready, not recording, not busy, not terminating). Toggle mode
     /// consults it before flipping state — see the `.toggle` case.
@@ -3025,6 +3041,13 @@ final class HotkeyListener {
     /// toggle mode doesn't end up offset by one.
     func resetToggleState() {
         transitionState.resetToggleState()
+    }
+
+    /// Keep toggle mode aligned when a menu action starts the recording.
+    /// The next hotkey press should stop that recording, not be declined as
+    /// an attempted second start.
+    func recordingDidStartOutsideHotkey() {
+        transitionState.recordingDidStartOutsideHotkey(triggerMode: triggerMode)
     }
 }
 
@@ -3907,6 +3930,54 @@ enum FillerWordRemover {
 private enum RecordingReleaseAction: Equatable {
     case discardTooShort(duration: Double)
     case transcribe(duration: Double)
+}
+
+private enum DictationMenuControlAction: Int, Equatable {
+    case start
+    case stop
+}
+
+private struct DictationMenuControlState: Equatable {
+    let action: DictationMenuControlAction
+    let title: String
+    let isEnabled: Bool
+    let help: String
+}
+
+private func dictationMenuControlState(isReady: Bool,
+                                       isRecording: Bool,
+                                       isBusy: Bool,
+                                       isTerminating: Bool,
+                                       hasMissingPermissions: Bool) -> DictationMenuControlState {
+    if isRecording {
+        return DictationMenuControlState(
+            action: .stop,
+            title: "Stop and Transcribe",
+            isEnabled: !isTerminating,
+            help: "Stop recording, transcribe locally, and paste into the window where recording began."
+        )
+    }
+
+    let unavailableReason: String?
+    if isTerminating {
+        unavailableReason = "Presspeech is quitting."
+    } else if isBusy {
+        unavailableReason = "Wait for the current transcription to finish."
+    } else if hasMissingPermissions {
+        unavailableReason = "Finish the permission steps in Setup Checklist first."
+    } else if !isReady {
+        unavailableReason = "Wait for Presspeech to finish setup."
+    } else {
+        unavailableReason = nil
+    }
+
+    return DictationMenuControlState(
+        action: .start,
+        title: "Start Dictation",
+        isEnabled: unavailableReason == nil,
+        help: unavailableReason
+            ?? "Start recording for the currently focused window; choose Stop and Transcribe when finished."
+    )
 }
 
 private func recordingReleaseAction(capturedSampleCount: Int,
@@ -6821,11 +6892,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         errorImage = image.map { tintedCopy(of: $0, with: .systemYellow) }
         button.image = image
         button.imagePosition = .imageOnly
+        button.setAccessibilityLabel("Presspeech")
+        button.setAccessibilityHelp("Open dictation controls")
         if image == nil {
             button.title = "Presspeech"
             log("statusItem: presspeech-menubar.png not in Bundle.main — text fallback")
         }
         button.toolTip = "Presspeech"
+        button.setAccessibilityValue(menuBarAccessibilityValue(for: .loading))
     }
 
     private func tintedCopy(of source: NSImage, with color: NSColor) -> NSImage {
@@ -6850,6 +6924,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func setMenuBarState(_ state: MenuBarState) {
         guard let button = statusItem.button else { return }
+        button.setAccessibilityValue(menuBarAccessibilityValue(for: state))
         switch state {
         case .loading:
             // Subtle dim while the model compiles. nil contentTintColor
@@ -7593,6 +7668,22 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         cancelActiveRecording(reason: "menu")
     }
 
+    @objc private func dictationMenuControlClicked(_ sender: NSMenuItem) {
+        guard let action = DictationMenuControlAction(rawValue: sender.tag) else { return }
+        switch action {
+        case .stop:
+            guard isRecording else { return }
+            hotkey.resetToggleState()
+            handleRelease()
+        case .start:
+            guard !isRecording else { return }
+            handlePress()
+            if isRecording {
+                hotkey.recordingDidStartOutsideHotkey()
+            }
+        }
+    }
+
     @objc private func copyDiagnosticsClicked(_ sender: NSMenuItem) {
         copyDiagnosticsToClipboard()
     }
@@ -7687,14 +7778,30 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         menu.addItem(.separator())
 
+        let controlState = dictationMenuControlState(
+            isReady: isReady,
+            isRecording: isRecording,
+            isBusy: isBusy,
+            isTerminating: isTerminating,
+            hasMissingPermissions: !missingPermissions().isEmpty
+        )
+        let dictationControl = NSMenuItem(title: controlState.title,
+                                          action: #selector(dictationMenuControlClicked(_:)),
+                                          keyEquivalent: "")
+        dictationControl.target = self
+        dictationControl.tag = controlState.action.rawValue
+        dictationControl.isEnabled = controlState.isEnabled
+        dictationControl.toolTip = controlState.help
+        menu.addItem(dictationControl)
+
         if isRecording {
             let cancel = NSMenuItem(title: "Cancel Recording",
                                     action: #selector(cancelRecordingClicked(_:)),
                                     keyEquivalent: "")
             cancel.target = self
             menu.addItem(cancel)
-            menu.addItem(.separator())
         }
+        menu.addItem(.separator())
 
         if let failure = startupFailure {
             let retry = NSMenuItem(title: failure.retryTitle,
@@ -13838,6 +13945,64 @@ private enum PresspeechSelfTest {
     }
 
     private static func testRecordingLifecycle() throws {
+        try expect(
+            dictationMenuControlState(isReady: true,
+                                      isRecording: false,
+                                      isBusy: false,
+                                      isTerminating: false,
+                                      hasMissingPermissions: false),
+            equals: DictationMenuControlState(
+                action: .start,
+                title: "Start Dictation",
+                isEnabled: true,
+                help: "Start recording for the currently focused window; choose Stop and Transcribe when finished."
+            ),
+            "ready menu should expose an enabled start action"
+        )
+        try expect(
+            dictationMenuControlState(isReady: true,
+                                      isRecording: true,
+                                      isBusy: false,
+                                      isTerminating: false,
+                                      hasMissingPermissions: false).action,
+            equals: .stop,
+            "recording menu should expose a stop-and-transcribe action"
+        )
+        try expect(
+            dictationMenuControlState(isReady: true,
+                                      isRecording: false,
+                                      isBusy: true,
+                                      isTerminating: false,
+                                      hasMissingPermissions: false).isEnabled,
+            equals: false,
+            "menu start should stay disabled during transcription"
+        )
+        try expect(
+            dictationMenuControlState(isReady: true,
+                                      isRecording: false,
+                                      isBusy: false,
+                                      isTerminating: false,
+                                      hasMissingPermissions: true).isEnabled,
+            equals: false,
+            "menu start should stay disabled while a permission is missing"
+        )
+        try expect(menuBarAccessibilityValue(for: .recording),
+                   equals: "Recording",
+                   "menu-bar accessibility value should announce recording state")
+
+        var externallyStartedToggle = HotkeyTransitionState()
+        let f5 = hotkeyChoice(forKeycode: 96)
+        externallyStartedToggle.recordingDidStartOutsideHotkey(triggerMode: .toggle)
+        try expect(
+            externallyStartedToggle.transition(for: event(.keyDown, keycode: f5.keycode),
+                                                hotkey: f5,
+                                                triggerMode: .toggle,
+                                                isRecording: true,
+                                                canStartRecording: false),
+            equals: HotkeyTransitionResult(suppress: true, actions: [.release]),
+            "toggle hotkey should stop a recording started from the menu"
+        )
+
         try expect(
             recordingHUDFrame(size: NSSize(width: 232, height: 54),
                               visibleFrame: NSRect(x: 100, y: 40, width: 1_000, height: 700)),

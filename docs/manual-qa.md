@@ -33,6 +33,13 @@ cd swift
 
 ## Dictation
 
+- With a text field focused, choose **Start Dictation** from the menu, speak,
+  then choose **Stop and Transcribe**. Confirm the transcript returns to the
+  original text field. Repeat in toggle mode and confirm the hotkey can stop a
+  menu-started recording.
+- Enable macOS Voice Control and confirm the Presspeech status item is named
+  **Presspeech**, its recording state is announced, and the named start/stop
+  menu actions can be selected by voice.
 - Start dictating into a text field, switch to another window in the same app
   before transcription finishes, and confirm no text is pasted into the new
   window. Repeat with a window in another app. Confirm in both cases that the
