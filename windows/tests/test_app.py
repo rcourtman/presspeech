@@ -761,6 +761,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.transcriber = mock.Mock()
         instance.transcriber.loaded.return_value = False
         instance._model_executor = mock.Mock()
+        instance._model_retry_lock = __import__("threading").Lock()
         instance._set_indicator = mock.Mock()
         instance._log = mock.Mock()
         with mock.patch.object(app, "_foreground_paste_target") as foreground, \
@@ -802,6 +803,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.transcriber = mock.Mock()
         instance.transcriber.loaded.return_value = False
         instance._model_executor = mock.Mock()
+        instance._model_retry_lock = __import__("threading").Lock()
         instance._set_indicator = mock.Mock()
         instance._log = mock.Mock()
         self.assertFalse(instance.start_recording())
@@ -809,6 +811,22 @@ class TextRegressionTests(unittest.TestCase):
         instance._model_executor.submit.assert_called_once_with(
             instance._preload_model_worker)
         self.assertFalse(instance.start_recording())
+        instance._model_executor.submit.assert_called_once_with(
+            instance._preload_model_worker)
+
+    def test_explicit_model_retry_is_single_flight(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.model_status = "error"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = False
+        instance._model_executor = mock.Mock()
+        instance._model_retry_lock = __import__("threading").Lock()
+
+        self.assertTrue(instance.retry_model())
+        self.assertFalse(instance.retry_model())
+
+        self.assertEqual(instance.model_status, "loading")
         instance._model_executor.submit.assert_called_once_with(
             instance._preload_model_worker)
 
@@ -1038,7 +1056,11 @@ class TextRegressionTests(unittest.TestCase):
         self.assertIsNone(instance._recording_limit_timer)
         timer.cancel.assert_called_once_with()
         instance.notify.assert_called_once_with(
-            "Microphone error", "device disconnected")
+            "Microphone error",
+            "Presspeech couldn't open the selected input. Check Settings > "
+            "System > Sound > Input and Windows microphone privacy settings, "
+            "including 'Let desktop apps access your microphone', then try "
+            "again. Details: device disconnected")
 
     def test_missing_microphone_cancels_recording_limit(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1062,8 +1084,8 @@ class TextRegressionTests(unittest.TestCase):
         timer.cancel.assert_called_once_with()
         instance.notify.assert_called_once_with(
             "No microphone found",
-            "Plug in a microphone or check Windows Sound settings "
-            "(Recording tab), then try again.")
+            "Check Settings > System > Sound > Input, then enable microphone "
+            "access for desktop apps in Windows privacy settings and try again.")
 
     def test_stale_microphone_error_does_not_cancel_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

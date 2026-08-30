@@ -2499,6 +2499,21 @@ private struct SetupChecklistRowState: Equatable {
     let buttonTitle: String?
 }
 
+private struct SetupChecklistPermissionState: Equatable {
+    let permission: Permission
+    let detail: String
+    let status: String
+    let buttonTitle: String?
+}
+
+private struct SetupChecklistSnapshot: Equatable {
+    let speechModel: SetupChecklistRowState
+    let audioInput: SetupChecklistRowState
+    let permissions: [SetupChecklistPermissionState]
+    let hotkey: SetupChecklistRowState
+    let isComplete: Bool
+}
+
 private func speechModelSetupRowState(profile: SpeechModelProfile,
                                       isSpeechModelReady: Bool,
                                       isStartupInProgress: Bool,
@@ -6146,6 +6161,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var didOfferSetupChecklistThisLaunch = false
     private var setupChecklistWindow: NSWindow?
     private var setupChecklistRefreshTimer: Timer?
+    private var renderedSetupChecklistSnapshot: SetupChecklistSnapshot?
     private var dictationScratchpadWindow: NSWindow?
     private weak var dictationScratchpadTextView: NSTextView?
     private var hotkeyTestSucceeded = false
@@ -8231,11 +8247,69 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updateSetupChecklist() {
         guard let window = setupChecklistWindow else { return }
-        window.contentView = makeSetupChecklistView()
+        let snapshot = setupChecklistSnapshot()
+        guard snapshot != renderedSetupChecklistSnapshot else { return }
+
+        let focusedIdentifier = (window.firstResponder as? NSView)?.identifier
+        window.contentView = makeSetupChecklistView(snapshot: snapshot)
+        renderedSetupChecklistSnapshot = snapshot
+        if let focusedIdentifier,
+           let replacement = setupChecklistView(
+               identifiedBy: focusedIdentifier,
+               in: window.contentView) {
+            window.makeFirstResponder(replacement)
+        }
         rebuildMenu()
     }
 
-    private func makeSetupChecklistView() -> NSView {
+    private func setupChecklistSnapshot() -> SetupChecklistSnapshot {
+        let permissions = Permission.allCases.map { permission in
+            let granted = Permissions.isGranted(permission)
+            let clicks = permClickCount[permission] ?? 0
+            return SetupChecklistPermissionState(
+                permission: permission,
+                detail: setupDetail(for: permission),
+                status: granted ? "Granted" : "Missing",
+                buttonTitle: granted ? nil : (clicks >= 1 ? "Try Again" : "Grant"))
+        }
+        return SetupChecklistSnapshot(
+            speechModel: speechModelSetupRowState(
+                profile: settings.speechModelProfile,
+                isSpeechModelReady: isSpeechModelReady,
+                isStartupInProgress: startupTask != nil || isSwitchingSpeechModel,
+                startupStatusTitle: startupStatusTitle,
+                failure: startupFailure),
+            audioInput: audioInputSetupRowState(
+                isSpeechModelReady: isSpeechModelReady,
+                isCoreRuntimeReady: isCoreRuntimeReady,
+                isStartupInProgress: startupTask != nil || isRestartingAudioInput,
+                startupStatusTitle: startupStatusTitle,
+                failure: startupFailure),
+            permissions: permissions,
+            hotkey: hotkeySetupRowState(
+                isReady: isReady,
+                hotkeyTestSucceeded: hotkeyTestSucceeded,
+                triggerMode: settings.triggerMode,
+                hotkeyName: hotkey.hotkey.name,
+                failure: startupFailure),
+            isComplete: isSpeechModelReady
+                && isReady
+                && permissions.allSatisfy { $0.status == "Granted" })
+    }
+
+    private func setupChecklistView(identifiedBy identifier: NSUserInterfaceItemIdentifier,
+                                    in root: NSView?) -> NSView? {
+        guard let root else { return nil }
+        if root.identifier == identifier { return root }
+        for child in root.subviews {
+            if let match = setupChecklistView(identifiedBy: identifier, in: child) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    private func makeSetupChecklistView(snapshot: SetupChecklistSnapshot) -> NSView {
         let root = NSStackView()
         root.orientation = .vertical
         // NSStackView on macOS uses NSLayoutConstraint.Attribute for
@@ -8260,16 +8334,40 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         root.addArrangedSubview(subtitle)
         root.addArrangedSubview(setupSeparator())
 
-        root.addArrangedSubview(makeSpeechModelSetupRow())
-        root.addArrangedSubview(makeAudioInputSetupRow())
+        root.addArrangedSubview(makeSetupChecklistRow(
+            title: "Speech model",
+            state: snapshot.speechModel,
+            identifier: "speech-model",
+            action: snapshot.speechModel.buttonTitle == nil
+                ? nil : #selector(retryStartupFromSetupClicked(_:))))
+        root.addArrangedSubview(makeSetupChecklistRow(
+            title: "Audio input",
+            state: snapshot.audioInput,
+            identifier: "audio-input",
+            action: snapshot.audioInput.buttonTitle == nil
+                ? nil : #selector(retryStartupFromSetupClicked(_:))))
 
-        for permission in Permission.allCases {
-            root.addArrangedSubview(makePermissionSetupRow(permission))
+        for permission in snapshot.permissions {
+            root.addArrangedSubview(makeSetupChecklistRow(
+                title: permission.permission.rawValue,
+                state: SetupChecklistRowState(
+                    detail: permission.detail,
+                    status: permission.status,
+                    buttonTitle: permission.buttonTitle),
+                identifier: "permission-\(permission.permission.rawValue.lowercased())",
+                action: permission.buttonTitle == nil
+                    ? nil : #selector(grantSetupPermissionClicked(_:)),
+                tag: Permission.allCases.firstIndex(of: permission.permission) ?? -1))
         }
 
-        root.addArrangedSubview(makeHotkeySetupRow())
+        root.addArrangedSubview(makeSetupChecklistRow(
+            title: "Hotkey",
+            state: snapshot.hotkey,
+            identifier: "hotkey",
+            action: snapshot.hotkey.buttonTitle == nil
+                ? nil : #selector(retryStartupFromSetupClicked(_:))))
 
-        if !setupChecklistIsComplete {
+        if !snapshot.isComplete {
             let tip = setupLabel("Tip: If clicking 'Grant' doesn't open a prompt or show Presspeech in System Settings, click 'Try Again' — Presspeech will reset its TCC permission entry and re-request, which clears stuck macOS state.",
                                  font: .systemFont(ofSize: 11),
                                  color: .secondaryLabelColor)
@@ -8283,21 +8381,23 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         footer.spacing = 10
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let summary = setupLabel(setupChecklistSummary(),
+        let summary = setupLabel(setupChecklistSummary(isComplete: snapshot.isComplete),
                                  font: .systemFont(ofSize: 12),
                                  color: .secondaryLabelColor)
-        let close = NSButton(title: setupChecklistIsComplete ? "Done" : "Close",
+        let close = NSButton(title: snapshot.isComplete ? "Done" : "Close",
                              target: self,
                              action: #selector(closeSetupChecklistClicked(_:)))
         close.bezelStyle = .rounded
+        close.identifier = NSUserInterfaceItemIdentifier("setup-close")
 
         footer.addArrangedSubview(summary)
         footer.addArrangedSubview(NSView())
-        if setupChecklistIsComplete {
+        if snapshot.isComplete {
             let tryDictation = NSButton(title: "Try Dictation",
                                         target: self,
                                         action: #selector(showDictationScratchpadClicked(_:)))
             tryDictation.bezelStyle = .rounded
+            tryDictation.identifier = NSUserInterfaceItemIdentifier("setup-try-dictation")
             footer.addArrangedSubview(tryDictation)
         }
         footer.addArrangedSubview(close)
@@ -8334,62 +8434,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             && missingPermissions().isEmpty
     }
 
-    private func setupChecklistSummary() -> String {
-        setupChecklistIsComplete
+    private func setupChecklistSummary(isComplete: Bool) -> String {
+        isComplete
             ? "Setup is complete. Use Presspeech from the menu bar."
             : "You can close this window; the menu will keep tracking setup."
-    }
-
-    private func makeSpeechModelSetupRow() -> NSView {
-        let state = speechModelSetupRowState(profile: settings.speechModelProfile,
-                                             isSpeechModelReady: isSpeechModelReady,
-                                             isStartupInProgress: startupTask != nil || isSwitchingSpeechModel,
-                                             startupStatusTitle: startupStatusTitle,
-                                             failure: startupFailure)
-
-        return makeSetupChecklistRow(title: "Speech model",
-                                     detail: state.detail,
-                                     status: state.status,
-                                     buttonTitle: state.buttonTitle,
-                                     action: state.buttonTitle == nil ? nil : #selector(retryStartupFromSetupClicked(_:)))
-    }
-
-    private func makeAudioInputSetupRow() -> NSView {
-        let state = audioInputSetupRowState(isSpeechModelReady: isSpeechModelReady,
-                                            isCoreRuntimeReady: isCoreRuntimeReady,
-                                            isStartupInProgress: startupTask != nil || isRestartingAudioInput,
-                                            startupStatusTitle: startupStatusTitle,
-                                            failure: startupFailure)
-        return makeSetupChecklistRow(title: "Audio input",
-                                     detail: state.detail,
-                                     status: state.status,
-                                     buttonTitle: state.buttonTitle,
-                                     action: state.buttonTitle == nil ? nil : #selector(retryStartupFromSetupClicked(_:)))
-    }
-
-    private func makePermissionSetupRow(_ permission: Permission) -> NSView {
-        let granted = Permissions.isGranted(permission)
-        let clicks = permClickCount[permission] ?? 0
-        return makeSetupChecklistRow(title: permission.rawValue,
-                                     detail: setupDetail(for: permission),
-                                     status: granted ? "Granted" : "Missing",
-                                     buttonTitle: granted ? nil : (clicks >= 1 ? "Try Again" : "Grant"),
-                                     action: granted ? nil : #selector(grantSetupPermissionClicked(_:)),
-                                     tag: Permission.allCases.firstIndex(of: permission) ?? -1)
-    }
-
-    private func makeHotkeySetupRow() -> NSView {
-        let state = hotkeySetupRowState(isReady: isReady,
-                                        hotkeyTestSucceeded: hotkeyTestSucceeded,
-                                        triggerMode: settings.triggerMode,
-                                        hotkeyName: hotkey.hotkey.name,
-                                        failure: startupFailure)
-
-        return makeSetupChecklistRow(title: "Hotkey",
-                                     detail: state.detail,
-                                     status: state.status,
-                                     buttonTitle: state.buttonTitle,
-                                     action: state.buttonTitle == nil ? nil : #selector(retryStartupFromSetupClicked(_:)))
     }
 
     private func setupDetail(for permission: Permission) -> String {
@@ -8404,12 +8452,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func makeSetupChecklistRow(title: String,
-                                       detail: String,
-                                       status: String,
-                                       buttonTitle: String? = nil,
+                                       state: SetupChecklistRowState,
+                                       identifier: String,
                                        action: Selector? = nil,
                                        tag: Int = 0) -> NSView {
         let row = NSStackView()
+        row.identifier = NSUserInterfaceItemIdentifier("setup-\(identifier)")
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 14
@@ -8422,13 +8470,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         textStack.addArrangedSubview(setupLabel(title, font: .systemFont(ofSize: 13, weight: .semibold)))
         
-        let detailLabel = setupLabel(detail, font: .systemFont(ofSize: 12), color: .secondaryLabelColor)
-        detailLabel.preferredMaxLayoutWidth = (buttonTitle != nil) ? 310 : 380
+        let detailLabel = setupLabel(state.detail, font: .systemFont(ofSize: 12), color: .secondaryLabelColor)
+        detailLabel.preferredMaxLayoutWidth = (state.buttonTitle != nil) ? 310 : 380
         textStack.addArrangedSubview(detailLabel)
 
-        let statusLabel = setupLabel(status,
+        let statusLabel = setupLabel(state.status,
                                      font: .systemFont(ofSize: 12, weight: .medium),
-                                     color: setupStatusColor(status))
+                                     color: setupStatusColor(state.status))
         statusLabel.alignment = .right
         statusLabel.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -8436,10 +8484,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         row.addArrangedSubview(NSView())
         row.addArrangedSubview(statusLabel)
 
-        if let buttonTitle, let action {
+        if let buttonTitle = state.buttonTitle, let action {
             let button = NSButton(title: buttonTitle, target: self, action: action)
             button.bezelStyle = .rounded
             button.tag = tag
+            button.identifier = NSUserInterfaceItemIdentifier("setup-\(identifier)-action")
+            button.setAccessibilityLabel("\(buttonTitle) \(title)")
             button.setContentHuggingPriority(.required, for: .horizontal)
             row.addArrangedSubview(button)
         }

@@ -46,12 +46,18 @@ the immutable snapshots exercised by native QA, so a fresh install cannot
 silently receive different model files from the same app version.
 The first-run readiness window shows model loading, microphone selection, the
 push-to-talk key, and Start with Windows in one place. Wait until it says the
-model is ready before the first dictation.
+model is ready before the first dictation. **Try Dictation** remains disabled
+until then. If preparation fails, use **Retry Speech Model**; the window keeps
+tracking the retry instead of leaving the previous error on screen.
 If the push-to-talk key is pressed before readiness, Presspeech keeps showing
 **Preparing speech model…** and does not open the microphone, play recording
 cues, mute playback, or claim to be listening. Release and press again once the
 preparation indicator disappears.
-First recording triggers the Windows microphone permission prompt—allow it.
+Before recording, open Windows microphone privacy settings and turn on
+**Microphone access** and **Let desktop apps access your microphone**. Presspeech
+is an unpackaged desktop app, so Windows uses that shared desktop-app control
+rather than an app-specific Presspeech permission prompt. Also confirm the
+selected device under **Settings → System → Sound → Input**.
 
 ### Install from source
 

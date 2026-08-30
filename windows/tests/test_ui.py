@@ -70,6 +70,52 @@ class AccessibleWindowTests(unittest.TestCase):
             self.assertEqual(ui.accessibility_status(), "degraded")
 
 
+class SetupWindowTests(unittest.TestCase):
+    def make_window(self, status, detail=""):
+        window = ui.SetupWindow.__new__(ui.SetupWindow)
+        window.app = mock.Mock(
+            model_status=status, model_status_detail=detail)
+        window.root = mock.Mock()
+        window.model_label = mock.Mock()
+        window.progress = mock.Mock()
+        window.retry_button = mock.Mock()
+        window.try_button = mock.Mock()
+        return window
+
+    def test_error_remains_observed_and_enables_retry(self):
+        window = self.make_window("error", "download failed")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        set_text.assert_called_once_with(
+            window.model_label, "Needs attention — download failed")
+        window.retry_button.config.assert_called_once_with(state="normal")
+        window.try_button.config.assert_called_once_with(state="disabled")
+        window.progress.config.assert_called_once_with(
+            mode="determinate", value=0)
+        window.root.after.assert_called_once_with(300, window._poll_model)
+
+    def test_ready_enables_try_dictation_and_keeps_observing(self):
+        window = self.make_window("ready", "base.en on cpu")
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+
+        window.retry_button.config.assert_called_once_with(state="disabled")
+        window.try_button.config.assert_called_once_with(state="normal")
+        window.progress.config.assert_called_once_with(
+            mode="determinate", value=100)
+        window.root.after.assert_called_once_with(300, window._poll_model)
+
+    def test_retry_action_uses_app_single_flight_gate(self):
+        window = self.make_window("error")
+
+        window._retry_model()
+
+        window.app.retry_model.assert_called_once_with()
+
+
 class DictionarySettingsTests(unittest.TestCase):
     def make_window(self, rules=None):
         window = ui.SettingsWindow.__new__(ui.SettingsWindow)

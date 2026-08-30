@@ -451,6 +451,7 @@ class PresspeechApp:
         self.pending_update = None
         self.model_status = "pending"
         self.model_status_detail = "Waiting to load"
+        self._model_retry_lock = threading.Lock()
         self._update_lock = threading.Lock()
         self.icon = None
         self.listener = None
@@ -635,13 +636,28 @@ class PresspeechApp:
         needs_load = status in ("error", "unloaded") or (
             status == "ready" and not loaded)
         if needs_load:
-            self.model_status = "loading"
-            self.model_status_detail = "Loading %s" % model_name
-            self._model_executor.submit(self._preload_model_worker)
+            self.retry_model()
 
         self._set_indicator("loading")
         self._log("dictation ignored; speech model is not ready (status=%s)" % status)
         return False
+
+    def retry_model(self):
+        """Queue at most one model retry and report whether one was started."""
+        with self._model_retry_lock:
+            model_name = self.settings["model"]
+            status = getattr(self, "model_status", "pending")
+            if status in ("pending", "loading"):
+                return False
+            if status == "ready" and self.transcriber.loaded(model_name):
+                return False
+            # Publish loading before queueing work. Repeated UI or hotkey
+            # requests then observe the in-flight state and cannot enqueue
+            # duplicate loads.
+            self.model_status = "loading"
+            self.model_status_detail = "Loading %s" % model_name
+            self._model_executor.submit(self._preload_model_worker)
+            return True
 
     def start_recording(self):
         # Keep transcription and paste delivery exclusive with capture. A
@@ -754,8 +770,9 @@ class PresspeechApp:
                 self._set_indicator(None)
                 self._log("no working microphone found")
                 self.notify("No microphone found",
-                            "Plug in a microphone or check Windows Sound settings "
-                            "(Recording tab), then try again.")
+                            "Check Settings > System > Sound > Input, then enable "
+                            "microphone access for desktop apps in Windows privacy "
+                            "settings and try again.")
                 return
             self.input_device = chosen
             idx, rate = chosen
@@ -799,7 +816,12 @@ class PresspeechApp:
             self._restore_playback_after_recording()
             self._set_indicator(None)
             self._log("mic error: %s" % exc)
-            self.notify("Microphone error", str(exc))
+            self.notify(
+                "Microphone error",
+                "Presspeech couldn't open the selected input. Check Settings > "
+                "System > Sound > Input and Windows microphone privacy settings, "
+                "including 'Let desktop apps access your microphone', then try "
+                "again. Details: %s" % str(exc))
             return
         self._log("mic open ok: %s" % (self.input_device,))
         if self.icon is not None:

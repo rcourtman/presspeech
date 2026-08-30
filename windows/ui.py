@@ -344,8 +344,14 @@ class SetupWindow:
 
         buttons = ttk.Frame(frame)
         buttons.grid(row=7, column=0, columnspan=2, sticky="ew")
-        ttk.Button(buttons, text="Try Dictation",
-                   command=self.app.open_scratchpad).pack(side="left")
+        self.try_button = ttk.Button(
+            buttons, text="Try Dictation", command=self.app.open_scratchpad,
+            state="disabled")
+        self.try_button.pack(side="left")
+        self.retry_button = ttk.Button(
+            buttons, text="Retry Speech Model", command=self._retry_model,
+            state="disabled")
+        self.retry_button.pack(side="left", padx=(8, 0))
         ttk.Button(buttons, text="Finish Setup",
                    command=self._finish).pack(side="right")
 
@@ -362,16 +368,22 @@ class SetupWindow:
         labels = {
             "pending": "Waiting to start…",
             "loading": detail or "Downloading or loading…",
-            "ready": "Ready — " + detail,
-            "error": "Needs attention — " + detail,
+            "ready": "Ready" + ((" — " + detail) if detail else ""),
+            "error": "Needs attention" + ((" — " + detail) if detail else ""),
         }
         _set_accessible_text(
             self.model_label, labels.get(status, detail or status))
+        self.retry_button.config(
+            state="normal" if status == "error" else "disabled")
+        self.try_button.config(
+            state="normal" if status == "ready" else "disabled")
         if status in ("ready", "error"):
             self.progress.stop()
             self.progress.config(mode="determinate", value=100 if status == "ready" else 0)
-        else:
-            self.root.after(300, self._poll_model)
+        self.root.after(300, self._poll_model)
+
+    def _retry_model(self):
+        self.app.retry_model()
 
     def _finish(self):
         settings = self.app.settings

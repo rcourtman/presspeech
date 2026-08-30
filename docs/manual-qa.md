@@ -12,6 +12,12 @@ cd swift
 - Confirm `/tmp/Presspeech-dev.app` launches and the menu-bar item appears.
 - Open **Support -> Setup Checklist...** and confirm model, permissions,
   audio input, and hotkey rows render.
+- Navigate the checklist using Tab and Shift-Tab. Activate a permission action
+  that remains missing and changes from **Grant** to **Try Again**; confirm
+  keyboard focus remains on that replacement action when the row is redrawn.
+- With VoiceOver enabled, confirm each permission action includes its context,
+  such as **Grant Microphone** and **Grant Accessibility**, rather than being
+  announced only as **Grant**.
 - On a clean preference profile, confirm setup asks for **Language & model**
   before downloading a speech model. Choose English and confirm the setup
   row switches to the English optimized model; reset preferences and repeat
