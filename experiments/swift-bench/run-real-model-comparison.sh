@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compare v3 and Unified on the same audio fixture directory.
+# Compare production v3 and one candidate backend on the same fixture directory.
 #
 # Reports are private/redacted by default: clip names, paths, references,
 # and transcripts stay out of generated Markdown while WER, final-word
@@ -17,11 +17,20 @@ cd "$(dirname "$SCRIPT_PATH")"
 INPUT_DIR="real-audio"
 OUTDIR="real-results"
 TRIALS="3"
+CANDIDATE_BACKEND="unified"
+LANGUAGE="auto"
 UNIFIED_TRAILING_SILENCE_MS="250"
 REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
 CORPUS_KIND="private"
+REFERENCES_HAND_AUDITED=0
+REQUIRE_CANDIDATE_PASS=0
 SELF_TEST=0
+
+MIN_CANDIDATE_TRIALS=3
+MIN_CANDIDATE_CLIPS=25
+MIN_CANDIDATE_REFERENCE_WORDS=1000
+MAX_CANDIDATE_LATENCY_RATIO="1.25"
 
 usage() {
     cat <<'USAGE'
@@ -31,11 +40,18 @@ Options:
   --input-dir <path>       directory with audio + .txt sidecars (default: real-audio)
   --out-dir <path>         report directory (default: real-results)
   --trials <n>             measured trials per clip/backend (default: 3)
+  --candidate-backend <name>
+                           comparison backend: unified or v3-int8-v2
+                           (default: unified)
+  --language <auto|code>   Parakeet language/script hint (default: auto)
   --unified-trailing-silence-ms <n>
                            Unified-only trailing silence in ms (default: 250)
   --show-transcripts       include reference/hypothesis text in raw bench logs
   --show-paths             include local fixture filenames and paths in the report
   --public-corpus          label the report as licensed public speech instead of private fixtures
+  --references-hand-audited
+                           declare private references checked against audio
+  --require-candidate-pass fail unless the int8-v2 evidence screen passes
   --self-test              run parser, aggregation, and redaction self-tests
   -h, --help               show this help
 
@@ -157,6 +173,33 @@ extract_worst_wer_metrics() {
     '
 }
 
+extract_best_wer_metrics() {
+    local log_file="$1"
+    sed -nE 's/^[[:space:]]*(transcript:|[^[:space:]]+)[[:space:]]+\[WER ([0-9.]+)%\][[:space:]]+\[final-word retained=(true|false)([^]]*)\][[:space:]]+\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\2\t\5\t\6/p' "$log_file" \
+        | awk -F '\t' '
+        {
+            numerator = $2
+            denominator = $3
+            if (denominator == 0) {
+                numerator = numerator == 0 ? 0 : 1
+                denominator = 1
+            }
+            if (!seen || numerator * best_denominator < best_numerator * denominator) {
+                best = $1
+                errors = $2
+                words = $3
+                best_numerator = numerator
+                best_denominator = denominator
+                seen = 1
+            }
+        }
+        END {
+            if (seen) printf("%s\t%s\t%s\n", best, errors, words)
+            else print "unknown\tunknown\tunknown"
+        }
+    '
+}
+
 extract_p50_ms() {
     local log_file="$1"
     sed -nE 's/.*latency:[[:space:]]+p50=[[:space:]]*([0-9.]+) ms.*/\1/p' "$log_file" | head -n 1
@@ -256,6 +299,75 @@ backend_summary_row() {
     ' "$tsv"
 }
 
+candidate_assessment() {
+    local tsv="$1"
+    local candidate="$2"
+    awk -F '\t' -v candidate="$candidate" '
+        NR > 1 && $2 == "v3" {
+            baseline_best[$1] = $9
+            baseline_p50[$1] = $6
+            baseline_words[$1] = $8
+        }
+        NR > 1 && $2 == candidate {
+            candidate_worst[$1] = $7
+            candidate_p50[$1] = $6
+            candidate_words[$1] = $8
+        }
+        END {
+            for (clip in baseline_best) {
+                if (!(clip in candidate_worst) ||
+                    baseline_best[clip] == "unknown" || candidate_worst[clip] == "unknown" ||
+                    baseline_p50[clip] == "unknown" || candidate_p50[clip] == "unknown" ||
+                    baseline_words[clip] != candidate_words[clip]) continue
+                comparable += 1
+                words += baseline_words[clip]
+                baseline_errors += baseline_best[clip]
+                candidate_errors += candidate_worst[clip]
+                baseline_latency += baseline_p50[clip]
+                candidate_latency += candidate_p50[clip]
+                if (candidate_worst[clip] < baseline_best[clip]) improved += 1
+                if (candidate_worst[clip] > baseline_best[clip]) regressed += 1
+            }
+            ratio = baseline_latency > 0 ? candidate_latency / baseline_latency : 999
+            printf("%d\t%d\t%d\t%d\t%d\t%d\t%.3f\n",
+                   comparable, words, baseline_errors, candidate_errors,
+                   improved, regressed, ratio)
+        }
+    ' "$tsv"
+}
+
+candidate_screen() {
+    local assessment="$1"
+    local source_state="$2"
+    local candidate="$3"
+    local comparable words baseline_errors candidate_errors improved regressed latency_ratio
+    IFS=$'\t' read -r comparable words baseline_errors candidate_errors \
+        improved regressed latency_ratio <<<"$assessment"
+
+    local blockers=()
+    [[ "$candidate" == "v3-int8-v2" ]] || blockers+=("screen is defined only for v3-int8-v2")
+    [[ "$TRIALS" -ge "$MIN_CANDIDATE_TRIALS" ]] || blockers+=("fewer than $MIN_CANDIDATE_TRIALS trials")
+    if [[ "$CORPUS_KIND" != "public" && "$REFERENCES_HAND_AUDITED" -ne 1 ]]; then
+        blockers+=("private references not declared hand-audited")
+    fi
+    [[ "$source_state" == "clean" ]] || blockers+=("benchmark source modified")
+    [[ "$comparable" -ge "$MIN_CANDIDATE_CLIPS" ]] || blockers+=("fewer than $MIN_CANDIDATE_CLIPS comparable clips")
+    [[ "$words" -ge "$MIN_CANDIDATE_REFERENCE_WORDS" ]] || blockers+=("fewer than $MIN_CANDIDATE_REFERENCE_WORDS reference words")
+    [[ "$improved" -ge 1 ]] || blockers+=("no clip demonstrates an error reduction")
+    [[ "$candidate_errors" -le "$baseline_errors" ]] || blockers+=("corpus word errors increased")
+    [[ "$regressed" -eq 0 ]] || blockers+=("$regressed clip(s) regressed")
+    awk -v ratio="$latency_ratio" -v max="$MAX_CANDIDATE_LATENCY_RATIO" \
+        'BEGIN { exit !(ratio <= max) }' || blockers+=("latency exceeds ${MAX_CANDIDATE_LATENCY_RATIO}x production")
+
+    if [[ "${#blockers[@]}" -eq 0 ]]; then
+        printf 'passes\t'
+    else
+        local blocker_text
+        printf -v blocker_text '%s; ' "${blockers[@]}"
+        printf 'blocked\t%s' "${blocker_text%; }"
+    fi
+}
+
 assert_eq() {
     local actual="$1"
     local expected="$2"
@@ -306,6 +418,7 @@ run_self_test() {
         echo 'transcript: [WER 0.1%] [final-word retained=false] [word-errors=2 reference-words=2000] <redacted 22 chars>'
     } >"$rounded_wer_log"
     assert_eq "$(extract_worst_wer_metrics "$rounded_wer_log")" $'0.1\t2\t2000' "rounded WER exact worst-trial selection"
+    assert_eq "$(extract_best_wer_metrics "$rounded_wer_log")" $'0.1\t1\t2000' "rounded WER exact best-trial selection"
 
     local validation_log="$tmpdir/validation.log"
     if validate_metrics max-WER unknown final-word-retained "" >"$validation_log" 2>&1; then
@@ -371,6 +484,34 @@ run_self_test() {
     assert_contains "$summary" '| `v3` | 2 | 1.98 | 100.0 | 1 | 60.0 |'
     assert_not_contains "$summary" '\n'
 
+    local precision_tsv="$tmpdir/precision.tsv"
+    {
+        printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors\n'
+        printf '001\tv3\tna\t10.0\ttrue\t100.0\t2\t20\t1\n'
+        printf '001\tv3-int8-v2\tna\t0.0\ttrue\t110.0\t0\t20\t0\n'
+        printf '002\tv3\tna\t0.0\ttrue\t120.0\t0\t30\t0\n'
+        printf '002\tv3-int8-v2\tna\t3.3\ttrue\t130.0\t1\t30\t1\n'
+    } >"$precision_tsv"
+    assert_eq "$(candidate_assessment "$precision_tsv" v3-int8-v2)" \
+        $'2\t50\t1\t1\t1\t1\t1.091' "encoder candidate conservative assessment"
+
+    local original_trials="$TRIALS"
+    local original_kind="$CORPUS_KIND"
+    local original_audit="$REFERENCES_HAND_AUDITED"
+    TRIALS=3
+    CORPUS_KIND="public"
+    REFERENCES_HAND_AUDITED=0
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v3-int8-v2)" \
+        $'passes\t' "passing encoder candidate screen"
+    local blocked_screen
+    blocked_screen="$(candidate_screen $'25\t1200\t10\t11\t0\t1\t1.300' clean v3-int8-v2)"
+    assert_contains <(printf '%s' "$blocked_screen") "no clip demonstrates an error reduction"
+    assert_contains <(printf '%s' "$blocked_screen") "corpus word errors increased"
+    assert_contains <(printf '%s' "$blocked_screen") "latency exceeds 1.25x production"
+    TRIALS="$original_trials"
+    CORPUS_KIND="$original_kind"
+    REFERENCES_HAND_AUDITED="$original_audit"
+
     CORPUS_KIND="public"
     report_title >"$summary"
     assert_contains "$summary" "Public-Speech"
@@ -425,6 +566,16 @@ while [[ $# -gt 0 ]]; do
             TRIALS="$2"
             shift 2
             ;;
+        --candidate-backend)
+            need_value "$@"
+            CANDIDATE_BACKEND="$2"
+            shift 2
+            ;;
+        --language)
+            need_value "$@"
+            LANGUAGE="$2"
+            shift 2
+            ;;
         --unified-trailing-silence-ms)
             need_value "$@"
             UNIFIED_TRAILING_SILENCE_MS="$2"
@@ -440,6 +591,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --public-corpus)
             CORPUS_KIND="public"
+            shift
+            ;;
+        --references-hand-audited)
+            REFERENCES_HAND_AUDITED=1
+            shift
+            ;;
+        --require-candidate-pass)
+            REQUIRE_CANDIDATE_PASS=1
             shift
             ;;
         --self-test)
@@ -468,6 +627,19 @@ if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     exit 2
 fi
 
+case "$CANDIDATE_BACKEND" in
+    unified|v3-int8-v2) ;;
+    *)
+        echo "--candidate-backend must be unified or v3-int8-v2" >&2
+        exit 2
+        ;;
+esac
+
+if [[ -z "$LANGUAGE" || "$LANGUAGE" == --* ]]; then
+    echo "--language requires auto or a language code" >&2
+    exit 2
+fi
+
 if ! [[ "$UNIFIED_TRAILING_SILENCE_MS" =~ ^[0-9]+$ ]]; then
     echo "--unified-trailing-silence-ms must be a non-negative integer" >&2
     exit 2
@@ -476,6 +648,11 @@ fi
 if [[ ! -d "$INPUT_DIR" ]]; then
     echo "input directory not found: $INPUT_DIR" >&2
     exit 1
+fi
+
+BENCHMARK_SOURCE_STATE="clean"
+if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+    BENCHMARK_SOURCE_STATE="modified"
 fi
 
 if ! command -v afconvert >/dev/null 2>&1; then
@@ -544,7 +721,7 @@ tsv="$stage_dir/results.tsv"
 raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
-printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\tword_errors\treference_words\n' >"$tsv"
+printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors\n' >"$tsv"
 
 {
     echo "# $(report_title)"
@@ -552,16 +729,22 @@ printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retai
     echo "- Date: $timestamp"
     echo "- Input directory: $(path_label "$INPUT_DIR")"
     echo "- Trials per clip/backend: $TRIALS"
-    echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
+    echo "- Candidate backend: $CANDIDATE_BACKEND"
+    echo "- Parakeet language hint: $LANGUAGE"
+    if [[ "$CANDIDATE_BACKEND" == "unified" ]]; then
+        echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
+    fi
     echo "- Transcript output: $([[ "$REDACT_TRANSCRIPTS" -eq 1 ]] && echo redacted || echo included)"
     echo "- Fixture paths: $([[ "$REDACT_PATHS" -eq 1 ]] && echo redacted || echo included)"
     echo "- Clips: ${#clips[@]}"
+    echo "- Benchmark source: $BENCHMARK_SOURCE_STATE"
+    echo "- Private references declared hand-audited: $([[ "$REFERENCES_HAND_AUDITED" -eq 1 ]] && echo yes || echo no)"
     echo
     report_note
     echo
     echo "## Per-Clip Results"
     echo
-    echo "| Clip | Backend | Unified trailing ms | Max WER % | Final word retained | p50 ms |"
+    echo "| Clip | Backend | Backend setting | Max WER % | Final word retained | p50 ms |"
     echo "|---|---|---:|---:|---|---:|"
 } >"$report"
 
@@ -578,9 +761,10 @@ for clip in "${clips[@]}"; do
     afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
     cp "$ref" "$tmpdir/$clip_id.txt"
 
-    for backend in v3 unified; do
+    for backend in v3 "$CANDIDATE_BACKEND"; do
         log_file="$raw_dir/$(redacted_log_name "$clip_id" "$backend")"
         bench_args=( ".build/release/presspeech-bench" "--file" "$normalized" "--backend" "$backend" "--trials" "$TRIALS" )
+        bench_args+=( "--language" "$LANGUAGE" )
         if [[ "$backend" == "unified" ]]; then
             bench_args+=( "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS" )
         fi
@@ -597,28 +781,49 @@ for clip in "${clips[@]}"; do
 
         wer_metrics="$(extract_worst_wer_metrics "$log_file")"
         IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"
+        best_wer_metrics="$(extract_best_wer_metrics "$log_file")"
+        IFS=$'\t' read -r best_wer best_word_errors best_reference_words <<<"$best_wer_metrics"
         retained="$(extract_final_word_retained "$log_file")"
         p50="$(extract_p50_ms "$log_file")"
         [[ -n "$p50" ]] || p50="unknown"
         if ! validate_metrics \
             max-WER "$wer" word-errors "$word_errors" reference-words "$reference_words" \
+            best-WER "$best_wer" best-word-errors "$best_word_errors" \
+            best-reference-words "$best_reference_words" \
             final-word-retained "$retained" p50 "$p50"; then
             cat "$log_file" >&2
             echo "invalid benchmark output for clip $clip_id backend=$backend" >&2
             exit 1
         fi
-        trailing="na"
+        setting="na"
         if [[ "$backend" == "unified" ]]; then
-            trailing="$UNIFIED_TRAILING_SILENCE_MS"
+            setting="trailing-silence=${UNIFIED_TRAILING_SILENCE_MS}ms"
+        elif [[ "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
+            if [[ "$backend" == "v3" ]]; then
+                setting="encoder=int8-production"
+            else
+                setting="encoder=int8-v2"
+            fi
         fi
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$clip_id" "$backend" "$trailing" "$wer" "$retained" "$p50" \
-            "$word_errors" "$reference_words" >>"$tsv"
+        if [[ "$best_reference_words" != "$reference_words" ]]; then
+            echo "inconsistent reference metrics for clip $clip_id backend=$backend" >&2
+            exit 1
+        fi
+
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$clip_id" "$backend" "$setting" "$wer" "$retained" "$p50" \
+            "$word_errors" "$reference_words" "$best_word_errors" >>"$tsv"
         printf '| `%s` | `%s` | %s | %s | %s | %s |\n' \
-            "$clip_id" "$backend" "$trailing" "$wer" "$retained" "$p50" >>"$report"
+            "$clip_id" "$backend" "$setting" "$wer" "$retained" "$p50" >>"$report"
     done
 done
+
+assessment="$(candidate_assessment "$tsv" "$CANDIDATE_BACKEND")"
+IFS=$'\t' read -r comparable reference_words baseline_errors candidate_errors \
+    improved regressed latency_ratio <<<"$assessment"
+screen="$(candidate_screen "$assessment" "$BENCHMARK_SOURCE_STATE" "$CANDIDATE_BACKEND")"
+IFS=$'\t' read -r verdict blockers <<<"$screen"
 
 {
     echo
@@ -627,7 +832,20 @@ done
     echo "| Backend | Clip rows | Corpus WER % | Worst WER % | Final-word failures | Average p50 ms |"
     echo "|---|---:|---:|---:|---:|---:|"
     backend_summary_row "$tsv" "v3"
-    backend_summary_row "$tsv" "unified"
+    backend_summary_row "$tsv" "$CANDIDATE_BACKEND"
+    if [[ "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
+        echo
+        echo "## Encoder Candidate Evidence Screen"
+        echo
+        echo "The candidate's worst observed transcript is compared with production's best observed transcript on each clip; a noisy production trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x production. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
+        echo
+        echo "| Candidate | Comparable clips | Reference words | Production best errors | Candidate worst errors | Improved clips | Regressed clips | p50 / production | Verdict | Blockers |"
+        echo "|---|---:|---:|---:|---:|---:|---:|---:|---|---|"
+        printf '| `%s` | %s | %s | %s | %s | %s | %s | %.3f | %s | %s |\n' \
+            "$CANDIDATE_BACKEND" "$comparable" "$reference_words" "$baseline_errors" \
+            "$candidate_errors" "$improved" "$regressed" "$latency_ratio" \
+            "$verdict" "${blockers:-}"
+    fi
     echo
     echo "$(raw_logs_label): $(path_label "$final_raw_dir")"
     echo "Machine-readable TSV: $(path_label "$final_tsv")"
@@ -645,3 +863,8 @@ stage_dir=""
 
 echo "report: $final_report"
 echo "tsv: $final_tsv"
+
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$verdict" != "passes" ]]; then
+    echo "candidate evidence screen blocked: ${blockers:-unknown blocker}" >&2
+    exit 1
+fi

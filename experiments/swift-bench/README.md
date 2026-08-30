@@ -17,6 +17,7 @@ the production app.
 | Tag | Stack | Where it runs |
 |---|---|---|
 | **`v3`** | FluidAudio Swift SDK → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
+| **`v3-int8-v2`** | production `v3` path + candidate linear-int8 `Encoder_v2` | Apple Neural Engine |
 | **`v3-vocab`** | production `v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
 | **`v3-vocab-conservative`** | `v3-vocab` + FluidAudio's short-term taper and spotter similarity floors | Apple Neural Engine |
 | **`v3-vocab-no-rescue`** | `v3-vocab` with acoustic-only spotter rescue disabled | Apple Neural Engine |
@@ -65,15 +66,20 @@ swift build
 ../../.venv/bin/python bench-py.py --file test-audio/short-clean.wav --trials 5
 ```
 
-The Swift benchmark pins FluidAudio to the same revision as the
-production app. Temporarily change `Package.swift` only when evaluating
-an upstream FluidAudio bump, then restore or intentionally update both
-manifests together.
+The Swift benchmark normally pins FluidAudio to the same revision as the
+production app. Its current pin is an intentional candidate-only exception:
+it includes FluidAudio's opt-in `int8-v2` encoder API while the app remains on
+the released v0.15.6 commit. Both direct-v3 benchmark lanes explicitly retain
+the app's released mel-context chunking behavior because the candidate
+revision also changed that long-form default; an encoder-precision comparison
+must not vary both controls at once. Do not move the app pin until the
+candidate checks below have passed.
 
 `Package.resolved` is committed for the benchmark for the same reason
-as the app: dependency changes should be visible in review. When
-updating FluidAudio, commit the app and benchmark manifests plus both
-resolved files together.
+as the app: dependency changes should be visible in review. Candidate-only
+API evaluation may move the benchmark pin with the exception documented
+above. When promoting a validated FluidAudio revision to production, update
+the app and benchmark manifests plus both resolved files together.
 
 ## Private real-dictation regression
 
@@ -394,6 +400,42 @@ transcripts by default because the fixture corpus is public. LibriSpeech is
 read English audiobook speech under CC BY 4.0, so treat it as a stable
 reproducible benchmark, not as a replacement for local push-to-talk dictation
 clips.
+
+## Parakeet encoder-precision regression
+
+FluidAudio's original v3 `Encoder.mlmodelc` uses 6-bit LUT palettization even
+though its historical API label is `int8`. Upstream isolated a deterministic,
+high-confidence Ukrainian token corruption to that encoder and published a
+larger linear-int8 `Encoder_v2.mlmodelc` candidate. The fix is opt-in because
+upstream had not completed broad WER or Apple Neural Engine latency checks
+([FluidAudio issue #760](https://github.com/FluidInference/FluidAudio/issues/760),
+[implementation #872](https://github.com/FluidInference/FluidAudio/pull/872)).
+
+Compare it with Presspeech's production encoder on exactly the same fixtures:
+
+```sh
+./run-real-model-comparison.sh \
+  --input-dir public-audio/librispeech-dev-clean \
+  --out-dir public-results \
+  --candidate-backend v3-int8-v2 \
+  --language en \
+  --public-corpus --show-transcripts --show-paths \
+  --trials 3
+```
+
+For a product-candidate gate, add `--require-candidate-pass`. The gate requires
+a clean checkout, at least 3 trials, 25 comparable clips and 1,000 reference
+words, at least one demonstrated error reduction, no per-clip or aggregate
+word-error increase, and average p50 latency no more than 1.25× production.
+It compares the candidate's worst observed transcript with production's best
+on every clip so unstable baseline output cannot hide a regression. Private
+corpora additionally require `--references-hand-audited`.
+
+A pass is only a per-corpus prerequisite. Before changing production, run at
+least one general dictation corpus and a human-audited corpus in a language
+that exercises the reported quantization failure (currently Ukrainian), and
+inspect the additional model-cache and memory cost. A clean English corpus
+that never changes cannot pass merely because latency is acceptable.
 
 ### 2026-07-22 candidate recheck
 
