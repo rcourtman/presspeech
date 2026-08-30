@@ -95,7 +95,8 @@ clipboard and notifies you instead of pasting private text into the wrong window
 Tray icon (bottom-right) menus include **Dictate** (toggle), **Try Dictation…**
 (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
 **Check for Updates…**, **Copy Diagnostics**, and **Exit**. The icon turns red
-while recording.
+while recording. Setup, settings, update, and scratchpad controls expose names,
+roles, values, and actions through Windows UI Automation for screen readers.
 
 ## Settings
 

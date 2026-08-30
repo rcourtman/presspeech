@@ -363,7 +363,7 @@ class TextRegressionTests(unittest.TestCase):
             "comtypes", "ctranslate2", "faster_whisper", "librosa",
             "pycaw.constants", "pycaw.pycaw", "safetensors",
             "sentencepiece", "soundfile", "tokenizers", "torch",
-            "transformers",
+            "tk_uia", "transformers",
         })
 
     def test_packaged_selftest_redacts_import_exception_details(self):
@@ -911,6 +911,7 @@ class TextRegressionTests(unittest.TestCase):
         diagnostics = instance.diagnostics_text()
         self.assertIn("Dictionary rule count: 1", diagnostics)
         self.assertIn("Model status: ready", diagnostics)
+        self.assertIn("Windows UI Automation: not initialized", diagnostics)
         self.assertNotIn("\\Users\\", diagnostics)
         self.assertNotIn("private spoken phrase", diagnostics)
         self.assertNotIn("private replacement", diagnostics)

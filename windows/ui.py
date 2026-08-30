@@ -12,6 +12,134 @@ import config as cfg
 import updates
 
 
+try:
+    import tk_uia
+except ImportError:
+    class _UnavailableTkUia:
+        """Keep source installs usable when the optional bridge is absent."""
+
+        @staticmethod
+        def _unavailable(*_args, **_kwargs):
+            raise RuntimeError("tk-uia is not installed")
+
+        enable = _unavailable
+        add_acc_object = _unavailable
+        label_for = _unavailable
+        set_acc_name = _unavailable
+
+    tk_uia = _UnavailableTkUia()
+
+
+class _WindowHost:
+    """Own every interactive Tk window on one accessible UI thread."""
+
+    def __init__(self):
+        self.commands = queue.Queue()
+        self.root = None
+        self.failure = None
+        self.accessibility = "not initialized"
+        self.ready = threading.Event()
+        threading.Thread(
+            target=self._run, name="presspeech-ui", daemon=True).start()
+
+    def submit(self, command):
+        self.ready.wait()
+        if self.failure is not None:
+            raise RuntimeError("Presspeech could not start its window system") \
+                from self.failure
+        self.commands.put(command)
+
+    def _run(self):
+        try:
+            root = tk.Tk()
+            self.root = root
+            root.withdraw()
+            # Tk 8.6's Windows accessibility proxy leaves most ttk controls
+            # anonymous or inert. One installation follows every later
+            # Toplevel created by this interpreter.
+            try:
+                strategy = tk_uia.enable(root)
+                self.accessibility = strategy.name.lower()
+            except Exception:
+                # An assistive-technology integration failure must not take
+                # dictation's setup and recovery windows away from the user.
+                self.accessibility = "unavailable"
+            self.ready.set()
+
+            def poll():
+                try:
+                    while True:
+                        command = self.commands.get_nowait()
+                        try:
+                            command()
+                        except Exception as exc:
+                            root.report_callback_exception(
+                                type(exc), exc, exc.__traceback__)
+                except queue.Empty:
+                    pass
+                root.after(25, poll)
+
+            root.after(0, poll)
+            root.mainloop()
+        except Exception as exc:
+            self.failure = exc
+            self.ready.set()
+
+
+_WINDOW_HOST = None
+_WINDOW_HOST_LOCK = threading.Lock()
+
+
+def _window_host():
+    global _WINDOW_HOST
+    with _WINDOW_HOST_LOCK:
+        if _WINDOW_HOST is None:
+            _WINDOW_HOST = _WindowHost()
+        return _WINDOW_HOST
+
+
+def _interactive_window(title):
+    root = tk.Toplevel(_window_host().root)
+    root.title(title)
+    return root
+
+
+def accessibility_status():
+    """Return a privacy-safe summary for Copy Diagnostics."""
+    if _WINDOW_HOST is None:
+        return "not initialized"
+    return _WINDOW_HOST.accessibility
+
+
+def _accessibility_failed():
+    if _WINDOW_HOST is not None:
+        _WINDOW_HOST.accessibility = "degraded"
+
+
+def _label_control(label, control):
+    """Expose an explicit accessible name for a captioned form control."""
+    try:
+        tk_uia.label_for(label, control)
+    except Exception:
+        _accessibility_failed()
+
+
+def _name_control(control, name):
+    try:
+        tk_uia.set_acc_name(control, name)
+    except Exception:
+        _accessibility_failed()
+
+
+def _set_accessible_text(widget, text):
+    """Keep a mapped widget's UIA name aligned with changed visible text."""
+    widget.config(text=text)
+    try:
+        tk_uia.add_acc_object(widget)
+    except Exception:
+        _accessibility_failed()
+
+
 class DictationIndicator:
     """Small click-through overlay driven safely from any application thread."""
 
@@ -161,12 +289,11 @@ class SetupWindow:
     def __init__(self, app):
         self.app = app
         self.root = None
-        threading.Thread(target=self._build, daemon=True).start()
+        _window_host().submit(self._build)
 
     def _build(self):
-        root = tk.Tk()
+        root = _interactive_window("Welcome to Presspeech")
         self.root = root
-        root.title("Welcome to Presspeech")
         root.resizable(False, False)
         root.lift()
         root.attributes("-topmost", True)
@@ -192,7 +319,8 @@ class SetupWindow:
         self.progress.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 13))
         self.progress.start(12)
 
-        ttk.Label(frame, text="Microphone").grid(row=4, column=0, sticky="w")
+        microphone_label = ttk.Label(frame, text="Microphone")
+        microphone_label.grid(row=4, column=0, sticky="w")
         options = self.app.input_device_options()
         self.device_values = {label: value for label, value in options}
         current = self.app.settings.get("input_device", cfg.DEFAULTS["input_device"])
@@ -222,10 +350,9 @@ class SetupWindow:
                    command=self._finish).pack(side="right")
 
         root.protocol("WM_DELETE_WINDOW", self._close)
+        root.update_idletasks()
+        _label_control(microphone_label, self.device)
         root.after(100, self._poll_model)
-        root.mainloop()
-        self.root = None
-        self.app.setup_window = None
 
     def _poll_model(self):
         if self.root is None:
@@ -238,7 +365,8 @@ class SetupWindow:
             "ready": "Ready — " + detail,
             "error": "Needs attention — " + detail,
         }
-        self.model_label.config(text=labels.get(status, detail or status))
+        _set_accessible_text(
+            self.model_label, labels.get(status, detail or status))
         if status in ("ready", "error"):
             self.progress.stop()
             self.progress.config(mode="determinate", value=100 if status == "ready" else 0)
@@ -263,6 +391,7 @@ class SetupWindow:
             self.root.destroy()
         except Exception:
             pass
+        self.app.setup_window = None
 
 
 class UpdateWindow:
@@ -280,12 +409,11 @@ class UpdateWindow:
         self.active_staging_path = None
         self.download_finished = threading.Event()
         self.download_finished.set()
-        threading.Thread(target=self._build, daemon=True).start()
+        _window_host().submit(self._build)
 
     def _build(self):
-        root = tk.Tk()
+        root = _interactive_window("Presspeech Update")
         self.root = root
-        root.title("Presspeech Update")
         root.resizable(False, False)
         frame = ttk.Frame(root, padding=18)
         frame.pack(fill="both", expand=True)
@@ -309,16 +437,13 @@ class UpdateWindow:
         self.download_button.pack(side="right")
         root.protocol("WM_DELETE_WINDOW", self._close)
         root.after(100, self._poll)
-        root.mainloop()
-        self.root = None
-        self.app.update_window = None
 
     def _download(self):
         self._discard_completed_download()
         self.cancel_download.clear()
         self.download_finished.clear()
         self.download_button.config(state="disabled")
-        self.status.config(text="Downloading…")
+        _set_accessible_text(self.status, "Downloading…")
         threading.Thread(target=self._download_worker, daemon=True).start()
 
     def _download_worker(self):
@@ -421,18 +546,21 @@ class UpdateWindow:
                     _kind, done, total = event
                     if total:
                         self.progress.config(maximum=total, value=done)
-                        self.status.config(text="Downloaded %.1f of %.1f GB" %
-                                           (done / 1073741824, total / 1073741824))
+                        _set_accessible_text(
+                            self.status, "Downloaded %.1f of %.1f GB" %
+                            (done / 1073741824, total / 1073741824))
                     else:
-                        self.status.config(text="Downloaded %.1f MB" %
-                                           (done / 1048576))
+                        _set_accessible_text(
+                            self.status, "Downloaded %.1f MB" %
+                            (done / 1048576))
                 elif event[0] == "error":
-                    self.status.config(text="Download failed")
+                    _set_accessible_text(self.status, "Download failed")
                     self.download_button.config(state="normal")
                     messagebox.showerror("Update failed", event[1], parent=self.root)
                 elif event[0] == "ready":
                     self.progress.config(value=self.progress["maximum"])
-                    self.status.config(text="Verified and ready to install")
+                    _set_accessible_text(
+                        self.status, "Verified and ready to install")
                     if messagebox.askyesno(
                             "Install update",
                             "Close Presspeech and run the verified installer now?",
@@ -441,14 +569,14 @@ class UpdateWindow:
                             self.app.launch_update(event[1], self.update)
                         except Exception as exc:
                             self._discard_completed_download()
-                            self.status.config(text="Install failed")
+                            _set_accessible_text(self.status, "Install failed")
                             self.progress.config(value=0)
                             self.download_button.config(state="normal")
                             messagebox.showerror(
                                 "Update failed", str(exc), parent=self.root)
                     else:
                         self._discard_completed_download()
-                        self.status.config(text="Ready to download")
+                        _set_accessible_text(self.status, "Ready to download")
                         self.progress.config(value=0)
                         self.download_button.config(state="normal")
         except queue.Empty:
@@ -461,26 +589,27 @@ class UpdateWindow:
             self.root.destroy()
         except Exception:
             pass
+        self.app.update_window = None
 
 
 class SettingsWindow:
     def __init__(self, app):
         self.app = app
         self.root = None
-        threading.Thread(target=self._build, daemon=True).start()
+        _window_host().submit(self._build)
 
     def _build(self):
         s = self.app.settings
-        root = tk.Tk()
+        root = _interactive_window("Presspeech Settings")
         self.root = root
-        root.title("Presspeech Settings")
         root.resizable(False, False)
         f = ttk.Frame(root, padding=12)
         f.pack(fill="both", expand=True)
 
         row = 0
 
-        ttk.Label(f, text="Dictation hotkey").grid(row=row, column=0, sticky="w", pady=2)
+        hotkey_label = ttk.Label(f, text="Dictation hotkey")
+        hotkey_label.grid(row=row, column=0, sticky="w", pady=2)
         self.var_hotkey = ttk.Combobox(f, values=cfg.HOTKEYS, state="readonly", width=14)
         self.var_hotkey.set(s["hotkey"])
         self.var_hotkey.grid(row=row, column=1, sticky="w", padx=10, pady=2)
@@ -494,7 +623,8 @@ class SettingsWindow:
             row=row, column=2, sticky="w")
         row += 1
 
-        ttk.Label(f, text="Microphone").grid(row=row, column=0, sticky="w", pady=2)
+        microphone_label = ttk.Label(f, text="Microphone")
+        microphone_label.grid(row=row, column=0, sticky="w", pady=2)
         device_options = self.app.input_device_options()
         self.device_values = {label: value for label, value in device_options}
         selected_device = s.get("input_device", cfg.DEFAULTS["input_device"])
@@ -510,16 +640,18 @@ class SettingsWindow:
         self.var_device.grid(row=row, column=1, columnspan=2, sticky="w", padx=10, pady=2)
         row += 1
 
-        ttk.Label(f, text="Speech model").grid(row=row, column=0, sticky="w", pady=2)
+        model_label = ttk.Label(f, text="Speech model")
+        model_label.grid(row=row, column=0, sticky="w", pady=2)
         self.var_model = ttk.Combobox(f, values=[cfg.MODEL_LABELS[m] for m in cfg.MODELS],
                                       state="readonly", width=42)
         self.var_model.set(cfg.MODEL_LABELS.get(s["model"], cfg.MODEL_LABELS[cfg.MODELS[0]]))
         self.var_model.grid(row=row, column=1, sticky="w", padx=10, pady=2)
         ttk.Label(f, text="No CUDA? First setup uses base.en on CPU").grid(
-            row=row, column=2, sticky="w", foreground="#666")
+            row=row, column=2, sticky="w")
         row += 1
 
-        ttk.Label(f, text="After pasting").grid(row=row, column=0, sticky="w", pady=2)
+        suffix_label = ttk.Label(f, text="After pasting")
+        suffix_label.grid(row=row, column=0, sticky="w", pady=2)
         self.var_suffix = ttk.Combobox(
             f, values=["space", "newline", "none"], state="readonly", width=14)
         self.var_suffix.set(s["suffix"])
@@ -579,10 +711,18 @@ class SettingsWindow:
 
         self.var_spoken = tk.StringVar()
         self.var_replace = tk.StringVar()
-        ttk.Entry(f, textvariable=self.var_spoken, width=18).grid(
-            row=row, column=0, sticky="w", pady=2)
+        spoken_label = ttk.Label(f, text="Spoken phrase")
+        spoken_label.grid(row=row, column=0, sticky="w")
+        replacement_label = ttk.Label(f, text="Replacement")
+        replacement_label.grid(row=row, column=2, sticky="w", padx=10)
+        row += 1
+        self.spoken_entry = ttk.Entry(
+            f, textvariable=self.var_spoken, width=18)
+        self.spoken_entry.grid(row=row, column=0, sticky="w", pady=2)
         ttk.Label(f, text="\u2192").grid(row=row, column=1)
-        ttk.Entry(f, textvariable=self.var_replace, width=18).grid(
+        self.replacement_entry = ttk.Entry(
+            f, textvariable=self.var_replace, width=18)
+        self.replacement_entry.grid(
             row=row, column=2, sticky="w", padx=10, pady=2)
         row += 1
 
@@ -607,13 +747,20 @@ class SettingsWindow:
         row += 1
 
         ttk.Button(f, text="Save", command=self._save).grid(row=row, column=0, sticky="w")
-        self.status = ttk.Label(f, text="", foreground="#666")
+        self.status = ttk.Label(f, text="")
         self.status.grid(row=row, column=1, columnspan=2, sticky="w", padx=10)
 
         root.protocol("WM_DELETE_WINDOW", self._close)
-        root.mainloop()
-        self.root = None
-        self.app.settings_window = None
+        root.update_idletasks()
+        for label, control in (
+                (hotkey_label, self.var_hotkey),
+                (microphone_label, self.var_device),
+                (model_label, self.var_model),
+                (suffix_label, self.var_suffix),
+                (spoken_label, self.spoken_entry),
+                (replacement_label, self.replacement_entry)):
+            _label_control(label, control)
+        _name_control(self.listbox, "Dictionary rules")
 
     def _add_rule(self):
         spoken = self.var_spoken.get().strip()
@@ -623,14 +770,15 @@ class SettingsWindow:
         candidate = cfg.validated_dictionary(
             self.dictionary_rules + [[spoken, replacement]])
         if candidate is None or len(candidate) != len(self.dictionary_rules) + 1:
-            self.status.config(
-                text="Rule not added. Check the text length or remove an existing rule.")
+            _set_accessible_text(
+                self.status,
+                "Rule not added. Check the text length or remove an existing rule.")
             return
         self.dictionary_rules = candidate
         self.listbox.insert("end", "%s \u2192 %s" % (spoken, replacement))
         self.var_spoken.set("")
         self.var_replace.set("")
-        self.status.config(text="")
+        _set_accessible_text(self.status, "")
 
     def _remove_rule(self):
         selection = self.listbox.curselection()
@@ -664,13 +812,15 @@ class SettingsWindow:
         s["dictionary"] = cfg.validated_dictionary(self.dictionary_rules) or []
         cfg.save(s)
         self.app.apply_autostart()
-        self.status.config(text="Saved. Hotkey changes apply immediately.")
+        _set_accessible_text(
+            self.status, "Saved. Hotkey changes apply immediately.")
 
     def _close(self):
         try:
             self.root.destroy()
         except Exception:
             pass
+        self.app.settings_window = None
 
 
 class ScratchpadWindow:
@@ -678,12 +828,11 @@ class ScratchpadWindow:
         self.app = app
         self.root = None
         self.window_handle = 0
-        threading.Thread(target=self._build, daemon=True).start()
+        _window_host().submit(self._build)
 
     def _build(self):
-        root = tk.Tk()
+        root = _interactive_window("Presspeech - Try Dictation")
         self.root = root
-        root.title("Presspeech - Try Dictation")
         root.geometry("480x280")
         self.text = tk.Text(root, wrap="word", font=("Segoe UI", 12))
         self.text.pack(fill="both", expand=True, padx=8, pady=8)
@@ -696,18 +845,14 @@ class ScratchpadWindow:
         user32.GetParent.restype = ctypes.c_void_p
         client_handle = root.winfo_id()
         self.window_handle = int(user32.GetParent(client_handle) or client_handle)
-        root.mainloop()
-        self.window_handle = 0
-        self.root = None
-        self.app.scratchpad = None
 
     def toggle(self):
         if self.app.recording:
             self.app.stop_recording()
-            self.btn.config(text="Dictate (or use the hotkey)")
+            _set_accessible_text(self.btn, "Dictate (or use the hotkey)")
         else:
             if self.app.start_recording():
-                self.btn.config(text="Stop")
+                _set_accessible_text(self.btn, "Stop")
 
     def append_text(self, text):
         def do():
@@ -723,3 +868,5 @@ class ScratchpadWindow:
             self.root.destroy()
         except Exception:
             pass
+        self.window_handle = 0
+        self.app.scratchpad = None

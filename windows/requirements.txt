@@ -5,6 +5,7 @@ pystray>=0.19.5
 Pillow>=10.0.0
 pyperclip>=1.8.2
 pycaw==20251023
+tk-uia==0.8.0
 numpy>=1.26.0
 soundfile>=0.12.1
 transformers>=5.14.1,<6

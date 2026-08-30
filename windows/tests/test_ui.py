@@ -15,6 +15,61 @@ except ModuleNotFoundError:
 import ui
 
 
+class AccessibleWindowTests(unittest.TestCase):
+    def test_every_interactive_window_uses_the_shared_host(self):
+        host = mock.Mock()
+        app = mock.Mock()
+
+        with mock.patch.object(ui, "_window_host", return_value=host):
+            windows = (
+                ui.SetupWindow(app),
+                ui.UpdateWindow(app, {"version": "1.2.3"}),
+                ui.SettingsWindow(app),
+                ui.ScratchpadWindow(app),
+            )
+
+        self.assertEqual(host.submit.call_count, len(windows))
+        self.assertEqual(
+            [call.args[0].__self__ for call in host.submit.call_args_list],
+            list(windows),
+        )
+
+    def test_form_labels_and_names_reach_ui_automation(self):
+        label = mock.Mock()
+        control = mock.Mock()
+
+        with mock.patch.object(ui.tk_uia, "label_for") as label_for, \
+                mock.patch.object(ui.tk_uia, "set_acc_name") as set_name:
+            ui._label_control(label, control)
+            ui._name_control(control, "Dictionary rules")
+
+        label_for.assert_called_once_with(label, control)
+        set_name.assert_called_once_with(control, "Dictionary rules")
+
+    def test_changed_visible_text_refreshes_its_accessible_name(self):
+        widget = mock.Mock()
+
+        with mock.patch.object(ui.tk_uia, "add_acc_object") as refresh:
+            ui._set_accessible_text(widget, "Verified and ready to install")
+
+        widget.config.assert_called_once_with(
+            text="Verified and ready to install")
+        refresh.assert_called_once_with(widget)
+
+    def test_diagnostics_do_not_start_the_window_host(self):
+        with mock.patch.object(ui, "_WINDOW_HOST", None):
+            self.assertEqual(ui.accessibility_status(), "not initialized")
+
+    def test_accessibility_failures_are_visible_in_diagnostics(self):
+        host = mock.Mock()
+        host.accessibility = "provided"
+        with mock.patch.object(ui, "_WINDOW_HOST", host), \
+                mock.patch.object(
+                    ui.tk_uia, "label_for", side_effect=OSError("UIA failed")):
+            ui._label_control(mock.Mock(), mock.Mock())
+            self.assertEqual(ui.accessibility_status(), "degraded")
+
+
 class DictionarySettingsTests(unittest.TestCase):
     def make_window(self, rules=None):
         window = ui.SettingsWindow.__new__(ui.SettingsWindow)

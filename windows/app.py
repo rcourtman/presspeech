@@ -111,6 +111,7 @@ PACKAGE_SMOKE_IMPORTS = (
     ("comtypes", ()),
     ("pycaw.constants", ("AudioDeviceState", "EDataFlow")),
     ("pycaw.pycaw", ("AudioUtilities",)),
+    ("tk_uia", ("add_acc_object", "enable", "label_for", "set_acc_name")),
 )
 
 
@@ -1348,6 +1349,7 @@ class PresspeechApp:
             "Hotkey / trigger: %s / %s" % (
                 self.settings.get("hotkey", "unknown"),
                 self.settings.get("trigger", "unknown")),
+            "Windows UI Automation: %s" % ui.accessibility_status(),
             "Automatic update checks: %s" % bool(
                 self.settings.get("check_updates", True)),
             "Dictionary rule count: %d" % len(self.settings.get("dictionary", [])),
