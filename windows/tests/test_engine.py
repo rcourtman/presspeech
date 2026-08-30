@@ -127,6 +127,31 @@ class ParakeetConfigurationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unsupported Whisper model"):
                 engine.Transcriber()._load_whisper("unreviewed/model", None)
 
+    def test_whisper_transcribes_each_recording_without_previous_window_prompt(self):
+        model = mock.Mock()
+        model.transcribe.return_value = (
+            iter([
+                types.SimpleNamespace(text=" Standalone"),
+                types.SimpleNamespace(text=" dictation "),
+            ]),
+            mock.sentinel.info,
+        )
+        transcriber = engine.Transcriber()
+        transcriber.model = model
+        transcriber.backend = "whisper"
+
+        text = transcriber.transcribe(mock.sentinel.audio, language="en")
+
+        self.assertEqual(text, "Standalone dictation")
+        model.transcribe.assert_called_once_with(
+            mock.sentinel.audio,
+            language="en",
+            beam_size=1,
+            vad_filter=False,
+            without_timestamps=True,
+            condition_on_previous_text=False,
+        )
+
     def test_parakeet_load_fallbacks_keep_the_reviewed_revision(self):
         torch = types.ModuleType("torch")
         torch.float16 = "float16"

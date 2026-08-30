@@ -261,7 +261,7 @@ class Transcriber:
             else:
                 segments, _info = model.transcribe(
                     audio, language=language, beam_size=1, vad_filter=False,
-                    without_timestamps=True,
+                    without_timestamps=True, condition_on_previous_text=False,
                 )
                 text = "".join(seg.text for seg in segments).strip()
             finished_at = time.perf_counter()
