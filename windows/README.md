@@ -52,9 +52,12 @@ place. The check briefly opens the selected input, discards its samples in
 memory, and reports whether microphone audio is available. If it fails, use the
 window's direct links to Windows Microphone Privacy or Sound Input settings,
 then choose **Check Again**. Wait until it says the model is ready before the
-first dictation. **Try Dictation** remains disabled until then. If preparation
-fails, use **Retry Speech Model**; the window keeps tracking the retry instead
-of leaving the previous error on screen.
+first dictation. **Try Dictation** and **Finish Setup** remain disabled until
+then. If preparation fails, use **Retry Speech Model**; the window keeps
+tracking the retry instead of leaving the previous error on screen. Choose
+**Set Up Later** to close the window without marking setup complete; it will
+open again on the next launch. A microphone can still be connected later and
+does not block **Finish Setup** once the speech model is ready.
 If the push-to-talk key is pressed before readiness, Presspeech keeps showing
 **Preparing speech model…** and does not open the microphone, play recording
 cues, mute playback, or claim to be listening. Release and press again once the

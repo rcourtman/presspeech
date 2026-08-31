@@ -517,8 +517,12 @@ class SetupWindow:
             buttons, text="Retry Speech Model", command=self._retry_model,
             state="disabled")
         self.retry_button.pack(side="left", padx=(8, 0))
-        ttk.Button(buttons, text="Finish Setup",
-                   command=self._finish).pack(side="right")
+        self.finish_button = ttk.Button(
+            buttons, text="Finish Setup", command=self._finish,
+            state="disabled")
+        self.finish_button.pack(side="right")
+        ttk.Button(buttons, text="Set Up Later",
+                   command=self._close).pack(side="right", padx=(0, 8))
 
         root.protocol("WM_DELETE_WINDOW", self._close)
         root.update_idletasks()
@@ -545,6 +549,8 @@ class SetupWindow:
         self.retry_button.config(
             state="normal" if status == "error" else "disabled")
         self.try_button.config(
+            state="normal" if status == "ready" else "disabled")
+        self.finish_button.config(
             state="normal" if status == "ready" else "disabled")
         if status in ("ready", "error"):
             self.progress.stop()
@@ -602,6 +608,12 @@ class SetupWindow:
         self.app.retry_model()
 
     def _finish(self):
+        # setup_complete means the app has reached a usable speech-model state.
+        # A microphone may deliberately be connected later, but dismissing a
+        # pending or failed model would hide the guided retry path on restart.
+        if getattr(self.app, "model_status", "pending") != "ready":
+            self.finish_button.config(state="disabled")
+            return
         settings = self.app.settings
         selected = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])

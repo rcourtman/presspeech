@@ -133,6 +133,7 @@ class SetupWindowTests(unittest.TestCase):
         window.progress = mock.Mock()
         window.retry_button = mock.Mock()
         window.try_button = mock.Mock()
+        window.finish_button = mock.Mock()
         window.microphone_events = queue.Queue()
         window.microphone_checking = False
         window.check_microphone_button = mock.Mock()
@@ -152,6 +153,7 @@ class SetupWindowTests(unittest.TestCase):
             window.model_label, "Needs attention — download failed")
         window.retry_button.config.assert_called_once_with(state="normal")
         window.try_button.config.assert_called_once_with(state="disabled")
+        window.finish_button.config.assert_called_once_with(state="disabled")
         window.progress.config.assert_called_once_with(
             mode="determinate", value=0)
         window.root.after.assert_called_once_with(300, window._poll_model)
@@ -164,6 +166,7 @@ class SetupWindowTests(unittest.TestCase):
 
         window.retry_button.config.assert_called_once_with(state="disabled")
         window.try_button.config.assert_called_once_with(state="normal")
+        window.finish_button.config.assert_called_once_with(state="normal")
         window.progress.config.assert_called_once_with(
             mode="determinate", value=100)
         window.root.after.assert_called_once_with(300, window._poll_model)
@@ -174,6 +177,38 @@ class SetupWindowTests(unittest.TestCase):
         window._retry_model()
 
         window.app.retry_model.assert_called_once_with()
+
+    def test_setup_cannot_finish_before_model_is_ready(self):
+        window = self.make_window("error", "download failed")
+        window.app.settings = {"setup_complete": False}
+
+        with mock.patch.object(ui.cfg, "save") as save:
+            window._finish()
+
+        self.assertFalse(window.app.settings["setup_complete"])
+        window.finish_button.config.assert_called_once_with(state="disabled")
+        save.assert_not_called()
+        window.app.apply_autostart.assert_not_called()
+
+    def test_ready_model_can_finish_without_a_connected_microphone(self):
+        window = self.make_window("ready")
+        window.app.settings = {
+            "input_device": "auto",
+            "autostart": True,
+            "setup_complete": False,
+        }
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = False
+        window._close = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save") as save:
+            window._finish()
+
+        self.assertTrue(window.app.settings["setup_complete"])
+        self.assertFalse(window.app.settings["autostart"])
+        save.assert_called_once_with(window.app.settings)
+        window.app.apply_autostart.assert_called_once_with()
+        window._close.assert_called_once_with()
 
     def test_microphone_check_runs_off_the_ui_thread(self):
         window = self.make_window("ready")

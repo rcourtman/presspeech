@@ -22,8 +22,11 @@ Run this before publishing a release.
   Setup and Settings stay within the desktop, expose scrollbars when needed,
   and automatically scroll each control into view while navigating with Tab
   and Shift-Tab. Resize both windows and repeat with Narrator enabled.
+- While the model is preparing, confirm **Try Dictation** and **Finish Setup**
+  remain disabled. Choose **Set Up Later**, restart, and confirm setup opens
+  again. After the model reaches Ready, confirm both actions become available.
 - Confirm **Finish Setup** remains available if the microphone will be connected
-  later, while **Try Dictation** remains gated only by speech-model readiness.
+  later; microphone readiness is advisory rather than a completion gate.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm
   capture stops, muted playback is restored, and no transcription is pasted or
   copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.
