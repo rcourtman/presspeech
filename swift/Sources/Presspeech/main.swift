@@ -79,6 +79,7 @@ let RECORDING_HUD_COLLAPSED_SIZE = NSSize(width: 58, height: 42)
 let RECORDING_HUD_ANIMATE_IN_SECONDS: TimeInterval = 0.12
 let RECORDING_HUD_ANIMATE_OUT_SECONDS: TimeInterval = 0.08
 let RECORDING_HUD_BUSY_DELAY_SECONDS: TimeInterval = 0.25
+let DICTATION_NOTICE_HUD_SECONDS: TimeInterval = 4
 let DICTATION_ERROR_FLASH_SECONDS: TimeInterval = 1.5  // how long the menu-bar icon flags a dropped dictation before returning to idle
 let AUDIO_START_RETRY_DELAYS_SECONDS: [UInt64] = [1, 3, 8]
 let AUDIO_IDLE_STOP_DELAY_SECONDS: TimeInterval = 5
@@ -135,9 +136,72 @@ func menuBarAccessibilityValue(for state: MenuBarState) -> String {
     }
 }
 
+enum DictationNotice: Equatable {
+    case copiedToClipboard
+    case insertionFailed
+    case insertionFailedWithoutHistory
+    case transcriptionFailed
+    case noSpeechDetected
+
+    var statusTitle: String {
+        switch self {
+        case .copiedToClipboard:
+            return "Transcript copied — press ⌘V to paste"
+        case .insertionFailed:
+            return "Couldn't paste — use Copy Last Transcript"
+        case .insertionFailedWithoutHistory:
+            return "Couldn't paste — try again"
+        case .transcriptionFailed:
+            return "Transcription failed — try again"
+        case .noSpeechDetected:
+            return "No speech detected — try again"
+        }
+    }
+
+    var hudTitle: String {
+        switch self {
+        case .copiedToClipboard:
+            return "Copied — press ⌘V to paste"
+        case .insertionFailed:
+            return "Couldn't paste — copy from menu"
+        case .insertionFailedWithoutHistory:
+            return "Couldn't paste — try again"
+        case .transcriptionFailed:
+            return "Transcription failed — try again"
+        case .noSpeechDetected:
+            return "No speech detected — try again"
+        }
+    }
+
+    var accessibilityValue: String {
+        switch self {
+        case .copiedToClipboard:
+            return "Transcript copied. Press Command V to paste."
+        case .insertionFailed:
+            return "Couldn't paste. Use Copy Last Transcript in the Presspeech menu."
+        case .insertionFailedWithoutHistory:
+            return "Couldn't paste. Recent Transcripts is off, so try dictating again."
+        case .transcriptionFailed:
+            return "Transcription failed. Try again."
+        case .noSpeechDetected:
+            return "No speech detected. Try again."
+        }
+    }
+
+    var requiresInMemoryHistory: Bool {
+        self == .insertionFailed
+    }
+}
+
 enum RecordingHUDMode {
     case recording
     case transcribing
+    case notice(DictationNotice)
+
+    var isRecording: Bool {
+        if case .recording = self { return true }
+        return false
+    }
 }
 
 /// The hotkeys the user can pick from in Settings → Hotkey. Modifier
@@ -4115,6 +4179,21 @@ enum TextInsertionOutcome: Equatable {
     case failed
 }
 
+func dictationCompletionNotice(processedText: String,
+                                insertionOutcome: TextInsertionOutcome?,
+                                keepsRecentTranscripts: Bool) -> DictationNotice? {
+    guard !processedText.isEmpty else { return .noSpeechDetected }
+    guard let insertionOutcome else { return nil }
+    switch insertionOutcome {
+    case .copiedWithoutPasting:
+        return .copiedToClipboard
+    case .failed:
+        return keepsRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
+    case .inserted:
+        return nil
+    }
+}
+
 @MainActor
 func currentDictationPasteTarget() -> DictationPasteTarget? {
     let systemWide = AXUIElementCreateSystemWide()
@@ -5773,7 +5852,17 @@ private final class RecordingHUDView: NSView {
         capsule.fill()
 
         let clamped = CGFloat(max(0, min(1, level)))
-        let accentColor: NSColor = mode == .recording ? .systemRed : .systemBlue
+        let accentColor: NSColor
+        switch mode {
+        case .recording:
+            accentColor = .systemRed
+        case .transcribing:
+            accentColor = .systemBlue
+        case .notice(.copiedToClipboard):
+            accentColor = .systemOrange
+        case .notice:
+            accentColor = .systemYellow
+        }
 
         let recordDotRect = NSRect(x: 17, y: bounds.midY - 6, width: 12, height: 12)
         accentColor.withAlphaComponent(0.18 + (0.22 * max(clamped, 0.35))).setFill()
@@ -5781,10 +5870,20 @@ private final class RecordingHUDView: NSView {
         accentColor.withAlphaComponent(0.92).setFill()
         NSBezierPath(ovalIn: recordDotRect).fill()
 
-        if mode == .transcribing {
-            let text = "Transcribing..." as NSString
+        let statusText: String?
+        switch mode {
+        case .recording:
+            statusText = nil
+        case .transcribing:
+            statusText = "Transcribing..."
+        case .notice(let notice):
+            statusText = notice.hudTitle
+        }
+
+        if let statusText {
+            let text = statusText as NSString
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
                 .foregroundColor: NSColor.white.withAlphaComponent(0.86),
             ]
             let size = text.size(withAttributes: attributes)
@@ -6174,7 +6273,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var recordingHUDView: RecordingHUDView?
     private var recordingHUDAnimationToken = 0
     private var delayedBusyHUDWorkItem: DispatchWorkItem?
+    private var dictationNoticeHUDWorkItem: DispatchWorkItem?
     private var errorFlashWorkItem: DispatchWorkItem?
+    private var dictationNotice: DictationNotice?
     private var systemAudioMuteWatchdog: Process?
 
     /// Last N transcripts, newest first. Shown in the History submenu.
@@ -7038,7 +7139,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             view.mode = mode
             view.level = level
             view.phase = recordingHUDPhase
-            view.showsCancelHint = mode == .recording && settings.triggerMode == .toggle
+            view.showsCancelHint = mode.isRecording && settings.triggerMode == .toggle
         }
         if shouldAnimate {
             animateRecordingHUDIn(panel)
@@ -7058,7 +7159,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         recordingHUDView?.mode = mode
         recordingHUDView?.level = level
         recordingHUDView?.phase = recordingHUDPhase
-        recordingHUDView?.showsCancelHint = mode == .recording && settings.triggerMode == .toggle
+        recordingHUDView?.showsCancelHint = mode.isRecording && settings.triggerMode == .toggle
     }
 
     private func hideRecordingHUD() {
@@ -7174,17 +7275,43 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hideRecordingHUD()
     }
 
-    // Visible + audible cue that a press produced no pasted text — the
-    // transcription threw, or the paste itself failed. Without it the menu
-    // bar just slips back to idle and the user can't tell their speech was
-    // dropped from "pasted somewhere I wasn't looking." The sound honours
-    // the feedback-sounds toggle; the icon flash always fires since it's the
-    // only signal for users who run silent.
-    private func signalDictationFailure() {
+    private func clearDictationNotice() {
+        let hadNotice = dictationNotice != nil
+        dictationNoticeHUDWorkItem?.cancel()
+        dictationNoticeHUDWorkItem = nil
+        dictationNotice = nil
+        if hadNotice {
+            hideRecordingHUD()
+        }
+        statusItem?.button?.toolTip = "Presspeech"
+        statusItem?.button?.setAccessibilityHelp("Open dictation controls")
+    }
+
+    // Visible + audible, actionable feedback when a press produced no pasted
+    // text. The menu keeps the recovery instruction until the next recording,
+    // while the optional waveform panel briefly shows the same instruction at
+    // the user's point of attention. The sound honours the feedback toggle;
+    // the icon flash always fires for users who hide the waveform or run silent.
+    private func signalDictationFailure(_ notice: DictationNotice) {
+        dictationNotice = notice
+        statusItem?.button?.toolTip = notice.statusTitle
+        statusItem?.button?.setAccessibilityHelp(notice.accessibilityValue)
         if settings.playFeedbackSounds {
             Sounds.playError()
         }
         flashErrorMenuBarIcon()
+        statusItem?.button?.setAccessibilityValue(notice.accessibilityValue)
+        if settings.showRecordingWaveform {
+            showRecordingHUD(mode: .notice(notice), level: 0)
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, !self.isRecording, !self.isBusy else { return }
+                self.dictationNoticeHUDWorkItem = nil
+                self.hideRecordingHUD()
+            }
+            dictationNoticeHUDWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + DICTATION_NOTICE_HUD_SECONDS,
+                                           execute: work)
+        }
     }
 
     private func flashErrorMenuBarIcon() {
@@ -7198,6 +7325,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // error state, or termination all own it and must not be stomped.
             guard self.isReady, !self.isRecording, !self.isBusy, !self.isTerminating else { return }
             self.setMenuBarState(.idle)
+            if let notice = self.dictationNotice {
+                self.statusItem.button?.toolTip = notice.statusTitle
+                self.statusItem.button?.setAccessibilityValue(notice.accessibilityValue)
+            }
             self.rebuildMenu()
         }
         errorFlashWorkItem = work
@@ -7243,6 +7374,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         recordingPasteTarget = pasteTarget
         isRecording = true
+        clearDictationNotice()
         if setupChecklistWindow?.isVisible == true {
             hotkeyTestSucceeded = true
             updateSetupChecklist()
@@ -7294,7 +7426,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         log("release: \(String(format: "%.2f", dur)) s captured, transcribing")
 
         Task { @MainActor in
-            var dictationFailed = false
+            var completionNotice: DictationNotice?
             defer { recordingPasteTarget = nil }
             do {
                 let t0 = Date()
@@ -7324,7 +7456,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     }
                     let cleaned = processed.text
                     log("\(String(format: "%.2f", dur)) s audio → \(String(format: "%.2f", dt)) s → \(cleaned.count) chars")
-                    if !cleaned.isEmpty {
+                    if cleaned.isEmpty {
+                        completionNotice = dictationCompletionNotice(processedText: cleaned,
+                                                                      insertionOutcome: nil,
+                                                                      keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0)
+                    } else {
                         let missing = missingPermissions()
                         guard missing.isEmpty else {
                             isBusy = false
@@ -7351,22 +7487,25 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                             }
                         case .copiedWithoutPasting:
                             log("paste skipped; focused window changed; transcript copied")
-                            dictationFailed = true
                         case .failed:
                             log("text insertion failed")
-                            dictationFailed = true
                         }
+                        completionNotice = dictationCompletionNotice(
+                            processedText: cleaned,
+                            insertionOutcome: insertionOutcome,
+                            keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0
+                        )
                         addToHistory(cleaned)
                     }
                 }
             } catch {
                 log("transcribe failed: \(error)")
-                dictationFailed = true
+                completionNotice = .transcriptionFailed
             }
             isBusy = false
             finishBusyHUD()
-            if dictationFailed && !isTerminating {
-                signalDictationFailure()
+            if let completionNotice, !isTerminating {
+                signalDictationFailure(completionNotice)
             } else {
                 setMenuBarState(.idle)
             }
@@ -7666,6 +7805,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         pb.clearContents()
         pb.setString(s, forType: .string)
         log("history copied to clipboard (\(s.count) chars)")
+        clearDictationNotice()
+        if isReady, !isRecording, !isBusy, !isTerminating {
+            setMenuBarState(.idle)
+        }
+        rebuildMenu()
     }
 
     @objc private func clearHistoryClicked(_ sender: NSMenuItem) {
@@ -7673,6 +7817,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let count = history.count
         history.removeAll()
         log("history cleared (\(count) entries)")
+        if dictationNotice?.requiresInMemoryHistory == true {
+            clearDictationNotice()
+            if isReady, !isRecording, !isBusy, !isTerminating {
+                setMenuBarState(.idle)
+            }
+        }
         rebuildMenu()
     }
 
@@ -8014,6 +8164,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if isBusy {
             return "Transcribing..."
+        }
+        if let dictationNotice {
+            return dictationNotice.statusTitle
         }
         if isReady {
             let hk = hotkey.hotkey.name
@@ -10282,6 +10435,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
               let limit = RecentTranscriptLimit(rawValue: raw) else { return }
         settings.recentTranscriptLimit = limit
         applyRecentTranscriptLimit()
+        if history.isEmpty, dictationNotice?.requiresInMemoryHistory == true {
+            clearDictationNotice()
+            if isReady, !isRecording, !isBusy, !isTerminating {
+                setMenuBarState(.idle)
+            }
+        }
         rebuildMenu()
     }
 
@@ -14039,6 +14198,38 @@ private enum PresspeechSelfTest {
         try expect(menuBarAccessibilityValue(for: .recording),
                    equals: "Recording",
                    "menu-bar accessibility value should announce recording state")
+        try expect(DictationNotice.copiedToClipboard.statusTitle,
+                   equals: "Transcript copied — press ⌘V to paste",
+                   "focus-safe delivery should explain immediate clipboard recovery")
+        try expect(DictationNotice.insertionFailed.statusTitle,
+                   equals: "Couldn't paste — use Copy Last Transcript",
+                   "failed insertion should direct the user to in-memory recovery")
+        try expect(DictationNotice.noSpeechDetected.hudTitle,
+                   equals: "No speech detected — try again",
+                   "empty recognition should not look like a successful dictation")
+        try expect(DictationNotice.copiedToClipboard.accessibilityValue,
+                   equals: "Transcript copied. Press Command V to paste.",
+                   "clipboard recovery should be explicit without relying on the Command glyph")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .copiedWithoutPasting,
+                                              keepsRecentTranscripts: true),
+                   equals: .copiedToClipboard,
+                   "focus-safe clipboard delivery should produce the recovery notice")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .inserted,
+                                              keepsRecentTranscripts: true),
+                   equals: DictationNotice?.none,
+                   "successful insertion should not leave a stale notice")
+        try expect(dictationCompletionNotice(processedText: "",
+                                              insertionOutcome: nil,
+                                              keepsRecentTranscripts: false),
+                   equals: .noSpeechDetected,
+                   "an empty processed transcript should produce the no-speech notice")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .failed,
+                                              keepsRecentTranscripts: false),
+                   equals: .insertionFailedWithoutHistory,
+                   "failed insertion should not offer unavailable history recovery")
 
         var externallyStartedToggle = HotkeyTransitionState()
         let f5 = hotkeyChoice(forKeycode: 96)

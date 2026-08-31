@@ -54,6 +54,12 @@ cd swift
 - Repeat the focus-change check immediately after pressing the hotkey, before
   the waveform appears, so a cold or rebuilding audio engine cannot retarget
   the transcript during startup.
+- In each focus-change case, confirm the HUD says **Copied — press ⌘V to
+  paste**, the menu keeps the same recovery instruction after the HUD closes,
+  and copying the last transcript clears the notice.
+- Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
+  and menu report **No speech detected — try again** rather than playing the
+  successful-dictation cue.
 - Enable **Restore clipboard after paste**, trigger the focus-change path, and
   confirm the transcript remains available for manual paste rather than being
   replaced by the old clipboard contents.

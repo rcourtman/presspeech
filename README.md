@@ -126,8 +126,10 @@ Default workflow:
 
 Each recording stays bound to the window that was focused when it began. If
 you change windows while Presspeech is transcribing, it copies the transcript
-to the clipboard and signals a failed automatic paste instead of sending your
-words to the new window. Paste manually when you are ready.
+to the clipboard and shows **Copied — press ⌘V to paste** instead of sending
+your words to the new window. The same recovery instruction remains at the top
+of the Presspeech menu until the next dictation. Paste manually when you are
+ready.
 
 Useful menu items:
 
