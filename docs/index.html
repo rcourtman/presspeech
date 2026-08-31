@@ -20,7 +20,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "@id": "https://rcourtman.github.io/presspeech/#software",
-        "name": "Presspeech",
+        "name": "Presspeech for macOS",
         "alternateName": "Presspeech push-to-talk dictation",
         "description": "Free MIT-licensed menu-bar app for private push-to-talk dictation into any Mac app. Speech recognition runs locally with Parakeet CoreML models on the Apple Neural Engine; no cloud transcription, account, subscription, or telemetry.",
         "operatingSystem": "macOS 14 Sonoma or later",
@@ -57,6 +57,7 @@
     </script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
@@ -72,23 +73,22 @@
       </nav>
     </header>
 
-    <main>
+    <main id="main-content">
       <div class="wrap hero">
         <div class="hero-copy">
-          <h1>Private dictation into any Mac app.</h1>
-          <p>Hold a key, speak, release. Presspeech pastes text at the cursor in about 100 ms with no account, no subscription, and no cloud transcription. Apple Silicon, macOS 14+.</p>
-          <p class="quiet">The current Presspeech identity migrates saved preferences and local dictionary rules from earlier builds. macOS privacy permissions require one fresh grant.</p>
+          <h1>Private dictation into any app.</h1>
+          <p>Hold a key, speak, release. Presspeech pastes text at the cursor with no account, subscription, telemetry, or cloud transcription. Choose the released macOS app or the Windows prerelease.</p>
+          <p class="quiet">macOS requires Apple Silicon and macOS 14+. Windows requires a 64-bit x64 PC running Windows 10 or 11.</p>
           <div class="actions">
-            <a class="button" href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Download Presspeech.zip</a>
-            <a class="button secondary" href="install.html">macOS install options</a>
-            <a class="button secondary" href="windows.html">Windows installer</a>
+            <a class="button" href="install.html">Install on macOS</a>
+            <a class="button" href="windows.html">Install on Windows</a>
             <a class="button secondary" href="compare/">Compare tools</a>
           </div>
-          <div class="install-line" aria-label="Homebrew install command">
+          <div class="install-line" aria-label="macOS Homebrew install command">
             <span class="prompt" aria-hidden="true">$</span>
             <code>brew install --cask rcourtman/presspeech/presspeech</code>
           </div>
-          <div class="stat-row" aria-label="Presspeech summary">
+          <div class="stat-row" aria-label="macOS release and benchmark summary">
             <div class="stat"><strong>~100 ms</strong><span>key release to pasted text</span></div>
             <div class="stat"><strong>8.3 MB</strong><span>signed release zip</span></div>
             <div class="stat"><strong>~80 MB</strong><span>RAM while idle</span></div>
@@ -96,7 +96,7 @@
           </div>
         </div>
         <div class="hero-visual">
-          <figure class="menu-mock" aria-label="Presspeech menu bar preview">
+          <figure class="menu-mock" aria-label="Presspeech macOS menu bar preview">
             <div class="menu-mock__bar">
               <span class="menu-mock__time">9:41</span>
               <span class="menu-mock__bar-icons" aria-hidden="true">
@@ -147,7 +147,7 @@
                 <span class="menu-mock__kbd">⌘ Q</span>
               </div>
             </div>
-            <figcaption class="menu-mock__caption">Setup and settings live in the menu bar. No dock icon, no preferences window.</figcaption>
+            <figcaption class="menu-mock__caption">On macOS, setup and settings live in the menu bar. No dock icon, no preferences window.</figcaption>
           </figure>
         </div>
       </div>

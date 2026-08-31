@@ -362,7 +362,12 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
 
     text = text.replace(
         "Lives in the menu bar. No dock icon, no preferences window.",
+        "On macOS, setup and settings live in the menu bar. No dock icon, no preferences window.",
+        1,
+    )
+    text = text.replace(
         "Setup and settings live in the menu bar. No dock icon, no preferences window.",
+        "On macOS, setup and settings live in the menu bar. No dock icon, no preferences window.",
         1,
     )
     return text

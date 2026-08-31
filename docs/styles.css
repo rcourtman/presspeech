@@ -64,6 +64,26 @@ a:focus-visible {
   border-radius: 3px;
 }
 
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 16px;
+  z-index: 100;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-dark);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent-dark);
+  font-weight: 650;
+  text-decoration: none;
+  box-shadow: var(--shadow-md);
+  transform: translateY(calc(-100% - 18px));
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 /* ---------- Header ---------- */
 
 .site-header {
