@@ -1,3 +1,6 @@
+import json
+import os
+import tempfile
 import unittest
 from unittest import mock
 
@@ -29,6 +32,80 @@ class MetricTests(unittest.TestCase):
         transcriber = mock.Mock()
         benchmark._apply_precision(transcriber, "auto")
         transcriber.model.to.assert_not_called()
+
+    def test_reviewed_silence_scores_empty_output_as_clean(self):
+        self.assertEqual(
+            benchmark.silence_metrics(True, True, [" \n", ""]),
+            {
+                "evaluated": True,
+                "false_positive": False,
+                "false_positive_trials": 0,
+                "trials": 2,
+            },
+        )
+
+    def test_reviewed_silence_scores_words_as_false_positive(self):
+        self.assertEqual(
+            benchmark.silence_metrics(True, True, ["", "Thank you.", ""]),
+            {
+                "evaluated": True,
+                "false_positive": True,
+                "false_positive_trials": 1,
+                "trials": 3,
+            },
+        )
+
+    def test_silence_fixture_requires_review_before_scoring(self):
+        self.assertEqual(
+            benchmark.silence_metrics(True, False, [""]),
+            {
+                "evaluated": False,
+                "false_positive": None,
+                "false_positive_trials": None,
+                "trials": 1,
+            },
+        )
+        self.assertIsNone(benchmark.silence_metrics(False, True, [""]))
+
+    def test_benchmark_aggregates_reviewed_silence_false_positives(self):
+        manifest = {
+            "runs": 1,
+            "samples": [
+                {
+                    "id": "quiet-room",
+                    "audio": "quiet.wav",
+                    "expected_silence": True,
+                    "reference_reviewed": True,
+                },
+                {
+                    "id": "background-noise",
+                    "audio": "noise.wav",
+                    "expected_silence": True,
+                    "reference_reviewed": True,
+                },
+            ],
+        }
+        transcriber = mock.Mock()
+        transcriber.transcribe.side_effect = ["", "Thank you."]
+        transcriber.model.dtype = "int8"
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        self.assertEqual(result["reviewed_silence_sample_count"], 2)
+        self.assertEqual(result["silence_false_positive_count"], 1)
+        self.assertEqual(result["reviewed_silence_trial_count"], 2)
+        self.assertEqual(result["silence_false_positive_trial_count"], 1)
+        self.assertFalse(result["samples"][0]["silence"]["false_positive"])
+        self.assertTrue(result["samples"][1]["silence"]["false_positive"])
 
 
 if __name__ == "__main__":

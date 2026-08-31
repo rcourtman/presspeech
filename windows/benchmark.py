@@ -65,6 +65,29 @@ def accuracy_metrics(reference, hypothesis):
     }
 
 
+def silence_metrics(expected_silence, reference_reviewed, hypotheses):
+    """Score a human-reviewed non-speech fixture without inventing a WER."""
+    if not expected_silence:
+        return None
+    if not reference_reviewed:
+        return {
+            "evaluated": False,
+            "false_positive": None,
+            "false_positive_trials": None,
+            "trials": len(hypotheses),
+        }
+    false_positive_trials = sum(
+        bool(_normalise_chars(hypothesis)) for hypothesis in hypotheses)
+    return {
+        "evaluated": True,
+        # One intermittent hallucination matters even if the modal transcript
+        # is empty, so score every trial rather than only the consensus.
+        "false_positive": false_positive_trials > 0,
+        "false_positive_trials": false_positive_trials,
+        "trials": len(hypotheses),
+    }
+
+
 def load_audio(path):
     audio, sample_rate = sf.read(path, dtype="float32", always_2d=False)
     if audio.ndim > 1:
@@ -190,6 +213,11 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
             ),
             "reference_reviewed": bool(sample.get("reference_reviewed", False)),
         }
+        result["silence"] = silence_metrics(
+            bool(sample.get("expected_silence", False)),
+            result["reference_reviewed"],
+            transcripts,
+        )
         reference = sample.get("reference", "")
         if reference and result["reference_reviewed"]:
             result["reference"] = reference
@@ -202,6 +230,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     reviewed = [item for item in sample_results if item["accuracy"] is not None]
     total_words = sum(item["accuracy"]["reference_words"] for item in reviewed)
     total_word_errors = sum(item["accuracy"]["word_errors"] for item in reviewed)
+    reviewed_silence = [
+        item for item in sample_results
+        if item["silence"] is not None and item["silence"]["evaluated"]
+    ]
     model_dtype = str(getattr(transcriber.model, "dtype", "unknown"))
     cuda_allocated_mib = None
     try:
@@ -223,6 +255,14 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         "sample_count": len(sample_results),
         "reviewed_sample_count": len(reviewed),
         "aggregate_wer": total_word_errors / total_words if total_words else None,
+        "reviewed_silence_sample_count": len(reviewed_silence),
+        "silence_false_positive_count": sum(
+            item["silence"]["false_positive"] for item in reviewed_silence),
+        "reviewed_silence_trial_count": sum(
+            item["silence"]["trials"] for item in reviewed_silence),
+        "silence_false_positive_trial_count": sum(
+            item["silence"]["false_positive_trials"]
+            for item in reviewed_silence),
         "samples": sample_results,
     }
 
@@ -242,7 +282,19 @@ def _print_summary(result):
             sample["estimated_release_to_paste_seconds"],
         ))
         print("  %s" % sample["transcript"])
-        if sample["accuracy"] is None:
+        if sample["silence"] is not None:
+            if sample["silence"]["evaluated"]:
+                if sample["silence"]["false_positive"]:
+                    status = "FALSE POSITIVE (%d/%d trials)" % (
+                        sample["silence"]["false_positive_trials"],
+                        sample["silence"]["trials"],
+                    )
+                else:
+                    status = "empty as expected"
+                print("  Reviewed silence: %s" % status)
+            else:
+                print("  Silence check: pending human review")
+        elif sample["accuracy"] is None:
             print("  Accuracy: pending reviewed reference")
         else:
             print("  WER: %.2f%% | CER: %.2f%%" % (

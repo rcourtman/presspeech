@@ -24,7 +24,8 @@ hiddenimports = [
 # analysis cannot see. Keep this list explicit; build-release.ps1 executes the
 # frozen app's model-free package self-test before creating an installer.
 for package in (
-    "faster_whisper", "ctranslate2", "pycaw", "comtypes", "sounddevice", "tk_uia"
+    "faster_whisper", "onnxruntime", "ctranslate2", "pycaw", "comtypes",
+    "sounddevice", "tk_uia",
 ):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas += package_datas

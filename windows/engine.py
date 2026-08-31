@@ -241,7 +241,7 @@ class Transcriber:
                 except Exception:
                     pass
 
-    def transcribe(self, audio, language="en"):
+    def transcribe(self, audio, language="en", _filter_silence=True):
         requested_at = time.perf_counter()
         with self.inference_lock:
             acquired_at = time.perf_counter()
@@ -259,11 +259,19 @@ class Transcriber:
             elif backend == "moonshine":
                 text = self._transcribe_moonshine(model, processor, audio)
             else:
-                segments, _info = model.transcribe(
-                    audio, language=language, beam_size=1, vad_filter=False,
+                segments, info = model.transcribe(
+                    audio, language=language, beam_size=1,
+                    vad_filter=_filter_silence,
                     without_timestamps=True, condition_on_previous_text=False,
                 )
-                text = "".join(seg.text for seg in segments).strip()
+                speech_seconds = getattr(info, "duration_after_vad", None)
+                self._backend_timing = {"speech_seconds": speech_seconds}
+                # Whisper can decode plausible text from silence. faster-whisper's
+                # standard API still returns a lazy segment generator when Silero
+                # VAD found no speech, so do not consume that generator at all.
+                text = ("" if (_filter_silence and speech_seconds is not None
+                               and speech_seconds <= 0)
+                        else "".join(seg.text for seg in segments).strip())
             finished_at = time.perf_counter()
             self.last_timing = {
                 "backend": backend,
@@ -283,8 +291,18 @@ class Transcriber:
                 self.transcribe(
                     np.zeros(bucket * 16000, dtype=np.float32), language="en")
             return
-        self.transcribe(
-            np.zeros(max(1, int(seconds * 16000)), dtype=np.float32), language="en")
+        silence = np.zeros(
+            max(1, int(seconds * 16000)), dtype=np.float32)
+        if backend == "whisper":
+            # Warm Silero first: its ONNX session is created lazily on the first
+            # filtered call, which should not be deferred to real dictation.
+            self.transcribe(silence, language="en")
+            # VAD correctly rejects this waveform before the lazy Whisper
+            # generator runs, so use a second pass to warm CTranslate2 too.
+            self.transcribe(
+                silence, language="en", _filter_silence=False)
+            return
+        self.transcribe(silence, language="en")
 
     def _transcribe_parakeet(self, model, processor, audio):
         import torch

@@ -145,7 +145,10 @@ roles, values, and actions through Windows UI Automation for screen readers.
 - Clipboard is used briefly to paste; it is overwritten.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
-  see `benchmarks/README.md` for the reviewed-reference workflow.
+  see `benchmarks/README.md` for the reviewed-reference workflow. A manifest
+  sample marked with both `"expected_silence": true` and
+  `"reference_reviewed": true` is scored as a non-speech fixture; reports count
+  any non-empty transcript as a silence false positive.
 - If you see missing-DLL errors, install the Visual C++ Redistributable
   (x64) from Microsoft.
 

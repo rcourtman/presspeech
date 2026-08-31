@@ -104,6 +104,7 @@ PACKAGE_SMOKE_IMPORTS = (
         "MoonshineStreamingForConditionalGeneration",
     )),
     ("faster_whisper", ("WhisperModel",)),
+    ("onnxruntime", ("InferenceSession",)),
     ("ctranslate2", ()),
     ("sentencepiece", ("SentencePieceProcessor",)),
     ("tokenizers", ("Tokenizer",)),

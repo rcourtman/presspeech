@@ -134,7 +134,7 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 types.SimpleNamespace(text=" Standalone"),
                 types.SimpleNamespace(text=" dictation "),
             ]),
-            mock.sentinel.info,
+            types.SimpleNamespace(duration_after_vad=1.25),
         )
         transcriber = engine.Transcriber()
         transcriber.model = model
@@ -147,9 +147,51 @@ class ParakeetConfigurationTests(unittest.TestCase):
             mock.sentinel.audio,
             language="en",
             beam_size=1,
-            vad_filter=False,
+            vad_filter=True,
             without_timestamps=True,
             condition_on_previous_text=False,
+        )
+        self.assertEqual(transcriber.last_timing["speech_seconds"], 1.25)
+
+    def test_whisper_does_not_decode_when_vad_finds_no_speech(self):
+        segments = mock.MagicMock()
+        model = mock.Mock()
+        model.transcribe.return_value = (
+            segments,
+            types.SimpleNamespace(duration_after_vad=0.0),
+        )
+        transcriber = engine.Transcriber()
+        transcriber.model = model
+        transcriber.backend = "whisper"
+
+        text = transcriber.transcribe(mock.sentinel.audio, language="en")
+
+        self.assertEqual(text, "")
+        segments.__iter__.assert_not_called()
+        self.assertEqual(transcriber.last_timing["speech_seconds"], 0.0)
+
+    def test_whisper_silence_warmup_exercises_vad_and_decode_kernels(self):
+        numpy = types.ModuleType("numpy")
+        numpy.float32 = "float32"
+        numpy.zeros = mock.Mock(return_value=mock.sentinel.silence)
+        transcriber = engine.Transcriber()
+        transcriber.backend = "whisper"
+
+        with mock.patch.dict(sys.modules, {"numpy": numpy}), \
+                mock.patch.object(transcriber, "transcribe") as transcribe:
+            transcriber.warmup(seconds=2.0)
+
+        numpy.zeros.assert_called_once_with(32000, dtype="float32")
+        self.assertEqual(
+            transcribe.call_args_list,
+            [
+                mock.call(mock.sentinel.silence, language="en"),
+                mock.call(
+                    mock.sentinel.silence,
+                    language="en",
+                    _filter_silence=False,
+                ),
+            ],
         )
 
     def test_parakeet_load_fallbacks_keep_the_reviewed_revision(self):
