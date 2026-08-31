@@ -140,6 +140,141 @@ def _set_accessible_text(widget, text):
         _accessibility_failed()
 
 
+def _bounded_viewport(content_size, screen_size, margin, minimum):
+    """Keep a scrollable dialog on screen without inventing a fixed size."""
+    available = max(1, screen_size - margin)
+    if available < minimum:
+        # Keep a small border even on an unusually constrained remote desktop;
+        # a nominal minimum must never make the window larger than the screen.
+        available = max(1, screen_size - min(32, margin))
+    return max(1, min(content_size, available))
+
+
+class _ScrollableDialogBody:
+    """A dialog body that preserves access at large text/display scales."""
+
+    _SCREEN_WIDTH_MARGIN = 96
+    _SCREEN_HEIGHT_MARGIN = 128
+
+    def __init__(self, root, padding):
+        self.root = root
+        self.outer = ttk.Frame(root)
+        self.outer.pack(fill="both", expand=True)
+        self.canvas = tk.Canvas(
+            self.outer, highlightthickness=0, borderwidth=0,
+            background=root.cget("background"), takefocus=False)
+        self.vertical = ttk.Scrollbar(
+            self.outer, orient="vertical", command=self.canvas.yview,
+            takefocus=True)
+        self.horizontal = ttk.Scrollbar(
+            self.outer, orient="horizontal", command=self.canvas.xview,
+            takefocus=True)
+        self.canvas.configure(
+            yscrollcommand=self._set_vertical,
+            xscrollcommand=self._set_horizontal)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.vertical.grid(row=0, column=1, sticky="ns")
+        self.horizontal.grid(row=1, column=0, sticky="ew")
+        self.outer.rowconfigure(0, weight=1)
+        self.outer.columnconfigure(0, weight=1)
+
+        self.content = ttk.Frame(self.canvas, padding=padding)
+        self.content_window = self.canvas.create_window(
+            (0, 0), window=self.content, anchor="nw")
+        self.content.bind("<Configure>", self._content_changed)
+        self.canvas.bind("<Configure>", self._canvas_changed)
+        root.bind("<MouseWheel>", self._mouse_wheel, add="+")
+        # FocusIn reaches a toplevel through each child widget's bind tags.
+        # Keeping the focused control visible makes Tab navigation useful even
+        # when text scaling pushes controls outside the initial viewport.
+        root.bind("<FocusIn>", self._focus_changed, add="+")
+
+    def fit_to_screen(self):
+        """Size the initial viewport to content, capped below the desktop."""
+        self.content.update_idletasks()
+        width = _bounded_viewport(
+            self.content.winfo_reqwidth(), self.root.winfo_screenwidth(),
+            self._SCREEN_WIDTH_MARGIN, 320)
+        height = _bounded_viewport(
+            self.content.winfo_reqheight(), self.root.winfo_screenheight(),
+            self._SCREEN_HEIGHT_MARGIN, 240)
+        self.canvas.configure(width=width, height=height)
+        self.root.minsize(min(width, 420), min(height, 320))
+
+    def _set_vertical(self, first, last):
+        self.vertical.set(first, last)
+        if float(first) <= 0.0 and float(last) >= 1.0:
+            self.vertical.grid_remove()
+        else:
+            self.vertical.grid()
+
+    def _set_horizontal(self, first, last):
+        self.horizontal.set(first, last)
+        if float(first) <= 0.0 and float(last) >= 1.0:
+            self.horizontal.grid_remove()
+        else:
+            self.horizontal.grid()
+
+    def _content_changed(self, _event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _canvas_changed(self, event):
+        # Fill spare width while preserving the content's requested width when
+        # the viewport is narrower, where horizontal scrolling is required.
+        width = max(event.width, self.content.winfo_reqwidth())
+        self.canvas.itemconfigure(self.content_window, width=width)
+
+    def _mouse_wheel(self, event):
+        delta = getattr(event, "delta", 0)
+        if not delta:
+            return None
+        units = -max(1, abs(delta) // 120) if delta > 0 else max(
+            1, abs(delta) // 120)
+        if getattr(event, "state", 0) & 0x0001:
+            self.canvas.xview_scroll(units, "units")
+        else:
+            self.canvas.yview_scroll(units, "units")
+        return "break"
+
+    def _focus_changed(self, event):
+        self.root.after_idle(lambda: self._show_widget(event.widget))
+
+    def _show_widget(self, widget):
+        """Scroll just enough to reveal a focused descendant control."""
+        x = y = 0
+        current = widget
+        try:
+            while current is not self.content:
+                x += current.winfo_x()
+                y += current.winfo_y()
+                current = current.master
+                if current is None:
+                    return
+            width = widget.winfo_width()
+            height = widget.winfo_height()
+            content_width = max(1, self.content.winfo_width())
+            content_height = max(1, self.content.winfo_height())
+            left = self.canvas.canvasx(0)
+            top = self.canvas.canvasy(0)
+            right = left + self.canvas.winfo_width()
+            bottom = top + self.canvas.winfo_height()
+            if x < left:
+                self.canvas.xview_moveto(x / content_width)
+            elif x + width > right:
+                self.canvas.xview_moveto(
+                    max(0, x + width - self.canvas.winfo_width()) /
+                    content_width)
+            if y < top:
+                self.canvas.yview_moveto(y / content_height)
+            elif y + height > bottom:
+                self.canvas.yview_moveto(
+                    max(0, y + height - self.canvas.winfo_height()) /
+                    content_height)
+        except (AttributeError, tk.TclError):
+            # Focus can move while a dialog is being destroyed.
+            return
+
+
 class DictationIndicator:
     """Small click-through overlay driven safely from any application thread."""
 
@@ -296,12 +431,12 @@ class SetupWindow:
     def _build(self):
         root = _interactive_window("Welcome to Presspeech")
         self.root = root
-        root.resizable(False, False)
+        root.resizable(True, True)
         root.lift()
         root.attributes("-topmost", True)
         root.after(500, lambda: root.attributes("-topmost", False))
-        frame = ttk.Frame(root, padding=20)
-        frame.pack(fill="both", expand=True)
+        self.scrollable_body = _ScrollableDialogBody(root, padding=20)
+        frame = self.scrollable_body.content
 
         ttk.Label(frame, text="Presspeech is almost ready",
                   font=("Segoe UI", 16, "bold")).grid(
@@ -389,6 +524,7 @@ class SetupWindow:
         root.update_idletasks()
         _label_control(microphone_label, self.device)
         _label_control(microphone_check_label, self.microphone_status)
+        self.scrollable_body.fit_to_screen()
         root.after(100, self._poll_model)
         root.after(150, self._check_microphone)
 
@@ -694,9 +830,9 @@ class SettingsWindow:
         s = self.app.settings
         root = _interactive_window("Presspeech Settings")
         self.root = root
-        root.resizable(False, False)
-        f = ttk.Frame(root, padding=12)
-        f.pack(fill="both", expand=True)
+        root.resizable(True, True)
+        self.scrollable_body = _ScrollableDialogBody(root, padding=12)
+        f = self.scrollable_body.content
 
         row = 0
 
@@ -853,6 +989,7 @@ class SettingsWindow:
                 (replacement_label, self.replacement_entry)):
             _label_control(label, control)
         _name_control(self.listbox, "Dictionary rules")
+        self.scrollable_body.fit_to_screen()
 
     def _add_rule(self):
         spoken = self.var_spoken.get().strip()

@@ -18,6 +18,10 @@ Run this before publishing a release.
   Windows Settings page, then restore access and rerun the check successfully.
 - With Narrator, confirm the microphone selector, changing check status, and
   both recovery buttons expose meaningful names.
+- Set Windows **Text size** to 225% and use a 1024 x 768 display (or VM). Confirm
+  Setup and Settings stay within the desktop, expose scrollbars when needed,
+  and automatically scroll each control into view while navigating with Tab
+  and Shift-Tab. Resize both windows and repeat with Narrator enabled.
 - Confirm **Finish Setup** remains available if the microphone will be connected
   later, while **Try Dictation** remains gated only by speech-model readiness.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm

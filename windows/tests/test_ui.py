@@ -2,6 +2,7 @@ import sys
 import types
 import unittest
 import queue
+import inspect
 from unittest import mock
 
 try:
@@ -17,6 +18,15 @@ import ui
 
 
 class AccessibleWindowTests(unittest.TestCase):
+    def test_dialog_viewport_uses_content_size_until_screen_margin(self):
+        self.assertEqual(ui._bounded_viewport(500, 1920, 96, 320), 500)
+        self.assertEqual(ui._bounded_viewport(1900, 1920, 96, 320), 1824)
+        self.assertEqual(ui._bounded_viewport(900, 768, 128, 240), 640)
+
+    def test_dialog_viewport_stays_positive_on_unusual_small_desktop(self):
+        self.assertEqual(ui._bounded_viewport(200, 100, 128, 240), 68)
+        self.assertEqual(ui._bounded_viewport(0, 1920, 96, 320), 1)
+
     def test_every_interactive_window_uses_the_shared_host(self):
         host = mock.Mock()
         app = mock.Mock()
@@ -34,6 +44,48 @@ class AccessibleWindowTests(unittest.TestCase):
             [call.args[0].__self__ for call in host.submit.call_args_list],
             list(windows),
         )
+
+    def test_setup_and_settings_use_scrollable_resizable_dialogs(self):
+        for window in (ui.SetupWindow, ui.SettingsWindow):
+            body = inspect.getsource(window)
+            self.assertIn("root.resizable(True, True)", body)
+            self.assertIn("_ScrollableDialogBody(root", body)
+            self.assertIn("self.scrollable_body.fit_to_screen()", body)
+
+    def test_scrollable_dialog_routes_wheel_and_shift_wheel(self):
+        body = ui._ScrollableDialogBody.__new__(ui._ScrollableDialogBody)
+        body.canvas = mock.Mock()
+
+        self.assertEqual(
+            body._mouse_wheel(types.SimpleNamespace(delta=120, state=0)),
+            "break")
+        body.canvas.yview_scroll.assert_called_once_with(-1, "units")
+
+        self.assertEqual(
+            body._mouse_wheel(types.SimpleNamespace(delta=-240, state=1)),
+            "break")
+        body.canvas.xview_scroll.assert_called_once_with(2, "units")
+
+    def test_scrollable_dialog_reveals_keyboard_focus(self):
+        body = ui._ScrollableDialogBody.__new__(ui._ScrollableDialogBody)
+        body.content = mock.Mock()
+        body.content.winfo_width.return_value = 500
+        body.content.winfo_height.return_value = 1000
+        body.canvas = mock.Mock()
+        body.canvas.canvasx.return_value = 0
+        body.canvas.canvasy.return_value = 0
+        body.canvas.winfo_width.return_value = 300
+        body.canvas.winfo_height.return_value = 200
+        widget = mock.Mock(master=body.content)
+        widget.winfo_x.return_value = 10
+        widget.winfo_y.return_value = 500
+        widget.winfo_width.return_value = 100
+        widget.winfo_height.return_value = 20
+
+        body._show_widget(widget)
+
+        body.canvas.xview_moveto.assert_not_called()
+        body.canvas.yview_moveto.assert_called_once_with(0.32)
 
     def test_form_labels_and_names_reach_ui_automation(self):
         label = mock.Mock()
