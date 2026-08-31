@@ -99,6 +99,15 @@ cd swift
 - Press Escape during an active recording and confirm it cancels without
   pasting.
 - Confirm the recording waveform appears when enabled.
+- In System Settings → Accessibility → Display, enable **Differentiate without
+  color** and confirm the recording HUD uses a **Recording** text label while
+  the menu-bar recording and error states use distinct record/alert shapes.
+- Enable **Reduce motion** before and during a recording. Confirm the HUD
+  switches to a static text state and appears/disappears without expanding or
+  collapsing; in toggle mode it still says **Esc cancels**.
+- Enable **Reduce transparency** and **Increase contrast** before and during a
+  recording. Confirm the HUD updates live to an opaque capsule and the
+  high-contrast variant gains a bright border and fully opaque text.
 - Confirm **Mute system audio while recording** still unmutes after release
   and cancel.
 

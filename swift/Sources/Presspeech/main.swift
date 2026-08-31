@@ -116,8 +116,8 @@ let MAX_TRANSCRIPT_CORRECTION_REPLACEMENT_BYTES = 4096
 
 /// Visible state of the menu-bar item. Idle/loading/busy use the
 /// template image so macOS handles light/dark menu bars. Recording and
-/// error states use pre-tinted static frames so the state remains
-/// visible even when macOS ignores contentTintColor on template images.
+/// error use distinct SF Symbol silhouettes as well as pre-tinted static
+/// frames, so neither important state is communicated by colour alone.
 enum MenuBarState {
     case loading
     case idle
@@ -202,6 +202,46 @@ enum RecordingHUDMode {
         if case .recording = self { return true }
         return false
     }
+}
+
+/// Snapshot of the macOS visual-accessibility settings that affect the
+/// custom-drawn recording HUD. Standard AppKit controls adapt themselves;
+/// this view and its hand-written animations have to do so explicitly.
+struct RecordingHUDAccessibilityOptions: Equatable {
+    let reduceMotion: Bool
+    let reduceTransparency: Bool
+    let increaseContrast: Bool
+    let differentiateWithoutColor: Bool
+
+    @MainActor
+    static func current(workspace: NSWorkspace = .shared) -> RecordingHUDAccessibilityOptions {
+        RecordingHUDAccessibilityOptions(
+            reduceMotion: workspace.accessibilityDisplayShouldReduceMotion,
+            reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency,
+            increaseContrast: workspace.accessibilityDisplayShouldIncreaseContrast,
+            differentiateWithoutColor: workspace.accessibilityDisplayShouldDifferentiateWithoutColor
+        )
+    }
+
+    var usesStaticRecordingPresentation: Bool {
+        reduceMotion || differentiateWithoutColor
+    }
+
+    var usesOpaqueHUDBackground: Bool {
+        reduceTransparency || increaseContrast
+    }
+
+    var animatesHUDTransitions: Bool {
+        !reduceMotion
+    }
+}
+
+func recordingHUDRecordingStatusText(
+    options: RecordingHUDAccessibilityOptions,
+    showsCancelHint: Bool
+) -> String? {
+    guard options.usesStaticRecordingPresentation else { return nil }
+    return showsCancelHint ? "Recording — Esc cancels" : "Recording"
 }
 
 /// The hotkeys the user can pick from in Settings → Hotkey. Modifier
@@ -5822,6 +5862,7 @@ final class CorrectionShareCleanupDelegate: NSObject, @preconcurrency NSSharingS
     }
 }
 
+@MainActor
 private final class RecordingHUDView: NSView {
     var mode: RecordingHUDMode = .recording {
         didSet { needsDisplay = true }
@@ -5839,6 +5880,10 @@ private final class RecordingHUDView: NSView {
         didSet { needsDisplay = true }
     }
 
+    var accessibilityOptions = RecordingHUDAccessibilityOptions.current() {
+        didSet { needsDisplay = true }
+    }
+
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -5848,8 +5893,15 @@ private final class RecordingHUDView: NSView {
         let capsule = NSBezierPath(roundedRect: capsuleBounds,
                                    xRadius: capsuleBounds.height / 2,
                                    yRadius: capsuleBounds.height / 2)
-        NSColor(calibratedWhite: 0.06, alpha: 0.9).setFill()
+        let backgroundAlpha: CGFloat = accessibilityOptions.usesOpaqueHUDBackground ? 1 : 0.9
+        NSColor(calibratedWhite: accessibilityOptions.increaseContrast ? 0 : 0.06,
+                alpha: backgroundAlpha).setFill()
         capsule.fill()
+        if accessibilityOptions.increaseContrast {
+            capsule.lineWidth = 2
+            NSColor.white.withAlphaComponent(0.9).setStroke()
+            capsule.stroke()
+        }
 
         let clamped = CGFloat(max(0, min(1, level)))
         let accentColor: NSColor
@@ -5873,7 +5925,10 @@ private final class RecordingHUDView: NSView {
         let statusText: String?
         switch mode {
         case .recording:
-            statusText = nil
+            statusText = recordingHUDRecordingStatusText(
+                options: accessibilityOptions,
+                showsCancelHint: showsCancelHint
+            )
         case .transcribing:
             statusText = "Transcribing..."
         case .notice(let notice):
@@ -5884,7 +5939,9 @@ private final class RecordingHUDView: NSView {
             let text = statusText as NSString
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
-                .foregroundColor: NSColor.white.withAlphaComponent(0.86),
+                .foregroundColor: NSColor.white.withAlphaComponent(
+                    accessibilityOptions.increaseContrast ? 1 : 0.86
+                ),
             ]
             let size = text.size(withAttributes: attributes)
             let rect = NSRect(x: 46,
@@ -5900,7 +5957,9 @@ private final class RecordingHUDView: NSView {
             let hint = "Esc cancel" as NSString
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 11, weight: .medium),
-                .foregroundColor: NSColor.white.withAlphaComponent(0.48),
+                .foregroundColor: NSColor.white.withAlphaComponent(
+                    accessibilityOptions.increaseContrast ? 1 : 0.58
+                ),
             ]
             let size = hint.size(withAttributes: attributes)
             let rect = NSRect(x: bounds.maxX - size.width - 17,
@@ -6255,6 +6314,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var pendingAudioRouteRefresh = false
     private var audioConfigurationChangeSuppressedUntil: TimeInterval?
     private var workspacePowerObservers: [NSObjectProtocol] = []
+    private var workspaceAccessibilityObserver: NSObjectProtocol?
     private var shouldResumeRuntimeAfterWake = false
     private var didLogDeferredWakeRecovery = false
     private var didOfferSetupChecklistThisLaunch = false
@@ -6267,6 +6327,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var recordingLevelTimer: Timer?
     private var recordingVisualLevel: Float = 0
     private var recordingHUDPhase: CGFloat = 0
+    private var recordingHUDAccessibilityOptions = RecordingHUDAccessibilityOptions.current()
     private var lastRecordingLevelSequence: UInt64 = 0
     private var staleRecordingLevelTicks = 0
     private var recordingHUDPanel: NSPanel?
@@ -6437,6 +6498,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         installWorkspacePowerObservers()
+        installWorkspaceAccessibilityObserver()
 
         // Configure hotkey listener up front so it picks up the user's
         // saved choice the moment the tap goes live.
@@ -6466,6 +6528,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         stopPermissionReadinessMonitor()
         stopSetupChecklistRefreshTimer()
         removeWorkspacePowerObservers()
+        removeWorkspaceAccessibilityObserver()
         correctionSyncTimer?.invalidate()
         correctionSyncTimer = nil
         cleanupPendingSharedCorrections(reason: "terminate")
@@ -6508,6 +6571,53 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             center.removeObserver(observer)
         }
         workspacePowerObservers.removeAll()
+    }
+
+    private func installWorkspaceAccessibilityObserver() {
+        removeWorkspaceAccessibilityObserver()
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceAccessibilityObserver = center.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: NSWorkspace.shared,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshRecordingHUDAccessibility()
+            }
+        }
+    }
+
+    private func removeWorkspaceAccessibilityObserver() {
+        guard let observer = workspaceAccessibilityObserver else { return }
+        NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        workspaceAccessibilityObserver = nil
+    }
+
+    private func refreshRecordingHUDAccessibility() {
+        let options = RecordingHUDAccessibilityOptions.current()
+        recordingHUDAccessibilityOptions = options
+        recordingHUDView?.accessibilityOptions = options
+        if options.usesStaticRecordingPresentation {
+            recordingHUDView?.level = 0
+            recordingHUDView?.phase = 0
+        }
+
+        // If Reduce Motion becomes active while the panel is expanding or
+        // collapsing, invalidate that completion and settle immediately.
+        guard options.reduceMotion,
+              let panel = recordingHUDPanel,
+              panel.isVisible else { return }
+        recordingHUDAnimationToken += 1
+        guard isRecording || isBusy || dictationNotice != nil else {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            return
+        }
+        panel.alphaValue = 1
+        if let frame = currentRecordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE) {
+            panel.setFrame(frame, display: true)
+        }
+        panel.orderFrontRegardless()
     }
 
     private func cleanupPendingSharedCorrections(reason: String) {
@@ -7005,8 +7115,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         image?.isTemplate = true
         image?.size = NSSize(width: 18, height: 18)
         templateImage = image
-        recordingImage = image.map { tintedCopy(of: $0, with: .systemRed) }
-        errorImage = image.map { tintedCopy(of: $0, with: .systemYellow) }
+        let recordingSymbol = NSImage(systemSymbolName: "record.circle.fill",
+                                      accessibilityDescription: nil)
+        recordingSymbol?.size = NSSize(width: 18, height: 18)
+        let errorSymbol = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
+                                  accessibilityDescription: nil)
+        errorSymbol?.size = NSSize(width: 18, height: 18)
+        recordingImage = (recordingSymbol ?? image).map { tintedCopy(of: $0, with: .systemRed) }
+        errorImage = (errorSymbol ?? image).map { tintedCopy(of: $0, with: .systemYellow) }
         button.image = image
         button.imagePosition = .imageOnly
         button.setAccessibilityLabel("Presspeech")
@@ -7118,10 +7234,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let rawLevel = visibleRecordingLevel(rawLevel: unsuppressedLevel)
         let attack: Float = rawLevel > recordingVisualLevel ? 0.65 : 0.28
         recordingVisualLevel += (rawLevel - recordingVisualLevel) * attack
-        recordingHUDPhase += 0.34 + (CGFloat(recordingVisualLevel) * 0.42)
+        if !recordingHUDAccessibilityOptions.reduceMotion {
+            recordingHUDPhase += 0.34 + (CGFloat(recordingVisualLevel) * 0.42)
+        }
         if settings.showRecordingWaveform {
             if recordingHUDPanel?.isVisible == true {
-                updateRecordingHUD(mode: .recording, level: recordingVisualLevel)
+                if !recordingHUDAccessibilityOptions.usesStaticRecordingPresentation {
+                    updateRecordingHUD(mode: .recording, level: recordingVisualLevel)
+                }
             } else {
                 showRecordingHUD(mode: .recording, level: recordingVisualLevel)
             }
@@ -7136,9 +7256,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         recordingHUDPanel = panel
         let shouldAnimate = !panel.isVisible
         if let view = recordingHUDView {
+            view.accessibilityOptions = recordingHUDAccessibilityOptions
             view.mode = mode
-            view.level = level
-            view.phase = recordingHUDPhase
+            view.level = recordingHUDAccessibilityOptions.usesStaticRecordingPresentation ? 0 : level
+            view.phase = recordingHUDAccessibilityOptions.usesStaticRecordingPresentation ? 0 : recordingHUDPhase
             view.showsCancelHint = mode.isRecording && settings.triggerMode == .toggle
         }
         if shouldAnimate {
@@ -7157,8 +7278,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func updateRecordingHUD(mode: RecordingHUDMode, level: Float) {
         recordingHUDView?.mode = mode
-        recordingHUDView?.level = level
-        recordingHUDView?.phase = recordingHUDPhase
+        recordingHUDView?.level = recordingHUDAccessibilityOptions.usesStaticRecordingPresentation ? 0 : level
+        recordingHUDView?.phase = recordingHUDAccessibilityOptions.usesStaticRecordingPresentation ? 0 : recordingHUDPhase
         recordingHUDView?.showsCancelHint = mode.isRecording && settings.triggerMode == .toggle
     }
 
@@ -7180,6 +7301,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         let token = recordingHUDAnimationToken
+        let options = recordingHUDAccessibilityOptions
+        guard options.animatesHUDTransitions else {
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            if let frame = currentRecordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE) {
+                panel.setFrame(frame, display: false)
+            }
+            return
+        }
         guard let collapsedFrame = currentRecordingHUDFrame(size: RECORDING_HUD_COLLAPSED_SIZE) else {
             panel.orderOut(nil)
             panel.alphaValue = 1
@@ -7210,6 +7340,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                             backing: .buffered,
                             defer: false)
         let view = RecordingHUDView(frame: NSRect(origin: .zero, size: size))
+        view.accessibilityOptions = recordingHUDAccessibilityOptions
         view.autoresizingMask = [.width, .height]
         panel.contentView = view
         panel.backgroundColor = .clear
@@ -7225,6 +7356,18 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func animateRecordingHUDIn(_ panel: NSPanel) {
         recordingHUDAnimationToken += 1
+        let options = recordingHUDAccessibilityOptions
+        guard options.animatesHUDTransitions else {
+            guard let finalFrame = currentRecordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE) else {
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+                return
+            }
+            panel.alphaValue = 1
+            panel.setFrame(finalFrame, display: true)
+            panel.orderFrontRegardless()
+            return
+        }
         guard let visibleFrame = screenForRecordingHUD()?.visibleFrame,
               let startFrame = recordingHUDFrame(size: RECORDING_HUD_COLLAPSED_SIZE,
                                                   visibleFrame: visibleFrame),
@@ -11213,6 +11356,8 @@ private enum PresspeechSelfTest {
             return runSuite("fillers", testFillerWordRemoval)
         case "audio-level":
             return runSuite("audio-level", testAudioLevelMetering)
+        case "hud-accessibility":
+            return runSuite("hud-accessibility", testRecordingHUDAccessibility)
         case "audio-conversion":
             return runSuite("audio-conversion", testAudioConversion)
         case "audio-input":
@@ -11268,6 +11413,7 @@ private enum PresspeechSelfTest {
         try testTranscriptCorrections()
         try testFillerWordRemoval()
         try testAudioLevelMetering()
+        try testRecordingHUDAccessibility()
         try testAudioConversion()
         try testAudioInputDeviceFiltering()
         try testSpeechModelStartupStatus()
@@ -11280,6 +11426,59 @@ private enum PresspeechSelfTest {
         try testPrivateLogAppend()
         try testDiagnostics()
         try testIdentityMigration()
+    }
+
+    private static func testRecordingHUDAccessibility() throws {
+        let defaults = RecordingHUDAccessibilityOptions(
+            reduceMotion: false,
+            reduceTransparency: false,
+            increaseContrast: false,
+            differentiateWithoutColor: false
+        )
+        try expect(defaults.usesStaticRecordingPresentation,
+                   equals: false,
+                   "default HUD should retain its level-responsive waveform")
+        try expect(defaults.usesOpaqueHUDBackground,
+                   equals: false,
+                   "default HUD may retain its translucent capsule")
+        try expect(defaults.animatesHUDTransitions,
+                   equals: true,
+                   "default HUD may animate its short transitions")
+        try expect(recordingHUDRecordingStatusText(options: defaults, showsCancelHint: true),
+                   equals: nil,
+                   "default HUD should keep the separate waveform and cancel hint")
+
+        let reducedMotion = RecordingHUDAccessibilityOptions(
+            reduceMotion: true,
+            reduceTransparency: false,
+            increaseContrast: false,
+            differentiateWithoutColor: false
+        )
+        try expect(reducedMotion.usesStaticRecordingPresentation,
+                   equals: true,
+                   "Reduce Motion should replace the moving waveform with text")
+        try expect(reducedMotion.animatesHUDTransitions,
+                   equals: false,
+                   "Reduce Motion should disable HUD expansion and collapse")
+        try expect(recordingHUDRecordingStatusText(options: reducedMotion, showsCancelHint: false),
+                   equals: "Recording",
+                   "static hold-mode HUD should identify the recording state")
+        try expect(recordingHUDRecordingStatusText(options: reducedMotion, showsCancelHint: true),
+                   equals: "Recording — Esc cancels",
+                   "static toggle-mode HUD should preserve its cancellation instruction")
+
+        let visualContrast = RecordingHUDAccessibilityOptions(
+            reduceMotion: false,
+            reduceTransparency: true,
+            increaseContrast: true,
+            differentiateWithoutColor: true
+        )
+        try expect(visualContrast.usesOpaqueHUDBackground,
+                   equals: true,
+                   "Reduce Transparency or Increase Contrast should make the HUD background opaque")
+        try expect(visualContrast.usesStaticRecordingPresentation,
+                   equals: true,
+                   "Differentiate Without Color should add a recording text label")
     }
 
     private static func testIdentityMigration() throws {
