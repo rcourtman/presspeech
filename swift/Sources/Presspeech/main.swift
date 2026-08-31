@@ -7287,6 +7287,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem?.button?.setAccessibilityHelp("Open dictation controls")
     }
 
+    private func announceForAccessibility(_ message: String) {
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: message,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ]
+        )
+    }
+
     // Visible + audible, actionable feedback when a press produced no pasted
     // text. The menu keeps the recovery instruction until the next recording,
     // while the optional waveform panel briefly shows the same instruction at
@@ -7301,6 +7312,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         flashErrorMenuBarIcon()
         statusItem?.button?.setAccessibilityValue(notice.accessibilityValue)
+        announceForAccessibility(notice.accessibilityValue)
         if settings.showRecordingWaveform {
             showRecordingHUD(mode: .notice(notice), level: 0)
             let work = DispatchWorkItem { [weak self] in

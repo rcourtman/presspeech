@@ -65,6 +65,10 @@ cd swift
 - Enable macOS Voice Control and confirm the Presspeech status item is named
   **Presspeech**, its recording state is announced, and the named start/stop
   menu actions can be selected by voice.
+- With VoiceOver enabled, trigger a focus-change recovery and a no-speech
+  result. Confirm each recovery instruction is announced once without moving
+  VoiceOver focus away from the target app, including when feedback sounds and
+  the recording waveform are disabled.
 - Start dictating into a text field, switch to another window in the same app
   before transcription finishes, and confirm no text is pasted into the new
   window. Repeat with a window in another app. Confirm in both cases that the
