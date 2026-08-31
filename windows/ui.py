@@ -289,6 +289,8 @@ class SetupWindow:
     def __init__(self, app):
         self.app = app
         self.root = None
+        self.microphone_events = queue.Queue()
+        self.microphone_checking = False
         _window_host().submit(self._build)
 
     def _build(self):
@@ -331,19 +333,47 @@ class SetupWindow:
             state="readonly", width=48)
         self.device.set(selected)
         self.device.grid(row=4, column=1, sticky="w", padx=(12, 0), pady=3)
+        self.device.bind("<<ComboboxSelected>>", self._microphone_changed)
 
-        ttk.Label(frame, text="Push-to-talk").grid(row=5, column=0, sticky="w")
+        microphone_check_label = ttk.Label(frame, text="Microphone check")
+        microphone_check_label.grid(row=5, column=0, sticky="w", pady=(5, 3))
+        microphone_check = ttk.Frame(frame)
+        microphone_check.grid(row=5, column=1, sticky="ew", padx=(12, 0), pady=(5, 3))
+        self.microphone_status = ttk.Label(microphone_check, text="Waiting to check…")
+        self.microphone_status.pack(side="left")
+        self.check_microphone_button = ttk.Button(
+            microphone_check, text="Check Again", command=self._check_microphone)
+        self.check_microphone_button.pack(side="right", padx=(12, 0))
+
+        ttk.Label(
+            frame,
+            text=("If the check fails, enable Microphone access and "
+                  "Let desktop apps access your microphone."),
+            justify="left",
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 3))
+        microphone_actions = ttk.Frame(frame)
+        microphone_actions.grid(row=7, column=0, columnspan=2, sticky="w")
+        ttk.Button(
+            microphone_actions, text="Open Microphone Privacy Settings",
+            command=self.app.open_microphone_privacy_settings,
+        ).pack(side="left")
+        ttk.Button(
+            microphone_actions, text="Open Sound Input Settings",
+            command=self.app.open_default_input_settings,
+        ).pack(side="left", padx=(8, 0))
+
+        ttk.Label(frame, text="Push-to-talk").grid(row=8, column=0, sticky="w")
         ttk.Label(frame, text=self.app.settings.get("hotkey", "right alt").title()).grid(
-            row=5, column=1, sticky="w", padx=(12, 0), pady=3)
+            row=8, column=1, sticky="w", padx=(12, 0), pady=3)
 
         self.autostart = tk.BooleanVar(
             value=self.app.settings.get("autostart", True))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
-                            row=6, column=0, columnspan=2, sticky="w", pady=(10, 14))
+                            row=9, column=0, columnspan=2, sticky="w", pady=(10, 14))
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=7, column=0, columnspan=2, sticky="ew")
+        buttons.grid(row=10, column=0, columnspan=2, sticky="ew")
         self.try_button = ttk.Button(
             buttons, text="Try Dictation", command=self.app.open_scratchpad,
             state="disabled")
@@ -358,11 +388,14 @@ class SetupWindow:
         root.protocol("WM_DELETE_WINDOW", self._close)
         root.update_idletasks()
         _label_control(microphone_label, self.device)
+        _label_control(microphone_check_label, self.microphone_status)
         root.after(100, self._poll_model)
+        root.after(150, self._check_microphone)
 
     def _poll_model(self):
         if self.root is None:
             return
+        self._poll_microphone_events()
         status = getattr(self.app, "model_status", "pending")
         detail = getattr(self.app, "model_status_detail", "")
         labels = {
@@ -381,6 +414,53 @@ class SetupWindow:
             self.progress.stop()
             self.progress.config(mode="determinate", value=100 if status == "ready" else 0)
         self.root.after(300, self._poll_model)
+
+    def _microphone_changed(self, _event=None):
+        _set_accessible_text(self.microphone_status, "Waiting to check…")
+        self.root.after(0, self._check_microphone)
+
+    def _check_microphone(self):
+        if self.microphone_checking or self.root is None:
+            return
+        selected = self.device_values.get(
+            self.device.get(), cfg.DEFAULTS["input_device"])
+        self.microphone_checking = True
+        self.check_microphone_button.config(state="disabled")
+        _set_accessible_text(self.microphone_status, "Checking…")
+        threading.Thread(
+            target=self._check_microphone_worker,
+            args=(selected,),
+            name="presspeech-microphone-check",
+            daemon=True,
+        ).start()
+
+    def _check_microphone_worker(self, selected):
+        ready = self.app.check_input_device(selected)
+        self.microphone_events.put((selected, ready))
+
+    def _poll_microphone_events(self):
+        latest = None
+        try:
+            while True:
+                latest = self.microphone_events.get_nowait()
+        except queue.Empty:
+            pass
+        if latest is None:
+            return
+        selected, ready = latest
+        self.microphone_checking = False
+        self.check_microphone_button.config(state="normal")
+        current = self.device_values.get(
+            self.device.get(), cfg.DEFAULTS["input_device"])
+        if selected != current:
+            _set_accessible_text(self.microphone_status, "Waiting to check…")
+            self.root.after(0, self._check_microphone)
+            return
+        if ready:
+            text = "Ready — microphone audio is available"
+        else:
+            text = "Needs attention — check the Windows settings below"
+        _set_accessible_text(self.microphone_status, text)
 
     def _retry_model(self):
         self.app.retry_model()

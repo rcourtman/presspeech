@@ -127,11 +127,11 @@ Get-Content .\Presspeech-Setup-0.1.10-x64.exe.sha256</code></pre>
             </li>
             <li>
               <strong>Let preparation finish</strong>
-              <p>The first-run window shows the model, microphone, hotkey, and Start with Windows setting. <strong>Try Dictation</strong> becomes available when the model is ready. If preparation fails, choose <strong>Retry Speech Model</strong>; the window keeps tracking the new attempt.</p>
+              <p>The first-run window shows the model, microphone, hotkey, and Start with Windows setting. It briefly opens the selected input for a local microphone check and discards those samples in memory. <strong>Try Dictation</strong> becomes available when the model is ready. If preparation fails, choose <strong>Retry Speech Model</strong>; the window keeps tracking the new attempt.</p>
             </li>
             <li>
               <strong>Check microphone access</strong>
-              <p>In Windows microphone privacy settings, turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>. Unpackaged desktop apps share this control, so Windows does not provide a separate Presspeech toggle. Then confirm the input under <strong>Settings → System → Sound → Input</strong>. Presspeech captures audio only while dictation is active, transcribes it in memory, and then discards it.</p>
+              <p>If setup reports that the microphone needs attention, use its direct buttons to open Windows Microphone Privacy or Sound Input settings. Turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>, confirm the input, then choose <strong>Check Again</strong>. Unpackaged desktop apps share this privacy control, so Windows does not provide a separate Presspeech toggle. Outside the brief readiness check, Presspeech captures audio only while dictation is active; all captured audio is discarded after local processing.</p>
             </li>
             <li>
               <strong>Try a private test</strong>

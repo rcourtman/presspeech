@@ -81,6 +81,8 @@ MOONLIGHT_PROCESSES = {"moonlight.exe"}
 RDP_PROCESSES = {"mstsc.exe", "msrdc.exe"}
 
 AUTO_INPUT_DEVICE = "auto"
+MICROPHONE_PRIVACY_SETTINGS_URI = "ms-settings:privacy-microphone"
+DEFAULT_INPUT_SETTINGS_URI = "ms-settings:sound-defaultinputproperties"
 INPUT_DEVICE_SKIP_WORDS = (
     "stereo mix", "steam", "stream", "virtual", "loopback", "aux", "line in",
     "hyperx",
@@ -1049,12 +1051,10 @@ class PresspeechApp:
             options.append((label, self._device_selector(device, host_name)))
         return options
 
-    def _get_input_device(self):
-        if self.input_device is not None:
-            return self.input_device
+    def _find_input_device(self, selected):
+        """Probe and return a usable input matching a stable selector."""
         devices = sd.query_devices()
         host_apis = sd.query_hostapis()
-        selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
         host_pref = {"mme": 0, "windows directsound": 1, "windows wasapi": 2}
         ranked = []
         for i, d in enumerate(devices):
@@ -1090,12 +1090,45 @@ class PresspeechApp:
                 except Exception:
                     continue
                 if self._probe_input(i, rate):
-                    self.input_device = (i, rate)
                     chosen_for = "configured" if selector == selected else "automatic"
                     self._log("using %s input: %s at %d Hz" %
                               (chosen_for, d["name"], rate))
-                    return self.input_device
+                    return (i, rate)
         return None
+
+    def _get_input_device(self):
+        if self.input_device is not None:
+            return self.input_device
+        selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
+        self.input_device = self._find_input_device(selected)
+        return self.input_device
+
+    def check_input_device(self, selected):
+        """Perform a fresh local microphone probe for setup and recovery."""
+        try:
+            return self._find_input_device(selected) is not None
+        except Exception as exc:
+            self._log("microphone readiness check failed: %s" % exc)
+            return False
+
+    def _open_windows_settings(self, uri):
+        """Open one of Presspeech's fixed Windows Settings destinations."""
+        try:
+            os.startfile(uri)
+            return True
+        except (AttributeError, OSError) as exc:
+            self._log("could not open Windows Settings: %s" % exc)
+            self.notify(
+                "Could not open Windows Settings",
+                "Open Settings manually and search for Microphone privacy or "
+                "Sound input settings.")
+            return False
+
+    def open_microphone_privacy_settings(self):
+        return self._open_windows_settings(MICROPHONE_PRIVACY_SETTINGS_URI)
+
+    def open_default_input_settings(self):
+        return self._open_windows_settings(DEFAULT_INPUT_SETTINGS_URI)
 
     @staticmethod
     def _probe_input(idx, rate):

@@ -2,6 +2,25 @@
 
 Run this before publishing a release.
 
+## Windows First Run
+
+- On a clean Windows profile, launch the packaged app and confirm the setup
+  window automatically checks the selected microphone without blocking model
+  preparation.
+- With microphone access enabled, confirm the status changes from **Checking…**
+  to **Ready — microphone audio is available**. Change the selected input and
+  confirm setup checks the new device.
+- Turn off **Let desktop apps access your microphone**, choose **Check Again**,
+  and confirm setup reports **Needs attention** without exposing raw device or
+  PortAudio errors.
+- Using only Tab, Shift-Tab, and Enter, open **Microphone Privacy Settings** and
+  **Sound Input Settings** from setup. Confirm each button opens the expected
+  Windows Settings page, then restore access and rerun the check successfully.
+- With Narrator, confirm the microphone selector, changing check status, and
+  both recovery buttons expose meaningful names.
+- Confirm **Finish Setup** remains available if the microphone will be connected
+  later, while **Try Dictation** remains gated only by speech-model readiness.
+
 ## Signed App Smoke
 
 ```sh

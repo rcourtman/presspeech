@@ -46,11 +46,15 @@ repository commit reviewed for that app version, so a fresh install cannot
 silently receive a different snapshot. Windows relies on the immutable Hugging
 Face snapshot identity; unlike the macOS model cache, it does not independently
 verify every downloaded model file against a SHA-256 manifest.
-The first-run readiness window shows model loading, microphone selection, the
-push-to-talk key, and Start with Windows in one place. Wait until it says the
-model is ready before the first dictation. **Try Dictation** remains disabled
-until then. If preparation fails, use **Retry Speech Model**; the window keeps
-tracking the retry instead of leaving the previous error on screen.
+The first-run readiness window shows model loading, microphone selection and a
+live microphone check, the push-to-talk key, and Start with Windows in one
+place. The check briefly opens the selected input, discards its samples in
+memory, and reports whether microphone audio is available. If it fails, use the
+window's direct links to Windows Microphone Privacy or Sound Input settings,
+then choose **Check Again**. Wait until it says the model is ready before the
+first dictation. **Try Dictation** remains disabled until then. If preparation
+fails, use **Retry Speech Model**; the window keeps tracking the retry instead
+of leaving the previous error on screen.
 If the push-to-talk key is pressed before readiness, Presspeech keeps showing
 **Preparing speech model…** and does not open the microphone, play recording
 cues, mute playback, or claim to be listening. Release and press again once the

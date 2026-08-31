@@ -1,6 +1,7 @@
 import sys
 import types
 import unittest
+import queue
 from unittest import mock
 
 try:
@@ -80,6 +81,13 @@ class SetupWindowTests(unittest.TestCase):
         window.progress = mock.Mock()
         window.retry_button = mock.Mock()
         window.try_button = mock.Mock()
+        window.microphone_events = queue.Queue()
+        window.microphone_checking = False
+        window.check_microphone_button = mock.Mock()
+        window.microphone_status = mock.Mock()
+        window.device_values = {"Automatic (recommended)": "auto"}
+        window.device = mock.Mock()
+        window.device.get.return_value = "Automatic (recommended)"
         return window
 
     def test_error_remains_observed_and_enables_retry(self):
@@ -114,6 +122,56 @@ class SetupWindowTests(unittest.TestCase):
         window._retry_model()
 
         window.app.retry_model.assert_called_once_with()
+
+    def test_microphone_check_runs_off_the_ui_thread(self):
+        window = self.make_window("ready")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text, \
+                mock.patch.object(ui.threading, "Thread") as thread:
+            window._check_microphone()
+
+        self.assertTrue(window.microphone_checking)
+        window.check_microphone_button.config.assert_called_once_with(
+            state="disabled")
+        set_text.assert_called_once_with(window.microphone_status, "Checking…")
+        thread.assert_called_once_with(
+            target=window._check_microphone_worker,
+            args=("auto",),
+            name="presspeech-microphone-check",
+            daemon=True,
+        )
+        thread.return_value.start.assert_called_once_with()
+
+    def test_ready_microphone_result_is_exposed_accessibly(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.app.check_input_device.return_value = True
+        window._check_microphone_worker("auto")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        window.app.check_input_device.assert_called_once_with("auto")
+        self.assertFalse(window.microphone_checking)
+        window.check_microphone_button.config.assert_called_once_with(
+            state="normal")
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Ready — microphone audio is available",
+        )
+
+    def test_failed_microphone_result_points_to_recovery_controls(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.microphone_events.put(("auto", False))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Needs attention — check the Windows settings below",
+        )
 
 
 class DictionarySettingsTests(unittest.TestCase):

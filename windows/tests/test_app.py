@@ -231,6 +231,57 @@ class InputSelectionTests(unittest.TestCase):
         stream.stop.assert_called_once_with()
         stream.close.assert_called_once_with()
 
+    def test_setup_check_freshly_probes_without_replacing_cached_input(self):
+        instance = self.make_app()
+        instance.input_device = (9, 48000)
+        instance._find_input_device = mock.Mock(return_value=(1, 16000))
+
+        self.assertTrue(instance.check_input_device("MME::USB microphone"))
+
+        instance._find_input_device.assert_called_once_with(
+            "MME::USB microphone")
+        self.assertEqual(instance.input_device, (9, 48000))
+
+    def test_setup_check_reports_device_enumeration_failure_safely(self):
+        instance = self.make_app()
+        instance._find_input_device = mock.Mock(
+            side_effect=OSError("private device detail"))
+        instance._log = mock.Mock()
+
+        self.assertFalse(instance.check_input_device("auto"))
+
+        instance._log.assert_called_once_with(
+            "microphone readiness check failed: private device detail")
+
+    def test_microphone_recovery_opens_supported_windows_settings_uris(self):
+        instance = self.make_app()
+        with mock.patch.object(app.os, "startfile", create=True) as startfile:
+            self.assertTrue(instance.open_microphone_privacy_settings())
+            self.assertTrue(instance.open_default_input_settings())
+
+        self.assertEqual(
+            startfile.call_args_list,
+            [
+                mock.call("ms-settings:privacy-microphone"),
+                mock.call("ms-settings:sound-defaultinputproperties"),
+            ],
+        )
+
+    def test_windows_settings_launch_failure_has_manual_recovery(self):
+        instance = self.make_app()
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        with mock.patch.object(
+                app.os, "startfile", create=True,
+                side_effect=OSError("no URI handler")):
+            self.assertFalse(instance.open_microphone_privacy_settings())
+
+        instance.notify.assert_called_once_with(
+            "Could not open Windows Settings",
+            "Open Settings manually and search for Microphone privacy or "
+            "Sound input settings.",
+        )
+
 
 class HotkeyRegressionTests(unittest.TestCase):
     def make_app(self, hotkey="right alt", trigger="hold"):
