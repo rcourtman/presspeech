@@ -20,6 +20,9 @@ Run this before publishing a release.
   both recovery buttons expose meaningful names.
 - Confirm **Finish Setup** remains available if the microphone will be connected
   later, while **Try Dictation** remains gated only by speech-model readiness.
+- Begin recording in both hold and toggle modes, press **Escape**, and confirm
+  capture stops, muted playback is restored, and no transcription is pasted or
+  copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.
 
 ## Signed App Smoke
 

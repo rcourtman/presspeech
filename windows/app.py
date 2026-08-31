@@ -77,6 +77,12 @@ CPU_FIRST_RUN_MODEL = "base.en"
 PASTE_DELAY_SEC = 0.01
 RDP_PASTE_DELAY_SEC = 0.08
 
+VK_ESCAPE = 0x1B
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
+WM_SYSKEYDOWN = 0x0104
+WM_SYSKEYUP = 0x0105
+
 MOONLIGHT_PROCESSES = {"moonlight.exe"}
 RDP_PROCESSES = {"mstsc.exe", "msrdc.exe"}
 
@@ -445,6 +451,7 @@ class PresspeechApp:
         self.buffer = []
         self.stream = None
         self.recording = False
+        self._canceling_recording = False
         self.transcribing = False
         self.lock = threading.Lock()
         self.scratchpad = None
@@ -463,6 +470,7 @@ class PresspeechApp:
         self._pressed_keys = set()
         self._held_hotkey_keys = frozenset()
         self._held_hotkey_trigger = None
+        self._suppress_escape_keyup = False
         self._injecting_keys = False
         self._recording_paste_target = PasteTarget("", 0)
         self._recording_scratchpad = None
@@ -497,6 +505,9 @@ class PresspeechApp:
             "Presspeech - push-to-talk dictation",
             menu=Menu(
                 MenuItem("Dictate", self.toggle_dictate, default=True),
+                MenuItem(
+                    "Cancel Dictation (Esc)", self.cancel_recording,
+                    enabled=lambda _item: self.recording),
                 MenuItem("Try Dictation\u2026", self.open_scratchpad),
                 MenuItem("Setup\u2026", self.open_setup),
                 MenuItem("Settings\u2026", self.open_settings),
@@ -508,7 +519,11 @@ class PresspeechApp:
             ),
         )
         threading.Thread(target=self.icon.run, daemon=True).start()
-        self.listener = pkb.Listener(on_press=self._on_press, on_release=self._on_release)
+        self.listener = pkb.Listener(
+            on_press=self._on_press,
+            on_release=self._on_release,
+            win32_event_filter=self._win32_event_filter,
+        )
         self.listener.start()
         self._log("running; hotkey=%s trigger=%s" % (self.settings["hotkey"], self.settings["trigger"]))
         self._model_executor.submit(self._preload_model_worker)
@@ -563,10 +578,37 @@ class PresspeechApp:
     def _is_hotkey(self, key):
         return key in KEY_MAP.get(self.settings["hotkey"], set())
 
+    def _win32_event_filter(self, message, data):
+        """Consume only an Escape transaction that cancels active capture."""
+        if getattr(data, "vkCode", None) != VK_ESCAPE:
+            return
+        if message in (WM_KEYDOWN, WM_SYSKEYDOWN):
+            if not self.recording and not self._suppress_escape_keyup:
+                return
+            # Keep autorepeats suppressed after the first key-down cancels and
+            # clears recording. Its paired key-up must not reach the target
+            # application either.
+            self._suppress_escape_keyup = True
+        elif message in (WM_KEYUP, WM_SYSKEYUP):
+            if not self._suppress_escape_keyup:
+                return
+            self._suppress_escape_keyup = False
+        else:
+            return
+        listener = self.listener
+        if listener is not None:
+            listener.suppress_event()
+
     def _on_press(self, key):
         if self._injecting_keys:
             return
         self._pressed_keys.add(key)
+        # Escape is a conventional, discoverable abort action. The Windows
+        # event filter consumes its complete transaction only while recording,
+        # so the foreground application is not also dismissed or changed.
+        if key == pkb.Key.esc:
+            self.cancel_recording()
+            return
         hotkey_keys = KEY_MAP.get(self.settings["hotkey"], set())
         if key not in hotkey_keys:
             return
@@ -667,6 +709,9 @@ class PresspeechApp:
         # previous worker injects Ctrl+V and briefly suppresses hook callbacks;
         # overlapping that with a new recording could swallow its hotkey
         # release and leave the microphone open until the safety timer fires.
+        if getattr(self, "_canceling_recording", False):
+            self._log("dictation ignored; canceled recording is still closing")
+            return False
         if getattr(self, "transcribing", False):
             self._set_indicator("transcribing")
             self._log("dictation ignored; previous transcription is still being delivered")
@@ -676,8 +721,10 @@ class PresspeechApp:
         paste_target = _foreground_paste_target()
         with self.lock:
             # Recheck after foreground-process discovery so simultaneous tray
-            # and hotkey starts cannot cross the busy boundary.
-            if self.recording or getattr(self, "transcribing", False):
+            # and hotkey starts cannot cross the busy boundary. Cancellation
+            # can also begin after the unlocked fast-path check above.
+            if (self.recording or getattr(self, "_canceling_recording", False)
+                    or getattr(self, "transcribing", False)):
                 return False
             self._rec_epoch += 1
             epoch = self._rec_epoch
@@ -846,6 +893,57 @@ class PresspeechApp:
             epoch = self._rec_epoch
         self._schedule_post_roll(
             POST_ROLL_MIN_SEC, epoch, time.perf_counter())
+
+    def cancel_recording(self, icon=None, item=None):
+        """Discard the active capture without transcribing or changing clipboard."""
+        with self.lock:
+            if not self.recording:
+                return False
+            self.recording = False
+            self._canceling_recording = True
+            stream = self.stream
+            self.stream = None
+            self.buffer = []
+            self._peak_rms = 0.0
+            self._recording_paste_target = PasteTarget("", 0)
+            self._recording_scratchpad = None
+            recording_limit_timer = getattr(
+                self, "_recording_limit_timer", None)
+            self._recording_limit_timer = None
+        threading.Thread(
+            target=self._cancel_recording_worker,
+            args=(stream, recording_limit_timer),
+            name="presspeech-cancel-recording",
+            daemon=True,
+        ).start()
+        return True
+
+    def _cancel_recording_worker(self, stream, recording_limit_timer):
+        """Close a claimed cancellation without blocking the keyboard hook."""
+        try:
+            if recording_limit_timer is not None:
+                recording_limit_timer.cancel()
+            if stream is not None:
+                try:
+                    stream.stop()
+                except Exception:
+                    pass
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            if self.icon is not None:
+                self.icon.icon = self.idle_icon
+            # Closing capture before restoring playback keeps returning speaker
+            # audio and the cue out of the discarded microphone data.
+            self._restore_playback_after_recording()
+            self._play_cue("stop")
+            self._set_indicator(None)
+            self._log("recording canceled; audio discarded")
+            self._schedule_model_idle_unload()
+        finally:
+            with self.lock:
+                self._canceling_recording = False
 
     def _schedule_recording_limit(self, epoch):
         """Bound capture even if Windows never delivers the hotkey release."""

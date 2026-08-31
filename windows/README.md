@@ -91,6 +91,10 @@ final words intact without always paying the full delay.
 
 Recordings stop automatically after two minutes. This bounds in-memory audio
 and restores muted playback if Windows misses a hotkey release.
+Press **Escape** during an active recording to cancel it immediately. The
+buffered audio is discarded without transcription or clipboard changes; the
+same action is available from **Cancel Dictation (Esc)** in the notification
+area menu while recording.
 
 The model stays loaded during normal use so every dictation is immediately ready.
 The internal unload support is retained for an explicit gaming mode rather than
@@ -104,8 +108,9 @@ Each recording is bound to the window that was focused when it began. If focus
 changes while the model is transcribing, Presspeech leaves the transcript on the
 clipboard and notifies you instead of pasting private text into the wrong window.
 
-Tray icon (bottom-right) menus include **Dictate** (toggle), **Try Dictation…**
-(scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
+The **Presspeech** icon in the Windows notification area (bottom-right) includes
+**Dictate** (toggle), **Cancel Dictation (Esc)** while recording,
+**Try Dictation…** (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
 **Check for Updates…**, **Copy Diagnostics**, and **Exit**. The icon turns red
 while recording. Setup, settings, update, and scratchpad controls expose names,
 roles, values, and actions through Windows UI Automation for screen readers.

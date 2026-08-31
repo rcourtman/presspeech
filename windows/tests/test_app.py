@@ -291,10 +291,13 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance._pressed_keys = set()
         instance._held_hotkey_keys = frozenset()
         instance._held_hotkey_trigger = None
+        instance._suppress_escape_keyup = False
         instance._injecting_keys = False
+        instance.listener = mock.Mock()
         instance.recording = False
         instance.start_recording = mock.Mock()
         instance.request_stop = mock.Mock()
+        instance.cancel_recording = mock.Mock()
         instance._log = mock.Mock()
         return instance
 
@@ -336,6 +339,52 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.start_recording.assert_called_once_with()
         instance.request_stop.assert_called_once_with()
         self.assertEqual(instance._pressed_keys, set())
+
+    def test_escape_requests_cancellation_without_becoming_a_hotkey(self):
+        instance = self.make_app()
+        instance.recording = True
+
+        instance._on_press(app.pkb.Key.esc)
+        instance._on_release(app.pkb.Key.esc)
+
+        instance.cancel_recording.assert_called_once_with()
+        instance.start_recording.assert_not_called()
+        instance.request_stop.assert_not_called()
+        self.assertEqual(instance._pressed_keys, set())
+
+    def test_escape_passes_through_when_not_recording(self):
+        instance = self.make_app()
+        event = mock.Mock(vkCode=app.VK_ESCAPE)
+
+        instance._win32_event_filter(app.WM_KEYDOWN, event)
+        instance._win32_event_filter(app.WM_KEYUP, event)
+
+        instance.listener.suppress_event.assert_not_called()
+        self.assertFalse(instance._suppress_escape_keyup)
+
+    def test_cancel_escape_suppresses_down_repeats_and_paired_keyup(self):
+        instance = self.make_app()
+        instance.recording = True
+        event = mock.Mock(vkCode=app.VK_ESCAPE)
+
+        instance._win32_event_filter(app.WM_KEYDOWN, event)
+        # The on-press callback cancels recording before key repeat and key-up.
+        instance.recording = False
+        instance._win32_event_filter(app.WM_KEYDOWN, event)
+        instance._win32_event_filter(app.WM_KEYUP, event)
+        instance._win32_event_filter(app.WM_KEYUP, event)
+
+        self.assertEqual(instance.listener.suppress_event.call_count, 3)
+        self.assertFalse(instance._suppress_escape_keyup)
+
+    def test_escape_filter_ignores_other_virtual_keys(self):
+        instance = self.make_app()
+        instance.recording = True
+
+        instance._win32_event_filter(
+            app.WM_KEYDOWN, mock.Mock(vkCode=0x41))
+
+        instance.listener.suppress_event.assert_not_called()
 
     def test_modifier_release_during_paste_does_not_leave_altgr_state_stuck(self):
         instance = self.make_app()
@@ -847,6 +896,38 @@ class TextRegressionTests(unittest.TestCase):
         instance._log.assert_called_once_with(
             "dictation ignored; previous transcription is still being delivered")
 
+    def test_recording_is_blocked_until_cancellation_cleanup_finishes(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._canceling_recording = True
+        instance.transcribing = False
+        instance._log = mock.Mock()
+
+        with mock.patch.object(app, "_foreground_paste_target") as foreground:
+            self.assertFalse(instance.start_recording())
+
+        foreground.assert_not_called()
+        instance._log.assert_called_once_with(
+            "dictation ignored; canceled recording is still closing")
+
+    def test_recording_rechecks_cancellation_under_lock(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance._canceling_recording = False
+        instance.transcribing = False
+        instance.recording = False
+        instance._dictation_model_ready = mock.Mock(return_value=True)
+
+        def cancellation_started():
+            instance._canceling_recording = True
+            return app.PasteTarget("notepad.exe", 1234)
+
+        with mock.patch.object(
+                app, "_foreground_paste_target",
+                side_effect=cancellation_started):
+            self.assertFalse(instance.start_recording())
+
+        self.assertFalse(instance.recording)
+
     def test_first_press_after_model_error_starts_one_retry_not_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
@@ -1217,6 +1298,111 @@ class TextRegressionTests(unittest.TestCase):
         self.assertTrue(instance.stop_recording(expected_epoch=7))
         self.assertIsNone(instance._recording_limit_timer)
         timer.cancel.assert_called_once_with()
+
+    def test_cancel_discards_capture_and_restores_recording_resources(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._canceling_recording = False
+        instance.transcribing = False
+        instance._rec_epoch = 7
+        instance.buffer = [
+            __import__("numpy").ones(4800, dtype="float32")]
+        instance._peak_rms = 0.4
+        instance._recording_paste_target = app.PasteTarget(
+            "notepad.exe", 1234)
+        instance._recording_scratchpad = mock.Mock()
+        stream = mock.Mock()
+        instance.stream = stream
+        instance.icon = mock.Mock()
+        idle_icon = object()
+        instance.idle_icon = idle_icon
+        timer = mock.Mock()
+        instance._recording_limit_timer = timer
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._model_executor = mock.Mock()
+
+        with mock.patch.object(app.pyperclip, "copy") as copy, \
+                mock.patch.object(app.threading, "Thread") as worker:
+            self.assertTrue(instance.cancel_recording())
+
+        self.assertFalse(instance.recording)
+        self.assertTrue(instance._canceling_recording)
+        self.assertFalse(instance.transcribing)
+        self.assertEqual(instance.buffer, [])
+        self.assertEqual(instance._peak_rms, 0.0)
+        self.assertEqual(
+            instance._recording_paste_target, app.PasteTarget("", 0))
+        self.assertIsNone(instance._recording_scratchpad)
+        self.assertIsNone(instance.stream)
+        self.assertIsNone(instance._recording_limit_timer)
+        worker.assert_called_once_with(
+            target=instance._cancel_recording_worker,
+            args=(stream, timer),
+            name="presspeech-cancel-recording",
+            daemon=True,
+        )
+        worker.return_value.start.assert_called_once_with()
+        instance._cancel_recording_worker(stream, timer)
+        timer.cancel.assert_called_once_with()
+        stream.stop.assert_called_once_with()
+        stream.close.assert_called_once_with()
+        self.assertIs(instance.icon.icon, idle_icon)
+        instance._restore_playback_after_recording.assert_called_once_with()
+        instance._play_cue.assert_called_once_with("stop")
+        instance._set_indicator.assert_called_once_with(None)
+        instance._schedule_model_idle_unload.assert_called_once_with()
+        instance._model_executor.submit.assert_not_called()
+        copy.assert_not_called()
+        self.assertFalse(instance._canceling_recording)
+
+    def test_cancel_closes_the_active_stream_before_restoring_playback(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance._canceling_recording = True
+        instance.icon = None
+        instance._play_cue = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        calls = mock.Mock()
+        stream = mock.Mock()
+        stream.stop.side_effect = calls.stream_stop
+        stream.close.side_effect = calls.stream_close
+        instance._restore_playback_after_recording = calls.restore
+
+        instance._cancel_recording_worker(stream, None)
+
+        self.assertEqual(calls.mock_calls, [
+            mock.call.stream_stop(),
+            mock.call.stream_close(),
+            mock.call.restore(),
+        ])
+        self.assertFalse(instance._canceling_recording)
+
+    def test_cancel_attempts_stream_close_when_stop_fails(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance._canceling_recording = True
+        instance.icon = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        stream = mock.Mock()
+        stream.stop.side_effect = RuntimeError("device already stopped")
+
+        instance._cancel_recording_worker(stream, None)
+
+        stream.stop.assert_called_once_with()
+        stream.close.assert_called_once_with()
+        instance._restore_playback_after_recording.assert_called_once_with()
+        self.assertFalse(instance._canceling_recording)
 
     def test_stopping_recording_claims_delivery_before_model_queue(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
