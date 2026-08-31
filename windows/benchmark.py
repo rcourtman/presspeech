@@ -88,6 +88,29 @@ def silence_metrics(expected_silence, reference_reviewed, hypotheses):
     }
 
 
+def speech_detection_metrics(audio_seconds, backend_timings):
+    """Summarise the privacy-safe VAD duration reported by faster-whisper."""
+    values = []
+    for timing in backend_timings:
+        value = timing.get("speech_seconds") if isinstance(timing, dict) else None
+        if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0):
+            values.append(float(value))
+    if not values:
+        return None
+    median_seconds = statistics.median(values)
+    return {
+        "min_seconds": min(values),
+        "median_seconds": median_seconds,
+        "max_seconds": max(values),
+        "median_audio_ratio": (median_seconds / audio_seconds
+                               if audio_seconds > 0 else None),
+        "rejected_trials": sum(value <= 0 for value in values),
+        "trials": len(values),
+        "all_seconds": values,
+    }
+
+
 def load_audio(path):
     audio, sample_rate = sf.read(path, dtype="float32", always_2d=False)
     if audio.ndim > 1:
@@ -180,6 +203,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         audio, audio_seconds, source_rate = load_audio(audio_path)
         timings = []
         transcripts = []
+        backend_timings = []
         for _run in range(runs):
             _sync_cuda()
             started = time.perf_counter()
@@ -187,6 +211,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
             _sync_cuda()
             timings.append(time.perf_counter() - started)
             transcripts.append(transcript)
+            backend_timing = getattr(transcriber, "last_timing", {})
+            backend_timings.append(
+                dict(backend_timing) if isinstance(backend_timing, dict) else {})
         consensus = collections.Counter(transcripts).most_common(1)[0][0]
         median_seconds = statistics.median(timings)
         result = {
@@ -212,6 +239,8 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
                 app.POST_ROLL_MIN_SEC + median_seconds + app.PASTE_DELAY_SEC
             ),
             "reference_reviewed": bool(sample.get("reference_reviewed", False)),
+            "speech_detection": speech_detection_metrics(
+                audio_seconds, backend_timings),
         }
         result["silence"] = silence_metrics(
             bool(sample.get("expected_silence", False)),
@@ -233,6 +262,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     reviewed_silence = [
         item for item in sample_results
         if item["silence"] is not None and item["silence"]["evaluated"]
+    ]
+    reviewed_speech_with_detection = [
+        item for item in reviewed
+        if item["silence"] is None and item["speech_detection"] is not None
     ]
     model_dtype = str(getattr(transcriber.model, "dtype", "unknown"))
     cuda_allocated_mib = None
@@ -263,6 +296,12 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         "silence_false_positive_trial_count": sum(
             item["silence"]["false_positive_trials"]
             for item in reviewed_silence),
+        "reviewed_speech_vad_rejection_count": sum(
+            item["speech_detection"]["rejected_trials"] > 0
+            for item in reviewed_speech_with_detection),
+        "reviewed_speech_vad_rejection_trial_count": sum(
+            item["speech_detection"]["rejected_trials"]
+            for item in reviewed_speech_with_detection),
         "samples": sample_results,
     }
 
@@ -282,6 +321,12 @@ def _print_summary(result):
             sample["estimated_release_to_paste_seconds"],
         ))
         print("  %s" % sample["transcript"])
+        detection = sample["speech_detection"]
+        if detection is not None:
+            print("  VAD speech: %.3fs median of %.3fs; rejected %d/%d trials" % (
+                detection["median_seconds"], sample["audio_seconds"],
+                detection["rejected_trials"], detection["trials"],
+            ))
         if sample["silence"] is not None:
             if sample["silence"]["evaluated"]:
                 if sample["silence"]["false_positive"]:

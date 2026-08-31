@@ -1479,6 +1479,18 @@ class PostRollTests(unittest.TestCase):
 
 
 class ModelIdleTests(unittest.TestCase):
+    def test_model_timing_summary_exposes_vad_rejection_without_audio(self):
+        summary = app._model_timing_summary({
+            "backend": "whisper",
+            "speech_seconds": 0.0,
+            "lock_wait": 0.01,
+            "inference": 0.2,
+        })
+
+        self.assertIn("backend=whisper", summary)
+        self.assertIn("speech=0.000s", summary)
+        self.assertIn("generate=0.200s", summary)
+
     def test_idle_timer_queues_unload_on_permanent_model_executor(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"gpu_idle_unload_sec": 30}

@@ -432,6 +432,28 @@ def _startup_model(settings, cuda_available):
     return configured
 
 
+def _model_timing_summary(timing):
+    """Format privacy-safe backend timing, including Whisper VAD retention."""
+    if not isinstance(timing, dict) or not timing:
+        return None
+    speech_seconds = timing.get("speech_seconds")
+    speech = ("-" if not isinstance(speech_seconds, (int, float))
+              else "%.3fs" % speech_seconds)
+    return (
+        "model detail: backend=%s bucket=%s speech=%s lock=%.3fs "
+        "prepare=%.3fs transfer=%.3fs generate=%.3fs decode=%.3fs" % (
+            timing.get("backend", ""),
+            timing.get("bucket_seconds", "-"),
+            speech,
+            timing.get("lock_wait", 0.0),
+            timing.get("prepare", 0.0),
+            timing.get("transfer", 0.0),
+            timing.get("generate", timing.get("inference", 0.0)),
+            timing.get("decode", 0.0),
+        )
+    )
+
+
 def _make_icon(color):
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -1306,27 +1328,21 @@ class PresspeechApp:
                 self._log(traceback.format_exc())
                 self.notify("Transcription failed", str(exc2))
                 return
+        timing = getattr(self.transcriber, "last_timing", {})
+        timing_summary = _model_timing_summary(timing)
         if not text:
-            self._log("transcription returned empty")
+            self._log("transcription returned empty (model %.3fs)" % model_seconds)
+            if timing_summary is not None:
+                self._log(timing_summary)
             return
         text = self._apply_text(text)
         # Dictation is private: retain performance data without persisting the
-        # user's words in the diagnostic log.
+        # user's words in the diagnostic log. Whisper's detected-speech duration
+        # distinguishes a VAD rejection from an empty decoder result.
         self._log("transcription complete: %d chars (model %.3fs)" %
                   (len(text), model_seconds))
-        timing = getattr(self.transcriber, "last_timing", {})
-        if timing:
-            self._log(
-                "model detail: backend=%s bucket=%s lock=%.3fs prepare=%.3fs "
-                "transfer=%.3fs generate=%.3fs decode=%.3fs" % (
-                    timing.get("backend", ""),
-                    timing.get("bucket_seconds", "-"),
-                    timing.get("lock_wait", 0.0),
-                    timing.get("prepare", 0.0),
-                    timing.get("transfer", 0.0),
-                    timing.get("generate", timing.get("inference", 0.0)),
-                    timing.get("decode", 0.0),
-                ))
+        if timing_summary is not None:
+            self._log(timing_summary)
         self._deliver_text(text, paste_target, scratchpad_target)
 
     def _deliver_text(

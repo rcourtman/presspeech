@@ -33,6 +33,24 @@ class MetricTests(unittest.TestCase):
         benchmark._apply_precision(transcriber, "auto")
         transcriber.model.to.assert_not_called()
 
+    def test_speech_detection_metrics_count_intermittent_vad_rejection(self):
+        metrics = benchmark.speech_detection_metrics(2.0, [
+            {"speech_seconds": 1.5},
+            {"speech_seconds": 0.0},
+            {"speech_seconds": 1.0},
+        ])
+
+        self.assertEqual(metrics["min_seconds"], 0.0)
+        self.assertEqual(metrics["median_seconds"], 1.0)
+        self.assertEqual(metrics["max_seconds"], 1.5)
+        self.assertEqual(metrics["median_audio_ratio"], 0.5)
+        self.assertEqual(metrics["rejected_trials"], 1)
+        self.assertEqual(metrics["trials"], 3)
+
+    def test_speech_detection_metrics_ignore_non_whisper_timings(self):
+        self.assertIsNone(benchmark.speech_detection_metrics(
+            1.0, [{"generate": 0.1}, mock.sentinel.timing]))
+
     def test_reviewed_silence_scores_empty_output_as_clean(self):
         self.assertEqual(
             benchmark.silence_metrics(True, True, [" \n", ""]),
@@ -106,6 +124,46 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["silence_false_positive_trial_count"], 1)
         self.assertFalse(result["samples"][0]["silence"]["false_positive"])
         self.assertTrue(result["samples"][1]["silence"]["false_positive"])
+
+    def test_benchmark_reports_reviewed_speech_vad_rejections(self):
+        manifest = {
+            "runs": 2,
+            "samples": [{
+                "id": "quiet-speech",
+                "audio": "quiet.wav",
+                "reference": "quiet speech",
+                "reference_reviewed": True,
+            }],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "int8"
+        speech_seconds = iter((1.25, 0.0))
+
+        def transcribe(*_args, **_kwargs):
+            detected = next(speech_seconds)
+            transcriber.last_timing = {
+                "backend": "whisper",
+                "speech_seconds": detected,
+            }
+            return "quiet speech" if detected else ""
+
+        transcriber.transcribe.side_effect = transcribe
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 2.0, 16000)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        detection = result["samples"][0]["speech_detection"]
+        self.assertEqual(detection["all_seconds"], [1.25, 0.0])
+        self.assertEqual(result["reviewed_speech_vad_rejection_count"], 1)
+        self.assertEqual(
+            result["reviewed_speech_vad_rejection_trial_count"], 1)
 
 
 if __name__ == "__main__":

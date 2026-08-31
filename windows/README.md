@@ -153,7 +153,10 @@ roles, values, and actions through Windows UI Automation for screen readers.
   see `benchmarks/README.md` for the reviewed-reference workflow. A manifest
   sample marked with both `"expected_silence": true` and
   `"reference_reviewed": true` is scored as a non-speech fixture; reports count
-  any non-empty transcript as a silence false positive.
+  any non-empty transcript as a silence false positive. Whisper reports also
+  record the VAD-retained speech duration for every trial and count reviewed
+  speech clips that VAD rejected, so silence fixes cannot hide quiet-speech
+  regressions behind aggregate WER.
 - If you see missing-DLL errors, install the Visual C++ Redistributable
   (x64) from Microsoft.
 
