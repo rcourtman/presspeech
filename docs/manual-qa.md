@@ -18,11 +18,6 @@ Run this before publishing a release.
   Windows Settings page, then restore access and rerun the check successfully.
 - With Narrator, confirm the microphone selector, changing check status, and
   both recovery buttons expose meaningful names.
-- On a layout with AltGr (for example Polish or German), confirm typing an
-  AltGr character does not begin dictation. In Setup, select **F8**, confirm the
-  instructions update and the key works immediately, choose **Set Up Later**,
-  restart, and confirm **F8** remains selected. Repeat the selector with
-  Narrator and keyboard-only navigation.
 - Set Windows **Text size** to 225% and use a 1024 x 768 display (or VM). Confirm
   Setup and Settings stay within the desktop, expose scrollbars when needed,
   and automatically scroll each control into view while navigating with Tab
@@ -75,11 +70,6 @@ cd swift
 - On a display whose usable height is less than 700 points, confirm Setup
   Checklist opens wholly inside the visible screen and every setup row remains
   reachable by scrolling or keyboard navigation.
-- Enable **Settings → Behavior → Launch at Login**, then turn Presspeech off in
-  **System Settings → General → Login Items & Extensions**. Confirm the app's
-  setting changes to **Launch at Login (Approval Required)** and selecting it
-  opens Login Items instead of removing the pending login item. Approve it,
-  reopen the Presspeech menu, and confirm the setting is on.
 - Confirm **Support -> Copy Diagnostics** copies a report with no
   transcript text or text-correction contents.
 - Confirm **Support -> Save Diagnostics...** writes the same privacy-safe

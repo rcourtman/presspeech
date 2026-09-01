@@ -1,90 +1,50 @@
 name: Bug report
-description: Report a Presspeech problem on macOS or Windows.
+description: Something doesn't work as expected.
 labels: [bug]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for helping improve Presspeech. Search existing issues first,
-        then include the details below for the affected computer.
-
-        Issues are public. Do not include dictated text, audio, dictionary or
-        shortcut contents, credentials, or other private data. **Copy
-        Diagnostics** in the Presspeech menu creates a privacy-safe summary.
   - type: textarea
     id: what-happened
     attributes:
       label: What happened?
-      description: What did you expect, and what happened instead?
-    validations:
-      required: true
-  - type: textarea
-    id: reproduce
-    attributes:
-      label: Steps to reproduce
-      description: List the smallest repeatable sequence, including the target app when relevant.
-      placeholder: |
-        1. Open ...
-        2. Hold ...
-        3. ...
-    validations:
-      required: true
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      options:
-        - macOS
-        - Windows
+      description: What did you expect, and what did you get instead?
     validations:
       required: true
   - type: input
-    id: app-version
+    id: macos
     attributes:
-      label: Presspeech version
-      description: Copy Diagnostics includes this value.
-      placeholder: e.g. 0.3.6 (macOS) or 0.1.10 (Windows)
+      label: macOS version
+      placeholder: e.g. 26.4.1 (Tahoe)
     validations:
       required: true
   - type: input
-    id: os-version
+    id: mac
     attributes:
-      label: Operating system version
-      placeholder: e.g. macOS 26.4.1 or Windows 11 24H2
+      label: Mac model
+      placeholder: e.g. Mac mini M2, MacBook Pro M3 Pro
     validations:
       required: true
   - type: textarea
-    id: hardware
+    id: log
     attributes:
-      label: Hardware
+      label: Log output
       description: |
-        On macOS, include the Mac model and chip. On Windows, include the CPU
-        and, when present, the GPU and driver version.
-      placeholder: e.g. Mac mini, M2 or Ryzen 7 7700, RTX 4070, driver 580.88
-    validations:
-      required: true
-  - type: textarea
-    id: readiness
-    attributes:
-      label: Setup and readiness
-      description: |
-        macOS: say whether the model, Microphone, Accessibility, Input
-        Monitoring, and hotkey checks are ready. Windows: include the
-        configured model, model status, microphone status, and hotkey.
-  - type: textarea
-    id: diagnostics
-    attributes:
-      label: Privacy-safe diagnostics
-      description: |
-        In the Presspeech menu, choose **Copy Diagnostics**, then paste the
-        result here. It excludes transcript, audio, and dictionary contents.
+        Last ~30 lines of `~/Library/Logs/Presspeech.log` (same path for
+        the Homebrew Cask install and a contributor `dev-run.sh` build
+        — they share a bundle id).
 
-        If Presspeech cannot open, instead include only the relevant last ~30
-        lines from `~/Library/Logs/Presspeech.log` on macOS or
-        `%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting.
+        Presspeech never logs transcript content; if you've manually
+        patched a debug build to do so, redact it before pasting.
       render: shell
+  - type: checkboxes
+    id: permissions
+    attributes:
+      label: Permissions granted to Presspeech.app
+      description: All three are required.
+      options:
+        - label: Microphone
+        - label: Accessibility
+        - label: Input Monitoring
   - type: textarea
     id: extra
     attributes:
       label: Anything else?
-      description: Add screenshots or other non-sensitive context if useful.

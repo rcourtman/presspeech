@@ -8,30 +8,20 @@ integration, and local CUDA inference.
 
 ## Reporting bugs
 
-Use the cross-platform [bug report
-form](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml)
-and include the affected platform, app and operating-system versions,
-reproduction steps, and hardware. Choose **Copy Diagnostics** from the
-Presspeech menu and paste its privacy-safe summary when the app can open. The
-summary excludes transcript, audio, and dictionary contents.
+Open an issue with the affected platform and version. For macOS, include:
 
-For macOS, also include:
-
+- macOS version (`sw_vers`). Presspeech requires **macOS 14 (Sonoma)** or
+  later.
 - Mac model (M1/M2/M3/M4 etc.)
+- The last ~30 lines of `~/Library/Logs/Presspeech.log`
 - Whether the tink and pop sounds play at the expected moments
 - Whether all three privacy permissions (Microphone, Accessibility,
   Input Monitoring) are granted to **Presspeech.app** specifically (not
   `Terminal` or anything else)
 
 For Windows, include the Windows version, configured model, GPU/driver details,
-whether the model reached **Ready**, and whether the microphone check passed.
-
-If Presspeech cannot open, include only the relevant last ~30 lines from
-`~/Library/Logs/Presspeech.log` on macOS or
-`%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting. Issues
-are public: never include dictated text, audio, dictionary or shortcut
-contents, credentials, or other private data. Report security vulnerabilities
-through the private process in [SECURITY.md](SECURITY.md).
+whether the model reached **Ready**, and the relevant tail of
+`%APPDATA%\Presspeech\log.txt`. Never paste transcript text into a report.
 
 ## Suggesting features
 

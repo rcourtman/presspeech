@@ -109,5 +109,5 @@
   </g>
 
   <!-- Caption below the mockup -->
-  <text x="320" y="448" font-size="13" fill="#64748B" text-anchor="middle" font-style="italic">Menu bar by default · optional Dock access when needed.</text>
+  <text x="320" y="448" font-size="13" fill="#64748B" text-anchor="middle" font-style="italic">Lives in the menu bar. No dock icon, no preferences window.</text>
 </svg>

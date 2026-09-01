@@ -51,7 +51,6 @@ SYNCED_PATHS = [
 EXTRA_STALE_SCAN = [
     ROOT / "CONTRIBUTING.md",
     ROOT / "llms.txt",
-    ROOT / "icon" / "menu-mockup.svg",
     DOCS / "privacy.html",
     DOCS / "privacy" / "network-calls.json",
     ROOT / "marketing" / "SHARING.md",
@@ -117,10 +116,6 @@ STALE_PATTERNS = [
     (
         re.compile(r"cross-platform Windows or Linux support", re.IGNORECASE),
         "pre-Windows recommendation wording",
-    ),
-    (
-        re.compile(r"no dock icon, no preferences window", re.IGNORECASE),
-        "pre-optional-Dock-access onboarding wording",
     ),
 ]
 
@@ -365,16 +360,16 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
     if "Save Diagnostics" not in text:
         text = replace_literal(text, diagnostics_row, diagnostics_row + save_diagnostics_row, path=path)
 
-    dock_access_caption = (
-        "On macOS, setup and settings begin in the menu bar. If the Presspeech item is hidden, "
-        "reopen the app to show Setup Checklist and optionally keep it in the Dock."
-    )
-    for old_caption in (
+    text = text.replace(
         "Lives in the menu bar. No dock icon, no preferences window.",
+        "On macOS, setup and settings live in the menu bar. No dock icon, no preferences window.",
+        1,
+    )
+    text = text.replace(
         "Setup and settings live in the menu bar. No dock icon, no preferences window.",
         "On macOS, setup and settings live in the menu bar. No dock icon, no preferences window.",
-    ):
-        text = text.replace(old_caption, dock_access_caption, 1)
+        1,
+    )
     return text
 
 
@@ -650,7 +645,7 @@ def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
 def stale_copy_errors(paths: list[Path]) -> list[str]:
     errors: list[str] = []
     for path in paths:
-        if not path.exists() or path.suffix not in {".html", ".json", ".md", ".svg", ".txt"}:
+        if not path.exists() or path.suffix not in {".html", ".json", ".md", ".txt"}:
             continue
         text = read_text(path)
         for pattern, label in STALE_PATTERNS:
@@ -780,13 +775,6 @@ def run_self_test() -> None:
         )
         if not stale_copy_errors([stale]):
             raise SyncError("self-test: stale clipboard privacy wording was not flagged")
-        stale_svg = Path(tmp) / "caption.svg"
-        stale_svg.write_text(
-            "On macOS there is no Dock icon, no preferences window.\n",
-            encoding="utf-8",
-        )
-        if not stale_copy_errors([stale_svg]):
-            raise SyncError("self-test: stale Dock-access SVG wording was not flagged")
 
 
 def main() -> int:

@@ -25,11 +25,9 @@ No Python installation or command-line setup is required. Presspeech installs
 per-user under `%LOCALAPPDATA%\Programs\Presspeech`, adds a Start Menu shortcut,
 and appears in **Settings → Apps → Installed apps** for normal uninstallation.
 
-The current prerelease is not code-signed. Windows SmartScreen may report
-**Unknown publisher**. Follow the public guide's
-[download and PowerShell verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run),
-then choose **More info → Run anyway** only after it reports that SHA-256
-verification succeeded.
+This first build is not code-signed. Windows SmartScreen may report **Unknown
+publisher**; choose **More info → Run anyway** after verifying the checksum on
+the release page.
 
 Requirements:
 
@@ -49,8 +47,8 @@ silently receive a different snapshot. Windows relies on the immutable Hugging
 Face snapshot identity; unlike the macOS model cache, it does not independently
 verify every downloaded model file against a SHA-256 manifest.
 The first-run readiness window shows model loading, microphone selection and a
-live microphone check, a selectable push-to-talk key, and Start with Windows in
-one place. The check briefly opens the selected input, discards its samples in
+live microphone check, the push-to-talk key, and Start with Windows in one
+place. The check briefly opens the selected input, discards its samples in
 memory, and reports whether microphone audio is available. If it fails, use the
 window's direct links to Windows Microphone Privacy or Sound Input settings,
 then choose **Check Again**. Wait until it says the model is ready before the
@@ -69,12 +67,6 @@ Before recording, open Windows microphone privacy settings and turn on
 is an unpackaged desktop app, so Windows uses that shared desktop-app control
 rather than an app-specific Presspeech permission prompt. Also confirm the
 selected device under **Settings → System → Sound → Input**.
-
-On keyboard layouts where **Right Alt** enters `@`, `€`, or accented letters,
-Windows treats that key as **AltGr**. Presspeech leaves AltGr available for
-normal typing and does not start dictation from it. Choose **F8** or another
-push-to-talk key in first-run setup; the choice applies immediately and remains
-selected if setup is deferred.
 
 ### Install from source
 
