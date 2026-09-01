@@ -76,7 +76,7 @@
         </div>
       </div>
 
-      <section>
+      <section id="download-verify-run">
         <div class="wrap">
           <span class="section-eyebrow">Before you download</span>
           <h2>Requirements and download size</h2>
@@ -99,10 +99,20 @@
               <p>Get <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe">Presspeech-Setup-0.1.10-x64.exe</a> and its <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe.sha256">published SHA-256 file</a> from the same GitHub release.</p>
             </li>
             <li>
-              <strong>Compare the SHA-256 value</strong>
-              <p>In PowerShell, run the command below from your Downloads folder. The hash must match the value in the downloaded <code>.sha256</code> file exactly.</p>
-              <pre><code>Get-FileHash .\Presspeech-Setup-0.1.10-x64.exe -Algorithm SHA256
-Get-Content .\Presspeech-Setup-0.1.10-x64.exe.sha256</code></pre>
+              <strong>Verify SHA-256 automatically</strong>
+              <p>In PowerShell, run the commands below from your Downloads folder. They validate the checksum file, compare it with the installer, and stop with an error instead of reporting success if anything differs.</p>
+              <pre><code>$installer = '.\Presspeech-Setup-0.1.10-x64.exe'
+$parts = (Get-Content -LiteralPath "$installer.sha256" -Raw).Trim() -split '\s+'
+if ($parts.Count -ne 2 -or
+    $parts[0] -notmatch '^[0-9a-fA-F]{64}$' -or
+    $parts[1] -ne (Split-Path $installer -Leaf)) {
+  throw 'The published checksum file is not valid. Do not run the installer.'
+}
+$actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+if ($actual -ne $parts[0]) {
+  throw 'SHA-256 verification failed. Do not run the installer.'
+}
+"SHA-256 verified: $actual"</code></pre>
             </li>
             <li>
               <strong>Run the installer</strong>
@@ -128,7 +138,7 @@ Get-Content .\Presspeech-Setup-0.1.10-x64.exe.sha256</code></pre>
             </li>
             <li>
               <strong>Let preparation finish</strong>
-              <p>The first-run window shows the model, microphone, hotkey, and Start with Windows setting. It briefly opens the selected input for a local microphone check and discards those samples in memory. <strong>Try Dictation</strong> and <strong>Finish Setup</strong> become available when the model is ready. If preparation fails, choose <strong>Retry Speech Model</strong>; the window keeps tracking the new attempt. Choose <strong>Set Up Later</strong> to defer setup without marking it complete; the window opens again on the next launch. You can still finish after the model is ready if you plan to connect a microphone later.</p>
+              <p>The first-run window shows the model, microphone, a selectable push-to-talk key, and Start with Windows setting. It briefly opens the selected input for a local microphone check and discards those samples in memory. If <strong>Right Alt</strong> enters @, €, or accented letters on your keyboard, Windows is using it as <strong>AltGr</strong>; choose <strong>F8</strong> or another key so AltGr remains available for typing. The hotkey choice applies immediately and is kept if you defer setup. <strong>Try Dictation</strong> and <strong>Finish Setup</strong> become available when the model is ready. If preparation fails, choose <strong>Retry Speech Model</strong>; the window keeps tracking the new attempt. Choose <strong>Set Up Later</strong> to defer setup without marking it complete; the window opens again on the next launch. You can still finish after the model is ready if you plan to connect a microphone later.</p>
             </li>
             <li>
               <strong>Check microphone access</strong>
@@ -189,7 +199,8 @@ Get-Content .\Presspeech-Setup-0.1.10-x64.exe.sha256</code></pre>
         <div class="wrap">
           <span class="section-eyebrow">More detail</span>
           <h2>Support and source installation</h2>
-          <p>The <a href="https://github.com/rcourtman/presspeech/blob/main/windows/README.md">Windows technical guide</a> covers every setting, model choices, source setup, testing, packaging, and diagnostics. Report problems through <a href="https://github.com/rcourtman/presspeech/issues">GitHub Issues</a> with your Windows version, selected model, GPU and driver details, and whether the model reached Ready. Do not include dictated text.</p>
+          <p>The <a href="https://github.com/rcourtman/presspeech/blob/main/windows/README.md">Windows technical guide</a> covers every setting, model choice, source setup, testing, packaging, and diagnostics. To report a problem, choose <strong>Copy Diagnostics</strong> in the tray menu and paste its privacy-safe summary into the <a href="https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml">cross-platform bug report form</a>. Also include the steps to reproduce, Windows version, CPU, GPU and driver when present, and whether the model reached Ready.</p>
+          <div class="note"><p>GitHub issues are public. Do not add dictated text, audio, dictionary contents, credentials, or other private data. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private vulnerability-reporting form</a> for a security issue.</p></div>
         </div>
       </section>
     </main>
