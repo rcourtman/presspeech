@@ -97,6 +97,21 @@ func recordingHUDFrame(size: NSSize, visibleFrame: NSRect?) -> NSRect? {
                   height: size.height)
 }
 
+func setupChecklistWindowContentSize(ideal: NSSize = NSSize(width: 560, height: 620),
+                                     visibleFrame: NSRect?) -> NSSize {
+    guard let visibleFrame,
+          visibleFrame.width > 0,
+          visibleFrame.height > 0 else { return ideal }
+
+    // Leave enough room to move and resize the window without putting its
+    // controls under the menu bar, Dock, or camera housing. The checklist
+    // itself scrolls when a display cannot accommodate the ideal height.
+    let availableWidth = max(420, visibleFrame.width - 80)
+    let availableHeight = max(320, visibleFrame.height - 80)
+    return NSSize(width: min(ideal.width, availableWidth),
+                  height: min(ideal.height, availableHeight))
+}
+
 let SETTINGS_SUITE = "com.local.presspeech"
 let CORRECTIONS_FILE_UTI = "com.local.presspeech.corrections"
 let CORRECTIONS_FILE_EXTENSION = "presspeech-corrections"
@@ -5864,6 +5879,13 @@ final class CorrectionShareCleanupDelegate: NSObject, @preconcurrency NSSharingS
 }
 
 @MainActor
+private final class SetupChecklistDocumentView: NSView {
+    // A flipped document view keeps the first setup row at the top when the
+    // checklist is taller than the scroll viewport.
+    override var isFlipped: Bool { true }
+}
+
+@MainActor
 private final class RecordingHUDView: NSView {
     var mode: RecordingHUDMode = .recording {
         didSet { needsDisplay = true }
@@ -8595,11 +8617,18 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
 
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 480),
-                              styleMask: [.titled, .closable],
+        let contentSize = setupChecklistWindowContentSize(
+            visibleFrame: NSScreen.main?.visibleFrame
+        )
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: contentSize),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered,
                               defer: false)
         window.title = "Set Up Presspeech"
+        // Match the readability floors used by
+        // setupChecklistWindowContentSize(_:). A larger minimum here would
+        // let AppKit defeat the constrained-display sizing above.
+        window.contentMinSize = NSSize(width: 420, height: 320)
         window.isReleasedWhenClosed = false
         window.delegate = self
         setupChecklistWindow = window
@@ -8801,9 +8830,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         footer.addArrangedSubview(close)
         footer.setHuggingPriority(.defaultLow, for: .horizontal)
-        root.addArrangedSubview(setupSeparator())
-        root.addArrangedSubview(footer)
-
         // Force every arranged subview to fill the inner content width
         // (root width minus left + right insets). Without this the row
         // NSStackViews hug their content and the right-aligned Status /
@@ -8815,14 +8841,48 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                         constant: innerWidthInset).isActive = true
         }
 
+        let document = SetupChecklistDocumentView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(root)
+
+        let scroll = NSScrollView()
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.documentView = document
+        scroll.setAccessibilityLabel("Setup checklist")
+
+        let footerSeparator = setupSeparator()
+        footerSeparator.translatesAutoresizingMaskIntoConstraints = false
+
         let container = NSView()
-        container.addSubview(root)
+        container.addSubview(scroll)
+        container.addSubview(footerSeparator)
+        container.addSubview(footer)
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            root.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            root.topAnchor.constraint(equalTo: container.topAnchor),
-            root.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            root.widthAnchor.constraint(equalToConstant: 520),
+            document.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            document.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            document.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            document.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor),
+
+            root.leadingAnchor.constraint(equalTo: document.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: document.trailingAnchor),
+            root.topAnchor.constraint(equalTo: document.topAnchor),
+            root.bottomAnchor.constraint(equalTo: document.bottomAnchor),
+
+            scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: container.topAnchor),
+            footerSeparator.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
+            footerSeparator.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -22),
+            footerSeparator.topAnchor.constraint(equalTo: scroll.bottomAnchor),
+            footer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 22),
+            footer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -22),
+            footer.topAnchor.constraint(equalTo: footerSeparator.bottomAnchor, constant: 12),
+            footer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16),
         ])
         return container
     }
@@ -14560,6 +14620,25 @@ private enum PresspeechSelfTest {
             recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE, visibleFrame: nil),
             equals: NSRect?.none,
             "recording HUD should stay hidden while macOS reports no screens"
+        )
+        try expect(
+            setupChecklistWindowContentSize(
+                visibleFrame: NSRect(x: 0, y: 0, width: 1_440, height: 900)
+            ),
+            equals: NSSize(width: 560, height: 620),
+            "setup checklist should use its comfortable size when the display has room"
+        )
+        try expect(
+            setupChecklistWindowContentSize(
+                visibleFrame: NSRect(x: 0, y: 0, width: 1_024, height: 600)
+            ),
+            equals: NSSize(width: 560, height: 520),
+            "setup checklist should leave screen-edge room on a short display"
+        )
+        try expect(
+            setupChecklistWindowContentSize(visibleFrame: nil),
+            equals: NSSize(width: 560, height: 620),
+            "setup checklist should retain a usable fallback size when no screen is reported"
         )
 
         try expect(

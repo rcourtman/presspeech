@@ -56,10 +56,11 @@ cd swift
 - Enable **Show in Dock**, minimize Setup Checklist, then reopen Presspeech from
   Finder or the Dock. Confirm the minimized window is restored and brought to
   the front rather than leaving Presspeech without a visible control surface.
-- On a clean preference profile, confirm setup asks for **Language & model**
-  before downloading a speech model. Choose English and confirm the setup
-  row switches to the English optimized model; reset preferences and repeat
-  with Multilingual.
+- Resize Setup Checklist vertically and confirm the checklist rows scroll while
+  **Show in Dock**, **Try Dictation** (when ready), and **Done** remain visible.
+- On a display whose usable height is less than 700 points, confirm Setup
+  Checklist opens wholly inside the visible screen and every setup row remains
+  reachable by scrolling or keyboard navigation.
 - Confirm **Support -> Copy Diagnostics** copies a report with no
   transcript text or text-correction contents.
 - Confirm **Support -> Save Diagnostics...** writes the same privacy-safe
