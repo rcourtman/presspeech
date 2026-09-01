@@ -97,13 +97,18 @@ jobs:
             -ExpectedSha $sha
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
-      - name: Install runtime and build dependencies
+          # release_requirements.py verifies this exact interpreter version.
+          python-version: "3.12.10"
+      - name: Install the locked release environment
         working-directory: windows
         shell: pwsh
         run: |
-          python -m pip install --no-cache-dir -r requirements.txt -r requirements-build.txt
+          # The release build verifies the environment against the compiled
+          # lock, so install that graph rather than re-resolving the loose
+          # inputs: CUDA Torch first, then every locked pin without further
+          # resolution so nothing Torch pulled in can drift past the lock.
           python -m pip install --no-cache-dir -r requirements-cuda.txt
+          python -m pip install --no-cache-dir --no-deps -r requirements-release.txt
           winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --force --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
       - name: Import optional signing certificate
         env:
