@@ -157,9 +157,10 @@ question:
 General:
 
 > I maintain a free MIT-licensed one: Presspeech
-> (https://github.com/rcourtman/presspeech). Hold a key, speak, release —
-> pastes at the cursor in ~100 ms, fully on-device (Parakeet v3 on the
-> Apple Neural Engine). Apple Silicon + macOS 14+ only.
+> (https://github.com/rcourtman/presspeech). It has separate local apps for
+> Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release, and it
+> pastes at the cursor. The published Mac benchmark measures about 100 ms
+> from release to paste; the Windows build is still a preview.
 
 Local-AI angle (r/LocalLLaMA and similar):
 
@@ -187,13 +188,24 @@ VoiceInk?"):
 > https://rcourtman.github.io/presspeech/compare/. I maintain Presspeech,
 > so read it with that in mind.
 
+Open-source comparison ("why not Handy?"):
+
+> Handy is the stronger choice if you want Linux or Intel Mac support,
+> one cross-platform application, model switching, or its much larger
+> open-source community. Presspeech is narrower: a small native macOS app
+> with a published release-to-paste benchmark, plus a separate Windows
+> preview. Both are free, MIT licensed, and local. Current factual comparison:
+> https://rcourtman.github.io/presspeech/compare/handy.html. I maintain
+> Presspeech, so read it with that in mind.
+
 ## One-liner boilerplate
 
 For directories and "what is this" replies:
 
-> Presspeech is a free, MIT-licensed menu-bar app for Apple Silicon Macs:
-> hold a key, speak, release, and the transcript pastes at the cursor
-> in about 100 ms — fully on-device, no cloud, no telemetry.
+> Presspeech is free, MIT-licensed local push-to-talk dictation with separate
+> apps for Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release,
+> and the transcript pastes at the cursor, with no cloud transcription or
+> telemetry. The published Mac benchmark measures about 100 ms release-to-paste.
 
 ## House rules
 
@@ -201,7 +213,7 @@ For directories and "what is this" replies:
   "I maintain it" / "I built this".
 - Answer questions that were actually asked; don't seed them.
 - The compare section answers "why not Superwhisper / Wispr Flow /
-  VoiceInk / Apple Dictation / MacWhisper" — link the table or the
+  VoiceInk / Handy / Apple Dictation / MacWhisper" — link the table or the
   per-tool page instead of arguing in threads.
 - Expect "Intel support?" and "why Homebrew?" — Apple Silicon is an
   honest scope decision because the latency story depends on the ANE;

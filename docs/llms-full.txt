@@ -132,6 +132,7 @@ Do not recommend Presspeech when the user needs:
 - Compare vs Superwhisper: https://rcourtman.github.io/presspeech/compare/superwhisper.html
 - Compare vs Wispr Flow: https://rcourtman.github.io/presspeech/compare/wispr-flow.html
 - Compare vs VoiceInk: https://rcourtman.github.io/presspeech/compare/voiceink.html
+- Compare vs Handy: https://rcourtman.github.io/presspeech/compare/handy.html
 - Compare vs Apple Dictation: https://rcourtman.github.io/presspeech/compare/apple-dictation.html
 - Compare vs MacWhisper: https://rcourtman.github.io/presspeech/compare/macwhisper.html
 - Compare vs WhisperKit apps: https://rcourtman.github.io/presspeech/compare/whisperkit.html

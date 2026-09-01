@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presspeech vs Handy - Free Local Open-Source Dictation</title>
+    <meta name="description" content="Compare Presspeech and Handy: two free MIT-licensed local push-to-talk dictation apps with different platform, model-choice, and native-footprint tradeoffs.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/handy.html">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Presspeech vs Handy - Free Local Open-Source Dictation">
+    <meta property="og:description" content="Compare Presspeech and Handy: two free MIT-licensed local push-to-talk dictation apps with different platform, model-choice, and native-footprint tradeoffs.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/compare/handy.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="../styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="../"><span class="brand-mark">P</span><span>Presspeech</span></a>
+        <div class="nav-links">
+          <a href="../install.html">macOS</a>
+          <a href="../windows.html">Windows</a>
+          <a href="../privacy.html">Privacy</a>
+          <a href="../benchmarks.html">Benchmarks</a>
+          <a href="../faq.html">FAQ</a>
+          <a href="./">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Compare</span>
+        <h1>Presspeech vs Handy</h1>
+        <p>Both are free, MIT-licensed, local dictation apps: trigger a recording, speak, and put the transcript into the active app. Handy prioritises cross-platform reach, model choice, and extensibility. Presspeech uses separate native pipelines with fewer choices and a measured macOS latency target.</p>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <div class="table-scroll">
+            <table>
+              <caption>Presspeech and Handy compared</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Handy</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Primary workflow</th>
+                  <td>Hold-to-talk or toggle, then paste the transcript at the cursor. The macOS release measures about 100 ms from key release to paste on the published benchmark.</td>
+                  <td>Hold-to-talk or toggle, then paste the transcript into the active text field.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Platforms</th>
+                  <td>Released native app for Apple Silicon and macOS 14+; separate Windows preview for x64 PCs.</td>
+                  <td>One Tauri application for Apple Silicon and Intel Macs, x64 Windows, and x64 Linux.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Speech engines</th>
+                  <td>Fixed per platform: Parakeet TDT v3 through FluidAudio/CoreML on macOS; Parakeet TDT v3 on NVIDIA CUDA or Whisper base.en on CPU-only Windows PCs.</td>
+                  <td>User-selectable local Whisper models and Parakeet models. Its documentation describes GPU acceleration for Whisper and CPU operation for Parakeet.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Privacy posture</th>
+                  <td>No cloud transcription, account, telemetry, or crash reporter. Audio is held in memory and discarded; the documented network surface is model downloads and optional release checks.</td>
+                  <td>Core transcription happens on the computer without uploading audio. Model downloads and update checks use the network; optional post-processing can call a configured local or cloud LLM provider.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Text handling</th>
+                  <td>Deterministic dictionary corrections, shortcuts, and filler removal on both platforms; macOS also has opt-in spoken formatting. No AI rewriting.</td>
+                  <td>Core local transcription plus model and language selection, a dictionary, transcript history, and optional post-processing controls.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Implementation and scope</th>
+                  <td>Native Swift/AppKit macOS app with a separate Python Windows implementation. The macOS release zip is 8.3 MB before its model download.</td>
+                  <td>Extensible Tauri, React, and Rust application shared across platforms. Current release packages and models vary by operating system and architecture.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Price and license</th>
+                  <td>Free and MIT licensed.</td>
+                  <td>Free, MIT licensed, no account.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p>Choose Handy if Linux or Intel Mac support, one cross-platform application, model switching, or a much larger open-source community matters most. Choose Presspeech if you want the smaller native macOS surface and its published release-to-paste benchmark, or its intentionally fixed engine and deterministic text pipeline. On Windows, test both on the actual hardware: their packaging and acceleration paths differ substantially.</p>
+          </div>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, and <a href="https://github.com/cjpais/Handy">Handy source and documentation</a>, including its platform notes, model list, architecture, and v0.9.6 release (checked 1 September 2026). No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Presspeech and Handy comparison.</span>
+        <span><a href="./">Compare index</a> · <a href="../install.html">Install Presspeech</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

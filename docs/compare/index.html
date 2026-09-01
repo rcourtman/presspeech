@@ -69,9 +69,9 @@
                   <th scope="row">Price</th>
                   <td>Free.</td>
                   <td>Included with macOS.</td>
-                  <td>Free tier; Pro is $8.49/month, $84.99/year, or $249.99 lifetime.</td>
+                  <td>Free tier; Pro starts at $8.49/month.</td>
                   <td>Free tier of 2,000 words/week on desktop; Pro is $15/month, or $12/month billed annually.</td>
-                  <td>$25&ndash;$49 one-time; free to build from source.</td>
+                  <td>From $25 one-time for one Mac; free to build from source.</td>
                 </tr>
                 <tr>
                   <th scope="row">Source</th>
@@ -111,7 +111,7 @@
                   <td>Built in; on-device languages need a model download, size not published.</td>
                   <td>Not published; local models are 75 MB&ndash;3 GB.</td>
                   <td>Not published; docs ask for ~500 MB free storage.</td>
-                  <td>13.7 MB download (v1.79 DMG); models extra.</td>
+                  <td>47.8 MiB download (v2.13 DMG); models extra.</td>
                 </tr>
                 <tr>
                   <th scope="row">Idle footprint</th>
@@ -131,7 +131,7 @@
                 </tr>
                 <tr>
                   <th scope="row">Platforms</th>
-                  <td>Apple Silicon Macs, macOS 14+.</td>
+                  <td>Released on Apple Silicon Macs, macOS 14+; a separate Windows preview is available.</td>
                   <td>Every Mac.</td>
                   <td>macOS 13.3+, Windows, iOS; local models work best on Apple Silicon.</td>
                   <td>macOS 11+ including Intel, Windows, iPhone, Android.</td>
@@ -139,7 +139,7 @@
                 </tr>
                 <tr>
                   <th scope="row">Beyond verbatim dictation</th>
-                  <td>Deliberately nothing: local text corrections and opt-in filler-word removal are the whole list.</td>
+                  <td>Deterministic local corrections and shortcuts, opt-in spoken formatting, and filler-word removal; no AI rewriting.</td>
                   <td>Auto-punctuation, spoken punctuation and emoji commands.</td>
                   <td>AI modes, meeting transcription, file transcription, translation.</td>
                   <td>AI formatting, tone styles, command mode, cross-device dictionary.</td>
@@ -149,10 +149,10 @@
             </table>
           </div>
           <div class="note">
-            <p>Every tool here wins somewhere. Pick the AI-formatting tools if you want your words reshaped, Apple Dictation if you want zero install, VoiceInk if you want one configurable local app. Presspeech's case is narrow on purpose: the fastest measured path from key release to pasted text, in the smallest app, with no cloud path to audit.</p>
+            <p>Every tool here wins somewhere. Pick the AI-formatting tools if you want your words reshaped, Apple Dictation if you want zero install, VoiceInk if you want one configurable local Mac app, or <a href="handy.html">Handy</a> if you want a larger cross-platform open-source community and model choice. Presspeech's case is narrow on purpose: a measured low-latency path from key release to pasted text, a small native macOS app, and no cloud transcription path to audit.</p>
           </div>
-          <p>Presspeech's figures are measured on an M4 Mac mini and reproducible from the <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench">benchmark harness</a>. Other tools' figures come from their official sites and docs, checked 11 June 2026. &ldquo;Not published&rdquo; means we could not find an official number, nothing more. MacWhisper sits out this table because it is primarily a file-transcription app; it has its <a href="macwhisper.html">own page</a>. Spotted an error? <a href="https://github.com/rcourtman/presspeech/issues">Open an issue</a> and we will fix it.</p>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a> and <a href="../benchmarks.html">benchmarks</a>; <a href="https://support.apple.com/guide/mac-help/use-dictation-mh40584/mac">Apple Dictation guide</a>, <a href="https://www.apple.com/macos/feature-availability/">macOS feature availability</a>, and <a href="https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/">Siri &amp; Dictation privacy</a>; <a href="https://superwhisper.com/">Superwhisper</a> site and docs; <a href="https://wisprflow.ai/pricing">Wispr Flow pricing</a> and <a href="https://wisprflow.ai/privacy">privacy</a>; <a href="https://tryvoiceink.com/">VoiceInk</a> site and <a href="https://github.com/Beingpax/VoiceInk">repository</a>.</p>
+          <p>Presspeech's figures are measured on an M4 Mac mini and reproducible from the <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench">benchmark harness</a>. Other tools' figures come from their official sites, docs, and release assets, checked 1 September 2026. &ldquo;Not published&rdquo; means we could not find an official number, nothing more. MacWhisper sits out this table because it is primarily a file-transcription app; it has its <a href="macwhisper.html">own page</a>. Handy is the closest high-adoption open-source alternative and has its <a href="handy.html">own page</a> rather than making this Mac-focused table wider. Spotted an error? <a href="https://github.com/rcourtman/presspeech/issues">Open an issue</a> and we will fix it.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a> and <a href="../benchmarks.html">benchmarks</a>; <a href="https://support.apple.com/guide/mac-help/use-dictation-mh40584/mac">Apple Dictation guide</a>, <a href="https://www.apple.com/macos/feature-availability/">macOS feature availability</a>, and <a href="https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/">Siri &amp; Dictation privacy</a>; <a href="https://superwhisper.com/">Superwhisper</a> site and docs; <a href="https://wisprflow.ai/pricing">Wispr Flow pricing</a> and <a href="https://wisprflow.ai/privacy">privacy</a>; <a href="https://tryvoiceink.com/">VoiceInk</a> site and <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.13">v2.13 release</a>; <a href="https://github.com/cjpais/Handy">Handy source and documentation</a>.</p>
         </div>
       </section>
 
@@ -174,6 +174,11 @@
               <h3>Presspeech vs VoiceInk</h3>
               <p>Two open-source local dictation apps: a fixed minimal pipeline versus a configurable multi-model workspace.</p>
               <p><a href="voiceink.html">Read comparison &rarr;</a></p>
+            </article>
+            <article class="card">
+              <h3>Presspeech vs Handy</h3>
+              <p>Two free MIT-licensed local dictation apps: native fixed pipelines versus a cross-platform multi-model application.</p>
+              <p><a href="handy.html">Read comparison &rarr;</a></p>
             </article>
             <article class="card">
               <h3>Presspeech vs Apple Dictation</h3>

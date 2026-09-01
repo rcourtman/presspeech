@@ -34,7 +34,8 @@ Important pages:
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
 - Benchmark results JSON: https://rcourtman.github.io/presspeech/benchmarks/results.json
 - FAQ: https://rcourtman.github.io/presspeech/faq.html
-- Compare (side-by-side table vs Apple Dictation, Superwhisper, Wispr Flow, and VoiceInk, plus per-tool pages): https://rcourtman.github.io/presspeech/compare/
+- Compare (Mac side-by-side table plus focused pages for Handy and other adjacent tools): https://rcourtman.github.io/presspeech/compare/
+- Compare vs Handy: https://rcourtman.github.io/presspeech/compare/handy.html
 - Source: https://github.com/rcourtman/presspeech
 - Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 - Homebrew tap: https://github.com/rcourtman/homebrew-presspeech
