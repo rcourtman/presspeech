@@ -460,6 +460,9 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance._held_hotkey_keys = frozenset()
         instance._held_hotkey_trigger = None
         instance._suppress_escape_keyup = False
+        instance._filter_pressed_vks = set()
+        instance._passthrough_hotkey_vks = set()
+        instance._suppressed_hotkey_vks = {}
         instance._injecting_keys = False
         instance.listener = mock.Mock()
         instance.recording = False
@@ -484,6 +487,7 @@ class HotkeyRegressionTests(unittest.TestCase):
 
     def test_every_settings_hotkey_has_an_input_mapping(self):
         self.assertEqual(set(config.HOTKEYS), set(app.KEY_MAP))
+        self.assertEqual(set(config.HOTKEYS), set(app.HOTKEY_VIRTUAL_KEYS))
 
     def test_altgr_chord_does_not_start_right_alt_dictation(self):
         instance = self.make_app()
@@ -543,7 +547,9 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance._win32_event_filter(app.WM_KEYUP, event)
 
         self.assertEqual(instance.listener.suppress_event.call_count, 3)
+        instance.cancel_recording.assert_called_once_with()
         self.assertFalse(instance._suppress_escape_keyup)
+        self.assertNotIn(app.pkb.Key.esc, instance._pressed_keys)
 
     def test_escape_filter_ignores_other_virtual_keys(self):
         instance = self.make_app()
@@ -553,6 +559,85 @@ class HotkeyRegressionTests(unittest.TestCase):
             app.WM_KEYDOWN, mock.Mock(vkCode=0x41))
 
         instance.listener.suppress_event.assert_not_called()
+
+    def test_configured_hotkey_is_dispatched_but_withheld_from_focused_app(self):
+        instance = self.make_app(hotkey="f8")
+        event = mock.Mock(vkCode=0x77, flags=0)
+
+        self.assertFalse(instance._win32_event_filter(app.WM_KEYDOWN, event))
+        self.assertFalse(instance._win32_event_filter(app.WM_KEYUP, event))
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_called_once_with()
+        self.assertEqual(instance.listener.suppress_event.call_count, 2)
+        self.assertEqual(instance._suppressed_hotkey_vks, {})
+
+    def test_hotkey_action_failure_still_withholds_reserved_key(self):
+        instance = self.make_app(hotkey="f8")
+        instance.start_recording.side_effect = RuntimeError("test failure")
+        event = mock.Mock(vkCode=0x77, flags=0)
+
+        self.assertFalse(instance._win32_event_filter(app.WM_KEYDOWN, event))
+
+        instance.listener.suppress_event.assert_called_once_with()
+        self.assertEqual(
+            instance._log.call_args_list[-1],
+            mock.call("reserved hotkey action failed: RuntimeError"))
+
+    def test_suppressed_keyup_completes_original_transaction_after_setting_change(self):
+        instance = self.make_app(hotkey="left win")
+        down = mock.Mock(vkCode=0x5B, flags=0)
+
+        instance._win32_event_filter(app.WM_KEYDOWN, down)
+        instance.settings.update({"hotkey": "f8", "trigger": "toggle"})
+        instance._win32_event_filter(app.WM_KEYUP, down)
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_called_once_with()
+        self.assertFalse(instance._key_held)
+        self.assertEqual(instance._suppressed_hotkey_vks, {})
+
+    def test_hotkey_autorepeat_is_suppressed_without_restarting_dictation(self):
+        instance = self.make_app(hotkey="f9")
+        event = mock.Mock(vkCode=0x78, flags=0)
+
+        instance._win32_event_filter(app.WM_KEYDOWN, event)
+        instance._win32_event_filter(app.WM_KEYDOWN, event)
+        instance._win32_event_filter(app.WM_KEYUP, event)
+
+        instance.start_recording.assert_called_once_with()
+        instance.request_stop.assert_called_once_with()
+        self.assertEqual(instance.listener.suppress_event.call_count, 3)
+
+    def test_injected_ctrl_for_paste_is_never_treated_as_physical_hotkey(self):
+        instance = self.make_app(hotkey="left ctrl")
+        for flags in (app.LLKHF_INJECTED, app.LLKHF_LOWER_IL_INJECTED):
+            event = mock.Mock(vkCode=0xA2, flags=flags)
+            instance._win32_event_filter(app.WM_KEYDOWN, event)
+            instance._win32_event_filter(app.WM_KEYUP, event)
+
+        instance.start_recording.assert_not_called()
+        instance.request_stop.assert_not_called()
+        instance.listener.suppress_event.assert_not_called()
+
+    def test_altgr_right_alt_transaction_is_not_suppressed(self):
+        instance = self.make_app(hotkey="right alt")
+        ctrl = mock.Mock(vkCode=0xA2, flags=0)
+        alt = mock.Mock(vkCode=0xA5, flags=0)
+
+        # The hook can receive Right Alt before pynput has delivered its queued
+        # Left Ctrl callback, so detection must use the raw filter state.
+        instance._win32_event_filter(app.WM_KEYDOWN, ctrl)
+        instance._win32_event_filter(app.WM_SYSKEYDOWN, alt)
+        instance._win32_event_filter(app.WM_SYSKEYDOWN, alt)
+        instance._win32_event_filter(app.WM_KEYUP, ctrl)
+        instance._win32_event_filter(app.WM_SYSKEYUP, alt)
+
+        instance.start_recording.assert_not_called()
+        instance.request_stop.assert_not_called()
+        instance.listener.suppress_event.assert_not_called()
+        self.assertEqual(instance._passthrough_hotkey_vks, set())
+        self.assertEqual(instance._filter_pressed_vks, set())
 
     def test_modifier_release_during_paste_does_not_leave_altgr_state_stuck(self):
         instance = self.make_app()
@@ -1162,10 +1247,10 @@ class TextRegressionTests(unittest.TestCase):
         self.assertFalse(instance.start_recording())
         self.assertEqual(instance.model_status, "loading")
         instance._model_executor.submit.assert_called_once_with(
-            instance._preload_model_worker)
+            instance._preload_model_worker, "parakeet-tdt-0.6b-v3", 1)
         self.assertFalse(instance.start_recording())
         instance._model_executor.submit.assert_called_once_with(
-            instance._preload_model_worker)
+            instance._preload_model_worker, "parakeet-tdt-0.6b-v3", 1)
 
     def test_explicit_model_retry_is_single_flight(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1175,13 +1260,47 @@ class TextRegressionTests(unittest.TestCase):
         instance.transcriber.loaded.return_value = False
         instance._model_executor = mock.Mock()
         instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_generation = 0
 
         self.assertTrue(instance.retry_model())
         self.assertFalse(instance.retry_model())
 
         self.assertEqual(instance.model_status, "loading")
         instance._model_executor.submit.assert_called_once_with(
-            instance._preload_model_worker)
+            instance._preload_model_worker, "parakeet-tdt-0.6b-v3", 1)
+
+    def test_changed_model_is_prepared_before_the_next_dictation(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "small.en"}
+        instance.model_status = "ready"
+        instance.model_status_detail = "base.en on cpu (int8)"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.side_effect = lambda name: name == "base.en"
+        instance._model_executor = mock.Mock()
+        instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_target = None
+        instance._model_load_generation = 0
+
+        self.assertTrue(instance.prepare_configured_model())
+
+        self.assertEqual(instance.model_status, "loading")
+        self.assertEqual(instance.model_status_detail, "Loading small.en")
+        instance._model_executor.submit.assert_called_once_with(
+            instance._preload_model_worker, "small.en", 1)
+
+    def test_selected_model_preparation_is_single_flight(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "small.en"}
+        instance.model_status = "loading"
+        instance.transcriber = mock.Mock()
+        instance._model_executor = mock.Mock()
+        instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_target = "small.en"
+        instance._model_load_generation = 1
+
+        self.assertFalse(instance.prepare_configured_model())
+
+        instance._model_executor.submit.assert_not_called()
 
     def test_audio_cues_default_on(self):
         self.assertTrue(config.DEFAULTS["audio_cues"])
@@ -1898,6 +2017,50 @@ class StartupTests(unittest.TestCase):
         self.assertIn("model unavailable", instance.model_status_detail)
         self.assertEqual(
             indicator_states, [("loading", "loading"), (None, "error")])
+
+    def test_superseded_load_does_not_revert_or_ready_the_new_selection(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "small.en"}
+        instance.model_status = "loading"
+        instance.model_status_detail = "Loading small.en"
+        instance._model_load_target = "small.en"
+        instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_generation = 2
+        instance.transcriber = mock.Mock()
+        instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+
+        with mock.patch.object(app.PresspeechApp, "_log"), \
+                mock.patch.object(app.cfg, "save") as save:
+            instance._preload_model_worker("base.en", 1)
+
+        self.assertEqual(instance.model_status, "loading")
+        self.assertEqual(instance.model_status_detail, "Loading small.en")
+        self.assertEqual(instance._model_load_target, "small.en")
+        save.assert_not_called()
+        instance._schedule_model_idle_unload.assert_not_called()
+        instance._set_indicator.assert_called_once_with("loading")
+
+    def test_older_same_model_generation_cannot_finish_a_rapid_reversal(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "small.en"}
+        instance.model_status = "loading"
+        instance.model_status_detail = "Loading small.en"
+        instance._model_load_target = "small.en"
+        instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_generation = 3
+        instance.transcriber = mock.Mock()
+        instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+
+        with mock.patch.object(app.PresspeechApp, "_log"):
+            instance._preload_model_worker("small.en", 1)
+
+        self.assertEqual(instance.model_status, "loading")
+        self.assertEqual(instance._model_load_target, "small.en")
+        instance._schedule_model_idle_unload.assert_not_called()
 
 
 if __name__ == "__main__":

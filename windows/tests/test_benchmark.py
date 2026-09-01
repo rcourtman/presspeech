@@ -25,6 +25,31 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(benchmark.edit_distance(["a", "b"], ["a"]), 1)
         self.assertEqual(benchmark.edit_distance(["a"], ["b"]), 1)
 
+    def test_final_word_metrics_normalise_case_and_punctuation(self):
+        self.assertEqual(
+            benchmark.final_word_metrics(
+                "Keep the ending.", ["keep the ENDING!", "The ending"]),
+            {
+                "retained": True,
+                "retained_trials": 2,
+                "failed_trials": 0,
+                "trials": 2,
+            },
+        )
+
+    def test_final_word_metrics_expose_intermittent_loss(self):
+        self.assertEqual(
+            benchmark.final_word_metrics(
+                "Do not lose this word", ["Do not lose this word", "Do not lose this"]),
+            {
+                "retained": False,
+                "retained_trials": 1,
+                "failed_trials": 1,
+                "trials": 2,
+            },
+        )
+        self.assertIsNone(benchmark.final_word_metrics("", [""]))
+
     def test_percentile_uses_observed_upper_value(self):
         self.assertEqual(benchmark._percentile([0.1, 0.2, 0.3, 0.4], 0.95), 0.4)
 
@@ -167,6 +192,16 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["reviewed_speech_vad_rejection_count"], 1)
         self.assertEqual(
             result["reviewed_speech_vad_rejection_trial_count"], 1)
+        self.assertEqual(result["reviewed_final_word_sample_count"], 1)
+        self.assertEqual(result["final_word_failure_count"], 1)
+        self.assertEqual(result["reviewed_final_word_trial_count"], 2)
+        self.assertEqual(result["final_word_failure_trial_count"], 1)
+        self.assertEqual(result["samples"][0]["final_word"], {
+            "retained": False,
+            "retained_trials": 1,
+            "failed_trials": 1,
+            "trials": 2,
+        })
 
 
 if __name__ == "__main__":

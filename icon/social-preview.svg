@@ -14,20 +14,20 @@
   <!-- right: title + tagline -->
   <g transform="translate(640, 0)">
     <text x="0" y="270" font-size="98" font-weight="700" fill="#0F172A" letter-spacing="-1">Presspeech</text>
-    <text x="0" y="330" font-size="32" font-weight="500" fill="#475569">Push-to-talk dictation</text>
-    <text x="0" y="370" font-size="32" font-weight="500" fill="#475569">for Apple Silicon Macs</text>
+    <text x="0" y="330" font-size="32" font-weight="500" fill="#475569">Private local dictation</text>
+    <text x="0" y="370" font-size="32" font-weight="500" fill="#475569">for Mac and Windows</text>
 
     <!-- footer chip -->
     <g transform="translate(0, 440)">
-      <text x="0" y="0" font-size="22" font-weight="500" fill="#10B981">Local · Private · Free · MIT</text>
+      <text x="0" y="0" font-size="22" font-weight="500" fill="#10B981">macOS release · Windows prerelease</text>
 
       <!-- Hard-number stat line — the share preview's job is to make
            someone click through, and concrete numbers do that better
            than adjectives. One <text> with <tspan>s so the spacing
            flows naturally rather than being hand-positioned. -->
-      <text x="0" y="38" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="19" xml:space="preserve"><tspan font-weight="700" fill="#0F172A">~100 ms </tspan><tspan font-weight="400" fill="#475569">transcription   </tspan><tspan font-weight="700" fill="#0F172A">8.3 MB </tspan><tspan font-weight="400" fill="#475569">download   </tspan><tspan font-weight="700" fill="#0F172A">~80 MB </tspan><tspan font-weight="400" fill="#475569">RAM</tspan></text>
+      <text x="0" y="42" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="19" xml:space="preserve"><tspan font-weight="700" fill="#0F172A">macOS: ~100 ms </tspan><tspan font-weight="400" fill="#475569">· 8.3 MB zip · ~80 MB RAM</tspan></text>
 
-      <text x="0" y="98" font-size="20" font-weight="400" fill="#64748B" letter-spacing="0.5">brew install --cask rcourtman/presspeech/presspeech</text>
+      <text x="0" y="92" font-size="20" font-weight="400" fill="#64748B" letter-spacing="0.5">Local · Private · Free · MIT</text>
     </g>
   </g>
 </svg>

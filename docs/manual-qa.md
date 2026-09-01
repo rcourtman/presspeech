@@ -31,13 +31,22 @@ Run this before publishing a release.
 - Confirm initial keyboard focus lands on the microphone selector in Setup, the
   hotkey selector in Settings, Download Update in the update prompt, and the
   text area in Try Dictation.
-- With Narrator, confirm the microphone selector, changing check status, and
-  both recovery buttons expose meaningful names.
+- With Narrator, confirm the microphone selector and both recovery buttons
+  expose meaningful names. Leave focus on the selector while the microphone
+  check finishes and while the model becomes ready; confirm each changed status
+  is announced once without moving focus. Repeat for an update completion or
+  failure and a Settings save. During a download, confirm changing byte counts
+  remain readable on demand but do not repeatedly interrupt Narrator.
 - On a layout with AltGr (for example Polish or German), confirm typing an
   AltGr character does not begin dictation. In Setup, select **F8**, confirm the
   instructions update and the key works immediately, choose **Set Up Later**,
   restart, and confirm **F8** remains selected. Repeat the selector with
   Narrator and keyboard-only navigation.
+- With a text editor focused, select **Left Win** and dictate in both hold and
+  toggle modes; confirm the Start menu never opens and the transcript returns
+  to the original editor. Repeat with **F11** in an app that normally assigns
+  F11 and confirm that app command is not invoked. Confirm unrelated keys still
+  work normally while Presspeech runs.
 - Set Windows **Text size** to 225% and use a 1024 x 768 display (or VM). Confirm
   Setup, Settings, and the update prompt stay within the desktop, expose
   scrollbars when needed, and automatically scroll each control into view
@@ -98,12 +107,17 @@ cd swift
   Finder or the Dock. Confirm the minimized window is restored and brought to
   the front rather than leaving Presspeech without a visible control surface.
 - Enable **Show in Dock** and confirm the macOS application menu contains
-  **About Presspeech**, **Settings…**, Services, Hide, and Quit. Choose
-  **Settings…** and confirm the current Dictation, Text, and Behavior settings
-  hierarchy opens at the Presspeech status item (or at the active window if the
-  menu-bar item is crowded out). With a Presspeech window active, press
-  Command-comma and confirm it opens the same hierarchy with current checkmarks
-  and disabled states.
+  **About Presspeech**, **Settings…**, Services, Hide, and Quit, plus standard
+  **Edit** and **Window** menus. Choose **Settings…** and confirm the current
+  Dictation, Text, and Behavior settings hierarchy opens at the Presspeech
+  status item (or at the active window if the menu-bar item is crowded out).
+  With a Presspeech window active, press Command-comma and confirm it opens the
+  same hierarchy with current checkmarks and disabled states.
+- In Try Dictation and the dictionary manager's search field, confirm
+  Command-Z, Shift-Command-Z, Command-X/C/V, and Command-A match the enabled
+  Edit-menu commands and act on the focused text. With each Presspeech utility
+  window active, confirm Command-W closes it, Command-M minimizes it, and the
+  Window menu lists open Presspeech windows without quitting the menu-bar app.
 - Resize Setup Checklist vertically and confirm the checklist rows scroll while
   **Show in Dock**, **Try Dictation** (when ready), and **Done** remain visible.
 - On a display whose usable height is less than 700 points, confirm Setup
@@ -179,6 +193,15 @@ cd swift
 
 ## Dictionary And Shortcuts
 
+- Enable **Settings → General → Show in Dock**, open **Dictionary &
+  Shortcuts**, and verify the application menu includes **Edit** and **Window**.
+  In the search field and correction editor, verify Command-A, Command-C,
+  Command-V, Command-Z, and Command-Shift-Z reach the focused control and that
+  unavailable commands are disabled. Verify Command-M minimizes the manager
+  and that its window can be raised again from the Window menu.
+- Add several rules, double-click a row in **Dictionary & Shortcuts**, and
+  verify the clicked rule opens for editing. Resize columns until text is
+  truncated and verify hovering a cell reveals its complete value.
 - Open **Settings → Text → Dictionary & Shortcuts → Manage Dictionary &
   Shortcuts…**. Confirm the search field receives focus and the Heard / When
   you say and Paste columns resize with the window.

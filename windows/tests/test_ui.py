@@ -155,6 +155,7 @@ class AccessibleWindowTests(unittest.TestCase):
 
     def test_changed_visible_text_refreshes_its_accessible_name(self):
         widget = mock.Mock()
+        widget.cget.return_value = "Ready to download"
 
         with mock.patch.object(ui.tk_uia, "add_acc_object") as refresh:
             ui._set_accessible_text(widget, "Verified and ready to install")
@@ -162,6 +163,54 @@ class AccessibleWindowTests(unittest.TestCase):
         widget.config.assert_called_once_with(
             text="Verified and ready to install")
         refresh.assert_called_once_with(widget)
+
+    def test_marked_status_change_raises_live_region_event_once(self):
+        widget = mock.Mock()
+        widget.cget.return_value = "Downloading…"
+        widget.winfo_id.return_value = 8123
+        widget._presspeech_live_region = True
+
+        with mock.patch.object(ui.tk_uia, "add_acc_object"), \
+                mock.patch.object(ui._LIVE_REGIONS, "announce") as announce:
+            ui._set_accessible_text(widget, "Verified and ready to install")
+
+        announce.assert_called_once_with(8123)
+
+        widget.cget.return_value = "Verified and ready to install"
+        with mock.patch.object(ui.tk_uia, "add_acc_object"), \
+                mock.patch.object(ui._LIVE_REGIONS, "announce") as announce:
+            ui._set_accessible_text(widget, "Verified and ready to install")
+
+        announce.assert_not_called()
+
+    def test_progress_text_can_refresh_without_interrupting_screen_reader(self):
+        widget = mock.Mock()
+        widget.cget.return_value = "Downloaded 1.0 GB"
+        widget._presspeech_live_region = True
+
+        with mock.patch.object(ui.tk_uia, "add_acc_object"), \
+                mock.patch.object(ui._LIVE_REGIONS, "announce") as announce:
+            ui._set_accessible_text(
+                widget, "Downloaded 1.1 GB", announce=False)
+
+        announce.assert_not_called()
+
+    def test_live_region_is_marked_and_cleared_with_status_widget(self):
+        widget = mock.Mock()
+        widget.winfo_id.return_value = 8123
+
+        with mock.patch.object(
+                ui._LIVE_REGIONS, "mark", return_value=True) as mark, \
+                mock.patch.object(ui._LIVE_REGIONS, "clear") as clear:
+            ui._mark_live_region(widget)
+            mark.assert_called_once_with(8123, ui.live_region.POLITE)
+            self.assertTrue(widget._presspeech_live_region)
+            sequence, handler = widget.bind.call_args.args
+            self.assertEqual(sequence, "<Destroy>")
+            self.assertEqual(widget.bind.call_args.kwargs, {"add": "+"})
+            handler(types.SimpleNamespace(widget=widget))
+
+        clear.assert_called_once_with(8123)
 
     def test_access_key_underlines_and_invokes_its_visible_command(self):
         root = mock.Mock()
@@ -601,7 +650,7 @@ class DictionarySettingsTests(unittest.TestCase):
         save.assert_called_once_with(window.app.settings)
         window.app.apply_autostart.assert_called_once_with()
         set_text.assert_called_once_with(
-            window.status, "Saved. Hotkey changes apply immediately.")
+            window.status, "Saved. Changes apply immediately.")
 
         window.app.apply_autostart.return_value = False
         with mock.patch.object(ui.cfg, "save"), \
@@ -613,6 +662,82 @@ class DictionarySettingsTests(unittest.TestCase):
             "Saved, but Start with Windows was not updated. "
             "Open Startup Settings to review it.",
         )
+
+    def test_save_prepares_a_changed_model_immediately(self):
+        window = self.make_window()
+        window.app = mock.Mock()
+        window.app.apply_autostart.return_value = True
+        window.app.settings = {
+            "hotkey": "right alt",
+            "trigger": "hold",
+            "input_device": "auto",
+            "model": "base.en",
+            "suffix": "space",
+            "remove_fillers": True,
+            "british": True,
+            "audio_cues": True,
+            "mute_playback_while_recording": True,
+            "visual_indicator": True,
+            "check_updates": True,
+            "autostart": True,
+            "dictionary": [],
+        }
+        window.device_values = {"Automatic": "auto"}
+        values = {
+            "var_hotkey": "right alt",
+            "var_trigger": "hold",
+            "var_device": "Automatic",
+            "var_model": ui.cfg.MODEL_LABELS["small.en"],
+            "var_suffix": "space",
+            "var_fillers": True,
+            "var_british": True,
+            "var_audio_cues": True,
+            "var_mute_playback": True,
+            "var_visual_indicator": True,
+            "var_check_updates": True,
+            "var_autostart": True,
+        }
+        for name, value in values.items():
+            variable = mock.Mock()
+            variable.get.return_value = value
+            setattr(window, name, variable)
+
+        with mock.patch.object(ui.cfg, "save"):
+            window._save()
+
+        self.assertEqual(window.app.settings["model"], "small.en")
+        window.app.prepare_configured_model.assert_called_once_with()
+
+    def test_model_status_exposes_ready_error_and_retry_states(self):
+        window = self.make_window()
+        window.root = mock.Mock()
+        window.model_status = mock.Mock()
+        window.retry_model_button = mock.Mock()
+        window.app = mock.Mock()
+        window.app.settings = {"model": "base.en"}
+        window.app.model_status = "ready"
+        window.app.model_status_detail = "base.en on cpu (int8)"
+        window.app.transcriber.loaded.return_value = True
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        set_text.assert_called_once_with(
+            window.model_status,
+            "Speech model ready — base.en on cpu (int8)",
+        )
+        window.retry_model_button.config.assert_called_once_with(state="disabled")
+
+        window.app.model_status = "error"
+        window.app.model_status_detail = "download unavailable"
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        set_text.assert_called_once_with(
+            window.model_status,
+            "Speech model needs attention — download unavailable",
+        )
+        window.retry_model_button.config.assert_called_with(state="normal")
 
 
 if __name__ == "__main__":

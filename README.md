@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="icon/hero.svg" alt="Presspeech — fast, lightweight local dictation for Apple Silicon." width="900">
+  <img src="icon/hero.svg" alt="Presspeech — private local dictation for Mac and Windows." width="900">
 </p>
 
 <p align="center">
   <a href="https://github.com/rcourtman/presspeech/releases/latest"><img src="https://img.shields.io/github/v/release/rcourtman/presspeech?label=release&color=10B981" alt="Latest release"></a>
   <a href="https://github.com/rcourtman/presspeech/actions/workflows/check.yml"><img src="https://github.com/rcourtman/presspeech/actions/workflows/check.yml/badge.svg" alt="Build status"></a>
   <a href="https://github.com/rcourtman/presspeech/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rcourtman/presspeech?color=10B981" alt="MIT licensed"></a>
-  <img src="https://img.shields.io/badge/Apple%20Silicon%20%C2%B7%20macOS%2014%2B-10B981?color=10B981" alt="Apple Silicon · macOS 14+">
+  <a href="https://rcourtman.github.io/presspeech/install.html"><img src="https://img.shields.io/badge/macOS-Released%20%C2%B7%20notarised-10B981" alt="macOS: released and notarised"></a>
+  <a href="https://rcourtman.github.io/presspeech/windows.html"><img src="https://img.shields.io/badge/Windows-Prerelease%20%C2%B7%20unsigned-D97706" alt="Windows: prerelease and unsigned"></a>
   <a href="https://github.com/rcourtman/homebrew-presspeech"><img src="https://img.shields.io/badge/Homebrew-Cask-10B981?logo=homebrew&logoColor=white" alt="Homebrew Cask"></a>
   <a href="https://rcourtman.github.io/presspeech/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-10B981" alt="Documentation site"></a>
 </p>
@@ -17,12 +18,14 @@
 release, and the transcript appears at the cursor. No account, no
 subscription, no cloud transcription.
 
-Presspeech now has two platform implementations:
+Choose the build that matches your computer:
 
-- **macOS:** the released native Swift app for Apple Silicon, documented below.
-- **Windows:** the Python/CUDA implementation in [`windows/`](windows/README.md),
-  with Right Alt hold-to-talk, Parakeet TDT v3, a tray app, audio cues,
-  playback muting, and a compact on-screen status indicator.
+| | macOS | Windows |
+| --- | --- | --- |
+| **Status** | Released, signed, and notarised | Prerelease; installer is currently unsigned |
+| **System** | Apple Silicon, macOS 14+ | x64 PC; Windows 11 recommended |
+| **First model download** | About 500–600 MB | About 141 MiB on CPU or 2.5 GB with CUDA |
+| **Start** | [Install on macOS](https://rcourtman.github.io/presspeech/install.html) | [Verify and install the Windows prerelease](https://rcourtman.github.io/presspeech/windows.html) |
 
 > Presspeech now uses the `com.local.presspeech` identity throughout.
 > When upgrading from an earlier identity, saved preferences and local
@@ -33,7 +36,7 @@ Presspeech now has two platform implementations:
   <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence lands at the cursor about 100 milliseconds later." width="900">
 </p>
 
-Presspeech is a native Swift menu-bar app for Apple Silicon Macs. Under
+The released macOS build is a native Swift menu-bar app for Apple Silicon. Under
 the hood, speech recognition runs locally through
 [FluidAudio](https://github.com/FluidInference/FluidAudio), CoreML,
 and the Apple Neural Engine. The default model is multilingual
@@ -69,6 +72,11 @@ source-build details.
 Download the notarised app:
 
 - [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip)
+- [Download its SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.sha256), then optionally verify both downloaded files with:
+  ```sh
+  cd ~/Downloads
+  shasum -a 256 -c Presspeech.zip.sha256
+  ```
 - Unzip it, move **Presspeech.app** to **Applications**, then open it.
 
 Or install with Homebrew, which is the easiest path for updates:
@@ -151,7 +159,9 @@ Useful menu items:
 - **Support → Try Dictation…** — a private scratchpad for verifying the
   hotkey and first transcription without switching apps
 - **Presspeech → Settings…** or **Command-comma** — when **Show in Dock** is
-  enabled, open the same settings hierarchy from the standard macOS app menu
+  enabled, open the same settings hierarchy from the standard macOS app menu;
+  that menu also exposes standard Edit and Window commands for Presspeech's
+  scratchpad and manager windows
 - **Settings → Dictation → Hotkey** — choose Right Option, Right Control, Right
   Command, selected F-keys, or record another F-key/right modifier
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
@@ -255,12 +265,13 @@ See [`windows/README.md`](windows/README.md) for hardware, setup, and usage deta
 
 ## Links
 
+- [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)
 - [Latest release](https://github.com/rcourtman/presspeech/releases/latest)
 - [Direct download](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip)
 - [Windows install guide](https://rcourtman.github.io/presspeech/windows.html)
 - [Documentation site](https://rcourtman.github.io/presspeech/)
 - [Benchmarks and methodology](https://rcourtman.github.io/presspeech/benchmarks.html)
-- [Compare with other Mac dictation tools](https://rcourtman.github.io/presspeech/compare/)
+- [Compare Mac and Windows dictation options](https://rcourtman.github.io/presspeech/compare/)
 - [Homebrew tap](https://github.com/rcourtman/homebrew-presspeech)
 - [FluidAudio](https://github.com/FluidInference/FluidAudio)
 - [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)

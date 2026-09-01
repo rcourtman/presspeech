@@ -99,6 +99,10 @@ run.bat
 2. Speak.
 3. Release — the punctuated transcript appears at the cursor moments later.
 
+The configured key is reserved for Presspeech while it is running, so it does
+not also open a Windows surface or invoke an F8–F12 command in the focused app.
+Other keys and AltGr layout input continue to pass through normally.
+
 A short high tone confirms recording has started and a lower tone confirms it has
 stopped. Audio cues are enabled by default and can be disabled in Settings.
 
@@ -134,7 +138,11 @@ roles, values, and actions through Windows UI Automation for screen readers.
 Each window starts focus on its main working control. Use **Left Alt** plus a
 command's underlined letter to invoke it without tabbing, **Escape** to close the
 current window (and cancel an active update download), and **Ctrl+S** to save
-Settings.
+Settings. While one of these windows is open, screen readers also announce
+important asynchronous status changes such as model readiness, microphone check
+results, update completion or failure, and settings save results without moving
+keyboard focus. Download byte counters remain visual rather than repeatedly
+interrupting speech.
 Windows may place the icon in the notification-area overflow. If the icon is
 hard to find, launch Presspeech again from the Start Menu: the running app
 restores its existing window, opens Setup during first run, or opens Settings
@@ -160,6 +168,12 @@ after setup. It does not start a second dictation process.
 - Dictionary: map a misheard phrase or spoken shortcut to exact text
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)
+
+Saving a different speech model starts downloading/loading and warming it in
+the background immediately. Settings shows whether the selected model is being
+prepared, is ready, or needs attention, and offers a retry after a failure.
+Dictation remains unavailable until the selected model reports ready; there is
+no need to sacrifice a hotkey press to start the change or restart Presspeech.
 
 If **Start with Windows** cannot be registered, Setup stays open and Settings
 reports that the startup state was not updated instead of claiming success.
@@ -191,7 +205,9 @@ Use **Open Startup Settings** to review Presspeech under Windows
   any non-empty transcript as a silence false positive. Whisper reports also
   record the VAD-retained speech duration for every trial and count reviewed
   speech clips that VAD rejected, so silence fixes cannot hide quiet-speech
-  regressions behind aggregate WER.
+  regressions behind aggregate WER. Reviewed speech clips score final-word
+  retention on every trial as well, so an intermittent clipped ending cannot
+  be hidden by the consensus transcript.
 - If you see missing-DLL errors, install the Visual C++ Redistributable
   (x64) from Microsoft.
 

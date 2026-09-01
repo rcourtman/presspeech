@@ -50,6 +50,7 @@
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
+          <a href="getting-started.html">Get started</a>
           <a href="install.html">macOS</a>
           <a href="windows.html" aria-current="page">Windows</a>
           <a href="privacy.html">Privacy</a>
@@ -69,6 +70,7 @@
         <div class="actions">
           <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe">Download Windows 0.1.10</a>
           <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10">Release notes and checksum</a>
+          <a class="button secondary" href="getting-started.html#finish-setup">First dictation guide</a>
           <a class="button secondary" href="install.html">Install on macOS</a>
         </div>
         <div class="note warn">
@@ -160,7 +162,7 @@ if ($actual -ne $parts[0]) {
           <div class="grid two">
             <article class="card">
               <h3>Dictate anywhere</h3>
-              <p>Hold <strong>Right Alt</strong> by default. A high cue confirms recording; release to transcribe and paste. Press <strong>Escape</strong> during recording to cancel and discard the buffered audio without transcribing or changing the clipboard. The notification-area menu offers the same <strong>Cancel Dictation (Esc)</strong> action while recording. If Windows hides that icon in overflow, launch Presspeech again from the Start Menu to restore its window or open its controls; a second dictation process is not started. Hotkeys, hold/toggle behavior, microphone, text suffix, audio cues, and models are configurable.</p>
+              <p>Hold <strong>Right Alt</strong> by default. A high cue confirms recording; release to transcribe and paste. The configured key is reserved for Presspeech while it is running, so it does not also open a Windows surface or invoke an F8–F12 command in the focused app; other keys and AltGr layout input continue to pass through normally. Press <strong>Escape</strong> during recording to cancel and discard the buffered audio without transcribing or changing the clipboard. The notification-area menu offers the same <strong>Cancel Dictation (Esc)</strong> action while recording. If Windows hides that icon in overflow, launch Presspeech again from the Start Menu to restore its window or open its controls; a second dictation process is not started. Hotkeys, hold/toggle behavior, microphone, text suffix, audio cues, and models are configurable. Saving a different model starts preparing it immediately; Settings keeps its ready/error status visible and offers a retry, while dictation stays unavailable until preparation finishes.</p>
             </article>
             <article class="card">
               <h3>Focus stays protected</h3>

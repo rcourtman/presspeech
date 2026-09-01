@@ -22,6 +22,7 @@
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
+          <a href="getting-started.html">Get started</a>
           <a href="install.html">macOS</a>
           <a href="windows.html">Windows</a>
           <a href="privacy.html" aria-current="page">Privacy</a>
@@ -97,7 +98,7 @@
                 <tr>
                   <th scope="row">User-triggered install/update</th>
                   <td><code>github.com/rcourtman/presspeech/releases/download/...</code>, <code>formulae.brew.sh</code>, <code>github.com/rcourtman/homebrew-presspeech</code>, Homebrew's own update endpoints (github.com / api.github.com)</td>
-                  <td>macOS uses the signed GitHub release archive directly or through Homebrew. Windows downloads an installer only after user approval, then verifies the published size and SHA-256 before offering to launch it.</td>
+                  <td>macOS uses the signed, notarised archive directly or through Homebrew; each immutable GitHub release also publishes a SHA-256 sidecar. Windows downloads an installer only after user approval, then verifies the published size and SHA-256 before offering to launch it.</td>
                   <td>Only runs when the user installs or updates.</td>
                 </tr>
               </tbody>

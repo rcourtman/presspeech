@@ -2,7 +2,9 @@
 .release-venv/
 __pycache__/
 *.py[cod]
-benchmarks/
+benchmarks/*
+!benchmarks/README.md
+!benchmarks/manifest.example.json
 build/
 dist/
 *.log

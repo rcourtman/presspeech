@@ -37,25 +37,25 @@
     <text x="0" y="170" font-size="96" font-weight="700" fill="#0F172A" letter-spacing="-2">Presspeech</text>
 
     <!-- Tagline -->
-    <text x="0" y="222" font-size="28" font-weight="500" fill="#475569">Fast, lightweight local dictation for Apple Silicon.</text>
+    <text x="0" y="222" font-size="28" font-weight="500" fill="#475569">Private local dictation for Mac and Windows.</text>
 
     <!-- Chips -->
     <g transform="translate(0, 270)" font-size="16" font-weight="600">
       <g>
-        <rect width="92" height="40" rx="20" fill="#10B981" fill-opacity="0.12"/>
-        <text x="46" y="26" fill="#0E8A66" text-anchor="middle">Local</text>
+        <rect width="148" height="40" rx="20" fill="#10B981" fill-opacity="0.12"/>
+        <text x="74" y="26" fill="#0E8A66" text-anchor="middle">macOS release</text>
       </g>
-      <g transform="translate(104, 0)">
+      <g transform="translate(160, 0)">
+        <rect width="196" height="40" rx="20" fill="#10B981" fill-opacity="0.12"/>
+        <text x="98" y="26" fill="#0E8A66" text-anchor="middle">Windows prerelease</text>
+      </g>
+      <g transform="translate(368, 0)">
         <rect width="92" height="40" rx="20" fill="#10B981" fill-opacity="0.12"/>
         <text x="46" y="26" fill="#0E8A66" text-anchor="middle">Private</text>
       </g>
-      <g transform="translate(208, 0)">
-        <rect width="92" height="40" rx="20" fill="#10B981" fill-opacity="0.12"/>
-        <text x="46" y="26" fill="#0E8A66" text-anchor="middle">Free</text>
-      </g>
-      <g transform="translate(312, 0)">
-        <rect width="92" height="40" rx="20" fill="#10B981" fill-opacity="0.12"/>
-        <text x="46" y="26" fill="#0E8A66" text-anchor="middle">MIT</text>
+      <g transform="translate(472, 0)">
+        <rect width="112" height="40" rx="20" fill="#10B981" fill-opacity="0.12"/>
+        <text x="56" y="26" fill="#0E8A66" text-anchor="middle">Free · MIT</text>
       </g>
     </g>
 
@@ -63,7 +63,7 @@
          One <text> with <tspan>s so the spacing flows naturally —
          hand-positioned x-coordinates underestimated bold-monospace
          char widths and the labels collided with the numbers. -->
-    <text x="0" y="345" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="17" xml:space="preserve"><tspan font-weight="700" fill="#10B981">~100 ms </tspan><tspan font-weight="400" fill="#64748B">transcription   </tspan><tspan font-weight="700" fill="#10B981">8.3 MB </tspan><tspan font-weight="400" fill="#64748B">zip   </tspan><tspan font-weight="700" fill="#10B981">~80 MB </tspan><tspan font-weight="400" fill="#64748B">RAM   </tspan><tspan font-weight="700" fill="#10B981">0% CPU </tspan><tspan font-weight="400" fill="#64748B">when idle</tspan></text>
+    <text x="0" y="345" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="17" xml:space="preserve"><tspan font-weight="700" fill="#10B981">macOS: ~100 ms </tspan><tspan font-weight="400" fill="#64748B">release-to-paste   </tspan><tspan font-weight="700" fill="#10B981">8.3 MB </tspan><tspan font-weight="400" fill="#64748B">zip   </tspan><tspan font-weight="700" fill="#10B981">~80 MB </tspan><tspan font-weight="400" fill="#64748B">RAM</tspan></text>
 
     <!-- brew command -->
     <g transform="translate(0, 395)">

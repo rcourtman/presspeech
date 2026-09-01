@@ -22,6 +22,7 @@
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
+          <a href="getting-started.html">Get started</a>
           <a href="install.html" aria-current="page">macOS</a>
           <a href="windows.html">Windows</a>
           <a href="privacy.html">Privacy</a>
@@ -41,6 +42,7 @@
         <div class="note"><p><strong>Using Windows?</strong> The <a href="windows.html">Windows install guide</a> has the current prerelease installer, system and model sizes, SHA-256 verification steps, and first-run instructions.</p></div>
         <div class="actions">
           <a class="button" href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Download Presspeech.zip</a>
+          <a class="button secondary" href="getting-started.html#finish-setup">First dictation guide</a>
           <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/latest">View latest release</a>
         </div>
         <div class="install-line" aria-label="Homebrew install command">
@@ -70,6 +72,10 @@
             <li>
               <strong>Download the app</strong>
               <p><a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Download Presspeech.zip</a> from the latest GitHub release.</p>
+            </li>
+            <li>
+              <strong>Optionally verify the archive</strong>
+              <p>Download <a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.sha256">Presspeech.zip.sha256</a> to the same folder, then run <code>shasum -a 256 -c Presspeech.zip.sha256</code> there. Continue only if it reports <code>Presspeech.zip: OK</code>.</p>
             </li>
             <li>
               <strong>Move it to Applications</strong>

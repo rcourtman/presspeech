@@ -8,9 +8,10 @@ Core facts:
 - macOS engine: FluidAudio, CoreML, and the Apple Neural Engine with multilingual Parakeet TDT v3.
 - Windows engine: local Parakeet TDT v3 on CUDA; fresh non-CUDA systems use
   Whisper base.en with int8 CPU inference, with additional local models selectable.
-- macOS direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.
+- macOS direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip; matching SHA-256: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.sha256.
 - Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.
-- Setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
+- Getting started: https://rcourtman.github.io/presspeech/getting-started.html has the cross-platform path from install through a private scratchpad test and first dictation into another app.
+- macOS setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
 - Windows install and requirements: https://rcourtman.github.io/presspeech/windows.html.
 - First-use test: both apps provide a focused private scratchpad for verifying the hotkey and paste flow.
 - Deterministic voice tools: both apps map spoken phrases to exact text; macOS also offers optional spoken formatting for new lines, paragraphs, bullets, punctuation, quotes, and parentheses.
@@ -26,6 +27,7 @@ Core facts:
 
 Important pages:
 - Home: https://rcourtman.github.io/presspeech/
+- First dictation: https://rcourtman.github.io/presspeech/getting-started.html
 - Install on macOS: https://rcourtman.github.io/presspeech/install.html
 - Windows install: https://rcourtman.github.io/presspeech/windows.html
 - Agent install prompt: https://rcourtman.github.io/presspeech/install/agents.md
@@ -34,7 +36,8 @@ Important pages:
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
 - Benchmark results JSON: https://rcourtman.github.io/presspeech/benchmarks/results.json
 - FAQ: https://rcourtman.github.io/presspeech/faq.html
-- Compare (Mac side-by-side table plus focused pages for Handy and other adjacent tools): https://rcourtman.github.io/presspeech/compare/
+- Compare Mac and Windows dictation options: https://rcourtman.github.io/presspeech/compare/
+- Windows dictation decision guide: https://rcourtman.github.io/presspeech/compare/windows-dictation.html
 - Compare vs Handy: https://rcourtman.github.io/presspeech/compare/handy.html
 - Source: https://github.com/rcourtman/presspeech
 - Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip

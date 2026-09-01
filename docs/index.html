@@ -18,40 +18,69 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "@id": "https://rcourtman.github.io/presspeech/#software",
-        "name": "Presspeech for macOS",
-        "alternateName": "Presspeech push-to-talk dictation",
-        "description": "Free MIT-licensed menu-bar app for private push-to-talk dictation into any Mac app. Speech recognition runs locally with Parakeet CoreML models on the Apple Neural Engine; no cloud transcription, account, subscription, or telemetry.",
-        "operatingSystem": "macOS 14 Sonoma or later",
-        "applicationCategory": "UtilitiesApplication",
-        "applicationSubCategory": "Speech recognition, dictation, transcription",
-        "softwareVersion": "0.3.6",
-        "downloadUrl": "https://github.com/rcourtman/presspeech/releases/latest",
-        "installUrl": "https://rcourtman.github.io/presspeech/install.html",
-        "codeRepository": "https://github.com/rcourtman/presspeech",
-        "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
-        "softwareRequirements": [
-          "Apple Silicon Mac with M1 or newer",
-          "macOS 14 Sonoma or later",
-          "Homebrew optional for cask installation and updates"
-        ],
-        "memoryRequirements": "About 80 MB RAM while idle",
-        "storageRequirements": "8.3 MB signed release zip plus about 500-600 MB for the local speech model cache",
-        "processorRequirements": "Apple Silicon with Apple Neural Engine",
-        "screenshot": "https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png",
-        "publishingPrinciples": "https://rcourtman.github.io/presspeech/llms.txt",
-        "documentation": "https://rcourtman.github.io/presspeech/llms.txt",
-        "sameAs": [
-          "https://github.com/rcourtman/presspeech",
-          "https://github.com/rcourtman/homebrew-presspeech",
-          "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
-          "https://github.com/FluidInference/FluidAudio"
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://rcourtman.github.io/presspeech/#software",
+            "name": "Presspeech for macOS",
+            "alternateName": "Presspeech push-to-talk dictation",
+            "description": "Free MIT-licensed menu-bar app for private push-to-talk dictation into any Mac app. Speech recognition runs locally with Parakeet CoreML models on the Apple Neural Engine; no cloud transcription, account, subscription, or telemetry.",
+            "operatingSystem": "macOS 14 Sonoma or later",
+            "applicationCategory": "UtilitiesApplication",
+            "applicationSubCategory": "Speech recognition, dictation, transcription",
+            "softwareVersion": "0.3.6",
+            "downloadUrl": "https://github.com/rcourtman/presspeech/releases/latest",
+            "installUrl": "https://rcourtman.github.io/presspeech/install.html",
+            "codeRepository": "https://github.com/rcourtman/presspeech",
+            "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "softwareRequirements": [
+              "Apple Silicon Mac with M1 or newer",
+              "macOS 14 Sonoma or later",
+              "Homebrew optional for cask installation and updates"
+            ],
+            "memoryRequirements": "About 80 MB RAM while idle",
+            "storageRequirements": "8.3 MB signed release zip plus about 500-600 MB for the local speech model cache",
+            "processorRequirements": "Apple Silicon with Apple Neural Engine",
+            "screenshot": "https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png",
+            "publishingPrinciples": "https://rcourtman.github.io/presspeech/llms.txt",
+            "documentation": "https://rcourtman.github.io/presspeech/llms.txt",
+            "sameAs": [
+              "https://github.com/rcourtman/presspeech",
+              "https://github.com/rcourtman/homebrew-presspeech",
+              "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
+              "https://github.com/FluidInference/FluidAudio"
+            ]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
+            "name": "Presspeech for Windows",
+            "description": "Free MIT-licensed local push-to-talk dictation for Windows. Speech recognition runs on the PC with no cloud transcription, account, subscription, or telemetry.",
+            "operatingSystem": "Windows 10 or Windows 11, x64",
+            "applicationCategory": "UtilitiesApplication",
+            "applicationSubCategory": "Speech recognition, dictation, transcription",
+            "softwareVersion": "0.1.10",
+            "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10",
+            "downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe",
+            "installUrl": "https://rcourtman.github.io/presspeech/windows.html",
+            "codeRepository": "https://github.com/rcourtman/presspeech/tree/main/windows",
+            "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
+            "softwareRequirements": [
+              "Windows 10 or Windows 11, x64",
+              "About 4.4 GB for the installed app",
+              "A microphone and an internet connection for the first model download"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          }
         ]
       }
     </script>
@@ -62,6 +91,7 @@
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./" aria-current="page"><span class="brand-mark">P</span><span>Presspeech</span></a>
         <div class="nav-links">
+          <a href="getting-started.html">Get started</a>
           <a href="install.html">macOS</a>
           <a href="windows.html">Windows</a>
           <a href="privacy.html">Privacy</a>
@@ -77,12 +107,12 @@
       <div class="wrap hero">
         <div class="hero-copy">
           <h1>Private dictation into any app.</h1>
-          <p>Hold a key, speak, release. Presspeech pastes text at the cursor with no account, subscription, telemetry, or cloud transcription. Choose the released macOS app or the Windows prerelease.</p>
-          <p class="quiet">macOS requires Apple Silicon and macOS 14+. Windows requires a 64-bit x64 PC; Windows 11 is recommended because general Windows 10 support has ended.</p>
+          <p>Hold a key, speak, release. Presspeech pastes text at the cursor with no account, subscription, telemetry, or cloud transcription.</p>
+          <p class="quiet"><strong>macOS:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
           <div class="actions">
-            <a class="button" href="install.html">Install on macOS</a>
-            <a class="button" href="windows.html">Install on Windows</a>
-            <a class="button secondary" href="compare/">Compare tools</a>
+            <a class="button" href="getting-started.html">Get started</a>
+            <a class="button secondary" href="install.html">Get the macOS release</a>
+            <a class="button secondary" href="windows.html">Try the Windows prerelease</a>
           </div>
           <div class="install-line" aria-label="macOS Homebrew install command">
             <span class="prompt" aria-hidden="true">$</span>
@@ -155,16 +185,16 @@
       <section>
         <div class="wrap">
           <span class="section-eyebrow">Choose your platform</span>
-          <h2>One private workflow, two native integrations</h2>
+          <h2>Choose the build that matches your computer</h2>
           <div class="grid two">
             <article class="card">
-              <h3>macOS</h3>
-              <p>The released Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The notarised zip is small; the local model downloads on first launch.</p>
+              <h3>macOS — released</h3>
+              <p>The signed and notarised Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The app zip is small; the 500–600 MB local model downloads on first launch.</p>
               <p><a href="install.html">Install on Apple Silicon and macOS 14+</a></p>
             </article>
             <article class="card">
-              <h3>Windows prerelease</h3>
-              <p>The Windows tray app uses CUDA Parakeet when available and automatically selects a smaller Whisper CPU model on fresh PCs without usable CUDA.</p>
+              <h3>Windows — prerelease</h3>
+              <p>The currently unsigned x64 installer is for evaluation on Windows 11 or a supported Windows 10 edition. The tray app uses CUDA Parakeet when available and selects a smaller Whisper CPU model on fresh PCs without usable CUDA.</p>
               <p><a href="windows.html">Check requirements, verify the installer, and set up Windows</a></p>
             </article>
           </div>
@@ -187,7 +217,7 @@
 
       <section>
         <div class="wrap">
-          <span class="section-eyebrow">New in 0.3</span>
+          <span class="section-eyebrow">New in macOS 0.3</span>
           <h2>Say exactly what should happen</h2>
           <div class="grid">
             <article class="card">
@@ -200,7 +230,7 @@
             </article>
             <article class="card">
               <h3>Try Dictation</h3>
-              <p>Finish setup in a focused private scratchpad, test the hotkey immediately, then take the same workflow into any Mac app.</p>
+              <p>Both apps include a focused private scratchpad. Use the <a href="getting-started.html#private-test">first-dictation guide</a> to test the hotkey, then take the same workflow into another app.</p>
             </article>
           </div>
         </div>
@@ -208,7 +238,7 @@
 
       <section>
         <div class="wrap">
-          <span class="section-eyebrow">One workflow</span>
+          <span class="section-eyebrow">macOS implementation</span>
           <h2>Built for one thing, not ten</h2>
           <div class="grid">
             <article class="card">
@@ -220,7 +250,7 @@
               <p>Audio is captured in memory, transcribed locally, pasted, then discarded. Transcripts are not written to disk.</p>
             </article>
             <article class="card">
-              <h3>Native Mac stack</h3>
+              <h3>Native macOS stack</h3>
               <p>Swift, AVFoundation, CoreGraphics, AppKit, CoreML, and FluidAudio. No embedded browser runtime, interpreter, account, subscription, or cloud transcription endpoint.</p>
             </article>
           </div>
@@ -234,11 +264,11 @@
           <div class="grid two">
             <article class="card">
               <h3>Use Presspeech when you want</h3>
-              <p>Fast phrase-length dictation into whatever app already has focus; a local-only privacy model; a tiny notarised app; and a workflow that does not keep a transcript library.</p>
+              <p>Fast phrase-length dictation into whatever app already has focus; a local-only privacy model; and a workflow that does not keep a transcript library. The macOS app is released and notarised; the Windows app is available for people comfortable evaluating an unsigned prerelease.</p>
             </article>
             <article class="card">
               <h3>Use something else when you need</h3>
-              <p>Intel Mac support, macOS before 14 Sonoma, batch file transcription, speaker labels, long-form transcript editing, cloud models, team features, or integrations with notes databases.</p>
+              <p>Intel Mac or Windows on Arm support, macOS before 14 Sonoma, an installer accepted by managed Windows policies, batch file transcription, speaker labels, long-form transcript editing, cloud models, team features, or integrations with notes databases.</p>
             </article>
           </div>
         </div>

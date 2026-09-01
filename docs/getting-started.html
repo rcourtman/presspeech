@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Get Started with Presspeech - Your First Private Dictation</title>
+    <meta name="description" content="Install Presspeech on macOS or Windows, finish local model and permission setup, test the hotkey in a private scratchpad, and complete your first dictation.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/getting-started.html">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Get Started with Presspeech - Your First Private Dictation">
+    <meta property="og:description" content="One short path from install to a successful local dictation on macOS or Windows.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/getting-started.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
+        <div class="nav-links">
+          <a href="getting-started.html" aria-current="page">Get started</a>
+          <a href="install.html">macOS</a>
+          <a href="windows.html">Windows</a>
+          <a href="privacy.html">Privacy</a>
+          <a href="benchmarks.html">Benchmarks</a>
+          <a href="faq.html">FAQ</a>
+          <a href="compare/">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">First dictation</span>
+        <h1>From download to your first words</h1>
+        <p>Choose your platform, finish the local setup checks, and try one private dictation before using Presspeech in another app. No account or cloud transcription is involved.</p>
+        <div class="actions">
+          <a class="button" href="#macos">Start on macOS</a>
+          <a class="button" href="#windows">Start on Windows</a>
+        </div>
+      </div>
+
+      <section id="choose-platform">
+        <div class="wrap">
+          <span class="section-eyebrow">Before installing</span>
+          <h2>Choose the app for this computer</h2>
+          <div class="grid two">
+            <article class="card" id="macos">
+              <h3>macOS</h3>
+              <p>Use an Apple Silicon Mac with macOS 14 Sonoma or later. The released app is notarised; its first launch downloads about 500–600 MB of local model files.</p>
+              <p><a href="install.html">Open the macOS download and install guide</a></p>
+            </article>
+            <article class="card" id="windows">
+              <h3>Windows prerelease</h3>
+              <p>Use a 64-bit x64 PC, preferably Windows 11. The installer is currently unsigned, so follow the Windows guide to verify its published SHA-256 before running it.</p>
+              <p><a href="windows.html#download-verify-run">Open the Windows requirements and verified install guide</a></p>
+            </article>
+          </div>
+          <div class="note"><p><strong>Not supported:</strong> Intel Macs and Windows on Arm. Windows 10 x64 remains compatible, but general support has ended; use an edition with ongoing support or Extended Security Updates.</p></div>
+        </div>
+      </section>
+
+      <section id="finish-setup">
+        <div class="wrap">
+          <span class="section-eyebrow">After launch</span>
+          <h2>Finish setup before trying the hotkey</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>On macOS</h3>
+              <ol class="steps">
+                <li>
+                  <strong>Open Setup Checklist</strong>
+                  <p>Presspeech opens it while setup is incomplete. You can also choose <strong>Setup Checklist…</strong> from the menu-bar item.</p>
+                </li>
+                <li>
+                  <strong>Wait for the speech model</strong>
+                  <p>Keep the app open while the model downloads, verifies, compiles, and reaches Ready.</p>
+                </li>
+                <li>
+                  <strong>Grant the three permissions</strong>
+                  <p>Use the checklist buttons for Microphone, Accessibility, and Input Monitoring. Each row explains why the local macOS grant is needed.</p>
+                </li>
+                <li>
+                  <strong>Confirm the hotkey</strong>
+                  <p>Briefly press the configured key when prompted. The default is <strong>Right Option</strong>.</p>
+                </li>
+              </ol>
+            </article>
+            <article class="card">
+              <h3>On Windows</h3>
+              <ol class="steps">
+                <li>
+                  <strong>Wait for model preparation</strong>
+                  <p>The first-run window shows the selected local model. Wait until preparation is complete and <strong>Try Dictation</strong> becomes available.</p>
+                </li>
+                <li>
+                  <strong>Check the microphone</strong>
+                  <p>Speak during the local input check. If no level is detected, choose <strong>Check Again</strong> after selecting or unmuting the correct input.</p>
+                </li>
+                <li>
+                  <strong>Check the hotkey</strong>
+                  <p>The default is <strong>Right Alt</strong>. If that key acts as AltGr on your keyboard, choose F8 or another available key in setup.</p>
+                </li>
+                <li>
+                  <strong>Finish Setup</strong>
+                  <p>Review the Start with Windows choice, then finish setup once the model is ready.</p>
+                </li>
+              </ol>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="private-test">
+        <div class="wrap">
+          <span class="section-eyebrow">Safe practice</span>
+          <h2>Try the first dictation in Presspeech</h2>
+          <p>Both apps include a focused scratchpad so you can check the microphone, hotkey, transcription, and paste flow without sending text into another app.</p>
+          <ol class="steps">
+            <li>
+              <strong>Open Try Dictation</strong>
+              <p>On macOS, choose <strong>Support → Try Dictation…</strong> from the Presspeech menu. On Windows, choose <strong>Try Dictation…</strong> from setup or the notification-area menu.</p>
+            </li>
+            <li>
+              <strong>Click in the scratchpad</strong>
+              <p>Leave the cursor in its text area so Presspeech can verify the complete delivery path.</p>
+            </li>
+            <li>
+              <strong>Hold, speak, release</strong>
+              <p>Hold <strong>Right Option</strong> on macOS or <strong>Right Alt</strong> on Windows, say a short sentence, then release. If you selected toggle mode, press once to start and again to stop.</p>
+            </li>
+            <li>
+              <strong>Check the result</strong>
+              <p>Your sentence should appear after local transcription. Audio is discarded after processing, and the scratchpad is not a saved transcript history.</p>
+            </li>
+          </ol>
+          <div class="note"><p><strong>No recording cue?</strong> Return to Setup Checklist on macOS or Settings on Windows and recheck the hotkey and microphone. Do not keep retrying while the model still says it is preparing.</p></div>
+        </div>
+      </section>
+
+      <section id="first-app">
+        <div class="wrap">
+          <span class="section-eyebrow">Ready to use</span>
+          <h2>Dictate into a familiar text field</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>Use a simple first target</h3>
+              <p>Open a blank note, email draft, or document. Click where text should appear, keep that window focused, then repeat the same hold–speak–release gesture.</p>
+            </article>
+            <article class="card">
+              <h3>If you change windows</h3>
+              <p>Presspeech binds each recording to the window where it began. If focus changes before delivery, it leaves the transcript on the clipboard instead of pasting into the wrong place. Return to the intended field and paste manually.</p>
+            </article>
+          </div>
+          <div class="facts">
+            <div class="fact"><strong>Start cue</strong><span>Recording has started.</span></div>
+            <div class="fact"><strong>Stop cue</strong><span>Recording has stopped and local transcription has begun.</span></div>
+            <div class="fact"><strong>Escape</strong><span>Cancel an active recording and discard its buffered audio.</span></div>
+            <div class="fact"><strong>Clipboard fallback</strong><span>Paste manually if focus changed during transcription.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="recovery">
+        <div class="wrap">
+          <span class="section-eyebrow">If you get stuck</span>
+          <h2>Reopen the controls</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>macOS item is hidden</h3>
+              <p>Open <strong>Presspeech.app</strong> again from Applications, Finder, or Spotlight. The running app opens Setup Checklist instead of starting another copy. Enable <strong>Show in Dock</strong> there if you need a persistent alternative.</p>
+            </article>
+            <article class="card">
+              <h3>Windows icon is hidden</h3>
+              <p>Check the notification-area overflow first. You can also launch Presspeech again from the Start Menu to restore its window or controls without starting a second dictation process.</p>
+            </article>
+          </div>
+          <p>For model, permission, audio, or hotkey recovery, use the <a href="https://github.com/rcourtman/presspeech/blob/main/docs/troubleshooting.md">troubleshooting guide</a>. If the problem remains, create a privacy-safe report with <strong>Copy Diagnostics</strong> and use the <a href="https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml">bug report form</a>. Never post dictated text or audio to a public issue.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Your first private dictation with Presspeech.</span>
+        <span><a href="install.html">macOS install</a> · <a href="windows.html">Windows install</a> · <a href="faq.html">FAQ</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

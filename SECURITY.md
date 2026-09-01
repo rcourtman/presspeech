@@ -17,6 +17,23 @@ the smallest reproduction you can provide without exposing real transcript
 content. Reports stay private while the issue is investigated and a fix is
 prepared.
 
+## Trust model for app releases
+
+The macOS archive is signed with Developer ID, notarised by Apple, and
+published together with `Presspeech.zip.sha256` in an immutable GitHub
+release. The release script refuses to publish unless release immutability is
+enabled, uploads both files through GitHub CLI's draft-first flow, and verifies
+the resulting release attestation, asset digests, and protected tag before it
+updates the Homebrew Cask. Direct-download users can run
+`shasum -a 256 -c Presspeech.zip.sha256`; Homebrew independently enforces the
+same archive hash from the tap.
+
+The Windows release workflow builds only an approved main commit with green
+macOS and Windows CI, publishes the installer and checksum together, and
+checks their GitHub digests before the prerelease becomes available. The
+Windows updater checks the published metadata, checksum file, and installer
+again before launch.
+
 ## What's in scope
 
 - Anything that lets a non-Presspeech process read transcripts in flight,

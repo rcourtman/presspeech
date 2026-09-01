@@ -139,7 +139,8 @@ the native CUDA/ASR gate.
   the wrapper scripts.
 - `swift/dev-run.sh` — debug build + wrap + sign + relaunch.
 - `ship-swift.sh` — version bump, release build, sign, notarise,
-  staple, ditto-zip, tag, push, GitHub release, Cask bump.
+  staple, ditto-zip, checksum, atomic tag push, immutable GitHub release
+  verification, Cask bump.
 - `entitlements.plist` — hardened-runtime entitlements (two keys:
   `audio-input` + `microphone`).
 - `experiments/swift-bench/` — head-to-head latency benchmark

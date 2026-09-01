@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 import config as cfg
+import live_region
 import updates
 
 
@@ -88,6 +89,7 @@ class _WindowHost:
 
 _WINDOW_HOST = None
 _WINDOW_HOST_LOCK = threading.Lock()
+_LIVE_REGIONS = live_region.LiveRegions()
 
 ALTGR_HOTKEY_GUIDANCE = (
     "If Right Alt types @, €, or accented letters, Windows is using AltGr and "
@@ -165,8 +167,13 @@ def _name_control(control, name):
         _accessibility_failed()
 
 
-def _set_accessible_text(widget, text):
-    """Keep a mapped widget's UIA name aligned with changed visible text."""
+def _set_accessible_text(widget, text, announce=None):
+    """Keep visible/UIA text aligned and announce marked status changes."""
+    try:
+        changed = str(widget.cget("text")) != text
+    except Exception:
+        # Test doubles and a widget racing destruction may not expose cget.
+        changed = True
     options = {"text": text}
     access_key = widget.__dict__.get("_presspeech_access_key")
     if access_key is not None:
@@ -176,6 +183,34 @@ def _set_accessible_text(widget, text):
     widget.config(**options)
     try:
         tk_uia.add_acc_object(widget)
+    except Exception:
+        _accessibility_failed()
+    if announce is None:
+        announce = getattr(widget, "_presspeech_live_region", False) is True
+    if changed and announce:
+        try:
+            _LIVE_REGIONS.announce(widget.winfo_id())
+        except Exception:
+            _accessibility_failed()
+
+
+def _mark_live_region(widget, priority=live_region.POLITE):
+    """Make important future status changes available without moving focus."""
+    try:
+        hwnd = widget.winfo_id()
+        if not _LIVE_REGIONS.mark(hwnd, priority):
+            return
+        widget._presspeech_live_region = True
+
+        def clear(event):
+            if getattr(event, "widget", None) is not widget:
+                return
+            try:
+                _LIVE_REGIONS.clear(hwnd)
+            except Exception:
+                _accessibility_failed()
+
+        widget.bind("<Destroy>", clear, add="+")
     except Exception:
         _accessibility_failed()
 
@@ -733,6 +768,10 @@ class SetupWindow:
         _label_control(hotkey_label, self.hotkey)
         _name_control(
             self.hotkey, "Push-to-talk key. " + ALTGR_HOTKEY_GUIDANCE)
+        for status in (
+                self.model_label, self.microphone_status,
+                self.autostart_status):
+            _mark_live_region(status)
         self.scrollable_body.fit_to_screen()
         root.after_idle(self.device.focus_set)
         root.after(100, self._poll_model)
@@ -944,6 +983,7 @@ class UpdateWindow:
         _add_access_key(root, self.download_button, "d")
         _bind_window_command(root, "<Escape>", self._close)
         root.update_idletasks()
+        _mark_live_region(self.status)
         self.scrollable_body.fit_to_screen()
         root.after_idle(self.download_button.focus_set)
         root.after(100, self._poll)
@@ -1058,11 +1098,12 @@ class UpdateWindow:
                         self.progress.config(maximum=total, value=done)
                         _set_accessible_text(
                             self.status, "Downloaded %.1f of %.1f GB" %
-                            (done / 1073741824, total / 1073741824))
+                            (done / 1073741824, total / 1073741824),
+                            announce=False)
                     else:
                         _set_accessible_text(
                             self.status, "Downloaded %.1f MB" %
-                            (done / 1048576))
+                            (done / 1048576), announce=False)
                 elif event[0] == "error":
                     _set_accessible_text(self.status, "Download failed")
                     self.download_button.config(state="normal")
@@ -1163,6 +1204,15 @@ class SettingsWindow:
         self.var_model.grid(row=row, column=1, sticky="w", padx=10, pady=2)
         ttk.Label(f, text="No CUDA? First setup uses base.en on CPU").grid(
             row=row, column=2, sticky="w")
+        row += 1
+
+        self.model_status = ttk.Label(
+            f, text="", justify="left", wraplength=620)
+        self.model_status.grid(
+            row=row, column=0, columnspan=2, sticky="w", pady=(0, 5))
+        self.retry_model_button = ttk.Button(
+            f, text="Retry Speech Model", command=self.app.retry_model)
+        self.retry_model_button.grid(row=row, column=2, sticky="w", pady=(0, 5))
         row += 1
 
         suffix_label = ttk.Label(f, text="After pasting")
@@ -1276,6 +1326,7 @@ class SettingsWindow:
         _add_access_key(root, add_button, "a")
         _add_access_key(root, remove_button, "r")
         _add_access_key(root, startup_button, "o")
+        _add_access_key(root, self.retry_model_button, "m")
         _add_access_key(root, save_button, "s")
         _bind_window_command(root, "<Control-s>", self._save)
         _bind_window_command(root, "<Escape>", self._close)
@@ -1291,8 +1342,32 @@ class SettingsWindow:
         _name_control(
             self.var_hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
         _name_control(self.listbox, "Dictionary rules")
+        _mark_live_region(self.model_status)
+        _mark_live_region(self.status)
+        self._poll_model()
         self.scrollable_body.fit_to_screen()
         root.after_idle(self.var_hotkey.focus_set)
+
+    def _poll_model(self):
+        """Keep selected-model readiness visible while Settings stays open."""
+        if self.root is None:
+            return
+        selected = self.app.settings.get("model", cfg.DEFAULTS["model"])
+        status = getattr(self.app, "model_status", "pending")
+        detail = getattr(self.app, "model_status_detail", "")
+        if status == "ready" and self.app.transcriber.loaded(selected):
+            text = "Speech model ready" + ((" — " + detail) if detail else "")
+        elif status == "error":
+            text = "Speech model needs attention" + (
+                (" — " + detail) if detail else "")
+        else:
+            text = (
+                "Preparing selected speech model… Dictation is unavailable "
+                "until it is ready.")
+        _set_accessible_text(self.model_status, text)
+        self.retry_model_button.config(
+            state="normal" if status == "error" else "disabled")
+        self.root.after(300, self._poll_model)
 
     def _add_rule(self):
         spoken = self.var_spoken.get().strip()
@@ -1322,6 +1397,7 @@ class SettingsWindow:
     def _save(self):
         s = self.app.settings
         label_to_value = {v: k for k, v in cfg.MODEL_LABELS.items()}
+        old_model = s.get("model", cfg.DEFAULTS["model"])
         s["hotkey"] = self.var_hotkey.get() or cfg.DEFAULTS["hotkey"]
         s["trigger"] = self.var_trigger.get()
         old_input_device = s.get("input_device", cfg.DEFAULTS["input_device"])
@@ -1343,8 +1419,10 @@ class SettingsWindow:
         s["autostart"] = bool(self.var_autostart.get())
         s["dictionary"] = cfg.validated_dictionary(self.dictionary_rules) or []
         cfg.save(s)
+        if s["model"] != old_model:
+            self.app.prepare_configured_model()
         if self.app.apply_autostart():
-            status = "Saved. Hotkey changes apply immediately."
+            status = "Saved. Changes apply immediately."
         else:
             status = (
                 "Saved, but Start with Windows was not updated. "

@@ -198,6 +198,16 @@ Open-source comparison ("why not Handy?"):
 > https://rcourtman.github.io/presspeech/compare/handy.html. I maintain
 > Presspeech, so read it with that in mind.
 
+Windows comparison:
+
+> Windows has two built-in choices that are easy to confuse: Win+H Voice
+> Typing uses online speech recognition, while Windows 11 Voice Access can
+> dictate offline as part of a full voice-control workflow. If you specifically
+> want local push-to-talk, Presspeech and Handy are free open-source options
+> with different model and packaging tradeoffs. I maintain Presspeech; the
+> sourced comparison is here:
+> https://rcourtman.github.io/presspeech/compare/windows-dictation.html
+
 ## One-liner boilerplate
 
 For directories and "what is this" replies:
@@ -213,8 +223,9 @@ For directories and "what is this" replies:
   "I maintain it" / "I built this".
 - Answer questions that were actually asked; don't seed them.
 - The compare section answers "why not Superwhisper / Wispr Flow /
-  VoiceInk / Handy / Apple Dictation / MacWhisper" — link the table or the
-  per-tool page instead of arguing in threads.
+  VoiceInk / Handy / Apple Dictation / MacWhisper" and separates the Windows
+  built-ins from local and cloud apps — link the relevant table or per-tool
+  page instead of arguing in threads.
 - Expect "Intel support?" and "why Homebrew?" — Apple Silicon is an
   honest scope decision because the latency story depends on the ANE;
   Homebrew is optional but remains the easiest update path.

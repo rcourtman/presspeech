@@ -8259,7 +8259,77 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         applicationItem.submenu = applicationMenu
         mainMenu.addItem(applicationItem)
+
+        // NSTextView and NSTextField rely on the responder chain for their
+        // standard editing commands. In a nib-backed app AppKit supplies this
+        // menu automatically; without it, our scratchpad, dictionary editor,
+        // and search field have no visible native command surface for
+        // Undo/Cut/Copy/Paste/Select All when Show in Dock is enabled.
+        let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(responderChainMenuItem(title: "Undo",
+                                                action: Selector(("undo:")),
+                                                keyEquivalent: "z"))
+        let redo = responderChainMenuItem(title: "Redo",
+                                          action: Selector(("redo:")),
+                                          keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redo)
+        editMenu.addItem(.separator())
+        editMenu.addItem(responderChainMenuItem(title: "Cut",
+                                                action: Selector(("cut:")),
+                                                keyEquivalent: "x"))
+        editMenu.addItem(responderChainMenuItem(title: "Copy",
+                                                action: Selector(("copy:")),
+                                                keyEquivalent: "c"))
+        editMenu.addItem(responderChainMenuItem(title: "Paste",
+                                                action: Selector(("paste:")),
+                                                keyEquivalent: "v"))
+        editMenu.addItem(.separator())
+        editMenu.addItem(responderChainMenuItem(title: "Select All",
+                                                action: Selector(("selectAll:")),
+                                                keyEquivalent: "a"))
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        // The app can own several independent utility windows. Register a
+        // Window menu so AppKit can keep its window list current and route the
+        // conventional close/minimize/zoom commands to whichever one is key.
+        let windowItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(responderChainMenuItem(title: "Close Window",
+                                                  action: #selector(NSWindow.performClose(_:)),
+                                                  keyEquivalent: "w"))
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(responderChainMenuItem(title: "Minimize",
+                                                  action: #selector(NSWindow.performMiniaturize(_:)),
+                                                  keyEquivalent: "m"))
+        windowMenu.addItem(responderChainMenuItem(title: "Zoom",
+                                                  action: #selector(NSWindow.performZoom(_:)),
+                                                  keyEquivalent: ""))
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(responderChainMenuItem(title: "Bring All to Front",
+                                                  action: #selector(NSApplication.arrangeInFront(_:)),
+                                                  keyEquivalent: ""))
+        windowItem.submenu = windowMenu
+        mainMenu.addItem(windowItem)
+        NSApp.windowsMenu = windowMenu
+
         NSApp.mainMenu = mainMenu
+    }
+
+    /// A menu item whose target is intentionally nil, allowing AppKit to find
+    /// the active text editor, window, or application through the responder
+    /// chain.
+    private func responderChainMenuItem(title: String,
+                                        action: Selector,
+                                        keyEquivalent: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = nil
+        if !keyEquivalent.isEmpty {
+            item.keyEquivalentModifierMask = [.command]
+        }
+        return item
     }
 
     /// Present a fresh copy of the existing settings hierarchy so values and
@@ -10049,6 +10119,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         table.rowHeight = 28
         table.dataSource = self
         table.delegate = self
+        table.target = self
+        table.doubleAction = #selector(editManagedCorrectionFromTable(_:))
         table.setAccessibilityLabel("Saved dictionary rules and voice shortcuts")
 
         let heardColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("correction-source"))
@@ -10203,6 +10275,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let label = NSTextField(labelWithString: value.replacingOccurrences(of: "\n", with: " "))
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
+        label.toolTip = value
         label.translatesAutoresizingMaskIntoConstraints = false
         cell.textField = label
         cell.addSubview(label)
@@ -10231,6 +10304,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     @objc private func editManagedCorrectionClicked(_ sender: NSButton) {
+        editSelectedManagedCorrection()
+    }
+
+    @objc private func editManagedCorrectionFromTable(_ sender: NSTableView) {
+        guard sender === correctionsManagerTableView,
+              sender.clickedRow >= 0 else { return }
+        // A double-click always acts on the row under the pointer, even if it
+        // began as one row in a multiple selection.
+        sender.selectRowIndexes(IndexSet(integer: sender.clickedRow),
+                                byExtendingSelection: false)
+        editSelectedManagedCorrection()
+    }
+
+    private func editSelectedManagedCorrection() {
         guard let index = selectedManagedCorrectionIndices().first else { return }
         let corrections = settings.transcriptCorrections
         guard corrections.indices.contains(index),

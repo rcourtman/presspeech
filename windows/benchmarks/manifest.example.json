@@ -1,0 +1,18 @@
+{
+  "model": "base.en",
+  "runs": 3,
+  "samples": [
+    {
+      "id": "short-command-001",
+      "audio": "audio/short-command-001.wav",
+      "reference": "Replace this with a human-reviewed reference.",
+      "reference_reviewed": false
+    },
+    {
+      "id": "quiet-room-001",
+      "audio": "audio/quiet-room-001.wav",
+      "expected_silence": true,
+      "reference_reviewed": false
+    }
+  ]
+}

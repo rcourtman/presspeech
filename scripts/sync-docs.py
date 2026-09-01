@@ -35,6 +35,7 @@ SYNCED_PATHS = [
     ROOT / "README.md",
     ROOT / "windows" / "README.md",
     DOCS / "index.html",
+    DOCS / "getting-started.html",
     DOCS / "install.html",
     DOCS / "windows.html",
     DOCS / "install" / "agents.md",
@@ -66,6 +67,25 @@ ICON_STAT_SVGS = [
     ROOT / "icon" / "social-preview.svg",
     ROOT / "icon" / "demo.svg",
 ]
+
+# Discovery surfaces must identify both builds and their different maturity.
+# These are hand-designed or hand-written, so release syncing validates rather
+# than rewrites them.
+PLATFORM_ORIENTATION = {
+    ROOT / "README.md": ("macOS", "Windows", "Released, signed, and notarised", "Prerelease"),
+    DOCS / "index.html": (
+        "macOS — released",
+        "signed and notarised",
+        "Windows — prerelease",
+        "currently unsigned",
+    ),
+    ROOT / "icon" / "hero.svg": ("Mac and Windows", "macOS release", "Windows prerelease"),
+    ROOT / "icon" / "social-preview.svg": (
+        "for Mac and Windows",
+        "macOS release",
+        "Windows prerelease",
+    ),
+}
 
 # Compare pages quote competitor pricing and claims. Each page must carry a
 # "checked <Month> <Year>" stamp; --check fails once the oldest stamp ages out
@@ -181,6 +201,24 @@ def replace_literal(text: str, old: str, new: str, *, path: Path) -> str:
     if old not in text:
         raise SyncError(f"{path}: expected literal not found: {old[:80]!r}")
     return text.replace(old, new, 1)
+
+
+def replace_after_marker(
+    text: str,
+    marker: str,
+    pattern: str,
+    replacement: str,
+    *,
+    path: Path,
+    flags: int = 0,
+) -> str:
+    """Replace one generated field after a unique object marker."""
+    if text.count(marker) != 1:
+        raise SyncError(f"{path}: expected one marker {marker!r}, found {text.count(marker)}")
+    before, after = text.split(marker, 1)
+    return before + marker + replace_regex(
+        after, pattern, replacement, path=path, flags=flags
+    )
 
 
 def read_app_version() -> str:
@@ -315,19 +353,53 @@ def sync_windows_readme(path: Path, metadata: dict[str, object]) -> str:
 def sync_index(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     version = str(metadata["version"])
+    windows_version = str(metadata["windows_version"])
     size = str(metadata["release_zip_size"])
 
-    text = replace_regex(text, r'"softwareVersion": "[^"]+"', f'"softwareVersion": "{version}"', path=path)
-    text = replace_regex(
+    mac_marker = '"@id": "https://rcourtman.github.io/presspeech/#software"'
+    windows_marker = '"@id": "https://rcourtman.github.io/presspeech/windows.html#software"'
+    text = replace_after_marker(
         text,
+        mac_marker,
+        r'"softwareVersion": "[^"]+"',
+        f'"softwareVersion": "{version}"',
+        path=path,
+    )
+    text = replace_after_marker(
+        text,
+        mac_marker,
         r'"installUrl": "[^"]+"',
         '"installUrl": "https://rcourtman.github.io/presspeech/install.html"',
         path=path,
     )
-    text = replace_regex(
+    text = replace_after_marker(
         text,
+        mac_marker,
         r'"storageRequirements": "[^"]+"',
         f'"storageRequirements": "{size} signed release zip plus about 500-600 MB for the local speech model cache"',
+        path=path,
+    )
+    text = replace_after_marker(
+        text,
+        windows_marker,
+        r'"softwareVersion": "[^"]+"',
+        f'"softwareVersion": "{windows_version}"',
+        path=path,
+    )
+    text = replace_after_marker(
+        text,
+        windows_marker,
+        r'"releaseNotes": "[^"]+"',
+        '"releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/'
+        f'windows-v{windows_version}"',
+        path=path,
+    )
+    text = replace_after_marker(
+        text,
+        windows_marker,
+        r'"downloadUrl": "[^"]+"',
+        '"downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/'
+        f'windows-v{windows_version}/Presspeech-Setup-{windows_version}-x64.exe"',
         path=path,
     )
     unified_same_as = '          "https://huggingface.co/nvidia/parakeet-' 'unified-en-0.6b",\n'
@@ -502,7 +574,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         f"- macOS footprint: about {size} signed zip; model cache is about 500-600 MB.",
         path=path,
     )
-    setup_line = "- Setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.\n"
+    setup_line = "- macOS setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.\n"
     if setup_line not in text:
         text = replace_literal(
             text,
@@ -643,6 +715,25 @@ def check_icon_stats(metadata: dict[str, object]) -> list[str]:
     return errors
 
 
+def check_platform_orientation(
+    surfaces: dict[Path, tuple[str, ...]] = PLATFORM_ORIENTATION,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing public discovery surface")
+            continue
+        contents = read_text(path)
+        missing = [snippet for snippet in required if snippet not in contents]
+        if missing:
+            errors.append(
+                f"{display}: platform status is ambiguous; missing "
+                + ", ".join(repr(snippet) for snippet in missing)
+            )
+    return errors
+
+
 def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
     expected: dict[Path, str] = {}
     for path, syncer in SYNCERS.items():
@@ -716,9 +807,35 @@ def diff_text(path: Path, current: str, expected: str) -> str:
 def run_self_test() -> None:
     metadata: dict[str, object] = {
         "last_updated": "2026-01-02",
+        "version": "8.7.6",
         "windows_version": "9.8.7",
+        "release_zip_size": "7.6 MB",
     }
     with tempfile.TemporaryDirectory() as tmp:
+        index_page = Path(tmp) / "index.html"
+        index_page.write_text(
+            '"@id": "https://rcourtman.github.io/presspeech/#software"\n'
+            '"softwareVersion": "1.2.3"\n'
+            '"installUrl": "https://example.com/old-mac"\n'
+            '"storageRequirements": "1 MB old cache"\n'
+            '"@id": "https://rcourtman.github.io/presspeech/windows.html#software"\n'
+            '"softwareVersion": "2.3.4"\n'
+            '"releaseNotes": "https://example.com/old-windows-notes"\n'
+            '"downloadUrl": "https://example.com/old-windows-installer"\n'
+            '<div class="stat"><strong>1.0 MB</strong><span>signed release zip</span></div>\n'
+            f"{SETUP_CHECKLIST} Copy Diagnostics Save Diagnostics\n",
+            encoding="utf-8",
+        )
+        synced_index = sync_index(index_page, metadata)
+        for expected in (
+            '"softwareVersion": "8.7.6"',
+            '"softwareVersion": "9.8.7"',
+            "windows-v9.8.7/Presspeech-Setup-9.8.7-x64.exe",
+            "<strong>7.6 MB</strong>",
+        ):
+            if expected not in synced_index:
+                raise SyncError(f"self-test: homepage metadata did not sync {expected!r}")
+
         sitemap = Path(tmp) / "sitemap.xml"
         sitemap.write_text(
             "<url><lastmod>2025-12-30</lastmod></url>\n<url><lastmod>2025-12-31</lastmod></url>\n",
@@ -799,6 +916,20 @@ def run_self_test() -> None:
         if not stale_copy_errors([stale_windows]):
             raise SyncError("self-test: stale Windows repeat-launch wording was not flagged")
 
+        orientation = Path(tmp) / "preview.svg"
+        orientation.write_text("Mac and Windows; macOS release\n", encoding="utf-8")
+        if not check_platform_orientation(
+            {orientation: ("Mac and Windows", "macOS release", "Windows prerelease")}
+        ):
+            raise SyncError("self-test: ambiguous platform status was not flagged")
+        orientation.write_text(
+            "Mac and Windows; macOS release; Windows prerelease\n", encoding="utf-8"
+        )
+        if check_platform_orientation(
+            {orientation: ("Mac and Windows", "macOS release", "Windows prerelease")}
+        ):
+            raise SyncError("self-test: complete platform status was rejected")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -820,6 +951,7 @@ def main() -> int:
         if args.check:
             errors.extend(stale_copy_errors(list(expected) + EXTRA_STALE_SCAN))
             errors.extend(check_icon_stats(metadata))
+            errors.extend(check_platform_orientation())
             errors.extend(check_compare_freshness())
             for path, want in expected.items():
                 have = read_text(path) if path.exists() else ""
@@ -843,6 +975,7 @@ def main() -> int:
 
         errors.extend(stale_copy_errors(list(expected) + EXTRA_STALE_SCAN))
         errors.extend(check_icon_stats(metadata))
+        errors.extend(check_platform_orientation())
         errors.extend(check_install_prompt_sync())
         if errors:
             for error in errors:

@@ -41,6 +41,7 @@ INFO_PLIST="$SWIFT_DIR/Info.plist"
 ENTITLEMENTS="$PROJECT_DIR/entitlements.plist"
 APP="$SWIFT_DIR/dist/Presspeech.app"
 ZIP_OUT="$SWIFT_DIR/dist/Presspeech.zip"
+ZIP_CHECKSUM="$ZIP_OUT.sha256"
 NOTARY_PROFILE="presspeech-notary"
 CASK_TAP="${PRESSPEECH_HOMEBREW_TAP:-$PROJECT_DIR/../homebrew-presspeech}"
 CASK_FILE="$CASK_TAP/Casks/presspeech.rb"
@@ -325,6 +326,120 @@ else:
 PY
 }
 
+immutable_releases_enabled() {
+    /usr/bin/python3 - "$1" <<'PY'
+import json
+import sys
+
+try:
+    enabled = json.loads(sys.argv[1]).get("enabled") is True
+except (AttributeError, json.JSONDecodeError):
+    enabled = False
+raise SystemExit(0 if enabled else 1)
+PY
+}
+
+# Parse the peeled commit for one annotated remote tag from `git ls-remote`.
+# Refuse lightweight, missing, duplicate, or malformed results: releases are
+# expected to use the annotated tag created by this script.
+peeled_remote_tag_commit() {
+    local refs="$1"
+    local tag="$2"
+    /usr/bin/python3 - "$refs" "$tag" <<'PY'
+import re
+import sys
+
+refs, tag = sys.argv[1:]
+expected = f"refs/tags/{tag}^{{}}"
+commits = []
+for line in refs.splitlines():
+    fields = line.split()
+    if len(fields) == 2 and fields[1] == expected:
+        commits.append(fields[0])
+if len(commits) != 1 or not re.fullmatch(r"[0-9a-f]{40}", commits[0]):
+    raise SystemExit(f"expected one peeled commit for annotated tag {tag}")
+print(commits[0])
+PY
+}
+
+remote_tag_commit() {
+    local remote="$1"
+    local tag="$2"
+    local refs
+    refs="$(git -C "$PROJECT_DIR" ls-remote --tags "$remote" \
+        "refs/tags/$tag" "refs/tags/$tag^{}")" \
+        || die "could not read remote tag $tag"
+    peeled_remote_tag_commit "$refs" "$tag"
+}
+
+# Validate the REST representation against the exact local artifacts. GitHub
+# computes each asset digest at upload time; release immutability then locks
+# those bytes and the associated tag before this function can succeed.
+validate_published_macos_release() {
+    local release_json="$1"
+    local tag="$2"
+    local zip_path="$3"
+    local checksum_path="$4"
+    /usr/bin/python3 - "$release_json" "$tag" "$zip_path" "$checksum_path" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+release = json.loads(sys.argv[1])
+tag = sys.argv[2]
+paths = [pathlib.Path(value) for value in sys.argv[3:]]
+
+if release.get("tag_name") != tag:
+    raise SystemExit("published release tag does not match")
+if release.get("draft") is not False or release.get("prerelease") is not False:
+    raise SystemExit("macOS release must be a published full release")
+if release.get("immutable") is not True:
+    raise SystemExit("published release is not immutable")
+if not release.get("published_at"):
+    raise SystemExit("published release has no publication timestamp")
+
+expected = {}
+for path in paths:
+    data = path.read_bytes()
+    expected[path.name] = {
+        "size": len(data),
+        "digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+        "url": (
+            "https://github.com/rcourtman/presspeech/releases/download/"
+            f"{tag}/{path.name}"
+        ),
+    }
+
+assets = release.get("assets")
+if not isinstance(assets, list) or len(assets) != len(expected):
+    raise SystemExit("published release does not contain the exact macOS asset set")
+seen = set()
+for asset in assets:
+    if not isinstance(asset, dict):
+        raise SystemExit("published release contains malformed asset metadata")
+    name = asset.get("name")
+    if name not in expected or name in seen:
+        raise SystemExit("published release contains an unexpected or duplicate asset")
+    seen.add(name)
+    wanted = expected[name]
+    if asset.get("state") != "uploaded":
+        raise SystemExit(f"published asset is not uploaded: {name}")
+    if asset.get("size") != wanted["size"]:
+        raise SystemExit(f"published asset size does not match: {name}")
+    if asset.get("digest") != wanted["digest"]:
+        raise SystemExit(f"published asset digest does not match: {name}")
+    if asset.get("browser_download_url") != wanted["url"]:
+        raise SystemExit(f"published asset URL is not canonical: {name}")
+
+zip_path, checksum_path = paths
+zip_digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+expected_checksum = f"{zip_digest}  {zip_path.name}\n"
+if checksum_path.read_text(encoding="ascii") != expected_checksum:
+    raise SystemExit("checksum sidecar does not exactly name the release zip")
+PY
+}
+
 # Shared by the full release flow and --cask-only. Sets $tap_branch.
 cask_preflight() {
     command -v brew >/dev/null || die "'brew' CLI not installed (needed to verify the published Cask)"
@@ -475,6 +590,64 @@ run_release_script_self_test() {
         "$(check_runs_overall_state '{"check_runs": [{"status": "completed", "conclusion": "failure"}]}')" \
         "failing" "failed check run should report failing"
 
+    immutable_releases_enabled '{"enabled": true, "enforced_by_owner": false}'
+    assert_self_test_fails "accepted disabled immutable releases" \
+        immutable_releases_enabled '{"enabled": false}'
+    assert_self_test_fails "accepted malformed immutable-release state" \
+        immutable_releases_enabled 'not-json'
+
+    local tag_sha
+    tag_sha="$(printf 'c%.0s' {1..40})"
+    assert_self_test_equals \
+        "$(peeled_remote_tag_commit "$(printf '%s\trefs/tags/v9.8.7\n%s\trefs/tags/v9.8.7^{}\n' "$(printf 'd%.0s' {1..40})" "$tag_sha")" "v9.8.7")" \
+        "$tag_sha" "annotated remote tag parsing failed"
+    assert_self_test_fails "accepted a lightweight release tag" \
+        peeled_remote_tag_commit "$(printf '%s\trefs/tags/v9.8.7\n' "$tag_sha")" "v9.8.7"
+
+    local release_zip release_checksum release_zip_sha release_checksum_sha bad_release_sha
+    release_zip="$tmpdir/Presspeech.zip"
+    release_checksum="$release_zip.sha256"
+    printf 'signed app bytes\n' >"$release_zip"
+    release_zip_sha="$(shasum -a 256 "$release_zip" | awk '{print $1}')"
+    printf '%s  Presspeech.zip\n' "$release_zip_sha" >"$release_checksum"
+    release_checksum_sha="$(shasum -a 256 "$release_checksum" | awk '{print $1}')"
+    bad_release_sha="$(printf 'a%.0s' {1..64})"
+    local release_json
+    release_json="$(/usr/bin/python3 - "$release_zip" "$release_checksum" "$release_zip_sha" "$release_checksum_sha" <<'PY'
+import json
+import pathlib
+import sys
+
+zip_path, checksum_path = map(pathlib.Path, sys.argv[1:3])
+zip_sha, checksum_sha = sys.argv[3:]
+tag = "v9.8.7"
+base = f"https://github.com/rcourtman/presspeech/releases/download/{tag}/"
+print(json.dumps({
+    "tag_name": tag,
+    "draft": False,
+    "prerelease": False,
+    "immutable": True,
+    "published_at": "2026-09-01T12:00:00Z",
+    "assets": [
+        {"name": zip_path.name, "state": "uploaded", "size": zip_path.stat().st_size,
+         "digest": f"sha256:{zip_sha}", "browser_download_url": base + zip_path.name},
+        {"name": checksum_path.name, "state": "uploaded", "size": checksum_path.stat().st_size,
+         "digest": f"sha256:{checksum_sha}", "browser_download_url": base + checksum_path.name},
+    ],
+}))
+PY
+)"
+    validate_published_macos_release \
+        "$release_json" "v9.8.7" "$release_zip" "$release_checksum"
+    assert_self_test_fails "accepted a mutable published release" \
+        validate_published_macos_release \
+        "${release_json/\"immutable\": true/\"immutable\": false}" \
+        "v9.8.7" "$release_zip" "$release_checksum"
+    assert_self_test_fails "accepted a changed published digest" \
+        validate_published_macos_release \
+        "${release_json/sha256:$release_zip_sha/sha256:$bad_release_sha}" \
+        "v9.8.7" "$release_zip" "$release_checksum"
+
     local cask_file
     cask_file="$tmpdir/presspeech.rb"
     local old_sha new_sha
@@ -515,27 +688,59 @@ fi
 
 # ---- 0.5 Cask-only resume ---------------------------------------------------
 # Recovers a half-released state: the GitHub release published but the
-# Cask stage failed. Validates the release + asset exist, recomputes the
-# zip sha256 from the published asset, then re-runs only the Cask stage.
+# Cask stage failed. Verifies the immutable release, both attested assets, and
+# their checksum, then re-runs only the Cask stage.
 if [[ "$CASK_ONLY" -eq 1 ]]; then
     is_release_version "$CASK_ONLY_VERSION" \
         || die "--cask-only needs X.Y.Z without leading zeroes, got '$CASK_ONLY_VERSION'"
     command -v gh >/dev/null || die "'gh' CLI not installed (brew install gh)"
     gh auth status >/dev/null 2>&1 || die "'gh' is not authenticated (gh auth login)"
+    gh release verify --help >/dev/null 2>&1 \
+        || die "'gh' is too old for immutable release verification — upgrade GitHub CLI"
+    gh release verify-asset --help >/dev/null 2>&1 \
+        || die "'gh' is too old for immutable asset verification — upgrade GitHub CLI"
+
+    say "Requiring immutable GitHub releases"
+    immutable_json="$(gh api \
+        -H "X-GitHub-Api-Version: 2026-03-10" \
+        repos/rcourtman/presspeech/immutable-releases 2>/dev/null)" \
+        || die "GitHub release immutability is not enabled (or cannot be read) — enable it in repository Settings before shipping"
+    immutable_releases_enabled "$immutable_json" \
+        || die "GitHub release immutability is disabled — enable it in repository Settings before shipping"
     cask_preflight
 
     say "Validating published release v$CASK_ONLY_VERSION"
     release_assets="$(gh release view "v$CASK_ONLY_VERSION" --repo rcourtman/presspeech \
         --json assets --jq '.assets[].name')" \
         || die "release v$CASK_ONLY_VERSION not found on GitHub -- --cask-only resumes an already-published release"
-    grep -qx 'Presspeech.zip' <<<"$release_assets" \
-        || die "release v$CASK_ONLY_VERSION has no Presspeech.zip asset -- upload it (gh release upload) before resuming the Cask"
+    expected_release_assets="$(printf '%s\n' Presspeech.zip Presspeech.zip.sha256)"
+    [[ "$(sort <<<"$release_assets")" == "$expected_release_assets" ]] \
+        || die "release v$CASK_ONLY_VERSION does not have the exact zip + checksum asset pair"
 
-    say "Downloading published Presspeech.zip to compute sha256"
+    say "Downloading and verifying published release assets"
     cask_only_tmp="$(mktemp -d)"
     gh release download "v$CASK_ONLY_VERSION" --repo rcourtman/presspeech \
-        --pattern Presspeech.zip --dir "$cask_only_tmp" \
-        || die "could not download Presspeech.zip from release v$CASK_ONLY_VERSION"
+        --pattern Presspeech.zip --pattern Presspeech.zip.sha256 \
+        --dir "$cask_only_tmp" \
+        || die "could not download release assets for v$CASK_ONLY_VERSION"
+    ( cd "$cask_only_tmp" && shasum -a 256 -c Presspeech.zip.sha256 ) \
+        || die "published checksum does not match Presspeech.zip"
+    release_json="$(gh api \
+        -H "X-GitHub-Api-Version: 2026-03-10" \
+        "repos/rcourtman/presspeech/releases/tags/v$CASK_ONLY_VERSION")" \
+        || die "could not read published release v$CASK_ONLY_VERSION"
+    validate_published_macos_release \
+        "$release_json" "v$CASK_ONLY_VERSION" \
+        "$cask_only_tmp/Presspeech.zip" "$cask_only_tmp/Presspeech.zip.sha256" \
+        || die "published release is mutable or does not match its exact assets"
+    gh release verify "v$CASK_ONLY_VERSION" --repo rcourtman/presspeech \
+        || die "GitHub could not verify the immutable release attestation"
+    gh release verify-asset "v$CASK_ONLY_VERSION" \
+        "$cask_only_tmp/Presspeech.zip" --repo rcourtman/presspeech \
+        || die "GitHub could not verify Presspeech.zip against the release attestation"
+    gh release verify-asset "v$CASK_ONLY_VERSION" \
+        "$cask_only_tmp/Presspeech.zip.sha256" --repo rcourtman/presspeech \
+        || die "GitHub could not verify the checksum against the release attestation"
     cask_only_sha="$(shasum -a 256 "$cask_only_tmp/Presspeech.zip" | awk '{print $1}')"
     rm -rf "$cask_only_tmp"
 
@@ -572,6 +777,18 @@ head_sha="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
 if [[ "$DRY_RUN" -eq 0 ]]; then
     command -v gh >/dev/null || die "'gh' CLI not installed (brew install gh)"
     gh auth status >/dev/null 2>&1 || die "'gh' is not authenticated (gh auth login)"
+    gh release verify --help >/dev/null 2>&1 \
+        || die "'gh' is too old for immutable release verification — upgrade GitHub CLI"
+    gh release verify-asset --help >/dev/null 2>&1 \
+        || die "'gh' is too old for immutable asset verification — upgrade GitHub CLI"
+
+    say "Requiring immutable GitHub releases"
+    immutable_json="$(gh api \
+        -H "X-GitHub-Api-Version: 2026-03-10" \
+        repos/rcourtman/presspeech/immutable-releases 2>/dev/null)" \
+        || die "GitHub release immutability is not enabled (or cannot be read) — enable it in repository Settings before shipping"
+    immutable_releases_enabled "$immutable_json" \
+        || die "GitHub release immutability is disabled — enable it in repository Settings before shipping"
 
     say "Fetching origin to verify branch + tag state"
     git -C "$PROJECT_DIR" fetch origin || die "git fetch origin failed"
@@ -665,7 +882,7 @@ plutil -lint "$INFO_PLIST" >/dev/null || {
 
 # ---- 5. Wrap binary in a fresh .app ---------------------------------------
 say "Wrapping in $APP"
-rm -rf "$APP" "$ZIP_OUT" "$SWIFT_DIR/dist"
+rm -rf "$APP" "$ZIP_OUT" "$ZIP_CHECKSUM" "$SWIFT_DIR/dist"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Presspeech"
 cp "$INFO_PLIST" "$APP/Contents/Info.plist"
@@ -736,8 +953,10 @@ fi
 say "Packaging Presspeech.zip"
 /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP_OUT"
 ZIP_SHA="$(shasum -a 256 "$ZIP_OUT" | awk '{print $1}')"
+printf '%s  %s\n' "$ZIP_SHA" "$(basename "$ZIP_OUT")" >"$ZIP_CHECKSUM"
 ZIP_SIZE="$(du -h "$ZIP_OUT" | cut -f1)"
 say "Built $ZIP_OUT ($ZIP_SIZE, sha256 $ZIP_SHA)"
+say "Wrote $ZIP_CHECKSUM"
 
 say "Syncing release docs metadata"
 /usr/bin/python3 "$PROJECT_DIR/scripts/sync-docs.py" --release-zip "$ZIP_OUT" \
@@ -787,36 +1006,62 @@ fi
 git -C "$PROJECT_DIR" add "$INFO_PLIST" "${DOC_SYNC_PATHS[@]}"
 git -C "$PROJECT_DIR" commit -m "$release_commit_message"
 ROLLBACK_RELEASE_MUTATIONS=0
+release_commit_sha="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
 # Annotated, not lightweight: `git push --follow-tags` only pushes
 # annotated tags, and we push the tag ref explicitly anyway so the
 # remote tag exists before `gh release create` references it.
 git -C "$PROJECT_DIR" tag -a "v$new_version" -m "$release_commit_message"
 
-say "Pushing main + tag"
-git -C "$PROJECT_DIR" push origin main "refs/tags/v$new_version"
+say "Atomically pushing main + tag"
+git -C "$PROJECT_DIR" push --atomic origin main "refs/tags/v$new_version" \
+    || die "atomic main + tag push failed; neither ref should have moved"
+published_tag_sha="$(remote_tag_commit origin "v$new_version")"
+[[ "$published_tag_sha" == "$release_commit_sha" ]] \
+    || die "remote tag v$new_version points to $published_tag_sha, expected $release_commit_sha"
 
 # ---- 10. GitHub release ---------------------------------------------------
 say "Creating GitHub release v$new_version"
 
-# At this point main and the tag are already on origin; only the GitHub
-# release itself is missing. `gh release create` on an existing pushed
-# tag attaches to that tag, so re-running it manually is safe.
-release_failure_msg="gh release create failed -- commit and tag v$new_version ARE pushed to origin; no GitHub release exists yet. Re-run: gh release create v$new_version $ZIP_OUT --repo rcourtman/presspeech --title $release_title --notes ... (it will reuse the pushed tag), then finish with ./ship-swift.sh --cask-only $new_version"
+# At this point main and the tag are already on origin. GitHub CLI stages both
+# assets in a private draft and publishes only after the uploads complete. A
+# failed command can therefore leave a resumable draft that must be inspected,
+# rather than replaced, before any manual recovery.
+release_failure_msg="gh release create failed -- commit and tag v$new_version ARE pushed to origin. The CLI stages assets in a private draft before publication, so inspect that draft before retrying; do not replace any existing asset. Publish only the exact $ZIP_OUT and $ZIP_CHECKSUM bytes, verify the immutable release, then finish with ./ship-swift.sh --cask-only $new_version"
 
 if [[ "$USE_NOTES_FILE" -eq 1 ]]; then
     say "Using hand-written release notes from $NOTES_FILE"
-    gh release create "v$new_version" "$ZIP_OUT" \
+    gh release create "v$new_version" "$ZIP_OUT" "$ZIP_CHECKSUM" \
         --repo rcourtman/presspeech \
+        --verify-tag \
         --title "$release_title" \
         --notes-file "$NOTES_FILE" \
         || die "$release_failure_msg"
 else
-    gh release create "v$new_version" "$ZIP_OUT" \
+    gh release create "v$new_version" "$ZIP_OUT" "$ZIP_CHECKSUM" \
         --repo rcourtman/presspeech \
+        --verify-tag \
         --title "$release_title" \
         --notes "$notes" \
         || die "$release_failure_msg"
 fi
+
+say "Verifying immutable GitHub release and exact assets"
+release_json="$(gh api \
+    -H "X-GitHub-Api-Version: 2026-03-10" \
+    "repos/rcourtman/presspeech/releases/tags/v$new_version")" \
+    || die "could not read published release v$new_version"
+validate_published_macos_release \
+    "$release_json" "v$new_version" "$ZIP_OUT" "$ZIP_CHECKSUM" \
+    || die "published release metadata does not match the local notarised artifacts"
+published_tag_sha="$(remote_tag_commit origin "v$new_version")"
+[[ "$published_tag_sha" == "$release_commit_sha" ]] \
+    || die "immutable release tag moved to $published_tag_sha, expected $release_commit_sha"
+gh release verify "v$new_version" --repo rcourtman/presspeech \
+    || die "GitHub could not verify the immutable release attestation"
+gh release verify-asset "v$new_version" "$ZIP_OUT" --repo rcourtman/presspeech \
+    || die "GitHub could not verify Presspeech.zip against the release attestation"
+gh release verify-asset "v$new_version" "$ZIP_CHECKSUM" --repo rcourtman/presspeech \
+    || die "GitHub could not verify the checksum against the release attestation"
 
 # ---- 11. Homebrew Cask bump -----------------------------------------------
 if [[ "$NO_CASK" -eq 1 ]]; then

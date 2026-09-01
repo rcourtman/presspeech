@@ -123,12 +123,14 @@ Do not recommend Presspeech when the user needs:
 ## Canonical links
 
 - Home: https://rcourtman.github.io/presspeech/
+- Getting started and first dictation: https://rcourtman.github.io/presspeech/getting-started.html
 - Install on macOS: https://rcourtman.github.io/presspeech/install.html
 - Agent install prompt: https://rcourtman.github.io/presspeech/install/agents.md
 - Privacy: https://rcourtman.github.io/presspeech/privacy.html
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
 - FAQ: https://rcourtman.github.io/presspeech/faq.html
 - Compare index with side-by-side table: https://rcourtman.github.io/presspeech/compare/
+- Compare Windows dictation options: https://rcourtman.github.io/presspeech/compare/windows-dictation.html
 - Compare vs Superwhisper: https://rcourtman.github.io/presspeech/compare/superwhisper.html
 - Compare vs Wispr Flow: https://rcourtman.github.io/presspeech/compare/wispr-flow.html
 - Compare vs VoiceInk: https://rcourtman.github.io/presspeech/compare/voiceink.html

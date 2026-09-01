@@ -65,6 +65,27 @@ def accuracy_metrics(reference, hypothesis):
     }
 
 
+def final_word_metrics(reference, hypotheses):
+    """Score final-word retention across every trial of a reviewed clip."""
+    reference_words = _normalise_words(reference)
+    if not reference_words:
+        return None
+    expected = reference_words[-1]
+    retained_trials = sum(
+        bool(words := _normalise_words(hypothesis)) and words[-1] == expected
+        for hypothesis in hypotheses
+    )
+    trials = len(hypotheses)
+    return {
+        # One intermittent clipped ending matters even when the consensus
+        # transcript is complete, so require every measured trial to retain it.
+        "retained": retained_trials == trials,
+        "retained_trials": retained_trials,
+        "failed_trials": trials - retained_trials,
+        "trials": trials,
+    }
+
+
 def silence_metrics(expected_silence, reference_reviewed, hypotheses):
     """Score a human-reviewed non-speech fixture without inventing a WER."""
     if not expected_silence:
@@ -251,8 +272,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         if reference and result["reference_reviewed"]:
             result["reference"] = reference
             result["accuracy"] = accuracy_metrics(reference, consensus)
+            result["final_word"] = final_word_metrics(reference, transcripts)
         else:
             result["accuracy"] = None
+            result["final_word"] = None
             result["accuracy_note"] = "Reference transcript requires human review."
         sample_results.append(result)
 
@@ -266,6 +289,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     reviewed_speech_with_detection = [
         item for item in reviewed
         if item["silence"] is None and item["speech_detection"] is not None
+    ]
+    reviewed_final_words = [
+        item for item in reviewed if item["final_word"] is not None
     ]
     model_dtype = str(getattr(transcriber.model, "dtype", "unknown"))
     cuda_allocated_mib = None
@@ -308,6 +334,15 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         "reviewed_speech_vad_rejection_trial_count": sum(
             item["speech_detection"]["rejected_trials"]
             for item in reviewed_speech_with_detection),
+        "reviewed_final_word_sample_count": len(reviewed_final_words),
+        "final_word_failure_count": sum(
+            not item["final_word"]["retained"]
+            for item in reviewed_final_words),
+        "reviewed_final_word_trial_count": sum(
+            item["final_word"]["trials"] for item in reviewed_final_words),
+        "final_word_failure_trial_count": sum(
+            item["final_word"]["failed_trials"]
+            for item in reviewed_final_words),
         "samples": sample_results,
     }
 
@@ -363,6 +398,11 @@ def _print_summary(result):
             print("  WER: %.2f%% | CER: %.2f%%" % (
                 sample["accuracy"]["wer"] * 100,
                 sample["accuracy"]["cer"] * 100,
+            ))
+            final_word = sample["final_word"]
+            print("  Final word: %s (%d/%d trials retained)" % (
+                "retained" if final_word["retained"] else "FAILED",
+                final_word["retained_trials"], final_word["trials"],
             ))
 
 

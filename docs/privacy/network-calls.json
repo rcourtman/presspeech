@@ -49,7 +49,7 @@
         "formulae.brew.sh",
         "Homebrew's own update endpoints (github.com / api.github.com)"
       ],
-      "purpose": "User-triggered install/update flow: direct release download, a Homebrew metadata refresh followed by the signed macOS archive, or a Windows installer whose published size and SHA-256 are verified before launch",
+      "purpose": "User-triggered install/update flow: direct immutable release download with a published SHA-256 sidecar, a Homebrew metadata refresh followed by the signed macOS archive, or a Windows installer whose published size and SHA-256 are verified before launch",
       "user_triggered": true,
       "can_disable": true,
       "data_sent": "Browser or Homebrew request metadata; no dictation audio"
