@@ -371,6 +371,22 @@ extracts the selected FLAC clips, converts them to 16 kHz Float32 WAV with
 `afconvert`, and writes same-stem `.txt` references plus `manifest.tsv` under
 `public-audio/librispeech-dev-clean/`.
 
+For a public multilingual corpus, the same fetcher supports FLEURS locales
+that correspond to Presspeech's exposed language hints. It pins the FLEURS
+dataset revision and verifies each language/split archive against its pinned
+Git LFS SHA-256 and byte count. For example, fetch Ukrainian test speech:
+
+```sh
+./fetch-public-speech-fixtures.sh \
+  --source fleurs --language uk_ua --split test \
+  --count 60
+```
+
+This downloads the full compressed language/split archive (roughly 400 MB for
+the pinned Ukrainian test split) but extracts and converts only the requested
+deterministic row range. FLEURS is CC BY 4.0 read speech with human references;
+like LibriSpeech, it complements rather than replaces real push-to-talk clips.
+
 Then run the production v3 regression with public-corpus reporting:
 
 ```sh
@@ -499,6 +515,23 @@ that exercises the reported quantization failure (currently Ukrainian), and
 inspect the additional model-cache and memory cost. A clean English corpus
 that never changes cannot pass merely because latency is acceptable.
 
+Use the reproducible FLEURS import as the public Ukrainian baseline, then keep
+the private human-dictation requirement as a separate product check:
+
+```sh
+./run-real-model-comparison.sh \
+  --input-dir public-audio/fleurs-uk_ua-test \
+  --out-dir public-results/fleurs-uk_ua-test \
+  --candidate-backend v3-int8-v2 \
+  --language uk \
+  --public-corpus --show-transcripts --show-paths \
+  --trials 3
+```
+
+The pinned Ukrainian test split's first 60 rows exceed the default candidate
+screen's 1,000-reference-word floor; the report remains authoritative about
+the actual row and normalized-word counts.
+
 ### 2026-07-22 candidate recheck
 
 The first 25 LibriSpeech dev-clean clips, three trials per clip, on the
@@ -543,12 +576,15 @@ To tune the number instead of only checking the current candidate value:
 ./run-tail-word-regression.sh --unified-trailing-ms-list 0,100,150,200,250,300,500
 ```
 
-To test a post-release capture grace experiment, sweep grace separately
-from synthetic model padding. A 100 ms grace means the generated fixture
-puts 100 ms of the cut tail back into the recording before inference.
+To test the macOS app's post-release capture policy, sweep grace separately
+from synthetic model padding. The production capture keeps at least 80 ms and
+up to 400 ms while the tail remains voiced; a 100 ms benchmark grace means the
+generated fixture puts 100 ms of the cut tail back into the recording before
+inference. Test the bounds as well as intermediate values because this helper
+models retained audio, not the app's live RMS decision.
 
 ```sh
-./run-tail-word-regression.sh --capture-grace-ms-list 0,50,100,150 --unified-trailing-ms-list 250
+./run-tail-word-regression.sh --capture-grace-ms-list 0,80,100,150,400 --unified-trailing-ms-list 250
 ```
 
 For a quick non-ASR check of parser and threshold logic:

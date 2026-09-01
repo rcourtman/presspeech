@@ -8,6 +8,9 @@ integration, and local CUDA inference.
 
 ## Reporting bugs
 
+For setup help and recovery guides, start with [SUPPORT.md](SUPPORT.md).
+User support and issue discussion are public and require a GitHub account.
+
 Use the cross-platform [bug report
 form](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml)
 and include the affected platform, app and operating-system versions,

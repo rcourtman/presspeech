@@ -132,10 +132,15 @@ def _parakeet_max_new_tokens(model, input_features, torch_module):
 
 
 class Transcriber:
-    def __init__(self, precision="auto"):
+    def __init__(self, precision="auto", measure_stages=False):
         self.lock = threading.Lock()
         self.inference_lock = threading.Lock()
         self.precision = precision
+        # CUDA launches are asynchronous. Product diagnostics avoid inserting
+        # barriers into the hot path, while the benchmark opts in so its
+        # prepare/transfer/generate/decode values describe completed work
+        # instead of submission time.
+        self.measure_stages = measure_stages
         self.model = None
         self.processor = None
         self.backend = None
@@ -334,6 +339,7 @@ class Transcriber:
     def _transcribe_parakeet(self, model, processor, audio):
         import torch
         bucket_seconds = _parakeet_bucket_seconds(len(audio) / 16000.0)
+        self._parakeet_stage_barrier(torch, model.device)
         started = time.perf_counter()
         inputs = processor(
             audio,
@@ -344,12 +350,14 @@ class Transcriber:
             truncation=True,
             return_attention_mask=True,
         )
+        self._parakeet_stage_barrier(torch, model.device)
         processed = time.perf_counter()
         inputs = {
             k: (v.to(device=model.device, dtype=model.dtype)
                 if v.is_floating_point() else v.to(device=model.device))
             for k, v in inputs.items()
         }
+        self._parakeet_stage_barrier(torch, model.device)
         transferred = time.perf_counter()
         with torch.no_grad():
             max_new_tokens = _parakeet_max_new_tokens(
@@ -359,9 +367,11 @@ class Transcriber:
                 return_dict_in_generate=True,
                 max_new_tokens=max_new_tokens,
             )
+        self._parakeet_stage_barrier(torch, model.device)
         generated = time.perf_counter()
         decoded, _timestamps = processor.decode(
             output.sequences, durations=output.durations, skip_special_tokens=True)
+        self._parakeet_stage_barrier(torch, model.device)
         decoded_at = time.perf_counter()
         self._backend_timing = {
             "bucket_seconds": bucket_seconds,
@@ -373,6 +383,11 @@ class Transcriber:
         if isinstance(decoded, (list, tuple)):
             decoded = "".join(decoded)
         return decoded.strip()
+
+    def _parakeet_stage_barrier(self, torch_module, device):
+        """Synchronize CUDA only for explicit benchmark stage measurement."""
+        if self.measure_stages and str(device).startswith("cuda"):
+            torch_module.cuda.synchronize(device)
 
     @staticmethod
     def _transcribe_nemotron(model, processor, audio):

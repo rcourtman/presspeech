@@ -1,9 +1,10 @@
 # Windows speech benchmark fixtures
 
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
-WER/CER, final-word retention, silence false positives, and Whisper VAD speech
-retention. Audio, reviewed references, manifests, and JSON results stay ignored
-because they can contain private dictation.
+synchronized Parakeet prepare/transfer/generate/decode stages, WER/CER,
+final-word retention, silence false positives, and Whisper VAD speech retention.
+Audio, reviewed references, manifests, and JSON results stay ignored because
+they can contain private dictation.
 
 Start a local manifest from the tracked structure:
 
@@ -28,6 +29,9 @@ but canonical fixtures make runs easier to compare.
 - Keep the same clips, references, run count, model precision, and hardware when
   comparing a decoding or VAD change. Reports record the effective Whisper VAD
   policy and per-trial VAD-retained duration.
+- Compare Parakeet optimizations using both total inference latency and the
+  synchronized per-stage medians. Stage barriers are benchmark-only and are
+  deliberately disabled during interactive dictation.
 - Do not commit audio, reference text, manifests, hypotheses, or result files.
 
 The manifest's `runs` value is the number of measured trials after model

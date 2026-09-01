@@ -9,6 +9,9 @@ https://rcourtman.github.io/presspeech/llms-full.txt
 Getting started and first dictation:
 https://rcourtman.github.io/presspeech/getting-started.html
 
+Troubleshooting:
+https://rcourtman.github.io/presspeech/troubleshooting.html
+
 Source:
 https://github.com/rcourtman/presspeech
 

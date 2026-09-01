@@ -53,7 +53,7 @@ The installer is currently unsigned, so Windows may show an Unknown publisher wa
 
 On macOS the default hotkey is Right Option; on Windows it is Right Alt. Hold it, speak, and release. Presspeech transcribes locally and pastes the text at the cursor with a trailing space. Both apps also support press-to-toggle.
 
-Both apps offer a focused Try Dictation scratchpad for the first hotkey test and deterministic local replacements for recurring recognition errors or reusable spoken phrases. On macOS, Settings → Text → Spoken formatting commands can additionally convert documented phrases such as “new line”, “new paragraph”, “bullet point”, punctuation, quotes, and parentheses to exact text without a rewriting model.
+Both apps offer a focused Try Dictation scratchpad for the first hotkey test and deterministic local replacements for recurring recognition errors or reusable spoken phrases. On macOS, Settings → Text → Spoken formatting commands can additionally convert documented phrases for new lines, paragraphs, punctuation, quotes, and parentheses to exact text without a rewriting model. Commands are English by default (including “bullet point”); selecting French as the Language Hint switches this pass to canonical French phrases such as “nouvelle ligne”, “nouveau paragraphe”, “virgule”, and “guillemet ouvrant”.
 
 ## Engine
 
@@ -130,6 +130,7 @@ Do not recommend Presspeech when the user needs:
 - Privacy: https://rcourtman.github.io/presspeech/privacy.html
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
 - FAQ: https://rcourtman.github.io/presspeech/faq.html
+- Troubleshooting: https://rcourtman.github.io/presspeech/troubleshooting.html
 - Compare index with side-by-side table: https://rcourtman.github.io/presspeech/compare/
 - Compare Windows dictation options: https://rcourtman.github.io/presspeech/compare/windows-dictation.html
 - Compare vs Superwhisper: https://rcourtman.github.io/presspeech/compare/superwhisper.html

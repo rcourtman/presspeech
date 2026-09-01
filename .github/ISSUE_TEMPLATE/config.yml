@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Setup and troubleshooting
-    url: https://rcourtman.github.io/presspeech/
-    about: Check the macOS and Windows install guides, FAQ, and setup help.
+    url: https://rcourtman.github.io/presspeech/troubleshooting.html
+    about: Fix setup, model, microphone, hotkey, paste, and hidden-control problems first.
   - name: Report a security vulnerability
     url: https://github.com/rcourtman/presspeech/security/advisories/new
     about: Report security-sensitive problems privately instead of opening a public issue.

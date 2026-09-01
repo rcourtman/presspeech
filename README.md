@@ -33,7 +33,7 @@ Choose the build that matches your computer:
 > be granted once to the current identity.
 
 <p align="center">
-  <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence lands at the cursor about 100 milliseconds later." width="900">
+  <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence quickly lands at the cursor." width="900">
 </p>
 
 The released macOS build is a native Swift menu-bar app for Apple Silicon. Under
@@ -73,11 +73,11 @@ source-build details.
 
 Download the notarised app:
 
-- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip)
-- [Download its SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.sha256), then optionally verify both downloaded files with:
+- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/download/v0.3.6/Presspeech.zip)
+- Optionally verify the current archive against its published SHA-256:
   ```sh
   cd ~/Downloads
-  shasum -a 256 -c Presspeech.zip.sha256
+  echo 'b2e67e1b1f823b470d3de1e3fe0dbccc055bede8d66a8b018e9c8d8b63c5266e  Presspeech.zip' | shasum -a 256 -c -
   ```
 - Unzip it, move **Presspeech.app** to **Applications**, then open it.
 
@@ -99,9 +99,11 @@ Requirements:
 
 First launch downloads the local speech model, about 500-600 MB. Open
 **Setup Checklist…** from the menu bar to finish the model, permission,
-and hotkey checks. Presspeech asks for Microphone, Accessibility, and Input
-Monitoring because it records while the hotkey is active, observes the
-global hotkey, and pastes text at the cursor.
+and hotkey checks. The checklist stays incomplete until the configured hotkey
+actually reaches Presspeech; if it does not respond or controls another Mac
+feature, choose a different key under Settings. Presspeech asks for Microphone,
+Accessibility, and Input Monitoring because it records while the hotkey is
+active, observes the global hotkey, and pastes text at the cursor.
 
 If the Presspeech item is hidden by a crowded or notched menu bar, open
 **Presspeech.app** again from Applications, Finder, or Spotlight. The running
@@ -168,7 +170,9 @@ Useful menu items:
   that menu also exposes standard Edit and Window commands for Presspeech's
   scratchpad and manager windows
 - **Settings → Dictation → Hotkey** — choose Right Option, Right Control, Right
-  Command, selected F-keys, or record another F-key/right modifier
+  Command, selected F-keys, or record another F-key/right modifier; recorded
+  keys are previewed before they replace the current choice, and Apple
+  keyboards may require **Fn** to send an F-key
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
 - **Settings → Dictation → Language Hint** — auto-detect (default) or pin to one of
   18 Latin/Cyrillic-script languages to prevent wrong-script bleed-through
@@ -180,7 +184,9 @@ Useful menu items:
   through export/import or a user-chosen sync file
 - **Settings → Text → Spoken formatting commands** — opt in to exact
   commands such as “new line”, “new paragraph”, “bullet point”, “comma”,
-  and “open quote”
+  and “open quote”; when the Language Hint is French, the command set follows
+  canonical French phrases such as “nouvelle ligne”, “nouveau paragraphe”,
+  “virgule”, and “guillemet ouvrant”
 - **Settings → Text → Remove filler words** — opt-in deterministic strip of
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
 - **Settings → Behavior → Restore clipboard after paste** — opt-in guarded restore
@@ -243,8 +249,9 @@ swift run Presspeech --self-test all
 ```
 
 Before publishing a release, run the manual checklist in
-`docs/manual-qa.md`. Permission and model-cache recovery notes live in
-`docs/troubleshooting.md`.
+`docs/manual-qa.md`. User-facing recovery help lives on the
+[troubleshooting page](https://rcourtman.github.io/presspeech/troubleshooting.html);
+its concise Markdown reference is `docs/troubleshooting.md`.
 
 Key files:
 
@@ -272,6 +279,7 @@ See [`windows/README.md`](windows/README.md) for hardware, setup, and usage deta
 
 ## Links
 
+- [Support and troubleshooting](SUPPORT.md)
 - [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)
 - [Latest release](https://github.com/rcourtman/presspeech/releases/latest)
 - [Direct download](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip)

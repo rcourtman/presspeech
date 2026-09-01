@@ -54,6 +54,65 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.assertIs(returned, processor)
         self.assertEqual(processor.decoder_type, "tdt")
 
+    def test_stage_barrier_is_benchmark_only_and_cuda_only(self):
+        torch = mock.Mock()
+
+        engine.Transcriber()._parakeet_stage_barrier(torch, "cuda:0")
+        engine.Transcriber(measure_stages=True)._parakeet_stage_barrier(
+            torch, "cpu")
+        torch.cuda.synchronize.assert_not_called()
+
+        engine.Transcriber(measure_stages=True)._parakeet_stage_barrier(
+            torch, "cuda:0")
+        torch.cuda.synchronize.assert_called_once_with("cuda:0")
+
+    def test_parakeet_benchmark_brackets_every_reported_stage(self):
+        torch = types.ModuleType("torch")
+        torch.no_grad = mock.MagicMock()
+        features = mock.Mock()
+        features.is_floating_point.return_value = True
+        attention_mask = mock.Mock()
+        attention_mask.is_floating_point.return_value = False
+        processor = mock.Mock()
+        processor.return_value = {
+            "input_features": features,
+            "attention_mask": attention_mask,
+        }
+        processor.decode.return_value = (" measured transcription ", None)
+        model = mock.Mock()
+        model.device = "cuda:0"
+        model.dtype = "float16"
+        model.generate.return_value = types.SimpleNamespace(
+            sequences=mock.sentinel.sequences,
+            durations=mock.sentinel.durations,
+        )
+        transcriber = engine.Transcriber(measure_stages=True)
+        audio = [0.0] * 16000
+
+        with mock.patch.dict(sys.modules, {"torch": torch}), \
+                mock.patch.object(
+                    engine, "_parakeet_max_new_tokens", return_value=123), \
+                mock.patch.object(
+                    transcriber, "_parakeet_stage_barrier") as barrier:
+            text = transcriber._transcribe_parakeet(
+                model, processor, audio)
+
+        self.assertEqual(text, "measured transcription")
+        self.assertEqual(barrier.call_count, 5)
+        self.assertEqual(
+            barrier.call_args_list,
+            [mock.call(torch, "cuda:0")] * 5,
+        )
+        processor.assert_called_once_with(
+            audio,
+            sampling_rate=16000,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=15 * 16000,
+            truncation=True,
+            return_attention_mask=True,
+        )
+
     def test_transformers_models_use_reviewed_immutable_revisions(self):
         torch = types.ModuleType("torch")
         torch.float16 = "float16"

@@ -40,7 +40,25 @@ import UniformTypeIdentifiers
 let SAMPLE_RATE: Double = 16_000
 let DEFAULT_HOTKEY_KEYCODE: CGKeyCode = 61  // Right Option
 let ESCAPE_KEYCODE: CGKeyCode = 53
+// Keep native modal-dialog navigation available while the hotkey recorder's
+// local event monitor is active. These keys are not valid dictation hotkeys,
+// but AppKit needs their keyDown events for Return/Enter, Tab, Space, and
+// Escape to confirm, move focus, activate a focused button, or cancel.
+let HOTKEY_RECORDER_CONTROL_KEYCODES: Set<CGKeyCode> = [36, 48, 49, 53, 76]
 let MIN_CLIP_SECONDS: Double = 0.25
+// A key release can arrive while the speaker is still finishing the last
+// phoneme, and AVAudioEngine delivers microphone samples in buffers rather
+// than synchronously with that key event. Keep capture armed briefly after
+// release, stopping as soon as the new tail is quiet and imposing a hard
+// bound when the user released mid-word. These values match the reviewed
+// Windows push-to-talk policy so both apps protect the same capture boundary.
+let POST_RELEASE_MIN_CAPTURE_SECONDS: TimeInterval = 0.08
+let POST_RELEASE_MAX_CAPTURE_SECONDS: TimeInterval = 0.4
+let POST_RELEASE_CAPTURE_CHECK_SECONDS: TimeInterval = 0.04
+let POST_RELEASE_TAIL_SECONDS: TimeInterval = 0.09
+let POST_RELEASE_ABSOLUTE_SILENCE_RMS = 0.003
+let POST_RELEASE_RELATIVE_SILENCE = 0.06
+let POST_RELEASE_MAX_SILENCE_RMS = 0.012
 // A forgotten toggle must still stop, and even hand-written defaults
 // cannot grow the in-memory capture without a bound.
 let DEFAULT_MAX_RECORDING_SECONDS: TimeInterval = 120
@@ -112,6 +130,19 @@ func setupChecklistWindowContentSize(ideal: NSSize = NSSize(width: 560, height: 
     let availableHeight = max(320, visibleFrame.height - 80)
     return NSSize(width: min(ideal.width, availableWidth),
                   height: min(ideal.height, availableHeight))
+}
+
+/// Keep the user's place when the live setup checklist replaces its view tree.
+/// AppKit resets a new scroll document to its origin, so permission/model state
+/// refreshes otherwise jump a user on a short display back to the first row.
+func restoredSetupChecklistScrollOriginY(previousOriginY: CGFloat,
+                                         documentHeight: CGFloat,
+                                         viewportHeight: CGFloat) -> CGFloat {
+    guard previousOriginY.isFinite,
+          documentHeight.isFinite,
+          viewportHeight.isFinite else { return 0 }
+    let maximumOriginY = max(0, documentHeight - max(0, viewportHeight))
+    return min(max(0, previousOriginY), maximumOriginY)
 }
 
 /// A registered login item can still require the user's approval in System
@@ -1500,6 +1531,42 @@ func correctionContextSelection(clickedRow: Int,
     return IndexSet(integer: clickedRow)
 }
 
+enum TranscriptCorrectionSortField: String {
+    case source
+    case replacement
+}
+
+/// Sort only the manager's index view; stored correction order remains stable
+/// for export, sync, and deterministic transcript processing. The original
+/// index is the final tie-breaker so clicking a column never makes equal rows
+/// jump around between refreshes.
+func sortedTranscriptCorrectionIndices(_ indices: [Int],
+                                       in corrections: [TranscriptCorrection],
+                                       by field: TranscriptCorrectionSortField,
+                                       ascending: Bool) -> [Int] {
+    let validIndices = indices.filter { corrections.indices.contains($0) }
+    return validIndices.sorted { lhsIndex, rhsIndex in
+        let lhs = corrections[lhsIndex]
+        let rhs = corrections[rhsIndex]
+        let lhsPrimary = field == .source ? lhs.source : lhs.replacement
+        let rhsPrimary = field == .source ? rhs.source : rhs.replacement
+        let lhsSecondary = field == .source ? lhs.replacement : lhs.source
+        let rhsSecondary = field == .source ? rhs.replacement : rhs.source
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive, .numeric]
+
+        let primary = lhsPrimary.compare(rhsPrimary, options: options)
+        if primary != .orderedSame {
+            return ascending ? primary == .orderedAscending : primary == .orderedDescending
+        }
+        let secondary = lhsSecondary.compare(rhsSecondary, options: options)
+        if secondary != .orderedSame {
+            return ascending ? secondary == .orderedAscending : secondary == .orderedDescending
+        }
+        return lhsIndex < rhsIndex
+    }
+
+}
+
 /// First line of the import-confirmation dialog. When the file holds
 /// more entries than survive normalization (over the
 /// MAX_TRANSCRIPT_CORRECTIONS cap, or invalid/duplicate entries), the
@@ -1522,6 +1589,68 @@ func correctionImportMergeCapWarningText(existingCount: Int,
     let mergedCount = existingCount + newCount
     guard mergedCount > cap else { return nil }
     return "Merging would produce \(mergedCount) corrections; Presspeech keeps at most \(cap), so \(mergedCount - cap) would be dropped."
+}
+
+enum CorrectionEditorValidationIssue: Equatable {
+    case missingSource
+    case missingReplacement
+    case unsupportedSourceCharacters
+    case unsupportedReplacementCharacters
+    case sourceTooLong
+    case replacementTooLong
+    case correctionLimitReached
+
+    func message(sourceTitle: String) -> String {
+        switch self {
+        case .missingSource:
+            return "Enter text in \(sourceTitle). Your other edit is still here."
+        case .missingReplacement:
+            return "Enter the exact text to paste. Your other edit is still here."
+        case .unsupportedSourceCharacters:
+            return "\(sourceTitle) contains an unsupported control character. Remove it and try again."
+        case .unsupportedReplacementCharacters:
+            return "Paste contains an unsupported control character. Remove it and try again."
+        case .sourceTooLong:
+            return "\(sourceTitle) must use \(MAX_TRANSCRIPT_CORRECTION_SOURCE_BYTES) bytes or fewer. Shorten it and try again."
+        case .replacementTooLong:
+            return "Paste must use \(MAX_TRANSCRIPT_CORRECTION_REPLACEMENT_BYTES) bytes or fewer. Shorten it and try again."
+        case .correctionLimitReached:
+            return "Presspeech already has \(MAX_TRANSCRIPT_CORRECTIONS) saved items. Delete one, or use a phrase that is already saved to update it."
+        }
+    }
+
+    var focusesSource: Bool {
+        switch self {
+        case .missingSource, .unsupportedSourceCharacters, .sourceTooLong, .correctionLimitReached:
+            return true
+        case .missingReplacement, .unsupportedReplacementCharacters, .replacementTooLong:
+            return false
+        }
+    }
+}
+
+func correctionEditorValidationIssue(source: String,
+                                     replacement: String,
+                                     isEditing: Bool,
+                                     existingCorrections: [TranscriptCorrection]) -> CorrectionEditorValidationIssue? {
+    let trimmedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedReplacement = replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if trimmedSource.isEmpty { return .missingSource }
+    if trimmedReplacement.isEmpty { return .missingReplacement }
+    if trimmedSource.contains("\u{0}") { return .unsupportedSourceCharacters }
+    if trimmedReplacement.contains("\u{0}") { return .unsupportedReplacementCharacters }
+    if trimmedSource.utf8.count > MAX_TRANSCRIPT_CORRECTION_SOURCE_BYTES { return .sourceTooLong }
+    if trimmedReplacement.utf8.count > MAX_TRANSCRIPT_CORRECTION_REPLACEMENT_BYTES { return .replacementTooLong }
+
+    if !isEditing, existingCorrections.count >= MAX_TRANSCRIPT_CORRECTIONS {
+        let key = normalizedTranscriptCorrectionSource(trimmedSource)
+        let updatesExisting = existingCorrections.contains {
+            normalizedTranscriptCorrectionSource($0.source) == key
+        }
+        if !updatesExisting { return .correctionLimitReached }
+    }
+    return nil
 }
 
 private func utf8ClippedPrefix(_ text: String, maxBytes: Int) -> String {
@@ -2778,9 +2907,19 @@ private func hotkeySetupRowState(isReady: Bool,
                                       status: "Detected",
                                       buttonTitle: nil)
     }
-    return SetupChecklistRowState(detail: "\(verb) \(hotkeyName). A quick tap is enough to confirm the hotkey.",
+    let testDetail = triggerMode == .hold
+        ? "Hold \(hotkeyName) briefly, then release."
+        : "Press \(hotkeyName) once, then press it again to stop the test."
+    return SetupChecklistRowState(detail: testDetail,
                                   status: "Ready to test",
                                   buttonTitle: nil)
+}
+
+private func setupChecklistCompletionState(isSpeechModelReady: Bool,
+                                           isReady: Bool,
+                                           permissionsGranted: Bool,
+                                           hotkeyTestSucceeded: Bool) -> Bool {
+    isSpeechModelReady && isReady && permissionsGranted && hotkeyTestSucceeded
 }
 
 @MainActor
@@ -2925,6 +3064,11 @@ private func hotkeyRecordingDecision(for event: HotkeyEventSnapshot) -> HotkeyRe
         return .reject("Choose a right-side modifier key or an F-key. Typing keys are not safe because Presspeech suppresses its dictation key globally.")
     }
     return .accept(choice)
+}
+
+private func hotkeyRecorderShouldPassThrough(_ event: HotkeyEventSnapshot) -> Bool {
+    event.typeRawValue == CGEventType.keyDown.rawValue
+        && HOTKEY_RECORDER_CONTROL_KEYCODES.contains(event.keycode)
 }
 
 private enum HotkeyTransitionAction: Equatable, Sendable {
@@ -3321,6 +3465,80 @@ private struct AudioSampleAccumulator {
         sampleCount = 0
         return captured
     }
+
+    /// RMS of the newest samples without flattening the full recording.
+    /// The caller supplies the number of 16 kHz samples that define the tail.
+    func tailRMS(maxSampleCount: Int) -> Double {
+        guard maxSampleCount > 0 else { return 0 }
+        var remaining = maxSampleCount
+        var sumSquares = 0.0
+        var finiteCount = 0
+
+        for segment in segments.reversed() {
+            let take = min(remaining, segment.count)
+            guard take > 0 else { continue }
+            for sample in segment.suffix(take) where sample.isFinite {
+                let clamped = max(-1, min(1, sample))
+                sumSquares += Double(clamped * clamped)
+                finiteCount += 1
+            }
+            remaining -= take
+            if remaining == 0 { break }
+        }
+
+        guard finiteCount > 0 else { return 0 }
+        return sqrt(sumSquares / Double(finiteCount))
+    }
+}
+
+fileprivate struct PostReleaseTailMeasurement: Equatable {
+    let tailRMS: Double
+    let silenceThreshold: Double
+    let sampleSequence: UInt64
+
+    init(tailRMS: Double,
+         silenceThreshold: Double,
+         sampleSequence: UInt64 = 0) {
+        self.tailRMS = tailRMS
+        self.silenceThreshold = silenceThreshold
+        self.sampleSequence = sampleSequence
+    }
+}
+
+private enum PostReleaseCaptureDecision: Equatable {
+    case wait(TimeInterval)
+    case finishSilence
+    case finishMaximum
+}
+
+private func postReleaseSilenceThreshold(peakRMS: Double) -> Double {
+    min(POST_RELEASE_MAX_SILENCE_RMS,
+        max(POST_RELEASE_ABSOLUTE_SILENCE_RMS,
+            peakRMS * POST_RELEASE_RELATIVE_SILENCE))
+}
+
+private func postReleaseCaptureDecision(elapsed: TimeInterval,
+                                        measurement: PostReleaseTailMeasurement,
+                                        receivedNewSamples: Bool = true) -> PostReleaseCaptureDecision {
+    let elapsed = max(0, elapsed)
+    if elapsed >= POST_RELEASE_MAX_CAPTURE_SECONDS {
+        return .finishMaximum
+    }
+    if elapsed < POST_RELEASE_MIN_CAPTURE_SECONDS {
+        return .wait(POST_RELEASE_MIN_CAPTURE_SECONDS - elapsed)
+    }
+    // AVAudioEngine documents bufferSize as a request: the implementation may
+    // choose another size. Never let the first timer merely re-score the
+    // pre-release tail while the boundary buffer is still pending.
+    if !receivedNewSamples {
+        return .wait(min(POST_RELEASE_CAPTURE_CHECK_SECONDS,
+                         POST_RELEASE_MAX_CAPTURE_SECONDS - elapsed))
+    }
+    if measurement.tailRMS <= measurement.silenceThreshold {
+        return .finishSilence
+    }
+    return .wait(min(POST_RELEASE_CAPTURE_CHECK_SECONDS,
+                     POST_RELEASE_MAX_CAPTURE_SECONDS - elapsed))
 }
 
 func selectedMonoMixChannelIndices(channelRMS: [Double]) -> [Int] {
@@ -3376,6 +3594,7 @@ final class AudioCapture: @unchecked Sendable {
     private var _isRunning = false
     private var latestLevel: Float = 0
     private var latestLevelSequence: UInt64 = 0
+    private var peakRMS = 0.0
     private var recordingGeneration: UInt64 = 0
     private var engineStarted = false
     private var configurationObserver: NSObjectProtocol?
@@ -3427,6 +3646,7 @@ final class AudioCapture: @unchecked Sendable {
             samples.removeAll(keepingCapacity: true)
             latestLevel = 0
             latestLevelSequence &+= 1
+            peakRMS = 0
             _isRunning = true
         }
         lock.unlock()
@@ -3482,6 +3702,7 @@ final class AudioCapture: @unchecked Sendable {
         _isRunning = false
         latestLevel = 0
         latestLevelSequence &+= 1
+        peakRMS = 0
         recordingGeneration &+= 1
         samples.removeAll(keepingCapacity: true)
         engineStarted = false
@@ -3516,6 +3737,7 @@ final class AudioCapture: @unchecked Sendable {
         samples.removeAll(keepingCapacity: true)
         latestLevel = 0
         latestLevelSequence &+= 1
+        peakRMS = 0
         _isRunning = true
     }
 
@@ -3552,6 +3774,7 @@ final class AudioCapture: @unchecked Sendable {
         latestLevelSequence &+= 1
         recordingGeneration &+= 1
         let captured = samples.drain()
+        peakRMS = 0
         lock.unlock()
         return captured.flattened()
     }
@@ -3559,6 +3782,16 @@ final class AudioCapture: @unchecked Sendable {
     func latestRecordingLevelSnapshot() -> (level: Float, sequence: UInt64) {
         lock.lock(); defer { lock.unlock() }
         return _isRunning ? (latestLevel, latestLevelSequence) : (0, latestLevelSequence)
+    }
+
+    fileprivate func postReleaseTailMeasurement() -> PostReleaseTailMeasurement {
+        lock.lock(); defer { lock.unlock() }
+        let tailSamples = max(1, Int(SAMPLE_RATE * POST_RELEASE_TAIL_SECONDS))
+        return PostReleaseTailMeasurement(
+            tailRMS: samples.tailRMS(maxSampleCount: tailSamples),
+            silenceThreshold: postReleaseSilenceThreshold(peakRMS: peakRMS),
+            sampleSequence: latestLevelSequence
+        )
     }
 
     private func handleTap(buffer: AVAudioPCMBuffer, target: AVAudioFormat) {
@@ -3617,6 +3850,9 @@ final class AudioCapture: @unchecked Sendable {
         }
         let level = normalizedAudioLevel(sumSquares: sumSquares,
                                          sampleCount: finiteSampleCount)
+        let rawRMS = finiteSampleCount > 0
+            ? sqrt(sumSquares / Double(finiteSampleCount))
+            : 0
 
         // Re-check running under lock — endRecording() might have
         // fired during conversion, then a rapid next recording may
@@ -3627,6 +3863,7 @@ final class AudioCapture: @unchecked Sendable {
             samples.append(arr)
             latestLevel = level
             latestLevelSequence &+= 1
+            peakRMS = max(peakRMS, rawRMS)
         }
         lock.unlock()
     }
@@ -3896,7 +4133,7 @@ enum SpokenFormattingCommandProcessor {
         let consumesTrailingPunctuation: Bool
     }
 
-    private static let commands: [Command] = [
+    private static let englishCommands: [Command] = [
         Command(phrases: ["new paragraph"], replacement: "\n\n", consumesTrailingPunctuation: true),
         Command(phrases: ["new line"], replacement: "\n", consumesTrailingPunctuation: true),
         Command(phrases: ["bullet point"], replacement: "\n• ", consumesTrailingPunctuation: true),
@@ -3912,12 +4149,38 @@ enum SpokenFormattingCommandProcessor {
         Command(phrases: ["comma"], replacement: ",", consumesTrailingPunctuation: true),
     ]
 
-    static func apply(to text: String) -> (text: String, appliedCount: Int) {
+    // Keep command matching tied to the explicit language hint. Running every
+    // language's short punctuation words over every transcript would turn
+    // ordinary words such as French "point" into punctuation unexpectedly.
+    // Auto-detect retains the original English behavior for compatibility.
+    // French spellings follow the names in Apple's current macOS Dictation
+    // command reference; apostrophe and hyphen variants tolerate ASR output.
+    private static let frenchCommands: [Command] = [
+        Command(phrases: ["nouveau paragraphe"], replacement: "\n\n", consumesTrailingPunctuation: true),
+        Command(phrases: ["nouvelle ligne"], replacement: "\n", consumesTrailingPunctuation: true),
+        Command(phrases: ["guillemet ouvrant"], replacement: "«", consumesTrailingPunctuation: true),
+        Command(phrases: ["guillemet fermant"], replacement: "»", consumesTrailingPunctuation: true),
+        Command(phrases: ["parenthèse ouvrante"], replacement: "(", consumesTrailingPunctuation: true),
+        Command(phrases: ["parenthèse fermante"], replacement: ")", consumesTrailingPunctuation: true),
+        Command(phrases: ["point d'interrogation", "point d’interrogation"], replacement: "?", consumesTrailingPunctuation: true),
+        Command(phrases: ["point d'exclamation", "point d’exclamation"], replacement: "!", consumesTrailingPunctuation: true),
+        Command(phrases: ["point-virgule", "point virgule"], replacement: ";", consumesTrailingPunctuation: true),
+        Command(phrases: ["deux-points", "deux points"], replacement: ":", consumesTrailingPunctuation: true),
+        Command(phrases: ["virgule"], replacement: ",", consumesTrailingPunctuation: true),
+        Command(phrases: ["point"], replacement: ".", consumesTrailingPunctuation: true),
+    ]
+
+    private static func commands(for language: DictationLanguage) -> [Command] {
+        language == .french ? frenchCommands : englishCommands
+    }
+
+    static func apply(to text: String,
+                      language: DictationLanguage = .auto) -> (text: String, appliedCount: Int) {
         guard !text.isEmpty else { return (text, 0) }
 
         var result = text
         var appliedCount = 0
-        for command in commands {
+        for command in commands(for: language) {
             let alternatives = command.phrases.map { phrase in
                 phrase
                     .split(whereSeparator: { $0.isWhitespace })
@@ -4201,11 +4464,13 @@ private struct DictationTextProcessingResult: Equatable {
 private func processedDictationText(rawTranscript: String,
                                     corrections: [TranscriptCorrection],
                                     spokenFormattingCommands: Bool,
+                                    dictationLanguage: DictationLanguage,
                                     removeFillerWords: Bool) -> DictationTextProcessingResult {
     let trimmed = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     let corrected = TranscriptCorrector.apply(to: trimmed, corrections: corrections)
     let formatted = spokenFormattingCommands
-        ? SpokenFormattingCommandProcessor.apply(to: corrected.text)
+        ? SpokenFormattingCommandProcessor.apply(to: corrected.text,
+                                                 language: dictationLanguage)
         : (text: corrected.text, appliedCount: 0)
 
     guard removeFillerWords else {
@@ -5945,6 +6210,88 @@ final class CorrectionShareCleanupDelegate: NSObject, @preconcurrency NSSharingS
     }
 }
 
+/// Owns the dictionary editor's modal loop so Save can validate without
+/// dismissing the alert. `NSAlert.runModal()` normally ends the modal session
+/// as soon as a button is chosen, which used to throw away both text fields
+/// before Presspeech could explain an invalid value.
+@MainActor
+private final class CorrectionEditorModalController: NSObject {
+    private let alert: NSAlert
+    private let sourceTitle: String
+    private let sourceEditor: NSTextView
+    private let replacementEditor: NSTextView
+    private let isEditing: Bool
+    private let existingCorrections: [TranscriptCorrection]
+    private var result: TranscriptCorrection?
+
+    init(alert: NSAlert,
+         sourceTitle: String,
+         sourceEditor: NSTextView,
+         replacementEditor: NSTextView,
+         isEditing: Bool,
+         existingCorrections: [TranscriptCorrection]) {
+        self.alert = alert
+        self.sourceTitle = sourceTitle
+        self.sourceEditor = sourceEditor
+        self.replacementEditor = replacementEditor
+        self.isEditing = isEditing
+        self.existingCorrections = existingCorrections
+    }
+
+    func run() -> TranscriptCorrection? {
+        guard alert.buttons.count >= 2 else { return nil }
+        let save = alert.buttons[0]
+        save.target = self
+        save.action = #selector(saveClicked(_:))
+        save.keyEquivalent = "\r"
+
+        let cancel = alert.buttons[1]
+        cancel.target = self
+        cancel.action = #selector(cancelClicked(_:))
+        cancel.keyEquivalent = "\u{1b}"
+
+        alert.window.initialFirstResponder = sourceEditor
+        let response = NSApp.runModal(for: alert.window)
+        alert.window.orderOut(nil)
+        return response == .alertFirstButtonReturn ? result : nil
+    }
+
+    @objc private func saveClicked(_ sender: NSButton) {
+        let source = sourceEditor.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let replacement = replacementEditor.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let issue = correctionEditorValidationIssue(
+            source: source,
+            replacement: replacement,
+            isEditing: isEditing,
+            existingCorrections: existingCorrections
+        ) {
+            let message = issue.message(sourceTitle: sourceTitle)
+            alert.alertStyle = .warning
+            alert.informativeText = message
+            alert.layout()
+            let editor = issue.focusesSource ? sourceEditor : replacementEditor
+            alert.window.makeFirstResponder(editor)
+            NSAccessibility.post(
+                element: alert.window as Any,
+                notification: .announcementRequested,
+                userInfo: [
+                    .announcement: message,
+                    .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+                ]
+            )
+            NSSound.beep()
+            return
+        }
+
+        result = TranscriptCorrection(source: source, replacement: replacement)
+        NSApp.stopModal(withCode: .alertFirstButtonReturn)
+    }
+
+    @objc private func cancelClicked(_ sender: NSButton) {
+        NSApp.stopModal(withCode: .alertSecondButtonReturn)
+    }
+}
+
 @MainActor
 private final class SetupChecklistDocumentView: NSView {
     // A flipped document view keeps the first setup row at the top when the
@@ -6375,6 +6722,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private let settings = Settings.shared
 
     private var isRecording = false
+    private var isFinishingRecording = false
     private var isBusy = false
     private var recordingPasteTarget: DictationPasteTarget?
     private var isReady = false
@@ -6403,6 +6751,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     /// still in flight; the in-flight completion honours it.
     private var systemAudioUnmuteRequested = false
     private var maxDurationWorkItem: DispatchWorkItem?
+    private var postReleaseCaptureWorkItem: DispatchWorkItem?
     private var audioIdleStopWorkItem: DispatchWorkItem?
     private var isRestartingAudioInput = false
     private var pendingAudioRouteRefresh = false
@@ -6520,7 +6869,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             break
         }
 
-        hotkey.onPress = { [weak self] in self?.handlePress() }
+        hotkey.onPress = { [weak self] in self?.handleHotkeyPress() }
         hotkey.onRelease = { [weak self] in self?.handleRelease() }
         hotkey.onCancel = { [weak self] in self?.cancelActiveRecording(reason: "escape") }
         hotkey.isRecordingActive = { [weak self] in self?.isRecording == true }
@@ -6838,6 +7187,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func prepareForStartupAttempt() {
         cancelMaxDurationAutoRelease()
+        cancelPostReleaseCapture()
 
         if isRecording || audio.isRunning {
             _ = audio.endRecording()
@@ -6885,6 +7235,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func recordStartupFailure(stage: StartupFailureStage, error: Error, reason: String) {
+        cancelPostReleaseCapture()
         if stage == .speechModel,
            let fallback = fallbackSpeechModelProfileAfterStartupFailure,
            fallback != settings.speechModelProfile,
@@ -7027,6 +7378,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func pauseAudioRuntimeForSystemSleep() {
         cancelMaxDurationAutoRelease()
+        cancelPostReleaseCapture()
         stopRecordingLevelMeter()
         unmuteIfWeMuted()
 
@@ -7129,6 +7481,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
 
         cancelMaxDurationAutoRelease()
+        cancelPostReleaseCapture()
         if isRecording || audio.isRunning || audio.isEngineStarted {
             _ = audio.endRecording()
             stopAudioEngineImmediately()
@@ -7637,11 +7990,26 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         return nil
     }
 
+    /// Only the global event listener enters here. Menu and Voice Control
+    /// dictation actions call `handlePress()` directly, so they cannot falsely
+    /// mark the configured keyboard shortcut as tested.
+    private func handleHotkeyPress() {
+        if !hotkeyTestSucceeded {
+            hotkeyTestSucceeded = true
+            updateSetupChecklist()
+        }
+        handlePress()
+    }
+
     private func handlePress() {
         if let blocker = recordingStartBlocker() {
             log("press ignored: \(blocker.rawValue)")
             return
         }
+        // Defensive reset: every normal terminal path clears this work item,
+        // but a recovered audio/runtime failure must never make a later key
+        // release look like a duplicate post-release request.
+        cancelPostReleaseCapture()
         let missing = missingPermissions()
         guard missing.isEmpty else {
             enterPermissionBlockedState(missing: missing, reason: "hotkey press")
@@ -7667,10 +8035,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         recordingPasteTarget = pasteTarget
         isRecording = true
         clearDictationNotice()
-        if setupChecklistWindow?.isVisible == true {
-            hotkeyTestSucceeded = true
-            updateSetupChecklist()
-        }
         startRecordingLevelMeter()
         if settings.playFeedbackSounds {
             Sounds.playStart()
@@ -7683,19 +8047,91 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func handleRelease() {
-        guard isRecording, !isTerminating else { return }
+        guard isRecording, !isFinishingRecording, !isTerminating else { return }
         let missing = missingPermissions()
         guard missing.isEmpty else {
             enterPermissionBlockedState(missing: missing, reason: "hotkey release")
             return
         }
 
-        isRecording = false
-        stopRecordingLevelMeter()
+        // Do not cut the microphone at the keyboard-event boundary. Speech
+        // and AVAudioEngine buffers can both extend just beyond that event;
+        // keep the recording lifecycle claimed until a quiet tail or the hard
+        // post-release bound says it is safe to drain the accumulator.
+        isFinishingRecording = true
+        stopRecordingLevelMeter(resetImage: false)
         cancelMaxDurationAutoRelease()
-        unmuteIfWeMuted()
+        let releasedAt = ProcessInfo.processInfo.systemUptime
+        let releaseSampleSequence = audio.latestRecordingLevelSnapshot().sequence
+        log("release: retaining bounded post-release audio")
+        schedulePostReleaseCaptureCheck(after: POST_RELEASE_MIN_CAPTURE_SECONDS,
+                                        releasedAt: releasedAt,
+                                        releaseSampleSequence: releaseSampleSequence)
+        rebuildMenu()
+    }
 
+    private func schedulePostReleaseCaptureCheck(after delay: TimeInterval,
+                                                 releasedAt: TimeInterval,
+                                                 releaseSampleSequence: UInt64) {
+        postReleaseCaptureWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.postReleaseCaptureWorkItem = nil
+            self.checkPostReleaseCapture(releasedAt: releasedAt,
+                                         releaseSampleSequence: releaseSampleSequence)
+        }
+        postReleaseCaptureWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay), execute: work)
+    }
+
+    private func checkPostReleaseCapture(releasedAt: TimeInterval,
+                                         releaseSampleSequence: UInt64) {
+        guard isRecording, isFinishingRecording, !isTerminating else { return }
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - releasedAt)
+        let measurement = audio.postReleaseTailMeasurement()
+        guard audio.isRunning else {
+            // A route/runtime failure should flow through the existing empty-
+            // capture recovery instead of leaving the app permanently stuck
+            // in its claimed recording lifecycle.
+            finishRecordingAfterPostRelease(reason: "audio stopped",
+                                            elapsed: elapsed,
+                                            measurement: measurement)
+            return
+        }
+        let receivedNewSamples = measurement.sampleSequence != releaseSampleSequence
+        switch postReleaseCaptureDecision(elapsed: elapsed,
+                                          measurement: measurement,
+                                          receivedNewSamples: receivedNewSamples) {
+        case .wait(let delay):
+            schedulePostReleaseCaptureCheck(after: delay,
+                                            releasedAt: releasedAt,
+                                            releaseSampleSequence: releaseSampleSequence)
+        case .finishSilence:
+            finishRecordingAfterPostRelease(reason: "silence",
+                                            elapsed: elapsed,
+                                            measurement: measurement)
+        case .finishMaximum:
+            finishRecordingAfterPostRelease(reason: "maximum",
+                                            elapsed: elapsed,
+                                            measurement: measurement)
+        }
+    }
+
+    private func finishRecordingAfterPostRelease(reason: String,
+                                                 elapsed: TimeInterval,
+                                                 measurement: PostReleaseTailMeasurement) {
+        guard isRecording, isFinishingRecording, !isTerminating else { return }
+        postReleaseCaptureWorkItem?.cancel()
+        postReleaseCaptureWorkItem = nil
+        isFinishingRecording = false
+        log("post-release capture \(String(format: "%.3f", elapsed)) s (\(reason); rms \(String(format: "%.4f", measurement.tailRMS)), threshold \(String(format: "%.4f", measurement.silenceThreshold)))")
+
+        isRecording = false
         let samples = audio.endRecording()
+        // Keep returning speaker audio out of the retained microphone tail.
+        // endRecording closes the capture boundary before the asynchronous
+        // unmute lifecycle can complete.
+        unmuteIfWeMuted()
         let dur: Double
         switch recordingReleaseAction(capturedSampleCount: samples.count) {
         case .discardTooShort(let duration):
@@ -7716,6 +8152,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         scheduleDelayedBusyHUD()
         rebuildMenu()
         log("release: \(String(format: "%.2f", dur)) s captured, transcribing")
+        let dictationLanguage = settings.dictationLanguage
 
         Task { @MainActor in
             var completionNotice: DictationNotice?
@@ -7723,7 +8160,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             do {
                 let t0 = Date()
                 let text = try await asr.transcribe(samples: samples,
-                                                    language: settings.dictationLanguage.fluidLanguage)
+                                                    language: dictationLanguage.fluidLanguage)
                 let dt = Date().timeIntervalSince(t0)
                 if !isTerminating {
                     let missing = missingPermissions()
@@ -7736,6 +8173,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                     let processed = processedDictationText(rawTranscript: text,
                                                            corrections: settings.transcriptCorrections,
                                                            spokenFormattingCommands: settings.spokenFormattingCommands,
+                                                           dictationLanguage: dictationLanguage,
                                                            removeFillerWords: settings.removeFillerWords)
                     if processed.appliedCorrectionCount > 0 {
                         log("transcript corrections applied: \(processed.appliedCorrectionCount)")
@@ -7811,6 +8249,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func cancelActiveRecording(reason: String, runDeferredRefresh: Bool = true) {
+        cancelPostReleaseCapture()
         guard isRecording || audio.isRunning else {
             recordingPasteTarget = nil
             hotkey.resetToggleState()
@@ -7840,6 +8279,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     // while termination only needs to discard audio and restore mute.
     private func cancelRecordingForTermination() {
         cancelMaxDurationAutoRelease()
+        cancelPostReleaseCapture()
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
@@ -8064,6 +8504,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private func cancelMaxDurationAutoRelease() {
         maxDurationWorkItem?.cancel()
         maxDurationWorkItem = nil
+    }
+
+    private func cancelPostReleaseCapture() {
+        postReleaseCaptureWorkItem?.cancel()
+        postReleaseCaptureWorkItem = nil
+        isFinishingRecording = false
     }
 
     // MARK: - History
@@ -8994,8 +9440,28 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard snapshot != renderedSetupChecklistSnapshot else { return }
 
         let focusedIdentifier = (window.firstResponder as? NSView)?.identifier
+        let scrollIdentifier = NSUserInterfaceItemIdentifier("setup-checklist-scroll")
+        let previousScrollOriginY = (
+            setupChecklistView(identifiedBy: scrollIdentifier,
+                               in: window.contentView) as? NSScrollView
+        )?.documentVisibleRect.minY
         window.contentView = makeSetupChecklistView(snapshot: snapshot)
         renderedSetupChecklistSnapshot = snapshot
+        window.contentView?.layoutSubtreeIfNeeded()
+        if let previousScrollOriginY,
+           let scroll = setupChecklistView(identifiedBy: scrollIdentifier,
+                                           in: window.contentView) as? NSScrollView,
+           let document = scroll.documentView {
+            document.layoutSubtreeIfNeeded()
+            let restoredOriginY = restoredSetupChecklistScrollOriginY(
+                previousOriginY: previousScrollOriginY,
+                documentHeight: document.frame.height,
+                viewportHeight: scroll.contentView.bounds.height
+            )
+            scroll.contentView.scroll(to: NSPoint(x: scroll.documentVisibleRect.minX,
+                                                  y: restoredOriginY))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
         if let focusedIdentifier,
            let replacement = setupChecklistView(
                identifiedBy: focusedIdentifier,
@@ -9036,9 +9502,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 hotkeyName: hotkey.hotkey.name,
                 failure: startupFailure),
             showInDock: settings.showInDock,
-            isComplete: isSpeechModelReady
-                && isReady
-                && permissions.allSatisfy { $0.status == "Granted" })
+            isComplete: setupChecklistCompletionState(
+                isSpeechModelReady: isSpeechModelReady,
+                isReady: isReady,
+                permissionsGranted: permissions.allSatisfy { $0.status == "Granted" },
+                hotkeyTestSucceeded: hotkeyTestSucceeded))
     }
 
     private func setupChecklistView(identifiedBy identifier: NSUserInterfaceItemIdentifier,
@@ -9112,7 +9580,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 ? nil : #selector(retryStartupFromSetupClicked(_:))))
 
         if !snapshot.isComplete {
-            let tip = setupLabel("Tip: If clicking 'Grant' doesn't open a prompt or show Presspeech in System Settings, click 'Try Again' — Presspeech will reset its TCC permission entry and re-request, which clears stuck macOS state.",
+            let tipText = snapshot.hotkey.status == "Ready to test"
+                ? "Test the hotkey before choosing Done. If it controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
+                : "Tip: If clicking 'Grant' doesn't open a prompt or show Presspeech in System Settings, click 'Try Again' — Presspeech will reset its TCC permission entry and re-request, which clears stuck macOS state."
+            let tip = setupLabel(tipText,
                                  font: .systemFont(ofSize: 11),
                                  color: .secondaryLabelColor)
             tip.preferredMaxLayoutWidth = 476
@@ -9166,6 +9637,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         document.addSubview(root)
 
         let scroll = NSScrollView()
+        scroll.identifier = NSUserInterfaceItemIdentifier("setup-checklist-scroll")
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.borderType = .noBorder
         scroll.drawsBackground = false
@@ -9370,7 +9842,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         footer.spacing = 10
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let hint = setupLabel("Tip: enable Text → Spoken formatting commands to say “new paragraph” or “bullet point”.",
+        let formattingExamples = settings.dictationLanguage == .french
+            ? "“nouveau paragraphe” or “virgule”"
+            : "“new paragraph” or “bullet point”"
+        let hint = setupLabel("Tip: enable Text → Spoken formatting commands to say \(formattingExamples).",
                               font: .systemFont(ofSize: 11),
                               color: .secondaryLabelColor)
         let clear = NSButton(title: "Clear", target: self, action: #selector(clearDictationScratchpadClicked(_:)))
@@ -9540,7 +10015,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                     keyEquivalent: "")
         formatting.target = self
         formatting.state = settings.spokenFormattingCommands ? .on : .off
-        formatting.toolTip = "Say new line, new paragraph, bullet point, comma, open quote, and other deterministic commands."
+        formatting.toolTip = "English commands are available by default; selecting French as the Language Hint uses French line, paragraph, punctuation, quote, and parenthesis commands."
         sub.addItem(formatting)
 
         let filler = NSMenuItem(title: "Remove filler words (um, uh, ah, er, hmm)",
@@ -9689,6 +10164,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             item.target = self
             item.state = (choice.keycode == current.keycode) ? .on : .off
             item.representedObject = Int(choice.keycode)
+            item.toolTip = choice.isModifier
+                ? "Pressing this key starts dictation globally. Choose an F-key if you use it while typing special characters."
+                : "On an Apple keyboard, this may require Fn unless function keys are set to work as standard keys."
             hkSub.addItem(item)
         }
 
@@ -10215,12 +10693,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         heardColumn.title = "Heard / When you say"
         heardColumn.minWidth = 180
         heardColumn.width = 330
+        heardColumn.sortDescriptorPrototype = NSSortDescriptor(
+            key: TranscriptCorrectionSortField.source.rawValue,
+            ascending: true
+        )
         table.addTableColumn(heardColumn)
 
         let pasteColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("correction-replacement"))
         pasteColumn.title = "Paste"
         pasteColumn.minWidth = 180
         pasteColumn.width = 360
+        pasteColumn.sortDescriptorPrototype = NSSortDescriptor(
+            key: TranscriptCorrectionSortField.replacement.rawValue,
+            ascending: true
+        )
         table.addTableColumn(pasteColumn)
 
         let scroll = NSScrollView()
@@ -10303,17 +10789,35 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         refreshCorrectionsManager()
     }
 
-    private func refreshCorrectionsManager(selecting correctionIndex: Int? = nil) {
+    private func refreshCorrectionsManager(selecting correctionIndex: Int? = nil,
+                                           preservingCorrectionIndices: [Int] = []) {
         guard let table = correctionsManagerTableView else { return }
         let corrections = settings.transcriptCorrections
         let query = correctionsManagerSearchField?.stringValue ?? ""
         correctionsManagerVisibleIndices = correctionSearchMatchIndices(in: corrections, query: query)
+        if let descriptor = table.sortDescriptors.first,
+           let key = descriptor.key,
+           let field = TranscriptCorrectionSortField(rawValue: key) {
+            correctionsManagerVisibleIndices = sortedTranscriptCorrectionIndices(
+                correctionsManagerVisibleIndices,
+                in: corrections,
+                by: field,
+                ascending: descriptor.ascending
+            )
+        }
         table.reloadData()
 
         if let correctionIndex,
            let row = correctionsManagerVisibleIndices.firstIndex(of: correctionIndex) {
             table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             table.scrollRowToVisible(row)
+        } else if !preservingCorrectionIndices.isEmpty {
+            let preserved = IndexSet(
+                preservingCorrectionIndices.compactMap {
+                    correctionsManagerVisibleIndices.firstIndex(of: $0)
+                }
+            )
+            table.selectRowIndexes(preserved, byExtendingSelection: false)
         } else {
             table.deselectAll(nil)
         }
@@ -10380,6 +10884,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard let table = notification.object as? NSTableView,
               table === correctionsManagerTableView else { return }
         updateCorrectionsManagerSelectionState()
+    }
+
+    func tableView(_ tableView: NSTableView,
+                   sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
+        guard tableView === correctionsManagerTableView else { return }
+        let selected = selectedManagedCorrectionIndices()
+        refreshCorrectionsManager(preservingCorrectionIndices: selected)
     }
 
     @objc private func addManagedCorrectionClicked(_ sender: NSButton) {
@@ -11102,11 +11613,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                       prefillSource: String = "") -> TranscriptCorrection? {
         showAppForModal()
         let alert = NSAlert()
+        let sourceTitle: String
         switch mode {
         case .correction:
+            sourceTitle = "Heard"
             alert.messageText = existing == nil ? "Add Dictionary Correction" : "Edit Dictionary Rule"
             alert.informativeText = "Add the text Presspeech heard, then the exact text it should paste instead."
         case .shortcut:
+            sourceTitle = "When you say"
             alert.messageText = "Add Voice Shortcut"
             alert.informativeText = "Choose a phrase to say and the exact text Presspeech should paste. Shortcuts are deterministic and stay on this Mac."
         }
@@ -11119,7 +11633,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let viewHeight: CGFloat = (labelHeight * 2) + (fieldHeight * 2) + 24
         let accessory = NSView(frame: NSRect(x: 0, y: 0, width: viewWidth, height: viewHeight))
 
-        let sourceLabel = NSTextField(labelWithString: mode == .shortcut ? "When you say" : "Heard")
+        let sourceLabel = NSTextField(labelWithString: sourceTitle)
         sourceLabel.font = .systemFont(ofSize: 12, weight: .medium)
         sourceLabel.frame = NSRect(x: 0, y: viewHeight - labelHeight, width: viewWidth, height: labelHeight)
 
@@ -11127,6 +11641,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             frame: NSRect(x: 0, y: viewHeight - labelHeight - fieldHeight, width: viewWidth, height: fieldHeight),
             text: existing?.source ?? prefillSource.trimmingCharacters(in: .whitespacesAndNewlines)
         )
+        sourceEditor.textView.setAccessibilityLabel(sourceTitle)
 
         let replacementLabel = NSTextField(labelWithString: "Paste")
         replacementLabel.font = .systemFont(ofSize: 12, weight: .medium)
@@ -11136,24 +11651,23 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             frame: NSRect(x: 0, y: 0, width: viewWidth, height: fieldHeight),
             text: existing?.replacement ?? ""
         )
+        replacementEditor.textView.setAccessibilityLabel("Paste")
 
         accessory.addSubview(sourceLabel)
         accessory.addSubview(sourceEditor.scrollView)
         accessory.addSubview(replacementLabel)
         accessory.addSubview(replacementEditor.scrollView)
         alert.accessoryView = accessory
-        alert.window.initialFirstResponder = sourceEditor.textView
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-
-        let source = sourceEditor.textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        let replacement = replacementEditor.textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !source.isEmpty, !replacement.isEmpty else {
-            showCorrectionValidationError()
-            return nil
-        }
-
-        return TranscriptCorrection(source: source, replacement: replacement)
+        let controller = CorrectionEditorModalController(
+            alert: alert,
+            sourceTitle: sourceTitle,
+            sourceEditor: sourceEditor.textView,
+            replacementEditor: replacementEditor.textView,
+            isEditing: existing != nil,
+            existingCorrections: settings.transcriptCorrections
+        )
+        return controller.run()
     }
 
     private func correctionTextEditor(frame: NSRect, text: String) -> (scrollView: NSScrollView, textView: NSTextView) {
@@ -11179,16 +11693,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                                        height: CGFloat.greatestFiniteMagnitude)
         scroll.documentView = textView
         return (scroll, textView)
-    }
-
-    private func showCorrectionValidationError() {
-        showAppForModal()
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Correction Not Saved"
-        alert.informativeText = "Both fields need text."
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
     }
 
     private func saveCorrection(_ correction: TranscriptCorrection, replacing index: Int? = nil) {
@@ -11277,7 +11781,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let alert = NSAlert()
         alert.messageText = "Record Hotkey"
-        alert.informativeText = "Press a right-side modifier key or an F-key."
+        alert.informativeText = "Press a right-side modifier key or an F-key, then confirm your choice. On an Apple keyboard, you may need to hold Fn to send an F-key."
         alert.addButton(withTitle: "Use Selected")
         alert.addButton(withTitle: "Cancel")
         let useButton = alert.buttons[0]
@@ -11307,12 +11811,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 flagsRawValue: event.cgEvent?.flags.rawValue ?? 0,
                 isAutoRepeat: event.isARepeat
             )
+            if hotkeyRecorderShouldPassThrough(snapshot) {
+                return event
+            }
             switch hotkeyRecordingDecision(for: snapshot) {
             case .accept(let choice):
                 selected = choice
-                status.stringValue = "Selected: \(choice.name)"
+                status.stringValue = "Selected: \(choice.name). Choose Use Selected to save it."
                 useButton.isEnabled = true
-                NSApp.stopModal(withCode: .alertFirstButtonReturn)
                 return nil
             case .reject(let message):
                 status.stringValue = message
@@ -12537,6 +13043,7 @@ private enum PresspeechSelfTest {
     private static func testHotkey() throws {
         try testHotkeyPreferenceNormalization()
         try testHotkeyDiagnosticModifierNames()
+        try testHotkeyRecorderControlEvents()
         try testHotkeyPreferenceUpdateResults()
         try testHotkeyRecorderRestartActions()
         try testRecordingStartBlockerResolution()
@@ -12564,6 +13071,26 @@ private enum PresspeechSelfTest {
             diagnosticModifierName(for: event(.keyDown, keycode: 58)),
             equals: nil,
             "hotkey diagnostics should require a modifier event"
+        )
+    }
+
+    private static func testHotkeyRecorderControlEvents() throws {
+        for keycode: CGKeyCode in [36, 48, 49, 53, 76] {
+            try expect(
+                hotkeyRecorderShouldPassThrough(event(.keyDown, keycode: keycode)),
+                equals: true,
+                "hotkey recorder should preserve modal control key \(keycode)"
+            )
+        }
+        try expect(
+            hotkeyRecorderShouldPassThrough(event(.flagsChanged, keycode: 53)),
+            equals: false,
+            "hotkey recorder should only pass modal controls on key down"
+        )
+        try expect(
+            hotkeyRecorderShouldPassThrough(event(.keyDown, keycode: 0)),
+            equals: false,
+            "hotkey recorder should continue rejecting ordinary typing keys"
         )
     }
 
@@ -12862,6 +13389,34 @@ private enum PresspeechSelfTest {
                                            status: "Detected",
                                            buttonTitle: nil),
             "setup checklist should show detected hotkey state"
+        )
+        try expect(
+            hotkeySetupRowState(isReady: true,
+                                hotkeyTestSucceeded: false,
+                                triggerMode: .toggle,
+                                hotkeyName: "F5",
+                                failure: nil),
+            equals: SetupChecklistRowState(
+                detail: "Press F5 once, then press it again to stop the test.",
+                status: "Ready to test",
+                buttonTitle: nil),
+            "setup checklist should explain how to finish a toggle-mode test"
+        )
+        try expect(
+            setupChecklistCompletionState(isSpeechModelReady: true,
+                                          isReady: true,
+                                          permissionsGranted: true,
+                                          hotkeyTestSucceeded: false),
+            equals: false,
+            "setup checklist should remain incomplete until a hotkey event is delivered"
+        )
+        try expect(
+            setupChecklistCompletionState(isSpeechModelReady: true,
+                                          isReady: true,
+                                          permissionsGranted: true,
+                                          hotkeyTestSucceeded: true),
+            equals: true,
+            "setup checklist should complete after runtime, permissions, and hotkey test succeed"
         )
 
         try expect(
@@ -13349,6 +13904,60 @@ private enum PresspeechSelfTest {
             "segmented audio accumulator should preserve sample order when flattened"
         )
 
+        var tailAccumulator = AudioSampleAccumulator()
+        tailAccumulator.append([0.5, 0.5])
+        tailAccumulator.append([0.001, 0.001])
+        guard abs(tailAccumulator.tailRMS(maxSampleCount: 2) - 0.001) < 0.000_001 else {
+            throw SelfTestFailure.failed("post-release RMS should inspect only the requested newest samples")
+        }
+        guard abs(tailAccumulator.tailRMS(maxSampleCount: 4) - sqrt(0.125_000_5)) < 0.000_001 else {
+            throw SelfTestFailure.failed("post-release RMS should cross accumulator segment boundaries")
+        }
+        try expect(
+            postReleaseSilenceThreshold(peakRMS: 0.01),
+            equals: POST_RELEASE_ABSOLUTE_SILENCE_RMS,
+            "quiet recordings should use the absolute post-release silence floor"
+        )
+        try expect(
+            postReleaseSilenceThreshold(peakRMS: 1),
+            equals: POST_RELEASE_MAX_SILENCE_RMS,
+            "loud recordings should cap the relative post-release silence threshold"
+        )
+
+        let quietTail = PostReleaseTailMeasurement(tailRMS: 0.001,
+                                                   silenceThreshold: 0.003)
+        let voicedTail = PostReleaseTailMeasurement(tailRMS: 0.03,
+                                                    silenceThreshold: 0.006)
+        try expect(
+            postReleaseCaptureDecision(elapsed: 0.04, measurement: quietTail),
+            equals: .wait(0.04),
+            "post-release capture should always retain its minimum safety window"
+        )
+        try expect(
+            postReleaseCaptureDecision(elapsed: POST_RELEASE_MIN_CAPTURE_SECONDS,
+                                       measurement: quietTail),
+            equals: .finishSilence,
+            "a quiet tail should finish immediately after the minimum window"
+        )
+        try expect(
+            postReleaseCaptureDecision(elapsed: 0.2,
+                                       measurement: quietTail,
+                                       receivedNewSamples: false),
+            equals: .wait(POST_RELEASE_CAPTURE_CHECK_SECONDS),
+            "pre-release silence should not finish while the boundary audio buffer is pending"
+        )
+        try expect(
+            postReleaseCaptureDecision(elapsed: 0.2, measurement: voicedTail),
+            equals: .wait(POST_RELEASE_CAPTURE_CHECK_SECONDS),
+            "a voiced tail should keep capture armed before the hard bound"
+        )
+        try expect(
+            postReleaseCaptureDecision(elapsed: POST_RELEASE_MAX_CAPTURE_SECONDS,
+                                       measurement: voicedTail),
+            equals: .finishMaximum,
+            "ongoing sound should never extend post-release capture past its bound"
+        )
+
         try expect(
             normalizedAudioLevel(from: Array(repeating: 0, count: 128)),
             equals: 0,
@@ -13495,6 +14104,81 @@ private enum PresspeechSelfTest {
             "correction source prefill should clip at character boundaries"
         )
 
+        try expect(
+            correctionEditorValidationIssue(
+                source: "   ",
+                replacement: "draft replacement",
+                isEditing: false,
+                existingCorrections: []
+            ),
+            equals: .missingSource,
+            "correction editor should reject an empty source without discarding the replacement draft"
+        )
+        try expect(
+            correctionEditorValidationIssue(
+                source: "spoken phrase",
+                replacement: "\n\t",
+                isEditing: false,
+                existingCorrections: []
+            ),
+            equals: .missingReplacement,
+            "correction editor should reject an empty replacement"
+        )
+        try expect(
+            correctionEditorValidationIssue(
+                source: String(repeating: "é", count: 257),
+                replacement: "replacement",
+                isEditing: false,
+                existingCorrections: []
+            ),
+            equals: .sourceTooLong,
+            "correction editor should enforce the UTF-8 source limit before saving"
+        )
+        try expect(
+            correctionEditorValidationIssue(
+                source: "spoken phrase",
+                replacement: "unsupported\u{0}replacement",
+                isEditing: false,
+                existingCorrections: []
+            ),
+            equals: .unsupportedReplacementCharacters,
+            "correction editor should reject unsupported control characters before normalization"
+        )
+
+        let fullEditorCorrections = (0..<MAX_TRANSCRIPT_CORRECTIONS).map {
+            TranscriptCorrection(source: "source-\($0)", replacement: "replacement-\($0)")
+        }
+        try expect(
+            correctionEditorValidationIssue(
+                source: "new source",
+                replacement: "new replacement",
+                isEditing: false,
+                existingCorrections: fullEditorCorrections
+            ),
+            equals: .correctionLimitReached,
+            "correction editor should explain why a new item cannot be added at the storage cap"
+        )
+        try expect(
+            correctionEditorValidationIssue(
+                source: " SOURCE-0 ",
+                replacement: "updated replacement",
+                isEditing: false,
+                existingCorrections: fullEditorCorrections
+            ),
+            equals: nil,
+            "correction editor should still allow updating a matching item at the storage cap"
+        )
+        try expect(
+            correctionEditorValidationIssue(
+                source: "renamed source",
+                replacement: "updated replacement",
+                isEditing: true,
+                existingCorrections: fullEditorCorrections
+            ),
+            equals: nil,
+            "editing an existing item should remain possible at the storage cap"
+        )
+
         let normalized = normalizedTranscriptCorrections([
             TranscriptCorrection(source: "  Yeti   Nano  ", replacement: "  Blue mic  "),
             TranscriptCorrection(source: "yeti nano", replacement: "USB mic"),
@@ -13547,6 +14231,31 @@ private enum PresspeechSelfTest {
                                        rowCount: 4),
             equals: IndexSet(integersIn: 1..<3),
             "keyboard shortcut-menu invocation should preserve dictionary selection"
+        )
+        try expect(
+            sortedTranscriptCorrectionIndices([0, 1, 2],
+                                              in: searchable,
+                                              by: .source,
+                                              ascending: true),
+            equals: [1, 2, 0],
+            "correction manager should sort heard text ascending"
+        )
+        try expect(
+            sortedTranscriptCorrectionIndices([0, 1, 2],
+                                              in: searchable,
+                                              by: .replacement,
+                                              ascending: false),
+            equals: [0, 2, 1],
+            "correction manager should sort paste text descending"
+        )
+        try expect(
+            sortedTranscriptCorrectionIndices([2, 99, 0],
+                                              in: searchable,
+                                              by: .source,
+                                              ascending: true),
+            equals: [2, 0],
+            "correction manager sorting should ignore stale indices"
+
         )
         try expect(shouldShowInlineCorrectionMenuEntries(count: 1), equals: true,
                    "small correction sets should remain directly editable from the menu")
@@ -15373,6 +16082,27 @@ private enum PresspeechSelfTest {
             equals: NSSize(width: 560, height: 620),
             "setup checklist should retain a usable fallback size when no screen is reported"
         )
+        try expect(
+            restoredSetupChecklistScrollOriginY(previousOriginY: 180,
+                                                documentHeight: 900,
+                                                viewportHeight: 500),
+            equals: 180,
+            "live setup refreshes should preserve a valid scroll position"
+        )
+        try expect(
+            restoredSetupChecklistScrollOriginY(previousOriginY: 450,
+                                                documentHeight: 760,
+                                                viewportHeight: 500),
+            equals: 260,
+            "setup refreshes should clamp the old position when content becomes shorter"
+        )
+        try expect(
+            restoredSetupChecklistScrollOriginY(previousOriginY: -20,
+                                                documentHeight: 900,
+                                                viewportHeight: 500),
+            equals: 0,
+            "setup refreshes should not restore an invalid negative position"
+        )
 
         try expect(
             MAXIMUM_RECORDING_LENGTH_CHOICES.map(\.seconds),
@@ -15441,6 +16171,7 @@ private enum PresspeechSelfTest {
             rawTranscript: "  Um, parakeet is fast.  ",
             corrections: [TranscriptCorrection(source: "parakeet", replacement: "Presspeech")],
             spokenFormattingCommands: false,
+            dictationLanguage: .auto,
             removeFillerWords: true
         )
         try expect(
@@ -15456,6 +16187,7 @@ private enum PresspeechSelfTest {
             rawTranscript: "  Um, parakeet is fast.  ",
             corrections: [TranscriptCorrection(source: "parakeet", replacement: "Presspeech")],
             spokenFormattingCommands: false,
+            dictationLanguage: .auto,
             removeFillerWords: false
         )
         try expect(
@@ -15471,6 +16203,7 @@ private enum PresspeechSelfTest {
             rawTranscript: "Shopping list. New paragraph. Bullet point apples bullet point pears new line done question mark",
             corrections: [],
             spokenFormattingCommands: true,
+            dictationLanguage: .english,
             removeFillerWords: false
         )
         try expect(
@@ -15484,10 +16217,59 @@ private enum PresspeechSelfTest {
             "spoken formatting should deterministically turn documented phrases into structure and punctuation"
         )
 
+        let frenchFormatted = processedDictationText(
+            rawTranscript: "Liste deux-points nouveau paragraphe Bonjour virgule monde point d’interrogation nouvelle ligne terminé point",
+            corrections: [],
+            spokenFormattingCommands: true,
+            dictationLanguage: .french,
+            removeFillerWords: false
+        )
+        try expect(
+            frenchFormatted,
+            equals: DictationTextProcessingResult(
+                text: "Liste:\n\nBonjour, monde?\nterminé.",
+                appliedCorrectionCount: 0,
+                appliedFormattingCommandCount: 6,
+                removedFillerWordCount: 0
+            ),
+            "French language hint should select deterministic French formatting commands"
+        )
+
+        let frenchDelimiters = SpokenFormattingCommandProcessor.apply(
+            to: "guillemet ouvrant bonjour guillemet fermant parenthèse ouvrante test parenthèse fermante point-virgule suite point d'exclamation",
+            language: .french
+        )
+        try expect(
+            frenchDelimiters.text,
+            equals: "« bonjour » (test); suite!",
+            "French formatting should preserve French quote spacing and clean parentheses"
+        )
+        try expect(
+            frenchDelimiters.appliedCount,
+            equals: 6,
+            "French delimiter and punctuation commands should all be counted"
+        )
+
+        let frenchDoesNotRewriteEnglish = SpokenFormattingCommandProcessor.apply(
+            to: "A practical point remains.",
+            language: .english
+        )
+        try expect(
+            frenchDoesNotRewriteEnglish.text,
+            equals: "A practical point remains.",
+            "French punctuation words should not run outside the French language hint"
+        )
+        try expect(
+            frenchDoesNotRewriteEnglish.appliedCount,
+            equals: 0,
+            "non-selected language commands should not count as applied"
+        )
+
         let formattingDisabled = processedDictationText(
             rawTranscript: "Start a new line here.",
             corrections: [],
             spokenFormattingCommands: false,
+            dictationLanguage: .auto,
             removeFillerWords: false
         )
         try expect(

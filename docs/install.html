@@ -28,6 +28,7 @@
           <a href="privacy.html">Privacy</a>
           <a href="benchmarks.html">Benchmarks</a>
           <a href="faq.html">FAQ</a>
+          <a href="troubleshooting.html">Help</a>
           <a href="compare/">Compare</a>
           <a href="https://github.com/rcourtman/presspeech">GitHub</a>
         </div>
@@ -71,11 +72,14 @@
           <ol class="steps">
             <li>
               <strong>Download the app</strong>
-              <p><a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Download Presspeech.zip</a> from the latest GitHub release.</p>
+              <p><a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.6/Presspeech.zip">Download Presspeech.zip</a> from the current GitHub release.</p>
             </li>
             <li>
               <strong>Optionally verify the archive</strong>
-              <p>Download <a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip.sha256">Presspeech.zip.sha256</a> to the same folder, then run <code>shasum -a 256 -c Presspeech.zip.sha256</code> there. Continue only if it reports <code>Presspeech.zip: OK</code>.</p>
+              <p>In Downloads, verify the current archive against its published SHA-256:</p>
+              <pre><code>cd ~/Downloads
+echo 'b2e67e1b1f823b470d3de1e3fe0dbccc055bede8d66a8b018e9c8d8b63c5266e  Presspeech.zip' | shasum -a 256 -c -</code></pre>
+              <p>Continue only if it reports <code>Presspeech.zip: OK</code>.</p>
             </li>
             <li>
               <strong>Move it to Applications</strong>
@@ -227,7 +231,7 @@ brew uninstall --zap --cask rcourtman/presspeech/presspeech</code></pre>
         <div class="wrap">
           <span class="section-eyebrow">Support</span>
           <h2>Get useful help without sharing your words</h2>
-          <p>First check the <a href="faq.html">FAQ</a> and <a href="https://github.com/rcourtman/presspeech/blob/main/docs/troubleshooting.md">troubleshooting guide</a>. To report a problem, choose <strong>Support → Copy Diagnostics</strong>, then <strong>Support → Report a Problem…</strong> and paste the privacy-safe summary into the focused form. It includes app, system, permission, model, microphone, and bounded log state without transcript text or correction contents. For a recurring unmet need, choose <strong>Support → Suggest an Improvement…</strong> and provide a measurable success condition.</p>
+          <p>First check the <a href="faq.html">FAQ</a> and <a href="troubleshooting.html">troubleshooting guide</a>. To report a problem, choose <strong>Support → Copy Diagnostics</strong>, then <strong>Support → Report a Problem…</strong> and paste the privacy-safe summary into the focused form. It includes app, system, permission, model, microphone, and bounded log state without transcript text or correction contents. For a recurring unmet need, choose <strong>Support → Suggest an Improvement…</strong> and provide a measurable success condition.</p>
           <div class="note"><p>GitHub issues are public. Do not add dictated text, audio, dictionary or shortcut contents, credentials, or other private data. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private vulnerability-reporting form</a> for a security issue.</p></div>
         </div>
       </section>

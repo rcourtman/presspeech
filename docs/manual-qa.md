@@ -86,6 +86,12 @@ Run this before publishing a release.
   recovery instead of disappearing silently. Retry immediately and confirm the
   new **Listening…** state is not hidden when the old message expires. Repeat
   with the visual indicator disabled and confirm the notification remains.
+- Open Notepad normally and confirm dictation pastes automatically. Then open a
+  separate Notepad instance with **Run as administrator**, dictate into it, and
+  confirm Presspeech leaves the transcript on the clipboard, sends no simulated
+  paste shortcut, and reports the Windows administrator boundary. Paste manually
+  and confirm the complete transcript is available. Do not elevate Presspeech.
+
 
 ## Signed App Smoke
 
@@ -126,6 +132,17 @@ cd swift
   Window menu lists open Presspeech windows without quitting the menu-bar app.
 - Resize Setup Checklist vertically and confirm the checklist rows scroll while
   **Show in Dock**, **Try Dictation** (when ready), and **Done** remain visible.
+- Reach runtime and permission readiness without pressing the configured
+  hotkey. Confirm its row says **Ready to test** and the footer still says
+  **Close**, not **Done**. Press the hotkey and confirm the row changes to
+  **Detected** and the footer changes to **Done**. Start dictation from the menu
+  on a fresh launch and confirm that action does not falsely mark the hotkey as
+  detected.
+- While the checklist is short enough to scroll, leave it on the lower
+  permission or hotkey rows as model progress or a permission state changes.
+  Confirm the live refresh keeps the same scroll position instead of jumping
+  back to **Speech model**.
+
 - On a display whose usable height is less than 700 points, confirm Setup
   Checklist opens wholly inside the visible screen and every setup row remains
   reachable by scrolling or keyboard navigation.
@@ -142,9 +159,13 @@ cd swift
 ## Hotkeys
 
 - In **Settings -> Hotkey**, choose **Right Option** and dictate once.
-- Record an F-key such as F7 with **Record Hotkey...**, then dictate once.
+- Record an F-key such as F7 with **Record Hotkey...**. Confirm the dialog
+  previews F7 without closing or changing the current setting, then choose
+  **Use Selected** and dictate once. Repeat using only Tab and Return.
 - Record a right-side modifier such as **Right Control**, then dictate once.
 - Try recording a normal letter key and confirm it is rejected.
+- In the hotkey recorder, confirm Escape cancels and Tab, Space, and Return
+  continue to operate the dialog controls rather than being rejected as keys.
 - Use **Reset Hotkey to Default** and confirm the menu returns to
   **Right Option**.
 - Cancel the hotkey recorder and confirm the existing hotkey still works.
@@ -181,6 +202,11 @@ cd swift
   replaced by the old clipboard contents.
 - Test hold mode: hold the hotkey, speak, release, and confirm text pastes
   at the cursor.
+- In hold mode, release directly on the last consonant of several short
+  phrases and confirm the final word is retained. Repeat with quiet room tone
+  and with steady background noise; the quiet case should begin transcription
+  promptly, and ongoing noise must never hold capture more than about 0.4
+  seconds after release.
 - Test toggle mode: press once to start, press again to stop.
 - Press Escape during an active recording and confirm it cancels without
   pasting.
@@ -194,10 +220,19 @@ cd swift
 - Enable **Reduce transparency** and **Increase contrast** before and during a
   recording. Confirm the HUD updates live to an opaque capsule and the
   high-contrast variant gains a bright border and fully opaque text.
-- Confirm **Mute system audio while recording** still unmutes after release
-  and cancel.
+- Confirm **Mute system audio while recording** stays muted through the short
+  post-release capture window, then unmutes after transcription starts; cancel
+  must still unmute immediately.
 
 ## Dictionary And Shortcuts
+
+- Enable **Settings → Text → Spoken formatting commands** with Language Hint
+  set to English. Dictate “first line new line second line question mark” and
+  confirm the exact output has a newline and ends in `?`.
+- Set Language Hint to French. Dictate “bonjour virgule nouvelle ligne monde
+  point d’interrogation” and confirm the exact output is `bonjour,`, a newline,
+  then `monde?`. Confirm the same French command words remain literal when the
+  Language Hint is English.
 
 - Enable **Settings → General → Show in Dock**, open **Dictionary &
   Shortcuts**, and verify the application menu includes **Edit** and **Window**.
@@ -227,6 +262,15 @@ cd swift
   VoiceOver's VO-Shift-M. Confirm **Edit…** edits that row. Select multiple
   rows and confirm their shortcut menu preserves the selection and offers
   **Delete N Items** with the same confirmation as the Delete button.
+- Start adding a correction, leave each field empty in turn, and choose Save.
+  Confirm the editor stays open, preserves both drafts, explains the specific
+  missing field, and returns keyboard focus there. Repeat with VoiceOver and
+  confirm the validation message is announced without closing the editor.
+- Paste more than 512 bytes into Heard / When you say and more than 4096 bytes
+  into Paste. Confirm Save keeps the editor open and identifies the applicable
+  limit rather than silently dropping the item. At 512 saved items, confirm a
+  new phrase is rejected with recovery guidance while an existing phrase can
+  still be updated.
 
 ## Permissions And TCC
 

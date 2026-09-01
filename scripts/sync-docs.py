@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import html
 import json
 import plistlib
@@ -222,6 +223,25 @@ STALE_PATTERNS = [
         re.compile(r"launching twice does nothing", re.IGNORECASE),
         "pre-repeat-launch-recovery Windows wording",
     ),
+    (
+        re.compile(
+            r"Hold (?:<strong>)?Right Option(?:</strong>)? on macOS or "
+            r"(?:<strong>)?Right Alt(?:</strong>)? on Windows",
+            re.IGNORECASE,
+        ),
+        "first-dictation guidance ignores the configured hotkey",
+    ),
+    (
+        re.compile(
+            r"Hold Right Alt, speak, release, and check the result",
+            re.IGNORECASE,
+        ),
+        "Windows private-test guidance ignores the configured hotkey",
+    ),
+    (
+        re.compile(r"releases/latest/download/Presspeech\.zip\.sha256"),
+        "macOS checksum link is not present in the current release",
+    ),
 ]
 
 INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
@@ -334,13 +354,22 @@ def build_metadata(args: argparse.Namespace) -> dict[str, object]:
     zip_path = Path(args.release_zip).resolve() if args.release_zip else None
 
     release_zip_bytes = existing.get("release_zip_bytes")
+    release_zip_sha256 = existing.get("release_zip_sha256")
     if zip_path is not None:
         if not zip_path.exists():
             raise SyncError(f"release zip not found: {zip_path}")
         release_zip_bytes = zip_path.stat().st_size
+        release_zip_sha256 = hashlib.sha256(zip_path.read_bytes()).hexdigest()
     if not isinstance(release_zip_bytes, int):
         raise SyncError(
             f"{METADATA_PATH}: missing release_zip_bytes. "
+            "Run scripts/sync-docs.py --release-zip swift/dist/Presspeech.zip from the release workflow."
+        )
+    if not isinstance(release_zip_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", release_zip_sha256
+    ):
+        raise SyncError(
+            f"{METADATA_PATH}: missing or invalid release_zip_sha256. "
             "Run scripts/sync-docs.py --release-zip swift/dist/Presspeech.zip from the release workflow."
         )
 
@@ -356,6 +385,7 @@ def build_metadata(args: argparse.Namespace) -> dict[str, object]:
         "version": read_app_version(),
         "windows_version": read_windows_version(),
         "release_zip_bytes": release_zip_bytes,
+        "release_zip_sha256": release_zip_sha256,
         "release_zip_size": release_size(release_zip_bytes),
         "model_cache_size": MODEL_CACHE_SIZE,
         "last_updated": last_updated,
@@ -369,12 +399,34 @@ def metadata_text(metadata: dict[str, object]) -> str:
 def sync_readme(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     size = str(metadata["release_zip_size"])
+    digest = str(metadata["release_zip_sha256"])
+    version = str(metadata["version"])
     windows_version = str(metadata["windows_version"])
+    text = replace_regex(
+        text,
+        r"- \[Download Presspeech\.zip\]\(https://github\.com/rcourtman/presspeech/releases/"
+        r"(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip\)",
+        "- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/"
+        f"download/v{version}/Presspeech.zip)",
+        path=path,
+    )
     text = replace_regex(
         text,
         r"\*\*[\d.]+ MB release zip\*\*",
         f"**{size} release zip**",
         path=path,
+    )
+    text = replace_regex(
+        text,
+        r"- (?:\[Download its SHA-256 checksum\].*?|Optionally verify the current archive.*?)\n"
+        r"  ```sh\n.*?  ```",
+        "- Optionally verify the current archive against its published SHA-256:\n"
+        "  ```sh\n"
+        "  cd ~/Downloads\n"
+        f"  echo '{digest}  Presspeech.zip' | shasum -a 256 -c -\n"
+        "  ```",
+        path=path,
+        flags=re.S,
     )
     text = replace_regex(
         text,
@@ -531,8 +583,9 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
 
 
 def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
-    del metadata
     text = read_text(path)
+    digest = str(metadata["release_zip_sha256"])
+    version = str(metadata["version"])
     escaped_prompt = html.escape(INSTALL_PROMPT, quote=False)
 
     text = replace_regex(
@@ -564,6 +617,30 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         r"<div class=\"fact\"><strong>Model download</strong><span>.*?</span></div>",
         '<div class="fact"><strong>Model download</strong><span>First launch downloads the local model, about 500-600 MB.</span></div>',
         path=path,
+    )
+    text = replace_regex(
+        text,
+        r'<p><a href="https://github\.com/rcourtman/presspeech/releases/'
+        r'(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip">'
+        r"Download Presspeech\.zip</a> from the (?:latest|current) GitHub release\.</p>",
+        '<p><a href="https://github.com/rcourtman/presspeech/releases/'
+        f'download/v{version}/Presspeech.zip">Download Presspeech.zip</a> '
+        "from the current GitHub release.</p>",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"<p>(?:Download <a href=\"https://github\.com/rcourtman/presspeech/releases/latest/"
+        r"download/Presspeech\.zip\.sha256\">.*?|The current archive's published SHA-256 is .*?"
+        r"|In Downloads, verify the current archive against its published SHA-256:)</p>"
+        r"(?:\s*<pre><code>.*?</code></pre>\s*"
+        r"<p>Continue only if it reports <code>Presspeech\.zip: OK</code>\.</p>)?",
+        "<p>In Downloads, verify the current archive against its published SHA-256:</p>\n"
+        "              <pre><code>cd ~/Downloads\n"
+        f"echo '{digest}  Presspeech.zip' | shasum -a 256 -c -</code></pre>\n"
+        "              <p>Continue only if it reports <code>Presspeech.zip: OK</code>.</p>",
+        path=path,
+        flags=re.S,
     )
     text = replace_regex(
         text,
@@ -643,11 +720,22 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
 def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     size = str(metadata["release_zip_size"])
+    digest = str(metadata["release_zip_sha256"])
+    version = str(metadata["version"])
     text = replace_regex(
         text,
         r"- (?:Release size|macOS footprint): about [\d.]+ MB signed zip; "
         r"(?:model cache is about 500-600 MB|model cache is about 600 MB on first launch)\.",
         f"- macOS footprint: about {size} signed zip; model cache is about 500-600 MB.",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"- macOS direct download: https://github\.com/rcourtman/presspeech/releases/"
+        r"(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip; "
+        r"(?:matching|current) SHA-256: .*?\.\n",
+        "- macOS direct download: https://github.com/rcourtman/presspeech/releases/"
+        f"download/v{version}/Presspeech.zip; current SHA-256: {digest}.\n",
         path=path,
     )
     setup_line = "- macOS setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.\n"
@@ -946,9 +1034,24 @@ def run_self_test() -> None:
         "last_updated": "2026-01-02",
         "version": "8.7.6",
         "windows_version": "9.8.7",
+        "release_zip_sha256": "a" * 64,
         "release_zip_size": "7.6 MB",
     }
     with tempfile.TemporaryDirectory() as tmp:
+        release_zip = Path(tmp) / "Presspeech.zip"
+        release_zip.write_bytes(b"release fixture\n")
+        generated_metadata = build_metadata(
+            argparse.Namespace(
+                release_zip=str(release_zip), date="2026-01-02", check=False
+            )
+        )
+        expected_digest = hashlib.sha256(release_zip.read_bytes()).hexdigest()
+        if (
+            generated_metadata["release_zip_bytes"] != release_zip.stat().st_size
+            or generated_metadata["release_zip_sha256"] != expected_digest
+        ):
+            raise SyncError("self-test: release archive size or SHA-256 did not sync")
+
         index_page = Path(tmp) / "index.html"
         index_page.write_text(
             '"@id": "https://rcourtman.github.io/presspeech/#software"\n'
@@ -1067,6 +1170,27 @@ def run_self_test() -> None:
         )
         if not stale_copy_errors([stale_windows]):
             raise SyncError("self-test: stale Windows repeat-launch wording was not flagged")
+        stale_hotkey = Path(tmp) / "getting-started.html"
+        stale_hotkey.write_text(
+            "Hold <strong>Right Option</strong> on macOS or "
+            "<strong>Right Alt</strong> on Windows.\n"
+            "Hold Right Alt, speak, release, and check the result.\n",
+            encoding="utf-8",
+        )
+        hotkey_errors = stale_copy_errors([stale_hotkey])
+        if len(hotkey_errors) != 2:
+            raise SyncError(
+                "self-test: expected both configured-hotkey copy errors, "
+                f"found {hotkey_errors!r}"
+            )
+        stale_checksum = Path(tmp) / "install.html"
+        stale_checksum.write_text(
+            "https://github.com/rcourtman/presspeech/releases/latest/download/"
+            "Presspeech.zip.sha256\n",
+            encoding="utf-8",
+        )
+        if not stale_copy_errors([stale_checksum]):
+            raise SyncError("self-test: missing current-release checksum asset was not flagged")
 
         release_reference = Path(tmp) / "new-public-page.md"
         release_reference.write_text(

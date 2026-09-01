@@ -53,15 +53,16 @@ silently receive a different snapshot. Windows relies on the immutable Hugging
 Face snapshot identity; unlike the macOS model cache, it does not independently
 verify every downloaded model file against a SHA-256 manifest.
 The first-run readiness window shows model loading, microphone selection and a
-live microphone check, a selectable push-to-talk key, and Start with Windows in
-one place. Speak while the check runs. It briefly opens the selected input,
+live microphone check, a selectable push-to-talk key with its global-listener
+status, and Start with Windows in one place. Speak while the check runs. It briefly opens the selected input,
 discards its samples in memory, and distinguishes an input level from a
 connected-but-silent device or one that cannot be opened. If it is silent,
 unmute it and choose **Check Again**; if it cannot be opened, use the window's
 direct links to Windows Microphone Privacy or Sound Input settings first. Wait
 until it says the model is ready before the
-first dictation. **Try Dictation** and **Finish Setup** remain disabled until
-then. If preparation fails, use **Retry Speech Model**; the window keeps
+first dictation. **Try Dictation** remains disabled until then, and **Finish
+Setup** requires both the speech model and global hotkey to be ready. If
+preparation fails, use **Retry Speech Model**; the window keeps
 tracking the retry instead of leaving the previous error on screen. Choose
 **Set Up Later** to close the window without marking setup complete; it will
 open again on the next launch. Microphone, hotkey, and Start with Windows
@@ -135,12 +136,17 @@ clipboard with a small reliability delay. Normal Windows apps retain fast Ctrl+V
 Each recording is bound to the window that was focused when it began. If focus
 changes while the model is transcribing, Presspeech leaves the transcript on the
 clipboard and notifies you instead of pasting private text into the wrong window.
+[Windows prevents](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput#remarks)
+a standard app from sending simulated input into an app running as administrator.
+Presspeech detects that boundary, leaves the transcript on the clipboard, and
+tells you to paste it manually or reopen the target without **Run as
+administrator**. Do not run Presspeech as administrator to work around it.
 
 The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Dictate** (toggle), **Cancel Dictation (Esc)** while recording,
 **Try Dictation…** (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
 **Check for Updates…**, **Copy Diagnostics**, **Report a Problem…**, **Suggest an
-Improvement…**, and **Exit**. The feedback actions open the focused public
+Improvement…**, **Repair Global Hotkey**, and **Exit**. The feedback actions open the focused public
 GitHub forms without adding app or user data to the URL. The icon turns red
 while recording. Setup, settings, update, and scratchpad controls expose names,
 roles, values, and actions through Windows UI Automation for screen readers.
@@ -156,6 +162,13 @@ Windows may place the icon in the notification-area overflow. If the icon is
 hard to find, launch Presspeech again from the Start Menu: the running app
 restores its existing window, opens Setup during first run, or opens Settings
 after setup. It does not start a second dictation process.
+
+If the configured key stops responding while menu-based **Dictate** still
+works, choose **Repair Global Hotkey** from the notification-area menu, Setup,
+or Settings. Presspeech replaces the Windows keyboard listener even when its
+thread still appears healthy, then reports whether the new listener started.
+Listener failures are also announced and included in privacy-safe diagnostics;
+callback details and pressed keys are not included.
 
 ## Settings
 

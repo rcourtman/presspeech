@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" font-family="-apple-system, system-ui, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>Hold Right Option, speak, release — the sentence lands at your cursor about 100 ms later.</title>
+  <title>Hold Right Option, speak, release — the sentence quickly lands at your cursor.</title>
 
-  <!-- Timeline (6.5 s loop): idle 0.5 s · press · speak 2.4 s · release at 2.9 s ·
-       text lands at 3.0 s (a real ~100 ms after release) · rest ~3.2 s · reset -->
+  <!-- Timeline (6.5 s loop): idle 0.5 s · press · speak 2.4 s · release ·
+       text lands quickly · rest ~3.2 s · reset -->
 
   <!-- Background -->
   <rect width="1000" height="500" fill="#FAF8F2"/>
@@ -44,7 +44,7 @@
     <animate attributeName="opacity" values="0;0;0.25;0;0" keyTimes="0;0.4615;0.475;0.53;1" dur="6.5s" repeatCount="indefinite"/>
   </rect>
 
-  <!-- The transcript: appears all at once ~100 ms after release -->
+  <!-- The transcript appears all at once after local transcription. -->
   <text x="204" y="190" font-size="16" font-weight="500" fill="#0F172A" textLength="280" fill-opacity="0">
     <animate attributeName="fill-opacity" values="0;0;1;1;0;0" keyTimes="0;0.4608;0.4662;0.95;0.99;1" dur="6.5s" repeatCount="indefinite"/>
     This sentence was spoken, not typed.
@@ -65,7 +65,7 @@
     </rect>
   </g>
 
-  <!-- "~100 ms" chip: pops the moment the text lands -->
+  <!-- Benchmark compute-latency chip: pops the moment the text lands. -->
   <g opacity="0">
     <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.4615;0.467;0.95;0.99;1" dur="6.5s" repeatCount="indefinite"/>
     <rect x="506" y="170" width="96" height="28" rx="14" fill="#10B981"/>

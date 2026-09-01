@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Troubleshoot Presspeech on macOS and Windows</title>
+    <meta name="description" content="Fix Presspeech setup, speech model, microphone, hotkey, paste, hidden icon, and muted-audio problems on macOS and Windows without sharing dictated text.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/troubleshooting.html">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Troubleshoot Presspeech on macOS and Windows">
+    <meta property="og:description" content="Task-focused recovery steps for Presspeech setup, models, microphones, hotkeys, pasting, hidden controls, and muted audio.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/troubleshooting.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
+        <div class="nav-links">
+          <a href="getting-started.html">Get started</a>
+          <a href="install.html">macOS</a>
+          <a href="windows.html">Windows</a>
+          <a href="privacy.html">Privacy</a>
+          <a href="benchmarks.html">Benchmarks</a>
+          <a href="faq.html">FAQ</a>
+          <a href="troubleshooting.html" aria-current="page">Help</a>
+          <a href="compare/">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Help</span>
+        <h1>Fix a Presspeech problem</h1>
+        <p>Choose your platform, then start with the symptom you can see. These steps use Presspeech's built-in setup and diagnostics controls before asking you to reset anything.</p>
+        <div class="actions">
+          <a class="button" href="#macos">Fix a macOS problem</a>
+          <a class="button secondary" href="#windows">Fix a Windows problem</a>
+          <a class="button secondary" href="#report">Report a problem safely</a>
+        </div>
+      </div>
+
+      <section id="start-here">
+        <div class="wrap">
+          <span class="section-eyebrow">Start here</span>
+          <h2>Check the visible state first</h2>
+          <ol class="steps">
+            <li>
+              <strong>Reopen Presspeech's controls</strong>
+              <p>On macOS, open <strong>Presspeech.app</strong> again from Applications, Finder, or Spotlight. On Windows, launch Presspeech again from the Start Menu. The running app restores its setup or settings window instead of starting a second dictation process.</p>
+            </li>
+            <li>
+              <strong>Read the model, microphone, and permission status</strong>
+              <p>Open <strong>Setup Checklist</strong> on macOS or <strong>Setup</strong> on Windows. Wait for the speech model to report ready, then use the built-in microphone and hotkey checks.</p>
+            </li>
+            <li>
+              <strong>Test inside Presspeech</strong>
+              <p>Choose <strong>Try Dictation</strong>. If the private scratchpad works, the model, microphone, and hotkey path are ready; continue with the paste and focus steps for your platform.</p>
+            </li>
+          </ol>
+          <div class="note"><p>Model retries and update checks use the documented network connections, but dictation audio is not uploaded. See the <a href="privacy.html">privacy page</a> for the complete network surface.</p></div>
+        </div>
+      </section>
+
+      <section id="macos">
+        <div class="wrap">
+          <span class="section-eyebrow">macOS</span>
+          <h2>Recover the released Mac app</h2>
+          <div class="grid two">
+            <article class="card" id="macos-hidden-item">
+              <h3>The menu bar item is missing</h3>
+              <p>macOS can hide third-party status items when a crowded or notched menu bar runs out of space. Open <strong>/Applications/Presspeech.app</strong> again; the existing process opens Setup Checklist. Enable <strong>Show in Dock</strong> there for a persistent alternative. Right-click the Dock icon for dictation controls, Settings, Support, and Quit.</p>
+            </article>
+            <article class="card" id="macos-permissions">
+              <h3>A permission is missing or will not appear</h3>
+              <p>Open <strong>Support → Setup Checklist…</strong> and choose the affected Microphone, Accessibility, or Input Monitoring row. If the grant still does not appear, quit and reopen the copy in Applications, return to Setup Checklist, and choose <strong>Try Again</strong>. Presspeech then resets only that stuck permission entry and asks macOS again.</p>
+            </article>
+            <article class="card" id="macos-model">
+              <h3>The speech model fails to load</h3>
+              <p>Check the connection and retry first. If Presspeech reports an incomplete or corrupt cache, choose <strong>Support → Reset Speech Model Cache…</strong>. This deletes only the local model cache, then downloads and verifies a fresh copy; it does not remove settings or dictionary rules.</p>
+            </article>
+            <article class="card" id="macos-hotkey">
+              <h3>The hotkey does nothing</h3>
+              <p>Confirm <strong>Settings → Hotkey</strong> shows the intended key and that Input Monitoring is granted in Setup Checklist. Use <strong>Settings → Hotkey → Reset Hotkey to Default</strong> to test Right Option. If a different app reserves that key, record another supported right-side modifier or F-key.</p>
+            </article>
+            <article class="card" id="macos-paste">
+              <h3>Try Dictation works, but text is not inserted</h3>
+              <p>Confirm Accessibility is granted, click the destination text field, then hold the hotkey without changing apps until transcription finishes. Presspeech protects the app that had focus when recording began; if focus changes, it leaves the text on the clipboard instead of pasting into the wrong window. Paste manually once you have confirmed the intended destination.</p>
+            </article>
+            <article class="card" id="macos-muted">
+              <h3>System audio stays muted</h3>
+              <p>Unmute the Mac in Control Center or Sound settings, then reopen Presspeech. The app uses a local watchdog and recovery marker to restore audio after an interrupted recording, and checks that marker again at launch. If it happens again, copy diagnostics before quitting.</p>
+            </article>
+            <article class="card" id="macos-exit">
+              <h3>Presspeech reports an unexpected exit</h3>
+              <p>The notice means a local marker remained after the previous process ended; nothing was sent anywhere. Choose <strong>Copy Diagnostics</strong> or <strong>Open Log</strong> from the notice if you want to report what happened.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="windows">
+        <div class="wrap">
+          <span class="section-eyebrow">Windows</span>
+          <h2>Recover the Windows prerelease</h2>
+          <div class="grid two">
+            <article class="card" id="windows-hidden-icon">
+              <h3>The notification icon is missing</h3>
+              <p>Select the up-arrow at the right of the taskbar to check the notification-area overflow. You can also launch Presspeech again from the Start Menu. The existing process restores its open window, or opens Setup before first-run completion and Settings afterward.</p>
+            </article>
+            <article class="card" id="windows-model">
+              <h3>The model is still preparing or failed</h3>
+              <p>Keep Setup open and wait for the selected model to report ready. A hotkey press while it is preparing is intentionally ignored. If Setup reports a failure, choose <strong>Retry Speech Model</strong>. Check the connection and available disk space; on an NVIDIA system, also update the display driver or select a local Whisper model in Settings.</p>
+            </article>
+            <article class="card" id="windows-microphone">
+              <h3>The microphone is silent or cannot open</h3>
+              <p>In Setup, select the intended input, speak during the local level check, and choose <strong>Check Again</strong>. If it cannot open, use the buttons for Windows Microphone Privacy and Sound Input settings. Turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>, then confirm the input under <strong>Settings → System → Sound → Input</strong>. Windows does not show a separate Presspeech toggle for this desktop app.</p>
+            </article>
+            <article class="card" id="windows-hotkey">
+              <h3>The hotkey does nothing</h3>
+              <p>Confirm the model says ready and check the selected key in Setup or Settings. If Right Alt types @, €, or accented letters, your keyboard uses it as AltGr; Presspeech deliberately leaves that chord alone. Choose F8 or another available modifier or F-key and retry in <strong>Try Dictation</strong>.</p>
+            </article>
+            <article class="card" id="windows-paste">
+              <h3>Try Dictation works, but text is not inserted</h3>
+              <p>Click the destination text field before pressing the hotkey and keep that window focused until transcription finishes. If focus changes, Presspeech protects against sending private text to the wrong app: it leaves the transcript on the clipboard and shows a notification. Return to the intended field and paste manually.</p>
+            </article>
+            <article class="card" id="windows-muted">
+              <h3>Playback stays muted</h3>
+              <p>Unmute the affected output from Windows Quick Settings or <strong>Settings → System → Sound</strong>, then reopen Presspeech. Recordings normally restore each playback device to its previous mute state, including when the configured maximum length stops a recording. Copy diagnostics if the state is not restored.</p>
+            </article>
+            <article class="card" id="windows-startup">
+              <h3>Start with Windows will not enable</h3>
+              <p>Choose <strong>Open Startup Settings</strong>, find Presspeech under <strong>Settings → Apps → Startup</strong>, and review the system setting. Then return to Setup or Settings and retry <strong>Finish Setup</strong> or <strong>Save</strong>; Presspeech keeps the window open when registration fails rather than claiming success.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="report">
+        <div class="wrap">
+          <span class="section-eyebrow">Still stuck?</span>
+          <h2>Report the problem without reporting your words</h2>
+          <ol class="steps">
+            <li>
+              <strong>Copy the built-in diagnostics</strong>
+              <p>On macOS choose <strong>Support → Copy Diagnostics</strong>; on Windows choose <strong>Copy Diagnostics</strong> from the notification-area menu. The report includes bounded app, system, model, permission, microphone, settings, update, and log state.</p>
+            </li>
+            <li>
+              <strong>Describe what you expected and what happened</strong>
+              <p>Include short reproduction steps, the affected platform and version, whether the model reached ready, and whether Try Dictation worked. For Windows model failures, include CPU, GPU, and driver details when available.</p>
+            </li>
+            <li>
+              <strong>Use the focused public form</strong>
+              <p>Choose <strong>Report a Problem…</strong> in Presspeech or open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml">bug report form</a>. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private vulnerability-reporting form</a> instead for a security issue.</p>
+            </li>
+          </ol>
+          <div class="note warn"><p><strong>GitHub issues are public.</strong> Diagnostics omit transcript text, audio, and dictionary contents. Do not add dictated text, audio, references, dictionary or shortcut contents, credentials, or other private data yourself.</p></div>
+          <p class="quiet">Prefer plain text? The repository also keeps a concise <a href="troubleshooting.md">Markdown recovery reference</a>.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Recovery help for Presspeech.</span>
+        <span><a href="getting-started.html">Get started</a> · <a href="faq.html">FAQ</a> · <a href="privacy.html">Privacy</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

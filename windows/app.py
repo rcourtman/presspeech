@@ -169,6 +169,7 @@ class PasteTarget(NamedTuple):
     process_name: str
     window_handle: int
     process_identifier: int = 0
+    integrity_level: int = 0
 
 
 def _update_check_due(last_check_epoch, now_epoch=None):
@@ -407,20 +408,111 @@ def _foreground_paste_target():
             return PasteTarget("", int(hwnd))
         handle = kernel32.OpenProcess(0x1000, False, process_id.value)
         if not handle:
-            return PasteTarget("", int(hwnd), int(process_id.value))
+            return PasteTarget(
+                "", int(hwnd), int(process_id.value),
+                _process_integrity_level(process_id.value))
         try:
             size = wintypes.DWORD(32768)
             path = ctypes.create_unicode_buffer(size.value)
             if not kernel32.QueryFullProcessImageNameW(
                     handle, 0, path, ctypes.byref(size)):
-                return PasteTarget("", int(hwnd), int(process_id.value))
+                return PasteTarget(
+                    "", int(hwnd), int(process_id.value),
+                    _process_integrity_level(process_id.value))
             return PasteTarget(
                 os.path.basename(path.value).lower(), int(hwnd),
-                int(process_id.value))
+                int(process_id.value),
+                _process_integrity_level(process_id.value))
         finally:
             kernel32.CloseHandle(handle)
     except Exception:
         return PasteTarget("", 0)
+
+
+def _process_integrity_level(process_identifier):
+    """Return a process's mandatory-integrity RID, or zero when unavailable."""
+    process_handle = None
+    token_handle = None
+    try:
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [
+            wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        advapi32.OpenProcessToken.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD,
+            ctypes.POINTER(wintypes.HANDLE),
+        ]
+        advapi32.GetTokenInformation.argtypes = [
+            wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+            wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+        ]
+        advapi32.GetSidSubAuthorityCount.argtypes = [ctypes.c_void_p]
+        advapi32.GetSidSubAuthorityCount.restype = ctypes.POINTER(ctypes.c_ubyte)
+        advapi32.GetSidSubAuthority.argtypes = [ctypes.c_void_p, wintypes.DWORD]
+        advapi32.GetSidSubAuthority.restype = ctypes.POINTER(wintypes.DWORD)
+
+        process_handle = kernel32.OpenProcess(
+            0x1000, False, int(process_identifier))  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not process_handle:
+            return 0
+        token = wintypes.HANDLE()
+        if not advapi32.OpenProcessToken(
+                process_handle, 0x0008, ctypes.byref(token)):  # TOKEN_QUERY
+            return 0
+        token_handle = token.value
+
+        needed = wintypes.DWORD()
+        # TokenIntegrityLevel is variable-sized. The first call obtains the
+        # TOKEN_MANDATORY_LABEL buffer size and is expected to fail with
+        # ERROR_INSUFFICIENT_BUFFER.
+        advapi32.GetTokenInformation(
+            token, 25, None, 0, ctypes.byref(needed))
+        if not needed.value:
+            return 0
+        information = ctypes.create_string_buffer(needed.value)
+        if not advapi32.GetTokenInformation(
+                token, 25, information, needed.value, ctypes.byref(needed)):
+            return 0
+        # TOKEN_MANDATORY_LABEL starts with SID_AND_ATTRIBUTES, whose first
+        # field is the SID pointer. The final SID sub-authority is the
+        # mandatory-integrity RID (low, medium, high, or system).
+        sid = ctypes.cast(
+            information, ctypes.POINTER(ctypes.c_void_p)).contents.value
+        if not sid:
+            return 0
+        count = advapi32.GetSidSubAuthorityCount(sid)
+        if not count or not count.contents.value:
+            return 0
+        authority = advapi32.GetSidSubAuthority(
+            sid, count.contents.value - 1)
+        return int(authority.contents.value) if authority else 0
+    except Exception:
+        return 0
+    finally:
+        try:
+            if token_handle:
+                kernel32.CloseHandle(token_handle)
+        except Exception:
+            pass
+        try:
+            if process_handle:
+                kernel32.CloseHandle(process_handle)
+        except Exception:
+            pass
+
+
+def _paste_target_blocks_simulated_input(paste_target, source_integrity=None):
+    """Return whether Windows UIPI blocks input into this higher-IL target."""
+    target_integrity = getattr(paste_target, "integrity_level", 0)
+    if not target_integrity:
+        return False
+    if source_integrity is None:
+        source_integrity = _process_integrity_level(os.getpid())
+    return bool(source_integrity and target_integrity > source_integrity)
 
 
 def _paste_target_matches(expected, current):
@@ -525,6 +617,10 @@ class PresspeechApp:
         self._update_lock = threading.Lock()
         self.icon = None
         self.listener = None
+        self._hotkey_listener_lock = threading.Lock()
+        self._hotkey_status = "not started"
+        self._hotkey_status_detail = "Global hotkey has not started"
+        self._exiting = False
         self._mutex_handle = None
         self._activation_event_handle = None
         self._key_held = False
@@ -580,6 +676,7 @@ class PresspeechApp:
                 MenuItem("Try Dictation\u2026", self.open_scratchpad),
                 MenuItem("Setup\u2026", self.open_setup),
                 MenuItem("Settings\u2026", self.open_settings),
+                MenuItem("Repair Global Hotkey", self.repair_hotkey),
                 Menu.SEPARATOR,
                 MenuItem("Check for Updates\u2026", self.check_for_updates),
                 MenuItem("Copy Diagnostics", self.copy_diagnostics),
@@ -590,17 +687,17 @@ class PresspeechApp:
             ),
         )
         threading.Thread(target=self.icon.run, daemon=True).start()
-        self.listener = pkb.Listener(
-            on_press=self._on_press,
-            on_release=self._on_release,
-            win32_event_filter=self._win32_event_filter,
-        )
-        self.listener.start()
+        hotkey_started = self._start_hotkey_listener()
         self._log("running; hotkey=%s trigger=%s" % (self.settings["hotkey"], self.settings["trigger"]))
         with self._model_retry_lock:
             self._queue_model_load_locked(None)
         if not self.settings.get("setup_complete", False):
             threading.Timer(0.8, self.open_setup).start()
+        elif not hotkey_started:
+            # A completed setup must not leave the app apparently running with
+            # its primary control unavailable. The tray Dictate command still
+            # works while Settings exposes a keyboard-accessible repair action.
+            threading.Timer(0.8, self.open_settings).start()
         if (self.settings.get("check_updates", True) and
                 _update_check_due(self.settings.get("last_update_check_epoch", 0))):
             threading.Thread(
@@ -685,6 +782,7 @@ class PresspeechApp:
             self._log("repeat launch opened setup")
 
     def exit_app(self, icon=None, item=None):
+        self._exiting = True
         self._restore_playback_after_recording()
         self.indicator.close()
         if self.listener is not None:
@@ -705,6 +803,132 @@ class PresspeechApp:
         os._exit(0)
 
     # ---------------- hotkey ----------------
+
+    def hotkey_available(self):
+        """Return whether the observed global keyboard listener is usable."""
+        return getattr(self, "_hotkey_status", "not started") == "ready"
+
+    def hotkey_listener_status(self):
+        """Return a stable state and user-facing detail for readiness UI."""
+        status = getattr(self, "_hotkey_status", "not started")
+        if status == "ready":
+            detail = "Ready \u2014 %s" % self.settings["hotkey"].title()
+        else:
+            detail = getattr(
+                self, "_hotkey_status_detail",
+                "Global hotkey has not started")
+        return status, detail
+
+    def _reset_hotkey_transaction(self):
+        """Discard physical-key bookkeeping owned by a stopped listener."""
+        self._key_held = False
+        self._pressed_keys.clear()
+        self._held_hotkey_keys = frozenset()
+        self._held_hotkey_trigger = None
+        self._suppress_escape_keyup = False
+        self._filter_pressed_vks.clear()
+        self._passthrough_hotkey_vks.clear()
+        self._suppressed_hotkey_vks.clear()
+
+    def _start_hotkey_listener(self, force=False):
+        """Create a fresh listener after startup failure or listener exit."""
+        with self._hotkey_listener_lock:
+            current = self.listener
+            if not force and self.hotkey_available() and current is not None:
+                try:
+                    if current.is_alive():
+                        return True
+                except Exception:
+                    pass
+
+            if force and current is not None:
+                # Windows can silently remove a low-level hook while pynput's
+                # message-loop thread remains alive. A user-requested repair
+                # must therefore replace even an apparently healthy listener.
+                try:
+                    current.stop()
+                except Exception as exc:
+                    self._hotkey_status = "error"
+                    self._hotkey_status_detail = (
+                        "Global hotkey could not restart. Exit and reopen "
+                        "Presspeech.")
+                    self._log(
+                        "global hotkey could not stop: %s" % type(exc).__name__)
+                    return False
+
+            self._hotkey_status = "starting"
+            self._hotkey_status_detail = "Starting global hotkey\u2026"
+            self._reset_hotkey_transaction()
+            try:
+                listener = pkb.Listener(
+                    on_press=self._on_press,
+                    on_release=self._on_release,
+                    win32_event_filter=self._win32_event_filter,
+                )
+                self.listener = listener
+                listener.start()
+            except Exception as exc:
+                self._hotkey_status = "error"
+                self._hotkey_status_detail = (
+                    "Global hotkey could not start. Choose Repair Global Hotkey.")
+                self._log(
+                    "global hotkey could not start: %s" % type(exc).__name__)
+                return False
+
+            self._hotkey_status = "ready"
+            self._hotkey_status_detail = (
+                "Ready \u2014 %s" % self.settings["hotkey"].title())
+            threading.Thread(
+                target=self._watch_hotkey_listener,
+                args=(listener,),
+                name="presspeech-hotkey-watch",
+                daemon=True,
+            ).start()
+            return True
+
+    def _watch_hotkey_listener(self, listener):
+        """Expose a listener exit that pynput otherwise leaves on its thread."""
+        failure = None
+        try:
+            listener.join()
+        except Exception as exc:
+            # Exception details can contain a key value or library internals;
+            # the type is enough for privacy-safe diagnostics.
+            failure = type(exc).__name__
+
+        with self._hotkey_listener_lock:
+            if (getattr(self, "_exiting", False) or
+                    self.listener is not listener):
+                return
+            self._hotkey_status = "error"
+            self._hotkey_status_detail = (
+                "Global hotkey stopped. Choose Repair Global Hotkey.")
+            self._reset_hotkey_transaction()
+        suffix = (": %s" % failure) if failure else ""
+        self._log("global hotkey listener stopped%s" % suffix)
+        self.notify(
+            "Global hotkey needs repair",
+            "Open the Presspeech notification-area menu and choose Repair "
+            "Global Hotkey. Dictate remains available from the menu.")
+
+    def repair_hotkey(self, icon=None, item=None):
+        """Attempt user-requested recovery with a new pynput listener."""
+        if (getattr(self, "recording", False) or
+                getattr(self, "_canceling_recording", False) or
+                getattr(self, "transcribing", False)):
+            self.notify(
+                "Finish the active dictation first",
+                "Stop or cancel dictation, then choose Repair Global Hotkey.")
+            return False
+        if self._start_hotkey_listener(force=True):
+            self.notify(
+                "Global hotkey ready",
+                "%s is ready for dictation." % self.settings["hotkey"].title())
+            return True
+        self.notify(
+            "Global hotkey still unavailable",
+            "Try another key in Settings, or exit and reopen Presspeech.")
+        return False
 
     def _is_hotkey(self, key):
         return key in KEY_MAP.get(self.settings["hotkey"], set())
@@ -1667,6 +1891,15 @@ class PresspeechApp:
         time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
         if not self._paste_target_still_focused(paste_target):
             return
+        if _paste_target_blocks_simulated_input(paste_target):
+            self._log(
+                "paste skipped; target runs at a higher Windows integrity level")
+            self.notify(
+                "Transcript copied, not pasted",
+                "Windows prevents Presspeech from typing into an app running "
+                "as administrator. Paste from the clipboard, or reopen that "
+                "app without Run as administrator.")
+            return
         keyboard = pkb.Controller()
         modifiers = [pkb.Key.ctrl_l]
         if route == "moonlight":
@@ -1799,6 +2032,8 @@ class PresspeechApp:
             "Hotkey / trigger: %s / %s" % (
                 self.settings.get("hotkey", "unknown"),
                 self.settings.get("trigger", "unknown")),
+            "Global hotkey status: %s" %
+            self.hotkey_listener_status()[0],
             "Maximum recording length: %d seconds" %
             cfg.recording_length_seconds(
                 self.settings.get("max_recording_seconds")),

@@ -132,6 +132,30 @@ def speech_detection_metrics(audio_seconds, backend_timings):
     }
 
 
+BACKEND_STAGE_NAMES = ("prepare", "transfer", "generate", "decode")
+
+
+def backend_stage_metrics(backend_timings):
+    """Summarise synchronized model stages without transcript content."""
+    result = {}
+    for name in BACKEND_STAGE_NAMES:
+        values = []
+        for timing in backend_timings:
+            value = timing.get(name) if isinstance(timing, dict) else None
+            if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and math.isfinite(value) and value >= 0):
+                values.append(float(value))
+        if not values:
+            continue
+        result[name] = {
+            "min": min(values),
+            "median": statistics.median(values),
+            "p95": _percentile(values, 0.95),
+            "all": values,
+        }
+    return result or None
+
+
 def load_audio(path):
     audio, sample_rate = sf.read(path, dtype="float32", always_2d=False)
     if audio.ndim > 1:
@@ -201,7 +225,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     if runs < 1:
         raise ValueError("runs must be at least 1")
 
-    transcriber = engine.Transcriber()
+    # Stage barriers are benchmark-only: they make CUDA timings factual while
+    # keeping synchronization overhead out of interactive dictation.
+    transcriber = engine.Transcriber(measure_stages=True)
     _sync_cuda()
     started = time.perf_counter()
     transcriber.load(model_name)
@@ -262,6 +288,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
             "reference_reviewed": bool(sample.get("reference_reviewed", False)),
             "speech_detection": speech_detection_metrics(
                 audio_seconds, backend_timings),
+            "backend_stages": backend_stage_metrics(backend_timings),
         }
         result["silence"] = silence_metrics(
             bool(sample.get("expected_silence", False)),
@@ -374,6 +401,12 @@ def _print_summary(result):
             sample["estimated_release_to_paste_seconds"],
         ))
         print("  %s" % sample["transcript"])
+        stages = sample.get("backend_stages")
+        if stages is not None:
+            print("  Model stages (median): %s" % " | ".join(
+                "%s %.3fs" % (name, stages[name]["median"])
+                for name in BACKEND_STAGE_NAMES if name in stages
+            ))
         detection = sample["speech_detection"]
         if detection is not None:
             print("  VAD speech: %.3fs median of %.3fs; rejected %d/%d trials" % (

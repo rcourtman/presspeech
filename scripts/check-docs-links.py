@@ -14,6 +14,8 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 LINK_ATTRIBUTES = {"href", "src", "poster"}
+ERROR_PAGE = Path("404.html")
+SITE_PATH = "/presspeech/"
 
 
 class DocumentParser(HTMLParser):
@@ -61,10 +63,19 @@ def link_errors(docs: Path = DOCS) -> list[str]:
 
             raw_path = unquote(parts.path)
             if raw_path.startswith("/"):
-                errors.append(
-                    f"{display(source, docs)}: {attribute}={raw_value!r} uses an unsupported site-absolute path"
-                )
-                continue
+                # GitHub Pages serves docs/404.html for missing URLs at any
+                # depth. Its links must be rooted at the project path or a
+                # request such as /presspeech/compare/missing would resolve
+                # styles and recovery links below /compare/. Keep validating
+                # those links against docs/ rather than treating them as
+                # unverifiable external URLs.
+                if source.relative_to(docs) == ERROR_PAGE and raw_path.startswith(SITE_PATH):
+                    raw_path = raw_path.removeprefix(SITE_PATH)
+                else:
+                    errors.append(
+                        f"{display(source, docs)}: {attribute}={raw_value!r} uses an unsupported site-absolute path"
+                    )
+                    continue
 
             target = (source.parent / raw_path).resolve() if raw_path else source
             try:
@@ -120,6 +131,16 @@ def run_self_test() -> None:
         errors = link_errors(docs)
         if len(errors) != 2:
             raise RuntimeError(f"self-test: expected two errors, found {errors!r}")
+
+        error_page = docs / ERROR_PAGE
+        error_page.write_text(
+            f'<a href="{SITE_PATH}guide/#setup">Guide</a>'
+            f'<a href="{SITE_PATH}asset.txt">Asset</a>',
+            encoding="utf-8",
+        )
+        index.write_text("<!doctype html><main>Home</main>\n", encoding="utf-8")
+        if link_errors(docs):
+            raise RuntimeError("self-test: valid 404 project-root links were rejected")
 
 
 def main() -> int:

@@ -311,6 +311,10 @@ class SetupWindowTests(unittest.TestCase):
         window.retry_button = mock.Mock()
         window.try_button = mock.Mock()
         window.finish_button = mock.Mock()
+        window.hotkey_status = mock.Mock()
+        window.repair_hotkey_button = mock.Mock()
+        window.app.hotkey_listener_status.return_value = (
+            "ready", "Ready — Right Alt")
         window.autostart_status = mock.Mock()
         window.microphone_events = queue.Queue()
         window.microphone_checking = False
@@ -327,8 +331,12 @@ class SetupWindowTests(unittest.TestCase):
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_model()
 
-        set_text.assert_called_once_with(
-            window.model_label, "Needs attention — download failed")
+        self.assertEqual(set_text.call_args_list, [
+            mock.call(window.model_label, "Needs attention — download failed"),
+            mock.call(window.hotkey_status, "Ready — Right Alt"),
+        ])
+        window.repair_hotkey_button.config.assert_called_once_with(
+            state="normal")
         window.retry_button.config.assert_called_once_with(state="normal")
         window.try_button.config.assert_called_once_with(state="disabled")
         window.finish_button.config.assert_called_once_with(state="disabled")
@@ -349,6 +357,24 @@ class SetupWindowTests(unittest.TestCase):
             mode="determinate", value=100)
         window.root.after.assert_called_once_with(300, window._poll_model)
 
+    def test_stopped_global_hotkey_exposes_repair_and_blocks_finish(self):
+        window = self.make_window("ready", "base.en on cpu")
+        window.app.hotkey_listener_status.return_value = (
+            "error", "Global hotkey stopped. Choose Repair Global Hotkey.")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertIn(
+            mock.call(
+                window.hotkey_status,
+                "Global hotkey stopped. Choose Repair Global Hotkey."),
+            set_text.call_args_list,
+        )
+        window.repair_hotkey_button.config.assert_called_once_with(state="normal")
+        window.try_button.config.assert_called_once_with(state="normal")
+        window.finish_button.config.assert_called_once_with(state="disabled")
+
     def test_retry_action_uses_app_single_flight_gate(self):
         window = self.make_window("error")
 
@@ -359,6 +385,20 @@ class SetupWindowTests(unittest.TestCase):
     def test_setup_cannot_finish_before_model_is_ready(self):
         window = self.make_window("error", "download failed")
         window.app.settings = {"setup_complete": False}
+
+        with mock.patch.object(ui.cfg, "save") as save:
+            window._finish()
+
+        self.assertFalse(window.app.settings["setup_complete"])
+        window.finish_button.config.assert_called_once_with(state="disabled")
+        save.assert_not_called()
+        window.app.apply_autostart.assert_not_called()
+
+    def test_setup_cannot_finish_with_a_stopped_global_hotkey(self):
+        window = self.make_window("ready", "base.en on cpu")
+        window.app.settings = {"setup_complete": False}
+        window.app.hotkey_listener_status.return_value = (
+            "error", "Global hotkey stopped. Choose Repair Global Hotkey.")
 
         with mock.patch.object(ui.cfg, "save") as save:
             window._finish()
@@ -758,29 +798,41 @@ class DictionarySettingsTests(unittest.TestCase):
         window.root = mock.Mock()
         window.model_status = mock.Mock()
         window.retry_model_button = mock.Mock()
+        window.hotkey_status = mock.Mock()
+        window.repair_hotkey_button = mock.Mock()
         window.app = mock.Mock()
         window.app.settings = {"model": "base.en"}
         window.app.model_status = "ready"
         window.app.model_status_detail = "base.en on cpu (int8)"
         window.app.transcriber.loaded.return_value = True
+        window.app.hotkey_listener_status.return_value = (
+            "ready", "Ready — Right Alt")
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_model()
 
-        set_text.assert_called_once_with(
-            window.model_status,
-            "Speech model ready — base.en on cpu (int8)",
-        )
+        self.assertEqual(set_text.call_args_list, [
+            mock.call(
+                window.model_status,
+                "Speech model ready — base.en on cpu (int8)"),
+            mock.call(
+                window.hotkey_status,
+                "Global hotkey status: Ready — Right Alt"),
+        ])
         window.retry_model_button.config.assert_called_once_with(state="disabled")
+        window.repair_hotkey_button.config.assert_called_once_with(
+            state="normal")
 
         window.app.model_status = "error"
         window.app.model_status_detail = "download unavailable"
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_model()
 
-        set_text.assert_called_once_with(
-            window.model_status,
-            "Speech model needs attention — download unavailable",
+        self.assertIn(
+            mock.call(
+                window.model_status,
+                "Speech model needs attention — download unavailable"),
+            set_text.call_args_list,
         )
         window.retry_model_button.config.assert_called_with(state="normal")
 

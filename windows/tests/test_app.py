@@ -728,6 +728,115 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertFalse(instance._key_held)
 
 
+class HotkeyListenerLifecycleTests(unittest.TestCase):
+    def make_app(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"hotkey": "f8", "trigger": "hold"}
+        instance.listener = None
+        instance._hotkey_listener_lock = app.threading.Lock()
+        instance._hotkey_status = "not started"
+        instance._hotkey_status_detail = "Global hotkey has not started"
+        instance._exiting = False
+        instance._key_held = False
+        instance._pressed_keys = set()
+        instance._held_hotkey_keys = frozenset()
+        instance._held_hotkey_trigger = None
+        instance._suppress_escape_keyup = False
+        instance._filter_pressed_vks = set()
+        instance._passthrough_hotkey_vks = set()
+        instance._suppressed_hotkey_vks = {}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        return instance
+
+    def test_listener_start_is_observed_and_reports_ready(self):
+        instance = self.make_app()
+        listener = mock.Mock()
+        listener.is_alive.return_value = True
+
+        with mock.patch.object(app.pkb, "Listener", return_value=listener), \
+                mock.patch.object(app.threading, "Thread") as thread:
+            self.assertTrue(instance._start_hotkey_listener())
+
+        listener.start.assert_called_once_with()
+        self.assertEqual(instance.hotkey_listener_status(), ("ready", "Ready — F8"))
+        self.assertIs(instance.listener, listener)
+        thread.assert_called_once_with(
+            target=instance._watch_hotkey_listener,
+            args=(listener,),
+            name="presspeech-hotkey-watch",
+            daemon=True,
+        )
+        thread.return_value.start.assert_called_once_with()
+
+    def test_listener_start_failure_keeps_app_recoverable(self):
+        instance = self.make_app()
+
+        with mock.patch.object(
+                app.pkb, "Listener", side_effect=OSError("private details")):
+            self.assertFalse(instance._start_hotkey_listener())
+
+        self.assertEqual(instance.hotkey_listener_status()[0], "error")
+        self.assertIn("Repair Global Hotkey", instance.hotkey_listener_status()[1])
+        instance._log.assert_called_once_with(
+            "global hotkey could not start: OSError")
+
+    def test_listener_callback_failure_becomes_visible_without_private_detail(self):
+        instance = self.make_app()
+        listener = mock.Mock()
+        listener.join.side_effect = RuntimeError("pressed secret key")
+        instance.listener = listener
+        instance._hotkey_status = "ready"
+        instance._key_held = True
+        instance._pressed_keys.add(app.pkb.Key.f8)
+
+        instance._watch_hotkey_listener(listener)
+
+        self.assertEqual(instance.hotkey_listener_status()[0], "error")
+        self.assertFalse(instance._key_held)
+        self.assertEqual(instance._pressed_keys, set())
+        instance._log.assert_called_once_with(
+            "global hotkey listener stopped: RuntimeError")
+        self.assertNotIn("secret", instance._log.call_args.args[0])
+        instance.notify.assert_called_once()
+
+    def test_user_repair_reports_success(self):
+        instance = self.make_app()
+        with mock.patch.object(
+                instance, "_start_hotkey_listener", return_value=True) as start:
+            self.assertTrue(instance.repair_hotkey())
+
+        start.assert_called_once_with(force=True)
+        instance.notify.assert_called_once_with(
+            "Global hotkey ready", "F8 is ready for dictation.")
+
+    def test_user_repair_replaces_an_apparently_alive_listener(self):
+        instance = self.make_app()
+        old_listener = mock.Mock()
+        instance.listener = old_listener
+        instance._hotkey_status = "ready"
+        new_listener = mock.Mock()
+
+        with mock.patch.object(app.pkb, "Listener", return_value=new_listener), \
+                mock.patch.object(app.threading, "Thread"):
+            self.assertTrue(instance._start_hotkey_listener(force=True))
+
+        old_listener.stop.assert_called_once_with()
+        new_listener.start.assert_called_once_with()
+        self.assertIs(instance.listener, new_listener)
+
+    def test_user_repair_does_not_interrupt_active_dictation(self):
+        instance = self.make_app()
+        instance.recording = True
+        with mock.patch.object(instance, "_start_hotkey_listener") as start:
+            self.assertFalse(instance.repair_hotkey())
+
+        start.assert_not_called()
+        instance.notify.assert_called_once_with(
+            "Finish the active dictation first",
+            "Stop or cancel dictation, then choose Repair Global Hotkey.")
+
+
 class AudioResamplingTests(unittest.TestCase):
     @staticmethod
     def tone(sample_rate, frequency, seconds=1.0):
@@ -1196,6 +1305,68 @@ class TextRegressionTests(unittest.TestCase):
         keyboard.release.assert_has_calls(
             [mock.call("v"), mock.call(app.pkb.Key.ctrl_l)])
 
+    def test_higher_integrity_target_copies_without_claiming_to_paste(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        target = app.PasteTarget("admin-tool.exe", 1234, 41, 0x3000)
+
+        with mock.patch.object(app.pyperclip, "copy") as copy, \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target", return_value=target), \
+                mock.patch.object(
+                    app, "_process_integrity_level", return_value=0x2000), \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("private transcript", target)
+
+        copy.assert_called_once_with("private transcript")
+        controller.assert_not_called()
+        instance._log.assert_called_once_with(
+            "paste skipped; target runs at a higher Windows integrity level")
+        instance.notify.assert_called_once_with(
+            "Transcript copied, not pasted",
+            "Windows prevents Presspeech from typing into an app running as "
+            "administrator. Paste from the clipboard, or reopen that app "
+            "without Run as administrator.")
+
+    def test_equal_integrity_target_still_receives_paste(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._injecting_keys = False
+        instance._log = mock.Mock()
+        target = app.PasteTarget("notepad.exe", 1234, 41, 0x2000)
+
+        with mock.patch.object(app.pyperclip, "copy"), \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target", return_value=target), \
+                mock.patch.object(
+                    app, "_process_integrity_level", return_value=0x2000), \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("transcript", target)
+
+        keyboard = controller.return_value
+        keyboard.press.assert_has_calls(
+            [mock.call(app.pkb.Key.ctrl_l), mock.call("v")])
+
+    def test_unknown_integrity_fails_open_for_existing_paste_behavior(self):
+        unknown_target = app.PasteTarget("notepad.exe", 1234, 41)
+
+        with mock.patch.object(
+                app, "_process_integrity_level") as process_integrity:
+            self.assertFalse(
+                app._paste_target_blocks_simulated_input(unknown_target))
+
+        process_integrity.assert_not_called()
+
+        known_target = app.PasteTarget("admin-tool.exe", 1234, 42, 0x3000)
+        with mock.patch.object(
+                app, "_process_integrity_level", return_value=0) as source:
+            self.assertFalse(
+                app._paste_target_blocks_simulated_input(known_target))
+
+        source.assert_called_once_with(app.os.getpid())
+
     def test_recording_is_blocked_while_startup_model_is_loading(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
@@ -1439,6 +1610,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertIn("Dictionary rule count: 1", diagnostics)
         self.assertIn("Maximum recording length: 300 seconds", diagnostics)
         self.assertIn("Model status: ready", diagnostics)
+        self.assertIn("Global hotkey status: not started", diagnostics)
         self.assertIn("Windows UI Automation: not initialized", diagnostics)
         self.assertNotIn("\\Users\\", diagnostics)
         self.assertNotIn("private spoken phrase", diagnostics)

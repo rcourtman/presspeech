@@ -2,6 +2,7 @@
   "last_updated": "2026-09-01",
   "model_cache_size": "~600 MB",
   "release_zip_bytes": 8745690,
+  "release_zip_sha256": "b2e67e1b1f823b470d3de1e3fe0dbccc055bede8d66a8b018e9c8d8b63c5266e",
   "release_zip_size": "8.3 MB",
   "schema": 1,
   "version": "0.3.6",

@@ -89,6 +89,22 @@
       ],
       "redacted_by_default": true
     },
+    "vocabulary_bias": {
+      "status": "research-only; no policy has cleared the product-candidate gate",
+      "request": "https://github.com/rcourtman/presspeech/issues/21",
+      "script": "experiments/swift-bench/run-vocabulary-bias-regression.sh",
+      "production_integration": false,
+      "policies_compared": [
+        "v3-vocab",
+        "v3-vocab-conservative",
+        "v3-vocab-no-rescue",
+        "v3-vocab-exact-similarity"
+      ],
+      "required_controls": "same-language ordinary push-to-talk speech without configured critical terms",
+      "trials_per_clip_minimum": 3,
+      "redacted_by_default": true,
+      "upstream_documentation_at_pinned_revision": "https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Documentation/ASR/CustomVocabulary.md"
+    },
     "public_candidate_recheck_2026_07_22": {
       "script": "experiments/swift-bench/run-real-dictation-regression.sh",
       "purpose": "Public 25-clip current-pin comparison for production v3, repaired Nemotron English, and Nemotron 3.5 multilingual",

@@ -76,6 +76,84 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(benchmark.speech_detection_metrics(
             1.0, [{"generate": 0.1}, mock.sentinel.timing]))
 
+    def test_backend_stage_metrics_report_each_observed_stage(self):
+        metrics = benchmark.backend_stage_metrics([
+            {
+                "prepare": 0.03,
+                "transfer": 0.01,
+                "generate": 0.20,
+                "decode": 0.02,
+            },
+            {
+                "prepare": 0.01,
+                "transfer": 0.03,
+                "generate": 0.10,
+                "decode": 0.04,
+            },
+        ])
+
+        self.assertEqual(metrics["prepare"], {
+            "min": 0.01,
+            "median": 0.02,
+            "p95": 0.03,
+            "all": [0.03, 0.01],
+        })
+        self.assertAlmostEqual(metrics["generate"]["median"], 0.15)
+        self.assertEqual(metrics["decode"]["p95"], 0.04)
+
+    def test_backend_stage_metrics_ignore_unavailable_timings(self):
+        self.assertIsNone(benchmark.backend_stage_metrics([
+            {"backend": "whisper", "speech_seconds": 1.0},
+            {"prepare": float("nan"), "generate": -0.1, "decode": True},
+            mock.sentinel.timing,
+        ]))
+
+    def test_benchmark_enables_and_persists_synchronized_stages(self):
+        manifest = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "runs": 1,
+            "samples": [{
+                "id": "latency",
+                "audio": "latency.wav",
+                "reference_reviewed": False,
+            }],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+
+        def transcribe(*_args, **_kwargs):
+            transcriber.last_timing = {
+                "backend": "parakeet",
+                "prepare": 0.03,
+                "transfer": 0.01,
+                "generate": 0.20,
+                "decode": 0.02,
+            }
+            return "latency sample"
+
+        transcriber.transcribe.side_effect = transcribe
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber",
+                    return_value=transcriber) as transcriber_type, \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        transcriber_type.assert_called_once_with(measure_stages=True)
+        self.assertEqual(
+            result["samples"][0]["backend_stages"]["prepare"]["all"],
+            [0.03],
+        )
+        self.assertEqual(
+            result["samples"][0]["backend_stages"]["generate"]["median"],
+            0.20,
+        )
+
     def test_reviewed_silence_scores_empty_output_as_clean(self):
         self.assertEqual(
             benchmark.silence_metrics(True, True, [" \n", ""]),

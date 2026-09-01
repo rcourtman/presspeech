@@ -10,6 +10,27 @@ Fetch a small LibriSpeech fixture set:
 ./fetch-public-speech-fixtures.sh --source librispeech --split dev-clean --count 25
 ```
 
+For a reproducible multilingual encoder check, fetch the pinned FLEURS
+Ukrainian test rows that exercise the language family where the upstream
+linear-int8 encoder fix was first demonstrated:
+
+```sh
+./fetch-public-speech-fixtures.sh \
+  --source fleurs --language uk_ua --split test \
+  --count 60
+./run-real-model-comparison.sh \
+  --input-dir public-audio/fleurs-uk_ua-test \
+  --out-dir public-results/fleurs-uk_ua-test \
+  --candidate-backend v3-int8-v2 --language uk \
+  --public-corpus --show-transcripts --show-paths \
+  --trials 3
+```
+
+The FLEURS importer accepts only locales corresponding to languages exposed by
+Presspeech. It pins the dataset revision, reads the human reference TSV, and
+verifies the language/split archive against the SHA-256 and size in the pinned
+Git LFS pointer before extracting the selected rows. FLEURS is CC BY 4.0.
+
 Then run the production v3 regression:
 
 ```sh
@@ -36,12 +57,13 @@ Or fetch and compare in one command:
 ./run-public-model-comparison.sh --fetch --count 50 --trials 3
 ```
 
-The fetcher currently imports LibriSpeech from OpenSLR. LibriSpeech is read
-English audiobook speech, aligned to transcripts, and distributed under
-CC BY 4.0. That makes it useful as a reproducible public benchmark, but it
-does not replace private push-to-talk dictation clips. Keep both:
+The fetcher imports LibriSpeech from OpenSLR and supported-language FLEURS
+subsets from a pinned Google dataset revision. Both are read speech aligned to
+human references and distributed under CC BY 4.0. They are useful reproducible
+benchmarks, but do not replace private push-to-talk dictation clips. Keep both:
 
 - public fixtures for reproducible production v3 WER checks and candidate model comparisons
+- FLEURS fixtures for product-language and cross-script checks
 - private real-dictation fixtures for Presspeech's actual short, messy workflow
 
 Generated fixture sets contain:

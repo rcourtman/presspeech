@@ -21,12 +21,15 @@ SITE_ROOT = "https://rcourtman.github.io/presspeech/"
 MAC_APP_ID = f"{SITE_ROOT}#software"
 WINDOWS_APP_ID = f"{SITE_ROOT}windows.html#software"
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
+ERROR_PAGE = Path("404.html")
+ERROR_PAGE_URL = f"{SITE_ROOT}404.html"
 
 
 class DocumentParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.canonicals: list[str] = []
+        self.robots: list[str] = []
         self.structured_data: list[str] = []
         self._json_ld: list[str] | None = None
 
@@ -36,6 +39,8 @@ class DocumentParser(HTMLParser):
             href = attributes.get("href")
             if href is not None:
                 self.canonicals.append(href)
+        if tag == "meta" and (attributes.get("name") or "").lower() == "robots":
+            self.robots.append((attributes.get("content") or "").lower())
         if tag == "script" and attributes.get("type") == "application/ld+json":
             self._json_ld = []
 
@@ -111,6 +116,18 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
         parser, nodes, parse_errors = document_metadata(path)
         display = path.relative_to(docs)
         errors.extend(f"{display}: {error}" for error in parse_errors)
+        if display == ERROR_PAGE:
+            if parser.canonicals:
+                errors.append(f"{display}: error page must not declare a canonical URL")
+            directives = {
+                directive.strip()
+                for value in parser.robots
+                for directive in value.split(",")
+            }
+            if "noindex" not in directives:
+                errors.append(f"{display}: error page must declare robots noindex")
+            documents[path] = (parser, nodes)
+            continue
         if len(parser.canonicals) != 1:
             errors.append(f"{display}: expected one canonical URL, found {parser.canonicals!r}")
         else:
@@ -151,6 +168,8 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
     for canonical in canonical_paths:
         if canonical not in sitemap_urls:
             errors.append(f"sitemap.xml: missing HTML canonical {canonical}")
+    if ERROR_PAGE_URL in sitemap_urls:
+        errors.append(f"sitemap.xml: error page must not be listed as {ERROR_PAGE_URL}")
 
     index_path = docs / "index.html"
     windows_path = docs / "windows.html"
@@ -238,6 +257,12 @@ def run_self_test() -> None:
     nodes = graph_nodes(json.loads(parser.structured_data[0]))
     if parser.canonicals != ["https://example.com/"] or len(app_nodes(nodes)) != 2:
         raise RuntimeError("self-test: canonical or JSON-LD graph was not parsed")
+
+    parser = DocumentParser()
+    parser.feed('<meta name="robots" content="noindex, follow">')
+    parser.close()
+    if parser.robots != ["noindex, follow"]:
+        raise RuntimeError("self-test: robots metadata was not parsed")
 
     with tempfile.TemporaryDirectory() as tmp:
         broken = Path(tmp) / "broken.html"

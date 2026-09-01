@@ -235,6 +235,24 @@ def _bind_window_command(root, sequence, command):
     return invoke
 
 
+def _hotkey_readiness(app):
+    """Read optional app hotkey health without breaking lightweight test fakes."""
+    checker = getattr(app, "hotkey_listener_status", None)
+    if checker is None or not callable(checker):
+        return "ready", "Global hotkey ready"
+    try:
+        result = checker()
+    except Exception:
+        return "error", "Global hotkey status could not be checked"
+    if (not isinstance(result, tuple) or len(result) != 2 or
+            result[0] not in ("not started", "starting", "ready", "error") or
+            not isinstance(result[1], str)):
+        # unittest.mock objects and older embedders do not implement the new
+        # readiness contract. Treat those compatibility shims as ready.
+        return "ready", "Global hotkey ready"
+    return result
+
+
 def _add_access_key(root, widget, key):
     """Give a command its conventional Windows Alt mnemonic."""
     key = key.casefold()
@@ -751,14 +769,25 @@ class SetupWindow:
             wraplength=560,
         ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(3, 8))
 
+        hotkey_status_label = ttk.Label(frame, text="Global hotkey status")
+        hotkey_status_label.grid(row=10, column=0, sticky="w", pady=(0, 6))
+        hotkey_actions = ttk.Frame(frame)
+        hotkey_actions.grid(row=10, column=1, sticky="ew", padx=(12, 0), pady=(0, 6))
+        self.hotkey_status = ttk.Label(hotkey_actions, text="Starting\u2026")
+        self.hotkey_status.pack(side="left")
+        self.repair_hotkey_button = ttk.Button(
+            hotkey_actions, text="Repair Global Hotkey",
+            command=self.app.repair_hotkey)
+        self.repair_hotkey_button.pack(side="right", padx=(12, 0))
+
         self.autostart = tk.BooleanVar(
             value=self.app.settings.get("autostart", True))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
-                            row=10, column=0, columnspan=2, sticky="w", pady=(2, 6))
+                            row=11, column=0, columnspan=2, sticky="w", pady=(2, 6))
 
         startup_actions = ttk.Frame(frame)
-        startup_actions.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(0, 14))
+        startup_actions.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(0, 14))
         self.autostart_status = ttk.Label(startup_actions, text="")
         self.autostart_status.pack(side="left")
         startup_button = ttk.Button(
@@ -768,7 +797,7 @@ class SetupWindow:
         startup_button.pack(side="right")
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=12, column=0, columnspan=2, sticky="ew")
+        buttons.grid(row=13, column=0, columnspan=2, sticky="ew")
         self.try_button = ttk.Button(
             buttons, text="Try Dictation", command=self.app.open_scratchpad,
             state="disabled")
@@ -788,6 +817,7 @@ class SetupWindow:
         root.protocol("WM_DELETE_WINDOW", self._defer)
         for button, key in (
                 (self.check_microphone_button, "c"),
+                (self.repair_hotkey_button, "h"),
                 (privacy_button, "p"),
                 (sound_button, "s"),
                 (startup_button, "o"),
@@ -799,13 +829,15 @@ class SetupWindow:
         _bind_window_command(root, "<Escape>", self._defer)
         root.update_idletasks()
         _label_control(microphone_label, self.device)
-        _label_control(microphone_check_label, self.microphone_status)
+        # This status must retain its changing text as its accessible name.
+        # label_for would pin the static caption across live-region updates.
         _label_control(hotkey_label, self.hotkey)
+        _label_control(hotkey_status_label, self.hotkey_status)
         _name_control(
             self.hotkey, "Push-to-talk key. " + ALTGR_HOTKEY_GUIDANCE)
         for status in (
                 self.model_label, self.microphone_status,
-                self.autostart_status):
+                self.hotkey_status, self.autostart_status):
             _mark_live_region(status)
         self.scrollable_body.fit_to_screen()
         root.after_idle(self.device.focus_set)
@@ -826,12 +858,16 @@ class SetupWindow:
         }
         _set_accessible_text(
             self.model_label, labels.get(status, detail or status))
+        hotkey_state, hotkey_detail = _hotkey_readiness(self.app)
+        _set_accessible_text(self.hotkey_status, hotkey_detail)
+        self.repair_hotkey_button.config(state="normal")
         self.retry_button.config(
             state="normal" if status == "error" else "disabled")
         self.try_button.config(
             state="normal" if status == "ready" else "disabled")
         self.finish_button.config(
-            state="normal" if status == "ready" else "disabled")
+            state=("normal" if status == "ready" and
+                   hotkey_state == "ready" else "disabled"))
         if status in ("ready", "error"):
             self.progress.stop()
             self.progress.config(mode="determinate", value=100 if status == "ready" else 0)
@@ -930,7 +966,9 @@ class SetupWindow:
         # setup_complete means the app has reached a usable speech-model state.
         # A microphone may deliberately be connected later, but dismissing a
         # pending or failed model would hide the guided retry path on restart.
-        if getattr(self.app, "model_status", "pending") != "ready":
+        hotkey_state, _hotkey_detail = _hotkey_readiness(self.app)
+        if (getattr(self.app, "model_status", "pending") != "ready" or
+                hotkey_state != "ready"):
             self.finish_button.config(state="disabled")
             return
         settings = self.app.settings
@@ -1206,6 +1244,14 @@ class SettingsWindow:
         ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
         row += 1
 
+        self.hotkey_status = ttk.Label(f, text="Global hotkey status: Starting\u2026")
+        self.hotkey_status.grid(
+            row=row, column=0, columnspan=2, sticky="w", pady=(0, 5))
+        self.repair_hotkey_button = ttk.Button(
+            f, text="Repair Global Hotkey", command=self.app.repair_hotkey)
+        self.repair_hotkey_button.grid(row=row, column=2, sticky="w", pady=(0, 5))
+        row += 1
+
         ttk.Label(f, text="Trigger").grid(row=row, column=0, sticky="w", pady=2)
         self.var_trigger = tk.StringVar(value=s["trigger"])
         ttk.Radiobutton(f, text="Hold to talk", value="hold", variable=self.var_trigger).grid(
@@ -1376,6 +1422,7 @@ class SettingsWindow:
         root.protocol("WM_DELETE_WINDOW", self._close)
         _add_access_key(root, add_button, "a")
         _add_access_key(root, remove_button, "r")
+        _add_access_key(root, self.repair_hotkey_button, "h")
         _add_access_key(root, startup_button, "o")
         _add_access_key(root, self.retry_model_button, "m")
         _add_access_key(root, save_button, "s")
@@ -1395,6 +1442,7 @@ class SettingsWindow:
             self.var_hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
         _name_control(self.listbox, "Dictionary rules")
         _mark_live_region(self.model_status)
+        _mark_live_region(self.hotkey_status)
         _mark_live_region(self.status)
         self._poll_model()
         self.scrollable_body.fit_to_screen()
@@ -1417,6 +1465,10 @@ class SettingsWindow:
                 "Preparing selected speech model… Dictation is unavailable "
                 "until it is ready.")
         _set_accessible_text(self.model_status, text)
+        hotkey_state, hotkey_detail = _hotkey_readiness(self.app)
+        _set_accessible_text(
+            self.hotkey_status, "Global hotkey status: " + hotkey_detail)
+        self.repair_hotkey_button.config(state="normal")
         self.retry_model_button.config(
             state="normal" if status == "error" else "disabled")
         self.root.after(300, self._poll_model)

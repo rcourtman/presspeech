@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 STYLES = DOCS / "styles.css"
 MIN_TEXT_CONTRAST = 4.5
+ERROR_PAGE = Path("404.html")
 
 
 class DocumentParser(HTMLParser):
@@ -29,6 +30,8 @@ class DocumentParser(HTMLParser):
         self.title_count = 0
         self.missing_alt_count = 0
         self.primary_nav_count = 0
+        self.primary_nav_links: list[str] = []
+        self._in_primary_nav = False
         self.current_links: list[tuple[str | None, str]] = []
         self.skip_links: list[str | None] = []
 
@@ -48,7 +51,10 @@ class DocumentParser(HTMLParser):
             self.missing_alt_count += 1
         if tag == "nav" and attributes.get("aria-label") == "Primary":
             self.primary_nav_count += 1
+            self._in_primary_nav = True
         if tag == "a":
+            if self._in_primary_nav and attributes.get("href") is not None:
+                self.primary_nav_links.append(attributes["href"])
             if attributes.get("aria-current") is not None:
                 self.current_links.append(
                     (attributes.get("href"), attributes["aria-current"] or "")
@@ -57,9 +63,15 @@ class DocumentParser(HTMLParser):
             if "skip-link" in classes:
                 self.skip_links.append(attributes.get("href"))
 
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "nav" and self._in_primary_nav:
+            self._in_primary_nav = False
 
-def expected_current_href(path: Path, docs: Path) -> str:
+
+def expected_current_href(path: Path, docs: Path) -> str | None:
     relative = path.relative_to(docs)
+    if relative == ERROR_PAGE:
+        return None
     if relative == Path("index.html"):
         return "./"
     if relative.parts[0] == "compare":
@@ -93,7 +105,20 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         errors.append(f"{parser.missing_alt_count} img element(s) lack alt")
     if parser.primary_nav_count != 1:
         errors.append(f"expected one primary navigation, found {parser.primary_nav_count}")
-    expected_current = [(expected_current_href(path, docs), "page")]
+    relative = path.relative_to(docs)
+    if relative != ERROR_PAGE:
+        expected_help_href = (
+            "../troubleshooting.html"
+            if relative.parts[0] == "compare"
+            else "troubleshooting.html"
+        )
+        if parser.primary_nav_links.count(expected_help_href) != 1:
+            errors.append(
+                "primary navigation must contain one consistent Help link to "
+                f"{expected_help_href!r}, found {parser.primary_nav_links!r}"
+            )
+    current_href = expected_current_href(path, docs)
+    expected_current = [] if current_href is None else [(current_href, "page")]
     if parser.current_links != expected_current:
         errors.append(
             f"current navigation must be {expected_current!r}, found {parser.current_links!r}"
@@ -177,7 +202,8 @@ def run_self_test() -> None:
         index.write_text(
             "<!doctype html><html lang='en'><head><title>Test</title></head><body>"
             "<a class='skip-link' href='#main-content'>Skip</a>"
-            "<nav aria-label='Primary'><a href='./' aria-current='page'>Home</a></nav>"
+            "<nav aria-label='Primary'><a href='./' aria-current='page'>Home</a>"
+            "<a href='troubleshooting.html'>Help</a></nav>"
             "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''></main>"
             "</body></html>",
             encoding="utf-8",
@@ -191,6 +217,26 @@ def run_self_test() -> None:
         errors = document_errors(index, docs)
         if not any("current navigation" in error for error in errors):
             raise RuntimeError("self-test: missing current navigation was accepted")
+        index.write_text(
+            index.read_text(encoding="utf-8").replace(
+                "<a href='troubleshooting.html'>Help</a>", ""
+            ),
+            encoding="utf-8",
+        )
+        errors = document_errors(index, docs)
+        if not any("consistent Help link" in error for error in errors):
+            raise RuntimeError("self-test: missing Help navigation was accepted")
+
+        error_page = docs / ERROR_PAGE
+        error_page.write_text(
+            "<!doctype html><html lang='en'><head><title>Missing</title></head><body>"
+            "<a class='skip-link' href='#main-content'>Skip</a>"
+            "<nav aria-label='Primary'><a href='./'>Home</a></nav>"
+            "<main id='main-content'><h1>Not found</h1></main></body></html>",
+            encoding="utf-8",
+        )
+        if document_errors(error_page, docs):
+            raise RuntimeError("self-test: valid 404 page was rejected")
 
     if round(contrast_ratio("#000000", "#ffffff"), 2) != 21.0:
         raise RuntimeError("self-test: contrast calculation is incorrect")

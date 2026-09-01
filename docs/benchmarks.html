@@ -28,6 +28,7 @@
           <a href="privacy.html">Privacy</a>
           <a href="benchmarks.html" aria-current="page">Benchmarks</a>
           <a href="faq.html">FAQ</a>
+          <a href="troubleshooting.html">Help</a>
           <a href="compare/">Compare</a>
           <a href="https://github.com/rcourtman/presspeech">GitHub</a>
         </div>
@@ -157,13 +158,14 @@
             </article>
             <article class="card">
               <h3>Private corpus</h3>
-              <p>For candidate-model decisions, maintainers can run Unified and current Nemotron candidates over private real-dictation clips. Reports keep transcript text and filenames redacted by default while showing WER, final-word failures, and latency.</p>
+              <p>For candidate-model decisions, maintainers can run Unified, the linear-int8 v3 encoder, and current Nemotron candidates over private real-dictation clips. Reports keep transcript text and filenames redacted by default while showing WER, final-word failures, and latency.</p>
             </article>
             <article class="card">
               <h3>Release gate</h3>
-              <p><code>run-release-asr-checks.sh</code> checks production v3 by default. Pass <code>--include-candidate-models</code> to add Unified, repaired Nemotron English, and Nemotron 3.5 multilingual checks.</p>
+              <p><code>run-release-asr-checks.sh</code> checks production v3 by default. Pass <code>--include-candidate-models</code> to add linear-int8 v3, Unified, repaired Nemotron English, and Nemotron 3.5 multilingual checks.</p>
             </article>
           </div>
+          <p>The public-fixture fetcher can also import a deterministic row range from a pinned Google FLEURS language split. This gives encoder candidates reproducible multilingual and cross-script coverage; private human dictation remains a separate product requirement.</p>
           <div class="table-scroll">
             <table>
               <caption>Public accuracy and latency recheck by speech-recognition backend</caption>
@@ -202,6 +204,29 @@
             </table>
           </div>
           <p>On 25 LibriSpeech dev-clean clips, repaired Nemotron English and Nemotron 3.5 multilingual both stayed behind Parakeet TDT v3. Multilingual is much faster than the older English path, but its accuracy and final-word retention are worse, so v3 remains the production model.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Vocabulary research</span>
+          <h2>Why decoder vocabulary assistance is not in the app</h2>
+          <p>A <a href="https://github.com/rcourtman/presspeech/issues/21">daily Polish user asked for recognition-time vocabulary assistance</a> because post-transcription dictionary rules require separate entries for inflected names. The need is real, but the current FluidAudio mechanism is a second CTC scoring pass with a precision/recall tradeoff, not a morphological system: aliases can help match variants, but an accepted alias is replaced with one configured canonical form.</p>
+          <div class="grid">
+            <article class="card">
+              <h3>Known risk</h3>
+              <p>FluidAudio documents that short or acoustically similar terms can replace ordinary words that were never spoken. Its conservative controls reduce those false replacements but can also lose genuine vocabulary recall.</p>
+            </article>
+            <article class="card">
+              <h3>Presspeech gate</h3>
+              <p><code>run-vocabulary-bias-regression.sh</code> compares production v3 with four direct-v3 policies over repeated target clips and same-language negative controls. A candidate cannot pass by improving aggregate recall while making even one compared clip worse.</p>
+            </article>
+            <article class="card">
+              <h3>Current status</h3>
+              <p>No vocabulary policy has cleared the product-candidate gate, so Presspeech still uses its deterministic Dictionary &amp; Shortcuts pass. That avoids silently trading occasional proper-name fixes for unrelated word substitutions.</p>
+            </article>
+          </div>
+          <p>People affected by this gap can help without publishing private speech. Follow the <a href="https://github.com/rcourtman/presspeech/blob/main/CONTRIBUTING.md#suggesting-features">privacy-redacted contribution workflow</a> and attach only the aggregate report to <a href="https://github.com/rcourtman/presspeech/issues/21">issue #21</a>. The local fixtures, transcripts, vocabulary terms, and paths stay on the contributor's Mac. Technical background: <a href="https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Documentation/ASR/CustomVocabulary.md">FluidAudio custom-vocabulary documentation at Presspeech's pinned revision</a>.</p>
         </div>
       </section>
 
