@@ -112,6 +112,30 @@ func setupChecklistWindowContentSize(ideal: NSSize = NSSize(width: 560, height: 
                   height: min(ideal.height, availableHeight))
 }
 
+/// A registered login item can still require the user's approval in System
+/// Settings. Treating that state as "enabled" makes a click unregister the
+/// pending request, leaving no path from Presspeech to the approval macOS is
+/// asking for. Keep the status-to-intent mapping pure so the recovery behavior
+/// is covered without mutating the machine's real login items in self-tests.
+enum LaunchAtLoginAction: Equatable {
+    case register
+    case unregister
+    case openSystemSettings
+}
+
+func launchAtLoginAction(for status: SMAppService.Status) -> LaunchAtLoginAction {
+    switch status {
+    case .enabled:
+        return .unregister
+    case .requiresApproval:
+        return .openSystemSettings
+    case .notRegistered, .notFound:
+        return .register
+    @unknown default:
+        return .register
+    }
+}
+
 let SETTINGS_SUITE = "com.local.presspeech"
 let CORRECTIONS_FILE_UTI = "com.local.presspeech.corrections"
 let CORRECTIONS_FILE_EXTENSION = "presspeech-corrections"
@@ -6293,7 +6317,10 @@ private final class UpdateProgressAppDelegate: NSObject, NSApplicationDelegate, 
 }
 
 @MainActor
-final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
+    private static let launchAtLoginMenuItemIdentifier = NSUserInterfaceItemIdentifier(
+        "com.local.presspeech.menu.launch-at-login"
+    )
     private var statusItem: NSStatusItem!
     private var templateImage: NSImage?
     private var recordingImage: NSImage?
@@ -8135,7 +8162,32 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - Menu
 
     private func rebuildMenu() {
-        statusItem.menu = buildMenu()
+        let menu = buildMenu()
+        menu.delegate = self
+        statusItem.menu = menu
+    }
+
+    /// Login-item approval can be changed outside Presspeech. Refresh its
+    /// cached menu item before each opening so returning from System Settings
+    /// never leaves a stale mixed/on state behind.
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === statusItem.menu,
+              let item = menuItem(with: Self.launchAtLoginMenuItemIdentifier, in: menu) else {
+            return
+        }
+        configureLaunchAtLoginMenuItem(item, status: SMAppService.mainApp.status)
+    }
+
+    private func menuItem(with identifier: NSUserInterfaceItemIdentifier,
+                          in menu: NSMenu) -> NSMenuItem? {
+        for item in menu.items {
+            if item.identifier == identifier { return item }
+            if let submenu = item.submenu,
+               let match = menuItem(with: identifier, in: submenu) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func buildDockMenu() -> NSMenu {
@@ -9282,15 +9334,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                        action: #selector(toggleLaunchAtLogin(_:)),
                                        keyEquivalent: "")
         launchAtLogin.target = self
-        switch SMAppService.mainApp.status {
-        case .enabled:
-            launchAtLogin.state = .on
-        case .requiresApproval:
-            launchAtLogin.state = .mixed
-            launchAtLogin.toolTip = "Approve Presspeech in System Settings → General → Login Items."
-        default:
-            launchAtLogin.state = .off
-        }
+        launchAtLogin.identifier = Self.launchAtLoginMenuItemIdentifier
+        configureLaunchAtLoginMenuItem(launchAtLogin, status: SMAppService.mainApp.status)
         sub.addItem(launchAtLogin)
 
         let dock = NSMenuItem(title: "Show Presspeech in Dock",
@@ -9302,6 +9347,22 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         parent.submenu = sub
         return parent
+    }
+
+    private func configureLaunchAtLoginMenuItem(_ item: NSMenuItem,
+                                                status: SMAppService.Status) {
+        item.title = "Launch at Login"
+        item.toolTip = nil
+        switch status {
+        case .enabled:
+            item.state = .on
+        case .requiresApproval:
+            item.state = .mixed
+            item.title = "Launch at Login (Approval Required)"
+            item.toolTip = "Open System Settings → General → Login Items to approve Presspeech."
+        default:
+            item.state = .off
+        }
     }
 
     private func buildMaximumRecordingLengthSettingsItem() -> NSMenuItem {
@@ -10804,13 +10865,16 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
         do {
-            switch SMAppService.mainApp.status {
-            case .enabled, .requiresApproval:
+            switch launchAtLoginAction(for: SMAppService.mainApp.status) {
+            case .unregister:
                 try SMAppService.mainApp.unregister()
                 log("launch at login disabled")
-            default:
+            case .register:
                 try SMAppService.mainApp.register()
                 log("launch at login enabled")
+            case .openSystemSettings:
+                SMAppService.openSystemSettingsLoginItems()
+                log("launch at login approval opened in System Settings")
             }
         } catch {
             showLaunchAtLoginError(error)
@@ -11537,6 +11601,8 @@ private enum PresspeechSelfTest {
             return runSuite("diagnostics", testDiagnostics)
         case "identity-migration":
             return runSuite("identity-migration", testIdentityMigration)
+        case "launch-at-login":
+            return runSuite("launch-at-login", testLaunchAtLogin)
         case "all":
             return runSuite("all", testAll)
         default:
@@ -11581,6 +11647,22 @@ private enum PresspeechSelfTest {
         try testPrivateLogAppend()
         try testDiagnostics()
         try testIdentityMigration()
+        try testLaunchAtLogin()
+    }
+
+    private static func testLaunchAtLogin() throws {
+        try expect(launchAtLoginAction(for: .enabled),
+                   equals: .unregister,
+                   "an enabled login item should be disabled on click")
+        try expect(launchAtLoginAction(for: .requiresApproval),
+                   equals: .openSystemSettings,
+                   "a pending login item should lead to its approval surface")
+        try expect(launchAtLoginAction(for: .notRegistered),
+                   equals: .register,
+                   "a disabled login item should be registered on click")
+        try expect(launchAtLoginAction(for: .notFound),
+                   equals: .register,
+                   "a missing login item should retry registration and surface any error")
     }
 
     private static func testRecordingHUDAccessibility() throws {
