@@ -47,7 +47,8 @@ CASK_TAP="${PRESSPEECH_HOMEBREW_TAP:-$PROJECT_DIR/../homebrew-presspeech}"
 CASK_FILE="$CASK_TAP/Casks/presspeech.rb"
 CASK_TOKEN="rcourtman/presspeech/presspeech"
 # Directory-level superset of SYNCED_PATHS in scripts/sync-docs.py
-# (every synced file lives at README.md or under docs/). Deliberately
+# (synced files live at README.md, under docs/, and — for the release size
+# caption inside designed artwork — under icon/). Deliberately
 # coarse: a path added to SYNCED_PATHS alone is still committed and
 # rolled back here without this list needing a matching edit. Pre-flight
 # rejects untracked files under these paths so `git add docs` cannot
@@ -55,6 +56,7 @@ CASK_TOKEN="rcourtman/presspeech/presspeech"
 DOC_SYNC_PATHS=(
     README.md
     docs
+    icon
 )
 NO_ATTRIBUTION_CHECKER="${NO_ATTRIBUTION_CHECKER:-/Users/rcourtman/.codex/skills/github-no-attribution/scripts/check_no_attribution.py}"
 ROLLBACK_RELEASE_MUTATIONS=0
