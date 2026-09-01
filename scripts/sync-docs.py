@@ -864,6 +864,36 @@ SYNCERS = {
 }
 
 
+def sync_icon_stats(
+    previous_size: str, size: str, paths: list[Path] = ICON_STAT_SVGS
+) -> list[str]:
+    """Refresh the release-size caption inside designed artwork.
+
+    The caption is a statistic, not artwork: when a release build changes the
+    published size, the exact previous caption is swapped in place and every
+    other designed byte is preserved. Anything more surprising than that exact
+    swap is left for check_icon_stats to fail on.
+    """
+    updated: list[str] = []
+    if not previous_size or previous_size == size:
+        return updated
+    pattern = re.compile(rf"(?<![0-9.]){re.escape(previous_size)}")
+    for path in paths:
+        if not path.exists():
+            continue
+        contents = read_text(path)
+        if size in contents:
+            continue
+        replaced, count = pattern.subn(size, contents)
+        if not count:
+            continue
+        write_text(path, replaced)
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        updated.append(str(display))
+        print(f"updated {display}")
+    return updated
+
+
 def check_icon_stats(metadata: dict[str, object]) -> list[str]:
     size = str(metadata["release_zip_size"])
     errors: list[str] = []
@@ -874,7 +904,8 @@ def check_icon_stats(metadata: dict[str, object]) -> list[str]:
         if size not in read_text(path):
             errors.append(
                 f"{path.relative_to(ROOT)}: release size stat is stale — "
-                f"expected {size!r} (designed asset; update the text by hand)"
+                f"expected {size!r} (designed asset; a release sync refreshes "
+                "the caption, otherwise update the text by hand)"
             )
     return errors
 
@@ -1051,6 +1082,21 @@ def run_self_test() -> None:
             or generated_metadata["release_zip_sha256"] != expected_digest
         ):
             raise SyncError("self-test: release archive size or SHA-256 did not sync")
+
+        stale_svg = Path(tmp) / "stale.svg"
+        stale_svg.write_text(
+            "<tspan>7.6 MB </tspan><tspan>80 MB</tspan><tspan>17.6 MB</tspan>",
+            encoding="utf-8",
+        )
+        current_svg = Path(tmp) / "current.svg"
+        current_svg.write_text("<tspan>7.7 MB</tspan>", encoding="utf-8")
+        sync_icon_stats("7.6 MB", "7.7 MB", [stale_svg, current_svg])
+        if stale_svg.read_text(encoding="utf-8") != (
+            "<tspan>7.7 MB </tspan><tspan>80 MB</tspan><tspan>17.6 MB</tspan>"
+        ):
+            raise SyncError("self-test: designed-asset size caption did not sync")
+        if current_svg.read_text(encoding="utf-8") != "<tspan>7.7 MB</tspan>":
+            raise SyncError("self-test: current designed-asset caption was rewritten")
 
         index_page = Path(tmp) / "index.html"
         index_page.write_text(
@@ -1298,10 +1344,12 @@ def main() -> int:
             print("docs are synced")
             return 0
 
+        previous_size = str(load_metadata().get("release_zip_size", ""))
         for path, text in expected.items():
             if not path.exists() or read_text(path) != text:
                 write_text(path, text)
                 print(f"updated {path.relative_to(ROOT)}")
+        sync_icon_stats(previous_size, str(metadata["release_zip_size"]))
 
         errors.extend(stale_copy_errors(list(expected) + EXTRA_STALE_SCAN))
         errors.extend(check_windows_release_references(metadata))
