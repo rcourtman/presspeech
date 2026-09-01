@@ -4,6 +4,7 @@ Hold a hotkey, speak, release, and the transcript is typed at the cursor.
 Everything runs locally (Whisper via faster-whisper); no cloud, no accounts.
 """
 
+import ctypes
 import importlib
 import math
 import os
@@ -60,6 +61,7 @@ FILLER_SENTENCE_TERMINATORS = ".!?"
 FILLER_ORPHAN_SEPARATORS = ",.;:!?"
 
 SINGLE_INSTANCE_MUTEX = "Local\\PresspeechSingleInstance"
+SINGLE_INSTANCE_ACTIVATE_EVENT = "Local\\PresspeechActivate"
 
 POST_ROLL_MIN_SEC = 0.08
 POST_ROLL_MAX_SEC = 0.4
@@ -488,6 +490,7 @@ class PresspeechApp:
         self.icon = None
         self.listener = None
         self._mutex_handle = None
+        self._activation_event_handle = None
         self._key_held = False
         self._pressed_keys = set()
         self._held_hotkey_keys = frozenset()
@@ -519,8 +522,13 @@ class PresspeechApp:
 
     def run(self):
         if not self._single_instance():
-            print("Presspeech is already running.")
-            sys.exit(1)
+            print("Presspeech is already running; opening its controls.")
+            sys.exit(0)
+        threading.Thread(
+            target=self._watch_activation_requests,
+            name="presspeech-activation",
+            daemon=True,
+        ).start()
         self.icon = Icon(
             "Presspeech",
             self.idle_icon,
@@ -561,19 +569,78 @@ class PresspeechApp:
         except KeyboardInterrupt:
             pass
 
-    def _single_instance(self):
-        import ctypes
+    def _single_instance(self, kernel32=None):
+        """Own the app mutex or signal the running process to show its UI."""
         from ctypes import wintypes
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        if kernel32 is None:
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateEventW.restype = wintypes.HANDLE
+        kernel32.CreateEventW.argtypes = [
+            wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
         kernel32.CreateMutexW.restype = wintypes.HANDLE
         kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+        kernel32.SetEvent.restype = wintypes.BOOL
+        kernel32.SetEvent.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+        # Create the event before claiming the mutex. Concurrent launches then
+        # share an event handle before one becomes the winner, so the losing
+        # process cannot signal during a narrow event-creation race.
+        activation_event = kernel32.CreateEventW(
+            None, False, False, SINGLE_INSTANCE_ACTIVATE_EVENT)
+        if not activation_event:
+            return False
+        # CreateEvent may have reported that the shared activation event
+        # already exists. Do not mistake that stale last-error value for the
+        # result of the distinct ownership mutex call below.
+        ctypes.set_last_error(0)
         handle = kernel32.CreateMutexW(None, False, SINGLE_INSTANCE_MUTEX)
         if not handle:
+            kernel32.CloseHandle(activation_event)
             return False
-        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+        already_exists = ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
+        if already_exists:
+            kernel32.SetEvent(activation_event)
+            kernel32.CloseHandle(handle)
+            kernel32.CloseHandle(activation_event)
             return False
         self._mutex_handle = handle
+        self._activation_event_handle = activation_event
         return True
+
+    def _watch_activation_requests(self, kernel32=None):
+        """Wait for later Start Menu launches without polling."""
+        from ctypes import wintypes
+        if kernel32 is None:
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        while True:
+            result = kernel32.WaitForSingleObject(
+                self._activation_event_handle, 0xFFFFFFFF)  # INFINITE
+            if result != 0:  # WAIT_OBJECT_0
+                self._log("activation watcher stopped; Win32 result=%s" % result)
+                return
+            self._activate_from_launch()
+
+    def _activate_from_launch(self):
+        """Reveal the most relevant control surface after a repeated launch."""
+        # Preserve the user's current task when a window already exists,
+        # including a minimized or covered update/setup/settings window.
+        for window in (
+                self.update_window, self.setup_window,
+                self.settings_window, self.scratchpad):
+            if window is not None:
+                ui.present_window(window)
+                self._log("repeat launch restored an existing window")
+                return
+        if self.settings.get("setup_complete", False):
+            self.open_settings()
+            self._log("repeat launch opened settings")
+        else:
+            self.open_setup()
+            self._log("repeat launch opened setup")
 
     def exit_app(self, icon=None, item=None):
         self._restore_playback_after_recording()
@@ -1448,16 +1515,25 @@ class PresspeechApp:
     def open_scratchpad(self, icon=None, item=None):
         if self.scratchpad is None:
             self.scratchpad = ui.ScratchpadWindow(self)
+        else:
+            ui.present_window(self.scratchpad)
 
     def open_settings(self, icon=None, item=None):
         if self.settings_window is None:
             self.settings_window = ui.SettingsWindow(self)
+        else:
+            ui.present_window(self.settings_window)
 
     def open_setup(self, icon=None, item=None):
         if self.setup_window is None:
             self.setup_window = ui.SetupWindow(self)
+        else:
+            ui.present_window(self.setup_window)
 
     def check_for_updates(self, icon=None, item=None):
+        if self.update_window is not None:
+            ui.present_window(self.update_window)
+            return
         if not self._update_lock.acquire(blocking=False):
             self.notify("Presspeech", "An update check is already running.")
             return

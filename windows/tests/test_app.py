@@ -26,6 +26,112 @@ HOST_APIS = [
 ]
 
 
+class SingleInstanceActivationTests(unittest.TestCase):
+    def make_app(self, setup_complete=False):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"setup_complete": setup_complete}
+        instance.update_window = None
+        instance.setup_window = None
+        instance.settings_window = None
+        instance.scratchpad = None
+        instance._log = mock.Mock()
+        return instance
+
+    @staticmethod
+    def kernel32():
+        kernel32 = mock.Mock()
+        kernel32.CreateEventW.return_value = 101
+        kernel32.CreateMutexW.return_value = 202
+        return kernel32
+
+    def test_first_instance_keeps_mutex_and_activation_event(self):
+        instance = self.make_app()
+        kernel32 = self.kernel32()
+
+        with mock.patch.object(
+                app.ctypes, "set_last_error", create=True) as clear_error, \
+                mock.patch.object(
+                    app.ctypes, "get_last_error", return_value=0, create=True):
+            self.assertTrue(instance._single_instance(kernel32))
+
+        clear_error.assert_called_once_with(0)
+        self.assertEqual(instance._mutex_handle, 202)
+        self.assertEqual(instance._activation_event_handle, 101)
+        kernel32.SetEvent.assert_not_called()
+        kernel32.CloseHandle.assert_not_called()
+
+    def test_later_instance_signals_first_and_releases_its_handles(self):
+        instance = self.make_app()
+        kernel32 = self.kernel32()
+
+        with mock.patch.object(
+                app.ctypes, "set_last_error", create=True) as clear_error, \
+                mock.patch.object(
+                    app.ctypes, "get_last_error", return_value=183, create=True):
+            self.assertFalse(instance._single_instance(kernel32))
+
+        clear_error.assert_called_once_with(0)
+        kernel32.SetEvent.assert_called_once_with(101)
+        self.assertEqual(
+            kernel32.CloseHandle.call_args_list,
+            [mock.call(202), mock.call(101)],
+        )
+
+    def test_activation_watcher_dispatches_each_signaled_request(self):
+        instance = self.make_app()
+        instance._activation_event_handle = 101
+        instance._activate_from_launch = mock.Mock()
+        kernel32 = mock.Mock()
+        kernel32.WaitForSingleObject.side_effect = [0, 258]
+
+        instance._watch_activation_requests(kernel32)
+
+        instance._activate_from_launch.assert_called_once_with()
+        self.assertEqual(kernel32.WaitForSingleObject.call_count, 2)
+
+    def test_repeat_launch_restores_existing_window_before_opening_another(self):
+        instance = self.make_app(setup_complete=True)
+        instance.setup_window = mock.Mock()
+        instance.open_settings = mock.Mock()
+
+        with mock.patch.object(app.ui, "present_window") as present:
+            instance._activate_from_launch()
+
+        present.assert_called_once_with(instance.setup_window)
+        instance.open_settings.assert_not_called()
+
+    def test_repeat_launch_opens_setup_until_first_run_is_complete(self):
+        instance = self.make_app(setup_complete=False)
+        instance.open_setup = mock.Mock()
+        instance.open_settings = mock.Mock()
+
+        instance._activate_from_launch()
+
+        instance.open_setup.assert_called_once_with()
+        instance.open_settings.assert_not_called()
+
+    def test_repeat_launch_opens_settings_after_first_run(self):
+        instance = self.make_app(setup_complete=True)
+        instance.open_setup = mock.Mock()
+        instance.open_settings = mock.Mock()
+
+        instance._activate_from_launch()
+
+        instance.open_settings.assert_called_once_with()
+        instance.open_setup.assert_not_called()
+
+    def test_update_command_restores_existing_prompt_without_another_check(self):
+        instance = self.make_app()
+        instance.update_window = mock.Mock()
+        instance._update_lock = mock.Mock()
+
+        with mock.patch.object(app.ui, "present_window") as present:
+            instance.check_for_updates()
+
+        present.assert_called_once_with(instance.update_window)
+        instance._update_lock.acquire.assert_not_called()
+
+
 class UpdateWindowTests(unittest.TestCase):
     def make_window(self):
         window = app.ui.UpdateWindow.__new__(app.ui.UpdateWindow)

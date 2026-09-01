@@ -45,6 +45,26 @@ class AccessibleWindowTests(unittest.TestCase):
             list(windows),
         )
 
+    def test_present_window_restores_and_foregrounds_on_shared_host(self):
+        host = mock.Mock()
+        root = mock.Mock()
+        window = types.SimpleNamespace(root=root)
+
+        with mock.patch.object(ui, "_window_host", return_value=host):
+            ui.present_window(window)
+
+        present = host.submit.call_args.args[0]
+        present()
+        root.deiconify.assert_called_once_with()
+        root.lift.assert_called_once_with()
+        root.focus_force.assert_called_once_with()
+        root.attributes.assert_called_once_with("-topmost", True)
+
+        delay, clear_topmost = root.after.call_args.args
+        self.assertEqual(delay, 250)
+        clear_topmost()
+        root.attributes.assert_called_with("-topmost", False)
+
     def test_setup_and_settings_use_scrollable_resizable_dialogs(self):
         for window in (ui.SetupWindow, ui.SettingsWindow):
             body = inspect.getsource(window)

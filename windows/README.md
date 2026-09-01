@@ -117,6 +117,10 @@ The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Check for Updates…**, **Copy Diagnostics**, and **Exit**. The icon turns red
 while recording. Setup, settings, update, and scratchpad controls expose names,
 roles, values, and actions through Windows UI Automation for screen readers.
+Windows may place the icon in the notification-area overflow. If the icon is
+hard to find, launch Presspeech again from the Start Menu: the running app
+restores its existing window, opens Setup during first run, or opens Settings
+after setup. It does not start a second dictation process.
 
 ## Settings
 

@@ -27,6 +27,15 @@ Run this before publishing a release.
   again. After the model reaches Ready, confirm both actions become available.
 - Confirm **Finish Setup** remains available if the microphone will be connected
   later; microphone readiness is advisory rather than a completion gate.
+- Close every Presspeech window while leaving the notification-area process
+  running, then launch Presspeech from the Start Menu. Before setup completion,
+  confirm Setup opens; after completion, confirm Settings opens. Minimize each
+  window and launch again, confirming the existing window is restored and
+  foregrounded rather than a duplicate being created. Repeat while the
+  notification-area icon is in overflow.
+- With Setup, Settings, Try Dictation, and the update prompt open in turn,
+  select the same notification-area command or launch Presspeech again and
+  confirm the existing window is restored instead of being ignored.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm
   capture stops, muted playback is restored, and no transcription is pasted or
   copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.

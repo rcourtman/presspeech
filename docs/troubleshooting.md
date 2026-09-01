@@ -1,6 +1,14 @@
 # Troubleshooting
 
-## Menu Bar Item Is Missing
+## Windows Notification Icon Is Missing
+
+Windows places many app icons in the notification-area overflow. Select the
+up-arrow at the right of the taskbar to look there, or launch Presspeech again
+from the Start Menu. The already-running app restores its open window; if no
+window is open, it opens Setup during first run or Settings afterward. It does
+not start another dictation process or reload the speech model.
+
+## macOS Menu Bar Item Is Missing
 
 macOS can temporarily omit third-party status items when a crowded or notched
 menu bar has too little space. Open `/Applications/Presspeech.app` again from

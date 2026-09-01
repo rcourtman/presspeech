@@ -104,6 +104,35 @@ def _interactive_window(title):
     return root
 
 
+def present_window(window):
+    """Restore and foreground an existing interactive window on its UI thread."""
+    def present():
+        root = getattr(window, "root", None)
+        if root is None:
+            return
+        try:
+            root.deiconify()
+            root.lift()
+            # A launch from the Start Menu is an explicit request to see the
+            # running app. Brief topmost placement also recovers a window that
+            # was covered by other application windows.
+            root.attributes("-topmost", True)
+
+            def clear_topmost():
+                try:
+                    root.attributes("-topmost", False)
+                except tk.TclError:
+                    pass
+
+            root.after(250, clear_topmost)
+            root.focus_force()
+        except tk.TclError:
+            # The close callback can run before this queued presentation.
+            return
+
+    _window_host().submit(present)
+
+
 def accessibility_status():
     """Return a privacy-safe summary for Copy Diagnostics."""
     if _WINDOW_HOST is None:
