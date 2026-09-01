@@ -42,7 +42,7 @@ the hood, speech recognition runs locally through
 and the Apple Neural Engine. The default model is multilingual
 [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3).
 
-> **~100 ms transcription** · **8.3 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
+> **~100 ms transcription** · **8.4 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
 
 ## Install on Windows
 
@@ -73,11 +73,11 @@ source-build details.
 
 Download the notarised app:
 
-- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/download/v0.3.6/Presspeech.zip)
+- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/download/v0.3.7/Presspeech.zip)
 - Optionally verify the current archive against its published SHA-256:
   ```sh
   cd ~/Downloads
-  echo 'b2e67e1b1f823b470d3de1e3fe0dbccc055bede8d66a8b018e9c8d8b63c5266e  Presspeech.zip' | shasum -a 256 -c -
+  echo '6ef0d73ca5b799d215bbb1b31367082411f8e4e07cfd3a692f47a062575f94bc  Presspeech.zip' | shasum -a 256 -c -
   ```
 - Unzip it, move **Presspeech.app** to **Applications**, then open it.
 

@@ -1,10 +1,10 @@
 {
   "last_updated": "2026-09-01",
   "model_cache_size": "~600 MB",
-  "release_zip_bytes": 8745690,
-  "release_zip_sha256": "b2e67e1b1f823b470d3de1e3fe0dbccc055bede8d66a8b018e9c8d8b63c5266e",
-  "release_zip_size": "8.3 MB",
+  "release_zip_bytes": 8796714,
+  "release_zip_sha256": "6ef0d73ca5b799d215bbb1b31367082411f8e4e07cfd3a692f47a062575f94bc",
+  "release_zip_size": "8.4 MB",
   "schema": 1,
-  "version": "0.3.6",
+  "version": "0.3.7",
   "windows_version": "0.1.11"
 }
