@@ -29,7 +29,7 @@ Options:
   --require-real-audio      fail if no private real-dictation clips are present
   --require-public-audio    fail if no public speech clips are present
   --include-candidate-models
-                            also run Unified and current Nemotron candidate checks
+                            also run Parakeet v2, Unified, and current Nemotron candidate checks
   --skip-tail               with --include-candidate-models, skip the synthetic tail-word gate
   --self-test               run wrapper parser/detection tests only
   -h, --help                show this help
@@ -249,6 +249,14 @@ else
         ./run-real-model-comparison.sh --input-dir "$REAL_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
 
         echo
+        echo "running private v3-vs-Parakeet-v2 English candidate comparison on $real_count clip(s)..."
+        ./run-real-model-comparison.sh \
+            --input-dir "$REAL_AUDIO_DIR" \
+            --candidate-backend v2 \
+            --language en \
+            --trials "$TRIALS"
+
+        echo
         echo "running private repaired Nemotron English candidate regression on $real_count clip(s)..."
         ./run-real-dictation-regression.sh --input-dir "$REAL_AUDIO_DIR" --backend nemotron-en --trials "$TRIALS"
 
@@ -286,6 +294,13 @@ if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
     echo
     echo "running public v3-vs-Unified candidate comparison on $public_count clip(s)..."
     ./run-public-model-comparison.sh --fixture-dir "$PUBLIC_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
+
+    echo
+    echo "running public v3-vs-Parakeet-v2 English candidate comparison on $public_count clip(s)..."
+    ./run-public-model-comparison.sh \
+        --fixture-dir "$PUBLIC_AUDIO_DIR" \
+        --candidate-backend v2 \
+        --trials "$TRIALS"
 
     echo
     echo "running public repaired Nemotron English candidate regression on $public_count clip(s)..."

@@ -41,7 +41,7 @@ Options:
   --out-dir <path>         report directory (default: real-results)
   --trials <n>             measured trials per clip/backend (default: 3)
   --candidate-backend <name>
-                           comparison backend: unified or v3-int8-v2
+                           comparison backend: unified, v2, or v3-int8-v2
                            (default: unified)
   --language <auto|code>   Parakeet language/script hint (default: auto)
   --unified-trailing-silence-ms <n>
@@ -51,7 +51,7 @@ Options:
   --public-corpus          label the report as licensed public speech instead of private fixtures
   --references-hand-audited
                            declare private references checked against audio
-  --require-candidate-pass fail unless the int8-v2 evidence screen passes
+  --require-candidate-pass fail unless the supported candidate evidence screen passes
   --self-test              run parser, aggregation, and redaction self-tests
   -h, --help               show this help
 
@@ -345,7 +345,8 @@ candidate_screen() {
         improved regressed latency_ratio <<<"$assessment"
 
     local blockers=()
-    [[ "$candidate" == "v3-int8-v2" ]] || blockers+=("screen is defined only for v3-int8-v2")
+    [[ "$candidate" == "v2" || "$candidate" == "v3-int8-v2" ]] || \
+        blockers+=("screen is defined only for v2 or v3-int8-v2")
     [[ "$TRIALS" -ge "$MIN_CANDIDATE_TRIALS" ]] || blockers+=("fewer than $MIN_CANDIDATE_TRIALS trials")
     if [[ "$CORPUS_KIND" != "public" && "$REFERENCES_HAND_AUDITED" -ne 1 ]]; then
         blockers+=("private references not declared hand-audited")
@@ -503,6 +504,8 @@ run_self_test() {
     REFERENCES_HAND_AUDITED=0
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v3-int8-v2)" \
         $'passes\t' "passing encoder candidate screen"
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v2)" \
+        $'passes\t' "passing English model candidate screen"
     local blocked_screen
     blocked_screen="$(candidate_screen $'25\t1200\t10\t11\t0\t1\t1.300' clean v3-int8-v2)"
     assert_contains <(printf '%s' "$blocked_screen") "no clip demonstrates an error reduction"
@@ -628,9 +631,9 @@ if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
 fi
 
 case "$CANDIDATE_BACKEND" in
-    unified|v3-int8-v2) ;;
+    unified|v2|v3-int8-v2) ;;
     *)
-        echo "--candidate-backend must be unified or v3-int8-v2" >&2
+        echo "--candidate-backend must be unified, v2, or v3-int8-v2" >&2
         exit 2
         ;;
 esac
@@ -804,6 +807,8 @@ for clip in "${clips[@]}"; do
             else
                 setting="encoder=int8-v2"
             fi
+        elif [[ "$CANDIDATE_BACKEND" == "v2" ]]; then
+            setting="$([[ "$backend" == "v3" ]] && echo multilingual-v3 || echo english-v2)"
         fi
 
         if [[ "$best_reference_words" != "$reference_words" ]]; then
@@ -833,9 +838,9 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
     echo "|---|---:|---:|---:|---:|---:|"
     backend_summary_row "$tsv" "v3"
     backend_summary_row "$tsv" "$CANDIDATE_BACKEND"
-    if [[ "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
+    if [[ "$CANDIDATE_BACKEND" == "v2" || "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
         echo
-        echo "## Encoder Candidate Evidence Screen"
+        echo "## Model Candidate Evidence Screen"
         echo
         echo "The candidate's worst observed transcript is compared with production's best observed transcript on each clip; a noisy production trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x production. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
         echo

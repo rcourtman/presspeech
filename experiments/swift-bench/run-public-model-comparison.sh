@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the v3-vs-Unified comparison on generated public speech fixtures.
+# Run a v3-versus-candidate comparison on generated public speech fixtures.
 
 set -euo pipefail
 
@@ -13,6 +13,7 @@ START_INDEX="0"
 FIXTURE_DIR=""
 OUTDIR="public-results"
 TRIALS="3"
+CANDIDATE_BACKEND="unified"
 UNIFIED_TRAILING_SILENCE_MS="250"
 FETCH=0
 FORCE_FETCH=0
@@ -33,6 +34,9 @@ Options:
                           (default: public-audio/librispeech-<split>)
   --out-dir <path>        report directory (default: public-results)
   --trials <n>            measured trials per clip/backend (default: 3)
+  --candidate-backend <name>
+                          comparison backend: unified, v2, or v3-int8-v2
+                          (default: unified)
   --unified-trailing-silence-ms <n>
                           Unified-only trailing silence in ms (default: 250)
   --self-test             run parser/detection self-tests only
@@ -40,7 +44,7 @@ Options:
 
 Examples:
   ./run-public-model-comparison.sh --fetch --count 50 --trials 3
-  ./run-public-model-comparison.sh --fixture-dir public-audio/librispeech-test-other --trials 5
+  ./run-public-model-comparison.sh --fixture-dir public-audio/librispeech-test-other --candidate-backend v2 --trials 5
 USAGE
 }
 
@@ -172,6 +176,11 @@ while [[ $# -gt 0 ]]; do
             TRIALS="$2"
             shift 2
             ;;
+        --candidate-backend)
+            need_value "$@"
+            CANDIDATE_BACKEND="$2"
+            shift 2
+            ;;
         --unified-trailing-silence-ms)
             need_value "$@"
             UNIFIED_TRAILING_SILENCE_MS="$2"
@@ -213,6 +222,14 @@ if ! is_positive_integer "$TRIALS"; then
     exit 2
 fi
 
+case "$CANDIDATE_BACKEND" in
+    unified|v2|v3-int8-v2) ;;
+    *)
+        echo "--candidate-backend must be unified, v2, or v3-int8-v2" >&2
+        exit 2
+        ;;
+esac
+
 if ! is_nonnegative_integer "$UNIFIED_TRAILING_SILENCE_MS"; then
     echo "--unified-trailing-silence-ms must be a non-negative integer" >&2
     exit 2
@@ -242,12 +259,22 @@ MSG
     exit 1
 fi
 
-echo "running public v3-vs-Unified ASR comparison on $clip_count clip(s)..."
-./run-real-model-comparison.sh \
-    --input-dir "$FIXTURE_DIR" \
-    --out-dir "$OUTDIR" \
-    --trials "$TRIALS" \
-    --unified-trailing-silence-ms "$UNIFIED_TRAILING_SILENCE_MS" \
-    --public-corpus \
-    --show-transcripts \
-    --show-paths
+echo "running public v3-vs-$CANDIDATE_BACKEND ASR comparison on $clip_count clip(s)..."
+compare_args=(
+    "./run-real-model-comparison.sh"
+    "--input-dir" "$FIXTURE_DIR"
+    "--out-dir" "$OUTDIR"
+    "--trials" "$TRIALS"
+    "--candidate-backend" "$CANDIDATE_BACKEND"
+    "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS"
+    "--public-corpus"
+    "--show-transcripts"
+    "--show-paths"
+)
+# The product would select v2 only for an explicit English dictation setting,
+# so compare it with production v3 under the same English hint rather than
+# giving the candidate an easier auto-detected baseline.
+if [[ "$CANDIDATE_BACKEND" == "v2" ]]; then
+    compare_args+=( "--language" "en" )
+fi
+"${compare_args[@]}"

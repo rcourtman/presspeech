@@ -14,8 +14,8 @@
 //   * FluidAudio's direct and sliding-window Parakeet v3 vocabulary paths,
 //     including conservative, spotter-rescue-disabled, and exact-similarity
 //     candidate-evidence policies.
-//   * Candidate FluidAudio Parakeet Unified, Nemotron English, and
-//     Nemotron 3.5 multilingual paths, also via CoreML on the ANE.
+//   * Candidate FluidAudio Parakeet v2 English, Parakeet Unified, Nemotron
+//     English, and Nemotron 3.5 multilingual paths, also via CoreML on the ANE.
 //
 // This benchmark drove the original "should Presspeech port to Swift?"
 // decision; FluidAudio won and the production app uses it now (see

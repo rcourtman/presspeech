@@ -17,6 +17,7 @@ the production app.
 | Tag | Stack | Where it runs |
 |---|---|---|
 | **`v3`** | FluidAudio Swift SDK → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
+| **`v2`** | FluidAudio Swift SDK → English-only Parakeet TDT 0.6 B **v2** → CoreML | Apple Neural Engine |
 | **`v3-int8-v2`** | production `v3` path + candidate linear-int8 `Encoder_v2` | Apple Neural Engine |
 | **`v3-vocab`** | production `v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
 | **`v3-vocab-conservative`** | `v3-vocab` + FluidAudio's short-term taper and spotter similarity floors | Apple Neural Engine |
@@ -54,6 +55,7 @@ swift build
 
 # 3a. Swift backends.
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3 --trials 5
+./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v2 --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend unified --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --trials 5
 
@@ -101,9 +103,9 @@ Then run:
 ./run-real-model-comparison.sh --trials 3
 ```
 
-The comparison script normalizes audio through `afconvert`, runs v3 and
-Unified against every clip, and writes ignored Markdown/TSV reports under
-`real-results/` with corpus WER, worst WER, final-word failures, and p50
+The comparison script normalizes audio through `afconvert`, runs v3 and a
+selected candidate against every clip, and writes ignored Markdown/TSV reports
+under `real-results/` with corpus WER, worst WER, final-word failures, and p50
 latency by backend. Corpus WER is computed from exact edit and reference-word
 counts, so longer clips contribute proportionally; worst-trial selection also
 uses those exact counts rather than the rounded display percentage. Transcript
@@ -122,6 +124,7 @@ For single-backend debugging:
 
 ```sh
 ./run-real-dictation-regression.sh --backend v3 --trials 5
+./run-real-dictation-regression.sh --backend v2 --trials 5
 ./run-real-dictation-regression.sh --backend unified --trials 5 --unified-trailing-silence-ms 250
 ./run-real-dictation-regression.sh --backend nemotron-en --trials 5
 ./run-real-dictation-regression.sh --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --trials 5
@@ -374,11 +377,12 @@ Then run the production v3 regression with public-corpus reporting:
 ./run-real-dictation-regression.sh --input-dir public-audio/librispeech-dev-clean --out-dir public-results --backend v3 --public-corpus --show-transcripts --show-paths --trials 3
 ```
 
-For candidate-model evaluation, run the same v3-vs-Unified comparison
-with public-corpus reporting:
+For candidate-model evaluation, run a v3-versus-candidate comparison with
+public-corpus reporting. Unified remains the default candidate:
 
 ```sh
 ./run-public-model-comparison.sh --trials 3
+./run-public-model-comparison.sh --candidate-backend v2 --trials 3
 ```
 
 Or run a specific candidate backend against the public fixtures:
@@ -423,10 +427,17 @@ Compare it with Presspeech's production encoder on exactly the same fixtures:
   --trials 3
 ```
 
-For a product-candidate gate, add `--require-candidate-pass`. The gate requires
-a clean checkout, at least 3 trials, 25 comparable clips and 1,000 reference
-words, at least one demonstrated error reduction, no per-clip or aggregate
-word-error increase, and average p50 latency no more than 1.25× production.
+Parakeet v2 is deliberately benchmark-only. FluidAudio recommends it when only
+English is needed because its tighter vocabulary improves English recall, but
+Presspeech does not promote a model from upstream aggregate results alone. The
+v2 comparison uses an explicit English hint for the production-v3 baseline and
+the same audio for both models.
+
+For a v2 or encoder product-candidate gate, add `--require-candidate-pass`.
+The gate requires a clean checkout, at least 3 trials, 25 comparable clips and
+1,000 reference words, at least one demonstrated error reduction, no per-clip
+or aggregate word-error increase, and average p50 latency no more than 1.25×
+production.
 It compares the candidate's worst observed transcript with production's best
 on every clip so unstable baseline output cannot hide a regression. Private
 corpora additionally require `--references-hand-audited`.
@@ -514,8 +525,8 @@ If you want the release check to fail when no local corpus is available:
 ./run-release-asr-checks.sh --require-public-audio
 ```
 
-To also run Unified tail-word/comparison checks plus repaired Nemotron English
-and Nemotron 3.5 multilingual regressions:
+To also run Parakeet v2 and Unified comparisons, the Unified tail-word check,
+plus repaired Nemotron English and Nemotron 3.5 multilingual regressions:
 
 ```sh
 ./run-release-asr-checks.sh --include-candidate-models

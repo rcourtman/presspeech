@@ -41,7 +41,7 @@ usage: ./run-real-dictation-regression.sh [options]
 Options:
   --input-dir <path>       directory with audio + .txt sidecars (default: real-audio)
   --out-dir <path>         report directory (default: real-results)
-  --backend <name>         presspeech-bench backend: v3, v3-int8-v2, unified, nemotron-en,
+  --backend <name>         presspeech-bench backend: v2, v3, v3-int8-v2, unified, nemotron-en,
                            nemotron-multilingual, apple, 110m, fluid, both (default: v3)
   --trials <n>             measured trials per clip (default: 5)
   --unified-trailing-silence-ms <n>

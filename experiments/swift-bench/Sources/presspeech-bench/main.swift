@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v3|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v2|v3|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //   presspeech-bench --reference-metrics --reference-file path/to/reference.txt --critical-terms path/to/terms.txt
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
@@ -139,11 +139,12 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v3|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v2|v3|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
                    presspeech-bench --reference-metrics --reference-file <txt> --critical-terms <txt>
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
+                         v2    FluidAudio Parakeet TDT v2 — English-only candidate
                          v3-int8-v2
                               production v3 path with FluidAudio's candidate
                               linear-int8 Encoder_v2 model
@@ -479,11 +480,10 @@ final class AppleBackend: ASRBackend {
 
 // ----- FluidAudio (Parakeet → CoreML → ANE) -----------------------------
 //
-// One class, two model versions: TDT v3 (0.6B, 25-language default) and
-// TDT-CTC 110M (smaller English-focused model with a fused
-// preprocessor+encoder). Both load through the same `AsrModels` /
-// `AsrManager` API and both decode through `TdtDecoderState` — 110M is a
-// hybrid TDT-CTC, so the TDT decoder path applies unchanged.
+// One class for the production TDT v3 model and compatible candidates:
+// English-only TDT v2 and TDT-CTC 110M. They load through the same
+// `AsrModels` / `AsrManager` API and decode through `TdtDecoderState` — 110M
+// is a hybrid TDT-CTC, so the TDT decoder path applies unchanged.
 
 final class FluidBackend: ASRBackend {
     let name: String
@@ -494,6 +494,8 @@ final class FluidBackend: ASRBackend {
 
     var modelCacheComponents: [(label: String, url: URL)] {
         switch version {
+        case .v2:
+            return [("parakeet-v2", modelCacheDirectory(for: .parakeetV2))]
         case .v3:
             return [("parakeet-v3-\(encoderPrecision.rawValue)", modelCacheDirectory(for: .parakeetV3))]
         case .tdtCtc110m:
@@ -1847,7 +1849,7 @@ struct PresspeechBench {
         let warmup = samples
 
         let known = [
-            "apple", "v3", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
+            "apple", "v2", "v3", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
             "v3-vocab-exact-similarity",
             "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
             "sliding-vocab-no-rescue", "unified",
@@ -1879,6 +1881,14 @@ struct PresspeechBench {
                     name: "fluid-ParakeetTDTv3",
                     version: .v3,
                     language: args.language
+                )
+            )
+        }
+        if args.backend == "v2" {
+            backends.append(
+                FluidBackend(
+                    name: "fluid-ParakeetTDTv2-English",
+                    version: .v2
                 )
             )
         }

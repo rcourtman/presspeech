@@ -34,7 +34,7 @@ usage() {
 usage: ./bench-power.sh --file <audio> [options]
 
 Options:
-  --backend <name>       presspeech-bench backend: v3, unified, nemotron-en,
+  --backend <name>       presspeech-bench backend: v2, v3, unified, nemotron-en,
                          nemotron-multilingual, apple, 110m, fluid, both (default: v3)
   --trials <n>           measured transcription trials (default: 20)
   --unified-trailing-silence-ms <n>
