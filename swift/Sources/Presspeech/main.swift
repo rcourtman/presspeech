@@ -2615,6 +2615,7 @@ private struct SetupChecklistSnapshot: Equatable {
     let audioInput: SetupChecklistRowState
     let permissions: [SetupChecklistPermissionState]
     let hotkey: SetupChecklistRowState
+    let showInDock: Bool
     let isComplete: Bool
 }
 
@@ -6516,6 +6517,40 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// A status item can be temporarily omitted when the menu bar has no room.
+    /// Reopening an already-running agent from Finder or Spotlight must still
+    /// reveal a control surface; otherwise this LSUIElement app has no window,
+    /// Dock icon, or application menu from which to recover.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        guard !isTerminating else { return false }
+        if flag {
+            showAppForModal()
+            if let window = sender.windows.first(where: {
+                !($0 is NSPanel) && ($0.isVisible || $0.isMiniaturized)
+            }) {
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                window.makeKeyAndOrderFront(nil)
+            }
+            log("app reopened; raised existing window")
+        } else {
+            log("app reopened; showing setup checklist")
+            showSetupChecklist()
+        }
+        // The reopen event is fully handled above. Returning true would make
+        // AppKit continue into untitled-document handling, which this agent
+        // app does not use.
+        return false
+    }
+
+    /// When the optional Dock icon is enabled, its contextual menu exposes the
+    /// high-value controls needed as an alternative access route.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        buildDockMenu()
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
         settings.hasActiveRunMarker = false
@@ -8081,6 +8116,57 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.menu = buildMenu()
     }
 
+    private func buildDockMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let status = NSMenuItem(title: menuStatusTitle(), action: nil, keyEquivalent: "")
+        status.isEnabled = false
+        if let failure = startupFailure {
+            status.toolTip = failure.detail
+        }
+        menu.addItem(status)
+        menu.addItem(.separator())
+
+        let controlState = dictationMenuControlState(
+            isReady: isReady,
+            isRecording: isRecording,
+            isBusy: isBusy,
+            isTerminating: isTerminating,
+            hasMissingPermissions: !missingPermissions().isEmpty
+        )
+        let dictationControl = NSMenuItem(title: controlState.title,
+                                          action: #selector(dictationMenuControlClicked(_:)),
+                                          keyEquivalent: "")
+        dictationControl.target = self
+        dictationControl.tag = controlState.action.rawValue
+        dictationControl.isEnabled = controlState.isEnabled
+        dictationControl.toolTip = controlState.help
+        menu.addItem(dictationControl)
+
+        if isRecording {
+            let cancel = NSMenuItem(title: "Cancel Recording",
+                                    action: #selector(cancelRecordingClicked(_:)),
+                                    keyEquivalent: "")
+            cancel.target = self
+            menu.addItem(cancel)
+        }
+        if let newest = history.first {
+            let copyLast = NSMenuItem(title: "Copy Last Transcript",
+                                      action: #selector(historyClicked(_:)),
+                                      keyEquivalent: "")
+            copyLast.target = self
+            copyLast.representedObject = newest
+            menu.addItem(copyLast)
+        }
+
+        menu.addItem(.separator())
+        menu.addItem(buildSettingsItem())
+        menu.addItem(buildSupportItem())
+        // AppKit appends the standard Dock commands, including Quit.
+        return menu
+    }
+
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -8600,6 +8686,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 triggerMode: settings.triggerMode,
                 hotkeyName: hotkey.hotkey.name,
                 failure: startupFailure),
+            showInDock: settings.showInDock,
             isComplete: isSpeechModelReady
                 && isReady
                 && permissions.allSatisfy { $0.status == "Granted" })
@@ -8689,16 +8776,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         footer.spacing = 10
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let summary = setupLabel(setupChecklistSummary(isComplete: snapshot.isComplete),
-                                 font: .systemFont(ofSize: 12),
-                                 color: .secondaryLabelColor)
+        let dockAccess = NSButton(checkboxWithTitle: "Show in Dock",
+                                  target: self,
+                                  action: #selector(toggleDockFromSetup(_:)))
+        dockAccess.state = snapshot.showInDock ? .on : .off
+        dockAccess.identifier = NSUserInterfaceItemIdentifier("setup-show-in-dock")
+        dockAccess.toolTip = "Right-click the Dock icon to open Presspeech controls."
+        dockAccess.setAccessibilityHelp("Provides another way to reach Presspeech if its menu-bar item is hidden.")
         let close = NSButton(title: snapshot.isComplete ? "Done" : "Close",
                              target: self,
                              action: #selector(closeSetupChecklistClicked(_:)))
         close.bezelStyle = .rounded
         close.identifier = NSUserInterfaceItemIdentifier("setup-close")
 
-        footer.addArrangedSubview(summary)
+        footer.addArrangedSubview(dockAccess)
         footer.addArrangedSubview(NSView())
         if snapshot.isComplete {
             let tryDictation = NSButton(title: "Try Dictation",
@@ -8740,12 +8831,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         isSpeechModelReady
             && isReady
             && missingPermissions().isEmpty
-    }
-
-    private func setupChecklistSummary(isComplete: Bool) -> String {
-        isComplete
-            ? "Setup is complete. Use Presspeech from the menu bar."
-            : "You can close this window; the menu will keep tracking setup."
     }
 
     private func setupDetail(for permission: Permission) -> String {
@@ -10642,9 +10727,19 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func toggleDock(_ sender: NSMenuItem) {
-        settings.showInDock.toggle()
-        sender.state = settings.showInDock ? .on : .off
-        NSApp.setActivationPolicy(settings.showInDock ? .regular : .accessory)
+        setShowInDock(!settings.showInDock)
+    }
+
+    @objc private func toggleDockFromSetup(_ sender: NSButton) {
+        setShowInDock(sender.state == .on)
+    }
+
+    private func setShowInDock(_ showInDock: Bool) {
+        guard settings.showInDock != showInDock else { return }
+        settings.showInDock = showInDock
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
+        log("Dock access \(showInDock ? "enabled" : "disabled")")
+        rebuildMenu()
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {

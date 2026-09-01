@@ -47,6 +47,15 @@ cd swift
 - With VoiceOver enabled, confirm each permission action includes its context,
   such as **Grant Microphone** and **Grant Accessibility**, rather than being
   announced only as **Grant**.
+- Complete setup, close every Presspeech window, then open the already-running
+  app again from Finder or Spotlight. Confirm Setup Checklist appears instead
+  of a second app instance. Enable **Show in Dock**, right-click the
+  Dock icon, and confirm dictation controls, Settings, Support, and the standard
+  macOS Quit command are all available. Disable the option and confirm the Dock
+  icon is removed without closing Setup Checklist.
+- Enable **Show in Dock**, minimize Setup Checklist, then reopen Presspeech from
+  Finder or the Dock. Confirm the minimized window is restored and brought to
+  the front rather than leaving Presspeech without a visible control surface.
 - On a clean preference profile, confirm setup asks for **Language & model**
   before downloading a speech model. Choose English and confirm the setup
   row switches to the English optimized model; reset preferences and repeat

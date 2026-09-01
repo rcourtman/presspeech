@@ -1,5 +1,16 @@
 # Troubleshooting
 
+## Menu Bar Item Is Missing
+
+macOS can temporarily omit third-party status items when a crowded or notched
+menu bar has too little space. Open `/Applications/Presspeech.app` again from
+Applications, Finder, or Spotlight. The existing Presspeech process opens
+Setup Checklist instead of launching a second copy.
+
+Enable **Show in Dock** in that window for a persistent alternative.
+Right-click the Dock icon to open dictation controls, Settings, and Support;
+macOS also provides its standard Quit command there.
+
 ## Permissions Do Not Appear In System Settings
 
 Presspeech needs Microphone, Accessibility, and Input Monitoring. Use

@@ -88,6 +88,12 @@ and hotkey checks. Presspeech asks for Microphone, Accessibility, and Input
 Monitoring because it records while the hotkey is active, observes the
 global hotkey, and pastes text at the cursor.
 
+If the Presspeech item is hidden by a crowded or notched menu bar, open
+**Presspeech.app** again from Applications, Finder, or Spotlight. The running
+app opens Setup Checklist instead of starting a second copy. Enable **Show in
+Dock** there for a persistent alternative; right-clicking its Dock icon
+exposes dictation controls, Settings, and Support.
+
 ### Assistant Install Prompt
 
 <details>
