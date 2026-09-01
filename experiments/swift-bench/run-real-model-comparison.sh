@@ -31,6 +31,7 @@ MIN_CANDIDATE_TRIALS=3
 MIN_CANDIDATE_CLIPS=25
 MIN_CANDIDATE_REFERENCE_WORDS=1000
 MAX_CANDIDATE_LATENCY_RATIO="1.25"
+REQUIRED_UNIFIED_TRAILING_SILENCE_MS="250"
 
 usage() {
     cat <<'USAGE'
@@ -345,8 +346,15 @@ candidate_screen() {
         improved regressed latency_ratio <<<"$assessment"
 
     local blockers=()
-    [[ "$candidate" == "v2" || "$candidate" == "v3-int8-v2" ]] || \
-        blockers+=("screen is defined only for v2 or v3-int8-v2")
+    [[ "$candidate" == "unified" || "$candidate" == "v2" || "$candidate" == "v3-int8-v2" ]] || \
+        blockers+=("screen is defined only for unified, v2, or v3-int8-v2")
+    if [[ "$candidate" == "unified" && \
+            "$UNIFIED_TRAILING_SILENCE_MS" != "$REQUIRED_UNIFIED_TRAILING_SILENCE_MS" ]]; then
+        blockers+=("Unified trailing silence must be ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms")
+    fi
+    if [[ ( "$candidate" == "unified" || "$candidate" == "v2" ) && "$LANGUAGE" != "en" ]]; then
+        blockers+=("English-only candidate requires an English production baseline")
+    fi
     [[ "$TRIALS" -ge "$MIN_CANDIDATE_TRIALS" ]] || blockers+=("fewer than $MIN_CANDIDATE_TRIALS trials")
     if [[ "$CORPUS_KIND" != "public" && "$REFERENCES_HAND_AUDITED" -ne 1 ]]; then
         blockers+=("private references not declared hand-audited")
@@ -499,13 +507,28 @@ run_self_test() {
     local original_trials="$TRIALS"
     local original_kind="$CORPUS_KIND"
     local original_audit="$REFERENCES_HAND_AUDITED"
+    local original_unified_trailing_silence_ms="$UNIFIED_TRAILING_SILENCE_MS"
+    local original_language="$LANGUAGE"
     TRIALS=3
     CORPUS_KIND="public"
     REFERENCES_HAND_AUDITED=0
+    LANGUAGE=en
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v3-int8-v2)" \
         $'passes\t' "passing encoder candidate screen"
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v2)" \
         $'passes\t' "passing English model candidate screen"
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean unified)" \
+        $'passes\t' "passing Unified model candidate screen"
+    UNIFIED_TRAILING_SILENCE_MS=0
+    local raw_unified_screen
+    raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean unified)"
+    assert_contains <(printf '%s' "$raw_unified_screen") \
+        "Unified trailing silence must be 250 ms"
+    UNIFIED_TRAILING_SILENCE_MS="$REQUIRED_UNIFIED_TRAILING_SILENCE_MS"
+    LANGUAGE=auto
+    raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean unified)"
+    assert_contains <(printf '%s' "$raw_unified_screen") \
+        "English-only candidate requires an English production baseline"
     local blocked_screen
     blocked_screen="$(candidate_screen $'25\t1200\t10\t11\t0\t1\t1.300' clean v3-int8-v2)"
     assert_contains <(printf '%s' "$blocked_screen") "no clip demonstrates an error reduction"
@@ -514,6 +537,8 @@ run_self_test() {
     TRIALS="$original_trials"
     CORPUS_KIND="$original_kind"
     REFERENCES_HAND_AUDITED="$original_audit"
+    UNIFIED_TRAILING_SILENCE_MS="$original_unified_trailing_silence_ms"
+    LANGUAGE="$original_language"
 
     CORPUS_KIND="public"
     report_title >"$summary"
@@ -838,11 +863,11 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
     echo "|---|---:|---:|---:|---:|---:|"
     backend_summary_row "$tsv" "v3"
     backend_summary_row "$tsv" "$CANDIDATE_BACKEND"
-    if [[ "$CANDIDATE_BACKEND" == "v2" || "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
+    if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" || "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
         echo
         echo "## Model Candidate Evidence Screen"
         echo
-        echo "The candidate's worst observed transcript is compared with production's best observed transcript on each clip; a noisy production trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x production. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
+        echo "The candidate's worst observed transcript is compared with production's best observed transcript on each clip; a noisy production trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x production. English-only candidates require an English production baseline. Unified additionally requires ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms trailing silence and the separate tail-word gate. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
         echo
         echo "| Candidate | Comparable clips | Reference words | Production best errors | Candidate worst errors | Improved clips | Regressed clips | p50 / production | Verdict | Blockers |"
         echo "|---|---:|---:|---:|---:|---:|---:|---:|---|---|"

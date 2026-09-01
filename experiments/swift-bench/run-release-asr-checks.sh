@@ -246,7 +246,11 @@ else
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
         echo "running private v3-vs-Unified candidate comparison on $real_count clip(s)..."
-        ./run-real-model-comparison.sh --input-dir "$REAL_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
+        ./run-real-model-comparison.sh \
+            --input-dir "$REAL_AUDIO_DIR" \
+            --language en \
+            --trials "$TRIALS" \
+            --unified-trailing-silence-ms 250
 
         echo
         echo "running private v3-vs-Parakeet-v2 English candidate comparison on $real_count clip(s)..."

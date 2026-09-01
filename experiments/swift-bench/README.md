@@ -433,14 +433,21 @@ Presspeech does not promote a model from upstream aggregate results alone. The
 v2 comparison uses an explicit English hint for the production-v3 baseline and
 the same audio for both models.
 
-For a v2 or encoder product-candidate gate, add `--require-candidate-pass`.
-The gate requires a clean checkout, at least 3 trials, 25 comparable clips and
-1,000 reference words, at least one demonstrated error reduction, no per-clip
-or aggregate word-error increase, and average p50 latency no more than 1.25×
-production.
+For a Unified, v2, or encoder product-candidate gate, add
+`--require-candidate-pass`. The gate requires a clean checkout, at least 3
+trials, 25 comparable clips and 1,000 reference words, at least one
+demonstrated error reduction, no per-clip or aggregate word-error increase,
+and average p50 latency no more than 1.25× production.
 It compares the candidate's worst observed transcript with production's best
 on every clip so unstable baseline output cannot hide a regression. Private
 corpora additionally require `--references-hand-audited`.
+
+Unified must use the product-candidate 250 ms trailing-silence setting and
+also pass `run-tail-word-regression.sh`; the corpus gate does not replace that
+short push-to-talk final-word check.
+Unified and v2 are English-only, so their thresholded comparisons also require
+`--language en` for the production-v3 baseline. The public comparison wrapper
+adds that hint automatically.
 
 A pass is only a per-corpus prerequisite. Before changing production, run at
 least one general dictation corpus and a human-audited corpus in a language

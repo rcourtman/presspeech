@@ -271,10 +271,10 @@ compare_args=(
     "--show-transcripts"
     "--show-paths"
 )
-# The product would select v2 only for an explicit English dictation setting,
-# so compare it with production v3 under the same English hint rather than
-# giving the candidate an easier auto-detected baseline.
-if [[ "$CANDIDATE_BACKEND" == "v2" ]]; then
+# The product would select either English-only model only for an explicit
+# English dictation setting, so compare it with production v3 under the same
+# hint rather than giving the candidate an easier auto-detected baseline.
+if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" ]]; then
     compare_args+=( "--language" "en" )
 fi
 "${compare_args[@]}"
