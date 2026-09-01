@@ -78,12 +78,13 @@ MICROPHONE_CHECK_AUDIO_RMS = POST_ROLL_ABS_SILENCE_RMS
 MICROPHONE_CHECK_LEVEL = "level"
 MICROPHONE_CHECK_SILENT = "silent"
 MICROPHONE_CHECK_UNAVAILABLE = "unavailable"
-MAX_RECORDING_SEC = 120.0
 MODEL_WARMUP_SEC = 8.0
 MODEL_IDLE_WAKE_SEC = 60.0
 CPU_FIRST_RUN_MODEL = "base.en"
 PASTE_DELAY_SEC = 0.01
 RDP_PASTE_DELAY_SEC = 0.08
+NO_SPEECH_FEEDBACK_SEC = 2.5
+NO_SPEECH_OUTCOME = "no_speech"
 
 VK_ESCAPE = 0x1B
 WM_KEYDOWN = 0x0100
@@ -122,6 +123,12 @@ AUTO_INPUT_DEVICE = "auto"
 MICROPHONE_PRIVACY_SETTINGS_URI = "ms-settings:privacy-microphone"
 DEFAULT_INPUT_SETTINGS_URI = "ms-settings:sound-defaultinputproperties"
 STARTUP_SETTINGS_URI = "ms-settings:startupapps"
+BUG_REPORT_URL = (
+    "https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml"
+)
+FEATURE_REQUEST_URL = (
+    "https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml"
+)
 INPUT_DEVICE_SKIP_WORDS = (
     "stereo mix", "steam", "stream", "virtual", "loopback", "aux", "line in",
     "hyperx",
@@ -576,6 +583,8 @@ class PresspeechApp:
                 Menu.SEPARATOR,
                 MenuItem("Check for Updates\u2026", self.check_for_updates),
                 MenuItem("Copy Diagnostics", self.copy_diagnostics),
+                MenuItem("Report a Problem\u2026", self.report_problem),
+                MenuItem("Suggest an Improvement\u2026", self.suggest_improvement),
                 Menu.SEPARATOR,
                 MenuItem("Exit", self.exit_app),
             ),
@@ -1179,8 +1188,10 @@ class PresspeechApp:
 
     def _schedule_recording_limit(self, epoch):
         """Bound capture even if Windows never delivers the hotkey release."""
+        maximum_seconds = cfg.recording_length_seconds(
+            self.settings.get("max_recording_seconds"))
         timer = threading.Timer(
-            MAX_RECORDING_SEC, self._recording_limit_reached, (epoch,))
+            maximum_seconds, self._recording_limit_reached, (epoch,))
         timer.daemon = True
         with self.lock:
             if not self.recording or epoch != self._rec_epoch:
@@ -1288,7 +1299,7 @@ class PresspeechApp:
         self._restore_playback_after_recording()
         self._play_cue("stop")
         if audio.size == 0:
-            self._set_indicator(None)
+            self._show_no_speech_feedback()
             self._log("recording stopped; no audio captured")
             self._schedule_model_idle_unload()
             return True
@@ -1297,7 +1308,7 @@ class PresspeechApp:
         if self.input_device is not None and self.input_device[1] != 16000:
             audio = _resample_to_16k(audio, self.input_device[1])
         if audio.size / 16000.0 < 0.25:
-            self._finish_transcribing()
+            self._finish_transcribing(NO_SPEECH_OUTCOME)
             self._log("recording stopped; too short (%.2fs)" % (audio.size / 16000.0))
             self._schedule_model_idle_unload()
             return True
@@ -1534,24 +1545,34 @@ class PresspeechApp:
     def _transcribe_worker(
             self, audio, paste_target=PasteTarget("", 0),
             scratchpad_target=None):
+        outcome = None
         try:
-            return self._transcribe_worker_inner(
+            outcome = self._transcribe_worker_inner(
                 audio, paste_target, scratchpad_target)
+            return outcome
         finally:
             # Empty/error results still exercised the model. Refresh the idle
             # deadline here so an already-queued gaming-mode unload cannot
             # evict it immediately after that work completes.
             self._last_model_use = time.perf_counter()
             self._schedule_model_idle_unload()
-            self._finish_transcribing()
+            self._finish_transcribing(outcome)
 
-    def _finish_transcribing(self):
+    def _finish_transcribing(self, outcome=None):
         """Clear delivery state without hiding a subsequent recording HUD."""
-        # Hide first while holding the lifecycle lock. A waiting start can only
-        # show its listening state after this stale hide has completed.
+        # Queue the final visual state while holding the lifecycle lock. A
+        # waiting start can only show Listening after this command, and the
+        # indicator's generation guard prevents a delayed result hide from
+        # erasing that newer recording state.
         with self.lock:
-            self._set_indicator(None)
+            if outcome == NO_SPEECH_OUTCOME:
+                self._set_temporary_indicator(
+                    "no_speech", NO_SPEECH_FEEDBACK_SEC)
+            else:
+                self._set_indicator(None)
             self.transcribing = False
+        if outcome == NO_SPEECH_OUTCOME:
+            self._notify_no_speech()
 
     def _transcribe_worker_inner(
             self, audio, paste_target=PasteTarget("", 0),
@@ -1584,7 +1605,7 @@ class PresspeechApp:
             self._log("transcription returned empty (model %.3fs)" % model_seconds)
             if timing_summary is not None:
                 self._log(timing_summary)
-            return
+            return NO_SPEECH_OUTCOME
         text = self._apply_text(text)
         # Dictation is private: retain performance data without persisting the
         # user's words in the diagnostic log. Whisper's detected-speech duration
@@ -1778,6 +1799,9 @@ class PresspeechApp:
             "Hotkey / trigger: %s / %s" % (
                 self.settings.get("hotkey", "unknown"),
                 self.settings.get("trigger", "unknown")),
+            "Maximum recording length: %d seconds" %
+            cfg.recording_length_seconds(
+                self.settings.get("max_recording_seconds")),
             "Windows UI Automation: %s" % ui.accessibility_status(),
             "Automatic update checks: %s" % bool(
                 self.settings.get("check_updates", True)),
@@ -1791,6 +1815,24 @@ class PresspeechApp:
     def copy_diagnostics(self, icon=None, item=None):
         pyperclip.copy(self.diagnostics_text())
         self.notify("Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
+
+    def _open_feedback_page(self, url):
+        """Open one fixed public feedback form without adding app or user data."""
+        try:
+            os.startfile(url)
+        except (OSError, AttributeError) as exc:
+            self._log("could not open feedback form: %s" % type(exc).__name__)
+            self.notify(
+                "Could not open GitHub",
+                "Open github.com/rcourtman/presspeech/issues in your browser.")
+            return False
+        return True
+
+    def report_problem(self, icon=None, item=None):
+        return self._open_feedback_page(BUG_REPORT_URL)
+
+    def suggest_improvement(self, icon=None, item=None):
+        return self._open_feedback_page(FEATURE_REQUEST_URL)
 
     # ---------------- helpers ----------------
 
@@ -1843,6 +1885,26 @@ class PresspeechApp:
                 indicator.show(state)
         except Exception:
             pass
+
+    def _set_temporary_indicator(self, state, seconds):
+        indicator = getattr(self, "indicator", None)
+        if indicator is None:
+            return
+        try:
+            if self.settings.get("visual_indicator", True):
+                indicator.show_temporary(state, seconds)
+        except Exception:
+            pass
+
+    def _notify_no_speech(self):
+        self.notify(
+            "No speech detected",
+            "Try again and speak after the start cue. If this keeps happening, "
+            "run the microphone check in Setup.")
+
+    def _show_no_speech_feedback(self):
+        self._set_temporary_indicator("no_speech", NO_SPEECH_FEEDBACK_SEC)
+        self._notify_no_speech()
 
     def _play_cue(self, name):
         if not self.settings.get("audio_cues", True):

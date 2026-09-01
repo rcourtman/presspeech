@@ -13,12 +13,15 @@ Core facts:
 - Getting started: https://rcourtman.github.io/presspeech/getting-started.html has the cross-platform path from install through a private scratchpad test and first dictation into another app.
 - macOS setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
 - Windows install and requirements: https://rcourtman.github.io/presspeech/windows.html.
+- Windows installer trust: the prerelease is unsigned. Verify its published
+  SHA-256 before deciding whether to run it. Smart App Control or managed policy
+  may block it without an override; do not try to circumvent that policy.
 - First-use test: both apps provide a focused private scratchpad for verifying the hotkey and paste flow.
 - Deterministic voice tools: both apps map spoken phrases to exact text; macOS also offers optional spoken formatting for new lines, paragraphs, bullets, punctuation, quotes, and parentheses.
 - Privacy: no cloud transcription, no telemetry, no transcript persistence.
 - Diagnostics: macOS Copy/Save Diagnostics and Windows Copy Diagnostics produce privacy-safe local reports without transcript or dictionary contents.
 - Clipboard: macOS leaves the transcript on the pasteboard by default and offers an opt-in guarded restore of the previous contents; Windows leaves the transcript on the clipboard until it is overwritten.
-- Network surface: platform model downloads from huggingface.co, optional GitHub update checks with fixed platform User-Agents and no version/device/user identifiers, and user-approved install/update downloads. See the machine-readable list below.
+- Network surface: platform model downloads from huggingface.co, optional GitHub update checks with fixed platform User-Agents and no version/device/user identifiers, fixed user-triggered GitHub feedback links, and user-approved install/update downloads. See the machine-readable list below.
 - macOS footprint: about 8.3 MB signed zip; model cache is about 500-600 MB.
 - Windows footprint: about 4.4 GB installed; first-run model cache is about
   141 MiB on CPU-only systems or about 2.5 GB with CUDA Parakeet.

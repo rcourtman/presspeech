@@ -429,6 +429,17 @@ overlap and actual window starts remain implementation details. This is a
 repeatable seam/long-form regression, while the uncomposed rows remain the
 better per-utterance diagnostic corpus.
 
+The release wrapper applies a separate catastrophic-content-drop screen to
+these composites. In addition to ordinary WER, `presspeech-bench` reports the
+longest consecutive run of reference words deleted by the stable minimum-edit
+alignment. The wrapper fails when that run exceeds six words, so a multi-second
+seam omission cannot disappear inside an acceptable clip-wide WER average.
+This is intentionally a narrow safety invariant, not a claim that a run of six
+or fewer deletions is good speech recognition; inspect WER and transcripts and
+keep the short, private-dictation, and multilingual checks. Override the bound
+for an explicitly reviewed corpus with
+`--long-public-max-reference-deletion-run`.
+
 ## Parakeet encoder-precision regression
 
 FluidAudio's original v3 `Encoder.mlmodelc` uses 6-bit LUT palettization even

@@ -58,11 +58,13 @@ Download the self-contained installer—Python is not required:
   the first dictation.
 
 The installer is currently unsigned, so SmartScreen may show **Unknown
-publisher**. Choose **More info → Run anyway** only after the guide reports
-that SHA-256 verification succeeded. The installed app is about 4.4 GB. On a
-fresh PC with NVIDIA CUDA, the default Parakeet model download is about 2.5 GB;
-without usable CUDA, Presspeech selects the smaller Whisper base.en CPU model
-(about 141 MiB).
+publisher**. Choose **More info → Run anyway** only if Windows offers that
+choice and the guide reports that SHA-256 verification succeeded. Windows 11
+Smart App Control or managed policy may block an unsigned app without offering
+an override; do not try to circumvent that policy. The installed app is about
+4.4 GB. On a fresh PC with NVIDIA CUDA, the default Parakeet model download is
+about 2.5 GB; without usable CUDA, Presspeech selects the smaller Whisper
+base.en CPU model (about 141 MiB).
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.
@@ -158,6 +160,9 @@ Useful menu items:
 - **Setup Checklist…** — model, permissions, and hotkey readiness
 - **Support → Try Dictation…** — a private scratchpad for verifying the
   hotkey and first transcription without switching apps
+- **Support → Report a Problem… / Suggest an Improvement…** — open the
+  focused GitHub forms; copy the privacy-safe diagnostics first for a bug, and
+  never post dictated text, audio, or dictionary contents
 - **Presspeech → Settings…** or **Command-comma** — when **Show in Dock** is
   enabled, open the same settings hierarchy from the standard macOS app menu;
   that menu also exposes standard Edit and Window commands for Presspeech's
@@ -201,6 +206,8 @@ Network calls are limited to:
 
 - speech model download from Hugging Face (first launch, integrity-failure re-download, or user-triggered cache reset),
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers),
+- user-triggered bug-report and feature-request links, which open fixed GitHub
+  forms in the default browser without adding app or user data to the URL,
 - user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows verifies the release asset's size and SHA-256 before offering to run it and again immediately before launch.
 
 ## How It Works

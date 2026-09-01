@@ -436,28 +436,63 @@ class DictationIndicator:
         "loading": ("Preparing speech model\u2026", "#6aa9ff"),
         "listening": ("Listening\u2026", "#ff5a5f"),
         "transcribing": ("Transcribing\u2026", "#ffb340"),
+        "no_speech": ("No speech detected \u2014 try again", "#ffb340"),
     }
 
     def __init__(self):
         self._commands = queue.Queue()
         self._thread = None
         self._thread_lock = threading.Lock()
+        self._command_generation = 0
         self._closed = False
 
     def show(self, state):
         if state not in self._STATES or self._closed:
             return
         self._ensure_thread()
-        self._commands.put(state)
+        with self._thread_lock:
+            if self._closed:
+                return
+            self._command_generation += 1
+            self._commands.put(state)
+
+    def show_temporary(self, state, seconds):
+        """Show a result briefly without letting its timer hide a newer state."""
+        if state not in self._STATES or self._closed or seconds <= 0:
+            return
+        self._ensure_thread()
+        with self._thread_lock:
+            if self._closed:
+                return
+            self._command_generation += 1
+            generation = self._command_generation
+            self._commands.put(state)
+        timer = threading.Timer(
+            seconds, self._hide_if_current, args=(generation,))
+        timer.daemon = True
+        timer.start()
+
+    def _hide_if_current(self, generation):
+        with self._thread_lock:
+            if self._closed or generation != self._command_generation:
+                return
+            self._command_generation += 1
+            self._commands.put("hide")
 
     def hide(self):
-        if self._thread is not None and not self._closed:
+        with self._thread_lock:
+            if self._thread is None or self._closed:
+                return
+            self._command_generation += 1
             self._commands.put("hide")
 
     def close(self):
-        self._closed = True
-        if self._thread is not None:
-            self._commands.put("close")
+        with self._thread_lock:
+            self._closed = True
+            self._command_generation += 1
+            running = self._thread is not None
+            if running:
+                self._commands.put("close")
 
     def _ensure_thread(self):
         with self._thread_lock:
@@ -1179,6 +1214,22 @@ class SettingsWindow:
             row=row, column=2, sticky="w")
         row += 1
 
+        recording_length_label = ttk.Label(f, text="Maximum recording length")
+        recording_length_label.grid(row=row, column=0, sticky="w", pady=2)
+        self.recording_length_values = {
+            label: seconds for seconds, label in cfg.RECORDING_LENGTHS.items()
+        }
+        self.var_recording_length = ttk.Combobox(
+            f, values=list(self.recording_length_values), state="readonly", width=20)
+        recording_seconds = cfg.recording_length_seconds(
+            s.get("max_recording_seconds"))
+        self.var_recording_length.set(cfg.RECORDING_LENGTHS[recording_seconds])
+        self.var_recording_length.grid(
+            row=row, column=1, sticky="w", padx=10, pady=2)
+        ttk.Label(f, text="Automatically stops and transcribes").grid(
+            row=row, column=2, sticky="w")
+        row += 1
+
         microphone_label = ttk.Label(f, text="Microphone")
         microphone_label.grid(row=row, column=0, sticky="w", pady=2)
         device_options = self.app.input_device_options()
@@ -1333,6 +1384,7 @@ class SettingsWindow:
         root.update_idletasks()
         for label, control in (
                 (hotkey_label, self.var_hotkey),
+                (recording_length_label, self.var_recording_length),
                 (microphone_label, self.var_device),
                 (model_label, self.var_model),
                 (suffix_label, self.var_suffix),
@@ -1400,6 +1452,10 @@ class SettingsWindow:
         old_model = s.get("model", cfg.DEFAULTS["model"])
         s["hotkey"] = self.var_hotkey.get() or cfg.DEFAULTS["hotkey"]
         s["trigger"] = self.var_trigger.get()
+        s["max_recording_seconds"] = self.recording_length_values.get(
+            self.var_recording_length.get(),
+            cfg.DEFAULTS["max_recording_seconds"],
+        )
         old_input_device = s.get("input_device", cfg.DEFAULTS["input_device"])
         s["input_device"] = self.device_values.get(
             self.var_device.get(), cfg.DEFAULTS["input_device"])

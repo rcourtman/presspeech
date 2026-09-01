@@ -68,7 +68,7 @@
 
       <section>
         <div class="wrap">
-          <span class="section-eyebrow">Three call types, fully listed</span>
+          <span class="section-eyebrow">Four call types, fully listed</span>
           <h2>Network calls</h2>
           <p>This is the complete network surface of Presspeech itself and its install/update path.</p>
           <div class="table-scroll">
@@ -94,6 +94,12 @@
                   <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code> (macOS); <code>api.github.com/repos/rcourtman/presspeech/releases?per_page=100</code> (Windows)</td>
                   <td>macOS checks every six hours; Windows checks at most daily. Both only notify and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no version, device, settings, transcript, or usage identifiers.</td>
                   <td>Disable update notifications from Settings.</td>
+                </tr>
+                <tr>
+                  <th scope="row">User-triggered feedback form</th>
+                  <td><code>github.com/rcourtman/presspeech/issues/new</code></td>
+                  <td>Report a Problem and Suggest an Improvement open fixed public GitHub forms in the default browser. Presspeech adds no version, device, settings, transcript, diagnostics, or usage data to the URL; the browser and GitHub handle their normal request and account metadata.</td>
+                  <td>Only runs after the user chooses one of the feedback actions.</td>
                 </tr>
                 <tr>
                   <th scope="row">User-triggered install/update</th>

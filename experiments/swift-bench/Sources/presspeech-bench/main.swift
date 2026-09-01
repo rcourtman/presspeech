@@ -1083,6 +1083,7 @@ func exactWordAlignment(_ ref: [String], _ hyp: [String]) -> [Int: Int] {
 struct WordErrorScore {
     let errors: Int
     let referenceWords: Int
+    let maxReferenceDeletionRun: Int
 
     var percent: Double {
         guard referenceWords > 0 else { return errors == 0 ? 0 : 100 }
@@ -1090,12 +1091,69 @@ struct WordErrorScore {
     }
 }
 
+/// Return the longest consecutive run of reference-word deletions on the same
+/// stable minimum-edit path used by the benchmark's alignment policy. Keep
+/// only the previous and current rows: public long-form checks should not need
+/// an O(referenceWords * hypothesisWords) backtracking matrix merely to detect
+/// a dropped span.
+func maxReferenceDeletionRun(_ ref: [String], _ hyp: [String]) -> Int {
+    guard !ref.isEmpty else { return 0 }
+    let m = hyp.count
+    var previousErrors = Array(0...m)
+    var previousCurrentRuns = [Int](repeating: 0, count: m + 1)
+    var previousMaxRuns = [Int](repeating: 0, count: m + 1)
+
+    for i in 1...ref.count {
+        var currentErrors = [Int](repeating: 0, count: m + 1)
+        var currentRuns = [Int](repeating: 0, count: m + 1)
+        var currentMaxRuns = [Int](repeating: 0, count: m + 1)
+        currentErrors[0] = i
+        currentRuns[0] = i
+        currentMaxRuns[0] = i
+
+        if m > 0 {
+            for j in 1...m {
+                // Match exactWordAlignment's deterministic tie order:
+                // diagonal, then deletion, then insertion.
+                let substitutionCost = ref[i - 1] == hyp[j - 1] ? 0 : 1
+                var bestErrors = previousErrors[j - 1] + substitutionCost
+                var bestCurrentRun = 0
+                var bestMaxRun = previousMaxRuns[j - 1]
+
+                let deletionErrors = previousErrors[j] + 1
+                if deletionErrors < bestErrors {
+                    bestErrors = deletionErrors
+                    bestCurrentRun = previousCurrentRuns[j] + 1
+                    bestMaxRun = max(previousMaxRuns[j], bestCurrentRun)
+                }
+
+                let insertionErrors = currentErrors[j - 1] + 1
+                if insertionErrors < bestErrors {
+                    bestErrors = insertionErrors
+                    bestCurrentRun = 0
+                    bestMaxRun = currentMaxRuns[j - 1]
+                }
+
+                currentErrors[j] = bestErrors
+                currentRuns[j] = bestCurrentRun
+                currentMaxRuns[j] = bestMaxRun
+            }
+        }
+
+        previousErrors = currentErrors
+        previousCurrentRuns = currentRuns
+        previousMaxRuns = currentMaxRuns
+    }
+    return previousMaxRuns[m]
+}
+
 func wordErrorScore(reference: String, hypothesis: String) -> WordErrorScore {
     let ref = werTokens(reference)
     let hyp = werTokens(hypothesis)
     return WordErrorScore(
         errors: wordEditDistance(ref, hyp),
-        referenceWords: ref.count
+        referenceWords: ref.count,
+        maxReferenceDeletionRun: maxReferenceDeletionRun(ref, hyp)
     )
 }
 
@@ -1605,6 +1663,27 @@ func runBenchSelfTests() throws {
     try expect(wordErrors.errors == 2, "WER should expose edit-error counts for corpus aggregation")
     try expect(wordErrors.referenceWords == 4, "WER should expose reference-word counts for corpus aggregation")
     try expect(abs(wordErrors.percent - 50) < 0.001, "WER percentage should derive from the exact counts")
+    try expect(
+        wordErrorScore(
+            reference: "one two three four five",
+            hypothesis: "one five"
+        ).maxReferenceDeletionRun == 3,
+        "word-error scoring should expose a consecutive dropped-word span"
+    )
+    try expect(
+        wordErrorScore(
+            reference: "one two three",
+            hypothesis: "one too three"
+        ).maxReferenceDeletionRun == 0,
+        "a substitution should not be mislabeled as a dropped-word span"
+    )
+    try expect(
+        wordErrorScore(
+            reference: "one two three",
+            hypothesis: ""
+        ).maxReferenceDeletionRun == 3,
+        "an empty hypothesis should report the complete reference as dropped"
+    )
     let preflightMetrics = referenceMetrics(
         reference: "Szypański met Nowy Sącz. Szypański returned.",
         criticalTerms: ["Szypański", "Nowy Sącz", "Absent"]
@@ -1709,7 +1788,8 @@ func summarize(_ name: String,
         let score = wordErrorScore(reference: reference, hypothesis: text)
         return (
             " [WER \(String(format: "%.1f%%", score.percent))]",
-            " [word-errors=\(score.errors) reference-words=\(score.referenceWords)]"
+            " [word-errors=\(score.errors) reference-words=\(score.referenceWords)]" +
+            " [max-reference-deletion-run=\(score.maxReferenceDeletionRun)]"
         )
     }
     func finalWordTag(_ text: String) -> String {

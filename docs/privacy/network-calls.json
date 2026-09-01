@@ -41,6 +41,18 @@
       "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
     },
     {
+      "name": "user_triggered_feedback_form",
+      "when": "Only when the user chooses Report a Problem or Suggest an Improvement",
+      "destination": [
+        "github.com/rcourtman/presspeech/issues/new?template=bug_report.yml",
+        "github.com/rcourtman/presspeech/issues/new?template=feature_request.yml"
+      ],
+      "purpose": "Open a focused public GitHub issue form in the default browser",
+      "user_triggered": true,
+      "can_disable": true,
+      "data_sent": "The app adds no version, device, settings, transcript, diagnostics, or usage data to the fixed URL; the browser and GitHub handle normal request and account metadata"
+    },
+    {
       "name": "user_triggered_install_or_update",
       "when": "Only when the user downloads the app directly, installs through Homebrew, or chooses to update through the menu or Homebrew",
       "destination": [

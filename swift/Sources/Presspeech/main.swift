@@ -60,6 +60,8 @@ let UPDATE_REMIND_LATER_SECONDS: TimeInterval = 24 * 3600  // 24h
 let GITHUB_LATEST_RELEASE_URL = URL(string: "https://api.github.com/repos/rcourtman/presspeech/releases/latest")!
 let GITHUB_REPOSITORY_PAGE = URL(string: "https://github.com/rcourtman/presspeech")!
 let GITHUB_RELEASES_PAGE = URL(string: "https://github.com/rcourtman/presspeech/releases/latest")!
+let GITHUB_BUG_REPORT_PAGE = URL(string: "https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml")!
+let GITHUB_FEATURE_REQUEST_PAGE = URL(string: "https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml")!
 let HOMEBREW_CASK_TAP = "rcourtman/presspeech"
 let HOMEBREW_CASK_TOKEN = "rcourtman/presspeech/presspeech"
 let HOMEBREW_CASK_INSTALLED_TOKEN = "presspeech"
@@ -1482,6 +1484,20 @@ func correctionSearchMatchIndices(in corrections: [TranscriptCorrection],
         let searchable = correction.source + "\n" + correction.replacement
         return terms.allSatisfy { searchable.range(of: $0, options: options) != nil }
     }
+}
+
+/// Resolve which visible rows a dictionary-table shortcut menu should act on.
+/// A pointer invocation on an unselected row moves selection to that row, as
+/// native macOS tables do; invoking the menu on an existing multi-selection
+/// preserves the whole selection. Keyboard/VoiceOver invocation may not have
+/// a clicked row, so it keeps the current selection instead of disabling a
+/// context menu that the user opened with VO-Shift-M.
+func correctionContextSelection(clickedRow: Int,
+                                selectedRows: IndexSet,
+                                rowCount: Int) -> IndexSet {
+    guard clickedRow >= 0, clickedRow < rowCount else { return selectedRows }
+    guard !selectedRows.contains(clickedRow) else { return selectedRows }
+    return IndexSet(integer: clickedRow)
 }
 
 /// First line of the import-confirmation dialog. When the file holds
@@ -6404,6 +6420,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var correctionsManagerWindow: NSWindow?
     private weak var correctionsManagerSearchField: NSSearchField?
     private weak var correctionsManagerTableView: NSTableView?
+    private var correctionsManagerContextMenu: NSMenu?
     private weak var correctionsManagerSummaryLabel: NSTextField?
     private weak var correctionsManagerEditButton: NSButton?
     private weak var correctionsManagerDeleteButton: NSButton?
@@ -8184,6 +8201,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
     }
 
+    @objc private func reportProblemClicked(_ sender: NSMenuItem) {
+        NSWorkspace.shared.open(GITHUB_BUG_REPORT_PAGE)
+    }
+
+    @objc private func suggestImprovementClicked(_ sender: NSMenuItem) {
+        NSWorkspace.shared.open(GITHUB_FEATURE_REQUEST_PAGE)
+    }
+
     private func showDiagnosticsSaveError(_ error: Error) {
         log("diagnostics save failed: \(error.localizedDescription)")
         showAppForModal()
@@ -8364,10 +8389,42 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         statusItem.menu = menu
     }
 
-    /// Login-item approval can be changed outside Presspeech. Refresh its
-    /// cached menu item before each opening so returning from System Settings
-    /// never leaves a stale mixed/on state behind.
+    /// Refresh dynamic menu state immediately before AppKit presents it.
     func menuWillOpen(_ menu: NSMenu) {
+        if menu === correctionsManagerContextMenu,
+           let table = correctionsManagerTableView {
+            // `clickedRow` can describe an old pointer event when a shortcut
+            // menu is opened from the keyboard or VoiceOver. Only use it for
+            // the mouse-down event that is currently opening this menu.
+            let clickedRow: Int
+            switch NSApp.currentEvent?.type {
+            case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+                clickedRow = table.clickedRow
+            default:
+                clickedRow = -1
+            }
+            let selection = correctionContextSelection(clickedRow: clickedRow,
+                                                       selectedRows: table.selectedRowIndexes,
+                                                       rowCount: table.numberOfRows)
+            table.selectRowIndexes(selection, byExtendingSelection: false)
+            let selectedCount = selectedManagedCorrectionIndices().count
+            if let edit = menu.items.first(where: {
+                $0.identifier?.rawValue == "correction-context-edit"
+            }) {
+                edit.isEnabled = selectedCount == 1
+            }
+            if let delete = menu.items.first(where: {
+                $0.identifier?.rawValue == "correction-context-delete"
+            }) {
+                delete.title = selectedCount > 1 ? "Delete \(selectedCount) Items" : "Delete"
+                delete.isEnabled = selectedCount > 0
+            }
+            return
+        }
+
+        // Login-item approval can be changed outside Presspeech. Refresh its
+        // cached menu item so returning from System Settings never leaves a
+        // stale mixed/on state behind.
         guard menu === statusItem.menu,
               let item = menuItem(with: Self.launchAtLoginMenuItemIdentifier, in: menu) else {
             return
@@ -8621,6 +8678,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                          keyEquivalent: "")
         saveDiagnostics.target = self
         sub.addItem(saveDiagnostics)
+
+        let reportProblem = NSMenuItem(title: "Report a Problem…",
+                                       action: #selector(reportProblemClicked(_:)),
+                                       keyEquivalent: "")
+        reportProblem.target = self
+        reportProblem.toolTip = "Open the privacy-aware bug report form on GitHub."
+        sub.addItem(reportProblem)
+
+        let suggestImprovement = NSMenuItem(title: "Suggest an Improvement…",
+                                            action: #selector(suggestImprovementClicked(_:)),
+                                            keyEquivalent: "")
+        suggestImprovement.target = self
+        suggestImprovement.toolTip = "Open the focused feature request form on GitHub."
+        sub.addItem(suggestImprovement)
 
         let resetModel = NSMenuItem(title: isResettingSpeechModelCache ? "Resetting Speech Model Cache…" : "Reset Speech Model Cache…",
                                     action: #selector(resetSpeechModelCacheClicked(_:)),
@@ -10123,6 +10194,23 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         table.doubleAction = #selector(editManagedCorrectionFromTable(_:))
         table.setAccessibilityLabel("Saved dictionary rules and voice shortcuts")
 
+        let tableMenu = NSMenu(title: "Dictionary Item")
+        tableMenu.autoenablesItems = false
+        tableMenu.delegate = self
+        let contextEdit = NSMenuItem(title: "Edit…",
+                                     action: #selector(editManagedCorrectionFromContextMenu(_:)),
+                                     keyEquivalent: "")
+        contextEdit.target = self
+        contextEdit.identifier = NSUserInterfaceItemIdentifier("correction-context-edit")
+        tableMenu.addItem(contextEdit)
+        let contextDelete = NSMenuItem(title: "Delete",
+                                       action: #selector(deleteManagedCorrectionsFromContextMenu(_:)),
+                                       keyEquivalent: "")
+        contextDelete.target = self
+        contextDelete.identifier = NSUserInterfaceItemIdentifier("correction-context-delete")
+        tableMenu.addItem(contextDelete)
+        table.menu = tableMenu
+
         let heardColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("correction-source"))
         heardColumn.title = "Heard / When you say"
         heardColumn.minWidth = 180
@@ -10201,6 +10289,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         correctionsManagerWindow = window
         correctionsManagerSearchField = search
         correctionsManagerTableView = table
+        correctionsManagerContextMenu = tableMenu
         correctionsManagerSummaryLabel = summary
         correctionsManagerEditButton = edit
         correctionsManagerDeleteButton = delete
@@ -10307,6 +10396,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         editSelectedManagedCorrection()
     }
 
+    @objc private func editManagedCorrectionFromContextMenu(_ sender: NSMenuItem) {
+        editSelectedManagedCorrection()
+    }
+
     @objc private func editManagedCorrectionFromTable(_ sender: NSTableView) {
         guard sender === correctionsManagerTableView,
               sender.clickedRow >= 0 else { return }
@@ -10326,6 +10419,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     @objc private func deleteManagedCorrectionsClicked(_ sender: NSButton) {
+        deleteSelectedManagedCorrections()
+    }
+
+    @objc private func deleteManagedCorrectionsFromContextMenu(_ sender: NSMenuItem) {
+        deleteSelectedManagedCorrections()
+    }
+
+    private func deleteSelectedManagedCorrections() {
         let selected = selectedManagedCorrectionIndices().sorted(by: >)
         guard !selected.isEmpty else { return }
 
@@ -13425,6 +13526,27 @@ private enum PresspeechSelfTest {
             correctionSearchMatchIndices(in: searchable, query: "   "),
             equals: [0, 1, 2],
             "empty correction search should preserve stable source order"
+        )
+        try expect(
+            correctionContextSelection(clickedRow: 2,
+                                       selectedRows: IndexSet(integersIn: 0..<2),
+                                       rowCount: 4),
+            equals: IndexSet(integer: 2),
+            "a shortcut menu on an unselected dictionary row should select only that row"
+        )
+        try expect(
+            correctionContextSelection(clickedRow: 1,
+                                       selectedRows: IndexSet(integersIn: 0..<2),
+                                       rowCount: 4),
+            equals: IndexSet(integersIn: 0..<2),
+            "a shortcut menu on a selected dictionary row should preserve multi-selection"
+        )
+        try expect(
+            correctionContextSelection(clickedRow: -1,
+                                       selectedRows: IndexSet(integersIn: 1..<3),
+                                       rowCount: 4),
+            equals: IndexSet(integersIn: 1..<3),
+            "keyboard shortcut-menu invocation should preserve dictionary selection"
         )
         try expect(shouldShowInlineCorrectionMenuEntries(count: 1), equals: true,
                    "small correction sets should remain directly editable from the menu")

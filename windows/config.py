@@ -15,9 +15,21 @@ MAX_DICTIONARY_RULES = 512
 MAX_DICTIONARY_SPOKEN_BYTES = 512
 MAX_DICTIONARY_REPLACEMENT_BYTES = 4096
 
+# Keep the Windows choices aligned with the macOS product while preserving the
+# original two-minute default. The upper bound still limits in-memory capture
+# when a toggle hotkey is forgotten or Windows misses its release.
+RECORDING_LENGTHS = {
+    60: "1 minute",
+    120: "2 minutes (Default)",
+    300: "5 minutes",
+    600: "10 minutes",
+}
+DEFAULT_RECORDING_SECONDS = 120
+
 DEFAULTS = {
     "hotkey": "right alt",
     "trigger": "hold",
+    "max_recording_seconds": DEFAULT_RECORDING_SECONDS,
     "input_device": "auto",
     "model": "parakeet-tdt-0.6b-v3",
     "model_explicit": False,
@@ -74,6 +86,7 @@ _ENUM_SETTINGS = {
     "model": set(MODELS),
     "precision": {"auto", "fp16", "bf16"},
     "suffix": set(SUFFIXES),
+    "max_recording_seconds": set(RECORDING_LENGTHS),
 }
 _NONNEGATIVE_INT_SETTINGS = {
     "last_update_check_epoch",
@@ -91,6 +104,13 @@ def _within_utf8_limit(value, limit):
         return len(value.encode("utf-8")) <= limit
     except UnicodeEncodeError:
         return False
+
+
+def recording_length_seconds(value):
+    """Return an advertised bounded duration, or the conservative default."""
+    if type(value) is int and value in RECORDING_LENGTHS:
+        return value
+    return DEFAULT_RECORDING_SECONDS
 
 
 def validated_dictionary(value):

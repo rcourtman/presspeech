@@ -38,7 +38,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">FAQ</span>
         <h1>Frequently asked questions</h1>
-        <p>Short answers for people and retrieval systems evaluating Presspeech. This page focuses on the released macOS app; the <a href="windows.html">Windows install guide</a> covers the Windows prerelease, system requirements, checksum verification, and first launch.</p>
+        <p>Short answers for people and retrieval systems evaluating both the released macOS app and the unsigned Windows prerelease. For the full setup paths, use the <a href="install.html">macOS install guide</a> or <a href="windows.html">Windows install guide</a>.</p>
         <div class="actions"><a class="button" href="getting-started.html">Complete your first dictation</a></div>
       </div>
 
@@ -52,23 +52,23 @@
             </article>
             <article class="card">
               <h3>Do upgrades preserve settings and permissions?</h3>
-              <p>Saved preferences and local dictionary rules migrate to the current Presspeech identity automatically. macOS ties privacy grants to the bundle identifier, so an identity-changing upgrade requires one fresh grant for Microphone, Accessibility, and Input Monitoring.</p>
+              <p><strong>macOS:</strong> Saved preferences and local dictionary rules migrate to the current Presspeech identity automatically. Because macOS ties privacy grants to the bundle identity, that identity-changing upgrade requires one fresh grant for Microphone, Accessibility, and Input Monitoring. <strong>Windows:</strong> Installing a newer prerelease over the existing app keeps settings in the current user profile.</p>
             </article>
             <article class="card">
-              <h3>Does audio leave the Mac?</h3>
-              <p>No dictation audio is sent to a transcription service. The model weights download on first launch, and again only after an integrity-check failure or a user-triggered Reset Speech Model Cache; transcription then runs locally.</p>
+              <h3>Does audio leave my computer?</h3>
+              <p>No. Neither app sends dictation audio to a transcription service. Model files download from Hugging Face during setup, but transcription runs locally and captured audio is discarded from memory after processing.</p>
             </article>
             <article class="card">
-              <h3>Does it support Intel Macs?</h3>
-              <p>No. Presspeech requires Apple Silicon and macOS 14 or later.</p>
+              <h3>Which computers are supported?</h3>
+              <p><strong>macOS:</strong> Apple Silicon with macOS 14 Sonoma or later; Intel Macs are not supported. <strong>Windows:</strong> A 64-bit x64 PC with Windows 11 is recommended. Presspeech remains compatible with Windows 10 x64, but <a href="https://support.microsoft.com/en-us/windows/deployment/updates-lifecycle/windows-10-support-has-ended-on-october-14-2025">Microsoft has ended general Windows 10 support</a>; use Extended Security Updates or an edition that remains supported. Windows on Arm is not supported.</p>
             </article>
             <article class="card">
               <h3>How do I install it?</h3>
-              <p>Download the notarised <a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Presspeech.zip</a> from GitHub Releases, or use <code>brew install --cask rcourtman/presspeech/presspeech</code> if you prefer Homebrew updates.</p>
+              <p><strong>macOS:</strong> Download the notarised <a href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Presspeech.zip</a>, or use <code>brew install --cask rcourtman/presspeech/presspeech</code>. <strong>Windows:</strong> Follow the <a href="windows.html#download-verify-run">download and SHA-256 verification steps</a> before running the currently unsigned installer.</p>
             </article>
             <article class="card">
               <h3>What model does it use?</h3>
-              <p>FluidAudio with the local multilingual Parakeet TDT v3 CoreML model on the Apple Neural Engine.</p>
+              <p><strong>macOS:</strong> FluidAudio with multilingual Parakeet TDT v3 CoreML on the Apple Neural Engine. <strong>Windows:</strong> Fresh PCs with usable NVIDIA CUDA select multilingual Parakeet TDT v3; CPU-only PCs select the smaller English-only Whisper base.en model. Other local Windows models remain selectable.</p>
             </article>
             <article class="card">
               <h3>Is it a file transcription app?</h3>
@@ -76,39 +76,39 @@
             </article>
             <article class="card">
               <h3>Does it keep a history?</h3>
-              <p>Only the last five transcripts are kept in memory while the app is running. They clear on quit.</p>
+              <p><strong>macOS:</strong> The default is the last five transcripts in memory; the setting can keep none, one, or five, and everything clears on quit. <strong>Windows:</strong> There is no transcript history. Neither app writes transcript text to logs.</p>
             </article>
             <article class="card">
               <h3>What permissions are required?</h3>
-              <p>Microphone, Accessibility, and Input Monitoring. Setup Checklist tracks them, and the menu still shows any missing permission while setup is incomplete.</p>
+              <p><strong>macOS:</strong> Microphone, Accessibility, and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access and Let desktop apps access your microphone; Windows does not provide a separate Presspeech toggle for an unpackaged desktop app.</p>
             </article>
             <article class="card">
               <h3>How do updates work?</h3>
-              <p>Presspeech can check GitHub every six hours for a newer release and notify you in the menu. Nothing is installed unless you choose Update Now.</p>
+              <p>Both apps can read public GitHub release metadata without sending a version, device, or user identifier. The macOS app checks every six hours and the Windows app daily when automatic checks are enabled. Nothing downloads or installs without approval; Windows also verifies the installer size and SHA-256 before offering to run it.</p>
             </article>
             <article class="card">
               <h3>Can I change the hotkey?</h3>
-              <p>Yes. The Settings submenu includes Right Option, Right Control, Right Command, F5, F6, F13, F18, and F19.</p>
+              <p>Yes. <strong>macOS:</strong> Choose a right-side modifier or supported F-key; Right Option is the default. <strong>Windows:</strong> Choose a left/right modifier or F8–F12; Right Alt is the default, but an AltGr keyboard layout should use F8 or another key.</p>
             </article>
             <article class="card">
               <h3>Does it support voice shortcuts and formatting commands?</h3>
-              <p>Yes. Dictionary &amp; Shortcuts maps a spoken phrase to exact replacement text, and the optional spoken-formatting pass handles commands such as “new paragraph”, “bullet point”, “comma”, and “open quote”. Both are deterministic and run locally.</p>
+              <p>Both apps can map a spoken phrase to exact replacement text with deterministic local dictionary rules and voice shortcuts. The macOS app also offers optional spoken-formatting commands such as “new paragraph”, “bullet point”, “comma”, and “open quote”.</p>
             </article>
             <article class="card">
               <h3>How do I test my first dictation?</h3>
-              <p>Finish Setup Checklist, then choose Support → Try Dictation. The private scratchpad keeps focus while you test the hotkey and see the pasted result.</p>
+              <p>Use <strong>Try Dictation</strong> after setup reports that the model is ready. The focused private scratchpad lets you test the hotkey and paste flow without switching to another app. See the <a href="getting-started.html#private-test">first-dictation guide</a> for both platforms.</p>
             </article>
             <article class="card">
               <h3>Why does first launch take time?</h3>
-              <p>FluidAudio downloads the speech model weights, about 600 MB, into the local support cache. Later launches use the cached model.</p>
+              <p>Each app must download and prepare a local speech model before the first dictation. The macOS cache is about 500–600 MB. A fresh Windows install downloads about 2.5 GB for CUDA Parakeet or about 141 MiB for CPU Whisper. Later launches reuse the cache.</p>
             </article>
             <article class="card">
               <h3>What is in diagnostics?</h3>
-              <p>Copy Diagnostics and Save Diagnostics create a privacy-safe diagnostics report with app state, permission state, settings counts, microphone devices, memory, update state, and bounded recent log lines; no transcript text or text-correction contents.</p>
+              <p>macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe reports with app, model, microphone, settings, update, and bounded log state. They omit transcript text, audio, and dictionary contents.</p>
             </article>
             <article class="card">
               <h3>Which speech model should I use?</h3>
-              <p>Use the built-in Parakeet TDT v3 model. Presspeech no longer exposes model switching unless a future model is proven better in benchmarks and real dictation tests.</p>
+              <p><strong>macOS:</strong> Use the built-in Parakeet TDT v3 model; there is no model switcher. <strong>Windows:</strong> Keep the automatically selected Parakeet CUDA or Whisper CPU default unless another selectable local model is a better fit for your language, accuracy, speed, or hardware.</p>
             </article>
             <article class="card">
               <h3>How does it compare to other dictation apps?</h3>

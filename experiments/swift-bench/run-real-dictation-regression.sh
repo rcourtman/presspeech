@@ -33,6 +33,7 @@ REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
 CORPUS_KIND="private"
 SELF_TEST=0
+MAX_REFERENCE_DELETION_RUN=""
 
 usage() {
     cat <<'USAGE'
@@ -54,6 +55,9 @@ Options:
   --show-transcripts       include reference/hypothesis text in the report
   --show-paths             include local fixture filenames and paths in the report
   --public-corpus          label the report as licensed public speech instead of private fixtures
+  --max-reference-deletion-run <n>
+                           fail if any hypothesis drops more than n consecutive
+                           reference words on the minimum-edit alignment
   --self-test              run parser and report-redaction self-tests
   -h, --help               show this help
 
@@ -134,7 +138,8 @@ validate_benchmark_output() {
             if (require_ref == 1 &&
                 (line !~ /\[WER [0-9]+([.][0-9]+)?%\]/ ||
                  line !~ /\[final-word retained=(true|false)([[:space:]]|\])/ ||
-                 line !~ /\[word-errors=[0-9]+ reference-words=[0-9]+\]/)) {
+                 line !~ /\[word-errors=[0-9]+ reference-words=[0-9]+\]/ ||
+                 line !~ /\[max-reference-deletion-run=[0-9]+\]/)) {
                 incomplete_results += 1
             }
         }
@@ -160,6 +165,32 @@ validate_benchmark_output() {
             }
         }
     ' "$log_file"
+}
+
+worst_reference_deletion_run() {
+    local report="$1"
+    sed -nE 's/.*\[max-reference-deletion-run=([0-9]+)\].*/\1/p' "$report" \
+        | awk 'BEGIN { found = 0; worst = 0 }
+               { found = 1; if ($1 > worst) worst = $1 }
+               END { if (found) print worst; else print "unknown" }'
+}
+
+append_quality_gate() {
+    local report="$1"
+    local observed="$2"
+    local verdict="passes"
+    if [[ "$observed" == "unknown" || "$observed" -gt "$MAX_REFERENCE_DELETION_RUN" ]]; then
+        verdict="fails"
+    fi
+    {
+        echo
+        echo "## Consecutive-deletion gate"
+        echo
+        echo "- Maximum allowed consecutive reference-word deletions: $MAX_REFERENCE_DELETION_RUN"
+        echo "- Worst observed: $observed"
+        echo "- Verdict: $verdict"
+    } >>"$report"
+    [[ "$verdict" == "passes" ]]
 }
 
 publish_report_artifact() {
@@ -294,6 +325,9 @@ write_report_header() {
             echo "- Nemotron multilingual language: $NEMOTRON_MULTILINGUAL_LANGUAGE"
             echo "- Nemotron multilingual chunk: ${NEMOTRON_MULTILINGUAL_CHUNK_MS} ms"
         fi
+        if [[ -n "$MAX_REFERENCE_DELETION_RUN" ]]; then
+            echo "- Maximum consecutive reference-word deletions: $MAX_REFERENCE_DELETION_RUN"
+        fi
         echo "- Transcript output: $(transcript_output_label)"
         echo "- Fixture paths: $(fixture_paths_label)"
         echo "- Clips: $clip_count"
@@ -379,6 +413,7 @@ run_self_test() {
     NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
+    MAX_REFERENCE_DELETION_RUN=""
 
     local report="$tmpdir/report.md"
     local clip_number="001"
@@ -416,10 +451,10 @@ run_self_test() {
     {
         echo '    latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms'
         echo '    transcripts (2 distinct):'
-        echo '      • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] [word-errors=0 reference-words=1] <redacted 3 chars>'
-        echo '      • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] [word-errors=1 reference-words=25] "literal [WER 99.0%]"'
+        echo '      • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] [word-errors=0 reference-words=1] [max-reference-deletion-run=0] <redacted 3 chars>'
+        echo '      • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] [word-errors=1 reference-words=25] [max-reference-deletion-run=1] "literal [WER 99.0%]"'
         echo '    latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms'
-        echo '    transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] [word-errors=1 reference-words=10] <redacted 3 chars>'
+        echo '    transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] [word-errors=1 reference-words=10] [max-reference-deletion-run=4] <redacted 3 chars>'
     } >"$summary_source"
     BACKEND="v3"
     # shellcheck disable=SC2016 # Markdown backticks are intentional literals.
@@ -429,6 +464,17 @@ run_self_test() {
     assert_contains "$summary_source" "## Summary"
     assert_contains "$summary_source" "$expected_summary"
     validate_benchmark_output "$summary_source" 2 1
+    assert_eq "$(worst_reference_deletion_run "$summary_source")" "4" "worst consecutive deletion parser"
+    MAX_REFERENCE_DELETION_RUN="4"
+    append_quality_gate "$summary_source" "$(worst_reference_deletion_run "$summary_source")"
+    assert_contains "$summary_source" "- Verdict: passes"
+    MAX_REFERENCE_DELETION_RUN="3"
+    if append_quality_gate "$summary_source" "4"; then
+        echo "self-test expected an excessive consecutive deletion run to fail" >&2
+        exit 1
+    fi
+    assert_contains "$summary_source" "- Verdict: fails"
+    MAX_REFERENCE_DELETION_RUN=""
     assert_eq "$(expected_backend_count v3)" "1" "single backend count"
     assert_eq "$(expected_backend_count fluid)" "5" "fluid backend count"
     assert_eq "$(expected_backend_count both)" "6" "all backend count"
@@ -550,6 +596,11 @@ while [[ $# -gt 0 ]]; do
             CORPUS_KIND="public"
             shift
             ;;
+        --max-reference-deletion-run)
+            need_value "$@"
+            MAX_REFERENCE_DELETION_RUN="$2"
+            shift 2
+            ;;
         --self-test)
             SELF_TEST=1
             shift
@@ -583,6 +634,12 @@ fi
 
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
+    exit 2
+fi
+
+if [[ -n "$MAX_REFERENCE_DELETION_RUN" ]] &&
+   ! [[ "$MAX_REFERENCE_DELETION_RUN" =~ ^[0-9]+$ ]]; then
+    echo "--max-reference-deletion-run must be a non-negative integer" >&2
     exit 2
 fi
 
@@ -725,7 +782,19 @@ done
 
 append_single_backend_summary "$report"
 
+quality_gate_passed=1
+if [[ -n "$MAX_REFERENCE_DELETION_RUN" ]]; then
+    observed_deletion_run="$(worst_reference_deletion_run "$report")"
+    if ! append_quality_gate "$report" "$observed_deletion_run"; then
+        quality_gate_passed=0
+    fi
+fi
+
 publish_report_artifact "$stage_dir" "$report" "$final_report"
 stage_dir=""
 
 echo "report: $final_report"
+if [[ "$quality_gate_passed" -ne 1 ]]; then
+    echo "ASR quality gate failed: worst consecutive reference-word deletion run ${observed_deletion_run}; required at most ${MAX_REFERENCE_DELETION_RUN}" >&2
+    exit 1
+fi

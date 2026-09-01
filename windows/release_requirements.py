@@ -21,7 +21,10 @@ INPUTS = (
     Path("windows/requirements-cuda.txt"),
 )
 LOCK = ROOT / "windows/requirements-release.txt"
-PYTHON_VERSION = "3.12.14"
+# Python 3.12.10 is the final 3.12 release with official Windows installers.
+# Later 3.12 security releases are source-only and cannot be provisioned by
+# actions/setup-python on a hosted Windows release runner.
+PYTHON_VERSION = "3.12.10"
 TARGET = "x86_64-pc-windows-msvc"
 PIN_RE = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s;]+)$")
 NAME_RE = re.compile(r"^([A-Za-z0-9_.-]+)")

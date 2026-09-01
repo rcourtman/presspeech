@@ -41,6 +41,7 @@ class ConfigLoadTests(unittest.TestCase):
             "capture_benchmark_remaining": True,
             "capture_benchmark_index": 0,
             "gpu_idle_unload_sec": "30",
+            "max_recording_seconds": 30,
             "unknown_future_setting": "ignored",
         })
 
@@ -52,7 +53,7 @@ class ConfigLoadTests(unittest.TestCase):
                 "trigger", "model", "suffix", "remove_fillers",
                 "input_device", "last_update_check_epoch",
                 "capture_benchmark_remaining", "capture_benchmark_index",
-                "gpu_idle_unload_sec"):
+                "gpu_idle_unload_sec", "max_recording_seconds"):
             self.assertEqual(settings[key], config.DEFAULTS[key])
         self.assertNotIn("unknown_future_setting", settings)
 
@@ -61,6 +62,27 @@ class ConfigLoadTests(unittest.TestCase):
             with self.subTest(hotkey=hotkey):
                 self.write({"hotkey": hotkey})
                 self.assertEqual(config.load()["hotkey"], hotkey)
+
+    def test_every_recording_length_survives_validation(self):
+        for seconds in config.RECORDING_LENGTHS:
+            with self.subTest(seconds=seconds):
+                self.assertEqual(config.recording_length_seconds(seconds), seconds)
+                self.write({"max_recording_seconds": seconds})
+                self.assertEqual(
+                    config.load()["max_recording_seconds"], seconds)
+
+    def test_recording_length_rejects_boolean_and_unbounded_values(self):
+        for value in (True, 0, 30, 601, 3600, "300", [], None):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    config.recording_length_seconds(value),
+                    config.DEFAULTS["max_recording_seconds"],
+                )
+                self.write({"max_recording_seconds": value})
+                self.assertEqual(
+                    config.load()["max_recording_seconds"],
+                    config.DEFAULTS["max_recording_seconds"],
+                )
 
     def test_dictionary_keeps_only_string_pairs(self):
         self.write({

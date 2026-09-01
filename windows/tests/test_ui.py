@@ -61,6 +61,37 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertIsNone(ui._indicator_system_palette(user32))
         user32.GetSysColor.assert_not_called()
 
+    def test_temporary_indicator_does_not_hide_a_newer_state(self):
+        indicator = ui.DictationIndicator()
+        indicator._ensure_thread = mock.Mock()
+
+        with mock.patch.object(ui.threading, "Timer") as timer:
+            indicator.show_temporary("no_speech", 2.5)
+            hide_if_current = timer.call_args.args[1]
+            generation = timer.call_args.kwargs["args"][0]
+            indicator.show("listening")
+            hide_if_current(generation)
+
+        self.assertEqual(indicator._commands.get_nowait(), "no_speech")
+        self.assertEqual(indicator._commands.get_nowait(), "listening")
+        with self.assertRaises(queue.Empty):
+            indicator._commands.get_nowait()
+        timer.return_value.start.assert_called_once_with()
+        self.assertTrue(timer.return_value.daemon)
+
+    def test_temporary_indicator_hides_when_it_is_still_current(self):
+        indicator = ui.DictationIndicator()
+        indicator._ensure_thread = mock.Mock()
+
+        with mock.patch.object(ui.threading, "Timer") as timer:
+            indicator.show_temporary("no_speech", 2.5)
+            hide_if_current = timer.call_args.args[1]
+            generation = timer.call_args.kwargs["args"][0]
+            hide_if_current(generation)
+
+        self.assertEqual(indicator._commands.get_nowait(), "no_speech")
+        self.assertEqual(indicator._commands.get_nowait(), "hide")
+
     def test_every_interactive_window_uses_the_shared_host(self):
         host = mock.Mock()
         app = mock.Mock()
@@ -387,6 +418,7 @@ class SetupWindowTests(unittest.TestCase):
         window.app.settings = {
             "hotkey": "right alt",
             "trigger": "hold",
+            "max_recording_seconds": 120,
             "setup_complete": False,
         }
         window.hotkey = mock.Mock()
@@ -619,9 +651,14 @@ class DictionarySettingsTests(unittest.TestCase):
             "dictionary": [],
         }
         window.device_values = {"Automatic": "auto"}
+        window.recording_length_values = {
+            label: seconds
+            for seconds, label in ui.cfg.RECORDING_LENGTHS.items()
+        }
         values = {
             "var_hotkey": "right alt",
             "var_trigger": "hold",
+            "var_recording_length": ui.cfg.RECORDING_LENGTHS[300],
             "var_device": "Automatic",
             "var_model": ui.cfg.MODEL_LABELS["parakeet-tdt-0.6b-v3"],
             "var_suffix": "space",
@@ -645,6 +682,7 @@ class DictionarySettingsTests(unittest.TestCase):
 
         self.assertEqual(window.app.settings["dictionary"], rules)
         self.assertTrue(window.app.settings["model_explicit"])
+        self.assertEqual(window.app.settings["max_recording_seconds"], 300)
         self.assertIsNot(window.app.settings["dictionary"], window.dictionary_rules)
         window.listbox.get.assert_not_called()
         save.assert_called_once_with(window.app.settings)
@@ -670,6 +708,7 @@ class DictionarySettingsTests(unittest.TestCase):
         window.app.settings = {
             "hotkey": "right alt",
             "trigger": "hold",
+            "max_recording_seconds": 120,
             "input_device": "auto",
             "model": "base.en",
             "suffix": "space",
@@ -683,9 +722,14 @@ class DictionarySettingsTests(unittest.TestCase):
             "dictionary": [],
         }
         window.device_values = {"Automatic": "auto"}
+        window.recording_length_values = {
+            label: seconds
+            for seconds, label in ui.cfg.RECORDING_LENGTHS.items()
+        }
         values = {
             "var_hotkey": "right alt",
             "var_trigger": "hold",
+            "var_recording_length": ui.cfg.RECORDING_LENGTHS[600],
             "var_device": "Automatic",
             "var_model": ui.cfg.MODEL_LABELS["small.en"],
             "var_suffix": "space",
@@ -706,6 +750,7 @@ class DictionarySettingsTests(unittest.TestCase):
             window._save()
 
         self.assertEqual(window.app.settings["model"], "small.en")
+        self.assertEqual(window.app.settings["max_recording_seconds"], 600)
         window.app.prepare_configured_model.assert_called_once_with()
 
     def test_model_status_exposes_ready_error_and_retry_states(self):

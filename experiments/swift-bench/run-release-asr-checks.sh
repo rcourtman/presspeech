@@ -19,6 +19,7 @@ REQUIRE_LONG_PUBLIC_AUDIO=0
 INCLUDE_CANDIDATE_MODELS=0
 RUN_TAIL=1
 SELF_TEST=0
+LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN="6"
 
 usage() {
     cat <<'USAGE'
@@ -35,6 +36,9 @@ Options:
   --require-public-audio    fail if no public speech clips are present
   --require-long-public-audio
                             fail if no composed multi-window fixtures are present
+  --long-public-max-reference-deletion-run <n>
+                            fail the multi-window gate above this consecutive
+                            dropped-reference-word count (default: 6)
   --include-candidate-models
                             also run Parakeet v2, linear-int8 v3, Unified,
                             and current Nemotron candidate checks
@@ -122,6 +126,14 @@ run_self_test() {
     fi
     assert_contains "$missing_value_log" "--trials requires a value"
 
+    local missing_deletion_value_log="$tmpdir/missing-deletion-value.log"
+    if bash "$SCRIPT_PATH" --long-public-max-reference-deletion-run >"$missing_deletion_value_log" 2>&1; then
+        echo "self-test expected the deletion-run option without a value to fail" >&2
+        exit 1
+    fi
+    assert_contains "$missing_deletion_value_log" \
+        "--long-public-max-reference-deletion-run requires a value"
+
     local missing_real_log="$tmpdir/missing-real.log"
     if bash "$SCRIPT_PATH" \
         --real-audio-dir "$tmpdir/missing-real" \
@@ -198,6 +210,11 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_LONG_PUBLIC_AUDIO=1
             shift
             ;;
+        --long-public-max-reference-deletion-run)
+            need_value "$@"
+            LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN="$2"
+            shift 2
+            ;;
         --include-candidate-models)
             INCLUDE_CANDIDATE_MODELS=1
             shift
@@ -229,6 +246,10 @@ fi
 
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
+    exit 2
+fi
+if ! [[ "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" =~ ^[0-9]+$ ]]; then
+    echo "--long-public-max-reference-deletion-run must be a non-negative integer" >&2
     exit 2
 fi
 
@@ -392,7 +413,8 @@ else
         --trials "$TRIALS" \
         --public-corpus \
         --show-transcripts \
-        --show-paths
+        --show-paths \
+        --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN"
 
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo

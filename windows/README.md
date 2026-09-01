@@ -28,8 +28,10 @@ and appears in **Settings → Apps → Installed apps** for normal uninstallatio
 The current prerelease is not code-signed. Windows SmartScreen may report
 **Unknown publisher**. Follow the public guide's
 [download and PowerShell verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run),
-then choose **More info → Run anyway** only after it reports that SHA-256
-verification succeeded.
+then choose **More info → Run anyway** only if Windows offers that choice and
+the guide reports that SHA-256 verification succeeded. Windows 11 Smart App
+Control or managed policy may block an unsigned app without offering an
+override; do not try to circumvent that policy.
 
 Requirements:
 
@@ -105,13 +107,18 @@ Other keys and AltGr layout input continue to pass through normally.
 
 A short high tone confirms recording has started and a lower tone confirms it has
 stopped. Audio cues are enabled by default and can be disabled in Settings.
+If a press captures too little audio or the local recognizer detects no speech,
+the indicator briefly says **No speech detected — try again** and a Windows
+notification points back to Setup's microphone check instead of failing
+silently. A quick retry cannot be hidden by the previous message's timeout.
 
 After release, silence-aware post-roll stops as early as 80 ms while retaining
 the original 400 ms safety ceiling whenever speech is still present. This keeps
 final words intact without always paying the full delay.
 
-Recordings stop automatically after two minutes. This bounds in-memory audio
-and restores muted playback if Windows misses a hotkey release.
+Recordings stop and transcribe automatically at the maximum length selected in
+Settings: 1, 2 (the default), 5, or 10 minutes. This bounds in-memory audio and
+restores muted playback if Windows misses a hotkey release.
 Press **Escape** during an active recording to cancel it immediately. The
 buffered audio is discarded without transcription or clipboard changes; the
 same action is available from **Cancel Dictation (Esc)** in the notification
@@ -132,7 +139,9 @@ clipboard and notifies you instead of pasting private text into the wrong window
 The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Dictate** (toggle), **Cancel Dictation (Esc)** while recording,
 **Try Dictation…** (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
-**Check for Updates…**, **Copy Diagnostics**, and **Exit**. The icon turns red
+**Check for Updates…**, **Copy Diagnostics**, **Report a Problem…**, **Suggest an
+Improvement…**, and **Exit**. The feedback actions open the focused public
+GitHub forms without adding app or user data to the URL. The icon turns red
 while recording. Setup, settings, update, and scratchpad controls expose names,
 roles, values, and actions through Windows UI Automation for screen readers.
 Each window starts focus on its main working control. Use **Left Alt** plus a
@@ -152,6 +161,7 @@ after setup. It does not start a second dictation process.
 
 - Hotkey: right/left Alt, Ctrl, Shift, Win, or F8–F12
 - Trigger: hold-to-talk or press-to-toggle
+- Maximum recording length: 1, 2 (default), 5, or 10 minutes
 - Microphone: automatic selection or a specific safe Windows input device
 - Engine/model: Parakeet TDT v3 and Nemotron (NVIDIA GPU recommended), or
   Whisper turbo/small/medium/base (base.en is the CPU first-run default)
@@ -226,7 +236,8 @@ results, virtual environments, caches, and logs are ignored by Git.
 
 ## Build the installer
 
-Release builds use CPython 3.12.14 and the fully resolved Windows dependency
+Release builds use CPython 3.12.10 (the final 3.12 release with Windows
+installers) and the fully resolved Windows dependency
 set in `requirements-release.txt`; source-development installs intentionally
 retain the lower bounds in `requirements.txt`. Install Inno Setup 6, create a
 clean release environment, then run the build script from `windows/`:

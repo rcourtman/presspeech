@@ -47,7 +47,7 @@ Presspeech uses the bundle identifier and preferences suite `com.local.presspeec
 The current Windows installer, requirements, checksum verification, and first-run steps are maintained at:
 https://rcourtman.github.io/presspeech/windows.html
 
-The installer is currently unsigned, so Windows may show an Unknown publisher warning. Users should verify the release checksum before choosing More info → Run anyway. First launch downloads and warms the local model; wait for the readiness indicator before dictating.
+The installer is currently unsigned, so Windows may show an Unknown publisher warning. Users should verify the release checksum before choosing More info → Run anyway, and only choose it if Windows offers that option. Windows 11 Smart App Control or managed policy may block the installer without an override; users should not try to circumvent that policy. First launch downloads and warms the local model; wait for the readiness indicator before dictating.
 
 ## Usage
 
@@ -71,7 +71,8 @@ Documented network calls:
 
 1. Speech model downloads from `huggingface.co`: macOS downloads the FluidAudio CoreML model on first launch, after an integrity failure, or after a user-triggered cache reset; Windows downloads its selected local model on first launch. No dictation audio is sent. If `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or `HUGGINGFACEHUB_API_TOKEN` is set, FluidAudio may attach it to macOS model requests; most users have none set.
 2. Optional update checks: macOS queries `api.github.com/repos/rcourtman/presspeech/releases/latest` with fixed User-Agent `presspeech-update-check`; Windows queries `api.github.com/repos/rcourtman/presspeech/releases?per_page=100` with fixed User-Agent `presspeech-windows-update-check`. Neither sends the app version, device details, settings, transcripts, or usage identifiers.
-3. User-approved install/update downloads: the signed macOS archive directly or through Homebrew, or a Windows installer whose published size and SHA-256 are verified before launch.
+3. User-triggered feedback links: Report a Problem and Suggest an Improvement open fixed public GitHub forms in the default browser. Presspeech adds no app or user data to the URL.
+4. User-approved install/update downloads: the signed macOS archive directly or through Homebrew, or a Windows installer whose published size and SHA-256 are verified before launch.
 
 For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe local reports with runtime metadata and bounded recent log lines. The reports exclude transcript text and dictionary/correction contents.
 

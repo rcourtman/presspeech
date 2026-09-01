@@ -64,6 +64,12 @@ gate used before a performance-sensitive feature can ship. A small corpus is
 still useful exploratory evidence when reported honestly; it just cannot clear
 that product-candidate gate by itself.
 
+Attach or paste only the redacted aggregate report to the existing feature
+request. Keep the underlying audio, references, hypotheses, vocabulary, and
+paths local. A report that does not clear the candidate gate is still useful:
+label it exploratory and include the blocked reasons rather than enlarging or
+repeating selected clips to meet a threshold.
+
 ## Development setup
 
 ```sh

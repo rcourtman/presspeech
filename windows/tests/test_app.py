@@ -132,6 +132,42 @@ class SingleInstanceActivationTests(unittest.TestCase):
         instance._update_lock.acquire.assert_not_called()
 
 
+class FeedbackLinkTests(unittest.TestCase):
+    def make_app(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        return instance
+
+    def test_report_problem_opens_fixed_bug_form(self):
+        instance = self.make_app()
+        with mock.patch.object(app.os, "startfile", create=True) as startfile:
+            self.assertTrue(instance.report_problem())
+
+        startfile.assert_called_once_with(app.BUG_REPORT_URL)
+        instance.notify.assert_not_called()
+
+    def test_suggest_improvement_opens_fixed_feature_form(self):
+        instance = self.make_app()
+        with mock.patch.object(app.os, "startfile", create=True) as startfile:
+            self.assertTrue(instance.suggest_improvement())
+
+        startfile.assert_called_once_with(app.FEATURE_REQUEST_URL)
+
+    def test_feedback_link_failure_has_manual_recovery_without_url_details(self):
+        instance = self.make_app()
+        with mock.patch.object(
+                app.os, "startfile", side_effect=OSError("private browser detail"),
+                create=True):
+            self.assertFalse(instance.report_problem())
+
+        instance._log.assert_called_once_with(
+            "could not open feedback form: OSError")
+        instance.notify.assert_called_once_with(
+            "Could not open GitHub",
+            "Open github.com/rcourtman/presspeech/issues in your browser.")
+
+
 class UpdateWindowTests(unittest.TestCase):
     def make_window(self):
         window = app.ui.UpdateWindow.__new__(app.ui.UpdateWindow)
@@ -1389,6 +1425,7 @@ class TextRegressionTests(unittest.TestCase):
             "input_device": "MME::Yeti Nano",
             "hotkey": "right alt",
             "trigger": "hold",
+            "max_recording_seconds": 300,
             "check_updates": True,
             "dictionary": [["private spoken phrase", "private replacement"]],
         }
@@ -1400,6 +1437,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.model_status = "ready"
         diagnostics = instance.diagnostics_text()
         self.assertIn("Dictionary rule count: 1", diagnostics)
+        self.assertIn("Maximum recording length: 300 seconds", diagnostics)
         self.assertIn("Model status: ready", diagnostics)
         self.assertIn("Windows UI Automation: not initialized", diagnostics)
         self.assertNotIn("\\Users\\", diagnostics)
@@ -1418,6 +1456,32 @@ class TextRegressionTests(unittest.TestCase):
             [mock.call.show("listening"), mock.call.show("transcribing"),
              mock.call.hide()],
         )
+
+    def test_no_speech_feedback_is_visible_and_actionable(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"visual_indicator": True}
+        instance.indicator = mock.Mock()
+        instance.notify = mock.Mock()
+
+        instance._show_no_speech_feedback()
+
+        instance.indicator.show_temporary.assert_called_once_with(
+            "no_speech", app.NO_SPEECH_FEEDBACK_SEC)
+        instance.notify.assert_called_once_with(
+            "No speech detected",
+            "Try again and speak after the start cue. If this keeps happening, "
+            "run the microphone check in Setup.")
+
+    def test_no_speech_notification_remains_when_visual_indicator_is_off(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"visual_indicator": False}
+        instance.indicator = mock.Mock()
+        instance.notify = mock.Mock()
+
+        instance._show_no_speech_feedback()
+
+        instance.indicator.show_temporary.assert_not_called()
+        instance.notify.assert_called_once()
 
     def test_frozen_autostart_runs_only_the_packaged_executable(self):
         command = app._autostart_command(
@@ -1653,6 +1717,7 @@ class TextRegressionTests(unittest.TestCase):
 
     def test_recording_limit_timer_is_daemon_and_epoch_scoped(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"max_recording_seconds": 300}
         instance.lock = __import__("threading").Lock()
         instance.recording = True
         instance._rec_epoch = 7
@@ -1660,9 +1725,26 @@ class TextRegressionTests(unittest.TestCase):
         with mock.patch.object(app.threading, "Timer") as timer:
             instance._schedule_recording_limit(7)
         timer.assert_called_once_with(
-            app.MAX_RECORDING_SEC, instance._recording_limit_reached, (7,))
+            300, instance._recording_limit_reached, (7,))
         self.assertTrue(timer.return_value.daemon)
         timer.return_value.start.assert_called_once_with()
+
+    def test_recording_limit_timer_falls_back_from_invalid_runtime_setting(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"max_recording_seconds": 3600}
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance._recording_limit_timer = None
+
+        with mock.patch.object(app.threading, "Timer") as timer:
+            instance._schedule_recording_limit(7)
+
+        timer.assert_called_once_with(
+            app.cfg.DEFAULTS["max_recording_seconds"],
+            instance._recording_limit_reached,
+            (7,),
+        )
 
     def test_stale_recording_limit_cannot_stop_a_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1685,12 +1767,41 @@ class TextRegressionTests(unittest.TestCase):
         instance._recording_limit_timer = timer
         instance._restore_playback_after_recording = mock.Mock()
         instance._play_cue = mock.Mock()
-        instance._set_indicator = mock.Mock()
+        instance._show_no_speech_feedback = mock.Mock()
         instance._log = mock.Mock()
         instance._schedule_model_idle_unload = mock.Mock()
         self.assertTrue(instance.stop_recording(expected_epoch=7))
         self.assertIsNone(instance._recording_limit_timer)
         timer.cancel.assert_called_once_with()
+        instance._show_no_speech_feedback.assert_called_once_with()
+
+    def test_too_short_recording_reports_no_speech_without_model_work(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance.transcribing = False
+        instance._rec_epoch = 7
+        instance.buffer = [
+            __import__("numpy").ones(1600, dtype="float32")]
+        instance.stream = None
+        instance.icon = None
+        instance.input_device = (0, 16000)
+        instance._recording_paste_target = app.PasteTarget(
+            "notepad.exe", 1234)
+        instance._recording_scratchpad = None
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._finish_transcribing = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._model_executor = mock.Mock()
+
+        self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        instance._finish_transcribing.assert_called_once_with(
+            app.NO_SPEECH_OUTCOME)
+        instance._model_executor.submit.assert_not_called()
 
     def test_cancel_discards_capture_and_restores_recording_resources(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1928,6 +2039,44 @@ class ModelIdleTests(unittest.TestCase):
         instance._schedule_model_idle_unload.assert_called_once_with()
         instance._set_indicator.assert_called_once_with(None)
         self.assertFalse(instance.transcribing)
+
+    def test_empty_transcription_keeps_a_transient_recovery_status(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.transcribing = True
+        instance._last_model_use = 0.0
+        instance._transcribe_worker_inner = mock.Mock(
+            return_value=app.NO_SPEECH_OUTCOME)
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._set_temporary_indicator = mock.Mock()
+        instance.notify = mock.Mock()
+
+        instance._transcribe_worker(
+            [], app.PasteTarget("notepad.exe", 1234))
+
+        instance._set_indicator.assert_not_called()
+        instance._set_temporary_indicator.assert_called_once_with(
+            "no_speech", app.NO_SPEECH_FEEDBACK_SEC)
+        instance.notify.assert_called_once()
+        self.assertFalse(instance.transcribing)
+
+    def test_empty_recognizer_result_is_classified_as_no_speech(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "base.en"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.return_value = ""
+        instance.transcriber.last_timing = {
+            "backend": "whisper", "speech_seconds": 0.0}
+        instance._log = mock.Mock()
+
+        outcome = instance._transcribe_worker_inner([])
+
+        self.assertEqual(outcome, app.NO_SPEECH_OUTCOME)
+        self.assertTrue(any(
+            "transcription returned empty" in call.args[0]
+            for call in instance._log.call_args_list))
 
 
 class StartupTests(unittest.TestCase):

@@ -59,6 +59,44 @@ EXTRA_STALE_SCAN = [
     ROOT / "marketing" / "demo" / "README.md",
 ]
 
+# Public prose can gain a Windows download link outside the files rewritten by
+# the syncers above. Scan every public documentation surface so a newly added
+# page cannot silently advertise an older prerelease or a tag/asset mismatch.
+PUBLIC_RELEASE_ROOTS = [DOCS, ROOT / "marketing"]
+PUBLIC_RELEASE_FILES = [
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "README.md",
+    ROOT / "SECURITY.md",
+    ROOT / "llms.txt",
+    ROOT / "swift" / "README.md",
+    ROOT / "windows" / "README.md",
+]
+PUBLIC_RELEASE_SUFFIXES = {".html", ".json", ".md", ".svg", ".txt"}
+WINDOWS_RELEASE_REFERENCE_PATTERNS = [
+    (
+        re.compile(
+            r"https://github\.com/rcourtman/presspeech/releases/tag/"
+            r"windows-v(?P<version>\d+\.\d+\.\d+)"
+        ),
+        "release tag",
+    ),
+    (
+        re.compile(
+            r"https://github\.com/rcourtman/presspeech/releases/download/"
+            r"windows-v(?P<version>\d+\.\d+\.\d+)"
+        ),
+        "download tag",
+    ),
+    (
+        re.compile(r"Presspeech-Setup-(?P<version>\d+\.\d+\.\d+)-x64\.exe"),
+        "installer filename",
+    ),
+    (
+        re.compile(r"Download Windows (?P<version>\d+\.\d+\.\d+)"),
+        "download label",
+    ),
+]
+
 # Designed SVG assets that carry the release-size stat in hand-laid text.
 # They can't be rewritten mechanically, so --check verifies the current
 # size string appears and fails loudly when a release changes it.
@@ -79,11 +117,49 @@ PLATFORM_ORIENTATION = {
         "Windows — prerelease",
         "currently unsigned",
     ),
+    DOCS / "faq.html": (
+        "released macOS app",
+        "unsigned Windows prerelease",
+        "Apple Silicon",
+        "Windows 11",
+    ),
     ROOT / "icon" / "hero.svg": ("Mac and Windows", "macOS release", "Windows prerelease"),
     ROOT / "icon" / "social-preview.svg": (
         "for Mac and Windows",
         "macOS release",
         "Windows prerelease",
+    ),
+}
+
+# Every Windows install entry point must explain that checksum verification does
+# not override operating-system policy. Windows 11 Smart App Control and managed
+# PCs can intentionally withhold the usual SmartScreen bypass for unsigned apps.
+WINDOWS_UNSIGNED_GUIDANCE = {
+    ROOT / "README.md": ("Smart App Control", "managed policy", "do not try to circumvent"),
+    ROOT / "windows" / "README.md": (
+        "Smart App Control",
+        "managed policy",
+        "do not try to circumvent",
+    ),
+    DOCS / "getting-started.html": (
+        "Smart App Control",
+        "managed policy",
+        "do not try to circumvent",
+    ),
+    DOCS / "windows.html": (
+        "Smart App Control",
+        "managed PCs",
+        "do not try to circumvent",
+    ),
+    DOCS / "llms.txt": (
+        "Smart App Control",
+        "managed policy",
+        "do not try to circumvent",
+    ),
+    DOCS / "llms-full.txt": (
+        "Smart App Control",
+        "managed policy",
+        "should not try to circumvent",
     ),
 }
 
@@ -550,13 +626,13 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     text = replace_regex(
         text,
-        r"<p>Microphone, Accessibility, and Input Monitoring\..*?</p>",
-        "<p>Microphone, Accessibility, and Input Monitoring. Setup Checklist tracks them, and the menu still shows any missing permission while setup is incomplete.</p>",
+        r"<p>(?:<strong>macOS:</strong> )?Microphone, Accessibility, and Input Monitoring\..*?</p>",
+        "<p><strong>macOS:</strong> Microphone, Accessibility, and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access and Let desktop apps access your microphone; Windows does not provide a separate Presspeech toggle for an unpackaged desktop app.</p>",
         path=path,
     )
-    diagnostics_card = f"""            <article class="card">
+    diagnostics_card = """            <article class="card">
               <h3>What is in diagnostics?</h3>
-              <p>Copy Diagnostics and Save Diagnostics create a {DIAGNOSTICS_SUMMARY}.</p>
+              <p>macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe reports with app, model, microphone, settings, update, and bounded log state. They omit transcript text, audio, and dictionary contents.</p>
             </article>
 """
     if "What is in diagnostics?" not in text:
@@ -734,6 +810,25 @@ def check_platform_orientation(
     return errors
 
 
+def check_windows_unsigned_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = WINDOWS_UNSIGNED_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing Windows install guidance")
+            continue
+        contents = " ".join(read_text(path).split())
+        missing = [phrase for phrase in required if phrase not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete unsigned Windows guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
 def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
     expected: dict[Path, str] = {}
     for path, syncer in SYNCERS.items():
@@ -752,6 +847,48 @@ def stale_copy_errors(paths: list[Path]) -> list[str]:
             if pattern.search(text):
                 display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
                 errors.append(f"{display}: stale copy found ({label})")
+    return errors
+
+
+def public_release_paths(
+    roots: list[Path] = PUBLIC_RELEASE_ROOTS,
+    files: list[Path] = PUBLIC_RELEASE_FILES,
+) -> list[Path]:
+    paths = set(files)
+    for root in roots:
+        paths.update(
+            path
+            for path in root.rglob("*")
+            if path.is_file() and path.suffix in PUBLIC_RELEASE_SUFFIXES
+        )
+    return sorted(paths)
+
+
+def check_windows_release_references(
+    metadata: dict[str, object], paths: list[Path] | None = None
+) -> list[str]:
+    expected = str(metadata["windows_version"])
+    errors: list[str] = []
+    for path in paths if paths is not None else public_release_paths():
+        if not path.exists():
+            continue
+        text = read_text(path)
+        stale = {
+            (label, match.group("version"))
+            for pattern, label in WINDOWS_RELEASE_REFERENCE_PATTERNS
+            for match in pattern.finditer(text)
+            if match.group("version") != expected
+        }
+        if not stale:
+            continue
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        details = ", ".join(
+            f"{label} {version}" for label, version in sorted(stale)
+        )
+        errors.append(
+            f"{display}: stale Windows public release reference(s): {details}; "
+            f"expected {expected}"
+        )
     return errors
 
 
@@ -879,6 +1016,21 @@ def run_self_test() -> None:
         if "1.2.3" in synced_windows_readme or synced_windows_readme.count("9.8.7") != 5:
             raise SyncError("self-test: Windows README release references were not all synced")
 
+        faq = Path(tmp) / "faq.html"
+        faq.write_text(
+            "<p>Microphone, Accessibility, and Input Monitoring. Old macOS-only answer.</p>\n"
+            "          </div>\n        </div>\n      </section>\n",
+            encoding="utf-8",
+        )
+        synced_faq = sync_faq(faq, metadata)
+        for expected in (
+            "<strong>Windows:</strong> Turn on Microphone access",
+            "Windows Copy Diagnostics",
+            "They omit transcript text, audio, and dictionary contents.",
+        ):
+            if expected not in synced_faq:
+                raise SyncError(f"self-test: FAQ did not sync {expected!r}")
+
         compare_dir = Path(tmp) / "compare"
         compare_dir.mkdir()
         page = compare_dir / "sample.html"
@@ -916,6 +1068,36 @@ def run_self_test() -> None:
         if not stale_copy_errors([stale_windows]):
             raise SyncError("self-test: stale Windows repeat-launch wording was not flagged")
 
+        release_reference = Path(tmp) / "new-public-page.md"
+        release_reference.write_text(
+            "[Download Windows 1.2.3]"
+            "(https://github.com/rcourtman/presspeech/releases/download/"
+            "windows-v1.2.3/Presspeech-Setup-1.2.4-x64.exe)\n",
+            encoding="utf-8",
+        )
+        release_errors = check_windows_release_references(
+            metadata, [release_reference]
+        )
+        if len(release_errors) != 1 or not all(
+            reference in release_errors[0]
+            for reference in (
+                "download label 1.2.3",
+                "download tag 1.2.3",
+                "installer filename 1.2.4",
+            )
+        ):
+            raise SyncError(
+                "self-test: stale or mismatched Windows release references were not flagged"
+            )
+        release_reference.write_text(
+            "[Download Windows 9.8.7]"
+            "(https://github.com/rcourtman/presspeech/releases/download/"
+            "windows-v9.8.7/Presspeech-Setup-9.8.7-x64.exe)\n",
+            encoding="utf-8",
+        )
+        if check_windows_release_references(metadata, [release_reference]):
+            raise SyncError("self-test: current Windows release references were rejected")
+
         orientation = Path(tmp) / "preview.svg"
         orientation.write_text("Mac and Windows; macOS release\n", encoding="utf-8")
         if not check_platform_orientation(
@@ -929,6 +1111,28 @@ def run_self_test() -> None:
             {orientation: ("Mac and Windows", "macOS release", "Windows prerelease")}
         ):
             raise SyncError("self-test: complete platform status was rejected")
+
+        unsigned_guidance = Path(tmp) / "windows-install.md"
+        unsigned_guidance.write_text(
+            "Verify SHA-256, then choose More info → Run anyway.\n",
+            encoding="utf-8",
+        )
+        required_guidance = {
+            unsigned_guidance: (
+                "Smart App Control",
+                "managed policy",
+                "do not try to circumvent",
+            )
+        }
+        if not check_windows_unsigned_guidance(required_guidance):
+            raise SyncError("self-test: incomplete unsigned Windows guidance was not flagged")
+        unsigned_guidance.write_text(
+            "Smart App Control or managed policy may block the installer; "
+            "do not try to circumvent that policy.\n",
+            encoding="utf-8",
+        )
+        if check_windows_unsigned_guidance(required_guidance):
+            raise SyncError("self-test: complete unsigned Windows guidance was rejected")
 
 
 def main() -> int:
@@ -950,8 +1154,10 @@ def main() -> int:
         errors: list[str] = []
         if args.check:
             errors.extend(stale_copy_errors(list(expected) + EXTRA_STALE_SCAN))
+            errors.extend(check_windows_release_references(metadata))
             errors.extend(check_icon_stats(metadata))
             errors.extend(check_platform_orientation())
+            errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_compare_freshness())
             for path, want in expected.items():
                 have = read_text(path) if path.exists() else ""
@@ -974,8 +1180,10 @@ def main() -> int:
                 print(f"updated {path.relative_to(ROOT)}")
 
         errors.extend(stale_copy_errors(list(expected) + EXTRA_STALE_SCAN))
+        errors.extend(check_windows_release_references(metadata))
         errors.extend(check_icon_stats(metadata))
         errors.extend(check_platform_orientation())
+        errors.extend(check_windows_unsigned_guidance())
         errors.extend(check_install_prompt_sync())
         if errors:
             for error in errors:

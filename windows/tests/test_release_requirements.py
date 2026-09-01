@@ -9,6 +9,15 @@ import release_requirements
 
 
 class ReleaseRequirementTests(unittest.TestCase):
+    def test_locked_python_patch_has_an_official_windows_installer(self):
+        version = tuple(map(int, release_requirements.PYTHON_VERSION.split(".")))
+        if version[:2] == (3, 12):
+            self.assertLessEqual(
+                version[2],
+                10,
+                "Python 3.12 patches after 3.12.10 are source-only",
+            )
+
     def test_faster_whisper_floor_supports_snapshot_revisions(self):
         requirements = (release_requirements.ROOT / "windows/requirements.txt").read_text(
             encoding="utf-8"
@@ -35,7 +44,7 @@ class ReleaseRequirementTests(unittest.TestCase):
         )
         pins["torch"] = release_requirements.torch_version()
         self.assertEqual(
-            release_requirements.environment_errors(pins, (3, 12, 14)), []
+            release_requirements.environment_errors(pins, (3, 12, 10)), []
         )
 
     def test_environment_check_reports_python_missing_and_drift(self):
@@ -45,8 +54,8 @@ class ReleaseRequirementTests(unittest.TestCase):
         pins["torch"] = release_requirements.torch_version()
         pins.pop("numpy")
         pins["transformers"] = "0"
-        errors = release_requirements.environment_errors(pins, (3, 12, 13))
-        self.assertTrue(any("Python is 3.12.13" in error for error in errors))
+        errors = release_requirements.environment_errors(pins, (3, 12, 9))
+        self.assertTrue(any("Python is 3.12.9" in error for error in errors))
         self.assertTrue(any("numpy is not installed" in error for error in errors))
         self.assertTrue(any("transformers is 0" in error for error in errors))
 

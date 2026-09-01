@@ -80,6 +80,12 @@ Run this before publishing a release.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm
   capture stops, muted playback is restored, and no transcription is pasted or
   copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.
+- Tap the hotkey too briefly to produce a usable recording, then make a longer
+  silent recording. Confirm both leave **No speech detected — try again** on
+  the indicator briefly and issue a Windows notification with microphone-check
+  recovery instead of disappearing silently. Retry immediately and confirm the
+  new **Listening…** state is not hidden when the old message expires. Repeat
+  with the visual indicator disabled and confirm the notification remains.
 
 ## Signed App Smoke
 
@@ -217,6 +223,10 @@ cd swift
 - Navigate the manager with Full Keyboard Access and VoiceOver. Confirm the
   search field, table/columns, selection, and Add/Edit/Delete buttons have
   meaningful names and disabled states.
+- Select one row, then open its shortcut menu with Control-click and with
+  VoiceOver's VO-Shift-M. Confirm **Edit…** edits that row. Select multiple
+  rows and confirm their shortcut menu preserves the selection and offers
+  **Delete N Items** with the same confirmation as the Delete button.
 
 ## Permissions And TCC
 
