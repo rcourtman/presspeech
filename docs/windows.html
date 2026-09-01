@@ -25,9 +25,9 @@
         "operatingSystem": "Windows 10 or Windows 11, x64",
         "applicationCategory": "UtilitiesApplication",
         "applicationSubCategory": "Speech recognition, dictation, transcription",
-        "softwareVersion": "0.1.10",
-        "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10",
-        "downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe",
+        "softwareVersion": "0.1.11",
+        "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.11",
+        "downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.11/Presspeech-Setup-0.1.11-x64.exe",
         "installUrl": "https://rcourtman.github.io/presspeech/windows.html",
         "codeRepository": "https://github.com/rcourtman/presspeech/tree/main/windows",
         "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
@@ -68,8 +68,8 @@
         <h1>Private dictation on your Windows PC</h1>
         <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and pastes the result into the app that had focus when you started—without an account, subscription, telemetry, or cloud transcription.</p>
         <div class="actions">
-          <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe">Download Windows 0.1.10</a>
-          <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10">Release notes and checksum</a>
+          <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.11/Presspeech-Setup-0.1.11-x64.exe">Download Windows 0.1.11</a>
+          <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.11">Release notes and checksum</a>
           <a class="button secondary" href="getting-started.html#finish-setup">First dictation guide</a>
           <a class="button secondary" href="install.html">Install on macOS</a>
         </div>
@@ -99,12 +99,12 @@
           <ol class="steps">
             <li>
               <strong>Download the current installer and checksum</strong>
-              <p>Get <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe">Presspeech-Setup-0.1.10-x64.exe</a> and its <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe.sha256">published SHA-256 file</a> from the same GitHub release.</p>
+              <p>Get <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.11/Presspeech-Setup-0.1.11-x64.exe">Presspeech-Setup-0.1.11-x64.exe</a> and its <a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.11/Presspeech-Setup-0.1.11-x64.exe.sha256">published SHA-256 file</a> from the same GitHub release.</p>
             </li>
             <li>
               <strong>Verify SHA-256 automatically</strong>
               <p>In PowerShell, run the commands below from your Downloads folder. They validate the checksum file, compare it with the installer, and stop with an error instead of reporting success if anything differs.</p>
-              <pre><code>$installer = '.\Presspeech-Setup-0.1.10-x64.exe'
+              <pre><code>$installer = '.\Presspeech-Setup-0.1.11-x64.exe'
 $parts = (Get-Content -LiteralPath "$installer.sha256" -Raw).Trim() -split '\s+'
 if ($parts.Count -ne 2 -or
     $parts[0] -notmatch '^[0-9a-fA-F]{64}$' -or

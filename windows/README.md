@@ -18,8 +18,8 @@ models remain available in Settings, and explicit choices are not overridden.
 
 Download the self-contained Windows x64 installer:
 
-- [Presspeech-Setup-0.1.10-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe)
-- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.10)
+- [Presspeech-Setup-0.1.11-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.11/Presspeech-Setup-0.1.11-x64.exe)
+- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.11)
 
 No Python installation or command-line setup is required. Presspeech installs
 per-user under `%LOCALAPPDATA%\Programs\Presspeech`, adds a Start Menu shortcut,
@@ -249,7 +249,7 @@ py -3.12 -m venv .release-venv
 .\.release-venv\Scripts\python -m pip install --no-deps -r requirements-cuda.txt
 .\.release-venv\Scripts\python -m pip check
 powershell -ExecutionPolicy Bypass -File .\build-release.ps1 `
-  -Version 0.1.10 -Python .\.release-venv\Scripts\python.exe
+  -Version 0.1.11 -Python .\.release-venv\Scripts\python.exe
 ```
 
 `build-release.ps1` refuses to package with a different Python patch or any
