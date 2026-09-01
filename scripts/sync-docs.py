@@ -122,6 +122,10 @@ STALE_PATTERNS = [
         re.compile(r"no dock icon, no preferences window", re.IGNORECASE),
         "pre-optional-Dock-access onboarding wording",
     ),
+    (
+        re.compile(r"launching twice does nothing", re.IGNORECASE),
+        "pre-repeat-launch-recovery Windows wording",
+    ),
 ]
 
 INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
@@ -787,6 +791,13 @@ def run_self_test() -> None:
         )
         if not stale_copy_errors([stale_svg]):
             raise SyncError("self-test: stale Dock-access SVG wording was not flagged")
+        stale_windows = Path(tmp) / "windows-readme.txt"
+        stale_windows.write_text(
+            "Single-instance (named mutex) — launching twice does nothing.\n",
+            encoding="utf-8",
+        )
+        if not stale_copy_errors([stale_windows]):
+            raise SyncError("self-test: stale Windows repeat-launch wording was not flagged")
 
 
 def main() -> int:

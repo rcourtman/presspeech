@@ -4,7 +4,7 @@
   --bg-tint: #f4f1ea;
   --text: #18201d;
   --muted: #5d6a64;
-  --muted-2: #8a948e;
+  --muted-2: #606a65;
   --line: #e1e2dc;
   --line-strong: #cdd0c8;
   --panel: #ffffff;
@@ -150,6 +150,12 @@ a:focus-visible {
 .nav-links a:hover {
   color: var(--text);
   background: color-mix(in srgb, var(--soft) 55%, transparent);
+}
+
+.nav a[aria-current="page"] {
+  color: var(--text);
+  background: var(--soft);
+  font-weight: 640;
 }
 
 /* ---------- Layout ---------- */
@@ -912,6 +918,10 @@ td strong {
 }
 
 @media (max-width: 720px) {
+  .site-header {
+    position: static;
+  }
+
   .stat-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import NamedTuple
 
 import numpy as np
+import soxr
 import sounddevice as sd
 import pyperclip
 from pynput import keyboard as pkb
@@ -72,6 +73,11 @@ POST_ROLL_RELATIVE_SILENCE = 0.06
 POST_ROLL_MAX_SILENCE_RMS = 0.012
 # Backwards-compatible conservative value used by the benchmark's worst-case estimate.
 POST_ROLL_SEC = POST_ROLL_MAX_SEC
+MICROPHONE_CHECK_LISTEN_SEC = 2.0
+MICROPHONE_CHECK_AUDIO_RMS = POST_ROLL_ABS_SILENCE_RMS
+MICROPHONE_CHECK_LEVEL = "level"
+MICROPHONE_CHECK_SILENT = "silent"
+MICROPHONE_CHECK_UNAVAILABLE = "unavailable"
 MAX_RECORDING_SEC = 120.0
 MODEL_WARMUP_SEC = 8.0
 MODEL_IDLE_WAKE_SEC = 60.0
@@ -91,6 +97,7 @@ RDP_PROCESSES = {"mstsc.exe", "msrdc.exe"}
 AUTO_INPUT_DEVICE = "auto"
 MICROPHONE_PRIVACY_SETTINGS_URI = "ms-settings:privacy-microphone"
 DEFAULT_INPUT_SETTINGS_URI = "ms-settings:sound-defaultinputproperties"
+STARTUP_SETTINGS_URI = "ms-settings:startupapps"
 INPUT_DEVICE_SKIP_WORDS = (
     "stereo mix", "steam", "stream", "virtual", "loopback", "aux", "line in",
     "hyperx",
@@ -118,6 +125,7 @@ PACKAGE_SMOKE_IMPORTS = (
     ("tokenizers", ("Tokenizer",)),
     ("safetensors", ("safe_open",)),
     ("librosa", ("resample",)),
+    ("soxr", ("resample",)),
     ("soundfile", ("SoundFile",)),
     ("comtypes", ()),
     ("pycaw.constants", ("AudioDeviceState", "EDataFlow")),
@@ -326,23 +334,18 @@ def _restore_playback_mutes(saved_states):
 
 
 def _resample_to_16k(audio, from_rate):
-    """Resample a mono float32 array to 16 kHz (48k = exact /3 decimation)."""
+    """Band-limit and resample a mono float32 array to the ASR rate."""
     if from_rate == 16000:
         return audio
-    if from_rate == 48000:
-        n = len(audio) // 3 * 3
-        if n < 3:
-            return audio
-        return audio[:n].reshape(-1, 3).mean(axis=1)
-    duration = len(audio) / float(from_rate)
-    out_n = int(round(duration * 16000))
-    if out_n < 2:
-        return audio
-    x = np.linspace(0.0, len(audio) - 1.0, out_n)
-    xi = np.floor(x).astype(np.int64)
-    frac = (x - xi).astype(np.float32)
-    xi = np.clip(xi, 0, len(audio) - 2)
-    return audio[xi] * (1.0 - frac) + audio[xi + 1] * frac
+    if len(audio) < 2:
+        return np.asarray(audio, dtype=np.float32)
+    # Microphones commonly expose 44.1/48/96 kHz streams. Decimation or linear
+    # interpolation without a low-pass filter folds content above 8 kHz into
+    # the speech band. SoXR HQ is fast band-limited sinc interpolation and is
+    # already part of the locked Windows runtime.
+    converted = soxr.resample(
+        np.asarray(audio, dtype=np.float32), from_rate, 16000, quality="HQ")
+    return np.asarray(converted, dtype=np.float32)
 
 
 def _foreground_paste_target():
@@ -1239,8 +1242,10 @@ class PresspeechApp:
             options.append((label, self._device_selector(device, host_name)))
         return options
 
-    def _find_input_device(self, selected):
+    def _find_input_device(self, selected, probe=None):
         """Probe and return a usable input matching a stable selector."""
+        if probe is None:
+            probe = self._probe_input
         devices = sd.query_devices()
         host_apis = sd.query_hostapis()
         host_pref = {"mme": 0, "windows directsound": 1, "windows wasapi": 2}
@@ -1277,7 +1282,7 @@ class PresspeechApp:
                                             dtype="float32")
                 except Exception:
                     continue
-                if self._probe_input(i, rate):
+                if probe(i, rate):
                     chosen_for = "configured" if selector == selected else "automatic"
                     self._log("using %s input: %s at %d Hz" %
                               (chosen_for, d["name"], rate))
@@ -1292,14 +1297,29 @@ class PresspeechApp:
         return self.input_device
 
     def check_input_device(self, selected):
-        """Perform a fresh local microphone probe for setup and recovery."""
+        """Open an input and distinguish audible samples from silent buffers."""
+        levels = []
+
+        def probe(idx, rate):
+            level = self._probe_input_level(
+                idx, rate, listen_for=MICROPHONE_CHECK_LISTEN_SEC)
+            if level is None:
+                return False
+            levels.append(level)
+            return True
+
         try:
-            return self._find_input_device(selected) is not None
+            chosen = self._find_input_device(selected, probe=probe)
+            if chosen is None:
+                return MICROPHONE_CHECK_UNAVAILABLE
+            if levels and max(levels) >= MICROPHONE_CHECK_AUDIO_RMS:
+                return MICROPHONE_CHECK_LEVEL
+            return MICROPHONE_CHECK_SILENT
         except Exception as exc:
             self._log("microphone readiness check failed: %s" % exc)
-            return False
+            return MICROPHONE_CHECK_UNAVAILABLE
 
-    def _open_windows_settings(self, uri):
+    def _open_windows_settings(self, uri, manual_recovery=None):
         """Open one of Presspeech's fixed Windows Settings destinations."""
         try:
             os.startfile(uri)
@@ -1308,6 +1328,7 @@ class PresspeechApp:
             self._log("could not open Windows Settings: %s" % exc)
             self.notify(
                 "Could not open Windows Settings",
+                manual_recovery or
                 "Open Settings manually and search for Microphone privacy or "
                 "Sound input settings.")
             return False
@@ -1318,23 +1339,45 @@ class PresspeechApp:
     def open_default_input_settings(self):
         return self._open_windows_settings(DEFAULT_INPUT_SETTINGS_URI)
 
+    def open_startup_settings(self):
+        return self._open_windows_settings(
+            STARTUP_SETTINGS_URI,
+            "Open Settings manually, then choose Apps and Startup.")
+
     @staticmethod
     def _probe_input(idx, rate):
+        return PresspeechApp._probe_input_level(idx, rate) is not None
+
+    @staticmethod
+    def _probe_input_level(idx, rate, listen_for=0.0):
+        """Return peak RMS from a short in-memory probe, or None if it cannot open."""
         got = threading.Event()
+        heard = threading.Event()
+        peak_rms = [0.0]
         stream = None
 
         def cb(indata, frames, t, status):
+            chunk = np.asarray(indata)
+            level = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
+            peak_rms[0] = max(peak_rms[0], level)
             got.set()
+            if level >= MICROPHONE_CHECK_AUDIO_RMS:
+                heard.set()
 
         try:
             stream = sd.InputStream(
                 device=idx, samplerate=rate, channels=1, dtype="float32",
                 callback=cb)
             stream.start()
-            ok = got.wait(0.8)
-            return ok
+            if not got.wait(0.8):
+                return None
+            # Return early once a meaningful input level arrives. Otherwise
+            # retain the stream briefly so a person has time to speak during
+            # the explicit first-run check.
+            heard.wait(max(0.0, listen_for))
+            return peak_rms[0]
         except Exception:
-            return False
+            return None
         finally:
             if stream is not None:
                 try:
@@ -1612,28 +1655,35 @@ class PresspeechApp:
     # ---------------- helpers ----------------
 
     def apply_autostart(self):
+        """Apply the requested per-user startup registration, reporting failure."""
         enable = bool(self.settings["autostart"])
         try:
             import winreg
-            key = winreg.OpenKey(
+            with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
                 0,
                 winreg.KEY_SET_VALUE,
-            )
-            if enable:
-                winreg.SetValueEx(key, "Presspeech", 0, winreg.REG_SZ,
-                                  _autostart_command(
-                                      sys.executable, __file__,
-                                      frozen=bool(getattr(sys, "frozen", False))))
-            else:
-                try:
-                    winreg.DeleteValue(key, "Presspeech")
-                except FileNotFoundError:
-                    pass
-            winreg.CloseKey(key)
+            ) as key:
+                if enable:
+                    winreg.SetValueEx(
+                        key, "Presspeech", 0, winreg.REG_SZ,
+                        _autostart_command(
+                            sys.executable, __file__,
+                            frozen=bool(getattr(sys, "frozen", False))))
+                else:
+                    try:
+                        winreg.DeleteValue(key, "Presspeech")
+                    except FileNotFoundError:
+                        pass
         except Exception as exc:
             self._log("autostart error: %s" % exc)
+            self.notify(
+                "Start with Windows not updated",
+                "Open Settings, then choose Apps and Startup to review "
+                "Presspeech's startup state.")
+            return False
+        return True
 
     def notify(self, title, message):
         try:

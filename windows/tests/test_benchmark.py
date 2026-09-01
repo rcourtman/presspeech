@@ -127,6 +127,7 @@ class MetricTests(unittest.TestCase):
 
     def test_benchmark_reports_reviewed_speech_vad_rejections(self):
         manifest = {
+            "model": "base.en",
             "runs": 2,
             "samples": [{
                 "id": "quiet-speech",
@@ -160,6 +161,8 @@ class MetricTests(unittest.TestCase):
                 result = benchmark.run_benchmark(manifest_path)
 
         detection = result["samples"][0]["speech_detection"]
+        self.assertEqual(
+            result["whisper_vad_policy"], benchmark.engine.WHISPER_VAD_POLICY)
         self.assertEqual(detection["all_seconds"], [1.25, 0.0])
         self.assertEqual(result["reviewed_speech_vad_rejection_count"], 1)
         self.assertEqual(

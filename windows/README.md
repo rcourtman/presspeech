@@ -33,7 +33,9 @@ verification succeeded.
 
 Requirements:
 
-- Windows 10 or 11, x64
+- Windows 11, x64. Presspeech remains compatible with Windows 10 x64, but
+  [Microsoft ended general Windows 10 support on 14 October 2025](https://support.microsoft.com/en-us/windows/deployment/updates-lifecycle/windows-10-support-has-ended-on-october-14-2025);
+  use it only with Extended Security Updates or an edition that remains supported.
 - About 4.4 GB for the app, plus about 141 MiB for the CPU default or 2.5 GB
   for the CUDA Parakeet model cache
 - A current NVIDIA driver is recommended for the fastest and most accurate
@@ -50,16 +52,20 @@ Face snapshot identity; unlike the macOS model cache, it does not independently
 verify every downloaded model file against a SHA-256 manifest.
 The first-run readiness window shows model loading, microphone selection and a
 live microphone check, a selectable push-to-talk key, and Start with Windows in
-one place. The check briefly opens the selected input, discards its samples in
-memory, and reports whether microphone audio is available. If it fails, use the
-window's direct links to Windows Microphone Privacy or Sound Input settings,
-then choose **Check Again**. Wait until it says the model is ready before the
+one place. Speak while the check runs. It briefly opens the selected input,
+discards its samples in memory, and distinguishes an input level from a
+connected-but-silent device or one that cannot be opened. If it is silent,
+unmute it and choose **Check Again**; if it cannot be opened, use the window's
+direct links to Windows Microphone Privacy or Sound Input settings first. Wait
+until it says the model is ready before the
 first dictation. **Try Dictation** and **Finish Setup** remain disabled until
 then. If preparation fails, use **Retry Speech Model**; the window keeps
 tracking the retry instead of leaving the previous error on screen. Choose
 **Set Up Later** to close the window without marking setup complete; it will
-open again on the next launch. A microphone can still be connected later and
-does not block **Finish Setup** once the speech model is ready.
+open again on the next launch. Microphone, hotkey, and Start with Windows
+choices are kept when setup is deferred, and a newly selected microphone is
+used immediately by **Try Dictation**. A microphone can still be connected
+later and does not block **Finish Setup** once the speech model is ready.
 If the push-to-talk key is pressed before readiness, Presspeech keeps showing
 **Preparing speech model…** and does not open the microphone, play recording
 cues, mute playback, or claim to be listening. Release and press again once the
@@ -125,6 +131,10 @@ The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Check for Updates…**, **Copy Diagnostics**, and **Exit**. The icon turns red
 while recording. Setup, settings, update, and scratchpad controls expose names,
 roles, values, and actions through Windows UI Automation for screen readers.
+Each window starts focus on its main working control. Use **Left Alt** plus a
+command's underlined letter to invoke it without tabbing, **Escape** to close the
+current window (and cancel an active update download), and **Ctrl+S** to save
+Settings.
 Windows may place the icon in the notification-area overflow. If the icon is
 hard to find, launch Presspeech again from the Start Menu: the running app
 restores its existing window, opens Setup during first run, or opens Settings
@@ -151,12 +161,19 @@ after setup. It does not start a second dictation process.
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)
 
+If **Start with Windows** cannot be registered, Setup stays open and Settings
+reports that the startup state was not updated instead of claiming success.
+Use **Open Startup Settings** to review Presspeech under Windows
+**Settings → Apps → Startup**, then retry **Finish Setup** or **Save**.
+
 ## Notes
 
 - A working microphone must be connected. Automatic selection prefers the
   Windows Sound Mapper, skips virtual/loopback and WDM-KS devices, and resamples
   to 16 kHz. A specific safe input can be selected in Settings.
-- Single-instance (named mutex) — launching twice does nothing.
+- Single-instance (named mutex) — launching again reuses the running process
+  and restores its open window, or opens Setup before first-run completion and
+  Settings afterward.
 - All audio is processed in memory and discarded after transcription.
 - Transcript content is never written to logs; diagnostics retain timings and
   character counts only.
@@ -165,6 +182,9 @@ after setup. It does not start a second dictation process.
 - Clipboard is used briefly to paste; it is overwritten.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
+  Whisper reports include the exact Silero VAD boundary policy so WER, quiet
+  speech rejection, and silence false positives remain comparable across
+  dependency updates;
   see `benchmarks/README.md` for the reviewed-reference workflow. A manifest
   sample marked with both `"expected_silence": true` and
   `"reference_reviewed": true` is scored as a non-speech fixture; reports count

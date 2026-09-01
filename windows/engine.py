@@ -47,8 +47,28 @@ WHISPER_MODELS = {
     ),
 }
 
+# Pin the complete Silero boundary policy used for push-to-talk clips. In
+# faster-whisper 1.2.1, passing only vad_filter=True selects a special 160 ms
+# silence split even though VadOptions itself defaults to 2,000 ms. Depending
+# on that implicit override would let a library update silently change which
+# quiet words reach Whisper. These values preserve the reviewed 1.2.1
+# behaviour; change them only alongside real-dictation and silence benchmarks.
+WHISPER_VAD_POLICY = {
+    "threshold": 0.5,
+    "neg_threshold": 0.35,
+    "min_speech_duration_ms": 0,
+    "min_silence_duration_ms": 160,
+    "speech_pad_ms": 400,
+}
+
 NEMOTRON_NAME = "nemotron-speech-streaming-en-0.6b"
 MOONSHINE_NAME = "moonshine-streaming-medium"
+
+
+def whisper_vad_parameters():
+    """Return a fresh faster-whisper VAD policy for one transcription."""
+    return dict(WHISPER_VAD_POLICY)
+
 
 # Stable feature shapes avoid a roughly one-second CUDA/cuDNN setup cost for
 # every previously unseen recording length. The attention mask ensures padded
@@ -259,10 +279,17 @@ class Transcriber:
             elif backend == "moonshine":
                 text = self._transcribe_moonshine(model, processor, audio)
             else:
+                whisper_options = {}
+                if _filter_silence:
+                    # faster-whisper currently mutates some caller-provided
+                    # VAD dictionaries while normalising options. Give every
+                    # request its own copy of the reviewed product policy.
+                    whisper_options["vad_parameters"] = whisper_vad_parameters()
                 segments, info = model.transcribe(
                     audio, language=language, beam_size=1,
                     vad_filter=_filter_silence,
                     without_timestamps=True, condition_on_previous_text=False,
+                    **whisper_options,
                 )
                 speech_seconds = getattr(info, "duration_after_vad", None)
                 self._backend_timing = {"speech_seconds": speech_seconds}

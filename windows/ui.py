@@ -167,11 +167,46 @@ def _name_control(control, name):
 
 def _set_accessible_text(widget, text):
     """Keep a mapped widget's UIA name aligned with changed visible text."""
-    widget.config(text=text)
+    options = {"text": text}
+    access_key = widget.__dict__.get("_presspeech_access_key")
+    if access_key is not None:
+        # Dynamic command labels (notably Dictate -> Stop Dictation) must keep
+        # underlining the key that the window binding actually invokes.
+        options["underline"] = _access_key_index(text, access_key)
+    widget.config(**options)
     try:
         tk_uia.add_acc_object(widget)
     except Exception:
         _accessibility_failed()
+
+
+def _access_key_index(text, key):
+    """Return the visible mnemonic position, rejecting misleading bindings."""
+    if len(key) != 1:
+        raise ValueError("an access key must be one character")
+    index = text.casefold().find(key.casefold())
+    if index < 0:
+        raise ValueError("access key is not present in the command label")
+    return index
+
+
+def _bind_window_command(root, sequence, command):
+    """Bind one window-local keyboard command without leaking its Tk event."""
+    def invoke(_event=None):
+        command()
+        return "break"
+
+    root.bind(sequence, invoke, add="+")
+    return invoke
+
+
+def _add_access_key(root, widget, key):
+    """Give a command its conventional Windows Alt mnemonic."""
+    key = key.casefold()
+    widget._presspeech_access_key = key
+    widget.config(underline=_access_key_index(str(widget.cget("text")), key))
+    _bind_window_command(
+        root, "<Alt-KeyPress-%s>" % key, widget.invoke)
 
 
 def _bounded_viewport(content_size, screen_size, margin, minimum):
@@ -182,6 +217,56 @@ def _bounded_viewport(content_size, screen_size, margin, minimum):
         # a nominal minimum must never make the window larger than the screen.
         available = max(1, screen_size - min(32, margin))
     return max(1, min(content_size, available))
+
+
+def _scaled_pixels(value, pixels_per_inch):
+    """Scale a 96-DPI layout value using Tk's effective display density."""
+    try:
+        scale = float(pixels_per_inch) / 96.0
+    except (TypeError, ValueError, ZeroDivisionError):
+        scale = 1.0
+    if scale <= 0:
+        scale = 1.0
+    return max(1, round(value * scale))
+
+
+def _colourref_hex(value):
+    """Convert a Win32 COLORREF (0x00bbggrr) to a Tk colour string."""
+    value = int(value)
+    red = value & 0xff
+    green = (value >> 8) & 0xff
+    blue = (value >> 16) & 0xff
+    return "#%02x%02x%02x" % (red, green, blue)
+
+
+class _HIGHCONTRAST(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", ctypes.c_uint),
+        ("dwFlags", ctypes.c_uint),
+        ("lpszDefaultScheme", ctypes.c_void_p),
+    ]
+
+
+def _indicator_system_palette(user32):
+    """Return the active Windows contrast palette, or None in normal mode."""
+    settings = _HIGHCONTRAST()
+    settings.cbSize = ctypes.sizeof(settings)
+    try:
+        available = user32.SystemParametersInfoW(
+            0x0042, settings.cbSize, ctypes.byref(settings), 0)
+    except (AttributeError, OSError):
+        return None
+    if not available or not settings.dwFlags & 0x00000001:
+        return None
+    try:
+        # A dictation state is transient, selected/in-progress UI. Windows'
+        # highlight pair remains legible across built-in and custom contrast
+        # themes; state text means colour is never the only distinction.
+        background = _colourref_hex(user32.GetSysColor(13))  # COLOR_HIGHLIGHT
+        foreground = _colourref_hex(user32.GetSysColor(14))  # COLOR_HIGHLIGHTTEXT
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+    return background, foreground
 
 
 class _ScrollableDialogBody:
@@ -376,17 +461,22 @@ class DictationIndicator:
             root.withdraw()
             root.title("Presspeech Indicator")
             root.overrideredirect(True)
-            root.configure(bg="#202124")
             root.attributes("-topmost", True)
-            root.attributes("-alpha", 0.94)
 
-            frame = tk.Frame(root, bg="#202124", padx=12, pady=7)
+            pixels_per_inch = root.winfo_fpixels("1i")
+            horizontal_padding = _scaled_pixels(12, pixels_per_inch)
+            vertical_padding = _scaled_pixels(7, pixels_per_inch)
+
+            frame = tk.Frame(
+                root, bg="#202124", padx=horizontal_padding,
+                pady=vertical_padding)
             frame.pack(fill="both", expand=True)
             dot = tk.Label(frame, text="\u25cf", bg="#202124", fg="#ff5a5f",
                            font=("Segoe UI", 11))
             dot.pack(side="left")
             label = tk.Label(frame, text="Listening\u2026", bg="#202124", fg="#ffffff",
-                             font=("Segoe UI", 10, "bold"), padx=7)
+                             font=("Segoe UI", 10, "bold"),
+                             padx=_scaled_pixels(7, pixels_per_inch))
             label.pack(side="left")
             root.update_idletasks()
 
@@ -413,21 +503,56 @@ class DictationIndicator:
                 ctypes.c_uint,
             ]
 
-            width, height = 224, 38
+            minimum_width = _scaled_pixels(224, pixels_per_inch)
+            minimum_height = _scaled_pixels(38, pixels_per_inch)
+            bottom_offset = _scaled_pixels(42, pixels_per_inch)
+            visible_state = None
+            current_palette = None
+
+            def apply_palette(state, force=False):
+                nonlocal current_palette
+                system_palette = _indicator_system_palette(user32)
+                if system_palette is None:
+                    background = "#202124"
+                    foreground = "#ffffff"
+                    accent = self._STATES[state][1]
+                    opacity = 0.94
+                else:
+                    background, foreground = system_palette
+                    accent = foreground
+                    # Transparency blends user-selected colours with arbitrary
+                    # content and can destroy their intended contrast ratio.
+                    opacity = 1.0
+                palette = (background, foreground, accent, opacity)
+                if not force and palette == current_palette:
+                    return
+                current_palette = palette
+                root.configure(bg=background)
+                frame.configure(bg=background)
+                dot.configure(bg=background, fg=accent)
+                label.configure(bg=background, fg=foreground)
+                root.attributes("-alpha", opacity)
 
             def apply_command(command):
+                nonlocal visible_state
                 if command == "close":
                     root.destroy()
                     return False
                 if command == "hide":
+                    visible_state = None
                     user32.ShowWindow(hwnd, 0)  # SW_HIDE
                     return True
-                text, colour = self._STATES[command]
-                label.configure(text=text)
-                dot.configure(fg=colour)
+                label.configure(text=self._STATES[command][0])
+                # Refresh even if the colours are otherwise unchanged because
+                # the default accent is specific to the current state.
+                apply_palette(command, force=True)
+                visible_state = command
+                root.update_idletasks()
+                width = max(minimum_width, frame.winfo_reqwidth())
+                height = max(minimum_height, frame.winfo_reqheight())
                 area = self._work_area()
                 x = area.left + ((area.right - area.left - width) // 2)
-                y = area.bottom - height - 42
+                y = area.bottom - height - bottom_offset
                 user32.SetWindowPos(
                     hwnd, ctypes.c_void_p(-1), x, y, width, height,
                     0x0010 | 0x0040,  # SWP_NOACTIVATE | SWP_SHOWWINDOW
@@ -445,7 +570,16 @@ class DictationIndicator:
                     return
                 root.after(25, poll)
 
+            def refresh_contrast_theme():
+                if visible_state is not None:
+                    # Contrast themes can be toggled while a two-minute
+                    # recording is active. Keep a visible indicator in sync
+                    # without requiring another dictation state transition.
+                    apply_palette(visible_state)
+                root.after(250, refresh_contrast_theme)
+
             root.after(0, poll)
+            root.after(250, refresh_contrast_theme)
             root.mainloop()
         except Exception:
             # Dictation must remain usable even if Windows refuses the overlay.
@@ -516,20 +650,22 @@ class SetupWindow:
 
         ttk.Label(
             frame,
-            text=("If the check fails, enable Microphone access and "
-                  "Let desktop apps access your microphone."),
+            text=("Speak while the check runs. If it fails, enable Microphone "
+                  "access and Let desktop apps access your microphone."),
             justify="left",
         ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 3))
         microphone_actions = ttk.Frame(frame)
         microphone_actions.grid(row=7, column=0, columnspan=2, sticky="w")
-        ttk.Button(
+        privacy_button = ttk.Button(
             microphone_actions, text="Open Microphone Privacy Settings",
             command=self.app.open_microphone_privacy_settings,
-        ).pack(side="left")
-        ttk.Button(
+        )
+        privacy_button.pack(side="left")
+        sound_button = ttk.Button(
             microphone_actions, text="Open Sound Input Settings",
             command=self.app.open_default_input_settings,
-        ).pack(side="left", padx=(8, 0))
+        )
+        sound_button.pack(side="left", padx=(8, 0))
 
         hotkey_label = ttk.Label(frame, text="Push-to-talk key")
         hotkey_label.grid(row=8, column=0, sticky="w")
@@ -549,10 +685,20 @@ class SetupWindow:
             value=self.app.settings.get("autostart", True))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
-                            row=10, column=0, columnspan=2, sticky="w", pady=(2, 14))
+                            row=10, column=0, columnspan=2, sticky="w", pady=(2, 6))
+
+        startup_actions = ttk.Frame(frame)
+        startup_actions.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(0, 14))
+        self.autostart_status = ttk.Label(startup_actions, text="")
+        self.autostart_status.pack(side="left")
+        startup_button = ttk.Button(
+            startup_actions, text="Open Startup Settings",
+            command=self.app.open_startup_settings,
+        )
+        startup_button.pack(side="right")
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=11, column=0, columnspan=2, sticky="ew")
+        buttons.grid(row=12, column=0, columnspan=2, sticky="ew")
         self.try_button = ttk.Button(
             buttons, text="Try Dictation", command=self.app.open_scratchpad,
             state="disabled")
@@ -565,10 +711,22 @@ class SetupWindow:
             buttons, text="Finish Setup", command=self._finish,
             state="disabled")
         self.finish_button.pack(side="right")
-        ttk.Button(buttons, text="Set Up Later",
-                   command=self._close).pack(side="right", padx=(0, 8))
+        later_button = ttk.Button(
+            buttons, text="Set Up Later", command=self._defer)
+        later_button.pack(side="right", padx=(0, 8))
 
-        root.protocol("WM_DELETE_WINDOW", self._close)
+        root.protocol("WM_DELETE_WINDOW", self._defer)
+        for button, key in (
+                (self.check_microphone_button, "c"),
+                (privacy_button, "p"),
+                (sound_button, "s"),
+                (startup_button, "o"),
+                (self.try_button, "t"),
+                (self.retry_button, "r"),
+                (self.finish_button, "f"),
+                (later_button, "l")):
+            _add_access_key(root, button, key)
+        _bind_window_command(root, "<Escape>", self._defer)
         root.update_idletasks()
         _label_control(microphone_label, self.device)
         _label_control(microphone_check_label, self.microphone_status)
@@ -576,6 +734,7 @@ class SetupWindow:
         _name_control(
             self.hotkey, "Push-to-talk key. " + ALTGR_HOTKEY_GUIDANCE)
         self.scrollable_body.fit_to_screen()
+        root.after_idle(self.device.focus_set)
         root.after(100, self._poll_model)
         root.after(150, self._check_microphone)
 
@@ -605,6 +764,16 @@ class SetupWindow:
         self.root.after(300, self._poll_model)
 
     def _microphone_changed(self, _event=None):
+        selected = self.device_values.get(
+            self.device.get(), cfg.DEFAULTS["input_device"])
+        settings = self.app.settings
+        if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
+            # Try Dictation uses the app's live capture configuration. Apply and
+            # persist the checked device now so the test cannot silently record
+            # from the previous automatic input and setup can be resumed later.
+            settings["input_device"] = selected
+            self.app.input_device = None
+            cfg.save(settings)
         _set_accessible_text(self.microphone_status, "Waiting to check…")
         self.root.after(0, self._check_microphone)
 
@@ -641,7 +810,8 @@ class SetupWindow:
             self.device.get(), cfg.DEFAULTS["input_device"])
         self.microphone_checking = True
         self.check_microphone_button.config(state="disabled")
-        _set_accessible_text(self.microphone_status, "Checking…")
+        _set_accessible_text(
+            self.microphone_status, "Listening — speak a few words…")
         threading.Thread(
             target=self._check_microphone_worker,
             args=(selected,),
@@ -650,8 +820,8 @@ class SetupWindow:
         ).start()
 
     def _check_microphone_worker(self, selected):
-        ready = self.app.check_input_device(selected)
-        self.microphone_events.put((selected, ready))
+        result = self.app.check_input_device(selected)
+        self.microphone_events.put((selected, result))
 
     def _poll_microphone_events(self):
         latest = None
@@ -662,7 +832,7 @@ class SetupWindow:
             pass
         if latest is None:
             return
-        selected, ready = latest
+        selected, result = latest
         self.microphone_checking = False
         self.check_microphone_button.config(state="normal")
         current = self.device_values.get(
@@ -671,10 +841,12 @@ class SetupWindow:
             _set_accessible_text(self.microphone_status, "Waiting to check…")
             self.root.after(0, self._check_microphone)
             return
-        if ready:
-            text = "Ready — microphone audio is available"
+        if result == "level":
+            text = "Ready — input level detected"
+        elif result == "silent":
+            text = "Connected, but no input level detected — unmute and check again"
         else:
-            text = "Needs attention — check the Windows settings below"
+            text = "Needs attention — microphone could not be opened"
         _set_accessible_text(self.microphone_status, text)
 
     def _retry_model(self):
@@ -695,6 +867,23 @@ class SetupWindow:
         settings["input_device"] = selected
         settings["autostart"] = bool(self.autostart.get())
         settings["setup_complete"] = True
+        cfg.save(settings)
+        if self.app.apply_autostart():
+            self._close()
+        else:
+            _set_accessible_text(
+                self.autostart_status,
+                "Setup is complete, but Start with Windows was not updated.")
+
+    def _defer(self):
+        """Keep first-run choices without claiming setup is complete."""
+        settings = self.app.settings
+        selected = self.device_values.get(
+            self.device.get(), cfg.DEFAULTS["input_device"])
+        if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
+            self.app.input_device = None
+        settings["input_device"] = selected
+        settings["autostart"] = bool(self.autostart.get())
         cfg.save(settings)
         self.app.apply_autostart()
         self._close()
@@ -727,9 +916,9 @@ class UpdateWindow:
     def _build(self):
         root = _interactive_window("Presspeech Update")
         self.root = root
-        root.resizable(False, False)
-        frame = ttk.Frame(root, padding=18)
-        frame.pack(fill="both", expand=True)
+        root.resizable(True, True)
+        self.scrollable_body = _ScrollableDialogBody(root, padding=18)
+        frame = self.scrollable_body.content
         ttk.Label(frame, text="Presspeech %s is available" % self.update["version"],
                   font=("Segoe UI", 14, "bold")).pack(anchor="w")
         ttk.Label(
@@ -744,11 +933,19 @@ class UpdateWindow:
         self.progress.pack(fill="x", pady=(5, 14))
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Later", command=self._close).pack(side="left")
+        later_button = ttk.Button(buttons, text="Later", command=self._close)
+        later_button.pack(side="left")
         self.download_button = ttk.Button(
-            buttons, text="Download Update", command=self._download)
+            buttons, text="Download Update", command=self._download,
+            default="active")
         self.download_button.pack(side="right")
         root.protocol("WM_DELETE_WINDOW", self._close)
+        _add_access_key(root, later_button, "l")
+        _add_access_key(root, self.download_button, "d")
+        _bind_window_command(root, "<Escape>", self._close)
+        root.update_idletasks()
+        self.scrollable_body.fit_to_screen()
+        root.after_idle(self.download_button.focus_set)
         root.after(100, self._poll)
 
     def _download(self):
@@ -1015,8 +1212,13 @@ class SettingsWindow:
 
         self.var_autostart = tk.BooleanVar(value=s["autostart"])
         ttk.Checkbutton(f, text="Start with Windows",
-                        variable=self.var_autostart).grid(row=row, column=0, columnspan=3,
+                        variable=self.var_autostart).grid(row=row, column=0, columnspan=2,
                                                           sticky="w", pady=2)
+        startup_button = ttk.Button(
+            f, text="Open Startup Settings",
+            command=self.app.open_startup_settings,
+        )
+        startup_button.grid(row=row, column=2, sticky="w", pady=2)
         row += 1
 
         ttk.Separator(f, orient="horizontal").grid(row=row, column=0, columnspan=3,
@@ -1044,10 +1246,11 @@ class SettingsWindow:
             row=row, column=2, sticky="w", padx=10, pady=2)
         row += 1
 
-        ttk.Button(f, text="Add rule", command=self._add_rule).grid(
-            row=row, column=0, sticky="w", pady=2)
-        ttk.Button(f, text="Remove selected", command=self._remove_rule).grid(
-            row=row, column=1, columnspan=2, sticky="w")
+        add_button = ttk.Button(f, text="Add rule", command=self._add_rule)
+        add_button.grid(row=row, column=0, sticky="w", pady=2)
+        remove_button = ttk.Button(
+            f, text="Remove selected", command=self._remove_rule)
+        remove_button.grid(row=row, column=1, columnspan=2, sticky="w")
         row += 1
 
         self.listbox = tk.Listbox(f, width=52, height=6)
@@ -1064,11 +1267,18 @@ class SettingsWindow:
                                                    sticky="ew", pady=8)
         row += 1
 
-        ttk.Button(f, text="Save", command=self._save).grid(row=row, column=0, sticky="w")
+        save_button = ttk.Button(f, text="Save", command=self._save)
+        save_button.grid(row=row, column=0, sticky="w")
         self.status = ttk.Label(f, text="")
         self.status.grid(row=row, column=1, columnspan=2, sticky="w", padx=10)
 
         root.protocol("WM_DELETE_WINDOW", self._close)
+        _add_access_key(root, add_button, "a")
+        _add_access_key(root, remove_button, "r")
+        _add_access_key(root, startup_button, "o")
+        _add_access_key(root, save_button, "s")
+        _bind_window_command(root, "<Control-s>", self._save)
+        _bind_window_command(root, "<Escape>", self._close)
         root.update_idletasks()
         for label, control in (
                 (hotkey_label, self.var_hotkey),
@@ -1082,6 +1292,7 @@ class SettingsWindow:
             self.var_hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
         _name_control(self.listbox, "Dictionary rules")
         self.scrollable_body.fit_to_screen()
+        root.after_idle(self.var_hotkey.focus_set)
 
     def _add_rule(self):
         spoken = self.var_spoken.get().strip()
@@ -1132,9 +1343,13 @@ class SettingsWindow:
         s["autostart"] = bool(self.var_autostart.get())
         s["dictionary"] = cfg.validated_dictionary(self.dictionary_rules) or []
         cfg.save(s)
-        self.app.apply_autostart()
-        _set_accessible_text(
-            self.status, "Saved. Hotkey changes apply immediately.")
+        if self.app.apply_autostart():
+            status = "Saved. Hotkey changes apply immediately."
+        else:
+            status = (
+                "Saved, but Start with Windows was not updated. "
+                "Open Startup Settings to review it.")
+        _set_accessible_text(self.status, status)
 
     def _close(self):
         try:
@@ -1160,7 +1375,10 @@ class ScratchpadWindow:
         self.btn = ttk.Button(root, text="Dictate (or use the hotkey)", command=self.toggle)
         self.btn.pack(pady=(0, 8))
         root.protocol("WM_DELETE_WINDOW", self._close)
+        _add_access_key(root, self.btn, "d")
+        _bind_window_command(root, "<Escape>", self._close)
         root.update_idletasks()
+        root.after_idle(self.text.focus_set)
         user32 = ctypes.windll.user32
         user32.GetParent.argtypes = [ctypes.c_void_p]
         user32.GetParent.restype = ctypes.c_void_p
@@ -1173,7 +1391,7 @@ class ScratchpadWindow:
             _set_accessible_text(self.btn, "Dictate (or use the hotkey)")
         else:
             if self.app.start_recording():
-                _set_accessible_text(self.btn, "Stop")
+                _set_accessible_text(self.btn, "Stop Dictation")
 
     def append_text(self, text):
         def do():

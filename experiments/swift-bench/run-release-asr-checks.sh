@@ -11,9 +11,11 @@ cd "$(dirname "$SCRIPT_PATH")"
 
 REAL_AUDIO_DIR="real-audio"
 PUBLIC_AUDIO_DIR="public-audio/librispeech-dev-clean"
+LONG_PUBLIC_AUDIO_DIR="public-audio/librispeech-dev-clean-long-form"
 TRIALS="3"
 REQUIRE_REAL_AUDIO=0
 REQUIRE_PUBLIC_AUDIO=0
+REQUIRE_LONG_PUBLIC_AUDIO=0
 INCLUDE_CANDIDATE_MODELS=0
 RUN_TAIL=1
 SELF_TEST=0
@@ -25,11 +27,17 @@ usage: ./run-release-asr-checks.sh [options]
 Options:
   --real-audio-dir <path>   private real-dictation fixtures (default: real-audio)
   --public-audio-dir <path> public speech fixtures (default: public-audio/librispeech-dev-clean)
+  --long-public-audio-dir <path>
+                            composed multi-window public fixtures
+                            (default: public-audio/librispeech-dev-clean-long-form)
   --trials <n>              trials per clip/backend (default: 3)
   --require-real-audio      fail if no private real-dictation clips are present
   --require-public-audio    fail if no public speech clips are present
+  --require-long-public-audio
+                            fail if no composed multi-window fixtures are present
   --include-candidate-models
-                            also run Parakeet v2, Unified, and current Nemotron candidate checks
+                            also run Parakeet v2, linear-int8 v3, Unified,
+                            and current Nemotron candidate checks
   --skip-tail               with --include-candidate-models, skip the synthetic tail-word gate
   --self-test               run wrapper parser/detection tests only
   -h, --help                show this help
@@ -37,7 +45,8 @@ Options:
 The default run performs:
   1. helper parser/self-tests,
   2. production v3 regression if private real-dictation fixtures exist,
-  3. production v3 regression if public speech fixtures exist.
+  3. production v3 regression if public speech fixtures exist,
+  4. production v3 multi-window regression if composed fixtures exist.
 
 Candidate models are not shipped by the app. Use --include-candidate-models
 only when evaluating whether a future model is good enough to expose.
@@ -137,6 +146,19 @@ run_self_test() {
         "no public speech clips found in $tmpdir/missing-public"
     assert_not_contains "$missing_public_log" "running helper self-tests"
 
+    local missing_long_public_log="$tmpdir/missing-long-public.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --require-long-public-audio >"$missing_long_public_log" 2>&1; then
+        echo "self-test expected required missing long-form public corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$missing_long_public_log" \
+        "no long-form public speech clips found in $tmpdir/missing-long-public"
+    assert_not_contains "$missing_long_public_log" "running helper self-tests"
+
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
     echo "release ASR checks self-test passed"
@@ -154,6 +176,11 @@ while [[ $# -gt 0 ]]; do
             PUBLIC_AUDIO_DIR="$2"
             shift 2
             ;;
+        --long-public-audio-dir)
+            need_value "$@"
+            LONG_PUBLIC_AUDIO_DIR="$2"
+            shift 2
+            ;;
         --trials)
             need_value "$@"
             TRIALS="$2"
@@ -165,6 +192,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-public-audio)
             REQUIRE_PUBLIC_AUDIO=1
+            shift
+            ;;
+        --require-long-public-audio)
+            REQUIRE_LONG_PUBLIC_AUDIO=1
             shift
             ;;
         --include-candidate-models)
@@ -206,6 +237,7 @@ fi
 # partial work and only then discover that its requested coverage is absent.
 real_count="$(supported_audio_count "$REAL_AUDIO_DIR")"
 public_count="$(supported_audio_count "$PUBLIC_AUDIO_DIR")"
+long_public_count="$(supported_audio_count "$LONG_PUBLIC_AUDIO_DIR")"
 if [[ "$REQUIRE_REAL_AUDIO" -eq 1 && "$real_count" -eq 0 ]]; then
     echo "no private real-dictation clips found in $REAL_AUDIO_DIR" >&2
     exit 1
@@ -214,11 +246,16 @@ if [[ "$REQUIRE_PUBLIC_AUDIO" -eq 1 && "$public_count" -eq 0 ]]; then
     echo "no public speech clips found in $PUBLIC_AUDIO_DIR" >&2
     exit 1
 fi
+if [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -eq 1 && "$long_public_count" -eq 0 ]]; then
+    echo "no long-form public speech clips found in $LONG_PUBLIC_AUDIO_DIR" >&2
+    exit 1
+fi
 
 echo "running helper self-tests..."
 ./run-tail-word-regression.sh --self-test
 ./add-real-dictation-fixture.sh --self-test
 ./fetch-public-speech-fixtures.sh --self-test
+python3 ./compose-public-long-form-fixtures.py --self-test
 ./run-real-dictation-regression.sh --self-test
 ./run-real-model-comparison.sh --self-test
 ./run-vocabulary-bias-regression.sh --self-test
@@ -261,6 +298,13 @@ else
             --trials "$TRIALS"
 
         echo
+        echo "running private v3 linear-int8 encoder candidate comparison on $real_count clip(s)..."
+        ./run-real-model-comparison.sh \
+            --input-dir "$REAL_AUDIO_DIR" \
+            --candidate-backend v3-int8-v2 \
+            --trials "$TRIALS"
+
+        echo
         echo "running private repaired Nemotron English candidate regression on $real_count clip(s)..."
         ./run-real-dictation-regression.sh --input-dir "$REAL_AUDIO_DIR" --backend nemotron-en --trials "$TRIALS"
 
@@ -278,57 +322,87 @@ fi
 if [[ "$public_count" -eq 0 ]]; then
     echo
     echo "no public speech clips found in $PUBLIC_AUDIO_DIR; skipped public WER gates"
+else
     echo
-    echo "release ASR checks passed"
-    exit 0
+    echo "running public production v3 ASR regression on $public_count clip(s)..."
+    ./run-real-dictation-regression.sh \
+        --input-dir "$PUBLIC_AUDIO_DIR" \
+        --out-dir public-results \
+        --backend v3 \
+        --trials "$TRIALS" \
+        --public-corpus \
+        --show-transcripts \
+        --show-paths
+
+    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        echo
+        echo "running public v3-vs-Unified candidate comparison on $public_count clip(s)..."
+        ./run-public-model-comparison.sh --fixture-dir "$PUBLIC_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
+
+        echo
+        echo "running public v3-vs-Parakeet-v2 English candidate comparison on $public_count clip(s)..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$PUBLIC_AUDIO_DIR" \
+            --candidate-backend v2 \
+            --trials "$TRIALS"
+
+        echo
+        echo "running public v3 linear-int8 encoder candidate comparison on $public_count clip(s)..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$PUBLIC_AUDIO_DIR" \
+            --candidate-backend v3-int8-v2 \
+            --trials "$TRIALS"
+
+        echo
+        echo "running public repaired Nemotron English candidate regression on $public_count clip(s)..."
+        ./run-real-dictation-regression.sh \
+            --input-dir "$PUBLIC_AUDIO_DIR" \
+            --out-dir public-results \
+            --backend nemotron-en \
+            --trials "$TRIALS" \
+            --public-corpus \
+            --show-transcripts \
+            --show-paths
+
+        echo
+        echo "running public Nemotron 3.5 multilingual candidate regression on $public_count clip(s)..."
+        ./run-real-dictation-regression.sh \
+            --input-dir "$PUBLIC_AUDIO_DIR" \
+            --out-dir public-results \
+            --backend nemotron-multilingual \
+            --nemotron-multilingual-language en-US \
+            --nemotron-multilingual-chunk-ms 2240 \
+            --trials "$TRIALS" \
+            --public-corpus \
+            --show-transcripts \
+            --show-paths
+    fi
 fi
 
-echo
-echo "running public production v3 ASR regression on $public_count clip(s)..."
-./run-real-dictation-regression.sh \
-    --input-dir "$PUBLIC_AUDIO_DIR" \
-    --out-dir public-results \
-    --backend v3 \
-    --trials "$TRIALS" \
-    --public-corpus \
-    --show-transcripts \
-    --show-paths
-
-if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+if [[ "$long_public_count" -eq 0 ]]; then
     echo
-    echo "running public v3-vs-Unified candidate comparison on $public_count clip(s)..."
-    ./run-public-model-comparison.sh --fixture-dir "$PUBLIC_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
-
+    echo "no long-form public speech clips found in $LONG_PUBLIC_AUDIO_DIR; skipped multi-window WER gate"
+else
     echo
-    echo "running public v3-vs-Parakeet-v2 English candidate comparison on $public_count clip(s)..."
-    ./run-public-model-comparison.sh \
-        --fixture-dir "$PUBLIC_AUDIO_DIR" \
-        --candidate-backend v2 \
-        --trials "$TRIALS"
-
-    echo
-    echo "running public repaired Nemotron English candidate regression on $public_count clip(s)..."
+    echo "running long-form public production v3 ASR regression on $long_public_count composite clip(s)..."
     ./run-real-dictation-regression.sh \
-        --input-dir "$PUBLIC_AUDIO_DIR" \
-        --out-dir public-results \
-        --backend nemotron-en \
+        --input-dir "$LONG_PUBLIC_AUDIO_DIR" \
+        --out-dir public-results/long-form \
+        --backend v3 \
         --trials "$TRIALS" \
         --public-corpus \
         --show-transcripts \
         --show-paths
 
-    echo
-    echo "running public Nemotron 3.5 multilingual candidate regression on $public_count clip(s)..."
-    ./run-real-dictation-regression.sh \
-        --input-dir "$PUBLIC_AUDIO_DIR" \
-        --out-dir public-results \
-        --backend nemotron-multilingual \
-        --nemotron-multilingual-language en-US \
-        --nemotron-multilingual-chunk-ms 2240 \
-        --trials "$TRIALS" \
-        --public-corpus \
-        --show-transcripts \
-        --show-paths
+    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        echo
+        echo "running long-form public v3 linear-int8 encoder candidate comparison..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/long-form \
+            --candidate-backend v3-int8-v2 \
+            --trials "$TRIALS"
+    fi
 fi
 
 echo

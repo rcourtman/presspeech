@@ -405,6 +405,30 @@ read English audiobook speech under CC BY 4.0, so treat it as a stable
 reproducible benchmark, not as a replacement for local push-to-talk dictation
 clips.
 
+The ordinary LibriSpeech rows are mostly shorter than FluidAudio's 15-second
+Parakeet encoder window. Build a second deterministic corpus that forces the
+production path through several windows per clip:
+
+```sh
+python3 ./compose-public-long-form-fixtures.py \
+  --input-dir public-audio/librispeech-dev-clean \
+  --output-dir public-audio/librispeech-dev-clean-long-form \
+  --target-seconds 45
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/librispeech-dev-clean-long-form \
+  --out-dir public-results/long-form \
+  --backend v3 --public-corpus --show-transcripts --show-paths --trials 3
+```
+
+The composer joins the fetched WAV payloads and references in sorted order,
+without resampling, generated speech, or duplicated source rows. Every output
+is at least the target duration; a short remainder extends the last complete
+composite instead of becoming a misleading sub-window fixture. Its manifest
+records source boundaries and nominal 15-second boundary markers; FluidAudio's
+overlap and actual window starts remain implementation details. This is a
+repeatable seam/long-form regression, while the uncomposed rows remain the
+better per-utterance diagnostic corpus.
+
 ## Parakeet encoder-precision regression
 
 FluidAudio's original v3 `Encoder.mlmodelc` uses 6-bit LUT palettization even
@@ -533,16 +557,20 @@ capture, or transcription post-processing, run the release wrapper:
 
 It runs helper self-tests, production v3 private real-dictation regressions
 if `real-audio/` contains local clips, and production v3 public speech
-regressions if `public-audio/librispeech-dev-clean/` has been fetched.
+regressions if `public-audio/librispeech-dev-clean/` has been fetched. It also
+runs production v3 over composed multi-window fixtures when
+`public-audio/librispeech-dev-clean-long-form/` exists.
 If you want the release check to fail when no local corpus is available:
 
 ```sh
 ./run-release-asr-checks.sh --require-real-audio
 ./run-release-asr-checks.sh --require-public-audio
+./run-release-asr-checks.sh --require-long-public-audio
 ```
 
-To also run Parakeet v2 and Unified comparisons, the Unified tail-word check,
-plus repaired Nemotron English and Nemotron 3.5 multilingual regressions:
+To also run Parakeet v2, linear-int8 v3, and Unified comparisons, the Unified
+tail-word check, plus repaired Nemotron English and Nemotron 3.5 multilingual
+regressions:
 
 ```sh
 ./run-release-asr-checks.sh --include-candidate-models

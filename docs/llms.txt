@@ -4,7 +4,7 @@ Presspeech is free MIT-licensed local push-to-talk dictation with separate macOS
 
 Core facts:
 - Category: local dictation, speech-to-text, push-to-talk transcription.
-- Platforms: Apple Silicon Macs on macOS 14 Sonoma or later; Windows 10 or 11 x64.
+- Platforms: Apple Silicon Macs on macOS 14 Sonoma or later; Windows 11 x64 (Windows 10 x64 remains compatible but requires ESU or an edition that remains supported).
 - macOS engine: FluidAudio, CoreML, and the Apple Neural Engine with multilingual Parakeet TDT v3.
 - Windows engine: local Parakeet TDT v3 on CUDA; fresh non-CUDA systems use
   Whisper base.en with int8 CPU inference, with additional local models selectable.

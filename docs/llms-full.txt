@@ -18,7 +18,7 @@ macOS:
 
 Windows:
 
-- Windows 10 or 11 x64.
+- Windows 11 x64; Windows 10 x64 remains compatible but requires Extended Security Updates or an edition that remains supported.
 - About 4.4 GB for the installed app, plus about 141 MiB for the CPU first-run
   model or about 2.5 GB for the CUDA Parakeet model cache.
 - A current NVIDIA GPU driver is recommended for Parakeet inference. Fresh PCs

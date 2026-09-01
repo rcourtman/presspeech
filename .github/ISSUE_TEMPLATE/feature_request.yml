@@ -2,11 +2,28 @@ name: Feature request
 description: Suggest a small, focused improvement.
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for describing the problem behind the request. Issues are
+        public: do not include dictated text, audio, dictionary or shortcut
+        contents, credentials, private paths, or other sensitive data.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which released implementation would this improve?
+      options:
+        - macOS
+        - Windows
+        - Both
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
       label: Problem
-      description: What gap are you trying to close? Avoid jumping straight to a solution.
+      description: What gap are you trying to close, how often does it occur, and what do you do today? Avoid jumping straight to a solution.
     validations:
       required: true
   - type: textarea
@@ -19,5 +36,27 @@ body:
     attributes:
       label: Why this fits Presspeech's scope
       description: |
-        See CONTRIBUTING.md. Out-of-scope: cloud backends, cross-platform
-        ports, heavy preferences UI. Try to make the case briefly.
+        See CONTRIBUTING.md. Out-of-scope: cloud backends, a shared
+        cross-platform UI/runtime, Linux support, and heavy preferences UI.
+        Try to make the case briefly.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or success measure
+      description: |
+        What observable result would show that this worked? For transcription
+        quality or latency, include aggregate details such as language,
+        hardware, fixture/word counts, repeated-trial count, WER or critical
+        error counts, and the comparison baseline when available. Never paste
+        private reference text, hypotheses, vocabulary terms, audio, or paths.
+        CONTRIBUTING.md describes the privacy-redacted benchmark helpers.
+      placeholder: e.g. On an M2 Mac, 25 audited Polish clips / 229 words; proper-name errors fell from 18 to 6 over 3 trials with no WER regression on controls.
+  - type: dropdown
+    id: validation-help
+    attributes:
+      label: Validation help
+      description: Could you evaluate a candidate without sharing private dictation content?
+      options:
+        - I can run a privacy-redacted benchmark
+        - I can test a candidate build manually
+        - I cannot test a candidate

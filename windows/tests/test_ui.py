@@ -27,6 +27,40 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertEqual(ui._bounded_viewport(200, 100, 128, 240), 68)
         self.assertEqual(ui._bounded_viewport(0, 1920, 96, 320), 1)
 
+    def test_indicator_layout_scales_from_effective_tk_dpi(self):
+        self.assertEqual(ui._scaled_pixels(224, 96), 224)
+        self.assertEqual(ui._scaled_pixels(224, 144), 336)
+        self.assertEqual(ui._scaled_pixels(42, 192), 84)
+        self.assertEqual(ui._scaled_pixels(42, 0), 42)
+
+    def test_win32_system_colours_are_converted_from_bgr(self):
+        self.assertEqual(ui._colourref_hex(0x00332211), "#112233")
+
+    def test_indicator_uses_the_windows_high_contrast_pair(self):
+        user32 = mock.Mock()
+
+        def report_high_contrast(_action, _size, pointer, _flags):
+            pointer._obj.dwFlags = 1
+            return True
+
+        user32.SystemParametersInfoW.side_effect = report_high_contrast
+        user32.GetSysColor.side_effect = {
+            13: 0x00654321,
+            14: 0x00ccbbaa,
+        }.__getitem__
+
+        self.assertEqual(
+            ui._indicator_system_palette(user32),
+            ("#214365", "#aabbcc"),
+        )
+
+    def test_indicator_keeps_default_palette_outside_contrast_mode(self):
+        user32 = mock.Mock()
+        user32.SystemParametersInfoW.return_value = True
+
+        self.assertIsNone(ui._indicator_system_palette(user32))
+        user32.GetSysColor.assert_not_called()
+
     def test_every_interactive_window_uses_the_shared_host(self):
         host = mock.Mock()
         app = mock.Mock()
@@ -65,8 +99,8 @@ class AccessibleWindowTests(unittest.TestCase):
         clear_topmost()
         root.attributes.assert_called_with("-topmost", False)
 
-    def test_setup_and_settings_use_scrollable_resizable_dialogs(self):
-        for window in (ui.SetupWindow, ui.SettingsWindow):
+    def test_structured_dialogs_are_scrollable_and_resizable(self):
+        for window in (ui.SetupWindow, ui.UpdateWindow, ui.SettingsWindow):
             body = inspect.getsource(window)
             self.assertIn("root.resizable(True, True)", body)
             self.assertIn("_ScrollableDialogBody(root", body)
@@ -129,6 +163,49 @@ class AccessibleWindowTests(unittest.TestCase):
             text="Verified and ready to install")
         refresh.assert_called_once_with(widget)
 
+    def test_access_key_underlines_and_invokes_its_visible_command(self):
+        root = mock.Mock()
+        button = mock.Mock()
+        button.cget.return_value = "Download Update"
+
+        ui._add_access_key(root, button, "d")
+
+        button.config.assert_called_once_with(underline=0)
+        root.bind.assert_called_once()
+        sequence, handler = root.bind.call_args.args
+        self.assertEqual(sequence, "<Alt-KeyPress-d>")
+        self.assertEqual(root.bind.call_args.kwargs, {"add": "+"})
+        self.assertEqual(handler(types.SimpleNamespace()), "break")
+        button.invoke.assert_called_once_with()
+
+    def test_dynamic_command_keeps_its_bound_access_key_underlined(self):
+        widget = mock.Mock()
+        widget._presspeech_access_key = "d"
+
+        with mock.patch.object(ui.tk_uia, "add_acc_object") as refresh:
+            ui._set_accessible_text(widget, "Stop Dictation")
+
+        widget.config.assert_called_once_with(
+            text="Stop Dictation", underline=5)
+        refresh.assert_called_once_with(widget)
+
+    def test_access_key_must_be_visible_in_the_command_label(self):
+        with self.assertRaisesRegex(ValueError, "not present"):
+            ui._access_key_index("Later", "z")
+
+    def test_every_interactive_window_supports_escape(self):
+        commands = {
+            ui.SetupWindow: "self._defer",
+            ui.UpdateWindow: "self._close",
+            ui.SettingsWindow: "self._close",
+            ui.ScratchpadWindow: "self._close",
+        }
+        for window, command in commands.items():
+            self.assertIn(
+                f'_bind_window_command(root, "<Escape>", {command})',
+                inspect.getsource(window),
+            )
+
     def test_diagnostics_do_not_start_the_window_host(self):
         with mock.patch.object(ui, "_WINDOW_HOST", None):
             self.assertEqual(ui.accessibility_status(), "not initialized")
@@ -154,6 +231,7 @@ class SetupWindowTests(unittest.TestCase):
         window.retry_button = mock.Mock()
         window.try_button = mock.Mock()
         window.finish_button = mock.Mock()
+        window.autostart_status = mock.Mock()
         window.microphone_events = queue.Queue()
         window.microphone_checking = False
         window.check_microphone_button = mock.Mock()
@@ -219,6 +297,7 @@ class SetupWindowTests(unittest.TestCase):
         }
         window.autostart = mock.Mock()
         window.autostart.get.return_value = False
+        window.app.apply_autostart.return_value = True
         window._close = mock.Mock()
 
         with mock.patch.object(ui.cfg, "save") as save:
@@ -229,6 +308,30 @@ class SetupWindowTests(unittest.TestCase):
         save.assert_called_once_with(window.app.settings)
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
+
+    def test_setup_stays_open_and_exposes_autostart_failure(self):
+        window = self.make_window("ready")
+        window.app.settings = {
+            "input_device": "auto",
+            "autostart": True,
+            "setup_complete": False,
+        }
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = True
+        window.app.apply_autostart.return_value = False
+        window._close = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._finish()
+
+        self.assertTrue(window.app.settings["setup_complete"])
+        save.assert_called_once_with(window.app.settings)
+        set_text.assert_called_once_with(
+            window.autostart_status,
+            "Setup is complete, but Start with Windows was not updated.",
+        )
+        window._close.assert_not_called()
 
     def test_setup_hotkey_change_applies_and_persists_before_finish(self):
         window = self.make_window("pending")
@@ -266,6 +369,50 @@ class SetupWindowTests(unittest.TestCase):
         self.assertEqual(window.app.settings["hotkey"], "right alt")
         save.assert_not_called()
 
+    def test_setup_microphone_change_applies_before_try_and_persists(self):
+        window = self.make_window("ready")
+        window.app.settings = {"input_device": "auto"}
+        window.app.input_device = (4, 48000)
+        window.device_values["Desk microphone"] = "MME::Desk microphone"
+        window.device.get.return_value = "Desk microphone"
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._microphone_changed()
+
+        self.assertEqual(
+            window.app.settings["input_device"], "MME::Desk microphone")
+        self.assertIsNone(window.app.input_device)
+        save.assert_called_once_with(window.app.settings)
+        set_text.assert_called_once_with(
+            window.microphone_status, "Waiting to check…")
+        window.root.after.assert_called_once_with(0, window._check_microphone)
+
+    def test_deferred_setup_keeps_choices_and_applies_autostart(self):
+        window = self.make_window("loading")
+        window.app.settings = {
+            "input_device": "auto",
+            "autostart": True,
+            "setup_complete": False,
+        }
+        window.app.input_device = (2, 16000)
+        window.device_values["Headset"] = "MME::Headset"
+        window.device.get.return_value = "Headset"
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = False
+        window._close = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save") as save:
+            window._defer()
+
+        self.assertEqual(window.app.settings["input_device"], "MME::Headset")
+        self.assertFalse(window.app.settings["autostart"])
+        self.assertFalse(window.app.settings["setup_complete"])
+        self.assertIsNone(window.app.input_device)
+        save.assert_called_once_with(window.app.settings)
+        window.app.apply_autostart.assert_called_once_with()
+        window._close.assert_called_once_with()
+
     def test_setup_instructions_respect_existing_toggle_mode(self):
         window = self.make_window("ready")
         window.app.settings = {"hotkey": "f9", "trigger": "toggle"}
@@ -286,7 +433,8 @@ class SetupWindowTests(unittest.TestCase):
         self.assertTrue(window.microphone_checking)
         window.check_microphone_button.config.assert_called_once_with(
             state="disabled")
-        set_text.assert_called_once_with(window.microphone_status, "Checking…")
+        set_text.assert_called_once_with(
+            window.microphone_status, "Listening — speak a few words…")
         thread.assert_called_once_with(
             target=window._check_microphone_worker,
             args=("auto",),
@@ -298,7 +446,7 @@ class SetupWindowTests(unittest.TestCase):
     def test_ready_microphone_result_is_exposed_accessibly(self):
         window = self.make_window("ready")
         window.microphone_checking = True
-        window.app.check_input_device.return_value = True
+        window.app.check_input_device.return_value = "level"
         window._check_microphone_worker("auto")
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
@@ -310,20 +458,33 @@ class SetupWindowTests(unittest.TestCase):
             state="normal")
         set_text.assert_called_once_with(
             window.microphone_status,
-            "Ready — microphone audio is available",
+            "Ready — input level detected",
         )
 
-    def test_failed_microphone_result_points_to_recovery_controls(self):
+    def test_silent_microphone_result_does_not_claim_readiness(self):
         window = self.make_window("ready")
         window.microphone_checking = True
-        window.microphone_events.put(("auto", False))
+        window.microphone_events.put(("auto", "silent"))
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_microphone_events()
 
         set_text.assert_called_once_with(
             window.microphone_status,
-            "Needs attention — check the Windows settings below",
+            "Connected, but no input level detected — unmute and check again",
+        )
+
+    def test_failed_microphone_result_points_to_recovery_controls(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.microphone_events.put(("auto", "unavailable"))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Needs attention — microphone could not be opened",
         )
 
 
@@ -392,6 +553,7 @@ class DictionarySettingsTests(unittest.TestCase):
         rules = [["maps \u2192 arrow", "  exact \u2192 text  "]]
         window = self.make_window(rules)
         window.app = mock.Mock()
+        window.app.apply_autostart.return_value = True
         window.app.settings = {
             "hotkey": "right alt",
             "trigger": "hold",
@@ -428,7 +590,8 @@ class DictionarySettingsTests(unittest.TestCase):
             setattr(window, name, variable)
         window.status = mock.Mock()
 
-        with mock.patch.object(ui.cfg, "save") as save:
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._save()
 
         self.assertEqual(window.app.settings["dictionary"], rules)
@@ -436,6 +599,20 @@ class DictionarySettingsTests(unittest.TestCase):
         self.assertIsNot(window.app.settings["dictionary"], window.dictionary_rules)
         window.listbox.get.assert_not_called()
         save.assert_called_once_with(window.app.settings)
+        window.app.apply_autostart.assert_called_once_with()
+        set_text.assert_called_once_with(
+            window.status, "Saved. Hotkey changes apply immediately.")
+
+        window.app.apply_autostart.return_value = False
+        with mock.patch.object(ui.cfg, "save"), \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._save()
+
+        set_text.assert_called_once_with(
+            window.status,
+            "Saved, but Start with Windows was not updated. "
+            "Open Startup Settings to review it.",
+        )
 
 
 if __name__ == "__main__":

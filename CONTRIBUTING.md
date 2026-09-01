@@ -35,14 +35,34 @@ through the private process in [SECURITY.md](SECURITY.md).
 
 ## Suggesting features
 
-Open an issue. Roughly in scope: hotkey behaviour, transcription
-quality / latency, menu bar UX, install/upgrade ergonomics. Roughly
-out of scope:
+Use the focused [feature request
+form](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml).
+Describe the recurring problem and a measurable success condition, not only a
+proposed implementation. Roughly in scope: hotkey behaviour, transcription
+quality / latency, menu bar UX, install/upgrade ergonomics. Roughly out of
+scope:
 
 - Cloud transcription backends — the project is local-only by design.
 - A shared cross-platform UI or runtime. The macOS and Windows integrations
   deliberately stay separate; Linux is not currently supported.
 - Heavy GUIs / preferences windows — the menu bar is the UI.
+
+For transcription-quality or latency requests, aggregate before/after evidence
+is much more actionable than impressions. Include the platform, language,
+hardware, number of clips and reference words, trial count, baseline, and
+privacy-safe metrics such as WER or critical-error counts. Say whether the
+references were listened to and corrected by a human. Do not upload private
+audio, reference text, hypotheses, vocabulary terms, or local paths.
+
+The macOS benchmark helpers under [`experiments/swift-bench/`](experiments/swift-bench/)
+redact transcripts and paths by default. For custom-vocabulary evaluation,
+`run-vocabulary-bias-regression.sh --preflight-only --no-threshold` checks and
+summarises a private fixture set without loading a model; a complete run
+compares the candidate with production and writes an ignored, privacy-redacted
+report. See the benchmark README for corpus controls and the stricter evidence
+gate used before a performance-sensitive feature can ship. A small corpus is
+still useful exploratory evidence when reported honestly; it just cannot clear
+that product-candidate gate by itself.
 
 ## Development setup
 

@@ -7,15 +7,30 @@ Run this before publishing a release.
 - On a clean Windows profile, launch the packaged app and confirm the setup
   window automatically checks the selected microphone without blocking model
   preparation.
-- With microphone access enabled, confirm the status changes from **Checking…**
-  to **Ready — microphone audio is available**. Change the selected input and
-  confirm setup checks the new device.
+- With microphone access enabled, speak during the check and confirm the status
+  changes from **Listening — speak a few words…** to **Ready — input level
+  detected**. Change the selected input and confirm setup checks the new device.
+  After the model is ready, use **Try Dictation** and confirm it captures that
+  selected device before setup is finished.
+- Mute the selected microphone, choose **Check Again**, and confirm setup says
+  it is connected but no input level was detected instead of claiming it is
+  ready. Unmute it, speak, and check again successfully.
 - Turn off **Let desktop apps access your microphone**, choose **Check Again**,
-  and confirm setup reports **Needs attention** without exposing raw device or
-  PortAudio errors.
+  and confirm setup reports that the microphone could not be opened without
+  exposing raw device or PortAudio errors.
 - Using only Tab, Shift-Tab, and Enter, open **Microphone Privacy Settings** and
   **Sound Input Settings** from setup. Confirm each button opens the expected
   Windows Settings page, then restore access and rerun the check successfully.
+- In Setup, press Left Alt with each command's underlined letter and confirm the
+  corresponding enabled command runs without moving focus to it. Confirm a
+  disabled model command remains inactive. Repeat the mnemonics in Settings,
+  the update prompt, and Try Dictation; confirm **Ctrl+S** saves Settings.
+- Press **Escape** in Setup, Settings, and Try Dictation and confirm only the
+  current window closes. Start an update download, press **Escape**, and confirm
+  the prompt closes and its partial download is cancelled and cleaned up.
+- Confirm initial keyboard focus lands on the microphone selector in Setup, the
+  hotkey selector in Settings, Download Update in the update prompt, and the
+  text area in Try Dictation.
 - With Narrator, confirm the microphone selector, changing check status, and
   both recovery buttons expose meaningful names.
 - On a layout with AltGr (for example Polish or German), confirm typing an
@@ -24,12 +39,24 @@ Run this before publishing a release.
   restart, and confirm **F8** remains selected. Repeat the selector with
   Narrator and keyboard-only navigation.
 - Set Windows **Text size** to 225% and use a 1024 x 768 display (or VM). Confirm
-  Setup and Settings stay within the desktop, expose scrollbars when needed,
-  and automatically scroll each control into view while navigating with Tab
-  and Shift-Tab. Resize both windows and repeat with Narrator enabled.
+  Setup, Settings, and the update prompt stay within the desktop, expose
+  scrollbars when needed, and automatically scroll each control into view
+  while navigating with Tab and Shift-Tab. Resize all three windows and repeat
+  with Narrator enabled.
+- At 100%, 150%, and 225% display scaling, start and stop a dictation. Confirm
+  the **Listening…** and **Transcribing…** indicator text is not clipped, the
+  surface remains above the taskbar on the active display, and it never takes
+  keyboard focus or intercepts pointer input.
+- Apply each Windows contrast theme in turn and confirm the dictation indicator
+  uses the theme's selected-text colour pair and remains fully opaque. Toggle a
+  contrast theme during an active recording and confirm the visible indicator
+  updates without another hotkey press; its text must continue to distinguish
+  **Listening…** from **Transcribing…** without relying on colour.
 - While the model is preparing, confirm **Try Dictation** and **Finish Setup**
   remain disabled. Choose **Set Up Later**, restart, and confirm setup opens
-  again. After the model reaches Ready, confirm both actions become available.
+  again with the selected microphone and Start with Windows choice preserved.
+  Confirm the chosen autostart state is reflected under Task Manager **Startup
+  apps**. After the model reaches Ready, confirm both actions become available.
 - Confirm **Finish Setup** remains available if the microphone will be connected
   later; microphone readiness is advisory rather than a completion gate.
 - Close every Presspeech window while leaving the notification-area process
@@ -70,6 +97,13 @@ cd swift
 - Enable **Show in Dock**, minimize Setup Checklist, then reopen Presspeech from
   Finder or the Dock. Confirm the minimized window is restored and brought to
   the front rather than leaving Presspeech without a visible control surface.
+- Enable **Show in Dock** and confirm the macOS application menu contains
+  **About Presspeech**, **Settings…**, Services, Hide, and Quit. Choose
+  **Settings…** and confirm the current Dictation, Text, and Behavior settings
+  hierarchy opens at the Presspeech status item (or at the active window if the
+  menu-bar item is crowded out). With a Presspeech window active, press
+  Command-comma and confirm it opens the same hierarchy with current checkmarks
+  and disabled states.
 - Resize Setup Checklist vertically and confirm the checklist rows scroll while
   **Show in Dock**, **Try Dictation** (when ready), and **Done** remain visible.
 - On a display whose usable height is less than 700 points, confirm Setup
@@ -142,6 +176,24 @@ cd swift
   high-contrast variant gains a bright border and fully opaque text.
 - Confirm **Mute system audio while recording** still unmutes after release
   and cancel.
+
+## Dictionary And Shortcuts
+
+- Open **Settings → Text → Dictionary & Shortcuts → Manage Dictionary &
+  Shortcuts…**. Confirm the search field receives focus and the Heard / When
+  you say and Paste columns resize with the window.
+- Import or add at least 21 rules. Confirm the menu shows the saved count and
+  manager instruction instead of a submenu for every rule; smaller sets of up
+  to 20 still expose their existing direct Edit/Delete submenus.
+- Add a replacement containing an accented name such as `Szypański`. Search
+  for `szypanski` and confirm the rule remains visible. Search with terms split
+  between the Heard and Paste columns and confirm all terms must match.
+- Select one row, edit it, and confirm it remains selected when it still
+  matches the search. Select several rows, delete them, and confirm the count,
+  table, menu, and configured sync file (when enabled) stay aligned.
+- Navigate the manager with Full Keyboard Access and VoiceOver. Confirm the
+  search field, table/columns, selection, and Add/Edit/Delete buttons have
+  meaningful names and disabled states.
 
 ## Permissions And TCC
 

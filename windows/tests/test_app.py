@@ -337,16 +337,69 @@ class InputSelectionTests(unittest.TestCase):
         stream.stop.assert_called_once_with()
         stream.close.assert_called_once_with()
 
+    def test_microphone_level_probe_distinguishes_silent_samples(self):
+        stream = mock.Mock()
+
+        def input_stream(**kwargs):
+            stream.start.side_effect = lambda: kwargs["callback"](
+                __import__("numpy").zeros((80, 1), dtype="float32"),
+                80, None, None)
+            return stream
+
+        with mock.patch.object(app.sd, "InputStream", side_effect=input_stream):
+            level = app.PresspeechApp._probe_input_level(
+                3, 16000, listen_for=0)
+
+        self.assertEqual(level, 0.0)
+        stream.stop.assert_called_once_with()
+        stream.close.assert_called_once_with()
+
+    def test_microphone_level_probe_reports_meaningful_input(self):
+        stream = mock.Mock()
+
+        def input_stream(**kwargs):
+            stream.start.side_effect = lambda: kwargs["callback"](
+                __import__("numpy").full((80, 1), 0.02, dtype="float32"),
+                80, None, None)
+            return stream
+
+        with mock.patch.object(app.sd, "InputStream", side_effect=input_stream):
+            level = app.PresspeechApp._probe_input_level(
+                3, 16000, listen_for=0)
+
+        self.assertAlmostEqual(level, 0.02, places=5)
+
     def test_setup_check_freshly_probes_without_replacing_cached_input(self):
         instance = self.make_app()
         instance.input_device = (9, 48000)
-        instance._find_input_device = mock.Mock(return_value=(1, 16000))
+        instance._probe_input_level = mock.Mock(return_value=0.02)
 
-        self.assertTrue(instance.check_input_device("MME::USB microphone"))
+        def find_input(selected, probe=None):
+            self.assertTrue(probe(1, 16000))
+            return (1, 16000)
 
-        instance._find_input_device.assert_called_once_with(
-            "MME::USB microphone")
+        instance._find_input_device = mock.Mock(side_effect=find_input)
+
+        self.assertEqual(
+            instance.check_input_device("MME::USB microphone"),
+            app.MICROPHONE_CHECK_LEVEL)
+
+        self.assertEqual(
+            instance._find_input_device.call_args.args,
+            ("MME::USB microphone",))
+        self.assertIn("probe", instance._find_input_device.call_args.kwargs)
         self.assertEqual(instance.input_device, (9, 48000))
+
+    def test_setup_check_reports_connected_but_silent_input(self):
+        instance = self.make_app()
+        instance._probe_input_level = mock.Mock(return_value=0.0)
+        instance._find_input_device = mock.Mock(
+            side_effect=lambda selected, probe: (1, 16000)
+            if probe(1, 16000) else None)
+
+        self.assertEqual(
+            instance.check_input_device("auto"),
+            app.MICROPHONE_CHECK_SILENT)
 
     def test_setup_check_reports_device_enumeration_failure_safely(self):
         instance = self.make_app()
@@ -354,7 +407,9 @@ class InputSelectionTests(unittest.TestCase):
             side_effect=OSError("private device detail"))
         instance._log = mock.Mock()
 
-        self.assertFalse(instance.check_input_device("auto"))
+        self.assertEqual(
+            instance.check_input_device("auto"),
+            app.MICROPHONE_CHECK_UNAVAILABLE)
 
         instance._log.assert_called_once_with(
             "microphone readiness check failed: private device detail")
@@ -387,6 +442,13 @@ class InputSelectionTests(unittest.TestCase):
             "Open Settings manually and search for Microphone privacy or "
             "Sound input settings.",
         )
+
+    def test_startup_recovery_opens_windows_startup_settings(self):
+        instance = self.make_app()
+        with mock.patch.object(app.os, "startfile", create=True) as startfile:
+            self.assertTrue(instance.open_startup_settings())
+
+        startfile.assert_called_once_with("ms-settings:startupapps")
 
 
 class HotkeyRegressionTests(unittest.TestCase):
@@ -545,6 +607,59 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertFalse(instance._key_held)
 
 
+class AudioResamplingTests(unittest.TestCase):
+    @staticmethod
+    def tone(sample_rate, frequency, seconds=1.0):
+        numpy = __import__("numpy")
+        times = numpy.arange(
+            int(sample_rate * seconds), dtype="float32") / sample_rate
+        return numpy.sin(2 * numpy.pi * frequency * times).astype("float32")
+
+    @staticmethod
+    def rms(audio):
+        numpy = __import__("numpy")
+        return float(numpy.sqrt(numpy.mean(audio * audio)))
+
+    def test_native_asr_rate_is_not_copied(self):
+        audio = self.tone(16000, 1000, seconds=0.1)
+
+        self.assertIs(app._resample_to_16k(audio, 16000), audio)
+
+    def test_tiny_capture_does_not_enter_the_resampler(self):
+        numpy = __import__("numpy")
+        audio = numpy.array([0.25], dtype="float32")
+
+        with mock.patch.object(app.soxr, "resample") as resample:
+            result = app._resample_to_16k(audio, 48000)
+
+        numpy.testing.assert_array_equal(result, audio)
+        resample.assert_not_called()
+
+    def test_common_microphone_rates_preserve_duration_and_dtype(self):
+        for sample_rate in (44100, 48000, 96000):
+            with self.subTest(sample_rate=sample_rate):
+                audio = self.tone(sample_rate, 1000)
+
+                result = app._resample_to_16k(audio, sample_rate)
+
+                self.assertEqual(len(result), 16000)
+                self.assertEqual(result.dtype.name, "float32")
+
+    def test_resampling_preserves_speech_band(self):
+        audio = self.tone(48000, 7000)
+
+        result = app._resample_to_16k(audio, 48000)
+
+        self.assertGreater(self.rms(result), self.rms(audio) * 0.98)
+
+    def test_resampling_rejects_content_above_asr_nyquist(self):
+        audio = self.tone(48000, 10000)
+
+        result = app._resample_to_16k(audio, 48000)
+
+        self.assertLess(self.rms(result), 0.01)
+
+
 class TextRegressionTests(unittest.TestCase):
     def test_packaged_selftest_loads_every_lazy_runtime_dependency(self):
         loaded = {}
@@ -568,7 +683,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(set(loaded), {
             "comtypes", "ctranslate2", "faster_whisper", "librosa",
             "onnxruntime", "pycaw.constants", "pycaw.pycaw", "safetensors",
-            "sentencepiece", "soundfile", "tokenizers", "torch",
+            "sentencepiece", "soundfile", "soxr", "tokenizers", "torch",
             "tk_uia", "transformers",
         })
 
@@ -1200,6 +1315,59 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(
             command,
             r'"C:\Presspeech\.venv\Scripts\pythonw.exe" "C:\Presspeech\app.py"')
+
+    @staticmethod
+    def winreg_module(key):
+        winreg = mock.Mock()
+        winreg.HKEY_CURRENT_USER = "current-user"
+        winreg.KEY_SET_VALUE = "set-value"
+        winreg.REG_SZ = "string"
+        winreg.OpenKey.return_value = key
+        return winreg
+
+    def test_autostart_success_is_reported_after_registry_write(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": True}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        key = mock.MagicMock()
+        key.__enter__.return_value = "run-key"
+        winreg = self.winreg_module(key)
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}), \
+                mock.patch.object(app, "_autostart_command",
+                                  return_value='"Presspeech.exe"'):
+            self.assertTrue(instance.apply_autostart())
+
+        winreg.OpenKey.assert_called_once_with(
+            "current-user",
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            "set-value",
+        )
+        winreg.SetValueEx.assert_called_once_with(
+            "run-key", "Presspeech", 0, "string", '"Presspeech.exe"')
+        instance.notify.assert_not_called()
+
+    def test_autostart_failure_is_reported_without_claiming_success(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": True}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        key = mock.MagicMock()
+        key.__enter__.side_effect = PermissionError("registry denied")
+        winreg = self.winreg_module(key)
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}):
+            self.assertFalse(instance.apply_autostart())
+
+        instance._log.assert_called_once_with(
+            "autostart error: registry denied")
+        instance.notify.assert_called_once_with(
+            "Start with Windows not updated",
+            "Open Settings, then choose Apps and Startup to review "
+            "Presspeech's startup state.",
+        )
 
     def test_playback_mute_restores_the_prior_endpoint_state(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

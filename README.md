@@ -150,6 +150,8 @@ Useful menu items:
 - **Setup Checklist…** — model, permissions, and hotkey readiness
 - **Support → Try Dictation…** — a private scratchpad for verifying the
   hotkey and first transcription without switching apps
+- **Presspeech → Settings…** or **Command-comma** — when **Show in Dock** is
+  enabled, open the same settings hierarchy from the standard macOS app menu
 - **Settings → Dictation → Hotkey** — choose Right Option, Right Control, Right
   Command, selected F-keys, or record another F-key/right modifier
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
@@ -159,14 +161,14 @@ Useful menu items:
   suffix
 - **Settings → Text → Dictionary & Shortcuts** — correct recurring
   mishearings or map a spoken phrase to exact reusable text; rules are
-  deterministic, local, and portable through export/import or a
-  user-chosen sync file
+  deterministic, local, searchable in a dedicated manager, and portable
+  through export/import or a user-chosen sync file
 - **Settings → Text → Spoken formatting commands** — opt in to exact
   commands such as “new line”, “new paragraph”, “bullet point”, “comma”,
   and “open quote”
 - **Settings → Text → Remove filler words** — opt-in deterministic strip of
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
-- **Settings → Text → Restore clipboard after paste** — opt-in guarded restore
+- **Settings → Behavior → Restore clipboard after paste** — opt-in guarded restore
   of the previous macOS pasteboard contents; skipped if another process copies
   newer content
 - **Settings → Behavior → Launch at Login** — keep dictation available after

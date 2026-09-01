@@ -150,8 +150,24 @@ class ParakeetConfigurationTests(unittest.TestCase):
             vad_filter=True,
             without_timestamps=True,
             condition_on_previous_text=False,
+            vad_parameters=engine.WHISPER_VAD_POLICY,
         )
         self.assertEqual(transcriber.last_timing["speech_seconds"], 1.25)
+
+    def test_whisper_vad_policy_is_complete_and_copied_per_request(self):
+        first = engine.whisper_vad_parameters()
+        second = engine.whisper_vad_parameters()
+
+        self.assertEqual(first, {
+            "threshold": 0.5,
+            "neg_threshold": 0.35,
+            "min_speech_duration_ms": 0,
+            "min_silence_duration_ms": 160,
+            "speech_pad_ms": 400,
+        })
+        self.assertIsNot(first, second)
+        first["speech_pad_ms"] = 0
+        self.assertEqual(second["speech_pad_ms"], 400)
 
     def test_whisper_does_not_decode_when_vad_finds_no_speech(self):
         segments = mock.MagicMock()

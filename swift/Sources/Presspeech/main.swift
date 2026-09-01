@@ -152,6 +152,7 @@ private let LEGACY_CORRECTIONS_FILE_EXTENSION = "parakey-corrections"
 let MAX_TRANSCRIPT_CORRECTIONS = 512
 let MAX_TRANSCRIPT_CORRECTION_SOURCE_BYTES = 512
 let MAX_TRANSCRIPT_CORRECTION_REPLACEMENT_BYTES = 4096
+let MAX_INLINE_CORRECTION_MENU_ENTRIES = 20
 
 /// Visible state of the menu-bar item. Idle/loading/busy use the
 /// template image so macOS handles light/dark menu bars. Recording and
@@ -1455,6 +1456,32 @@ func normalizedTranscriptCorrections(_ corrections: [TranscriptCorrection]) -> [
     }
 
     return result
+}
+
+/// Keep the menu useful for small dictionaries without turning a large saved
+/// vocabulary into a screen-height cascade. Large sets remain available in the
+/// searchable manager window.
+func shouldShowInlineCorrectionMenuEntries(count: Int,
+                                           limit: Int = MAX_INLINE_CORRECTION_MENU_ENTRIES) -> Bool {
+    count > 0 && count <= limit
+}
+
+/// Stable indices into `corrections` whose source or replacement contains all
+/// whitespace-separated search terms. Matching ignores case and diacritics so
+/// a user can still find an inflected name without typing every accent.
+func correctionSearchMatchIndices(in corrections: [TranscriptCorrection],
+                                  query: String) -> [Int] {
+    let terms = query
+        .split(whereSeparator: { $0.isWhitespace })
+        .map(String.init)
+    guard !terms.isEmpty else { return Array(corrections.indices) }
+
+    let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+    return corrections.indices.filter { index in
+        let correction = corrections[index]
+        let searchable = correction.source + "\n" + correction.replacement
+        return terms.allSatisfy { searchable.range(of: $0, options: options) != nil }
+    }
 }
 
 /// First line of the import-confirmation dialog. When the file holds
@@ -6317,7 +6344,8 @@ private final class UpdateProgressAppDelegate: NSObject, NSApplicationDelegate, 
 }
 
 @MainActor
-final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
+final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate,
+                            NSTableViewDataSource, NSTableViewDelegate {
     private static let launchAtLoginMenuItemIdentifier = NSUserInterfaceItemIdentifier(
         "com.local.presspeech.menu.launch-at-login"
     )
@@ -6373,6 +6401,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var renderedSetupChecklistSnapshot: SetupChecklistSnapshot?
     private var dictationScratchpadWindow: NSWindow?
     private weak var dictationScratchpadTextView: NSTextView?
+    private var correctionsManagerWindow: NSWindow?
+    private weak var correctionsManagerSearchField: NSSearchField?
+    private weak var correctionsManagerTableView: NSTableView?
+    private weak var correctionsManagerSummaryLabel: NSTextField?
+    private weak var correctionsManagerEditButton: NSButton?
+    private weak var correctionsManagerDeleteButton: NSButton?
+    private var correctionsManagerVisibleIndices: [Int] = []
     private var hotkeyTestSucceeded = false
     private var recordingLevelTimer: Timer?
     private var recordingVisualLevel: Float = 0
@@ -6535,6 +6570,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         restoreUpdateReminderPause()
 
         NSApp.setActivationPolicy(settings.showInDock ? .regular : .accessory)
+        installApplicationMenu()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         configureStatusItemImage()
@@ -8161,6 +8197,97 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     // MARK: - Menu
 
+    /// This app has no main nib, so AppKit cannot synthesize the application
+    /// menu that a regular Dock app normally gets. The menu stays installed
+    /// while Presspeech is an accessory app (and therefore remains hidden),
+    /// then becomes available immediately if Show in Dock is enabled.
+    ///
+    /// Keep the actual settings controls in the status-menu interface: this
+    /// command provides the standard macOS discovery path and Command-comma
+    /// shortcut without introducing a second, divergent preferences UI.
+    private func installApplicationMenu() {
+        let mainMenu = NSMenu(title: "Main Menu")
+        let applicationItem = NSMenuItem(title: "Presspeech", action: nil, keyEquivalent: "")
+        let applicationMenu = NSMenu(title: "Presspeech")
+
+        let about = NSMenuItem(title: "About Presspeech",
+                               action: #selector(showAboutClicked(_:)),
+                               keyEquivalent: "")
+        about.target = self
+        applicationMenu.addItem(about)
+        applicationMenu.addItem(.separator())
+
+        let settingsItem = NSMenuItem(title: "Settings…",
+                                      action: #selector(showSettingsFromApplicationMenu(_:)),
+                                      keyEquivalent: ",")
+        settingsItem.target = self
+        applicationMenu.addItem(settingsItem)
+        applicationMenu.addItem(.separator())
+
+        let servicesMenu = NSMenu(title: "Services")
+        let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+        servicesItem.submenu = servicesMenu
+        applicationMenu.addItem(servicesItem)
+        NSApp.servicesMenu = servicesMenu
+
+        applicationMenu.addItem(.separator())
+        let hide = NSMenuItem(title: "Hide Presspeech",
+                              action: #selector(NSApplication.hide(_:)),
+                              keyEquivalent: "h")
+        hide.target = NSApp
+        applicationMenu.addItem(hide)
+
+        let hideOthers = NSMenuItem(title: "Hide Others",
+                                    action: #selector(NSApplication.hideOtherApplications(_:)),
+                                    keyEquivalent: "h")
+        hideOthers.target = NSApp
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        applicationMenu.addItem(hideOthers)
+
+        let showAll = NSMenuItem(title: "Show All",
+                                 action: #selector(NSApplication.unhideAllApplications(_:)),
+                                 keyEquivalent: "")
+        showAll.target = NSApp
+        applicationMenu.addItem(showAll)
+
+        applicationMenu.addItem(.separator())
+        let quit = NSMenuItem(title: "Quit Presspeech",
+                              action: #selector(quitClicked(_:)),
+                              keyEquivalent: "q")
+        quit.target = self
+        applicationMenu.addItem(quit)
+
+        applicationItem.submenu = applicationMenu
+        mainMenu.addItem(applicationItem)
+        NSApp.mainMenu = mainMenu
+    }
+
+    /// Present a fresh copy of the existing settings hierarchy so values and
+    /// enabled states always match the status menu. Prefer the status item as
+    /// the visual anchor, but retain a screen-coordinate fallback for a menu
+    /// bar whose items are temporarily hidden because it is full.
+    @objc private func showSettingsFromApplicationMenu(_ sender: NSMenuItem) {
+        guard !isTerminating,
+              let settingsMenu = buildSettingsItem().submenu else { return }
+
+        if let button = statusItem.button,
+           button.window?.isVisible == true {
+            settingsMenu.popUp(positioning: nil,
+                               at: NSPoint(x: button.bounds.minX,
+                                           y: button.bounds.minY),
+                               in: button)
+        } else if let contentView = NSApp.keyWindow?.contentView {
+            settingsMenu.popUp(positioning: nil,
+                               at: NSPoint(x: contentView.bounds.minX + 20,
+                                           y: contentView.bounds.maxY - 20),
+                               in: contentView)
+        } else {
+            settingsMenu.popUp(positioning: nil,
+                               at: NSEvent.mouseLocation,
+                               in: nil)
+        }
+    }
+
     private func rebuildMenu() {
         let menu = buildMenu()
         menu.delegate = self
@@ -9722,6 +9849,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let sub = NSMenu()
         sub.autoenablesItems = false
 
+        let manage = NSMenuItem(title: "Manage Dictionary & Shortcuts…",
+                                action: #selector(showCorrectionsManagerClicked(_:)),
+                                keyEquivalent: "")
+        manage.target = self
+        manage.toolTip = "Search, edit, and remove saved dictionary rules and voice shortcuts."
+        sub.addItem(manage)
+
+        sub.addItem(.separator())
+
         let add = NSMenuItem(title: "Add Dictionary Correction…",
                              action: #selector(addCorrectionClicked(_:)),
                              keyEquivalent: "")
@@ -9806,29 +9942,39 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return parent
         }
 
-        for (index, correction) in corrections.enumerated() {
-            let item = NSMenuItem(title: correctionMenuTitle(correction),
-                                  action: nil,
-                                  keyEquivalent: "")
-            let itemSub = NSMenu()
-            itemSub.autoenablesItems = false
+        if shouldShowInlineCorrectionMenuEntries(count: corrections.count) {
+            for (index, correction) in corrections.enumerated() {
+                let item = NSMenuItem(title: correctionMenuTitle(correction),
+                                      action: nil,
+                                      keyEquivalent: "")
+                let itemSub = NSMenu()
+                itemSub.autoenablesItems = false
 
-            let edit = NSMenuItem(title: "Edit…",
-                                  action: #selector(editCorrectionClicked(_:)),
-                                  keyEquivalent: "")
-            edit.target = self
-            edit.representedObject = index
-            itemSub.addItem(edit)
+                let edit = NSMenuItem(title: "Edit…",
+                                      action: #selector(editCorrectionClicked(_:)),
+                                      keyEquivalent: "")
+                edit.target = self
+                edit.representedObject = index
+                itemSub.addItem(edit)
 
-            let delete = NSMenuItem(title: "Delete",
-                                    action: #selector(deleteCorrectionClicked(_:)),
-                                    keyEquivalent: "")
-            delete.target = self
-            delete.representedObject = index
-            itemSub.addItem(delete)
+                let delete = NSMenuItem(title: "Delete",
+                                        action: #selector(deleteCorrectionClicked(_:)),
+                                        keyEquivalent: "")
+                delete.target = self
+                delete.representedObject = index
+                itemSub.addItem(delete)
 
-            item.submenu = itemSub
-            sub.addItem(item)
+                item.submenu = itemSub
+                sub.addItem(item)
+            }
+        } else {
+            let summary = NSMenuItem(
+                title: "\(corrections.count) saved — use Manage to search and edit",
+                action: nil,
+                keyEquivalent: ""
+            )
+            summary.isEnabled = false
+            sub.addItem(summary)
         }
 
         sub.addItem(.separator())
@@ -9850,6 +9996,268 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private func clippedCorrectionText(_ text: String) -> String {
         let flat = text.replacingOccurrences(of: "\n", with: " ")
         return flat.count > 32 ? String(flat.prefix(32)) + "…" : flat
+    }
+
+    // MARK: - Dictionary manager
+
+    @objc private func showCorrectionsManagerClicked(_ sender: Any?) {
+        showAppForModal()
+        if let window = correctionsManagerWindow {
+            refreshCorrectionsManager()
+            window.makeKeyAndOrderFront(nil)
+            if let search = correctionsManagerSearchField {
+                window.makeFirstResponder(search)
+            }
+            return
+        }
+
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 500),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered,
+                              defer: false)
+        window.title = "Dictionary & Shortcuts"
+        window.contentMinSize = NSSize(width: 560, height: 340)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+
+        let root = NSStackView()
+        root.orientation = .vertical
+        root.alignment = .leading
+        root.spacing = 12
+        root.edgeInsets = NSEdgeInsets(top: 20, left: 22, bottom: 18, right: 22)
+        root.translatesAutoresizingMaskIntoConstraints = false
+
+        let title = setupLabel("Dictionary & Shortcuts",
+                               font: .systemFont(ofSize: 22, weight: .semibold))
+        let explanation = setupLabel(
+            "Corrections replace recurring mishearings; shortcuts replace a spoken phrase with exact reusable text. Everything stays on this Mac unless you set up a sync file.",
+            font: .systemFont(ofSize: 13),
+            color: .secondaryLabelColor
+        )
+
+        let search = NSSearchField()
+        search.placeholderString = "Search heard or pasted text"
+        search.sendsSearchStringImmediately = true
+        search.target = self
+        search.action = #selector(correctionsManagerSearchChanged(_:))
+        search.setAccessibilityLabel("Search dictionary and shortcuts")
+
+        let table = NSTableView()
+        table.allowsMultipleSelection = true
+        table.allowsEmptySelection = true
+        table.usesAlternatingRowBackgroundColors = true
+        table.rowHeight = 28
+        table.dataSource = self
+        table.delegate = self
+        table.setAccessibilityLabel("Saved dictionary rules and voice shortcuts")
+
+        let heardColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("correction-source"))
+        heardColumn.title = "Heard / When you say"
+        heardColumn.minWidth = 180
+        heardColumn.width = 330
+        table.addTableColumn(heardColumn)
+
+        let pasteColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("correction-replacement"))
+        pasteColumn.title = "Paste"
+        pasteColumn.minWidth = 180
+        pasteColumn.width = 360
+        table.addTableColumn(pasteColumn)
+
+        let scroll = NSScrollView()
+        scroll.borderType = .bezelBorder
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.autohidesScrollers = true
+        scroll.documentView = table
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+
+        let footer = NSStackView()
+        footer.orientation = .horizontal
+        footer.alignment = .centerY
+        footer.spacing = 10
+        footer.translatesAutoresizingMaskIntoConstraints = false
+
+        let summary = setupLabel("", font: .systemFont(ofSize: 12), color: .secondaryLabelColor)
+        let addCorrection = NSButton(title: "Add Correction…",
+                                     target: self,
+                                     action: #selector(addManagedCorrectionClicked(_:)))
+        let addShortcut = NSButton(title: "Add Shortcut…",
+                                   target: self,
+                                   action: #selector(addManagedShortcutClicked(_:)))
+        let edit = NSButton(title: "Edit…",
+                            target: self,
+                            action: #selector(editManagedCorrectionClicked(_:)))
+        let delete = NSButton(title: "Delete",
+                              target: self,
+                              action: #selector(deleteManagedCorrectionsClicked(_:)))
+        for button in [addCorrection, addShortcut, edit, delete] {
+            button.bezelStyle = .rounded
+        }
+        edit.isEnabled = false
+        delete.isEnabled = false
+
+        footer.addArrangedSubview(summary)
+        footer.addArrangedSubview(NSView())
+        footer.addArrangedSubview(addCorrection)
+        footer.addArrangedSubview(addShortcut)
+        footer.addArrangedSubview(edit)
+        footer.addArrangedSubview(delete)
+        footer.setHuggingPriority(.defaultLow, for: .horizontal)
+
+        root.addArrangedSubview(title)
+        root.addArrangedSubview(explanation)
+        root.addArrangedSubview(search)
+        root.addArrangedSubview(scroll)
+        root.addArrangedSubview(footer)
+
+        let container = NSView()
+        container.addSubview(root)
+        NSLayoutConstraint.activate([
+            root.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            root.topAnchor.constraint(equalTo: container.topAnchor),
+            root.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            explanation.widthAnchor.constraint(equalTo: root.widthAnchor,
+                                                constant: -(root.edgeInsets.left + root.edgeInsets.right)),
+            search.widthAnchor.constraint(equalTo: explanation.widthAnchor),
+            scroll.widthAnchor.constraint(equalTo: explanation.widthAnchor),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 210),
+            footer.widthAnchor.constraint(equalTo: explanation.widthAnchor),
+        ])
+
+        window.contentView = container
+        correctionsManagerWindow = window
+        correctionsManagerSearchField = search
+        correctionsManagerTableView = table
+        correctionsManagerSummaryLabel = summary
+        correctionsManagerEditButton = edit
+        correctionsManagerDeleteButton = delete
+        refreshCorrectionsManager()
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(search)
+    }
+
+    @objc private func correctionsManagerSearchChanged(_ sender: NSSearchField) {
+        refreshCorrectionsManager()
+    }
+
+    private func refreshCorrectionsManager(selecting correctionIndex: Int? = nil) {
+        guard let table = correctionsManagerTableView else { return }
+        let corrections = settings.transcriptCorrections
+        let query = correctionsManagerSearchField?.stringValue ?? ""
+        correctionsManagerVisibleIndices = correctionSearchMatchIndices(in: corrections, query: query)
+        table.reloadData()
+
+        if let correctionIndex,
+           let row = correctionsManagerVisibleIndices.firstIndex(of: correctionIndex) {
+            table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            table.scrollRowToVisible(row)
+        } else {
+            table.deselectAll(nil)
+        }
+
+        let visibleCount = correctionsManagerVisibleIndices.count
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            correctionsManagerSummaryLabel?.stringValue = "\(corrections.count) saved"
+        } else {
+            correctionsManagerSummaryLabel?.stringValue = "\(visibleCount) of \(corrections.count) shown"
+        }
+        updateCorrectionsManagerSelectionState()
+    }
+
+    private func selectedManagedCorrectionIndices() -> [Int] {
+        guard let table = correctionsManagerTableView else { return [] }
+        return table.selectedRowIndexes.compactMap { row in
+            correctionsManagerVisibleIndices.indices.contains(row)
+                ? correctionsManagerVisibleIndices[row]
+                : nil
+        }
+    }
+
+    private func updateCorrectionsManagerSelectionState() {
+        let selectedCount = selectedManagedCorrectionIndices().count
+        correctionsManagerEditButton?.isEnabled = selectedCount == 1
+        correctionsManagerDeleteButton?.isEnabled = selectedCount > 0
+        correctionsManagerDeleteButton?.title = selectedCount > 1 ? "Delete \(selectedCount)" : "Delete"
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        tableView === correctionsManagerTableView ? correctionsManagerVisibleIndices.count : 0
+    }
+
+    func tableView(_ tableView: NSTableView,
+                   viewFor tableColumn: NSTableColumn?,
+                   row: Int) -> NSView? {
+        guard tableView === correctionsManagerTableView,
+              correctionsManagerVisibleIndices.indices.contains(row) else { return nil }
+        let corrections = settings.transcriptCorrections
+        let index = correctionsManagerVisibleIndices[row]
+        guard corrections.indices.contains(index) else { return nil }
+        let correction = corrections[index]
+        let isSource = tableColumn?.identifier.rawValue == "correction-source"
+        let value = isSource ? correction.source : correction.replacement
+
+        let cell = NSTableCellView()
+        cell.identifier = tableColumn?.identifier
+        let label = NSTextField(labelWithString: value.replacingOccurrences(of: "\n", with: " "))
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.translatesAutoresizingMaskIntoConstraints = false
+        cell.textField = label
+        cell.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
+            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+        ])
+        return cell
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let table = notification.object as? NSTableView,
+              table === correctionsManagerTableView else { return }
+        updateCorrectionsManagerSelectionState()
+    }
+
+    @objc private func addManagedCorrectionClicked(_ sender: NSButton) {
+        guard let correction = showCorrectionEditor(existing: nil, mode: .correction) else { return }
+        saveCorrection(correction)
+    }
+
+    @objc private func addManagedShortcutClicked(_ sender: NSButton) {
+        guard let correction = showCorrectionEditor(existing: nil, mode: .shortcut) else { return }
+        saveCorrection(correction)
+    }
+
+    @objc private func editManagedCorrectionClicked(_ sender: NSButton) {
+        guard let index = selectedManagedCorrectionIndices().first else { return }
+        let corrections = settings.transcriptCorrections
+        guard corrections.indices.contains(index),
+              let edited = showCorrectionEditor(existing: corrections[index], mode: .correction) else { return }
+        saveCorrection(edited, replacing: index)
+    }
+
+    @objc private func deleteManagedCorrectionsClicked(_ sender: NSButton) {
+        let selected = selectedManagedCorrectionIndices().sorted(by: >)
+        guard !selected.isEmpty else { return }
+
+        if selected.count > 1 {
+            showAppForModal()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Delete \(selected.count) Selected Items?"
+            alert.informativeText = "This removes the selected dictionary rules and shortcuts from this Mac."
+            alert.addButton(withTitle: "Delete")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+
+        var corrections = settings.transcriptCorrections
+        for index in selected where corrections.indices.contains(index) {
+            corrections.remove(at: index)
+        }
+        updateTranscriptCorrections(corrections)
     }
 
     @objc private func addCorrectionClicked(_ sender: NSMenuItem) {
@@ -10205,12 +10613,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             // save like export/sync-write failures do — silently
             // dropping the user's edit looked like data loss.
             showCorrectionTransferError(title: "Saving Corrections Failed", error: error)
+            refreshCorrectionsManager()
             rebuildMenu()
             return
         }
         if writeToSync, !isApplyingCorrectionSyncFile {
             writeCorrectionsToSyncFile(presentErrors: false)
         }
+        refreshCorrectionsManager()
         rebuildMenu()
     }
 
@@ -10612,6 +11022,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
 
         updateTranscriptCorrections(corrections)
+        if let savedIndex = settings.transcriptCorrections.firstIndex(where: {
+            normalizedTranscriptCorrectionSource($0.source) == key
+        }) {
+            refreshCorrectionsManager(selecting: savedIndex)
+        }
     }
 
     @objc private func selectHotkey(_ sender: NSMenuItem) {
@@ -12903,6 +13318,33 @@ private enum PresspeechSelfTest {
             equals: [TranscriptCorrection(source: "yeti nano", replacement: "USB mic")],
             "normalization should trim, drop incomplete entries, collapse duplicate sources, and keep the latest replacement"
         )
+
+        let searchable = [
+            TranscriptCorrection(source: "ship pans key", replacement: "Szypański"),
+            TranscriptCorrection(source: "fluid audio", replacement: "FluidAudio"),
+            TranscriptCorrection(source: "right option", replacement: "Right Option"),
+        ]
+        try expect(
+            correctionSearchMatchIndices(in: searchable, query: "szypanski"),
+            equals: [0],
+            "correction search should ignore diacritics"
+        )
+        try expect(
+            correctionSearchMatchIndices(in: searchable, query: "fluid audio"),
+            equals: [1],
+            "correction search should require every whitespace-separated term"
+        )
+        try expect(
+            correctionSearchMatchIndices(in: searchable, query: "   "),
+            equals: [0, 1, 2],
+            "empty correction search should preserve stable source order"
+        )
+        try expect(shouldShowInlineCorrectionMenuEntries(count: 1), equals: true,
+                   "small correction sets should remain directly editable from the menu")
+        try expect(shouldShowInlineCorrectionMenuEntries(count: MAX_INLINE_CORRECTION_MENU_ENTRIES), equals: true,
+                   "the inline correction menu limit should be inclusive")
+        try expect(shouldShowInlineCorrectionMenuEntries(count: MAX_INLINE_CORRECTION_MENU_ENTRIES + 1), equals: false,
+                   "large correction sets should use the searchable manager instead of growing the menu")
 
         let boundedCorrections = normalizedTranscriptCorrections(
             [

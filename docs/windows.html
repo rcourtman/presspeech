@@ -81,7 +81,7 @@
           <span class="section-eyebrow">Before you download</span>
           <h2>Requirements and download size</h2>
           <div class="facts">
-            <div class="fact"><strong>Windows 10 or 11</strong><span>A 64-bit x64 PC. Windows on Arm is not supported.</span></div>
+            <div class="fact"><strong>Windows 11</strong><span>A 64-bit x64 PC. Windows 10 remains compatible but needs Extended Security Updates or an edition that remains supported; Windows on Arm is not supported.</span></div>
             <div class="fact"><strong>4.4 GB installed</strong><span>The installer includes the Python and speech runtimes; Python is not required separately.</span></div>
             <div class="fact"><strong>NVIDIA CUDA optional</strong><span>A current NVIDIA driver gives the fastest Parakeet path. CPU-only PCs use the smaller Whisper base.en model.</span></div>
             <div class="fact"><strong>First-run model</strong><span>About 2.5 GB with CUDA Parakeet, or about 141 MiB for the CPU default.</span></div>
@@ -93,6 +93,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Install safely</span>
           <h2>Download, verify, and run</h2>
+          <p>Presspeech remains compatible with Windows 10 x64, but <a href="https://support.microsoft.com/en-us/windows/deployment/updates-lifecycle/windows-10-support-has-ended-on-october-14-2025">Microsoft ended general Windows 10 support on 14 October 2025</a>. Prefer Windows 11, or use Windows 10 only with Extended Security Updates or an edition that remains supported.</p>
           <ol class="steps">
             <li>
               <strong>Download the current installer and checksum</strong>
@@ -138,11 +139,11 @@ if ($actual -ne $parts[0]) {
             </li>
             <li>
               <strong>Let preparation finish</strong>
-              <p>The first-run window shows the model, microphone, a selectable push-to-talk key, and Start with Windows setting. It briefly opens the selected input for a local microphone check and discards those samples in memory. If <strong>Right Alt</strong> enters @, €, or accented letters on your keyboard, Windows is using it as <strong>AltGr</strong>; choose <strong>F8</strong> or another key so AltGr remains available for typing. The hotkey choice applies immediately and is kept if you defer setup. <strong>Try Dictation</strong> and <strong>Finish Setup</strong> become available when the model is ready. If preparation fails, choose <strong>Retry Speech Model</strong>; the window keeps tracking the new attempt. Choose <strong>Set Up Later</strong> to defer setup without marking it complete; the window opens again on the next launch. You can still finish after the model is ready if you plan to connect a microphone later.</p>
+              <p>The first-run window shows the model, microphone, a selectable push-to-talk key, and Start with Windows setting. Speak while its local microphone check runs. It briefly opens the selected input, discards those samples in memory, and distinguishes a detected input level from a connected-but-silent device or one that cannot be opened. If <strong>Right Alt</strong> enters @, €, or accented letters on your keyboard, Windows is using it as <strong>AltGr</strong>; choose <strong>F8</strong> or another key so AltGr remains available for typing. Microphone and hotkey choices apply immediately, including in <strong>Try Dictation</strong>. <strong>Try Dictation</strong> and <strong>Finish Setup</strong> become available when the model is ready. If preparation fails, choose <strong>Retry Speech Model</strong>; the window keeps tracking the new attempt. Choose <strong>Set Up Later</strong> to defer setup without marking it complete; the window opens again on the next launch with your microphone, hotkey, and Start with Windows choices kept. You can still finish after the model is ready if you plan to connect a microphone later. For keyboard-only use, press <strong>Left Alt</strong> with a command's underlined letter; <strong>Escape</strong> closes the current Presspeech window, and <strong>Ctrl+S</strong> saves Settings. If Windows refuses the requested startup registration, Setup stays open and reports the failure; choose <strong>Open Startup Settings</strong> to review Presspeech under <strong>Settings → Apps → Startup</strong>, then retry Finish Setup.</p>
             </li>
             <li>
               <strong>Check microphone access</strong>
-              <p>If setup reports that the microphone needs attention, use its direct buttons to open Windows Microphone Privacy or Sound Input settings. Turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>, confirm the input, then choose <strong>Check Again</strong>. Unpackaged desktop apps share this privacy control, so Windows does not provide a separate Presspeech toggle. Outside the brief readiness check, Presspeech captures audio only while dictation is active; all captured audio is discarded after local processing.</p>
+              <p>If setup reports that the microphone is connected but no input level was detected, unmute it, speak, and choose <strong>Check Again</strong>. If the microphone cannot be opened, use the direct buttons to open Windows Microphone Privacy or Sound Input settings. Turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>, confirm the input, then check again. Unpackaged desktop apps share this privacy control, so Windows does not provide a separate Presspeech toggle. Outside the brief readiness check, Presspeech captures audio only while dictation is active; all captured audio is discarded after local processing.</p>
             </li>
             <li>
               <strong>Try a private test</strong>

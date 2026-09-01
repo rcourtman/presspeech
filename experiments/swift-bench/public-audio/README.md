@@ -57,3 +57,24 @@ public-audio/librispeech-dev-clean/
 The generated `manifest.tsv` records the source corpus, split, original
 LibriSpeech ID, original archive member, license, and reference transcript
 for each imported clip.
+
+## Multi-window fixtures
+
+The imported utterances are useful for WER but are mostly short. Compose them
+into deterministic 45-second-or-longer fixtures to exercise Parakeet's
+15-second CoreML windows and chunk merging:
+
+```sh
+python3 ./compose-public-long-form-fixtures.py \
+  --input-dir public-audio/librispeech-dev-clean \
+  --output-dir public-audio/librispeech-dev-clean-long-form \
+  --target-seconds 45
+```
+
+The generated long-form directory is also ignored by git. Its manifest records
+the source rows, their boundaries, and nominal 15-second boundary markers;
+FluidAudio's overlap and actual window starts remain implementation details.
+Run it through `run-real-dictation-regression.sh`, or let
+`run-release-asr-checks.sh` detect it automatically. Use
+`--require-long-public-audio` when absence of this seam coverage should fail a
+release check.

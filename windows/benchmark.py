@@ -279,6 +279,12 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         "benchmark_version": 1,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
+        # Keep reports interpretable across faster-whisper updates. The
+        # boundary policy can affect both WER and silence false positives.
+        "whisper_vad_policy": (
+            engine.whisper_vad_parameters()
+            if model_name in engine.WHISPER_MODELS else None
+        ),
         "precision": precision,
         "model_dtype": model_dtype,
         "cuda_allocated_mib": cuda_allocated_mib,
@@ -309,6 +315,18 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
 def _print_summary(result):
     print("Model: %s | precision: %s (%s)" %
           (result["model"], result["precision"], result["model_dtype"]))
+    vad_policy = result.get("whisper_vad_policy")
+    if vad_policy is not None:
+        print(
+            "Whisper VAD: threshold %.2f / negative %.2f / speech >= %d ms / "
+            "silence split %d ms / edge padding %d ms" % (
+                vad_policy["threshold"],
+                vad_policy["neg_threshold"],
+                vad_policy["min_speech_duration_ms"],
+                vad_policy["min_silence_duration_ms"],
+                vad_policy["speech_pad_ms"],
+            )
+        )
     if result["cuda_allocated_mib"] is not None:
         print("CUDA tensors: %.1f MiB" % result["cuda_allocated_mib"])
     print("Load: %.3fs | warm-up: %.3fs" %
