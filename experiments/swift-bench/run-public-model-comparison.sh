@@ -15,6 +15,7 @@ OUTDIR="public-results"
 TRIALS="3"
 CANDIDATE_BACKEND="unified"
 UNIFIED_TRAILING_SILENCE_MS="250"
+REQUIRE_CANDIDATE_PASS=0
 FETCH=0
 FORCE_FETCH=0
 SELF_TEST=0
@@ -39,12 +40,15 @@ Options:
                           (default: unified)
   --unified-trailing-silence-ms <n>
                           Unified-only trailing silence in ms (default: 250)
+  --require-candidate-pass
+                          fail unless the candidate evidence screen passes
   --self-test             run parser/detection self-tests only
   -h, --help              show this help
 
 Examples:
   ./run-public-model-comparison.sh --fetch --count 50 --trials 3
   ./run-public-model-comparison.sh --fixture-dir public-audio/librispeech-test-other --candidate-backend v2 --trials 5
+  ./run-public-model-comparison.sh --candidate-backend v2 --trials 3 --require-candidate-pass
 USAGE
 }
 
@@ -84,6 +88,30 @@ supported_audio_count() {
         | wc -l | tr -d '[:space:]'
 }
 
+build_compare_args() {
+    COMPARE_ARGS=(
+        "./run-real-model-comparison.sh"
+        "--input-dir" "$FIXTURE_DIR"
+        "--out-dir" "$OUTDIR"
+        "--trials" "$TRIALS"
+        "--candidate-backend" "$CANDIDATE_BACKEND"
+        "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS"
+        "--public-corpus"
+        "--show-transcripts"
+        "--show-paths"
+    )
+    # The product would select either English-only model only for an explicit
+    # English dictation setting, so compare it with production v3 under the
+    # same hint rather than giving the candidate an easier auto-detected
+    # baseline.
+    if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" ]]; then
+        COMPARE_ARGS+=( "--language" "en" )
+    fi
+    if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 ]]; then
+        COMPARE_ARGS+=( "--require-candidate-pass" )
+    fi
+}
+
 assert_eq() {
     local actual="$1"
     local expected="$2"
@@ -118,6 +146,17 @@ run_self_test() {
     touch "$tmpdir/fixtures/ignore.txt"
     assert_eq "$(supported_audio_count "$tmpdir/fixtures")" "3" "supported audio detection"
     assert_eq "$(supported_audio_count "$tmpdir/missing")" "0" "missing audio directory detection"
+
+    FIXTURE_DIR="$tmpdir/fixtures"
+    OUTDIR="$tmpdir/results"
+    CANDIDATE_BACKEND="v2"
+    REQUIRE_CANDIDATE_PASS=1
+    build_compare_args
+    assert_eq "${COMPARE_ARGS[4]}" "$OUTDIR" "comparison output forwarding"
+    assert_eq "${COMPARE_ARGS[8]}" "v2" "candidate backend forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 3]}" "--language" "English hint forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 2]}" "en" "English language forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--require-candidate-pass" "candidate gate forwarding"
 
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
@@ -185,6 +224,10 @@ while [[ $# -gt 0 ]]; do
             need_value "$@"
             UNIFIED_TRAILING_SILENCE_MS="$2"
             shift 2
+            ;;
+        --require-candidate-pass)
+            REQUIRE_CANDIDATE_PASS=1
+            shift
             ;;
         --self-test)
             SELF_TEST=1
@@ -260,21 +303,5 @@ MSG
 fi
 
 echo "running public v3-vs-$CANDIDATE_BACKEND ASR comparison on $clip_count clip(s)..."
-compare_args=(
-    "./run-real-model-comparison.sh"
-    "--input-dir" "$FIXTURE_DIR"
-    "--out-dir" "$OUTDIR"
-    "--trials" "$TRIALS"
-    "--candidate-backend" "$CANDIDATE_BACKEND"
-    "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS"
-    "--public-corpus"
-    "--show-transcripts"
-    "--show-paths"
-)
-# The product would select either English-only model only for an explicit
-# English dictation setting, so compare it with production v3 under the same
-# hint rather than giving the candidate an easier auto-detected baseline.
-if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" ]]; then
-    compare_args+=( "--language" "en" )
-fi
-"${compare_args[@]}"
+build_compare_args
+"${COMPARE_ARGS[@]}"

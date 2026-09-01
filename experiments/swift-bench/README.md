@@ -438,6 +438,15 @@ For a Unified, v2, or encoder product-candidate gate, add
 trials, 25 comparable clips and 1,000 reference words, at least one
 demonstrated error reduction, no per-clip or aggregate word-error increase,
 and average p50 latency no more than 1.25× production.
+The public comparison wrapper accepts and forwards the gate, for example:
+
+```sh
+./run-public-model-comparison.sh \
+  --candidate-backend v2 \
+  --trials 3 \
+  --require-candidate-pass
+```
+
 It compares the candidate's worst observed transcript with production's best
 on every clip so unstable baseline output cannot hide a regression. Private
 corpora additionally require `--references-hand-audited`.

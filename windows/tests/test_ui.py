@@ -230,6 +230,52 @@ class SetupWindowTests(unittest.TestCase):
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
 
+    def test_setup_hotkey_change_applies_and_persists_before_finish(self):
+        window = self.make_window("pending")
+        window.app.settings = {
+            "hotkey": "right alt",
+            "trigger": "hold",
+            "setup_complete": False,
+        }
+        window.hotkey = mock.Mock()
+        window.hotkey.get.return_value = "f8"
+        window.instructions = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._hotkey_changed()
+
+        self.assertEqual(window.app.settings["hotkey"], "f8")
+        save.assert_called_once_with(window.app.settings)
+        set_text.assert_called_once_with(
+            window.instructions,
+            "Hold F8, speak, then release to type at the cursor.\n"
+            "Speech stays on this PC; no audio or transcripts are uploaded.",
+        )
+
+    def test_setup_rejects_unknown_hotkey_without_saving(self):
+        window = self.make_window("pending")
+        window.app.settings = {"hotkey": "right alt", "trigger": "hold"}
+        window.hotkey = mock.Mock()
+        window.hotkey.get.return_value = "letter a"
+
+        with mock.patch.object(ui.cfg, "save") as save:
+            window._hotkey_changed()
+
+        window.hotkey.set.assert_called_once_with("right alt")
+        self.assertEqual(window.app.settings["hotkey"], "right alt")
+        save.assert_not_called()
+
+    def test_setup_instructions_respect_existing_toggle_mode(self):
+        window = self.make_window("ready")
+        window.app.settings = {"hotkey": "f9", "trigger": "toggle"}
+
+        self.assertEqual(
+            window._dictation_instructions(),
+            "Press F9 to start, then press it again to type at the cursor.\n"
+            "Speech stays on this PC; no audio or transcripts are uploaded.",
+        )
+
     def test_microphone_check_runs_off_the_ui_thread(self):
         window = self.make_window("ready")
 

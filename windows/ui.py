@@ -89,6 +89,11 @@ class _WindowHost:
 _WINDOW_HOST = None
 _WINDOW_HOST_LOCK = threading.Lock()
 
+ALTGR_HOTKEY_GUIDANCE = (
+    "If Right Alt types @, €, or accented letters, Windows is using AltGr and "
+    "that key will not start dictation. Choose F8 or another key."
+)
+
 
 def _window_host():
     global _WINDOW_HOST
@@ -470,13 +475,13 @@ class SetupWindow:
         ttk.Label(frame, text="Presspeech is almost ready",
                   font=("Segoe UI", 16, "bold")).grid(
                       row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(
+        self.instructions = ttk.Label(
             frame,
-            text=("Hold %s, speak, then release to type at the cursor.\n"
-                  "Speech stays on this PC; no audio or transcripts are uploaded."
-                  % self.app.settings.get("hotkey", "right alt").title()),
+            text=self._dictation_instructions(),
             justify="left",
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 16))
+        )
+        self.instructions.grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(6, 16))
 
         ttk.Label(frame, text="Speech model").grid(row=2, column=0, sticky="w")
         self.model_label = ttk.Label(frame, text="Preparing…")
@@ -526,18 +531,28 @@ class SetupWindow:
             command=self.app.open_default_input_settings,
         ).pack(side="left", padx=(8, 0))
 
-        ttk.Label(frame, text="Push-to-talk").grid(row=8, column=0, sticky="w")
-        ttk.Label(frame, text=self.app.settings.get("hotkey", "right alt").title()).grid(
-            row=8, column=1, sticky="w", padx=(12, 0), pady=3)
+        hotkey_label = ttk.Label(frame, text="Push-to-talk key")
+        hotkey_label.grid(row=8, column=0, sticky="w")
+        self.hotkey = ttk.Combobox(
+            frame, values=cfg.HOTKEYS, state="readonly", width=18)
+        self.hotkey.set(self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]))
+        self.hotkey.grid(row=8, column=1, sticky="w", padx=(12, 0), pady=3)
+        self.hotkey.bind("<<ComboboxSelected>>", self._hotkey_changed)
+        ttk.Label(
+            frame,
+            text=ALTGR_HOTKEY_GUIDANCE,
+            justify="left",
+            wraplength=560,
+        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(3, 8))
 
         self.autostart = tk.BooleanVar(
             value=self.app.settings.get("autostart", True))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
-                            row=9, column=0, columnspan=2, sticky="w", pady=(10, 14))
+                            row=10, column=0, columnspan=2, sticky="w", pady=(2, 14))
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=10, column=0, columnspan=2, sticky="ew")
+        buttons.grid(row=11, column=0, columnspan=2, sticky="ew")
         self.try_button = ttk.Button(
             buttons, text="Try Dictation", command=self.app.open_scratchpad,
             state="disabled")
@@ -557,6 +572,9 @@ class SetupWindow:
         root.update_idletasks()
         _label_control(microphone_label, self.device)
         _label_control(microphone_check_label, self.microphone_status)
+        _label_control(hotkey_label, self.hotkey)
+        _name_control(
+            self.hotkey, "Push-to-talk key. " + ALTGR_HOTKEY_GUIDANCE)
         self.scrollable_body.fit_to_screen()
         root.after(100, self._poll_model)
         root.after(150, self._check_microphone)
@@ -589,6 +607,32 @@ class SetupWindow:
     def _microphone_changed(self, _event=None):
         _set_accessible_text(self.microphone_status, "Waiting to check…")
         self.root.after(0, self._check_microphone)
+
+    def _dictation_instructions(self):
+        hotkey = self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]).title()
+        if self.app.settings.get("trigger", cfg.DEFAULTS["trigger"]) == "toggle":
+            action = (
+                "Press %s to start, then press it again to type at the cursor."
+                % hotkey
+            )
+        else:
+            action = "Hold %s, speak, then release to type at the cursor." % hotkey
+        return (action + "\nSpeech stays on this PC; no audio or transcripts "
+                "are uploaded.")
+
+    def _hotkey_changed(self, _event=None):
+        selected = self.hotkey.get()
+        if selected not in cfg.HOTKEYS:
+            self.hotkey.set(
+                self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]))
+            return
+        if selected == self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]):
+            return
+        # Persist immediately so Set Up Later, a model download failure, or a
+        # restart cannot strand an AltGr-layout user on the unusable default.
+        self.app.settings["hotkey"] = selected
+        cfg.save(self.app.settings)
+        _set_accessible_text(self.instructions, self._dictation_instructions())
 
     def _check_microphone(self):
         if self.microphone_checking or self.root is None:
@@ -884,6 +928,11 @@ class SettingsWindow:
         self.var_hotkey.grid(row=row, column=1, sticky="w", padx=10, pady=2)
         row += 1
 
+        ttk.Label(
+            f, text=ALTGR_HOTKEY_GUIDANCE, justify="left", wraplength=620,
+        ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
+        row += 1
+
         ttk.Label(f, text="Trigger").grid(row=row, column=0, sticky="w", pady=2)
         self.var_trigger = tk.StringVar(value=s["trigger"])
         ttk.Radiobutton(f, text="Hold to talk", value="hold", variable=self.var_trigger).grid(
@@ -1029,6 +1078,8 @@ class SettingsWindow:
                 (spoken_label, self.spoken_entry),
                 (replacement_label, self.replacement_entry)):
             _label_control(label, control)
+        _name_control(
+            self.var_hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
         _name_control(self.listbox, "Dictionary rules")
         self.scrollable_body.fit_to_screen()
 

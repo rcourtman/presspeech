@@ -46,15 +46,20 @@ and the Apple Neural Engine. The default model is multilingual
 Download the self-contained installer—Python is not required:
 
 - [Download Presspeech for Windows 0.1.10](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.10/Presspeech-Setup-0.1.10-x64.exe)
-- Run the installer, then launch Presspeech from the Start Menu.
+- Use the [Windows install guide](https://rcourtman.github.io/presspeech/windows.html#download-verify-run)
+  to download the matching checksum and have PowerShell verify it before you
+  run the installer.
+- After verification, run the installer and launch Presspeech from the Start
+  Menu.
 - On first launch, wait for **Preparing speech model…** to disappear before
   the first dictation.
 
 The installer is currently unsigned, so SmartScreen may show **Unknown
-publisher**. Choose **More info → Run anyway** after checking the release
-checksum. The installed app is about 4.4 GB. On a fresh PC with NVIDIA CUDA,
-the default Parakeet model download is about 2.5 GB; without usable CUDA,
-Presspeech selects the smaller Whisper base.en CPU model (about 141 MiB).
+publisher**. Choose **More info → Run anyway** only after the guide reports
+that SHA-256 verification succeeded. The installed app is about 4.4 GB. On a
+fresh PC with NVIDIA CUDA, the default Parakeet model download is about 2.5 GB;
+without usable CUDA, Presspeech selects the smaller Whisper base.en CPU model
+(about 141 MiB).
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.
@@ -164,6 +169,9 @@ Useful menu items:
 - **Settings → Text → Restore clipboard after paste** — opt-in guarded restore
   of the previous macOS pasteboard contents; skipped if another process copies
   newer content
+- **Settings → Behavior → Launch at Login** — keep dictation available after
+  sign-in; if macOS needs approval, selecting the marked setting opens Login
+  Items
 - **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, and bounded recent logs
 
 ## Privacy
