@@ -4571,14 +4571,20 @@ enum TextInsertionStrategy: String {
     }
 }
 
-/// The exact application window that owned the cursor when a recording began.
-/// Accessibility permission is already a runtime requirement for synthetic
-/// paste events, so using the focused AX window does not broaden Presspeech's
-/// permission footprint. Keeping the opaque element (rather than a title or
-/// document URL) also avoids retaining private window metadata.
+/// The application (and, where available, the exact window) that owned the
+/// cursor when a recording began. Accessibility permission is already a
+/// runtime requirement for synthetic paste events, so using the focused AX
+/// window does not broaden Presspeech's permission footprint. Keeping the
+/// opaque element (rather than a title or document URL) also avoids
+/// retaining private window metadata.
+///
+/// `focusedWindow` is optional: several Electron/Chromium apps don't
+/// reliably publish an accessibility-focused UI element even while
+/// genuinely frontmost, which previously made capture fail outright for
+/// them (see #33). `processIdentifier` alone is always required.
 struct DictationPasteTarget {
     let processIdentifier: pid_t
-    let focusedWindow: AXUIElement
+    let focusedWindow: AXUIElement?
 }
 
 enum TextInsertionOutcome: Equatable {
@@ -4604,29 +4610,37 @@ func dictationCompletionNotice(processedText: String,
 
 @MainActor
 func currentDictationPasteTarget() -> DictationPasteTarget? {
-    let systemWide = AXUIElementCreateSystemWide()
-    var applicationValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(systemWide,
-                                        kAXFocusedApplicationAttribute as CFString,
-                                        &applicationValue) == .success,
-          let applicationValue,
-          CFGetTypeID(applicationValue) == AXUIElementGetTypeID() else { return nil }
+    // NSWorkspace tracks window-server frontmost-app state directly. Unlike
+    // kAXFocusedApplicationAttribute off the system-wide AX element (the
+    // previous source for the pid here), it does not depend on the target
+    // app having published an accessibility-focused UI element — several
+    // Electron/Chromium apps don't reliably do that even while genuinely
+    // frontmost, which made capture fail outright for them. See #33.
+    guard let frontmost = NSWorkspace.shared.frontmostApplication else { return nil }
+    let processIdentifier = frontmost.processIdentifier
+    guard processIdentifier > 0 else { return nil }
 
-    let application = applicationValue as! AXUIElement
+    // Best-effort: still capture the focused window when the app publishes
+    // one, so a same-app internal re-render can be told apart from a real
+    // app switch in dictationPasteTargetMatches below. Never required for a
+    // valid capture — requiring it was the #33 bug.
+    let application = AXUIElementCreateApplication(processIdentifier)
     _ = AXUIElementSetMessagingTimeout(application, PASTE_TARGET_AX_TIMEOUT_SECONDS)
-    var processIdentifier: pid_t = 0
-    guard AXUIElementGetPid(application, &processIdentifier) == .success,
-          processIdentifier > 0 else { return nil }
-
     var windowValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(application,
+    let windowResult = AXUIElementCopyAttributeValue(application,
                                         kAXFocusedWindowAttribute as CFString,
-                                        &windowValue) == .success,
-          let windowValue,
-          CFGetTypeID(windowValue) == AXUIElementGetTypeID() else { return nil }
+                                        &windowValue)
+    let focusedWindow: AXUIElement?
+    if windowResult == .success,
+       let windowValue,
+       CFGetTypeID(windowValue) == AXUIElementGetTypeID() {
+        focusedWindow = (windowValue as! AXUIElement)
+    } else {
+        focusedWindow = nil
+    }
 
     return DictationPasteTarget(processIdentifier: processIdentifier,
-                                focusedWindow: windowValue as! AXUIElement)
+                                focusedWindow: focusedWindow)
 }
 
 @MainActor
@@ -4634,7 +4648,13 @@ func dictationPasteTargetMatches(_ expected: DictationPasteTarget,
                                  _ current: DictationPasteTarget?) -> Bool {
     guard let current,
           expected.processIdentifier == current.processIdentifier else { return false }
-    return CFEqual(expected.focusedWindow, current.focusedWindow)
+    // When either capture lacks a window (an app that doesn't reliably
+    // publish AX focus — see #33), same-process is the strongest check
+    // available, so accept it rather than failing closed forever for that
+    // app. When both have a window, keep the original exact-window check.
+    guard let expectedWindow = expected.focusedWindow,
+          let currentWindow = current.focusedWindow else { return true }
+    return CFEqual(expectedWindow, currentWindow)
 }
 
 func dictationDeliveryRoute(capturedTargetAvailable: Bool,
