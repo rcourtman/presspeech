@@ -4462,6 +4462,18 @@ private func recordingReleaseAction(capturedSampleCount: Int,
         : .transcribe(duration: duration)
 }
 
+/// A release that captured nothing at all is not a short press — the tap ran
+/// and delivered no samples. That is precisely what a capture-format mismatch
+/// looks like from here: AVAudioEngine raises no error, the buffers are simply
+/// silent, and the clip is discarded as too short with no hint as to why. Name
+/// the likely cause instead of logging an empty clip and moving on.
+private func noAudioCapturedHint(capturedSampleCount: Int) -> String? {
+    guard capturedSampleCount == 0 else { return nil }
+    return "release: no samples captured — the input tap delivered nothing. "
+        + "Compare the \"AudioCapture: input\" rate logged above against the "
+        + "input device's actual rate; a mismatch yields silence, not an error."
+}
+
 private struct DictationTextProcessingResult: Equatable {
     let text: String
     let appliedCorrectionCount: Int
@@ -8145,6 +8157,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         case .discardTooShort(let duration):
             recordingPasteTarget = nil
             dur = duration
+            if let hint = noAudioCapturedHint(capturedSampleCount: samples.count) {
+                log(hint)
+            }
             log("release: clip too short (\(String(format: "%.2f", dur)) s), discarding")
             setMenuBarState(.idle)
             rebuildMenu()
@@ -12704,6 +12719,8 @@ private enum PresspeechSelfTest {
             return runSuite("audio-route", testAudioRouteChangeDecision)
         case "recording-lifecycle":
             return runSuite("recording-lifecycle", testRecordingLifecycle)
+        case "silent-capture":
+            return runSuite("silent-capture", testSilentCaptureHint)
         case "power-state":
             return runSuite("power-state", testPowerStateRecoveryDecision)
         case "model-integrity":
@@ -12757,6 +12774,7 @@ private enum PresspeechSelfTest {
         try testSpeechModelStartupStatus()
         try testAudioRouteChangeDecision()
         try testRecordingLifecycle()
+        try testSilentCaptureHint()
         try testPowerStateRecoveryDecision()
         try testModelIntegrity()
         try testUpdate()
@@ -12765,6 +12783,18 @@ private enum PresspeechSelfTest {
         try testDiagnostics()
         try testIdentityMigration()
         try testLaunchAtLogin()
+    }
+
+    private static func testSilentCaptureHint() throws {
+        try expect(noAudioCapturedHint(capturedSampleCount: 0) != nil,
+                   equals: true,
+                   "a capture with no samples should name the format mismatch")
+        try expect(noAudioCapturedHint(capturedSampleCount: 1) == nil,
+                   equals: true,
+                   "a short but non-empty capture should not blame the format")
+        try expect(noAudioCapturedHint(capturedSampleCount: 16_000) == nil,
+                   equals: true,
+                   "a full clip should not emit the silent-capture hint")
     }
 
     private static func testLaunchAtLogin() throws {
