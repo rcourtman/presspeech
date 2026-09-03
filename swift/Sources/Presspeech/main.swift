@@ -3622,7 +3622,15 @@ final class AudioCapture: @unchecked Sendable {
 
         let input = engine.inputNode
         applyInputDevicePreference(inputDevicePreference, to: input)
-        let inputFormat = input.outputFormat(forBus: 0)
+        // inputFormat(forBus:), not outputFormat(forBus:). The latter reports
+        // the engine graph's rate, which follows the default *output* device.
+        // applyInputDevicePreference() has just repointed the audio unit at a
+        // different input device, so the two disagree whenever output and input
+        // hardware run at different rates — a 44.1 kHz Bluetooth headset
+        // alongside a 48 kHz microphone. A tap installed against the graph rate
+        // then receives buffers of pure silence, with no error raised anywhere:
+        // the capture simply comes back empty and is discarded as too short.
+        let inputFormat = input.inputFormat(forBus: 0)
 
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
