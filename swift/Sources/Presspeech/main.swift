@@ -69,8 +69,28 @@ let MAX_MAX_RECORDING_SECONDS: TimeInterval = 600
 // the target app must be given a moment to read the transcript off the
 // pasteboard before we write the old contents back over it. Quartz has
 // no paste-consumed acknowledgement, which is why restoration remains
-// an opt-in, best-effort behavior.
-let CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 0.4
+// an opt-in, best-effort behavior. User-configurable (Settings menu →
+// Behavior → Clipboard Restore Delay) because the right value depends on
+// how slow the target app's own paste handling is — Electron/Chromium
+// apps have been observed needing noticeably longer than the original
+// 0.4s default, which raced the real paste and delivered stale clipboard
+// content instead of the transcript.
+let DEFAULT_CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 1.2
+let MIN_CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 0.2
+let MAX_CLIPBOARD_RESTORE_DELAY_SECONDS: TimeInterval = 3.0
+
+func normalizedClipboardRestoreDelaySeconds(storedValue value: Any?) -> TimeInterval? {
+    let raw: TimeInterval?
+    if let number = value as? NSNumber {
+        raw = number.doubleValue
+    } else if let string = value as? String {
+        raw = TimeInterval(string.trimmingCharacters(in: .whitespacesAndNewlines))
+    } else {
+        raw = nil
+    }
+    guard let raw, raw.isFinite else { return nil }
+    return min(max(raw, MIN_CLIPBOARD_RESTORE_DELAY_SECONDS), MAX_CLIPBOARD_RESTORE_DELAY_SECONDS)
+}
 let PASTE_TARGET_AX_TIMEOUT_SECONDS: Float = 0.25
 let UPDATE_CHECK_FIRST_DELAY_SECONDS: TimeInterval = 30
 let UPDATE_CHECK_INTERVAL_SECONDS: TimeInterval = 6 * 3600  // 6h
@@ -433,6 +453,18 @@ let MAXIMUM_RECORDING_LENGTH_CHOICES: [MaximumRecordingLengthChoice] = [
     MaximumRecordingLengthChoice(seconds: 120, title: "2 minutes (Default)"),
     MaximumRecordingLengthChoice(seconds: 300, title: "5 minutes"),
     MaximumRecordingLengthChoice(seconds: 600, title: "10 minutes"),
+]
+
+struct ClipboardRestoreDelayChoice: Equatable {
+    let seconds: TimeInterval
+    let title: String
+}
+
+let CLIPBOARD_RESTORE_DELAY_CHOICES: [ClipboardRestoreDelayChoice] = [
+    ClipboardRestoreDelayChoice(seconds: 0.4, title: "0.4 seconds (original default)"),
+    ClipboardRestoreDelayChoice(seconds: 0.8, title: "0.8 seconds"),
+    ClipboardRestoreDelayChoice(seconds: 1.2, title: "1.2 seconds (Default)"),
+    ClipboardRestoreDelayChoice(seconds: 2.0, title: "2.0 seconds (slow apps, e.g. Electron)"),
 ]
 
 func normalizedMaximumRecordingSeconds(storedValue value: Any?) -> TimeInterval? {
@@ -2088,6 +2120,7 @@ final class Settings: @unchecked Sendable {
     private static let keyMuteWhileRecording = "mute_while_recording"
     private static let keyPlayFeedbackSounds = "play_feedback_sounds"
     private static let keyRestoreClipboardAfterPaste = "restore_clipboard_after_paste"
+    private static let keyClipboardRestoreDelaySeconds = "clipboard_restore_delay_seconds"
     private static let keyShowInDock = "show_in_dock"
     private static let keyInputDevice = "input_device"
     private static let keyCheckForUpdates = "check_for_updates"
@@ -2224,6 +2257,19 @@ final class Settings: @unchecked Sendable {
             return defaults.bool(forKey: Self.keyRestoreClipboardAfterPaste)
         }
         set { defaults.set(newValue, forKey: Self.keyRestoreClipboardAfterPaste) }
+    }
+
+    var clipboardRestoreDelaySeconds: TimeInterval {
+        get {
+            normalizedClipboardRestoreDelaySeconds(
+                storedValue: defaults.object(forKey: Self.keyClipboardRestoreDelaySeconds)
+            ) ?? DEFAULT_CLIPBOARD_RESTORE_DELAY_SECONDS
+        }
+        set {
+            let normalized = normalizedClipboardRestoreDelaySeconds(storedValue: newValue)
+                ?? DEFAULT_CLIPBOARD_RESTORE_DELAY_SECONDS
+            defaults.set(normalized, forKey: Self.keyClipboardRestoreDelaySeconds)
+        }
     }
 
     var showInDock: Bool {
@@ -4740,11 +4786,13 @@ enum TextInserter {
     static func insert(_ text: String,
                        strategy: TextInsertionStrategy = defaultStrategy,
                        restoreClipboard: Bool = false,
+                       restoreDelaySeconds: TimeInterval = DEFAULT_CLIPBOARD_RESTORE_DELAY_SECONDS,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         for candidate in textInsertionStrategyChain(primary: strategy) {
             let outcome = insert(text,
                                  using: candidate,
                                  restoreClipboard: restoreClipboard,
+                                 restoreDelaySeconds: restoreDelaySeconds,
                                  expectedTarget: expectedTarget)
             if outcome == .inserted {
                 if candidate != strategy {
@@ -4761,11 +4809,13 @@ enum TextInserter {
     private static func insert(_ text: String,
                                using strategy: TextInsertionStrategy,
                                restoreClipboard: Bool,
+                               restoreDelaySeconds: TimeInterval,
                                expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         switch strategy {
         case .clipboardPaste:
             return ClipboardPasteInserter.insert(text,
                                                  restoreClipboard: restoreClipboard,
+                                                 restoreDelaySeconds: restoreDelaySeconds,
                                                  expectedTarget: expectedTarget)
         case .directUnicode:
             return DirectUnicodeInserter.insert(text, expectedTarget: expectedTarget)
@@ -4874,6 +4924,7 @@ private enum ClipboardPasteInserter {
 
     static func insert(_ text: String,
                        restoreClipboard: Bool = false,
+                       restoreDelaySeconds: TimeInterval = DEFAULT_CLIPBOARD_RESTORE_DELAY_SECONDS,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         guard dictationPasteTargetMatches(expectedTarget,
                                           currentDictationPasteTarget()) else {
@@ -4940,7 +4991,7 @@ private enum ClipboardPasteInserter {
         }
 
         if let previous {
-            DispatchQueue.main.asyncAfter(deadline: .now() + CLIPBOARD_RESTORE_DELAY_SECONDS) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + restoreDelaySeconds) {
                 if restore(previous, to: pb, expectedChangeCount: writeChangeCount) {
                     log("clipboard restored after paste")
                 }
@@ -8205,6 +8256,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             insertionOutcome = TextInserter.insert(
                                 deliveredText,
                                 restoreClipboard: settings.restoreClipboardAfterPaste,
+                                restoreDelaySeconds: settings.clipboardRestoreDelaySeconds,
                                 expectedTarget: expectedTarget
                             )
                         } else {
@@ -10065,6 +10117,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         restoreClipboard.toolTip = "After pasting dictated text, put your previous clipboard contents back."
         sub.addItem(restoreClipboard)
 
+        sub.addItem(buildClipboardRestoreDelaySettingsItem())
+
         let automaticUpdates = NSMenuItem(title: "Automatically check for updates",
                                           action: #selector(toggleCheckForUpdates(_:)),
                                           keyEquivalent: "")
@@ -10138,6 +10192,40 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         parent.submenu = sub
         parent.toolTip = "Automatically stop and transcribe a recording at this length."
+        return parent
+    }
+
+    private func buildClipboardRestoreDelaySettingsItem() -> NSMenuItem {
+        let current = settings.clipboardRestoreDelaySeconds
+        let parent = NSMenuItem(title: "Clipboard Restore Delay",
+                                action: nil,
+                                keyEquivalent: "")
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+
+        if !CLIPBOARD_RESTORE_DELAY_CHOICES.contains(where: { $0.seconds == current }) {
+            let custom = NSMenuItem(title: "\(String(format: "%.1f", current)) seconds (Custom)",
+                                    action: nil,
+                                    keyEquivalent: "")
+            custom.state = .on
+            sub.addItem(custom)
+            sub.addItem(.separator())
+        }
+
+        for choice in CLIPBOARD_RESTORE_DELAY_CHOICES {
+            let item = NSMenuItem(title: choice.title,
+                                  action: #selector(selectClipboardRestoreDelay(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.state = choice.seconds == current ? .on : .off
+            item.representedObject = choice.seconds
+            sub.addItem(item)
+        }
+
+        parent.submenu = sub
+        parent.toolTip = "How long to wait after pasting before restoring your previous clipboard. "
+            + "Raise this if apps like Electron-based chat clients sometimes end up with your old "
+            + "clipboard contents instead of the dictated text."
         return parent
     }
 
@@ -11918,6 +12006,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard !isRecording,
               let seconds = sender.representedObject as? Int else { return }
         settings.maxRecordingSeconds = TimeInterval(seconds)
+        rebuildMenu()
+    }
+
+    @objc private func selectClipboardRestoreDelay(_ sender: NSMenuItem) {
+        guard let seconds = sender.representedObject as? TimeInterval else { return }
+        settings.clipboardRestoreDelaySeconds = seconds
         rebuildMenu()
     }
 
