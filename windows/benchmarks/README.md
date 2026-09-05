@@ -3,8 +3,6 @@
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER/CER,
 final-word retention, silence false positives, and Whisper VAD speech retention.
-Reports identify the immutable model repository/revision and retain the
-historical consensus WER alongside all-trial and best/worst-trial corpus WER.
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -31,9 +29,6 @@ but canonical fixtures make runs easier to compare.
 - Keep the same clips, references, run count, model precision, and hardware when
   comparing a decoding or VAD change. Reports record the effective Whisper VAD
   policy and per-trial VAD-retained duration.
-- Use `aggregate_worst_trial_wer`, rather than consensus `aggregate_wer`, when
-  screening a candidate for regressions. It sums each clip's worst exact word
-  error count, so an intermittent internal substitution cannot be voted away.
 - Compare Parakeet optimizations using both total inference latency and the
   synchronized per-stage medians. Stage barriers are benchmark-only and are
   deliberately disabled during interactive dictation.

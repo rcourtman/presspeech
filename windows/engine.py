@@ -88,22 +88,6 @@ def is_moonshine(model_name):
     return model_name == MOONSHINE_NAME
 
 
-def model_snapshot(model_name):
-    """Return the immutable model source exercised by a benchmark or release."""
-    if is_parakeet(model_name):
-        repository, revision = PARAKEET_MODEL, PARAKEET_REVISION
-    elif is_nemotron(model_name):
-        repository, revision = NEMOTRON_MODEL, NEMOTRON_REVISION
-    elif is_moonshine(model_name):
-        repository, revision = MOONSHINE_MODEL, MOONSHINE_REVISION
-    else:
-        try:
-            repository, revision = WHISPER_MODELS[model_name]
-        except KeyError:
-            raise ValueError("unsupported speech model: %s" % model_name) from None
-    return {"repository": repository, "revision": revision}
-
-
 def cuda_available():
     """Return whether the packaged Torch runtime can use NVIDIA CUDA."""
     try:
