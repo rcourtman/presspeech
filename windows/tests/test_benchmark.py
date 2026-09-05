@@ -1,7 +1,9 @@
 import json
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest import mock
 
 import benchmark
@@ -19,6 +21,20 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["word_errors"], 1)
         self.assertEqual(metrics["reference_words"], 2)
         self.assertEqual(metrics["wer"], 0.5)
+
+    def test_trial_accuracy_exposes_intermittent_non_final_error(self):
+        metrics = benchmark.trial_accuracy_metrics(
+            "open settings now",
+            ["open settings now", "open sittings now", "open settings now"],
+        )
+
+        self.assertEqual(metrics["trials"], 3)
+        self.assertEqual(metrics["exact_match_trials"], 2)
+        self.assertEqual(metrics["all_word_errors"], [0, 1, 0])
+        self.assertEqual(metrics["best_wer"], 0)
+        self.assertEqual(metrics["median_wer"], 0)
+        self.assertEqual(metrics["worst_wer"], 1 / 3)
+        self.assertIsNone(benchmark.trial_accuracy_metrics("...", ["words"]))
 
     def test_edit_distance_handles_insert_delete_and_replace(self):
         self.assertEqual(benchmark.edit_distance(["a", "b"], ["a", "x", "b"]), 1)
@@ -152,6 +168,69 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(
             result["samples"][0]["backend_stages"]["generate"]["median"],
             0.20,
+        )
+        self.assertEqual(result["benchmark_version"], 2)
+        self.assertEqual(result["model_snapshot"], {
+            "repository": benchmark.engine.PARAKEET_MODEL,
+            "revision": benchmark.engine.PARAKEET_REVISION,
+        })
+
+    def test_benchmark_aggregates_every_accuracy_trial_conservatively(self):
+        manifest = {
+            "runs": 2,
+            "samples": [
+                {
+                    "id": "short",
+                    "audio": "short.wav",
+                    "reference": "alpha beta",
+                    "reference_reviewed": True,
+                },
+                {
+                    "id": "longer",
+                    "audio": "longer.wav",
+                    "reference": "one two three four",
+                    "reference_reviewed": True,
+                },
+            ],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "int8"
+        transcriber.transcribe.side_effect = [
+            "alpha beta",
+            "gamma beta",
+            "one too three four",
+            "one too free four",
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        self.assertAlmostEqual(result["aggregate_wer"], 1 / 6)
+        self.assertAlmostEqual(result["aggregate_trial_wer"], 4 / 12)
+        self.assertAlmostEqual(result["aggregate_best_trial_wer"], 1 / 6)
+        self.assertAlmostEqual(result["aggregate_worst_trial_wer"], 3 / 6)
+        self.assertEqual(
+            result["samples"][0]["trial_accuracy"]["all_word_errors"],
+            [0, 1],
+        )
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn(
+            "Snapshot: nvidia/parakeet-tdt-0.6b-v3@", output.getvalue())
+        self.assertIn(
+            "16.67% consensus | 33.33% all trials | "
+            "16.67/50.00% best/worst trial envelope",
+            output.getvalue(),
         )
 
     def test_reviewed_silence_scores_empty_output_as_clean(self):

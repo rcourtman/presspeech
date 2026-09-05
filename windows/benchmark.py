@@ -65,6 +65,27 @@ def accuracy_metrics(reference, hypothesis):
     }
 
 
+def trial_accuracy_metrics(reference, hypotheses):
+    """Expose repeated-trial variation instead of hiding it in a consensus."""
+    metrics = [accuracy_metrics(reference, hypothesis) for hypothesis in hypotheses]
+    if not metrics or not metrics[0]["reference_words"]:
+        return None
+    word_errors = [item["word_errors"] for item in metrics]
+    word_error_rates = [item["wer"] for item in metrics]
+    return {
+        "trials": len(metrics),
+        "exact_match_trials": sum(item["exact_match"] for item in metrics),
+        "best_word_errors": min(word_errors),
+        "median_word_errors": statistics.median(word_errors),
+        "worst_word_errors": max(word_errors),
+        "all_word_errors": word_errors,
+        "best_wer": min(word_error_rates),
+        "median_wer": statistics.median(word_error_rates),
+        "worst_wer": max(word_error_rates),
+        "all_wer": word_error_rates,
+    }
+
+
 def final_word_metrics(reference, hypotheses):
     """Score final-word retention across every trial of a reviewed clip."""
     reference_words = _normalise_words(reference)
@@ -297,11 +318,22 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         )
         reference = sample.get("reference", "")
         if reference and result["reference_reviewed"]:
-            result["reference"] = reference
-            result["accuracy"] = accuracy_metrics(reference, consensus)
-            result["final_word"] = final_word_metrics(reference, transcripts)
+            trial_accuracy = trial_accuracy_metrics(reference, transcripts)
+            if trial_accuracy is not None:
+                result["reference"] = reference
+                result["accuracy"] = accuracy_metrics(reference, consensus)
+                result["trial_accuracy"] = trial_accuracy
+                result["final_word"] = final_word_metrics(reference, transcripts)
+            else:
+                result["accuracy"] = None
+                result["trial_accuracy"] = None
+                result["final_word"] = None
+                result["accuracy_note"] = (
+                    "Reviewed reference contains no scoreable words."
+                )
         else:
             result["accuracy"] = None
+            result["trial_accuracy"] = None
             result["final_word"] = None
             result["accuracy_note"] = "Reference transcript requires human review."
         sample_results.append(result)
@@ -320,6 +352,20 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     reviewed_final_words = [
         item for item in reviewed if item["final_word"] is not None
     ]
+    total_trial_words = sum(
+        item["accuracy"]["reference_words"] * item["trial_accuracy"]["trials"]
+        for item in reviewed
+    )
+    total_trial_errors = sum(
+        sum(item["trial_accuracy"]["all_word_errors"])
+        for item in reviewed
+    )
+    total_best_trial_errors = sum(
+        item["trial_accuracy"]["best_word_errors"] for item in reviewed
+    )
+    total_worst_trial_errors = sum(
+        item["trial_accuracy"]["worst_word_errors"] for item in reviewed
+    )
     model_dtype = str(getattr(transcriber.model, "dtype", "unknown"))
     cuda_allocated_mib = None
     try:
@@ -329,9 +375,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     except Exception:
         pass
     return {
-        "benchmark_version": 1,
+        "benchmark_version": 2,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
+        "model_snapshot": engine.model_snapshot(model_name),
         # Keep reports interpretable across faster-whisper updates. The
         # boundary policy can affect both WER and silence false positives.
         "whisper_vad_policy": (
@@ -346,7 +393,19 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         "warmup_seconds": warmup_seconds,
         "sample_count": len(sample_results),
         "reviewed_sample_count": len(reviewed),
+        # Keep the historical consensus WER while also exposing every measured
+        # run. Candidate evaluation should use the worst-trial corpus value so
+        # intermittent substitutions cannot be voted away by modal output.
         "aggregate_wer": total_word_errors / total_words if total_words else None,
+        "aggregate_trial_wer": (
+            total_trial_errors / total_trial_words if total_trial_words else None
+        ),
+        "aggregate_best_trial_wer": (
+            total_best_trial_errors / total_words if total_words else None
+        ),
+        "aggregate_worst_trial_wer": (
+            total_worst_trial_errors / total_words if total_words else None
+        ),
         "reviewed_silence_sample_count": len(reviewed_silence),
         "silence_false_positive_count": sum(
             item["silence"]["false_positive"] for item in reviewed_silence),
@@ -377,6 +436,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
 def _print_summary(result):
     print("Model: %s | precision: %s (%s)" %
           (result["model"], result["precision"], result["model_dtype"]))
+    snapshot = result["model_snapshot"]
+    print("Snapshot: %s@%s" %
+          (snapshot["repository"], snapshot["revision"]))
     vad_policy = result.get("whisper_vad_policy")
     if vad_policy is not None:
         print(
@@ -393,6 +455,14 @@ def _print_summary(result):
         print("CUDA tensors: %.1f MiB" % result["cuda_allocated_mib"])
     print("Load: %.3fs | warm-up: %.3fs" %
           (result["load_seconds"], result["warmup_seconds"]))
+    if result["aggregate_wer"] is not None:
+        print("Reviewed corpus WER: %.2f%% consensus | %.2f%% all trials | "
+              "%.2f/%.2f%% best/worst trial envelope" % (
+                  result["aggregate_wer"] * 100,
+                  result["aggregate_trial_wer"] * 100,
+                  result["aggregate_best_trial_wer"] * 100,
+                  result["aggregate_worst_trial_wer"] * 100,
+              ))
     for sample in result["samples"]:
         timing = sample["inference_seconds"]
         print("\n%s: %.3fs median (%.1fx realtime, adaptive/max release-to-paste %.3f/%.3fs)" % (
@@ -428,8 +498,14 @@ def _print_summary(result):
         elif sample["accuracy"] is None:
             print("  Accuracy: pending reviewed reference")
         else:
-            print("  WER: %.2f%% | CER: %.2f%%" % (
+            trial_accuracy = sample["trial_accuracy"]
+            print("  WER: %.2f%% consensus | %.2f/%.2f/%.2f%% "
+                  "best/median/worst across %d trials | CER: %.2f%%" % (
                 sample["accuracy"]["wer"] * 100,
+                trial_accuracy["best_wer"] * 100,
+                trial_accuracy["median_wer"] * 100,
+                trial_accuracy["worst_wer"] * 100,
+                trial_accuracy["trials"],
                 sample["accuracy"]["cer"] * 100,
             ))
             final_word = sample["final_word"]

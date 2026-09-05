@@ -29,6 +29,16 @@ For macOS, also include:
 For Windows, include the Windows version, configured model, GPU/driver details,
 whether the model reached **Ready**, and whether the microphone check passed.
 
+For an automatic-paste or clipboard-recovery problem, use a harmless test
+phrase and report the target app/version and app class (native, browser,
+Electron/Chromium, terminal, remote desktop, or elevated Windows app). Also
+report whether focus stayed in the same field, whether **Restore clipboard
+after paste** was enabled, whether manual paste recovered the complete test
+phrase, and the number of failures out of repeated attempts. Do not publish the
+phrase, clipboard contents, document/tab names, account or server names, or
+window titles. Those conditions distinguish a target-capture failure from a
+paste-consumption race without exposing the user's work.
+
 If Presspeech cannot open, include only the relevant last ~30 lines from
 `~/Library/Logs/Presspeech.log` on macOS or
 `%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting. Issues

@@ -22,13 +22,67 @@ body:
     id: reproduce
     attributes:
       label: Steps to reproduce
-      description: List the smallest repeatable sequence, including the target app when relevant.
+      description: List the smallest repeatable sequence. Use harmless test text and do not paste the transcript into this public report.
       placeholder: |
         1. Open ...
         2. Hold ...
         3. ...
     validations:
       required: true
+  - type: dropdown
+    id: affected-area
+    attributes:
+      label: Affected area
+      description: Choose the closest part of the dictation loop.
+      options:
+        - Setup or install
+        - Recording or hotkey
+        - Recognition or text processing
+        - Automatic paste or clipboard recovery
+        - Update
+        - App controls or accessibility
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: target-context
+    attributes:
+      label: Target app and context
+      description: |
+        For a delivery problem, include the target app and version and say
+        whether it is native, browser-based, Electron/Chromium, a terminal,
+        remote desktop, or elevated on Windows. Do not include a document,
+        tab, account, server, or window title. Leave blank for other problems.
+      placeholder: e.g. VS Code 1.x, Electron
+  - type: dropdown
+    id: delivery-result
+    attributes:
+      label: Text-delivery result
+      description: What happened after transcription? Do not include the actual transcript or clipboard contents.
+      options:
+        - Not a text-delivery problem
+        - Expected transcript pasted once
+        - Transcript copied and manual-paste recovery shown
+        - Transcript copied without a recovery notice
+        - Previous or unrelated clipboard content pasted
+        - Transcript went to the wrong window or field
+        - Transcript was duplicated, incomplete, or changed
+        - Transcript was not available on the clipboard
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: delivery-conditions
+    attributes:
+      label: Delivery conditions and frequency
+      description: |
+        For a delivery problem, say whether focus stayed in the same field,
+        moved within the same app, or moved to another app; whether **Restore
+        clipboard after paste** was on; whether manual paste recovered the
+        expected complete text; and how many attempts failed out of how many.
+        Do not quote any transcript, clipboard content, document, or window
+        title. Leave blank for other problems.
+      placeholder: e.g. Same field; clipboard restore off; manual paste recovered the complete test phrase; 4 of 5 attempts
   - type: dropdown
     id: platform
     attributes:
@@ -43,7 +97,7 @@ body:
     attributes:
       label: Presspeech version
       description: Copy Diagnostics includes this value.
-      placeholder: e.g. 0.3.6 (macOS) or 0.1.10 (Windows)
+      placeholder: Copy the exact version shown in Diagnostics.
     validations:
       required: true
   - type: input

@@ -205,9 +205,29 @@ cd swift
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.
-- Enable **Restore clipboard after paste**, trigger the focus-change path, and
-  confirm the transcript remains available for manual paste rather than being
-  replaced by the old clipboard contents.
+- With **Restore clipboard after paste** off, dictate distinct non-sensitive
+  markers into TextEdit and an Electron/Chromium target. Confirm the exact
+  transcript lands each time and remains available to an immediate manual
+  Command-V. This is the safe baseline for the restoration checks below.
+- Seed the clipboard with a distinct old marker, enable **Restore clipboard
+  after paste**, and complete at least ten consecutive dictations in TextEdit
+  and ten in a representative slow Electron/Chromium target. Mix short and
+  multi-sentence transcripts. For every trial, confirm the destination receives
+  the exact new transcript before a manual Command-V in a separate scratch
+  field proves that the old marker was restored. A stale marker, empty paste,
+  partial transcript, or duplicate is a release-blocking failure; one successful
+  trial is not enough to clear the race tracked in
+  [issue #36](https://github.com/rcourtman/presspeech/issues/36).
+- Repeat that matrix for every proposed restoration-delay default or preset
+  under review, including the slowest available target. A pure self-test or a
+  delay increase without repeated native results does not establish that the
+  destination consumed Command-V before restoration.
+- While restoration is enabled, start dictating with the old marker on the
+  clipboard and change focus before transcription finishes. Confirm Presspeech
+  leaves the new transcript available for manual paste rather than restoring
+  the old marker. In a successful automatic-paste trial, copy a third marker
+  before restoration runs and confirm Presspeech does not overwrite that newer
+  clipboard content.
 - Test hold mode: hold the hotkey, speak, release, and confirm text pastes
   at the cursor.
 - In hold mode, release directly on the last consonant of several short

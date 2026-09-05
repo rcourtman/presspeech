@@ -19,6 +19,12 @@ contents, credentials, private paths, or other sensitive data. Diagnostics are
 not sent automatically: opening a feedback form only opens a fixed GitHub URL,
 and you decide what to paste and submit.
 
+For a paste or clipboard problem, the bug form asks for the target app class,
+focus behavior, clipboard-restore setting, manual-recovery result, and repeat
+count. Reproduce with harmless test text, report only whether the complete text
+was recovered, and omit the text itself plus document, tab, account, server,
+and window names.
+
 Before proposing a larger capability, read the [product roadmap](ROADMAP.md).
 It describes current priorities, evidence gates, and workflows that are
 deliberately outside Presspeech's scope.
