@@ -25,6 +25,7 @@ ALLOW_CANDIDATE_DEPENDENCY=0
 RUN_TAIL=1
 SELF_TEST=0
 LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN="6"
+LONG_PUBLIC_MAX_CORPUS_WER="10"
 DEPENDENCY_MODE="production"
 
 usage() {
@@ -47,6 +48,9 @@ Options:
   --long-public-max-reference-deletion-run <n>
                             fail the multi-window gate above this consecutive
                             dropped-reference-word count (default: 6)
+  --long-public-max-corpus-wer <percent>
+                            fail if conservative multi-window corpus WER exceeds
+                            this percentage (default: 10)
   --include-candidate-models
                             also run Parakeet v2, linear-int8 v3, Unified,
                             and current Nemotron candidate checks
@@ -278,6 +282,14 @@ run_self_test() {
     assert_contains "$missing_deletion_value_log" \
         "--long-public-max-reference-deletion-run requires a value"
 
+    local missing_wer_value_log="$tmpdir/missing-wer-value.log"
+    if bash "$SCRIPT_PATH" --long-public-max-corpus-wer >"$missing_wer_value_log" 2>&1; then
+        echo "self-test expected the corpus-WER option without a value to fail" >&2
+        exit 1
+    fi
+    assert_contains "$missing_wer_value_log" \
+        "--long-public-max-corpus-wer requires a value"
+
     local missing_real_log="$tmpdir/missing-real.log"
     if bash "$SCRIPT_PATH" \
         --real-audio-dir "$tmpdir/missing-real" \
@@ -392,6 +404,11 @@ while [[ $# -gt 0 ]]; do
             LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN="$2"
             shift 2
             ;;
+        --long-public-max-corpus-wer)
+            need_value "$@"
+            LONG_PUBLIC_MAX_CORPUS_WER="$2"
+            shift 2
+            ;;
         --include-candidate-models)
             INCLUDE_CANDIDATE_MODELS=1
             shift
@@ -431,6 +448,10 @@ if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
 fi
 if ! [[ "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" =~ ^[0-9]+$ ]]; then
     echo "--long-public-max-reference-deletion-run must be a non-negative integer" >&2
+    exit 2
+fi
+if ! [[ "$LONG_PUBLIC_MAX_CORPUS_WER" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "--long-public-max-corpus-wer must be a non-negative decimal percentage" >&2
     exit 2
 fi
 
@@ -607,7 +628,8 @@ else
         --public-corpus \
         --show-transcripts \
         --show-paths \
-        --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN"
+        --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
+        --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
 
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo

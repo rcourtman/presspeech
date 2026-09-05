@@ -11,8 +11,44 @@ Backends:
 """
 
 import gc
+import os
 import threading
 import time
+
+
+# Hugging Face configuration is read when huggingface_hub is first imported.
+# Presspeech only downloads public, revision-pinned models, so it must not
+# inherit a developer's private-Hub endpoint or credentials and must not allow
+# upstream libraries to add telemetry calls to the documented network surface.
+# Establish this boundary before any of the lazy model-library imports below.
+HUGGING_FACE_TRUSTED_ENVIRONMENT = {
+    "HF_ENDPOINT": "https://huggingface.co",
+    "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "HF_HUB_DISABLE_UPDATE_CHECK": "1",
+}
+HUGGING_FACE_CREDENTIAL_ENV_VARS = (
+    "HF_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
+    "HUGGINGFACEHUB_API_TOKEN",
+)
+HUGGING_FACE_UNTRUSTED_ENV_VARS = (
+    "HUGGINGFACE_CO_STAGING",
+    "HF_HUB_USER_AGENT_ORIGIN",
+    *HUGGING_FACE_CREDENTIAL_ENV_VARS,
+)
+
+
+def _configure_hugging_face_download_environment():
+    """Make public model downloads anonymous, fixed-host, and telemetry-free."""
+    os.environ.update(HUGGING_FACE_TRUSTED_ENVIRONMENT)
+    # The staging switch takes precedence over HF_ENDPOINT; the origin value
+    # adds inherited text to every User-Agent. Neither belongs in this app.
+    for name in HUGGING_FACE_UNTRUSTED_ENV_VARS:
+        os.environ.pop(name, None)
+
+
+_configure_hugging_face_download_environment()
 
 PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 NEMOTRON_MODEL = "nvidia/nemotron-speech-streaming-en-0.6b"
@@ -176,15 +212,15 @@ class Transcriber:
                    "Loading Parakeet-TDT v3 on %s (first run downloads ~2.5 GB)..." % device)
         self.processor = _configure_parakeet_processor(
             AutoProcessor.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION))
+                PARAKEET_MODEL, revision=PARAKEET_REVISION, token=False))
         requested_dtype = _parakeet_dtype(torch, device, self.precision)
         try:
             self.model = AutoModelForTDT.from_pretrained(
                 PARAKEET_MODEL, revision=PARAKEET_REVISION,
-                dtype=requested_dtype)
+                dtype=requested_dtype, token=False)
         except TypeError:
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION)
+                PARAKEET_MODEL, revision=PARAKEET_REVISION, token=False)
         except Exception as exc:
             if requested_dtype == "auto":
                 raise
@@ -192,7 +228,8 @@ class Transcriber:
                 notify("Presspeech", "Half-precision load failed; retrying FP32 (%s)"
                        % str(exc)[:100])
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION, dtype="auto")
+                PARAKEET_MODEL, revision=PARAKEET_REVISION, dtype="auto",
+                token=False)
         if device != "cpu":
             self.model.to(device)
         self.backend = "parakeet"
@@ -206,10 +243,10 @@ class Transcriber:
             notify("Presspeech", "Loading Nemotron English ASR on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
         self.processor = AutoProcessor.from_pretrained(
-            NEMOTRON_MODEL, revision=NEMOTRON_REVISION)
+            NEMOTRON_MODEL, revision=NEMOTRON_REVISION, token=False)
         self.model = AutoModelForRNNT.from_pretrained(
             NEMOTRON_MODEL, revision=NEMOTRON_REVISION,
-            dtype=dtype).to(device)
+            dtype=dtype, token=False).to(device)
         self.backend = "nemotron"
         self._device = device
 
@@ -221,10 +258,10 @@ class Transcriber:
             notify("Presspeech", "Loading Moonshine Medium on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
         self.processor = AutoProcessor.from_pretrained(
-            MOONSHINE_MODEL, revision=MOONSHINE_REVISION)
+            MOONSHINE_MODEL, revision=MOONSHINE_REVISION, token=False)
         self.model = MoonshineStreamingForConditionalGeneration.from_pretrained(
             MOONSHINE_MODEL, revision=MOONSHINE_REVISION,
-            dtype=dtype).to(device)
+            dtype=dtype, token=False).to(device)
         self.backend = "moonshine"
         self._device = device
 
@@ -239,7 +276,8 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Whisper %s on %s..." % (model_name, device))
         self.model = WhisperModel(
-            repository, revision=revision, device=device, compute_type=compute)
+            repository, revision=revision, device=device, compute_type=compute,
+            use_auth_token=False)
         self.backend = "whisper"
         self._device = device
 

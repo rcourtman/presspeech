@@ -8,6 +8,10 @@ body:
         Thanks for describing the problem behind the request. Issues are
         public: do not include dictated text, audio, dictionary or shortcut
         contents, credentials, private paths, or other sensitive data.
+
+        Check the [product roadmap](https://github.com/rcourtman/presspeech/blob/main/ROADMAP.md)
+        first. It explains current priorities, evidence gates, and deliberate
+        non-goals.
   - type: dropdown
     id: platform
     attributes:

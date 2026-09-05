@@ -14,9 +14,10 @@
 
 # Presspeech
 
-**Private push-to-talk dictation into any app.** Hold a key, speak,
-release, and the transcript appears at the cursor. No account, no
-subscription, no cloud transcription.
+**Private push-to-talk dictation for Mac and Windows.** Hold a key, speak,
+release, and Presspeech transcribes locally before pasting at the cursor. If it
+cannot safely identify the same destination, the transcript stays on the
+clipboard for manual paste. No account, subscription, or cloud transcription.
 
 Choose the build that matches your computer:
 
@@ -140,21 +141,41 @@ out and are impressed by the speed!
 
 ## Use
 
-Default workflow:
+The gesture is the same on both platforms:
 
-1. Hold **Right Option**.
+1. Hold the configured push-to-talk key.
 2. Speak.
 3. Release.
-4. Presspeech pastes the transcript at the cursor.
+4. Presspeech pastes the transcript at the cursor when it can verify the
+   original destination; otherwise it copies the transcript and tells you to
+   paste manually.
+
+The defaults and control surfaces differ:
+
+- **macOS default:** **Right Option**. Open Presspeech from its menu-bar or
+  optional Dock item; setup and app controls are grouped under
+  **Setup Checklist…**, **Settings**, and **Support**.
+- **Windows default:** **Right Alt**. Open Presspeech from its notification-area
+  icon; if Right Alt acts as AltGr for your keyboard layout, choose F8 or
+  another available key in Setup.
 
 Each recording stays bound to the window that was focused when it began. If
-you change windows while Presspeech is transcribing, it copies the transcript
-to the clipboard and shows **Copied — press ⌘V to paste** instead of sending
-your words to the new window. The same recovery instruction remains at the top
-of the Presspeech menu until the next dictation. Paste manually when you are
-ready.
+you change windows while Presspeech is transcribing—or the destination does not
+expose enough focused-window information—it copies the transcript instead of
+risking delivery to the wrong place. The latter can happen in some
+Electron/Chromium-based apps even when the window appears unchanged. macOS
+shows **Copied — press ⌘V to paste** and keeps that recovery instruction in the
+Presspeech menu until the next dictation. Windows shows a **Transcript copied,
+not pasted** notification. Return to the intended field and paste manually with
+⌘V on macOS or Ctrl+V on Windows; do not dictate the same text again first.
 
-Useful menu items:
+Both builds provide a private **Try Dictation** scratchpad, hold and toggle
+trigger modes, configurable hotkeys, deterministic dictionary replacements,
+filler removal, paste suffix choices, startup controls, update checks, and
+privacy-safe diagnostics. Their menus and settings are intentionally native to
+each platform rather than identical.
+
+### macOS controls
 
 - **Start Dictation / Stop and Transcribe** — control a recording from the
   menu without using the global hotkey; these named actions also work with
@@ -191,13 +212,30 @@ Useful menu items:
   “virgule”, and “guillemet ouvrant”
 - **Settings → Text → Remove filler words** — opt-in deterministic strip of
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
-- **Settings → Behavior → Restore clipboard after paste** — opt-in guarded restore
-  of the previous macOS pasteboard contents; skipped if another process copies
-  newer content
+- **Settings → Behavior → Restore clipboard after paste** — off-by-default,
+  best-effort restore of the previous macOS pasteboard contents; skipped if
+  another process copies newer content. If a slow target pastes the old
+  clipboard content instead of the transcript, turn this setting off and retry
 - **Settings → Behavior → Launch at Login** — keep dictation available after
   sign-in; if macOS needs approval, selecting the marked setting opens Login
   Items
 - **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, and bounded recent logs
+
+### Windows controls
+
+- **Dictate / Cancel Dictation (Esc)** — start, stop, or cancel from the
+  notification-area menu without using the global hotkey
+- **Try Dictation… / Setup… / Settings…** — test privately, revisit first-run
+  readiness, or configure the hotkey, microphone, local model, text handling,
+  audio feedback, and Start with Windows
+- **Repair Global Hotkey** — replace the keyboard listener if menu-based
+  Dictate still works but the configured key does not
+- **Copy Diagnostics / Report a Problem… / Suggest an Improvement…** — copy a
+  privacy-safe support report, then open the focused GitHub form; never post
+  dictated text, audio, or dictionary contents
+
+See the [Windows guide](https://rcourtman.github.io/presspeech/windows.html#first-launch)
+for model readiness, AltGr-safe hotkey selection, and every Windows setting.
 
 ## Privacy
 
@@ -209,10 +247,17 @@ Presspeech is local-first:
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
+- Completed transcripts pass through the operating-system clipboard. Clipboard
+  services outside Presspeech—macOS Universal Clipboard, Windows clipboard
+  history and cross-device sync, or a third-party clipboard manager—may retain
+  or sync that text when enabled. Review those services before sensitive
+  dictation.
 
-Network calls are limited to:
+Network calls made by Presspeech are limited to:
 
-- speech model download from Hugging Face (first launch, integrity-failure re-download, or user-triggered cache reset),
+- speech model download from Hugging Face and its operated storage/CDN hosts
+  (first launch, integrity-failure re-download, or user-triggered cache reset;
+  Windows forces anonymous downloads and disables Hugging Face library telemetry),
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers),
 - user-triggered bug-report and feature-request links, which open fixed GitHub
   forms in the default browser without adding app or user data to the URL,
@@ -282,6 +327,7 @@ See [`windows/README.md`](windows/README.md) for hardware, setup, and usage deta
 ## Links
 
 - [Support and troubleshooting](SUPPORT.md)
+- [Product roadmap](ROADMAP.md)
 - [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)
 - [Latest release](https://github.com/rcourtman/presspeech/releases/latest)
 - [Direct download](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip)

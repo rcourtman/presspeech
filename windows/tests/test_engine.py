@@ -1,3 +1,5 @@
+import os
+import subprocess
 import sys
 import types
 import unittest
@@ -5,6 +7,56 @@ from unittest import mock
 
 import engine
 import config
+
+
+class HuggingFacePrivacyTests(unittest.TestCase):
+    def test_privacy_boundary_runs_during_fresh_engine_import(self):
+        environment = dict(os.environ)
+        environment.update({
+            "HF_ENDPOINT": "https://private-hub.example",
+            "HF_HUB_DISABLE_IMPLICIT_TOKEN": "0",
+            "HF_HUB_DISABLE_TELEMETRY": "0",
+            "HUGGINGFACE_CO_STAGING": "1",
+            "HF_TOKEN": "secret-token",
+        })
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                """
+import os
+import engine
+assert os.environ["HF_ENDPOINT"] == "https://huggingface.co"
+assert os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] == "1"
+assert os.environ["HF_HUB_DISABLE_TELEMETRY"] == "1"
+assert "HUGGINGFACE_CO_STAGING" not in os.environ
+assert "HF_TOKEN" not in os.environ
+""",
+            ],
+            cwd=os.path.dirname(engine.__file__),
+            env=environment,
+            check=True,
+        )
+
+    def test_model_download_environment_is_anonymous_and_fixed_host(self):
+        hostile = {
+            "HF_ENDPOINT": "https://private-hub.example",
+            "HF_HUB_DISABLE_IMPLICIT_TOKEN": "0",
+            "HF_HUB_DISABLE_TELEMETRY": "0",
+            "HF_HUB_DISABLE_UPDATE_CHECK": "0",
+            "HUGGINGFACE_CO_STAGING": "1",
+            "HF_TOKEN": "secret-current-token",
+            "HUGGING_FACE_HUB_TOKEN": "secret-legacy-token",
+            "HUGGINGFACEHUB_API_TOKEN": "secret-fluid-token",
+            "HF_HUB_USER_AGENT_ORIGIN": "private-workstation-name",
+        }
+        with mock.patch.dict(os.environ, hostile, clear=False):
+            engine._configure_hugging_face_download_environment()
+
+            for name, value in engine.HUGGING_FACE_TRUSTED_ENVIRONMENT.items():
+                self.assertEqual(os.environ[name], value)
+            for name in engine.HUGGING_FACE_UNTRUSTED_ENV_VARS:
+                self.assertNotIn(name, os.environ)
 
 
 class ParakeetConfigurationTests(unittest.TestCase):
@@ -136,25 +188,28 @@ class ParakeetConfigurationTests(unittest.TestCase):
             transcriber = engine.Transcriber(precision="auto")
             transcriber._load_parakeet(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION)
+                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION,
+                token=False)
             transformers.AutoModelForTDT.from_pretrained.assert_called_once_with(
                 engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION,
-                dtype="auto")
+                dtype="auto", token=False)
 
             transcriber._load_nemotron(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION)
+                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION,
+                token=False)
             transformers.AutoModelForRNNT.from_pretrained.assert_called_once_with(
                 engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION,
-                dtype="float32")
+                dtype="float32", token=False)
 
             transcriber._load_moonshine(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION)
+                engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
+                token=False)
             (transformers.MoonshineStreamingForConditionalGeneration
              .from_pretrained.assert_called_once_with(
                  engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
-                 dtype="float32"))
+                 dtype="float32", token=False))
 
     def test_selectable_whisper_models_have_immutable_snapshots(self):
         transformers_models = {
@@ -179,7 +234,8 @@ class ParakeetConfigurationTests(unittest.TestCase):
 
         repository, revision = engine.WHISPER_MODELS["base.en"]
         faster_whisper.WhisperModel.assert_called_once_with(
-            repository, revision=revision, device="cpu", compute_type="int8")
+            repository, revision=revision, device="cpu", compute_type="int8",
+            use_auth_token=False)
 
     def test_unknown_whisper_model_fails_before_backend_import(self):
         with mock.patch.dict(sys.modules, {"faster_whisper": None}):
@@ -300,11 +356,13 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 mock.call(
                     engine.PARAKEET_MODEL,
                     revision=engine.PARAKEET_REVISION,
-                    dtype="float16"),
+                    dtype="float16",
+                    token=False),
                 mock.call(
                     engine.PARAKEET_MODEL,
                     revision=engine.PARAKEET_REVISION,
-                    dtype="auto"),
+                    dtype="auto",
+                    token=False),
             ],
         )
 
@@ -325,10 +383,12 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 mock.call(
                     engine.PARAKEET_MODEL,
                     revision=engine.PARAKEET_REVISION,
-                    dtype="auto"),
+                    dtype="auto",
+                    token=False),
                 mock.call(
                     engine.PARAKEET_MODEL,
-                    revision=engine.PARAKEET_REVISION),
+                    revision=engine.PARAKEET_REVISION,
+                    token=False),
             ],
         )
 

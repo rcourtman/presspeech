@@ -31,7 +31,8 @@ Links:
 
 ## Claims and where they're backed
 
-- **~100 ms from key release to pasted text** — benchmarks page, methodology included
+- **~100 ms model transcription on the documented clips** — benchmarks page,
+  methodology included; clipboard and paste work are not part of that timing
 - **8.4 MB signed, notarised download** — release asset size; about 500-600 MB for the local speech model
 - **~80 MB RAM while idle, 0% CPU between dictations** — site stats
 - **100% local** — no cloud transcription, no telemetry, no account; the privacy page documents the full network surface
@@ -43,7 +44,10 @@ Links:
 > **Show HN: Presspeech – an 8.4 MB local dictation app for Apple Silicon**
 
 Presspeech is a macOS menu-bar app: hold Right Option, speak, release,
-and the transcript pastes at the cursor about 100 ms later.
+and the transcript pastes at the cursor. On the documented M4 benchmark
+clips, the local model call takes about 100 ms.
+There is also a separate unsigned Windows prerelease; the footprint and
+latency numbers below describe the released Mac app only.
 
 The 0.3 release adds deterministic voice shortcuts, spoken formatting,
 and a focused first-run dictation test while keeping the core interaction
@@ -56,12 +60,13 @@ transcription.
 
 How it works: audio is captured in memory and decoded once on key
 release with the local Parakeet TDT v3 CoreML model through FluidAudio on the
-Apple Neural Engine, then pasted at the cursor. The single-pass
-decode — rather than streaming — is where the latency comes from.
+Apple Neural Engine, then pasted at the cursor. The published latency
+benchmark times that model call only; it does not measure clipboard or paste
+work.
 Benchmarks and methodology:
 https://rcourtman.github.io/presspeech/benchmarks.html
 
-Numbers: ~100 ms key-release-to-paste; 8.4 MB notarised app plus about
+Numbers: ~100 ms model transcription on the documented clips; 8.4 MB notarised app plus about
 500-600 MB for the local speech model; ~80 MB RAM idle; 0% CPU between
 dictations. Transcription makes no network calls, and the full
 network surface (model download, optional update check) is
@@ -72,8 +77,8 @@ exact reusable text), opt-in spoken formatting commands such as “new
 paragraph” and “bullet point”, and a focused Try Dictation scratchpad
 for first-run setup. None of these features uses a rewriting model.
 
-Limitations: Apple Silicon and macOS 14+ only; 18
-Latin/Cyrillic-script languages via Parakeet v3; no streaming mode.
+Limitations: Apple Silicon and macOS 14+ only; 25 European languages with
+selectable language hints for 18; no streaming mode.
 
 MIT licensed. Download:
 https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
@@ -91,8 +96,8 @@ cursor already is.
 
 - speech recognition runs on-device with Parakeet TDT v3 on the Apple
   Neural Engine
-- about 100 ms from key release to pasted text on the documented M4
-  benchmark clips
+- about 100 ms for model transcription on the documented M4 benchmark clips;
+  clipboard and paste work are not included
 - no account, subscription, telemetry, cloud transcription, or saved
   audio
 - 8.4 MB notarised app; the local speech model is about 500–600 MB on
@@ -129,17 +134,21 @@ searches for years.
 
 Do this once, then stop and measure instead of tweaking copy in a loop:
 
-1. Confirm `main` is deployed to GitHub Pages and the README shows the
+1. Review open issues for a repeatable failure in the headline hold, speak,
+   release, paste workflow. Do not spend the one-time launch post while such a
+   regression is awaiting a fix or native platform QA; resolve it first rather
+   than weakening or qualifying the promise only in promotional copy.
+2. Confirm `main` is deployed to GitHub Pages and the README shows the
    direct download above Homebrew.
-2. Record a baseline: latest release downloads, total release
+3. Record a baseline: latest release downloads, total release
    downloads, repo stars, repo views, unique views, clones, and top
    referrers.
-3. Post the Show HN as written above, linking the repo or site
+4. Post the Show HN as written above, linking the repo or site
    depending on which preview looks cleaner that day.
-4. Stay available for the first few hours and answer only actual
+5. Stay available for the first few hours and answer only actual
    questions. Link the compare table for "why not X?" and the privacy
    page for trust questions.
-5. After 24 hours and 7 days, record the same metrics. Judge the post
+6. After 24 hours and 7 days, record the same metrics. Judge the post
    by qualified installs and questions, not points alone.
 
 If the direct download link materially outperforms the Homebrew command
@@ -159,14 +168,14 @@ General:
 > I maintain a free MIT-licensed one: Presspeech
 > (https://github.com/rcourtman/presspeech). It has separate local apps for
 > Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release, and it
-> pastes at the cursor. The published Mac benchmark measures about 100 ms
-> from release to paste; the Windows build is still a preview.
+> pastes at the cursor. The published Mac benchmark measures about 100 ms for
+> the local model call; the Windows build is still a preview.
 
 Local-AI angle (r/LocalLLaMA and similar):
 
 > If you want local ASR as a daily input method: Presspeech runs Parakeet
-> TDT v3 on the ANE via CoreML — no API keys, ~100 ms from key release
-> to pasted text. Benchmarks + methodology:
+> TDT v3 on the ANE via CoreML — no API keys, about 100 ms model transcription
+> on the documented clips. Benchmarks + methodology:
 > https://rcourtman.github.io/presspeech/benchmarks.html. I'm the
 > maintainer; MIT licensed.
 
@@ -193,7 +202,7 @@ Open-source comparison ("why not Handy?"):
 > Handy is the stronger choice if you want Linux or Intel Mac support,
 > one cross-platform application, model switching, or its much larger
 > open-source community. Presspeech is narrower: a small native macOS app
-> with a published release-to-paste benchmark, plus a separate Windows
+> with a published model-transcription benchmark, plus a separate Windows
 > preview. Both are free, MIT licensed, and local. Current factual comparison:
 > https://rcourtman.github.io/presspeech/compare/handy.html. I maintain
 > Presspeech, so read it with that in mind.
@@ -224,7 +233,8 @@ For directories and "what is this" replies:
 > Presspeech is free, MIT-licensed local push-to-talk dictation with separate
 > apps for Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release,
 > and the transcript pastes at the cursor, with no cloud transcription or
-> telemetry. The published Mac benchmark measures about 100 ms release-to-paste.
+> telemetry. The published Mac benchmark measures about 100 ms for the local
+> model call; it does not include clipboard or paste work.
 
 ## House rules
 

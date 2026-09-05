@@ -2,8 +2,10 @@
 
 Fast, private, local push-to-talk dictation for Windows — a Windows port of
 [presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
-speak, release, and the transcript is typed at the cursor. No cloud, no
-accounts, no telemetry — speech recognition runs entirely on your machine.
+speak, and release. The transcript is normally pasted at the cursor; if the
+original window cannot be verified, it stays on the clipboard for manual
+paste. No cloud transcription, accounts, or telemetry — speech recognition
+runs entirely on your machine.
 
 Preferred engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family
 Presspeech uses on macOS. On an NVIDIA GPU (CUDA) it transcribes with
@@ -216,7 +218,11 @@ Use **Open Startup Settings** to review Presspeech under Windows
   character counts only.
 - **Copy Diagnostics** includes configuration counts and runtime state, never
   transcripts, audio, or dictionary contents.
-- Clipboard is used briefly to paste; it is overwritten.
+- Finished text passes through the clipboard and remains there until something
+  else is copied. Presspeech has no transcript-sync feature, but Windows
+  clipboard history, cross-device sync, and third-party clipboard managers are
+  outside the app and may retain or sync clipboard writes when enabled. Review
+  **Settings → System → Clipboard** before sensitive dictation.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
   Whisper reports include the exact Silero VAD boundary policy so WER, quiet
@@ -228,8 +234,9 @@ Use **Open Startup Settings** to review Presspeech under Windows
   any non-empty transcript as a silence false positive. Whisper reports also
   record the VAD-retained speech duration for every trial and count reviewed
   speech clips that VAD rejected, so silence fixes cannot hide quiet-speech
-  regressions behind aggregate WER. Reviewed speech clips score final-word
-  retention on every trial as well, so an intermittent clipped ending cannot
+  regressions behind aggregate WER. Reviewed speech clips score WER, CER,
+  longest consecutive reference-word deletion, and final-word retention on
+  every trial as well, so an intermittent dropped span or clipped ending cannot
   be hidden by the consensus transcript.
 - If you see missing-DLL errors, install the Visual C++ Redistributable
   (x64) from Microsoft.

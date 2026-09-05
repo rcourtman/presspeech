@@ -11,6 +11,7 @@
   --accent: #0d7f5f;
   --accent-bright: #10b981;
   --accent-dark: #075941;
+  --focus: #0d7f5f;
   --soft: #e9f5f0;
   --soft-2: #f3f9f6;
   --warn: #fff5d8;
@@ -59,7 +60,7 @@ a:hover {
 }
 
 a:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 55%, white);
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
   border-radius: 3px;
 }

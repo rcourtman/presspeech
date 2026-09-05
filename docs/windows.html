@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Presspeech for Windows - Local Push-to-Talk Dictation</title>
-    <meta name="description" content="Install the Presspeech Windows prerelease for private, local push-to-talk dictation. Check requirements, verify the installer, finish first-run model setup, and dictate into any app.">
+    <meta name="description" content="Install the Presspeech Windows prerelease for private, local push-to-talk dictation. Check requirements, verify the installer, finish first-run model setup, and complete a first dictation.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/windows.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
@@ -67,7 +67,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Windows prerelease</span>
         <h1>Private dictation on your Windows PC</h1>
-        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and pastes the result into the app that had focus when you started—without an account, subscription, telemetry, or cloud transcription.</p>
+        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it keeps the result on the clipboard for manual paste. There is no account, subscription, telemetry, or cloud transcription.</p>
         <div class="actions">
           <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.11/Presspeech-Setup-0.1.11-x64.exe">Download Windows 0.1.11</a>
           <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.11">Release notes and checksum</a>
@@ -131,7 +131,7 @@ if ($actual -ne $parts[0]) {
         </div>
       </section>
 
-      <section>
+      <section id="first-launch">
         <div class="wrap">
           <span class="section-eyebrow">First launch</span>
           <h2>Wait for the local model</h2>
@@ -162,12 +162,16 @@ if ($actual -ne $parts[0]) {
           <h2>Hold. Speak. Release.</h2>
           <div class="grid two">
             <article class="card">
-              <h3>Dictate anywhere</h3>
+              <h3>Dictate in your apps</h3>
               <p>Hold <strong>Right Alt</strong> by default. A high cue confirms recording; release to transcribe and paste. If a press is too short or the local recognizer detects no speech, the indicator briefly says <strong>No speech detected — try again</strong> and a Windows notification points back to Setup's microphone check instead of failing silently. The configured key is reserved for Presspeech while it is running, so it does not also open a Windows surface or invoke an F8–F12 command in the focused app; other keys and AltGr layout input continue to pass through normally. Press <strong>Escape</strong> during recording to cancel and discard the buffered audio without transcribing or changing the clipboard. The notification-area menu offers the same <strong>Cancel Dictation (Esc)</strong> action while recording. If Windows hides that icon in overflow, launch Presspeech again from the Start Menu to restore its window or open its controls; a second dictation process is not started. If the configured key stops responding while menu-based <strong>Dictate</strong> still works, choose <strong>Repair Global Hotkey</strong> in the notification-area menu, Setup, or Settings. Presspeech replaces the listener even when its thread still appears healthy and reports whether the replacement started. Hotkeys, hold/toggle behavior, microphone, text suffix, audio cues, models, and the 1/2/5/10-minute maximum recording length are configurable. Reaching that limit stops and transcribes rather than discarding the recording. Saving a different model starts preparing it immediately; Settings keeps its ready/error status visible and offers a retry, while dictation stays unavailable until preparation finishes.</p>
             </article>
             <article class="card">
               <h3>Focus stays protected</h3>
               <p>A recording is bound to the window where it began. If focus changes during transcription, Presspeech leaves the text on the clipboard and notifies you instead of pasting into the wrong window. <a href="https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput#remarks">Windows blocks</a> a standard app from sending the paste shortcut into a target running as administrator. Presspeech detects that boundary, leaves the transcript on the clipboard, and asks you to paste manually or reopen the target without <strong>Run as administrator</strong>; do not elevate Presspeech as a workaround.</p>
+            </article>
+            <article class="card">
+              <h3>Clipboard history and sync</h3>
+              <p>Presspeech does not sync transcripts, but normal and recovery delivery writes finished text to the Windows clipboard. If <a href="https://support.microsoft.com/en-us/windows/apps/using-the-clipboard">clipboard history or cross-device sync</a> is enabled under <strong>Settings → System → Clipboard</strong>, Windows can retain or sync that text. Third-party clipboard managers may also retain it. Review those settings before sensitive dictation.</p>
             </article>
             <article class="card">
               <h3>Remote desktop aware</h3>

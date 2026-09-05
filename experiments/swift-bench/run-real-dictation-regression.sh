@@ -34,6 +34,7 @@ REDACT_PATHS=1
 CORPUS_KIND="private"
 SELF_TEST=0
 MAX_REFERENCE_DELETION_RUN=""
+MAX_CORPUS_WER=""
 
 usage() {
     cat <<'USAGE'
@@ -58,6 +59,9 @@ Options:
   --max-reference-deletion-run <n>
                            fail if any hypothesis drops more than n consecutive
                            reference words on the minimum-edit alignment
+  --max-corpus-wer <percent>
+                           fail if the conservative corpus WER exceeds this
+                           percentage (worst observed transcript per clip)
   --self-test              run parser and report-redaction self-tests
   -h, --help               show this help
 
@@ -175,6 +179,56 @@ worst_reference_deletion_run() {
                END { if (found) print worst; else print "unknown" }'
 }
 
+conservative_corpus_metrics() {
+    local report="$1"
+    awk '
+        function flush_clip() {
+            if (!clip_seen) return
+            if (clip_reference_words < 1) {
+                invalid = 1
+            } else {
+                total_errors += clip_worst_errors
+                total_words += clip_reference_words
+            }
+            clip_seen = 0
+            clip_worst_errors = 0
+            clip_reference_words = 0
+        }
+        /^    latency:/ {
+            flush_clip()
+        }
+        /\[word-errors=[0-9]+ reference-words=[0-9]+\]/ {
+            metric = $0
+            sub(/^.*\[word-errors=/, "", metric)
+            errors = metric
+            sub(/ reference-words=.*$/, "", errors)
+            words = metric
+            sub(/^[0-9]+ reference-words=/, "", words)
+            sub(/\].*$/, "", words)
+            errors += 0
+            words += 0
+            if (!clip_seen) {
+                clip_seen = 1
+                clip_reference_words = words
+                clip_worst_errors = errors
+            } else {
+                if (words != clip_reference_words) invalid = 1
+                if (errors > clip_worst_errors) clip_worst_errors = errors
+            }
+        }
+        END {
+            flush_clip()
+            if (invalid || total_words < 1) print "unknown\tunknown\tunknown"
+            else printf("%.2f\t%d\t%d\n", 100 * total_errors / total_words,
+                        total_errors, total_words)
+        }
+    ' "$report"
+}
+
+conservative_corpus_wer() {
+    conservative_corpus_metrics "$1" | cut -f1
+}
+
 append_quality_gate() {
     local report="$1"
     local observed="$2"
@@ -188,6 +242,26 @@ append_quality_gate() {
         echo
         echo "- Maximum allowed consecutive reference-word deletions: $MAX_REFERENCE_DELETION_RUN"
         echo "- Worst observed: $observed"
+        echo "- Verdict: $verdict"
+    } >>"$report"
+    [[ "$verdict" == "passes" ]]
+}
+
+append_corpus_wer_gate() {
+    local report="$1"
+    local observed="$2"
+    local verdict="passes"
+    if [[ "$observed" == "unknown" ]] ||
+       ! awk -v observed="$observed" -v maximum="$MAX_CORPUS_WER" \
+           'BEGIN { exit !(observed <= maximum) }'; then
+        verdict="fails"
+    fi
+    {
+        echo
+        echo "## Corpus-WER gate"
+        echo
+        echo "- Maximum allowed conservative corpus WER: ${MAX_CORPUS_WER}%"
+        echo "- Worst-observation corpus WER: ${observed}%"
         echo "- Verdict: $verdict"
     } >>"$report"
     [[ "$verdict" == "passes" ]]
@@ -267,15 +341,23 @@ append_single_backend_summary() {
     if backend_is_aggregate; then
         return
     fi
-    local summary_row
+    local summary_row corpus_wer corpus_errors corpus_words
     summary_row="$(single_backend_summary_row "$report")"
+    IFS=$'\t' read -r corpus_wer corpus_errors corpus_words \
+        < <(conservative_corpus_metrics "$report")
     {
         echo
         echo "## Summary"
         echo
-        echo "| Backend | Clip rows | Average WER % | Worst WER % | Final-word failures | Average p50 ms |"
+        echo "| Backend | Clip rows | Mean worst-clip WER % | Worst WER % | Final-word failures | Average p50 ms |"
         echo "|---|---:|---:|---:|---:|---:|"
         printf '%s\n' "$summary_row"
+        echo
+        if [[ "$corpus_wer" == "unknown" ]]; then
+            echo "Conservative corpus WER (worst observed transcript per clip): unknown"
+        else
+            echo "Conservative corpus WER (worst observed transcript per clip): ${corpus_wer}% (${corpus_errors} errors / ${corpus_words} reference words)"
+        fi
     } >>"$report"
 }
 
@@ -327,6 +409,9 @@ write_report_header() {
         fi
         if [[ -n "$MAX_REFERENCE_DELETION_RUN" ]]; then
             echo "- Maximum consecutive reference-word deletions: $MAX_REFERENCE_DELETION_RUN"
+        fi
+        if [[ -n "$MAX_CORPUS_WER" ]]; then
+            echo "- Maximum conservative corpus WER: ${MAX_CORPUS_WER}%"
         fi
         echo "- Transcript output: $(transcript_output_label)"
         echo "- Fixture paths: $(fixture_paths_label)"
@@ -414,6 +499,7 @@ run_self_test() {
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
     MAX_REFERENCE_DELETION_RUN=""
+    MAX_CORPUS_WER=""
 
     local report="$tmpdir/report.md"
     local clip_number="001"
@@ -451,7 +537,7 @@ run_self_test() {
     {
         echo '    latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms'
         echo '    transcripts (2 distinct):'
-        echo '      • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] [word-errors=0 reference-words=1] [max-reference-deletion-run=0] <redacted 3 chars>'
+        echo '      • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] [word-errors=0 reference-words=25] [max-reference-deletion-run=0] <redacted 3 chars>'
         echo '      • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] [word-errors=1 reference-words=25] [max-reference-deletion-run=1] "literal [WER 99.0%]"'
         echo '    latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms'
         echo '    transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] [word-errors=1 reference-words=10] [max-reference-deletion-run=4] <redacted 3 chars>'
@@ -460,9 +546,13 @@ run_self_test() {
     # shellcheck disable=SC2016 # Markdown backticks are intentional literals.
     local expected_summary='| `v3` | 2 | 7.00 | 10.0 | 2 | 60.0 |'
     assert_eq "$(single_backend_summary_row "$summary_source")" "$expected_summary" "variable-output single-backend summary"
+    assert_eq "$(conservative_corpus_metrics "$summary_source")" $'5.71\t2\t35' "conservative exact-count corpus metrics"
+    assert_eq "$(conservative_corpus_wer "$summary_source")" "5.71" "conservative exact-count corpus WER"
     append_single_backend_summary "$summary_source"
     assert_contains "$summary_source" "## Summary"
     assert_contains "$summary_source" "$expected_summary"
+    assert_contains "$summary_source" \
+        "Conservative corpus WER (worst observed transcript per clip): 5.71% (2 errors / 35 reference words)"
     validate_benchmark_output "$summary_source" 2 1
     assert_eq "$(worst_reference_deletion_run "$summary_source")" "4" "worst consecutive deletion parser"
     MAX_REFERENCE_DELETION_RUN="4"
@@ -475,6 +565,17 @@ run_self_test() {
     fi
     assert_contains "$summary_source" "- Verdict: fails"
     MAX_REFERENCE_DELETION_RUN=""
+    MAX_CORPUS_WER="5.71"
+    append_corpus_wer_gate "$summary_source" "$(conservative_corpus_wer "$summary_source")"
+    assert_contains "$summary_source" "- Worst-observation corpus WER: 5.71%"
+    assert_contains "$summary_source" "- Verdict: passes"
+    MAX_CORPUS_WER="5.70"
+    if append_corpus_wer_gate "$summary_source" "5.71"; then
+        echo "self-test expected excessive corpus WER to fail" >&2
+        exit 1
+    fi
+    assert_contains "$summary_source" "- Verdict: fails"
+    MAX_CORPUS_WER=""
     assert_eq "$(expected_backend_count v3)" "1" "single backend count"
     assert_eq "$(expected_backend_count fluid)" "5" "fluid backend count"
     assert_eq "$(expected_backend_count both)" "6" "all backend count"
@@ -537,6 +638,24 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$missing_value_log" "--trials requires a value"
+
+    local invalid_wer_log="$tmpdir/invalid-wer.log"
+    if bash "$SCRIPT_PATH" --input-dir "$secret_dir" --max-corpus-wer nope \
+        >"$invalid_wer_log" 2>&1; then
+        echo "self-test expected a non-decimal corpus-WER bound to fail" >&2
+        exit 1
+    fi
+    assert_contains "$invalid_wer_log" \
+        "--max-corpus-wer must be a non-negative decimal percentage"
+
+    local aggregate_wer_log="$tmpdir/aggregate-wer.log"
+    if bash "$SCRIPT_PATH" --input-dir "$secret_dir" --backend fluid \
+        --max-corpus-wer 10 >"$aggregate_wer_log" 2>&1; then
+        echo "self-test expected a corpus-WER gate over aggregate backends to fail" >&2
+        exit 1
+    fi
+    assert_contains "$aggregate_wer_log" \
+        "--max-corpus-wer requires a single benchmark backend"
 
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
@@ -601,6 +720,11 @@ while [[ $# -gt 0 ]]; do
             MAX_REFERENCE_DELETION_RUN="$2"
             shift 2
             ;;
+        --max-corpus-wer)
+            need_value "$@"
+            MAX_CORPUS_WER="$2"
+            shift 2
+            ;;
         --self-test)
             SELF_TEST=1
             shift
@@ -640,6 +764,17 @@ fi
 if [[ -n "$MAX_REFERENCE_DELETION_RUN" ]] &&
    ! [[ "$MAX_REFERENCE_DELETION_RUN" =~ ^[0-9]+$ ]]; then
     echo "--max-reference-deletion-run must be a non-negative integer" >&2
+    exit 2
+fi
+
+if [[ -n "$MAX_CORPUS_WER" ]] &&
+   ! [[ "$MAX_CORPUS_WER" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "--max-corpus-wer must be a non-negative decimal percentage" >&2
+    exit 2
+fi
+
+if [[ -n "$MAX_CORPUS_WER" ]] && backend_is_aggregate; then
+    echo "--max-corpus-wer requires a single benchmark backend" >&2
     exit 2
 fi
 
@@ -789,12 +924,18 @@ if [[ -n "$MAX_REFERENCE_DELETION_RUN" ]]; then
         quality_gate_passed=0
     fi
 fi
+if [[ -n "$MAX_CORPUS_WER" ]]; then
+    observed_corpus_wer="$(conservative_corpus_wer "$report")"
+    if ! append_corpus_wer_gate "$report" "$observed_corpus_wer"; then
+        quality_gate_passed=0
+    fi
+fi
 
 publish_report_artifact "$stage_dir" "$report" "$final_report"
 stage_dir=""
 
 echo "report: $final_report"
 if [[ "$quality_gate_passed" -ne 1 ]]; then
-    echo "ASR quality gate failed: worst consecutive reference-word deletion run ${observed_deletion_run}; required at most ${MAX_REFERENCE_DELETION_RUN}" >&2
+    echo "ASR quality gate failed; inspect the report's gate verdicts" >&2
     exit 1
 fi

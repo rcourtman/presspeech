@@ -41,7 +41,9 @@ through the private process in [SECURITY.md](SECURITY.md).
 Use the focused [feature request
 form](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml).
 Describe the recurring problem and a measurable success condition, not only a
-proposed implementation. Roughly in scope: hotkey behaviour, transcription
+proposed implementation. Check the [product roadmap](ROADMAP.md) first: it
+explains the current priority order, exploration gates, and deliberate
+non-goals. Roughly in scope: hotkey behaviour, transcription
 quality / latency, menu bar UX, install/upgrade ergonomics. Roughly out of
 scope:
 

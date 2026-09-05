@@ -92,7 +92,12 @@
             </article>
             <article class="card" id="macos-paste">
               <h3>Try Dictation works, but text is not inserted</h3>
-              <p>Confirm Accessibility is granted, click the destination text field, then hold the hotkey without changing apps until transcription finishes. Presspeech protects the app that had focus when recording began; if focus changes, it leaves the text on the clipboard instead of pasting into the wrong window. Paste manually once you have confirmed the intended destination.</p>
+              <p>Confirm Accessibility is granted, click the destination text field, then hold the hotkey without changing apps until transcription finishes. If the HUD or menu says <strong>Copied — press ⌘V to paste</strong>, the finished transcript is already on the clipboard: return to the intended field and paste it manually instead of dictating it again.</p>
+              <p>Presspeech also uses this safe fallback when it cannot verify the same destination. Some Electron/Chromium-based apps do not consistently expose the focused-window information the current Mac app checks, so the notice can appear even when the window looks unchanged. If Presspeech instead says <strong>Couldn't paste — use Copy Last Transcript</strong>, choose that menu action before trying again.</p>
+            </article>
+            <article class="card" id="macos-clipboard-restore">
+              <h3>The previous clipboard content is pasted</h3>
+              <p>Open <strong>Settings → Behavior</strong>, turn off <strong>Restore clipboard after paste</strong>, and retry with non-sensitive text in TextEdit. The option is off by default; disabling it leaves the new transcript on the clipboard and avoids restoring old content before a slow target has consumed the paste. Remove the unintended text from the destination before continuing, and include the target app's name with privacy-safe diagnostics if you report the problem.</p>
             </article>
             <article class="card" id="macos-muted">
               <h3>System audio stays muted</h3>
@@ -129,7 +134,7 @@
             </article>
             <article class="card" id="windows-paste">
               <h3>Try Dictation works, but text is not inserted</h3>
-              <p>Click the destination text field before pressing the hotkey and keep that window focused until transcription finishes. If focus changes, Presspeech protects against sending private text to the wrong app: it leaves the transcript on the clipboard and shows a notification. Return to the intended field and paste manually.</p>
+              <p>Click the destination text field before pressing the hotkey and keep that window focused until transcription finishes. If the notification says <strong>Transcript copied, not pasted</strong>, the finished transcript is already on the clipboard: return to the intended field and press <strong>Ctrl+V</strong> instead of dictating it again. This fallback is used when focus changed, the original window could not be identified, or the target is running as administrator. Reopen an elevated target normally when possible; do not run Presspeech as administrator as a workaround.</p>
             </article>
             <article class="card" id="windows-muted">
               <h3>Playback stays muted</h3>

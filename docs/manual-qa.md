@@ -194,6 +194,14 @@ cd swift
 - In each focus-change case, confirm the HUD says **Copied — press ⌘V to
   paste**, the menu keeps the same recovery instruction after the HUD closes,
   and copying the last transcript clears the notice.
+- In an Electron/Chromium app such as VS Code, open two separate windows with
+  editable fields. Dictate without leaving the first window and confirm the
+  text is pasted automatically rather than falling back to **Copied — press
+  ⌘V to paste**. Start another dictation in the first window, move to the
+  second window before transcription finishes, and confirm Presspeech leaves
+  the text on the clipboard instead of pasting into that same-process window.
+  This is the acceptance check for the accessibility-focus gap tracked in
+  [issue #33](https://github.com/rcourtman/presspeech/issues/33).
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.

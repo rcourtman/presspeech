@@ -19,5 +19,9 @@ contents, credentials, private paths, or other sensitive data. Diagnostics are
 not sent automatically: opening a feedback form only opens a fixed GitHub URL,
 and you decide what to paste and submit.
 
+Before proposing a larger capability, read the [product roadmap](ROADMAP.md).
+It describes current priorities, evidence gates, and workflows that are
+deliberately outside Presspeech's scope.
+
 Do not use a public issue for a security vulnerability. Follow the private
 reporting process in [SECURITY.md](SECURITY.md) instead.

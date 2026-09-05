@@ -100,11 +100,11 @@
                   <td>No; the paid binary activates with a license key.</td>
                 </tr>
                 <tr>
-                  <th scope="row">Latency, release to text</th>
-                  <td>~100 ms, measured p50 92&ndash;96 ms; <a href="../benchmarks.html">reproducible benchmark</a>.</td>
+                  <th scope="row">Published latency evidence</th>
+                  <td>Model-only p50 of 92&ndash;152 ms across the published clips; the <a href="../benchmarks.html">reproducible benchmark</a> does not time clipboard or paste work.</td>
                   <td>Not published.</td>
                   <td>Not published.</td>
-                  <td>Not published; its engineering blog describes a ~700 ms end-to-end target.</td>
+                  <td>Its engineering blog describes a ~700 ms end-to-end target, which is not directly comparable with Presspeech's model-only measurement.</td>
                   <td>Not published.</td>
                 </tr>
                 <tr>
@@ -151,7 +151,7 @@
             </table>
           </div>
           <div class="note">
-            <p>Every tool here wins somewhere. Pick the AI-formatting tools if you want your words reshaped, Apple Dictation if you want zero install, VoiceInk if you want one configurable local Mac app, or <a href="handy.html">Handy</a> if you want a larger cross-platform open-source community and model choice. Presspeech's case is narrow on purpose: a measured low-latency path from key release to pasted text, a small native macOS app, and no cloud transcription path to audit.</p>
+            <p>Every tool here wins somewhere. Pick the AI-formatting tools if you want your words reshaped, Apple Dictation if you want zero install, VoiceInk if you want one configurable local Mac app, or <a href="handy.html">Handy</a> if you want a larger cross-platform open-source community and model choice. Presspeech's case is narrow on purpose: a measured low-latency local model path, a small native macOS app, and no cloud transcription path to audit.</p>
           </div>
           <p>Presspeech's figures are measured on an M4 Mac mini and reproducible from the <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench">benchmark harness</a>. Other tools' figures come from their official sites, docs, and release assets, checked 1 September 2026. &ldquo;Not published&rdquo; means we could not find an official number, nothing more. MacWhisper sits out this table because it is primarily a file-transcription app; it has its <a href="macwhisper.html">own page</a>. Handy is the closest high-adoption open-source alternative and has its <a href="handy.html">own page</a> rather than making this Mac-focused table wider. Spotted an error? <a href="https://github.com/rcourtman/presspeech/issues">Open an issue</a> and we will fix it.</p>
           <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a> and <a href="../benchmarks.html">benchmarks</a>; <a href="https://support.apple.com/guide/mac-help/use-dictation-mh40584/mac">Apple Dictation guide</a>, <a href="https://www.apple.com/macos/feature-availability/">macOS feature availability</a>, and <a href="https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/">Siri &amp; Dictation privacy</a>; <a href="https://superwhisper.com/">Superwhisper</a> site and docs; <a href="https://wisprflow.ai/pricing">Wispr Flow pricing</a> and <a href="https://wisprflow.ai/privacy">privacy</a>; <a href="https://tryvoiceink.com/">VoiceInk</a> site and <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.13">v2.13 release</a>; <a href="https://github.com/cjpais/Handy">Handy source and documentation</a>.</p>

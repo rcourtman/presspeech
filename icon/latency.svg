@@ -4,7 +4,7 @@
   <rect width="1000" height="320" fill="#FAF8F2"/>
 
   <!-- Section title -->
-  <text x="500" y="46" text-anchor="middle" font-size="14" font-weight="700" fill="#64748B" letter-spacing="2">END-TO-END LATENCY</text>
+  <text x="500" y="46" text-anchor="middle" font-size="14" font-weight="700" fill="#64748B" letter-spacing="2">MODEL TRANSCRIPTION LATENCY</text>
 
   <defs>
     <!-- Reveal clip for the typed-text -->
@@ -130,7 +130,7 @@
   <circle cx="640" cy="180" r="10" fill="#0F172A"/>
   <text x="640" y="240" text-anchor="middle" font-size="13" font-weight="600" fill="#0F172A">Release</text>
 
-  <!-- ============ The 180ms gap — the star ============ -->
+  <!-- ============ Measured model-transcription segment ============ -->
   <!-- Bracket span -->
   <line x1="650" y1="180" x2="760" y2="180" stroke="#10B981" stroke-width="6" stroke-linecap="round"/>
 
@@ -153,7 +153,7 @@
   <circle cx="770" cy="180" r="10" fill="#10B981">
     <animate attributeName="r" values="10;10;10;10;10;14;10;10" keyTimes="0;0.55;0.62;0.66;0.72;0.78;0.84;1" dur="5s" repeatCount="indefinite"/>
   </circle>
-  <text x="770" y="240" text-anchor="middle" font-size="13" font-weight="600" fill="#10B981">Text appears</text>
+  <text x="770" y="240" text-anchor="middle" font-size="13" font-weight="600" fill="#10B981">Transcript ready</text>
 
   <!-- Mock text-field with the typed text appearing -->
   <rect x="780" y="160" width="160" height="40" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5"/>
@@ -162,5 +162,5 @@
   </g>
 
   <!-- Footer -->
-  <text x="500" y="296" text-anchor="middle" font-size="13" fill="#64748B">No network round-trip. Local inference on the Apple Neural Engine via FluidAudio + Parakeet TDT v3.</text>
+  <text x="500" y="296" text-anchor="middle" font-size="13" fill="#64748B">Benchmark times the local model call only; app, clipboard, and paste work are not included.</text>
 </svg>

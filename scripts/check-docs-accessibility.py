@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 STYLES = DOCS / "styles.css"
 MIN_TEXT_CONTRAST = 4.5
+MIN_FOCUS_CONTRAST = 3.0
+MIN_FOCUS_THICKNESS = 2
 MIN_MOBILE_NAV_TARGET = 44
 ERROR_PAGE = Path("404.html")
 
@@ -248,6 +250,48 @@ def navigation_target_errors(css: str) -> list[str]:
     return errors
 
 
+def focus_indicator_errors(css: str) -> list[str]:
+    """Enforce a durable keyboard focus ring on every light site surface."""
+    errors: list[str] = []
+    variables = css_variables(css)
+    focus = variables.get("focus")
+    if focus is None:
+        return ["missing --focus CSS color"]
+
+    declarations = css_declarations(css, "a:focus-visible")
+    if declarations is None:
+        return ["missing a:focus-visible rules"]
+    outline = declarations.get("outline", "").strip()
+    match = re.fullmatch(
+        r"(?P<thickness>\d+(?:\.\d+)?)px\s+solid\s+var\(--focus\)", outline
+    )
+    if match is None:
+        errors.append("keyboard focus outline must use a solid --focus color")
+    elif float(match.group("thickness")) < MIN_FOCUS_THICKNESS:
+        errors.append(
+            f"keyboard focus outline must be at least {MIN_FOCUS_THICKNESS}px thick"
+        )
+
+    # Links occur directly on each of these surfaces. Requiring the ring to
+    # survive the least favourable one avoids a passing homepage check while
+    # focus remains hard to see in a card, note, code sample, or tinted block.
+    surface_names = ("bg", "bg-tint", "panel", "soft", "soft-2", "warn", "code")
+    for background_name in surface_names:
+        background = variables.get(background_name)
+        if background is None:
+            errors.append(
+                f"missing --{background_name} CSS color for focus contrast check"
+            )
+            continue
+        ratio = contrast_ratio(focus, background)
+        if ratio + 1e-9 < MIN_FOCUS_CONTRAST:
+            errors.append(
+                f"focus {focus} on {background_name} {background} has {ratio:.2f}:1 "
+                f"contrast; need {MIN_FOCUS_CONTRAST:.1f}:1"
+            )
+    return errors
+
+
 def accessibility_errors(docs: Path = DOCS, styles: Path = STYLES) -> list[str]:
     errors: list[str] = []
     for path in sorted(docs.rglob("*.html")):
@@ -257,6 +301,8 @@ def accessibility_errors(docs: Path = DOCS, styles: Path = STYLES) -> list[str]:
         errors.append(f"{styles.name}: {error}")
     css = styles.read_text(encoding="utf-8")
     for error in navigation_target_errors(css):
+        errors.append(f"{styles.name}: {error}")
+    for error in focus_indicator_errors(css):
         errors.append(f"{styles.name}: {error}")
     return errors
 
@@ -330,6 +376,35 @@ def run_self_test() -> None:
     errors = navigation_target_errors(missing_width_css)
     if not any("44px min-width" in error for error in errors):
         raise RuntimeError("self-test: mobile link without a minimum width was accepted")
+
+    focus_css = """
+    :root {
+      --focus: #0d7f5f;
+      --bg: #fbfaf8;
+      --bg-tint: #f4f1ea;
+      --panel: #ffffff;
+      --soft: #e9f5f0;
+      --soft-2: #f3f9f6;
+      --warn: #fff5d8;
+      --code: #f3f2ed;
+    }
+    a:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+    """
+    if focus_indicator_errors(focus_css):
+        raise RuntimeError("self-test: valid focus indicator was rejected")
+    low_contrast_focus_css = focus_css.replace(
+        "--focus: #0d7f5f", "--focus: #7ab9a7"
+    )
+    errors = focus_indicator_errors(low_contrast_focus_css)
+    if not any("focus #7ab9a7" in error for error in errors):
+        raise RuntimeError("self-test: low-contrast focus indicator was accepted")
+    thin_focus_css = focus_css.replace("outline: 3px", "outline: 1px")
+    errors = focus_indicator_errors(thin_focus_css)
+    if not any("at least 2px thick" in error for error in errors):
+        raise RuntimeError("self-test: thin focus indicator was accepted")
 
 
 def main() -> int:

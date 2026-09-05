@@ -151,19 +151,20 @@
           <div class="grid two">
             <article class="card">
               <h3>Use a simple first target</h3>
-              <p>Open a blank note, email draft, or document. Click where text should appear, keep that window focused, then repeat the same hold–speak–release gesture.</p>
+              <p>Start in TextEdit on macOS or Notepad on Windows. Click in a blank document, keep that window focused, then repeat the same hold–speak–release gesture. A success there makes it easier to distinguish setup trouble from a target app's paste handling.</p>
             </article>
             <article class="card">
-              <h3>If you change windows</h3>
-              <p>Presspeech binds each recording to the window where it began. If focus changes before delivery, it leaves the transcript on the clipboard instead of pasting into the wrong place. Return to the intended field and paste manually.</p>
+              <h3>If Presspeech copies instead</h3>
+              <p>Presspeech binds each recording to the window where it began. If focus changes or Presspeech cannot verify the same destination, it leaves the transcript on the clipboard instead of risking a paste into the wrong place. Return to the intended field and paste manually. On Windows, this also happens when the target is running as administrator; reopen that target normally rather than elevating Presspeech.</p>
             </article>
           </div>
           <div class="facts">
             <div class="fact"><strong>Start cue</strong><span>Recording has started.</span></div>
             <div class="fact"><strong>Stop cue</strong><span>Recording has stopped and local transcription has begun.</span></div>
             <div class="fact"><strong>Escape</strong><span>Cancel an active recording and discard its buffered audio.</span></div>
-            <div class="fact"><strong>Clipboard fallback</strong><span>Paste manually if focus changed during transcription.</span></div>
+            <div class="fact"><strong>Clipboard fallback</strong><span>Paste manually whenever Presspeech reports that it copied the transcript.</span></div>
           </div>
+          <div class="note"><p><strong>Clipboard privacy:</strong> Presspeech itself does not sync transcripts, but enabled operating-system clipboard services or third-party clipboard managers can retain or sync copied text. Review the <a href="privacy.html">clipboard privacy boundary</a> before dictating sensitive text.</p></div>
         </div>
       </section>
 

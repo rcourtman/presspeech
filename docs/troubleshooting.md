@@ -51,10 +51,25 @@ and dictionary rules remain intact.
 ### Try Dictation Works But Text Is Not Inserted
 
 Confirm Accessibility is granted, click the destination text field, then dictate
-without changing apps before transcription finishes. Presspeech binds a
-recording to the app that had focus when it began. If focus changes, it leaves
-the text on the clipboard instead of pasting into the wrong window; paste it
-manually after confirming the intended destination.
+without changing apps before transcription finishes. If the HUD or menu says
+**Copied — press Command-V to paste**, the finished transcript is already on
+the clipboard. Return to the intended field and paste it manually instead of
+dictating it again.
+
+Presspeech also uses this fallback when it cannot verify the same destination.
+Some Electron/Chromium-based apps do not consistently expose the focused-window
+information the current Mac app checks, so the notice can appear even if the
+window looks unchanged. If Presspeech instead says **Couldn't paste — use Copy
+Last Transcript**, choose that menu action before trying again.
+
+### Previous Clipboard Content Is Pasted
+
+Turn off **Settings -> Behavior -> Restore clipboard after paste** and retry
+with non-sensitive text in TextEdit. This option is off by default. Disabling it
+leaves the new transcript on the clipboard and avoids restoring old content
+before a slow target app has consumed the paste. Remove unintended text from the
+destination before continuing and include the target app's name with
+privacy-safe diagnostics if you report the problem.
 
 ### System Audio Stays Muted
 
@@ -105,9 +120,12 @@ modifier or F-key and retry in **Try Dictation**.
 ### Try Dictation Works But Text Is Not Inserted
 
 Click the destination text field before pressing the hotkey and keep that window
-focused until transcription finishes. If focus changes, Presspeech leaves the
-transcript on the clipboard and shows a notification rather than pasting private
-text into the wrong app. Return to the intended field and paste manually.
+focused until transcription finishes. If the notification says **Transcript
+copied, not pasted**, the finished transcript is already on the clipboard.
+Return to the intended field and press **Ctrl+V** instead of dictating it again.
+This fallback is used when focus changed, the original window could not be
+identified, or the target runs as administrator. Reopen an elevated target
+normally when possible; do not run Presspeech as administrator as a workaround.
 
 ### Playback Stays Muted
 

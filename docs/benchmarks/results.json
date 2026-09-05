@@ -149,6 +149,8 @@
       "script": "experiments/swift-bench/run-release-asr-checks.sh",
       "runs_private_real_audio_when_present": true,
       "requires_long_form_public_corpus": true,
+      "max_conservative_long_form_corpus_wer_percent": 10,
+      "max_long_form_consecutive_reference_deletion_run": 6,
       "candidate_models_require_flag": "--include-candidate-models",
       "requires_exact_production_dependency_pin": true,
       "candidate_dependency_option": "--allow-candidate-dependency",

@@ -58,6 +58,10 @@ EXTRA_STALE_SCAN = [
     DOCS / "privacy" / "network-calls.json",
     ROOT / "marketing" / "SHARING.md",
     ROOT / "marketing" / "demo" / "README.md",
+    ROOT / "icon" / "hero.svg",
+    ROOT / "icon" / "demo.svg",
+    ROOT / "icon" / "social-preview.svg",
+    ROOT / "icon" / "latency.svg",
 ]
 
 # Public prose can gain a Windows download link outside the files rewritten by
@@ -111,12 +115,22 @@ ICON_STAT_SVGS = [
 # These are hand-designed or hand-written, so release syncing validates rather
 # than rewrites them.
 PLATFORM_ORIENTATION = {
-    ROOT / "README.md": ("macOS", "Windows", "Released, signed, and notarised", "Prerelease"),
+    ROOT / "README.md": (
+        "macOS",
+        "Windows",
+        "Released, signed, and notarised",
+        "Prerelease",
+        "**macOS default:** **Right Option**",
+        "**Windows default:** **Right Alt**",
+        "⌘V on macOS or Ctrl+V on Windows",
+    ),
     DOCS / "index.html": (
         "macOS — released",
         "signed and notarised",
         "Windows — prerelease",
         "currently unsigned",
+        "video below shows the macOS build",
+        "On Windows, use the same hold–speak–release gesture",
     ),
     DOCS / "faq.html": (
         "released macOS app",
@@ -164,6 +178,24 @@ WINDOWS_UNSIGNED_GUIDANCE = {
     ),
 }
 
+# Presspeech itself has no transcript-sync feature, but normal delivery writes
+# to each platform's general clipboard. Public privacy and retrieval surfaces
+# must preserve the separate operating-system boundary: Handoff/Universal
+# Clipboard and Windows clipboard history can retain or sync those writes.
+CLIPBOARD_SERVICE_GUIDANCE = {
+    ROOT / "README.md": ("macOS Universal Clipboard", "Windows clipboard"),
+    DOCS / "faq.html": ("macOS Universal Clipboard", "Windows clipboard history"),
+    DOCS / "privacy.html": ("macOS Universal Clipboard", "Windows clipboard history"),
+    DOCS / "privacy" / "network-calls.json": (
+        "macOS Universal Clipboard",
+        "Windows clipboard history",
+    ),
+    DOCS / "windows.html": ("Windows clipboard", "cross-device sync"),
+    ROOT / "windows" / "README.md": ("Windows clipboard history", "cross-device sync"),
+    DOCS / "llms.txt": ("macOS Universal Clipboard", "Windows clipboard history"),
+    DOCS / "llms-full.txt": ("macOS Universal Clipboard", "Windows clipboard history"),
+}
+
 # Compare pages quote competitor pricing and claims. Each page must carry a
 # "checked <Month> <Year>" stamp; --check fails once the oldest stamp ages out
 # so a release forces a re-verify against the cited sources.
@@ -188,6 +220,10 @@ MONTH_NUMBERS = {
 STALE_PATTERNS = [
     (re.compile(r"2\.2 MB"), "old release zip size"),
     (re.compile(r'"softwareVersion": "0\.2\.1"'), "old structured-data version"),
+    (
+        re.compile(r"dictat(?:e|ion) into any app", re.IGNORECASE),
+        "unsupported universal paste-delivery promise",
+    ),
     (re.compile(r"#install-one-liner"), "old README anchor install URL"),
     (re.compile(r"warning rows?", re.IGNORECASE), "old permission warning-row setup wording"),
     (re.compile(r"permission rows disappear", re.IGNORECASE), "old permission-row completion wording"),
@@ -241,6 +277,40 @@ STALE_PATTERNS = [
     (
         re.compile(r"releases/latest/download/Presspeech\.zip\.sha256"),
         "macOS checksum link is not present in the current release",
+    ),
+    (
+        re.compile(
+            r"(?:100\s*ms.{0,40}release[- ]to[- ]paste|"
+            r"release[- ]to[- ]paste.{0,40}(?:benchmark|100\s*ms))",
+            re.IGNORECASE,
+        ),
+        "benchmark mislabeled as release-to-paste latency",
+    ),
+    (
+        re.compile(
+            r"transcript (?:pastes|appears)[^\n.]{0,80}(?:about|~)\s*100\s*ms",
+            re.IGNORECASE,
+        ),
+        "model benchmark presented as complete paste latency",
+    ),
+    (
+        re.compile(r"about\s+100\s+ms\s+(?:later|after release)", re.IGNORECASE),
+        "model benchmark presented as complete paste latency",
+    ),
+    (
+        re.compile(
+            r"(?:~|about)\s*100\s*ms\s+from\s+(?:key\s+)?release\s+to\s+pasted\s+text",
+            re.IGNORECASE,
+        ),
+        "model benchmark presented as release-triggered paste latency",
+    ),
+    (
+        re.compile(r"END-TO-END LATENCY", re.IGNORECASE),
+        "model-only benchmark labeled end-to-end",
+    ),
+    (
+        re.compile(r"18\s+Latin/Cyrillic-script languages via Parakeet", re.IGNORECASE),
+        "language-hint count presented as recognition-language count",
     ),
 ]
 
@@ -948,6 +1018,25 @@ def check_windows_unsigned_guidance(
     return errors
 
 
+def check_clipboard_service_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = CLIPBOARD_SERVICE_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing clipboard privacy guidance")
+            continue
+        contents = " ".join(read_text(path).split())
+        missing = [phrase for phrase in required if phrase not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete operating-system clipboard guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
 def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
     expected: dict[Path, str] = {}
     for path, syncer in SYNCERS.items():
@@ -1237,6 +1326,35 @@ def run_self_test() -> None:
         )
         if not stale_copy_errors([stale_checksum]):
             raise SyncError("self-test: missing current-release checksum asset was not flagged")
+        stale_delivery = Path(tmp) / "homepage.html"
+        stale_delivery.write_text(
+            "Private push-to-talk dictation into any app.\n", encoding="utf-8"
+        )
+        if not stale_copy_errors([stale_delivery]):
+            raise SyncError("self-test: universal paste-delivery promise was not flagged")
+
+        stale_evidence = Path(tmp) / "claims.md"
+        stale_evidence.write_text(
+            "Published release-to-paste benchmark.\n"
+            "The transcript pastes at the cursor in about 100 ms.\n"
+            "~100 ms from key release to pasted text.\n"
+            "END-TO-END LATENCY\n"
+            "18 Latin/Cyrillic-script languages via Parakeet v3.\n",
+            encoding="utf-8",
+        )
+        evidence_errors = stale_copy_errors([stale_evidence])
+        expected_labels = (
+            "benchmark mislabeled as release-to-paste latency",
+            "model benchmark presented as complete paste latency",
+            "model benchmark presented as release-triggered paste latency",
+            "model-only benchmark labeled end-to-end",
+            "language-hint count presented as recognition-language count",
+        )
+        if not all(any(label in error for error in evidence_errors) for label in expected_labels):
+            raise SyncError(
+                "self-test: unsupported benchmark or language claims were not all flagged: "
+                f"{evidence_errors!r}"
+            )
 
         release_reference = Path(tmp) / "new-public-page.md"
         release_reference.write_text(
@@ -1304,6 +1422,25 @@ def run_self_test() -> None:
         if check_windows_unsigned_guidance(required_guidance):
             raise SyncError("self-test: complete unsigned Windows guidance was rejected")
 
+        clipboard_guidance = Path(tmp) / "privacy.html"
+        required_clipboard_guidance = {
+            clipboard_guidance: (
+                "macOS Universal Clipboard",
+                "Windows clipboard history",
+            )
+        }
+        clipboard_guidance.write_text(
+            "Presspeech itself does not sync transcripts.\n", encoding="utf-8"
+        )
+        if not check_clipboard_service_guidance(required_clipboard_guidance):
+            raise SyncError("self-test: missing clipboard-service boundary was not flagged")
+        clipboard_guidance.write_text(
+            "macOS Universal Clipboard and Windows clipboard history are outside Presspeech.\n",
+            encoding="utf-8",
+        )
+        if check_clipboard_service_guidance(required_clipboard_guidance):
+            raise SyncError("self-test: complete clipboard-service boundary was rejected")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1323,11 +1460,12 @@ def main() -> int:
         expected = expected_files(metadata)
         errors: list[str] = []
         if args.check:
-            errors.extend(stale_copy_errors(list(expected) + EXTRA_STALE_SCAN))
+            errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
             errors.extend(check_windows_release_references(metadata))
             errors.extend(check_icon_stats(metadata))
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
+            errors.extend(check_clipboard_service_guidance())
             errors.extend(check_compare_freshness())
             for path, want in expected.items():
                 have = read_text(path) if path.exists() else ""
@@ -1351,11 +1489,12 @@ def main() -> int:
                 print(f"updated {path.relative_to(ROOT)}")
         sync_icon_stats(previous_size, str(metadata["release_zip_size"]))
 
-        errors.extend(stale_copy_errors(list(expected) + EXTRA_STALE_SCAN))
+        errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
         errors.extend(check_windows_release_references(metadata))
         errors.extend(check_icon_stats(metadata))
         errors.extend(check_platform_orientation())
         errors.extend(check_windows_unsigned_guidance())
+        errors.extend(check_clipboard_service_guidance())
         errors.extend(check_install_prompt_sync())
         if errors:
             for error in errors:

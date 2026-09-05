@@ -34,6 +34,13 @@ checks their GitHub digests before the prerelease becomes available. The
 Windows updater checks the published metadata, checksum file, and installer
 again before launch.
 
+Windows model downloads are restricted to the public Hugging Face Hub before
+the model libraries are imported. Presspeech removes inherited Hub credentials
+from its process, disables implicit authentication and Hugging Face library
+telemetry, and ignores inherited private/staging Hub endpoints. The selectable
+models use full reviewed repository revisions rather than mutable branch or
+alias names.
+
 ## What's in scope
 
 - Anything that lets a non-Presspeech process read transcripts in flight,

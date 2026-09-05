@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -24,6 +26,34 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(benchmark.edit_distance(["a", "b"], ["a", "x", "b"]), 1)
         self.assertEqual(benchmark.edit_distance(["a", "b"], ["a"]), 1)
         self.assertEqual(benchmark.edit_distance(["a"], ["b"]), 1)
+
+    def test_reference_deletion_run_distinguishes_dropped_span(self):
+        self.assertEqual(
+            benchmark.max_reference_deletion_run(
+                ["keep", "this", "whole", "sentence", "intact"],
+                ["keep", "intact"],
+            ),
+            3,
+        )
+        self.assertEqual(
+            benchmark.max_reference_deletion_run(
+                ["keep", "this", "intact"],
+                ["keep", "that", "intact"],
+            ),
+            0,
+        )
+
+    def test_trial_accuracy_exposes_error_hidden_by_consensus(self):
+        metrics = benchmark.trial_accuracy_metrics(
+            "Keep this whole sentence intact",
+            ["Keep this whole sentence intact", "Keep intact"],
+        )
+
+        self.assertEqual(metrics["word_errors"], [0, 3])
+        self.assertEqual(metrics["wer"], [0.0, 0.6])
+        self.assertEqual(metrics["max_reference_deletion_run"], [0, 3])
+        self.assertEqual(metrics["exact_match_trials"], 1)
+        self.assertEqual(metrics["trials"], 2)
 
     def test_final_word_metrics_normalise_case_and_punctuation(self):
         self.assertEqual(
@@ -153,6 +183,9 @@ class MetricTests(unittest.TestCase):
             result["samples"][0]["backend_stages"]["generate"]["median"],
             0.20,
         )
+        self.assertIsNone(result["aggregate_trial_wer"])
+        self.assertIsNone(result["maximum_reference_deletion_run"])
+        self.assertEqual(result["reviewed_accuracy_trial_count"], 0)
 
     def test_reviewed_silence_scores_empty_output_as_clean(self):
         self.assertEqual(
@@ -280,6 +313,56 @@ class MetricTests(unittest.TestCase):
             "failed_trials": 1,
             "trials": 2,
         })
+
+    def test_benchmark_aggregates_every_accuracy_trial_and_deletion_span(self):
+        manifest = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "runs": 2,
+            "samples": [{
+                "id": "intermittent-drop",
+                "audio": "speech.wav",
+                "reference": "Keep this whole sentence intact",
+                "reference_reviewed": True,
+            }],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+        # Counter ties preserve first-seen order, so consensus WER remains zero
+        # while the second trial demonstrates the evidence the old report lost.
+        transcriber.transcribe.side_effect = [
+            "Keep this whole sentence intact",
+            "Keep intact",
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 2.0, 16000)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        self.assertEqual(result["benchmark_version"], 2)
+        self.assertEqual(result["aggregate_wer"], 0.0)
+        self.assertEqual(result["aggregate_trial_wer"], 0.3)
+        self.assertEqual(result["reviewed_accuracy_trial_count"], 2)
+        self.assertEqual(result["exact_match_trial_count"], 1)
+        self.assertEqual(result["maximum_reference_deletion_run"], 3)
+        self.assertEqual(
+            result["samples"][0]["trial_accuracy"]["word_errors"],
+            [0, 3],
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn(
+            "Reviewed accuracy: 0.00% consensus WER / 30.00% all-trial WER",
+            output.getvalue(),
+        )
+        self.assertIn("longest deletion 3 words", output.getvalue())
 
 
 if __name__ == "__main__":

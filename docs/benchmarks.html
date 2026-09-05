@@ -162,7 +162,7 @@
             </article>
             <article class="card">
               <h3>Release gate</h3>
-              <p><code>run-release-asr-checks.sh</code> checks production v3 only when the benchmark and app pin the exact same FluidAudio revision and a validated multi-window corpus is present. An explicit candidate-dependency mode can compare unreleased APIs, but cannot produce a production release-pass verdict.</p>
+              <p><code>run-release-asr-checks.sh</code> checks production v3 only when the benchmark and app pin the exact same FluidAudio revision and a validated multi-window corpus is present. The multi-window gate rejects a conservative corpus WER above 10% and any run of more than six consecutively deleted reference words. An explicit candidate-dependency mode can compare unreleased APIs, but cannot produce a production release-pass verdict.</p>
             </article>
           </div>
           <p>The public-fixture fetcher can also import a deterministic row range from a pinned Google FLEURS language split. This gives encoder candidates reproducible multilingual and cross-script coverage; private human dictation remains a separate product requirement.</p>

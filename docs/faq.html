@@ -105,6 +105,14 @@
               <p>Use <strong>Try Dictation</strong> after setup reports that the model is ready. The focused private scratchpad lets you test the hotkey and paste flow without switching to another app. See the <a href="getting-started.html#private-test">first-dictation guide</a> for both platforms.</p>
             </article>
             <article class="card">
+              <h3>Why was the transcript copied instead of pasted?</h3>
+              <p>Presspeech fails closed when it cannot verify the same destination it captured at the start. If macOS says <strong>Copied — press ⌘V to paste</strong> or Windows says <strong>Transcript copied, not pasted</strong>, return to the intended field and paste manually instead of dictating again. Causes include a focus change, unavailable focused-window information, and—on Windows—a target running as administrator. The <a href="troubleshooting.html#macos-paste">Mac</a> and <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps explain the platform details.</p>
+            </article>
+            <article class="card">
+              <h3>Can a clipboard service retain transcripts?</h3>
+              <p>Yes. Presspeech does not sync transcripts itself, but its normal delivery writes finished text to the system clipboard. macOS Universal Clipboard, Windows clipboard history and cross-device sync, or a third-party clipboard manager can retain or sync clipboard entries when enabled. Review the <a href="privacy.html">clipboard privacy boundary</a> before sensitive dictation.</p>
+            </article>
+            <article class="card">
               <h3>Why does first launch take time?</h3>
               <p>Each app must download and prepare a local speech model before the first dictation. The macOS cache is about 500–600 MB. A fresh Windows install downloads about 2.5 GB for CUDA Parakeet or about 141 MiB for CPU Whisper. Later launches reuse the cache.</p>
             </article>

@@ -447,15 +447,21 @@ better per-utterance diagnostic corpus.
 
 The release wrapper first validates that this is composer-owned output with a
 matching manifest, paired references, at least two composite clips, and at
-least 30 seconds per clip. It then applies a separate catastrophic-content-drop
-screen. In addition to ordinary WER, `presspeech-bench` reports the
+least 30 seconds per clip. It then applies two broad regression screens. The
+conservative corpus WER sums exact word errors from the worst observed
+transcript of each clip and fails above 10%. This deliberately generous bound
+is more than five times the published v0.15.5 production-v3 result of 1.73% on
+the ordinary public corpus, but unlike a deletion-only check it also catches
+widespread substitutions, insertions, and scattered omissions. In addition,
+`presspeech-bench` reports the
 longest consecutive run of reference words deleted by the stable minimum-edit
 alignment. The wrapper fails when that run exceeds six words, so a multi-second
 seam omission cannot disappear inside an acceptable clip-wide WER average.
-This is intentionally a narrow safety invariant, not a claim that a run of six
+These are safety invariants, not a claim that a sub-10% result or a run of six
 or fewer deletions is good speech recognition; inspect WER and transcripts and
-keep the short, private-dictation, and multilingual checks. Override the bound
-for an explicitly reviewed corpus with
+keep the short, private-dictation, and multilingual checks. Override either
+bound for an explicitly reviewed corpus with
+`--long-public-max-corpus-wer` or
 `--long-public-max-reference-deletion-run`.
 
 ## Parakeet encoder-precision regression
