@@ -191,7 +191,6 @@ CLIPBOARD_SERVICE_GUIDANCE = {
         "Windows clipboard history",
     ),
     DOCS / "windows.html": ("Windows clipboard", "cross-device sync"),
-    ROOT / "windows" / "README.md": ("Windows clipboard history", "cross-device sync"),
     DOCS / "llms.txt": ("macOS Universal Clipboard", "Windows clipboard history"),
     DOCS / "llms-full.txt": ("macOS Universal Clipboard", "Windows clipboard history"),
 }
