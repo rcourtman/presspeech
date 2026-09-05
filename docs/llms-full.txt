@@ -55,6 +55,11 @@ On macOS the default hotkey is Right Option; on Windows it is Right Alt. Hold it
 
 Both apps offer a focused Try Dictation scratchpad for the first hotkey test and deterministic local replacements for recurring recognition errors or reusable spoken phrases. On macOS, Settings → Text → Spoken formatting commands can additionally convert documented phrases for new lines, paragraphs, punctuation, quotes, and parentheses to exact text without a rewriting model. Commands are English by default (including “bullet point”); selecting French as the Language Hint switches this pass to canonical French phrases such as “nouvelle ligne”, “nouveau paragraphe”, “virgule”, and “guillemet ouvrant”.
 
+Dictionary & Shortcuts is post-transcription text replacement, not speech-model
+training or decoder vocabulary biasing. Each distinct mishearing or inflected
+form that needs correction requires its own saved rule. Rules stay local; the
+macOS app can export, import, or keep them in a user-chosen sync file.
+
 ## Engine
 
 The macOS app uses FluidAudio's Swift SDK with the local Parakeet TDT v3 CoreML speech model on the Apple Neural Engine. It is native Swift and uses AVFoundation, CoreGraphics event taps, AppKit, CoreML, NSPasteboard, a synthetic Cmd+V paste event, and direct Unicode key events as a fallback.

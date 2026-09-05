@@ -66,6 +66,10 @@ Run this before publishing a release.
   again with the selected microphone and Start with Windows choice preserved.
   Confirm the chosen autostart state is reflected under Task Manager **Startup
   apps**. After the model reaches Ready, confirm both actions become available.
+- On a test account or policy that denies changes to the current user's
+  startup registration, choose **Set Up Later**. Confirm Setup stays open, the
+  status says Start with Windows was not updated, Narrator announces that
+  status once, and **Open Startup Settings** remains keyboard-accessible.
 - Confirm **Finish Setup** remains available if the microphone will be connected
   later; microphone readiness is advisory rather than a completion gate.
 - Close every Presspeech window while leaving the notification-area process
@@ -91,6 +95,14 @@ Run this before publishing a release.
   confirm Presspeech leaves the transcript on the clipboard, sends no simulated
   paste shortcut, and reports the Windows administrator boundary. Paste manually
   and confirm the complete transcript is available. Do not elevate Presspeech.
+- Enable Windows Clipboard History, clear it, and dictate a unique non-sensitive
+  marker into Notepad. Confirm automatic and immediate manual Ctrl+V both work,
+  then press **Win+V** and confirm the marker is absent. Repeat the check after a
+  focus-change recovery and after **Copy Diagnostics**. If Cloud Clipboard sync
+  is available on a second test PC, confirm none of the three copies roams there.
+- Dictate into active Moonlight and Microsoft Remote Desktop sessions and
+  confirm each remote paste route still receives the complete marker even
+  though the source PC's **Win+V** history does not retain it.
 
 
 ## Signed App Smoke
@@ -106,6 +118,9 @@ cd swift
 - Navigate the checklist using Tab and Shift-Tab. Activate a permission action
   that remains missing and changes from **Grant** to **Try Again**; confirm
   keyboard focus remains on that replacement action when the row is redrawn.
+  Grant the permission and continue tabbing after the action disappears; then
+  complete the hotkey test and confirm the newly shown **Try Dictation** and
+  **Done** buttons enter the loop in visual order, with no skipped or stale stop.
 - With VoiceOver enabled, confirm each permission action includes its context,
   such as **Grant Microphone** and **Grant Accessibility**, rather than being
   announced only as **Grant**.
@@ -194,9 +209,11 @@ cd swift
 - In each focus-change case, confirm the HUD says **Copied — press ⌘V to
   paste**, the menu keeps the same recovery instruction after the HUD closes,
   and copying the last transcript clears the notice.
-- Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
-  and menu report **No speech detected — try again** rather than playing the
-  successful-dictation cue.
+- Tap the hotkey too briefly to pass the short-clip cutoff, then dictate silence
+  long enough to reach recognition. Confirm both leave **No speech detected —
+  try again** in the HUD and menu rather than disappearing silently or playing
+  the successful-dictation cue. Retry immediately and confirm the new recording
+  state is not hidden when the old notice expires.
 - Enable **Restore clipboard after paste**, trigger the focus-change path, and
   confirm the transcript remains available for manual paste rather than being
   replaced by the old clipboard contents.
@@ -306,4 +323,9 @@ sudo -v
 The real `bench-power.sh` run requires interactive sudo because
 `powermetrics` requires it. `run-release-asr-checks.sh` runs private
 real-dictation regressions only when local clips exist under
-`experiments/swift-bench/real-audio/`.
+`experiments/swift-bench/real-audio/`; its generated multi-window public corpus
+is required so the release check cannot silently exercise only short speech.
+The wrapper also fails closed unless the app and benchmark package pin the same
+FluidAudio revision. During an intentional candidate-API pin, use
+`--include-candidate-models --allow-candidate-dependency` only for candidate
+evidence; restore the exact app pin before recording a production release pass.

@@ -997,8 +997,13 @@ class SetupWindow:
         settings["input_device"] = selected
         settings["autostart"] = bool(self.autostart.get())
         cfg.save(settings)
-        self.app.apply_autostart()
-        self._close()
+        if self.app.apply_autostart():
+            self._close()
+        else:
+            _set_accessible_text(
+                self.autostart_status,
+                "Start with Windows was not updated, so Setup stayed open. "
+                "Open Startup Settings, then try Set Up Later again.")
 
     def _close(self):
         try:
@@ -1217,8 +1222,9 @@ class UpdateWindow:
 
 
 class SettingsWindow:
-    def __init__(self, app):
+    def __init__(self, app, initial_section="general"):
         self.app = app
+        self.initial_section = initial_section
         self.root = None
         _window_host().submit(self._build)
 
@@ -1372,7 +1378,7 @@ class SettingsWindow:
                                                    sticky="ew", pady=8)
         row += 1
 
-        ttk.Label(f, text="Dictionary (fix mishearings / spoken shortcuts):").grid(
+        ttk.Label(f, text="Dictionary & Shortcuts (fix recurring mishearings):").grid(
             row=row, column=0, columnspan=3, sticky="w")
         row += 1
 
@@ -1393,7 +1399,8 @@ class SettingsWindow:
             row=row, column=2, sticky="w", padx=10, pady=2)
         row += 1
 
-        add_button = ttk.Button(f, text="Add rule", command=self._add_rule)
+        add_button = ttk.Button(
+            f, text="Add or replace rule", command=self._add_rule)
         add_button.grid(row=row, column=0, sticky="w", pady=2)
         remove_button = ttk.Button(
             f, text="Remove selected", command=self._remove_rule)
@@ -1446,7 +1453,21 @@ class SettingsWindow:
         _mark_live_region(self.status)
         self._poll_model()
         self.scrollable_body.fit_to_screen()
-        root.after_idle(self.var_hotkey.focus_set)
+        if self.initial_section == "dictionary":
+            root.after_idle(self._focus_dictionary_on_ui_thread)
+        else:
+            root.after_idle(self.var_hotkey.focus_set)
+
+    def _focus_dictionary_on_ui_thread(self):
+        """Reveal and focus the correction editor from the Tk owner thread."""
+        if self.root is None:
+            return
+        self.scrollable_body._show_widget(self.spoken_entry)
+        self.spoken_entry.focus_set()
+
+    def focus_dictionary(self):
+        """Move an existing Settings window to its dictionary editor."""
+        _window_host().submit(self._focus_dictionary_on_ui_thread)
 
     def _poll_model(self):
         """Keep selected-model readiness visible while Settings stays open."""
@@ -1477,19 +1498,44 @@ class SettingsWindow:
         spoken = self.var_spoken.get().strip()
         replacement = self.var_replace.get()
         if not spoken:
+            _set_accessible_text(
+                self.status, "Enter the spoken phrase to add or replace.")
             return
+        # Matching is case-insensitive at dictation time. Treat another casing
+        # of the same spoken phrase as an edit rather than accepting a second
+        # rule that can never win the runtime tie-breaker.
+        duplicate_index = next(
+            (index for index, (existing, _replacement)
+             in enumerate(self.dictionary_rules)
+             if existing.casefold() == spoken.casefold()),
+            None,
+        )
+        proposed = [list(rule) for rule in self.dictionary_rules]
+        if duplicate_index is None:
+            proposed.append([spoken, replacement])
+        else:
+            proposed[duplicate_index] = [spoken, replacement]
         candidate = cfg.validated_dictionary(
-            self.dictionary_rules + [[spoken, replacement]])
-        if candidate is None or len(candidate) != len(self.dictionary_rules) + 1:
+            proposed)
+        if candidate is None or len(candidate) != len(proposed):
             _set_accessible_text(
                 self.status,
                 "Rule not added. Check the text length or remove an existing rule.")
             return
         self.dictionary_rules = candidate
-        self.listbox.insert("end", "%s \u2192 %s" % (spoken, replacement))
+        label = "%s \u2192 %s" % (spoken, replacement)
+        if duplicate_index is None:
+            self.listbox.insert("end", label)
+            _set_accessible_text(self.status, "Rule added. Save to apply it.")
+        else:
+            self.listbox.delete(duplicate_index)
+            self.listbox.insert(duplicate_index, label)
+            self.listbox.selection_set(duplicate_index)
+            self.listbox.see(duplicate_index)
+            _set_accessible_text(
+                self.status, "Existing rule replaced. Save to apply it.")
         self.var_spoken.set("")
         self.var_replace.set("")
-        _set_accessible_text(self.status, "")
 
     def _remove_rule(self):
         selection = self.listbox.curselection()

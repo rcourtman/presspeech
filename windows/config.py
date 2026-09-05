@@ -118,6 +118,7 @@ def validated_dictionary(value):
     if not isinstance(value, list):
         return None
     result = []
+    seen_spoken = set()
     for rule in value:
         if not (isinstance(rule, list) and len(rule) == 2 and
                 all(isinstance(part, str) for part in rule)):
@@ -129,6 +130,13 @@ def validated_dictionary(value):
                 not _within_utf8_limit(
                     replacement, MAX_DICTIONARY_REPLACEMENT_BYTES)):
             continue
+        spoken_key = spoken.casefold()
+        if spoken_key in seen_spoken:
+            # Runtime matching is case-insensitive and gives the earlier equal
+            # phrase priority. Keep that effective value while cleaning up old
+            # configs written before Settings prevented ineffective duplicates.
+            continue
+        seen_spoken.add(spoken_key)
         result.append([spoken, replacement])
         if len(result) == MAX_DICTIONARY_RULES:
             break

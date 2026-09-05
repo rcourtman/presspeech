@@ -950,13 +950,23 @@ td strong {
     min-height: 56px;
   }
 
+  .brand {
+    min-height: 44px;
+  }
+
   .nav-links {
+    width: 100%;
     gap: 4px 2px;
     font-size: 0.88rem;
   }
 
   .nav-links a {
-    padding: 5px 8px;
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
   }
 }
 

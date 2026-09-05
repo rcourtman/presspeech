@@ -26,6 +26,116 @@ HOST_APIS = [
 ]
 
 
+class PrivateClipboardTests(unittest.TestCase):
+    @staticmethod
+    def apis():
+        user32 = mock.Mock()
+        kernel32 = mock.Mock()
+        user32.RegisterClipboardFormatW.side_effect = [101, 102, 103]
+        user32.CreateWindowExW.return_value = 77
+        user32.OpenClipboard.return_value = True
+        user32.EmptyClipboard.return_value = True
+        user32.SetClipboardData.side_effect = lambda _format, handle: handle
+        kernel32.GlobalAlloc.side_effect = [201, 202, 203, 204]
+        kernel32.GlobalLock.side_effect = [301, 302, 303, 304]
+        return user32, kernel32
+
+    def test_private_copy_sets_history_and_cloud_opt_outs_atomically(self):
+        user32, kernel32 = self.apis()
+
+        with mock.patch.object(app.ctypes, "memmove") as memmove:
+            app._copy_private_text(
+                "private transcript", user32=user32, kernel32=kernel32)
+
+        self.assertEqual(
+            user32.RegisterClipboardFormatW.call_args_list,
+            [mock.call(name) for name, _value in app.CLIPBOARD_PRIVACY_FORMATS],
+        )
+        user32.OpenClipboard.assert_called_once_with(77)
+        user32.EmptyClipboard.assert_called_once_with()
+        self.assertEqual(
+            user32.SetClipboardData.call_args_list,
+            [mock.call(101, 201), mock.call(102, 202),
+             mock.call(103, 203), mock.call(app.CF_UNICODETEXT, 204)],
+        )
+        user32.CloseClipboard.assert_called_once_with()
+        user32.DestroyWindow.assert_called_once_with(77)
+        kernel32.GlobalFree.assert_not_called()
+        self.assertEqual(
+            [call.args[1] for call in memmove.call_args_list[:3]],
+            [app.struct.pack("<I", 1), app.struct.pack("<I", 0),
+             app.struct.pack("<I", 0)],
+        )
+        self.assertEqual(
+            memmove.call_args_list[3].args[1],
+            "private transcript".encode("utf-16-le") + b"\0\0",
+        )
+
+    def test_private_copy_retries_a_busy_clipboard(self):
+        user32, kernel32 = self.apis()
+        user32.OpenClipboard.side_effect = [False, False, True]
+        sleep = mock.Mock()
+
+        with mock.patch.object(app.ctypes, "memmove"):
+            app._copy_private_text(
+                "transcript", user32=user32, kernel32=kernel32, sleep=sleep)
+
+        self.assertEqual(user32.OpenClipboard.call_count, 3)
+        self.assertEqual(
+            sleep.call_args_list,
+            [mock.call(app.CLIPBOARD_OPEN_RETRY_SEC)] * 2,
+        )
+
+    def test_private_copy_failure_never_falls_back_or_leaks_buffers(self):
+        user32, kernel32 = self.apis()
+        user32.SetClipboardData.side_effect = [201, 0]
+
+        with mock.patch.object(app.ctypes, "memmove"), \
+                mock.patch.object(app.pyperclip, "copy") as fallback:
+            with self.assertRaisesRegex(OSError, "set Windows clipboard data"):
+                app._copy_private_text(
+                    "private transcript", user32=user32, kernel32=kernel32)
+
+        fallback.assert_not_called()
+        user32.CloseClipboard.assert_called_once_with()
+        user32.DestroyWindow.assert_called_once_with(77)
+        self.assertEqual(
+            kernel32.GlobalFree.call_args_list,
+            [mock.call(202), mock.call(203), mock.call(204)],
+        )
+
+    def test_private_copy_frees_earlier_buffers_if_allocation_fails(self):
+        user32, kernel32 = self.apis()
+        kernel32.GlobalAlloc.side_effect = [201, 0]
+
+        with mock.patch.object(app.ctypes, "memmove"):
+            with self.assertRaisesRegex(OSError, "allocate clipboard data"):
+                app._copy_private_text(
+                    "private transcript", user32=user32, kernel32=kernel32)
+
+        kernel32.GlobalFree.assert_called_once_with(201)
+        user32.CreateWindowExW.assert_not_called()
+
+    @unittest.skipUnless(
+        app.os.name == "nt" and app.os.environ.get("CI"),
+        "native clipboard smoke test runs only in Windows CI",
+    )
+    def test_native_private_copy_remains_pasteable_and_exposes_opt_outs(self):
+        previous = app.pyperclip.paste()
+        marker = "Presspeech private clipboard CI marker"
+        try:
+            app._copy_private_text(marker)
+            self.assertEqual(app.pyperclip.paste(), marker)
+            user32, _kernel32 = app._windows_clipboard_apis()
+            user32.IsClipboardFormatAvailable.argtypes = [app.ctypes.c_uint]
+            user32.IsClipboardFormatAvailable.restype = app.ctypes.c_int
+            for name, _value in app.CLIPBOARD_PRIVACY_FORMATS:
+                format_id = user32.RegisterClipboardFormatW(name)
+                self.assertTrue(user32.IsClipboardFormatAvailable(format_id))
+        finally:
+            app.pyperclip.copy(previous)
+
+
 class SingleInstanceActivationTests(unittest.TestCase):
     def make_app(self, setup_complete=False):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -119,6 +229,26 @@ class SingleInstanceActivationTests(unittest.TestCase):
 
         instance.open_settings.assert_called_once_with()
         instance.open_setup.assert_not_called()
+
+    def test_dictionary_command_opens_settings_at_dictionary_editor(self):
+        instance = self.make_app(setup_complete=True)
+
+        with mock.patch.object(app.ui, "SettingsWindow") as settings_window:
+            instance.open_dictionary()
+
+        settings_window.assert_called_once_with(
+            instance, initial_section="dictionary")
+        self.assertIs(instance.settings_window, settings_window.return_value)
+
+    def test_dictionary_command_focuses_editor_in_existing_settings(self):
+        instance = self.make_app(setup_complete=True)
+        instance.settings_window = mock.Mock()
+
+        with mock.patch.object(app.ui, "present_window") as present:
+            instance.open_dictionary()
+
+        present.assert_called_once_with(instance.settings_window)
+        instance.settings_window.focus_dictionary.assert_called_once_with()
 
     def test_update_command_restores_existing_prompt_without_another_check(self):
         instance = self.make_app()
@@ -1176,13 +1306,32 @@ class TextRegressionTests(unittest.TestCase):
             "normal transcript", target)
         instance.scratchpad.append_text.assert_not_called()
 
+    def test_private_clipboard_failure_never_sends_paste_shortcut(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        target = app.PasteTarget("notepad.exe", 1234)
+
+        with mock.patch.object(
+                app, "_copy_private_text", side_effect=OSError("busy")), \
+                mock.patch.object(app.pkb, "Controller") as controller:
+            instance._paste("private transcript", target)
+
+        controller.assert_not_called()
+        instance._log.assert_called_once_with(
+            "clipboard copy failed (OSError)")
+        instance.notify.assert_called_once_with(
+            "Could not copy transcript",
+            "Presspeech couldn't access the Windows clipboard, so no text "
+            "was pasted. Try dictating again.")
+
     def test_focus_change_copies_transcript_without_pasting(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
         target = app.PasteTarget("notepad.exe", 1234)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app, "_copy_private_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target",
@@ -1204,7 +1353,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app, "_copy_private_text") as copy, \
                 mock.patch.object(app.time, "sleep") as sleep, \
                 mock.patch.object(
                     app, "_foreground_paste_target") as foreground, \
@@ -1229,7 +1378,7 @@ class TextRegressionTests(unittest.TestCase):
         target = app.PasteTarget("notepad.exe", 1234, 41)
         replacement = app.PasteTarget("notepad.exe", 1234, 42)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app, "_copy_private_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target",
@@ -1254,7 +1403,7 @@ class TextRegressionTests(unittest.TestCase):
         target = app.PasteTarget("moonlight.exe", 1234, 41)
         replacement = app.PasteTarget("calculator.exe", 5678, 42)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app, "_copy_private_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target",
@@ -1292,7 +1441,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._log = mock.Mock()
         target = app.PasteTarget("notepad.exe", 1234, 41)
 
-        with mock.patch.object(app.pyperclip, "copy"), \
+        with mock.patch.object(app, "_copy_private_text"), \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
@@ -1311,7 +1460,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.notify = mock.Mock()
         target = app.PasteTarget("admin-tool.exe", 1234, 41, 0x3000)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app, "_copy_private_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
@@ -1336,7 +1485,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._log = mock.Mock()
         target = app.PasteTarget("notepad.exe", 1234, 41, 0x2000)
 
-        with mock.patch.object(app.pyperclip, "copy"), \
+        with mock.patch.object(app, "_copy_private_text"), \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
@@ -1615,6 +1764,36 @@ class TextRegressionTests(unittest.TestCase):
         self.assertNotIn("\\Users\\", diagnostics)
         self.assertNotIn("private spoken phrase", diagnostics)
         self.assertNotIn("private replacement", diagnostics)
+
+    def test_copy_diagnostics_uses_private_clipboard_formats(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.diagnostics_text = mock.Mock(return_value="safe diagnostics")
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        with mock.patch.object(app, "_copy_private_text") as copy:
+            instance.copy_diagnostics()
+
+        copy.assert_called_once_with("safe diagnostics")
+        instance._log.assert_not_called()
+        instance.notify.assert_called_once_with(
+            "Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
+
+    def test_copy_diagnostics_reports_private_clipboard_failure(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.diagnostics_text = mock.Mock(return_value="safe diagnostics")
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        with mock.patch.object(
+                app, "_copy_private_text", side_effect=OSError("busy")):
+            instance.copy_diagnostics()
+
+        instance._log.assert_called_once_with(
+            "diagnostics copy failed (OSError)")
+        instance.notify.assert_called_once_with(
+            "Could not copy diagnostics",
+            "Presspeech couldn't access the Windows clipboard. Try again.")
 
     def test_visual_indicator_routes_states_without_stealing_app_logic(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2002,7 +2181,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._schedule_model_idle_unload = mock.Mock()
         instance._model_executor = mock.Mock()
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app, "_copy_private_text") as copy, \
                 mock.patch.object(app.threading, "Thread") as worker:
             self.assertTrue(instance.cancel_recording())
 

@@ -445,8 +445,10 @@ overlap and actual window starts remain implementation details. This is a
 repeatable seam/long-form regression, while the uncomposed rows remain the
 better per-utterance diagnostic corpus.
 
-The release wrapper applies a separate catastrophic-content-drop screen to
-these composites. In addition to ordinary WER, `presspeech-bench` reports the
+The release wrapper first validates that this is composer-owned output with a
+matching manifest, paired references, at least two composite clips, and at
+least 30 seconds per clip. It then applies a separate catastrophic-content-drop
+screen. In addition to ordinary WER, `presspeech-bench` reports the
 longest consecutive run of reference words deleted by the stable minimum-edit
 alignment. The wrapper fails when that run exceeds six words, so a multi-second
 seam omission cannot disappear inside an acceptable clip-wide WER average.
@@ -532,12 +534,16 @@ The pinned Ukrainian test split's first 60 rows exceed the default candidate
 screen's 1,000-reference-word floor; the report remains authoritative about
 the actual row and normalized-word counts.
 
-### 2026-07-22 candidate recheck
+### 2026-07-22 v0.15.5 candidate recheck
 
 The first 25 LibriSpeech dev-clean clips, three trials per clip, on the
-production FluidAudio pin. This recheck includes FluidAudio's repaired native
-mel front-end for Nemotron English and adds Nemotron 3.5 multilingual at its
-recommended 2240 ms tier with an `en-US` language prompt.
+then-production FluidAudio v0.15.5 pin
+(`19600a485baa4998812e4654b70d2bab8f2c9949`). This recheck includes
+FluidAudio's repaired native mel front-end for Nemotron English and adds
+Nemotron 3.5 multilingual at its recommended 2240 ms tier with an `en-US`
+language prompt. The app now pins v0.15.6 (`4dbf4f9`), so these results retain
+their model-selection value but are not release evidence for the current
+FluidAudio code.
 
 | Backend | Avg WER | Worst WER | Final-word failures | Avg p50 |
 |---|---:|---:|---:|---:|
@@ -602,26 +608,39 @@ capture, or transcription post-processing, run the release wrapper:
 ./run-release-asr-checks.sh
 ```
 
-It runs helper self-tests, production v3 private real-dictation regressions
-if `real-audio/` contains local clips, and production v3 public speech
-regressions if `public-audio/librispeech-dev-clean/` has been fetched. It also
-runs production v3 over composed multi-window fixtures when
-`public-audio/librispeech-dev-clean-long-form/` exists.
-If you want the release check to fail when no local corpus is available:
+After the exact-pin preflight, it runs helper self-tests, production v3 private
+real-dictation regressions if `real-audio/` contains local clips, and production v3 public speech
+regressions if `public-audio/librispeech-dev-clean/` has been fetched. The
+validated `public-audio/librispeech-dev-clean-long-form/` corpus is required by
+default: release checks must not silently omit the production path used by
+recordings longer than one 15-second encoder window. Generate it using the
+composer instructions above. Private and ordinary short public corpora remain
+optional; require either explicitly when it is part of the intended evidence:
 
 ```sh
 ./run-release-asr-checks.sh --require-real-audio
 ./run-release-asr-checks.sh --require-public-audio
-./run-release-asr-checks.sh --require-long-public-audio
 ```
 
-To also run Parakeet v2, linear-int8 v3, and Unified comparisons, the Unified
-tail-word check, plus repaired Nemotron English and Nemotron 3.5 multilingual
-regressions:
+For a lightweight helper run that is explicitly not release evidence, use
+`--allow-missing-long-public-audio`.
+
+The wrapper also requires the benchmark package and app to pin the exact same
+FluidAudio revision. A mismatch fails before corpus output can be labelled
+production evidence. The benchmark currently pins an unreleased FluidAudio
+commit to compare Parakeet v2, linear-int8 v3, Unified, and the repaired
+Nemotron paths. Run that explicitly candidate-only suite with both flags:
 
 ```sh
-./run-release-asr-checks.sh --include-candidate-models
+./run-release-asr-checks.sh \
+  --include-candidate-models \
+  --allow-candidate-dependency
 ```
+
+That mode labels v3 as a candidate-revision baseline and ends with a candidate
+evaluation verdict, never a production release pass. Restore the benchmark
+manifest and resolved file to the app's exact pin before using the wrapper as
+release evidence.
 
 ## Power measurement
 

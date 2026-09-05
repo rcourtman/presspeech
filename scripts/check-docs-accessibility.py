@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 STYLES = DOCS / "styles.css"
 MIN_TEXT_CONTRAST = 4.5
+MIN_MOBILE_NAV_TARGET = 44
 ERROR_PAGE = Path("404.html")
 
 
@@ -185,12 +186,77 @@ def contrast_errors(styles: Path) -> list[str]:
     return errors
 
 
+def css_block(css: str, header: str) -> str | None:
+    """Return the contents of the first balanced CSS block for header."""
+    match = re.search(re.escape(header) + r"\s*\{", css)
+    if match is None:
+        return None
+    start = match.end()
+    depth = 1
+    for index in range(start, len(css)):
+        if css[index] == "{":
+            depth += 1
+        elif css[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return css[start:index]
+    return None
+
+
+def css_declarations(css: str, selector: str) -> dict[str, str] | None:
+    block = css_block(css, selector)
+    if block is None:
+        return None
+    return dict(re.findall(r"([\w-]+)\s*:\s*([^;{}]+);", block))
+
+
+def pixel_value(value: str | None) -> float | None:
+    if value is None:
+        return None
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)px\s*", value)
+    return float(match.group(1)) if match else None
+
+
+def navigation_target_errors(css: str) -> list[str]:
+    """Enforce the site's comfortable narrow-screen navigation baseline."""
+    errors: list[str] = []
+    media = css_block(css, "@media (max-width: 720px)")
+    if media is None:
+        return ["missing the max-width: 720px mobile navigation rules"]
+
+    brand = css_declarations(media, ".brand")
+    links = css_declarations(media, ".nav-links")
+    link = css_declarations(media, ".nav-links a")
+    brand_height = pixel_value(brand.get("min-height")) if brand is not None else None
+    if brand_height is None or brand_height < MIN_MOBILE_NAV_TARGET:
+        errors.append(
+            f"mobile brand target must have a {MIN_MOBILE_NAV_TARGET}px minimum height"
+        )
+    if links is None or links.get("width", "").strip() != "100%":
+        errors.append("mobile navigation links must occupy the full row")
+    if link is None:
+        errors.append("missing mobile navigation link rules")
+        return errors
+    if link.get("display", "").strip() != "inline-flex":
+        errors.append("mobile navigation links must use inline-flex target boxes")
+    for dimension in ("min-width", "min-height"):
+        target_size = pixel_value(link.get(dimension))
+        if target_size is None or target_size < MIN_MOBILE_NAV_TARGET:
+            errors.append(
+                f"mobile navigation links must have a {MIN_MOBILE_NAV_TARGET}px {dimension}"
+            )
+    return errors
+
+
 def accessibility_errors(docs: Path = DOCS, styles: Path = STYLES) -> list[str]:
     errors: list[str] = []
     for path in sorted(docs.rglob("*.html")):
         for error in document_errors(path, docs):
             errors.append(f"{path.relative_to(docs)}: {error}")
     for error in contrast_errors(styles):
+        errors.append(f"{styles.name}: {error}")
+    css = styles.read_text(encoding="utf-8")
+    for error in navigation_target_errors(css):
         errors.append(f"{styles.name}: {error}")
     return errors
 
@@ -242,6 +308,28 @@ def run_self_test() -> None:
         raise RuntimeError("self-test: contrast calculation is incorrect")
     if contrast_ratio("#8a948e", "#fbfaf8") >= MIN_TEXT_CONTRAST:
         raise RuntimeError("self-test: low-contrast fixture was accepted")
+
+    mobile_css = """
+    @media (max-width: 720px) {
+      .brand { min-height: 44px; }
+      .nav-links { width: 100%; }
+      .nav-links a {
+        display: inline-flex;
+        min-width: 44px;
+        min-height: 44px;
+      }
+    }
+    """
+    if navigation_target_errors(mobile_css):
+        raise RuntimeError("self-test: valid mobile navigation targets were rejected")
+    undersized_css = mobile_css.replace("min-height: 44px;", "min-height: 23px;", 1)
+    errors = navigation_target_errors(undersized_css)
+    if not any("brand target" in error for error in errors):
+        raise RuntimeError("self-test: undersized mobile brand target was accepted")
+    missing_width_css = mobile_css.replace("min-width: 44px;", "")
+    errors = navigation_target_errors(missing_width_css)
+    if not any("44px min-width" in error for error in errors):
+        raise RuntimeError("self-test: mobile link without a minimum width was accepted")
 
 
 def main() -> int:

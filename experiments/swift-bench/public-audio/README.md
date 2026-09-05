@@ -97,6 +97,6 @@ The generated long-form directory is also ignored by git. Its manifest records
 the source rows, their boundaries, and nominal 15-second boundary markers;
 FluidAudio's overlap and actual window starts remain implementation details.
 Run it through `run-real-dictation-regression.sh`, or let
-`run-release-asr-checks.sh` detect it automatically. Use
-`--require-long-public-audio` when absence of this seam coverage should fail a
-release check.
+`run-release-asr-checks.sh` validate and run it automatically. The release
+wrapper requires this seam coverage by default; only explicitly lightweight
+helper runs should pass `--allow-missing-long-public-audio`.

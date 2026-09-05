@@ -162,16 +162,17 @@
             </article>
             <article class="card">
               <h3>Release gate</h3>
-              <p><code>run-release-asr-checks.sh</code> checks production v3 by default. Pass <code>--include-candidate-models</code> to add linear-int8 v3, Unified, repaired Nemotron English, and Nemotron 3.5 multilingual checks.</p>
+              <p><code>run-release-asr-checks.sh</code> checks production v3 only when the benchmark and app pin the exact same FluidAudio revision and a validated multi-window corpus is present. An explicit candidate-dependency mode can compare unreleased APIs, but cannot produce a production release-pass verdict.</p>
             </article>
           </div>
           <p>The public-fixture fetcher can also import a deterministic row range from a pinned Google FLEURS language split. This gives encoder candidates reproducible multilingual and cross-script coverage; private human dictation remains a separate product requirement.</p>
+          <p><strong>Evidence scope:</strong> the public comparison below ran on FluidAudio v0.15.5 (<code>19600a4</code>). The app now pins v0.15.6 (<code>4dbf4f9</code>), so the table supports retaining Parakeet v3 over the tested Nemotron candidates; it does not validate the current inference-library revision for release.</p>
           <div class="table-scroll">
             <table>
-              <caption>Public accuracy and latency recheck by speech-recognition backend</caption>
+              <caption>FluidAudio v0.15.5 public accuracy and latency recheck by speech-recognition backend</caption>
               <thead>
                 <tr>
-                  <th scope="col">2026-07-22 public recheck backend</th>
+                  <th scope="col">2026-07-22 v0.15.5 backend</th>
                   <th scope="col">Avg WER</th>
                   <th scope="col">Worst WER</th>
                   <th scope="col">Final-word failures</th>

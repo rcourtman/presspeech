@@ -131,6 +131,20 @@ class ConfigLoadTests(unittest.TestCase):
         self.assertEqual(loaded[-1][0], "source-%d" %
                          (config.MAX_DICTIONARY_RULES - 1))
 
+    def test_dictionary_keeps_effective_case_insensitive_duplicate(self):
+        self.write({
+            "dictionary": [
+                ["Press Speech", "presspeech"],
+                ["other phrase", "other"],
+                ["PRESS SPEECH", "ineffective newer replacement"],
+            ],
+        })
+
+        self.assertEqual(config.load()["dictionary"], [
+            ["Press Speech", "presspeech"],
+            ["other phrase", "other"],
+        ])
+
     def test_malformed_json_falls_back_to_defaults(self):
         with open(self.path, "w", encoding="utf-8") as handle:
             handle.write("{not json")

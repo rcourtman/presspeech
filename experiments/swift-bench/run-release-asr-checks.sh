@@ -15,11 +15,17 @@ LONG_PUBLIC_AUDIO_DIR="public-audio/librispeech-dev-clean-long-form"
 TRIALS="3"
 REQUIRE_REAL_AUDIO=0
 REQUIRE_PUBLIC_AUDIO=0
-REQUIRE_LONG_PUBLIC_AUDIO=0
+# Multi-window coverage is the one public corpus this release-oriented wrapper
+# requires by default. The app accepts recordings up to ten minutes, while the
+# production CoreML encoder operates on 15-second windows; silently reducing a
+# release check to short utterances would miss a distinct quality path.
+REQUIRE_LONG_PUBLIC_AUDIO=1
 INCLUDE_CANDIDATE_MODELS=0
+ALLOW_CANDIDATE_DEPENDENCY=0
 RUN_TAIL=1
 SELF_TEST=0
 LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN="6"
+DEPENDENCY_MODE="production"
 
 usage() {
     cat <<'USAGE'
@@ -35,13 +41,19 @@ Options:
   --require-real-audio      fail if no private real-dictation clips are present
   --require-public-audio    fail if no public speech clips are present
   --require-long-public-audio
-                            fail if no composed multi-window fixtures are present
+                            fail if no composed multi-window fixtures are present (default)
+  --allow-missing-long-public-audio
+                            allow a lightweight run to skip multi-window coverage
   --long-public-max-reference-deletion-run <n>
                             fail the multi-window gate above this consecutive
                             dropped-reference-word count (default: 6)
   --include-candidate-models
                             also run Parakeet v2, linear-int8 v3, Unified,
                             and current Nemotron candidate checks
+  --allow-candidate-dependency
+                            permit the benchmark package to differ from the
+                            production app pin; requires --include-candidate-models
+                            and produces candidate evidence, not a release pass
   --skip-tail               with --include-candidate-models, skip the synthetic tail-word gate
   --self-test               run wrapper parser/detection tests only
   -h, --help                show this help
@@ -50,10 +62,13 @@ The default run performs:
   1. helper parser/self-tests,
   2. production v3 regression if private real-dictation fixtures exist,
   3. production v3 regression if public speech fixtures exist,
-  4. production v3 multi-window regression if composed fixtures exist.
+  4. required production v3 multi-window regression over validated composed fixtures.
 
 Candidate models are not shipped by the app. Use --include-candidate-models
 only when evaluating whether a future model is good enough to expose.
+By default, the benchmark and production app must pin the exact same
+FluidAudio revision. This prevents a candidate API experiment from silently
+turning the production-v3 release gate into a test of different library code.
 USAGE
 }
 
@@ -74,6 +89,82 @@ supported_audio_count() {
     find "$dir" -type f \
         \( -iname '*.wav' -o -iname '*.aiff' -o -iname '*.aif' -o -iname '*.caf' -o -iname '*.m4a' -o -iname '*.mp3' -o -iname '*.flac' \) \
         | wc -l | tr -d '[:space:]'
+}
+
+fluid_revision_from_package() {
+    local package_file="$1"
+    local revisions
+    revisions="$(sed -nE 's/.*revision: "([0-9a-f]{40})".*/\1/p' "$package_file")"
+    if [[ "$(printf '%s\n' "$revisions" | sed '/^$/d' | wc -l | tr -d '[:space:]')" != "1" ]]; then
+        echo "expected exactly one pinned FluidAudio revision in $package_file" >&2
+        return 1
+    fi
+    printf '%s' "$revisions"
+}
+
+validate_fluid_dependency_alignment() {
+    local production_package="$1"
+    local benchmark_package="$2"
+    local allow_candidate="$3"
+    local include_candidates="$4"
+    local production_revision benchmark_revision
+
+    production_revision="$(fluid_revision_from_package "$production_package")" || return 1
+    benchmark_revision="$(fluid_revision_from_package "$benchmark_package")" || return 1
+
+    if [[ "$production_revision" == "$benchmark_revision" ]]; then
+        if [[ "$allow_candidate" -eq 1 ]]; then
+            echo "--allow-candidate-dependency was supplied, but benchmark and production pins already match" >&2
+            return 2
+        fi
+        DEPENDENCY_MODE="production"
+        return 0
+    fi
+
+    if [[ "$allow_candidate" -ne 1 ]]; then
+        cat >&2 <<MSG
+benchmark FluidAudio pin does not match the production app
+  production: $production_revision
+  benchmark:  $benchmark_revision
+Refusing to label benchmark-revision transcripts as production release evidence.
+Restore benchmark Package.swift to the production pin, or use
+--include-candidate-models --allow-candidate-dependency for an explicit
+candidate-only comparison.
+MSG
+        return 1
+    fi
+    if [[ "$include_candidates" -ne 1 ]]; then
+        echo "--allow-candidate-dependency requires --include-candidate-models" >&2
+        return 2
+    fi
+
+    DEPENDENCY_MODE="candidate"
+    cat >&2 <<MSG
+warning: candidate dependency mode
+  production: $production_revision
+  benchmark:  $benchmark_revision
+Results from this run do not validate the production app's FluidAudio code.
+MSG
+}
+
+v3_baseline_label() {
+    if [[ "$DEPENDENCY_MODE" == "production" ]]; then
+        printf 'production v3'
+    else
+        printf 'candidate-revision v3 baseline'
+    fi
+}
+
+final_verdict() {
+    if [[ "$DEPENDENCY_MODE" != "production" ]]; then
+        echo "candidate ASR evaluation completed"
+        echo "not a production release-gate pass: benchmark and app FluidAudio pins differ"
+    elif [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -ne 1 ]]; then
+        echo "lightweight ASR checks completed"
+        echo "not a production release-gate pass: multi-window coverage was optional"
+    else
+        echo "release ASR checks passed"
+    fi
 }
 
 assert_eq() {
@@ -118,6 +209,59 @@ run_self_test() {
 
     assert_eq "$(supported_audio_count "$tmpdir/fixtures")" "4" "supported audio detection"
     assert_eq "$(supported_audio_count "$tmpdir/missing")" "0" "missing audio directory detection"
+
+    local production_sha="1111111111111111111111111111111111111111"
+    local candidate_sha="2222222222222222222222222222222222222222"
+    printf '.package(url: "https://example.invalid/FluidAudio.git", revision: "%s")\n' \
+        "$production_sha" >"$tmpdir/production-package.swift"
+    cp "$tmpdir/production-package.swift" "$tmpdir/matching-package.swift"
+    printf '.package(url: "https://example.invalid/FluidAudio.git", revision: "%s")\n' \
+        "$candidate_sha" >"$tmpdir/candidate-package.swift"
+    assert_eq "$(fluid_revision_from_package "$tmpdir/production-package.swift")" \
+        "$production_sha" "FluidAudio revision extraction"
+
+    DEPENDENCY_MODE="unset"
+    validate_fluid_dependency_alignment \
+        "$tmpdir/production-package.swift" "$tmpdir/matching-package.swift" 0 0
+    assert_eq "$DEPENDENCY_MODE" "production" "matching production dependency mode"
+
+    local mismatch_log="$tmpdir/dependency-mismatch.log"
+    if validate_fluid_dependency_alignment \
+        "$tmpdir/production-package.swift" "$tmpdir/candidate-package.swift" 0 0 \
+        >"$mismatch_log" 2>&1; then
+        echo "self-test expected a benchmark dependency mismatch to fail closed" >&2
+        exit 1
+    fi
+    assert_contains "$mismatch_log" \
+        "Refusing to label benchmark-revision transcripts as production release evidence."
+
+    local unscoped_candidate_log="$tmpdir/unscoped-candidate.log"
+    if validate_fluid_dependency_alignment \
+        "$tmpdir/production-package.swift" "$tmpdir/candidate-package.swift" 1 0 \
+        >"$unscoped_candidate_log" 2>&1; then
+        echo "self-test expected candidate dependency mode without candidate models to fail" >&2
+        exit 1
+    fi
+    assert_contains "$unscoped_candidate_log" \
+        "--allow-candidate-dependency requires --include-candidate-models"
+
+    DEPENDENCY_MODE="unset"
+    validate_fluid_dependency_alignment \
+        "$tmpdir/production-package.swift" "$tmpdir/candidate-package.swift" 1 1 \
+        >"$tmpdir/candidate-mode.log" 2>&1
+    assert_eq "$DEPENDENCY_MODE" "candidate" "explicit candidate dependency mode"
+    assert_contains "$tmpdir/candidate-mode.log" \
+        "Results from this run do not validate the production app's FluidAudio code."
+
+    DEPENDENCY_MODE="production"
+    REQUIRE_LONG_PUBLIC_AUDIO=1
+    assert_eq "$(final_verdict)" "release ASR checks passed" "release verdict"
+    REQUIRE_LONG_PUBLIC_AUDIO=0
+    assert_contains <(final_verdict) \
+        "not a production release-gate pass: multi-window coverage was optional"
+    DEPENDENCY_MODE="candidate"
+    assert_contains <(final_verdict) \
+        "not a production release-gate pass: benchmark and app FluidAudio pins differ"
 
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
@@ -171,6 +315,35 @@ run_self_test() {
         "no long-form public speech clips found in $tmpdir/missing-long-public"
     assert_not_contains "$missing_long_public_log" "running helper self-tests"
 
+    local default_missing_long_public_log="$tmpdir/default-missing-long-public.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        >"$default_missing_long_public_log" 2>&1; then
+        echo "self-test expected default missing long-form public corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$default_missing_long_public_log" \
+        "no long-form public speech clips found in $tmpdir/missing-long-public"
+    assert_not_contains "$default_missing_long_public_log" "running helper self-tests"
+
+    local invalid_long_public="$tmpdir/invalid-long-public"
+    mkdir -p "$invalid_long_public"
+    touch "$invalid_long_public/not-a-composite.wav"
+    local invalid_long_public_log="$tmpdir/invalid-long-public.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --long-public-audio-dir "$invalid_long_public" \
+        >"$invalid_long_public_log" 2>&1; then
+        echo "self-test expected invalid long-form public corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$invalid_long_public_log" \
+        "long-form output is not owned by this composer"
+    assert_not_contains "$invalid_long_public_log" "running helper self-tests"
+
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
     echo "release ASR checks self-test passed"
@@ -210,6 +383,10 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_LONG_PUBLIC_AUDIO=1
             shift
             ;;
+        --allow-missing-long-public-audio)
+            REQUIRE_LONG_PUBLIC_AUDIO=0
+            shift
+            ;;
         --long-public-max-reference-deletion-run)
             need_value "$@"
             LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN="$2"
@@ -217,6 +394,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --include-candidate-models)
             INCLUDE_CANDIDATE_MODELS=1
+            shift
+            ;;
+        --allow-candidate-dependency)
+            ALLOW_CANDIDATE_DEPENDENCY=1
             shift
             ;;
         --skip-tail)
@@ -271,6 +452,18 @@ if [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -eq 1 && "$long_public_count" -eq 0 ]]; then
     echo "no long-form public speech clips found in $LONG_PUBLIC_AUDIO_DIR" >&2
     exit 1
 fi
+if [[ "$long_public_count" -gt 0 ]]; then
+    # Do not let a mislabeled short clip satisfy the multi-window gate. The
+    # composer verifies ownership, paired references, manifest provenance,
+    # multiple composites, and at least two 15-second windows per clip.
+    python3 ./compose-public-long-form-fixtures.py \
+        --validate-output-dir \
+        --output-dir "$LONG_PUBLIC_AUDIO_DIR"
+fi
+
+validate_fluid_dependency_alignment \
+    "../../swift/Package.swift" "Package.swift" \
+    "$ALLOW_CANDIDATE_DEPENDENCY" "$INCLUDE_CANDIDATE_MODELS"
 
 echo "running helper self-tests..."
 ./run-tail-word-regression.sh --self-test
@@ -299,7 +492,7 @@ if [[ "$real_count" -eq 0 ]]; then
     echo "no private real-dictation clips found in $REAL_AUDIO_DIR; skipped real-audio WER gates"
 else
     echo
-    echo "running private production v3 ASR regression on $real_count clip(s)..."
+    echo "running private $(v3_baseline_label) ASR regression on $real_count clip(s)..."
     ./run-real-dictation-regression.sh --input-dir "$REAL_AUDIO_DIR" --backend v3 --trials "$TRIALS"
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
@@ -345,7 +538,7 @@ if [[ "$public_count" -eq 0 ]]; then
     echo "no public speech clips found in $PUBLIC_AUDIO_DIR; skipped public WER gates"
 else
     echo
-    echo "running public production v3 ASR regression on $public_count clip(s)..."
+    echo "running public $(v3_baseline_label) ASR regression on $public_count clip(s)..."
     ./run-real-dictation-regression.sh \
         --input-dir "$PUBLIC_AUDIO_DIR" \
         --out-dir public-results \
@@ -402,10 +595,10 @@ fi
 
 if [[ "$long_public_count" -eq 0 ]]; then
     echo
-    echo "no long-form public speech clips found in $LONG_PUBLIC_AUDIO_DIR; skipped multi-window WER gate"
+    echo "no long-form public speech clips found in $LONG_PUBLIC_AUDIO_DIR; skipped multi-window WER gate (--allow-missing-long-public-audio)"
 else
     echo
-    echo "running long-form public production v3 ASR regression on $long_public_count composite clip(s)..."
+    echo "running long-form public $(v3_baseline_label) ASR regression on $long_public_count composite clip(s)..."
     ./run-real-dictation-regression.sh \
         --input-dir "$LONG_PUBLIC_AUDIO_DIR" \
         --out-dir public-results/long-form \
@@ -428,4 +621,4 @@ else
 fi
 
 echo
-echo "release ASR checks passed"
+final_verdict

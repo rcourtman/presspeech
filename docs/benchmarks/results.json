@@ -107,7 +107,8 @@
     },
     "public_candidate_recheck_2026_07_22": {
       "script": "experiments/swift-bench/run-real-dictation-regression.sh",
-      "purpose": "Public 25-clip current-pin comparison for production v3, repaired Nemotron English, and Nemotron 3.5 multilingual",
+      "purpose": "Public 25-clip FluidAudio v0.15.5 comparison for production v3, repaired Nemotron English, and Nemotron 3.5 multilingual",
+      "evidence_scope": "Model-selection evidence only; the current app pins FluidAudio v0.15.6 and requires a same-pin release recheck",
       "corpus": "First 25 sorted LibriSpeech dev-clean transcript rows",
       "trials_per_clip": 3,
       "environment": {
@@ -147,8 +148,14 @@
     "release_gate": {
       "script": "experiments/swift-bench/run-release-asr-checks.sh",
       "runs_private_real_audio_when_present": true,
+      "requires_long_form_public_corpus": true,
       "candidate_models_require_flag": "--include-candidate-models",
+      "requires_exact_production_dependency_pin": true,
+      "candidate_dependency_option": "--allow-candidate-dependency",
+      "candidate_dependency_produces_release_pass": false,
       "candidate_models": [
+        "parakeet-v2",
+        "v3-int8-v2",
         "unified",
         "nemotron-en",
         "nemotron-multilingual"
@@ -159,6 +166,7 @@
     "The benchmark measures compute latency, not energy use.",
     "Both tested backends produced essentially identical transcripts on the synthetic audio.",
     "Unified and Nemotron models are candidate-only and are not exposed in the app unless future benchmarks and real dictation tests prove they improve on v3.",
-    "The 2026-07-22 current-pin recheck retained Parakeet TDT v3 because both Nemotron candidates had higher average and worst-case WER."
+    "The 2026-07-22 FluidAudio v0.15.5 recheck retained Parakeet TDT v3 because both Nemotron candidates had higher average and worst-case WER.",
+    "The current v0.15.6 production dependency still requires same-pin corpus evidence before an ASR release gate can pass."
   ]
 }

@@ -97,6 +97,10 @@
               <p>Yes. Both apps map spoken phrases to exact replacement text with deterministic local Dictionary &amp; Shortcuts rules. On macOS, the optional spoken-formatting pass also handles commands such as “new paragraph”, “bullet point”, “comma”, and “open quote”. With the Language Hint set to French, it instead recognizes French line, paragraph, punctuation, quote, and parenthesis phrases such as “nouvelle ligne”, “nouveau paragraphe”, “virgule”, and “guillemet ouvrant”. Auto-detect and other language hints retain the English command set so short French words such as “point” are not rewritten accidentally.</p>
             </article>
             <article class="card">
+              <h3>Does Dictionary &amp; Shortcuts teach the speech model?</h3>
+              <p>No. Dictionary rules run after local transcription and replace the exact saved mishearing or spoken phrase. They do not bias the decoder or learn related spellings and grammatical forms, so add a separate rule for each distinct output that needs correction. Rules stay local; macOS can also export, import, or keep them in a user-chosen sync file.</p>
+            </article>
+            <article class="card">
               <h3>How do I test my first dictation?</h3>
               <p>Use <strong>Try Dictation</strong> after setup reports that the model is ready. The focused private scratchpad lets you test the hotkey and paste flow without switching to another app. See the <a href="getting-started.html#private-test">first-dictation guide</a> for both platforms.</p>
             </article>

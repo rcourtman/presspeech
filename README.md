@@ -179,9 +179,11 @@ Useful menu items:
 - **Settings → Text → After Pasting** — append space, append newline, or no
   suffix
 - **Settings → Text → Dictionary & Shortcuts** — correct recurring
-  mishearings or map a spoken phrase to exact reusable text; rules are
-  deterministic, local, searchable in a dedicated manager, and portable
-  through export/import or a user-chosen sync file
+  mishearings or map a spoken phrase to exact reusable text after
+  transcription; rules are deterministic, local, searchable in a dedicated
+  manager, and portable through export/import or a user-chosen sync file. They
+  do not train or bias the speech model, so each distinct mishearing or
+  inflected form that needs correction requires its own rule
 - **Settings → Text → Spoken formatting commands** — opt in to exact
   commands such as “new line”, “new paragraph”, “bullet point”, “comma”,
   and “open quote”; when the Language Hint is French, the command set follows

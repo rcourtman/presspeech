@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import math
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ MARKER_NAME = ".presspeech-public-long-form-fixtures"
 MARKER_TEXT = "Presspeech generated public long-form speech fixtures\n"
 DEFAULT_TARGET_SECONDS = 45.0
 MIN_TARGET_SECONDS = 30.0
+MIN_RELEASE_COMPOSITES = 2
 
 
 class FixtureError(Exception):
@@ -258,6 +260,121 @@ def compose(input_dir: Path, output_dir: Path, target_seconds: float, force: boo
     return outputs
 
 
+def validate_output(output_dir: Path) -> list[Path]:
+    """Validate that an existing generated corpus really exercises many windows."""
+    if output_dir.is_symlink() or not output_dir.is_dir():
+        raise FixtureError(f"long-form output directory is missing or unsafe: {output_dir}")
+    marker = output_dir / MARKER_NAME
+    if (
+        marker.is_symlink()
+        or not marker.is_file()
+        or marker.read_bytes() != MARKER_TEXT.encode("utf-8")
+    ):
+        raise FixtureError(f"long-form output is not owned by this composer: {output_dir}")
+
+    audio_paths = sorted(output_dir.glob("*.wav"))
+    if len(audio_paths) < MIN_RELEASE_COMPOSITES:
+        raise FixtureError(
+            "long-form release coverage requires at least "
+            f"{MIN_RELEASE_COMPOSITES} composite WAV files; found {len(audio_paths)}"
+        )
+    other_audio = sorted(
+        path
+        for path in output_dir.iterdir()
+        if path.suffix.lower() in {".aiff", ".aif", ".caf", ".m4a", ".mp3", ".flac"}
+    )
+    if other_audio:
+        raise FixtureError(
+            "generated long-form output contains unsupported extra audio: "
+            f"{other_audio[0]}"
+        )
+
+    observed: dict[str, tuple[float, str]] = {}
+    for audio_path in audio_paths:
+        if audio_path.is_symlink() or not audio_path.is_file():
+            raise FixtureError(f"composite audio must be a regular file: {audio_path}")
+        reference_path = audio_path.with_suffix(".txt")
+        if reference_path.is_symlink() or not reference_path.is_file():
+            raise FixtureError(f"missing regular composite reference: {reference_path}")
+        _fmt, _data, _format_code, _frames, duration = read_wave(audio_path)
+        if duration < MIN_TARGET_SECONDS:
+            raise FixtureError(
+                f"composite {audio_path.name} is {duration:.3f}s; release coverage "
+                f"requires at least {MIN_TARGET_SECONDS:.3f}s per clip"
+            )
+        observed[audio_path.stem] = (duration, normalized_reference(reference_path))
+
+    manifest_path = output_dir / "manifest.tsv"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise FixtureError(f"missing regular long-form manifest: {manifest_path}")
+    with manifest_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        expected_fields = [
+            "composite_id",
+            "source_clip_count",
+            "source_clips",
+            "duration_seconds",
+            "source_boundaries_seconds",
+            "nominal_15s_boundaries_seconds",
+            "reference",
+        ]
+        if reader.fieldnames != expected_fields:
+            raise FixtureError("long-form manifest has an unexpected schema")
+        rows = list(reader)
+
+    manifest_ids: set[str] = set()
+    for row in rows:
+        composite_id = row["composite_id"]
+        if composite_id in manifest_ids:
+            raise FixtureError(f"duplicate long-form manifest id: {composite_id}")
+        manifest_ids.add(composite_id)
+        if composite_id not in observed:
+            raise FixtureError(f"manifest references missing composite: {composite_id}")
+        try:
+            source_clip_count = int(row["source_clip_count"])
+            manifest_duration = float(row["duration_seconds"])
+            source_boundaries = [
+                float(value)
+                for value in row["source_boundaries_seconds"].split(",")
+                if value
+            ]
+            nominal_boundaries = [
+                float(value)
+                for value in row["nominal_15s_boundaries_seconds"].split(",")
+                if value
+            ]
+        except ValueError as exc:
+            raise FixtureError(f"invalid numeric manifest data for {composite_id}") from exc
+        duration, reference = observed[composite_id]
+        if source_clip_count < 2 or len(row["source_clips"].split(",")) != source_clip_count:
+            raise FixtureError(f"invalid source-clip evidence for {composite_id}")
+        if (
+            len(source_boundaries) != source_clip_count - 1
+            or any(
+                current <= previous
+                for previous, current in zip(source_boundaries, source_boundaries[1:])
+            )
+            or any(value <= 0 or value >= duration for value in source_boundaries)
+        ):
+            raise FixtureError(f"invalid source boundaries for {composite_id}")
+        if not math.isclose(manifest_duration, duration, abs_tol=0.001):
+            raise FixtureError(f"manifest duration does not match {composite_id}")
+        expected_boundaries: list[float] = []
+        boundary = 15.0
+        while boundary < duration:
+            expected_boundaries.append(boundary)
+            boundary += 15.0
+        if nominal_boundaries != expected_boundaries:
+            raise FixtureError(f"manifest window boundaries do not match {composite_id}")
+        if row["reference"] != reference:
+            raise FixtureError(f"manifest reference does not match {composite_id}")
+
+    if manifest_ids != set(observed):
+        missing = sorted(set(observed) - manifest_ids)[0]
+        raise FixtureError(f"composite is missing from long-form manifest: {missing}")
+    return audio_paths
+
+
 def write_pcm16_fixture(path: Path, seconds: int, sample_rate: int, value: int) -> None:
     fmt = struct.pack("<HHIIHH", 1, 1, sample_rate, sample_rate * 2, 2, 16)
     data = struct.pack("<h", value) * (seconds * sample_rate)
@@ -289,6 +406,32 @@ def run_self_test() -> None:
         manifest = (output / "manifest.tsv").read_text(encoding="utf-8")
         if "\t16.000000\t15.0,30.0\t" not in manifest:
             raise AssertionError("manifest omitted source/nominal boundary evidence")
+        if len(validate_output(output)) != 2:
+            raise AssertionError("valid long-form corpus did not pass release preflight")
+
+        (output / "long-form-001.txt").write_text("changed reference\n", encoding="utf-8")
+        try:
+            validate_output(output)
+        except FixtureError as exc:
+            if "manifest reference" not in str(exc):
+                raise
+        else:
+            raise AssertionError("changed composite reference passed release preflight")
+        compose(source, output, 30.0, True)
+        manifest_path = output / "manifest.tsv"
+        manifest = manifest_path.read_text(encoding="utf-8")
+        manifest_path.write_text(
+            manifest.replace("\t16.000000\t15.0,30.0\t", "\t99.000000\t15.0,30.0\t", 1),
+            encoding="utf-8",
+        )
+        try:
+            validate_output(output)
+        except FixtureError as exc:
+            if "source boundaries" not in str(exc):
+                raise
+        else:
+            raise AssertionError("invalid source boundaries passed release preflight")
+        compose(source, output, 30.0, True)
         try:
             compose(source, output, 30.0, False)
         except FixtureError as exc:
@@ -345,6 +488,11 @@ def parse_args() -> argparse.Namespace:
         help=f"minimum duration per composite (default: {DEFAULT_TARGET_SECONDS:g})",
     )
     parser.add_argument("--force", action="store_true", help="replace an owned generated output")
+    parser.add_argument(
+        "--validate-output-dir",
+        action="store_true",
+        help="validate an existing generated corpus for release coverage",
+    )
     parser.add_argument("--self-test", action="store_true", help="run local format/composition tests")
     return parser.parse_args()
 
@@ -353,6 +501,11 @@ def main() -> int:
     args = parse_args()
     if args.self_test:
         run_self_test()
+        return 0
+    if args.validate_output_dir:
+        outputs = validate_output(Path(args.output_dir))
+        print(f"validated long-form fixtures: {args.output_dir}")
+        print(f"composites: {len(outputs)}")
         return 0
     if not math.isfinite(args.target_seconds) or args.target_seconds < MIN_TARGET_SECONDS:
         raise FixtureError(

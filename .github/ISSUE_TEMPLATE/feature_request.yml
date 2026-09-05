@@ -49,8 +49,10 @@ body:
         hardware, fixture/word counts, repeated-trial count, WER or critical
         error counts, and the comparison baseline when available. Never paste
         private reference text, hypotheses, vocabulary terms, audio, or paths.
-        CONTRIBUTING.md describes the privacy-redacted benchmark helpers.
-      placeholder: e.g. On an M2 Mac, 25 audited Polish clips / 229 words; proper-name errors fell from 18 to 6 over 3 trials with no WER regression on controls.
+        CONTRIBUTING.md describes the privacy-redacted benchmark helpers and
+        stricter product-candidate gate. Smaller samples are welcome when
+        clearly labelled exploratory.
+      placeholder: "e.g. Exploratory, on an M2 Mac: 25 audited Polish clips / 229 words over 3 trials; report proper-name errors and control WER separately."
   - type: dropdown
     id: validation-help
     attributes:
