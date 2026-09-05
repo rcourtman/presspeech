@@ -5,10 +5,7 @@
     {
       "name": "macos_first_launch_model_download",
       "when": "First launch until the model weights are cached locally; again if the local cache fails its integrity check and is re-downloaded; again when the user chooses Reset Speech Model Cache",
-      "destination": [
-        "huggingface.co",
-        "Hugging Face-operated storage and CDN hosts under *.huggingface.co and *.hf.co"
-      ],
+      "destination": "huggingface.co",
       "purpose": "FluidAudio downloads the Parakeet TDT v3 CoreML model weights",
       "approximate_size": "500-600 MB",
       "user_triggered": false,
@@ -18,15 +15,12 @@
     {
       "name": "windows_first_launch_model_download",
       "when": "First Windows launch until the automatically selected local model is cached; again after the user selects an uncached model in Settings",
-      "destination": [
-        "huggingface.co",
-        "Hugging Face-operated storage and CDN hosts under *.huggingface.co and *.hf.co"
-      ],
+      "destination": "huggingface.co",
       "purpose": "Download local speech-model weights: Parakeet TDT v3 when NVIDIA CUDA is usable, or Whisper base.en for the automatic CPU first-run path; other models are user-selectable",
       "approximate_size": "About 2.5 GB for Parakeet TDT v3 or 141 MiB for Whisper base.en",
       "user_triggered": false,
       "can_disable": false,
-      "data_sent": "Anonymous HTTPS model-request metadata; no Hub credential, Hugging Face library telemetry, dictation audio, transcript, settings, or usage data. Presspeech fixes the public Hub endpoint, removes inherited Hub credentials, and disables implicit authentication before importing the model libraries"
+      "data_sent": "Standard HTTPS request metadata; no dictation audio, transcript, settings, or usage data"
     },
     {
       "name": "macos_update_check",

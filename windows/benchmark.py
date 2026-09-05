@@ -47,60 +47,6 @@ def edit_distance(reference, hypothesis):
     return previous[-1]
 
 
-def max_reference_deletion_run(reference, hypothesis):
-    """Return the longest consecutive reference deletion on a stable edit path.
-
-    WER alone can understate a model dropping one continuous phrase or sentence.
-    Track that failure shape without retaining an alignment or any extra transcript
-    text in the report. Ties deliberately prefer substitution, then deletion, then
-    insertion so repeated words cannot make a deleted span look recovered merely
-    by choosing a different equally short alignment.
-    """
-    if not reference:
-        return 0
-    width = len(hypothesis)
-    previous_errors = list(range(width + 1))
-    previous_current_runs = [0] * (width + 1)
-    previous_max_runs = [0] * (width + 1)
-
-    for ref_index, ref_item in enumerate(reference, 1):
-        current_errors = [0] * (width + 1)
-        current_runs = [0] * (width + 1)
-        current_max_runs = [0] * (width + 1)
-        current_errors[0] = ref_index
-        current_runs[0] = ref_index
-        current_max_runs[0] = ref_index
-
-        for hyp_index, hyp_item in enumerate(hypothesis, 1):
-            substitution_cost = ref_item != hyp_item
-            best_errors = previous_errors[hyp_index - 1] + substitution_cost
-            best_current_run = 0
-            best_max_run = previous_max_runs[hyp_index - 1]
-
-            deletion_errors = previous_errors[hyp_index] + 1
-            if deletion_errors < best_errors:
-                best_errors = deletion_errors
-                best_current_run = previous_current_runs[hyp_index] + 1
-                best_max_run = max(
-                    previous_max_runs[hyp_index], best_current_run)
-
-            insertion_errors = current_errors[hyp_index - 1] + 1
-            if insertion_errors < best_errors:
-                best_errors = insertion_errors
-                best_current_run = 0
-                best_max_run = current_max_runs[hyp_index - 1]
-
-            current_errors[hyp_index] = best_errors
-            current_runs[hyp_index] = best_current_run
-            current_max_runs[hyp_index] = best_max_run
-
-        previous_errors = current_errors
-        previous_current_runs = current_runs
-        previous_max_runs = current_max_runs
-
-    return previous_max_runs[width]
-
-
 def accuracy_metrics(reference, hypothesis):
     ref_words = _normalise_words(reference)
     hyp_words = _normalise_words(hypothesis)
@@ -111,29 +57,11 @@ def accuracy_metrics(reference, hypothesis):
         "reference_words": len(ref_words),
         "wer": (edit_distance(ref_words, hyp_words) / len(ref_words)
                 if ref_words else None),
-        "max_reference_deletion_run": max_reference_deletion_run(
-            ref_words, hyp_words),
         "character_errors": edit_distance(ref_chars, hyp_chars),
         "reference_characters": len(ref_chars),
         "cer": (edit_distance(ref_chars, hyp_chars) / len(ref_chars)
                 if ref_chars else None),
         "exact_match": _normalise_chars(reference) == _normalise_chars(hypothesis),
-    }
-
-
-def trial_accuracy_metrics(reference, hypotheses):
-    """Score every trial so intermittent errors cannot hide in the consensus."""
-    metrics = [accuracy_metrics(reference, hypothesis) for hypothesis in hypotheses]
-    return {
-        "word_errors": [item["word_errors"] for item in metrics],
-        "wer": [item["wer"] for item in metrics],
-        "max_reference_deletion_run": [
-            item["max_reference_deletion_run"] for item in metrics
-        ],
-        "character_errors": [item["character_errors"] for item in metrics],
-        "cer": [item["cer"] for item in metrics],
-        "exact_match_trials": sum(item["exact_match"] for item in metrics),
-        "trials": len(metrics),
     }
 
 
@@ -371,12 +299,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         if reference and result["reference_reviewed"]:
             result["reference"] = reference
             result["accuracy"] = accuracy_metrics(reference, consensus)
-            result["trial_accuracy"] = trial_accuracy_metrics(
-                reference, transcripts)
             result["final_word"] = final_word_metrics(reference, transcripts)
         else:
             result["accuracy"] = None
-            result["trial_accuracy"] = None
             result["final_word"] = None
             result["accuracy_note"] = "Reference transcript requires human review."
         sample_results.append(result)
@@ -384,11 +309,6 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     reviewed = [item for item in sample_results if item["accuracy"] is not None]
     total_words = sum(item["accuracy"]["reference_words"] for item in reviewed)
     total_word_errors = sum(item["accuracy"]["word_errors"] for item in reviewed)
-    total_trial_words = sum(
-        item["accuracy"]["reference_words"] * item["trial_accuracy"]["trials"]
-        for item in reviewed)
-    total_trial_word_errors = sum(
-        sum(item["trial_accuracy"]["word_errors"]) for item in reviewed)
     reviewed_silence = [
         item for item in sample_results
         if item["silence"] is not None and item["silence"]["evaluated"]
@@ -409,7 +329,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     except Exception:
         pass
     return {
-        "benchmark_version": 2,
+        "benchmark_version": 1,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
         # Keep reports interpretable across faster-whisper updates. The
@@ -427,20 +347,6 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         "sample_count": len(sample_results),
         "reviewed_sample_count": len(reviewed),
         "aggregate_wer": total_word_errors / total_words if total_words else None,
-        "reviewed_accuracy_trial_count": sum(
-            item["trial_accuracy"]["trials"] for item in reviewed),
-        "aggregate_trial_wer": (
-            total_trial_word_errors / total_trial_words
-            if total_trial_words else None),
-        "exact_match_trial_count": sum(
-            item["trial_accuracy"]["exact_match_trials"] for item in reviewed),
-        "maximum_reference_deletion_run": max(
-            (
-                max(item["trial_accuracy"]["max_reference_deletion_run"], default=0)
-                for item in reviewed
-            ),
-            default=None,
-        ),
         "reviewed_silence_sample_count": len(reviewed_silence),
         "silence_false_positive_count": sum(
             item["silence"]["false_positive"] for item in reviewed_silence),
@@ -526,30 +432,11 @@ def _print_summary(result):
                 sample["accuracy"]["wer"] * 100,
                 sample["accuracy"]["cer"] * 100,
             ))
-            trial_accuracy = sample["trial_accuracy"]
-            print("  Trial WER: %.2f%% median / %.2f%% worst | exact %d/%d | "
-                  "longest deletion %d words" % (
-                      statistics.median(trial_accuracy["wer"]) * 100,
-                      max(trial_accuracy["wer"]) * 100,
-                      trial_accuracy["exact_match_trials"],
-                      trial_accuracy["trials"],
-                      max(trial_accuracy["max_reference_deletion_run"], default=0),
-                  ))
             final_word = sample["final_word"]
             print("  Final word: %s (%d/%d trials retained)" % (
                 "retained" if final_word["retained"] else "FAILED",
                 final_word["retained_trials"], final_word["trials"],
             ))
-
-    if result["reviewed_sample_count"]:
-        print("\nReviewed accuracy: %.2f%% consensus WER / %.2f%% all-trial WER | "
-              "exact %d/%d trials | longest deletion %d words" % (
-                  result["aggregate_wer"] * 100,
-                  result["aggregate_trial_wer"] * 100,
-                  result["exact_match_trial_count"],
-                  result["reviewed_accuracy_trial_count"],
-                  result["maximum_reference_deletion_run"],
-              ))
 
 
 def main():
