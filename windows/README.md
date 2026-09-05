@@ -216,7 +216,11 @@ Use **Open Startup Settings** to review Presspeech under Windows
   character counts only.
 - **Copy Diagnostics** includes configuration counts and runtime state, never
   transcripts, audio, or dictionary contents.
-- Clipboard is used briefly to paste; it is overwritten.
+- Finished text passes through the clipboard and remains there until something
+  else is copied. Presspeech has no transcript-sync feature, but Windows
+  clipboard history, cross-device sync, and third-party clipboard managers are
+  outside the app and may retain or sync clipboard writes when enabled. Review
+  **Settings → System → Clipboard** before sensitive dictation.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
   Whisper reports include the exact Silero VAD boundary policy so WER, quiet
