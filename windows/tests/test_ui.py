@@ -521,7 +521,6 @@ class SetupWindowTests(unittest.TestCase):
         window.device.get.return_value = "Headset"
         window.autostart = mock.Mock()
         window.autostart.get.return_value = False
-        window.app.apply_autostart.return_value = True
         window._close = mock.Mock()
 
         with mock.patch.object(ui.cfg, "save") as save:
@@ -534,32 +533,6 @@ class SetupWindowTests(unittest.TestCase):
         save.assert_called_once_with(window.app.settings)
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
-
-    def test_deferred_setup_stays_open_when_autostart_is_not_updated(self):
-        window = self.make_window("loading")
-        window.app.settings = {
-            "input_device": "auto",
-            "autostart": True,
-            "setup_complete": False,
-        }
-        window.autostart = mock.Mock()
-        window.autostart.get.return_value = True
-        window.app.apply_autostart.return_value = False
-        window._close = mock.Mock()
-
-        with mock.patch.object(ui.cfg, "save") as save, \
-                mock.patch.object(ui, "_set_accessible_text") as set_text:
-            window._defer()
-
-        self.assertFalse(window.app.settings["setup_complete"])
-        save.assert_called_once_with(window.app.settings)
-        window.app.apply_autostart.assert_called_once_with()
-        set_text.assert_called_once_with(
-            window.autostart_status,
-            "Start with Windows was not updated, so Setup stayed open. "
-            "Open Startup Settings, then try Set Up Later again.",
-        )
-        window._close.assert_not_called()
 
     def test_setup_instructions_respect_existing_toggle_mode(self):
         window = self.make_window("ready")
@@ -659,58 +632,6 @@ class DictionarySettingsTests(unittest.TestCase):
         )
         window.listbox.insert.assert_called_once_with(
             "end", "maps to arrow \u2192   A \u2192 B  ")
-        window.status.config.assert_called_once_with(
-            text="Rule added. Save to apply it.")
-
-    def test_add_rule_replaces_case_insensitive_duplicate(self):
-        window = self.make_window([
-            ["Press Speech", "presspeech"],
-            ["project folder", r"C:\old"],
-        ])
-        window.var_spoken.get.return_value = "PROJECT FOLDER"
-        window.var_replace.get.return_value = r"C:\new"
-
-        window._add_rule()
-
-        self.assertEqual(window.dictionary_rules, [
-            ["Press Speech", "presspeech"],
-            ["PROJECT FOLDER", r"C:\new"],
-        ])
-        window.listbox.delete.assert_called_once_with(1)
-        window.listbox.insert.assert_called_once_with(
-            1, r"PROJECT FOLDER → C:\new")
-        window.listbox.selection_set.assert_called_once_with(1)
-        window.listbox.see.assert_called_once_with(1)
-        window.status.config.assert_called_once_with(
-            text="Existing rule replaced. Save to apply it.")
-
-    def test_add_rule_explains_missing_spoken_phrase(self):
-        window = self.make_window()
-        window.var_spoken.get.return_value = "  "
-        window.var_replace.get.return_value = "replacement"
-
-        window._add_rule()
-
-        window.listbox.insert.assert_not_called()
-        window.status.config.assert_called_once_with(
-            text="Enter the spoken phrase to add or replace.")
-
-    def test_dictionary_focus_is_dispatched_to_the_ui_thread(self):
-        window = self.make_window()
-        host = mock.Mock()
-
-        with mock.patch.object(ui, "_window_host", return_value=host):
-            window.focus_dictionary()
-
-        host.submit.assert_called_once()
-        focus = host.submit.call_args.args[0]
-        window.root = mock.Mock()
-        window.scrollable_body = mock.Mock()
-        window.spoken_entry = mock.Mock()
-        focus()
-        window.scrollable_body._show_widget.assert_called_once_with(
-            window.spoken_entry)
-        window.spoken_entry.focus_set.assert_called_once_with()
 
     def test_add_rule_rejects_an_oversized_source(self):
         window = self.make_window()

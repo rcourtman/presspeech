@@ -4403,19 +4403,6 @@ enum FillerWordRemover {
 private enum RecordingReleaseAction: Equatable {
     case discardTooShort(duration: Double)
     case transcribe(duration: Double)
-
-    /// A quick tap never reaches the recognizer, but from the user's point of
-    /// view it has the same result as a longer silent clip: no text was
-    /// produced. Reuse the normal no-speech recovery instead of letting the
-    /// recording cue disappear without an explanation.
-    var immediateNotice: DictationNotice? {
-        switch self {
-        case .discardTooShort:
-            return .noSpeechDetected
-        case .transcribe:
-            return nil
-        }
-    }
 }
 
 private enum DictationMenuControlAction: Int, Equatable {
@@ -8166,8 +8153,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // unmute lifecycle can complete.
         unmuteIfWeMuted()
         let dur: Double
-        let releaseAction = recordingReleaseAction(capturedSampleCount: samples.count)
-        switch releaseAction {
+        switch recordingReleaseAction(capturedSampleCount: samples.count) {
         case .discardTooShort(let duration):
             recordingPasteTarget = nil
             dur = duration
@@ -8175,11 +8161,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 log(hint)
             }
             log("release: clip too short (\(String(format: "%.2f", dur)) s), discarding")
-            if let notice = releaseAction.immediateNotice {
-                signalDictationFailure(notice)
-            } else {
-                setMenuBarState(.idle)
-            }
+            setMenuBarState(.idle)
             rebuildMenu()
             if !runDeferredAudioRouteRefreshIfNeeded() {
                 scheduleAudioIdleStop(reason: "short clip")
@@ -9437,11 +9419,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // let AppKit defeat the constrained-display sizing above.
         window.contentMinSize = NSSize(width: 420, height: 320)
         window.isReleasedWhenClosed = false
-        // Permission, model, and hotkey updates replace this window's entire
-        // control hierarchy. Keep Full Keyboard Access from retaining the
-        // initial key-view loop after Grant/Retry buttons disappear or the
-        // Try Dictation and Done buttons arrive.
-        window.autorecalculatesKeyViewLoop = true
         window.delegate = self
         setupChecklistWindow = window
 
@@ -16214,25 +16191,11 @@ private enum PresspeechSelfTest {
             "release decision should discard clips under the minimum duration"
         )
         try expect(
-            recordingReleaseAction(capturedSampleCount: 3_999,
-                                   sampleRate: 16_000,
-                                   minimumClipSeconds: 0.25).immediateNotice,
-            equals: .noSpeechDetected,
-            "a discarded quick tap should use the visible no-speech recovery"
-        )
-        try expect(
             recordingReleaseAction(capturedSampleCount: 4_000,
                                    sampleRate: 16_000,
                                    minimumClipSeconds: 0.25),
             equals: .transcribe(duration: 0.25),
             "release decision should transcribe clips at the minimum duration"
-        )
-        try expect(
-            recordingReleaseAction(capturedSampleCount: 4_000,
-                                   sampleRate: 16_000,
-                                   minimumClipSeconds: 0.25).immediateNotice,
-            equals: DictationNotice?.none,
-            "a transcribed clip should wait for its actual completion outcome"
         )
         try expect(
             recordingReleaseAction(capturedSampleCount: 4_000,

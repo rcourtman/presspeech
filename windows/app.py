@@ -86,19 +86,6 @@ RDP_PASTE_DELAY_SEC = 0.08
 NO_SPEECH_FEEDBACK_SEC = 2.5
 NO_SPEECH_OUTCOME = "no_speech"
 
-CF_UNICODETEXT = 13
-GMEM_MOVEABLE = 0x0002
-CLIPBOARD_OPEN_ATTEMPTS = 10
-CLIPBOARD_OPEN_RETRY_SEC = 0.01
-# Windows Clipboard History and Cloud Clipboard honor these registered formats.
-# Set all three in the same clipboard transaction as the transcript so a local
-# dictation cannot be captured before its privacy policy is visible.
-CLIPBOARD_PRIVACY_FORMATS = (
-    ("ExcludeClipboardContentFromMonitorProcessing", 1),
-    ("CanIncludeInClipboardHistory", 0),
-    ("CanUploadToCloudClipboard", 0),
-)
-
 VK_ESCAPE = 0x1B
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
@@ -183,129 +170,6 @@ class PasteTarget(NamedTuple):
     window_handle: int
     process_identifier: int = 0
     integrity_level: int = 0
-
-
-def _windows_clipboard_apis():
-    """Return pointer-safe Win32 clipboard APIs for the 64-bit packaged app."""
-    from ctypes import wintypes
-
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    user32.CreateWindowExW.argtypes = [
-        wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
-        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-        wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID,
-    ]
-    user32.CreateWindowExW.restype = wintypes.HWND
-    user32.DestroyWindow.argtypes = [wintypes.HWND]
-    user32.DestroyWindow.restype = wintypes.BOOL
-    user32.OpenClipboard.argtypes = [wintypes.HWND]
-    user32.OpenClipboard.restype = wintypes.BOOL
-    user32.EmptyClipboard.argtypes = []
-    user32.EmptyClipboard.restype = wintypes.BOOL
-    user32.CloseClipboard.argtypes = []
-    user32.CloseClipboard.restype = wintypes.BOOL
-    user32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
-    user32.RegisterClipboardFormatW.restype = wintypes.UINT
-    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-    user32.SetClipboardData.restype = wintypes.HANDLE
-    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-    kernel32.GlobalAlloc.restype = wintypes.HANDLE
-    kernel32.GlobalLock.argtypes = [wintypes.HANDLE]
-    kernel32.GlobalLock.restype = wintypes.LPVOID
-    kernel32.GlobalUnlock.argtypes = [wintypes.HANDLE]
-    kernel32.GlobalUnlock.restype = wintypes.BOOL
-    kernel32.GlobalFree.argtypes = [wintypes.HANDLE]
-    kernel32.GlobalFree.restype = wintypes.HANDLE
-    return user32, kernel32
-
-
-def _last_windows_error():
-    """Return a Win32 last-error code while keeping pure tests portable."""
-    getter = getattr(ctypes, "get_last_error", None)
-    return getter() if getter is not None else 0
-
-
-def _clipboard_buffer(payload, kernel32):
-    """Allocate an unlocked movable buffer suitable for SetClipboardData."""
-    handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(payload))
-    if not handle:
-        raise OSError(_last_windows_error(), "Could not allocate clipboard data")
-    pointer = kernel32.GlobalLock(handle)
-    if not pointer:
-        kernel32.GlobalFree(handle)
-        raise OSError(_last_windows_error(), "Could not lock clipboard data")
-    try:
-        ctypes.memmove(pointer, payload, len(payload))
-    except Exception:
-        kernel32.GlobalUnlock(handle)
-        kernel32.GlobalFree(handle)
-        raise
-    kernel32.GlobalUnlock(handle)
-    return handle
-
-
-def _copy_private_text(text, user32=None, kernel32=None, sleep=time.sleep):
-    """Copy text without admitting it to Windows history or cloud sync.
-
-    A temporary owner window is required: Microsoft documents that opening and
-    emptying the clipboard with a null HWND makes SetClipboardData fail. The
-    test-only non-Windows fallback keeps pure unit tests importable; every
-    packaged Presspeech runtime takes the native Windows branch.
-    """
-    if user32 is None or kernel32 is None:
-        if os.name != "nt":
-            pyperclip.copy(text)
-            return
-        user32, kernel32 = _windows_clipboard_apis()
-
-    formats = []
-    for name, value in CLIPBOARD_PRIVACY_FORMATS:
-        format_id = user32.RegisterClipboardFormatW(name)
-        if not format_id:
-            raise OSError(
-                _last_windows_error(), "Could not register clipboard privacy format")
-        formats.append((format_id, struct.pack("<I", value)))
-
-    payloads = [*formats, (CF_UNICODETEXT, text.encode("utf-16-le") + b"\0\0")]
-    buffers = []
-    transferred = set()
-    owner = None
-    opened = False
-    try:
-        for format_id, payload in payloads:
-            buffers.append((format_id, _clipboard_buffer(payload, kernel32)))
-        # A built-in STATIC window needs no registered class or message loop,
-        # and gives this worker thread valid clipboard ownership until close.
-        owner = user32.CreateWindowExW(
-            0, "STATIC", "Presspeech Clipboard", 0,
-            0, 0, 0, 0, None, None, None, None)
-        if not owner:
-            raise OSError(_last_windows_error(), "Could not create clipboard owner")
-        for attempt in range(CLIPBOARD_OPEN_ATTEMPTS):
-            if user32.OpenClipboard(owner):
-                opened = True
-                break
-            if attempt + 1 < CLIPBOARD_OPEN_ATTEMPTS:
-                sleep(CLIPBOARD_OPEN_RETRY_SEC)
-        if not opened:
-            raise OSError(_last_windows_error(), "Windows clipboard is busy")
-        if not user32.EmptyClipboard():
-            raise OSError(_last_windows_error(), "Could not empty Windows clipboard")
-        for format_id, handle in buffers:
-            if not user32.SetClipboardData(format_id, handle):
-                raise OSError(
-                    _last_windows_error(), "Could not set Windows clipboard data")
-            # SetClipboardData transfers ownership to Windows on success.
-            transferred.add(handle)
-    finally:
-        if opened:
-            user32.CloseClipboard()
-        if owner:
-            user32.DestroyWindow(owner)
-        for _format_id, handle in buffers:
-            if handle not in transferred:
-                kernel32.GlobalFree(handle)
 
 
 def _update_check_due(last_check_epoch, now_epoch=None):
@@ -812,8 +676,6 @@ class PresspeechApp:
                 MenuItem("Try Dictation\u2026", self.open_scratchpad),
                 MenuItem("Setup\u2026", self.open_setup),
                 MenuItem("Settings\u2026", self.open_settings),
-                MenuItem(
-                    "Dictionary & Shortcuts\u2026", self.open_dictionary),
                 MenuItem("Repair Global Hotkey", self.repair_hotkey),
                 Menu.SEPARATOR,
                 MenuItem("Check for Updates\u2026", self.check_for_updates),
@@ -2011,17 +1873,7 @@ class PresspeechApp:
         return text
 
     def _paste(self, text, paste_target=PasteTarget("", 0)):
-        try:
-            _copy_private_text(text)
-        except Exception as exc:
-            # Never fall back to an unmarked clipboard write: that could put a
-            # local transcript into Windows history or cloud synchronization.
-            self._log("clipboard copy failed (%s)" % type(exc).__name__)
-            self.notify(
-                "Could not copy transcript",
-                "Presspeech couldn't access the Windows clipboard, so no text "
-                "was pasted. Try dictating again.")
-            return
+        pyperclip.copy(text)
         if not isinstance(paste_target, PasteTarget):
             # Legacy callers cannot prove which window owned the cursor when
             # recording began, so normalize them into the same fail-closed
@@ -2108,15 +1960,6 @@ class PresspeechApp:
             self.settings_window = ui.SettingsWindow(self)
         else:
             ui.present_window(self.settings_window)
-
-    def open_dictionary(self, icon=None, item=None):
-        """Open Settings at the correction editor, not its first control."""
-        if self.settings_window is None:
-            self.settings_window = ui.SettingsWindow(
-                self, initial_section="dictionary")
-        else:
-            ui.present_window(self.settings_window)
-            self.settings_window.focus_dictionary()
 
     def open_setup(self, icon=None, item=None):
         if self.setup_window is None:
@@ -2205,14 +2048,7 @@ class PresspeechApp:
         return "\r\n".join(lines)
 
     def copy_diagnostics(self, icon=None, item=None):
-        try:
-            _copy_private_text(self.diagnostics_text())
-        except Exception as exc:
-            self._log("diagnostics copy failed (%s)" % type(exc).__name__)
-            self.notify(
-                "Could not copy diagnostics",
-                "Presspeech couldn't access the Windows clipboard. Try again.")
-            return
+        pyperclip.copy(self.diagnostics_text())
         self.notify("Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
 
     def _open_feedback_page(self, url):
