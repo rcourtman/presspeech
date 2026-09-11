@@ -1668,8 +1668,30 @@ class PresspeechApp:
         if self.input_device is not None:
             return self.input_device
         selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
-        self.input_device = self._find_input_device(selected)
-        return self.input_device
+        chosen = self._find_input_device(selected)
+        if chosen is None and self._rescan_audio_devices():
+            # PortAudio enumerates devices when it initialises and reuses that
+            # table for the life of the process. A microphone that is
+            # connected, removed, or re-indexed after startup is invisible to
+            # the first query, so re-scan once before giving up: this recovers
+            # a reconnected device without restarting the app.
+            chosen = self._find_input_device(selected)
+        self.input_device = chosen
+        return chosen
+
+    def _rescan_audio_devices(self):
+        """Force PortAudio to re-enumerate devices after a hardware change."""
+        terminate = getattr(sd, "_terminate", None)
+        initialize = getattr(sd, "_initialize", None)
+        if terminate is None or initialize is None:
+            return False
+        try:
+            terminate()
+            initialize()
+        except Exception as exc:
+            self._log("could not re-scan audio devices: %s" % exc)
+            return False
+        return True
 
     def check_input_device(self, selected):
         """Open an input and distinguish audible samples from silent buffers."""

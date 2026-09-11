@@ -322,6 +322,8 @@ class InputSelectionTests(unittest.TestCase):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.input_device = None
         instance.settings = {"input_device": selected}
+        instance._log = mock.Mock()
+        instance._rescan_audio_devices = mock.Mock(return_value=True)
         return instance
 
     def sounddevice_mocks(self):
@@ -362,6 +364,48 @@ class InputSelectionTests(unittest.TestCase):
         with patches[0], patches[1], patches[2], patches[3] as probe, patches[4]:
             self.assertIsNone(instance._get_input_device())
         probe.assert_not_called()
+
+    def test_reconnected_device_is_recovered_by_rescanning(self):
+        instance = self.make_app()
+        instance._find_input_device = mock.Mock(side_effect=[None, (1, 16000)])
+
+        self.assertEqual(instance._get_input_device(), (1, 16000))
+        self.assertEqual(instance._find_input_device.call_count, 2)
+        instance._rescan_audio_devices.assert_called_once_with()
+
+    def test_successful_lookup_does_not_rescan_audio_devices(self):
+        instance = self.make_app()
+        instance._find_input_device = mock.Mock(return_value=(0, 16000))
+
+        self.assertEqual(instance._get_input_device(), (0, 16000))
+        instance._rescan_audio_devices.assert_not_called()
+
+    def test_failed_rescan_leaves_no_microphone(self):
+        instance = self.make_app()
+        instance._rescan_audio_devices = mock.Mock(return_value=False)
+        instance._find_input_device = mock.Mock(return_value=None)
+
+        self.assertIsNone(instance._get_input_device())
+        self.assertEqual(instance._find_input_device.call_count, 1)
+
+    def test_audio_rescan_reinitializes_portaudio(self):
+        instance = self.make_app()
+        del instance._rescan_audio_devices
+        with mock.patch.object(app.sd, "_terminate", create=True) as terminate, \
+                mock.patch.object(app.sd, "_initialize", create=True) as initialize:
+            self.assertTrue(instance._rescan_audio_devices())
+
+        terminate.assert_called_once_with()
+        initialize.assert_called_once_with()
+
+    def test_audio_rescan_reports_failure_without_raising(self):
+        instance = self.make_app()
+        del instance._rescan_audio_devices
+        with mock.patch.object(app.sd, "_terminate", create=True,
+                               side_effect=OSError("device unavailable")):
+            self.assertFalse(instance._rescan_audio_devices())
+
+        instance._log.assert_called_once()
 
     def test_failed_probe_closes_the_created_microphone_stream(self):
         stream = mock.Mock()
