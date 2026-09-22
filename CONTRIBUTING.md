@@ -36,10 +36,12 @@ For an automatic-paste or clipboard-recovery problem, use a harmless test
 phrase and report the target app/version and app class (native, browser,
 Electron/Chromium, terminal, remote desktop, or elevated Windows app). Also
 report whether focus stayed in the same field, whether **Restore clipboard
-after paste** was enabled, whether manual paste recovered the complete test
-phrase, and the number of failures out of repeated attempts. Do not publish the
-phrase, clipboard contents, document/tab names, account or server names, or
-window titles. Those conditions distinguish a target-capture failure from a
+after paste** was enabled on macOS 0.3.7 or, on a newer build, whether **Keep
+Previous Clipboard for Manual Restore** was enabled and its Restore action was
+used. Also report whether manual paste recovered the complete test phrase and
+the number of failures out of repeated attempts. Do not publish the phrase,
+clipboard contents, document/tab names, account or server names, or window
+titles. Those conditions distinguish a target-capture failure from a
 paste-consumption race without exposing the user's work.
 
 To test text delivery systematically, follow

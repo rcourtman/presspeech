@@ -30,23 +30,40 @@ request status remains authoritative for individual changes.
    Presspeech should preserve the complete transcript and tell the user how to
    continue.
 
-## Now: make the core loop dependable
+## Now: qualify dependable text delivery
 
-The current priority is release-to-text reliability across real target apps,
-input hardware, and recovery paths.
+The current priority is native qualification of the release candidates already
+on `main`, not another layer of settings. The published macOS release remains
+0.3.7 until the 0.3.8 behavior below clears the platform checks.
 
-- Make paste-target capture work in common native and Electron/Chromium apps,
-  without weakening the protection against pasting into a newly focused
-  window. Follow [issue #33](https://github.com/rcourtman/presspeech/issues/33)
-  and its candidate work in
-  [pull request #35](https://github.com/rcourtman/presspeech/pull/35).
-- Ensure the optional clipboard-restore path can never replace the transcript
-  before a slower target consumes the paste. Follow
-  [issue #36](https://github.com/rcourtman/presspeech/issues/36) and
-  [pull request #37](https://github.com/rcourtman/presspeech/pull/37).
+- Qualify paste-target capture in representative native, browser, and
+  Electron/Chromium apps. The 0.3.8 candidate gets frontmost-process identity
+  from the window server but still requires the exact Accessibility-focused
+  window before automatic paste. [Issue
+  #33](https://github.com/rcourtman/presspeech/issues/33) stays open until a
+  steady-focus Electron target can paste automatically while a switch between
+  two windows of that same process still recovers to the clipboard. Process
+  identity alone is not an acceptable substitute for the same-window check.
+- Qualify the 0.3.8 manual clipboard-recovery replacement against both fast
+  native and slow Electron targets. It retires automatic timer restoration
+  rather than choosing another delay: no timeout proves that another app has
+  consumed a paste. Close [issue
+  #36](https://github.com/rcourtman/presspeech/issues/36) only after the
+  repeated native checks show that old clipboard content cannot race the new
+  transcript.
+- Exercise the 0.3.8 configurable-hotkey candidate across keyboard layouts,
+  hold and toggle modes, conflict cases, and keyboard/VoiceOver navigation.
+  That is the remaining evidence gate for [issue
+  #34](https://github.com/rcourtman/presspeech/issues/34), not a reason to
+  widen the binding grammar further before release.
+- Qualify the Windows 0.1.13 retained-dictation recovery and audio-device
+  rescan on clean CPU and NVIDIA installations. A failed or uncertain delivery
+  must keep reviewable text in process memory without silently replacing a
+  newer clipboard value, and recording must wait for an explicit Copy or
+  Discard decision.
 - Keep improving setup, audio-route, permission, and no-speech diagnostics
   where a reproducible failure prevents a first successful dictation.
-- Validate native behavior before merging runtime changes. Model-free tests
+- Validate native behavior before shipping runtime changes. Model-free tests
   are necessary but do not prove microphone, accessibility, hotkey, clipboard,
   window-focus, or packaged-app behavior.
 
@@ -55,8 +72,9 @@ native, browser, Electron, remote-desktop, and elevated/non-elevated targets;
 the intended text lands once, and every unsafe path leaves an explicit manual
 paste recovery instead. The
 [target-app compatibility protocol](docs/app-compatibility.md) gives community
-reports the same small, privacy-safe baseline; those reports supplement rather
-than replace native release testing.
+reports from published builds the same small, privacy-safe baseline. Passing
+reports provide the denominator that failure-only issues cannot, but community
+reports supplement rather than replace native release testing.
 
 ## Next: earn a stable Windows release
 
@@ -91,12 +109,6 @@ unacceptable regressions, latency, memory, or power cost. The evidence gate in
 [`experiments/swift-bench/README.md`](experiments/swift-bench/README.md) is
 deliberately stricter than a promising small sample. Private audio, reference
 text, hypotheses, vocabulary, and paths stay on the evaluator's computer.
-
-Hotkey flexibility is also worth exploring where current choices conflict with
-keyboard layouts or existing shortcuts. The design must preserve a reliable
-emergency stop, avoid capturing normal typing, remain keyboard-accessible, and
-be testable across layouts; see
-[issue #34](https://github.com/rcourtman/presspeech/issues/34).
 
 ## Not currently planned
 

@@ -30,6 +30,16 @@ Links:
 - Download: <https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip>
 - Homebrew: `brew install --cask rcourtman/presspeech/presspeech`
 
+GitHub's repository profile is a manual distribution surface and must match the
+two-platform README. Use this About description:
+
+> Private local push-to-talk dictation for Apple Silicon Macs, plus an x64
+> Windows preview — no account, subscription, cloud transcription, or telemetry.
+
+Keep the existing topics and include `windows`, `offline`, and `on-device-ai`;
+otherwise GitHub search presents Presspeech as a Mac-only project even while a
+Windows build is available.
+
 ## Claims and where they're backed
 
 - **~100 ms model transcription on the documented clips** — benchmarks page,
@@ -148,10 +158,10 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    the release candidate. Do not spend the launch post while any incorrect or
    unsafe result remains, and describe recurring safe recovery rather than
    turning it into a universal paste claim.
-3. Confirm `main` is deployed to GitHub Pages and the README shows the
-   direct download above Homebrew. Also confirm the repository About
-   description reflects both the released macOS app and the Windows prerelease;
-   a Mac-only description now hides a shipped platform.
+3. Confirm `main` is deployed to GitHub Pages and the README shows the direct
+   download above Homebrew. Apply the exact two-platform GitHub About
+   description and missing discovery topics above; a Mac-only profile hides a
+   shipped platform.
 4. Record a baseline: latest release downloads, total release
    downloads, repo stars, repo views, unique views, clones, and top
    referrers.
