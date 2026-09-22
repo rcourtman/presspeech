@@ -18,6 +18,7 @@ import time
 import traceback
 import winsound
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from typing import NamedTuple
 
 import numpy as np
@@ -33,6 +34,9 @@ import engine
 import ui
 import updates
 from british import to_british
+from audio_backend import AudioBackend
+
+AUDIO_BACKEND = AudioBackend(sd)
 
 KEY_MAP = {
     "right alt": {pkb.Key.alt_gr, pkb.Key.alt_r},
@@ -1270,46 +1274,53 @@ class PresspeechApp:
     def _open_mic_worker(self, epoch):
         stream = None
         try:
-            if not self._recording_epoch_active(epoch):
-                return
-            chosen = self._get_input_device()
-            if not self._recording_epoch_active(epoch):
-                return
-            if chosen is None:
+            with AUDIO_BACKEND.operation() as audio_lease:
+                if not self._recording_epoch_active(epoch):
+                    return
+                chosen = self._get_input_device(epoch=epoch, audio_lease=audio_lease)
+                if not self._recording_epoch_active(epoch):
+                    return
+                if chosen is None:
+                    with self.lock:
+                        if not self.recording or epoch != self._rec_epoch:
+                            return
+                        self.recording = False
+                    self._cancel_recording_limit(epoch)
+                    self._restore_playback_after_recording()
+                    self._set_indicator(None)
+                    self._log("no working microphone found")
+                    self.notify("No microphone found",
+                                "Check Settings > System > Sound > Input, then enable "
+                                "microphone access for desktop apps in Windows privacy "
+                                "settings and try again.")
+                    return
                 with self.lock:
                     if not self.recording or epoch != self._rec_epoch:
                         return
-                    self.recording = False
-                self._cancel_recording_limit(epoch)
-                self._restore_playback_after_recording()
-                self._set_indicator(None)
-                self._log("no working microphone found")
-                self.notify("No microphone found",
-                            "Check Settings > System > Sound > Input, then enable "
-                            "microphone access for desktop apps in Windows privacy "
-                            "settings and try again.")
-                return
-            self.input_device = chosen
-            idx, rate = chosen
-            stream = sd.InputStream(
-                device=idx, samplerate=rate, channels=1, dtype="float32",
-                callback=lambda indata, frames, time_info, status: self._audio_cb(
-                    indata, frames, time_info, status, epoch),
-            )
-            stream.start()
-            with self.lock:
-                if not self.recording or epoch != self._rec_epoch:
-                    accepted = False
-                else:
-                    self.stream = stream
-                    accepted = True
-            if not accepted:
-                try:
-                    stream.stop()
-                    stream.close()
-                except Exception:
-                    pass
-                return
+                    self.input_device = chosen
+                idx, rate = chosen
+                stream = AUDIO_BACKEND.open_input_stream(
+                    device=idx, samplerate=rate, channels=1, dtype="float32",
+                    callback=lambda indata, frames, time_info, status: self._audio_cb(
+                        indata, frames, time_info, status, epoch),
+                )
+                stream.start()
+                with self.lock:
+                    if not self.recording or epoch != self._rec_epoch:
+                        accepted = False
+                    else:
+                        self.stream = stream
+                        accepted = True
+                if not accepted:
+                    try:
+                        stream.stop()
+                    except Exception:
+                        pass
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+                    return
         except Exception as exc:
             with self.lock:
                 if not self.recording or epoch != self._rec_epoch:
@@ -1322,6 +1333,9 @@ class PresspeechApp:
             if stream is not None:
                 try:
                     stream.stop()
+                except Exception:
+                    pass
+                try:
                     stream.close()
                 except Exception:
                     pass
@@ -1513,6 +1527,9 @@ class PresspeechApp:
         if stream is not None:
             try:
                 stream.stop()
+            except Exception:
+                pass
+            try:
                 stream.close()
             except Exception:
                 pass
@@ -1604,8 +1621,9 @@ class PresspeechApp:
         """Return (label, selector) pairs for Settings, excluding unsafe devices."""
         options = [("Automatic (recommended)", AUTO_INPUT_DEVICE)]
         try:
-            devices = sd.query_devices()
-            host_apis = sd.query_hostapis()
+            with AUDIO_BACKEND.operation():
+                devices = sd.query_devices()
+                host_apis = sd.query_hostapis()
         except Exception as exc:
             self._log("could not list input devices: %s" % exc)
             return options
@@ -1617,6 +1635,7 @@ class PresspeechApp:
             options.append((label, self._device_selector(device, host_name)))
         return options
 
+    @AUDIO_BACKEND.guarded
     def _find_input_device(self, selected, probe=None):
         """Probe and return a usable input matching a stable selector."""
         if probe is None:
@@ -1664,12 +1683,51 @@ class PresspeechApp:
                     return (i, rate)
         return None
 
-    def _get_input_device(self):
-        if self.input_device is not None:
-            return self.input_device
-        selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
-        self.input_device = self._find_input_device(selected)
-        return self.input_device
+    def _get_input_device(self, epoch=None, audio_lease=None):
+        scope = (AUDIO_BACKEND.operation() if audio_lease is None
+                 else nullcontext(audio_lease))
+        with scope as lease:
+            if epoch is not None and not self._recording_epoch_active(epoch):
+                return None
+            if self.input_device is not None:
+                return self.input_device
+            selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
+            try:
+                chosen = self._find_input_device(selected)
+            except Exception as exc:
+                self._log("could not query audio devices: %s" % exc)
+                chosen = None
+            if chosen is None and self._rescan_audio_devices(
+                    epoch=epoch, audio_lease=lease):
+                chosen = self._find_input_device(selected)
+            # A slow probe can finish after release/re-press. It must not reset
+            # the backend or overwrite the newer recording's selected input.
+            if epoch is not None:
+                with self.lock:
+                    if not self.recording or epoch != self._rec_epoch:
+                        return None
+                    self.input_device = chosen
+            else:
+                self.input_device = chosen
+            return chosen
+
+    def _rescan_audio_devices(self, epoch=None, audio_lease=None):
+        """Re-enumerate only while no other native operation can be affected."""
+        def still_current():
+            if getattr(self, "stream", None) is not None:
+                return False
+            if epoch is None:
+                return not getattr(self, "recording", False)
+            return self._recording_epoch_active(epoch)
+
+        scope = (AUDIO_BACKEND.operation() if audio_lease is None
+                 else nullcontext(audio_lease))
+        try:
+            with scope as lease:
+                return AUDIO_BACKEND.rescan(lease, still_current)
+        except Exception as exc:
+            self._log("could not re-scan audio devices: %s" % exc)
+            return False
 
     def check_input_device(self, selected):
         """Open an input and distinguish audible samples from silent buffers."""
@@ -1740,7 +1798,7 @@ class PresspeechApp:
                 heard.set()
 
         try:
-            stream = sd.InputStream(
+            stream = AUDIO_BACKEND.open_input_stream(
                 device=idx, samplerate=rate, channels=1, dtype="float32",
                 callback=cb)
             stream.start()
