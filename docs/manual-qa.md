@@ -100,10 +100,12 @@ by policy or Smart App Control; pursue trusted signing rather than treating an
 override as a successful install path.
 
 For the recovery rows, record the checklist step and aggregate outcome, not the
-synthetic phrase or clipboard contents. A unit-test pass is not a result for
-these rows: Windows must exercise the candidate's real clipboard ownership,
-registered exclusion format, input injection, notification settings, and
-packaged UI. If Cloud Clipboard cannot be tested safely with a disposable
+synthetic phrase or clipboard contents. A CI or unit-test pass is not a result
+for these rows. The opt-in native test can check one synthetic clipboard write
+on a disposable Windows runner, but it does not exercise the packaged
+candidate, Clipboard History or Cloud Clipboard UI, input injection,
+notification settings, or packaged UI. If Cloud Clipboard cannot be tested
+safely with a disposable
 paired device, mark only that sub-check **Not applicable** with the reason; do
 not use it to waive local Clipboard History exclusion.
 
@@ -475,9 +477,14 @@ item after the development-wrapper launch check.
   the text on the clipboard instead of pasting into that same-process window.
   This is the acceptance check for the accessibility-focus gap tracked in
   [issue #33](https://github.com/rcourtman/presspeech/issues/33).
-  If the steady-focus attempt falls back, copy diagnostics and confirm the log
-  says the target was unavailable at recording start rather than claiming the
-  focused window changed; either result is still an automatic-paste failure.
+  If the steady-focus attempt falls back, inspect the corresponding local-log
+  line in `~/Library/Logs/Presspeech.log`. Record its fixed failure category:
+  a `focused-window query failed (AX error …)` result means the target did not
+  provide usable exact-window evidence, while `frontmost application changed
+  during focused-window query` means window-server focus changed during the
+  bounded lookup. Other categories must be retained verbatim for triage.
+  Do not add the target name, window title, field contents, or transcript to
+  that log extract. Every fallback is still an automatic-paste failure.
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.
@@ -693,8 +700,13 @@ evidence; restore the exact app pin before recording a production release pass.
 ## Windows delivery recovery (upcoming 0.1.13)
 
 Use a disposable Windows desktop and benign synthetic text for clipboard/input
-qualification. The unit suite uses doubles and does not qualify real clipboard
-or input behavior. Do not run these steps against a user's active clipboard.
+qualification. The native unit probe checks the ABI, synthetic Unicode payload
+lifetime, and exclusion-format bytes when
+`PRESSPEECH_NATIVE_CLIPBOARD_TEST=1` is explicitly set on a disposable
+Windows runner; it is skipped otherwise. Test doubles cover fault control flow.
+Neither qualifies Clipboard History, Cloud Clipboard, real input delivery, or
+the packaged recovery UI. Do not run these steps against a user's active
+clipboard.
 
 - Hold the clipboard from a separate process during delivery. Confirm retained
   text is recoverable, recording is paused, the Delivery Recovery window opens
@@ -724,7 +736,8 @@ or input behavior. Do not run these steps against a user's active clipboard.
   confirm the phrase is not offered there. While the Presspeech item is current,
   confirm ordinary Ctrl+V and explicit recovery still work. These native checks
   qualify Windows' ExcludeClipboardContentFromMonitorProcessing behavior; the
-  doubled unit tests only qualify write ordering and fail-closed control flow.
+  opt-in native probe only confirms the marker is present, while doubled tests
+  qualify write ordering and fail-closed control flow.
 - Choose Discard and Exit separately. Both forget private recovery; Discard must
   leave a newer external clipboard untouched. No late worker may retain after Exit.
 - Force `SendInput` to return zero for modifier-down, V-down, V-up and

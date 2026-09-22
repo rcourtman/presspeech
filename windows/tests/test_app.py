@@ -2939,6 +2939,64 @@ class ModelIdleTests(unittest.TestCase):
             mock.sentinel.audio)
         instance._deliver_text.assert_called_once()
 
+    def test_transcription_exception_text_is_not_logged_or_notified(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "base.en"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.side_effect = RuntimeError(
+            "decoded private transcript")
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        instance._transcribe_worker_inner(mock.sentinel.audio)
+
+        messages = str(instance._log.mock_calls) + str(instance.notify.mock_calls)
+        self.assertNotIn("decoded private transcript", messages)
+        instance._log.assert_called_once_with(
+            "transcription failed; recognizer error details suppressed")
+        instance.notify.assert_called_once_with(
+            "Transcription failed",
+            "The local speech model could not complete this dictation. "
+            "Try again, or choose another model in Settings.")
+
+    def test_fallback_exception_text_is_not_logged_or_notified(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.side_effect = [
+            RuntimeError("first private hypothesis"),
+            RuntimeError("fallback private hypothesis"),
+        ]
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        instance._transcribe_worker_inner(mock.sentinel.audio)
+
+        messages = str(instance._log.mock_calls) + str(instance.notify.mock_calls)
+        self.assertNotIn("private hypothesis", messages)
+        self.assertEqual(
+            instance._log.call_args_list,
+            [
+                mock.call(
+                    "transcription failed; recognizer error details suppressed"),
+                mock.call(
+                    "fallback transcription failed; recognizer error details "
+                    "suppressed"),
+            ],
+        )
+        instance.notify.assert_has_calls([
+            mock.call(
+                "Parakeet failed",
+                "Trying the local Whisper base.en fallback. Error details "
+                "were suppressed to keep dictated text private."),
+            mock.call(
+                "Transcription failed",
+                "Neither local speech model could complete this dictation. "
+                "Try again, or choose another model in Settings."),
+        ])
+
 
 class StartupTests(unittest.TestCase):
     def test_fresh_non_cuda_install_selects_cpu_model(self):

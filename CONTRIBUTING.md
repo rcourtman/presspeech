@@ -4,7 +4,9 @@ Thanks for considering a contribution to Presspeech. The project has isolated
 macOS and Windows implementations. The released macOS app remains a
 single-file Swift menu-bar app plus a thin signed/notarised `.app` wrapper;
 the Windows tray app lives under `windows/` and uses Python, native Windows
-integration, and local CUDA inference.
+integration, and local CUDA inference. Participation in project spaces is
+covered by the [Code of Conduct](CODE_OF_CONDUCT.md); it also documents the
+confidential route for reporting a conduct concern.
 
 ## Reporting bugs
 

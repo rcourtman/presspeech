@@ -990,45 +990,6 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
         path=path,
     )
 
-    settings_row = """              <div class="menu-mock__row menu-mock__row--hover">
-                <span>Settings</span>
-                <span class="menu-mock__chev" aria-hidden="true">\u203a</span>
-              </div>
-"""
-    setup_row = """              <div class="menu-mock__row">
-                <span>Setup Checklist\u2026</span>
-              </div>
-"""
-    if SETUP_CHECKLIST not in text:
-        text = replace_literal(text, settings_row, settings_row + setup_row, path=path)
-
-    about_row = """              <div class="menu-mock__row">
-                <span>About Presspeech</span>
-              </div>
-"""
-    diagnostics_row = """              <div class="menu-mock__row">
-                <span>Copy Diagnostics</span>
-              </div>
-"""
-    if "Copy Diagnostics" not in text:
-        text = replace_literal(text, about_row, about_row + diagnostics_row, path=path)
-    save_diagnostics_row = """              <div class="menu-mock__row">
-                <span>Save Diagnostics\u2026</span>
-              </div>
-"""
-    if "Save Diagnostics" not in text:
-        text = replace_literal(text, diagnostics_row, diagnostics_row + save_diagnostics_row, path=path)
-
-    dock_access_caption = (
-        "On macOS, setup and settings begin in the menu bar. If the Presspeech item is hidden, "
-        "reopen the app to show Setup Checklist and optionally keep it in the Dock."
-    )
-    for old_caption in (
-        "Lives in the menu bar. No dock icon, no preferences window.",
-        "Setup and settings live in the menu bar. No dock icon, no preferences window.",
-        "On macOS, setup and settings live in the menu bar. No dock icon, no preferences window.",
-    ):
-        text = text.replace(old_caption, dock_access_caption, 1)
     return text
 
 

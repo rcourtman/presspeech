@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate public-site canonicals, sitemap entries, and release structured data."""
+"""Validate public-site discovery metadata and release structured data."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 from datetime import date
 from html.parser import HTMLParser
-from pathlib import Path
-from urllib.parse import urlsplit
+from pathlib import Path, PurePosixPath
+from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +23,7 @@ WINDOWS_APP_ID = f"{SITE_ROOT}windows.html#software"
 WEBSITE_ID = f"{SITE_ROOT}#website"
 HOME_PAGE_ID = f"{SITE_ROOT}#webpage"
 WINDOWS_PAGE_ID = f"{SITE_ROOT}windows.html#webpage"
+SITEMAP_URL = f"{SITE_ROOT}sitemap.xml"
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 ERROR_PAGE = Path("404.html")
@@ -115,6 +116,90 @@ def has_delivery_boundary(description: object) -> bool:
     )
 
 
+def robots_directives(parser: DocumentParser) -> set[str]:
+    return {
+        directive.strip()
+        for value in parser.robots
+        for directive in value.split(",")
+    }
+
+
+def expected_canonical(path: Path, docs: Path) -> str:
+    relative = path.relative_to(docs)
+    if relative == Path("index.html"):
+        return SITE_ROOT
+    if relative.name == "index.html":
+        return f"{SITE_ROOT}{relative.parent.as_posix()}/"
+    return f"{SITE_ROOT}{relative.as_posix()}"
+
+
+def public_path_for_url(url: str, docs: Path) -> Path | None:
+    parsed = urlsplit(url)
+    site = urlsplit(SITE_ROOT)
+    if (
+        parsed.scheme != site.scheme
+        or parsed.netloc != site.netloc
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.startswith(site.path)
+    ):
+        return None
+    relative = unquote(parsed.path[len(site.path) :])
+    public_path = PurePosixPath(relative)
+    if public_path.is_absolute() or ".." in public_path.parts:
+        return None
+    if not relative or relative.endswith("/"):
+        public_path /= "index.html"
+    return docs.joinpath(*public_path.parts)
+
+
+def robots_errors(docs: Path) -> list[str]:
+    path = docs / "robots.txt"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return [f"robots.txt: cannot read crawl policy: {exc}"]
+
+    errors: list[str] = []
+    fields: list[tuple[str, str]] = []
+    for number, raw_line in enumerate(lines, start=1):
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if ":" not in line:
+            errors.append(f"robots.txt:{number}: expected a field and value")
+            continue
+        name, value = line.split(":", 1)
+        fields.append((name.strip().lower(), value.strip()))
+
+    sitemaps = [value for name, value in fields if name == "sitemap"]
+    if sitemaps != [SITEMAP_URL]:
+        errors.append(
+            f"robots.txt: expected one Sitemap entry for {SITEMAP_URL}, found {sitemaps!r}"
+        )
+
+    wildcard_seen = False
+    current_agents: list[str] = []
+    group_has_directive = False
+    for name, value in fields:
+        if name == "user-agent":
+            if group_has_directive:
+                current_agents = []
+                group_has_directive = False
+            current_agents.append(value.lower())
+            if value == "*":
+                wildcard_seen = True
+        elif name in {"allow", "disallow"}:
+            group_has_directive = True
+            if name == "disallow" and value == "/" and "*" in current_agents:
+                errors.append("robots.txt: wildcard crawl policy must not disallow the site root")
+        elif name != "sitemap":
+            group_has_directive = True
+    if not wildcard_seen:
+        errors.append("robots.txt: missing wildcard User-agent policy")
+    return errors
+
+
 def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
     today = today or date.today()
     errors: list[str] = []
@@ -144,6 +229,8 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
             f"site-metadata.json: invalid last_updated date {last_updated!r}"
         )
 
+    errors.extend(robots_errors(docs))
+
     documents: dict[Path, tuple[DocumentParser, list[dict[str, object]]]] = {}
     canonical_paths: dict[str, Path] = {}
     for path in sorted(docs.rglob("*.html")):
@@ -153,21 +240,25 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
         if display == ERROR_PAGE:
             if parser.canonicals:
                 errors.append(f"{display}: error page must not declare a canonical URL")
-            directives = {
-                directive.strip()
-                for value in parser.robots
-                for directive in value.split(",")
-            }
+            directives = robots_directives(parser)
             if "noindex" not in directives:
                 errors.append(f"{display}: error page must declare robots noindex")
             documents[path] = (parser, nodes)
             continue
+        blocked = robots_directives(parser).intersection({"noindex", "none"})
+        if blocked:
+            errors.append(
+                f"{display}: public canonical page must remain indexable, found {sorted(blocked)!r}"
+            )
         if len(parser.canonicals) != 1:
             errors.append(f"{display}: expected one canonical URL, found {parser.canonicals!r}")
         else:
             canonical = parser.canonicals[0]
-            if not canonical.startswith(SITE_ROOT) or urlsplit(canonical).fragment:
-                errors.append(f"{display}: invalid canonical URL {canonical!r}")
+            expected_url = expected_canonical(path, docs)
+            if canonical != expected_url:
+                errors.append(
+                    f"{display}: canonical URL is {canonical!r}; expected {expected_url!r}"
+                )
             elif canonical in canonical_paths:
                 errors.append(
                     f"{display}: canonical URL duplicates {canonical_paths[canonical].relative_to(docs)}"
@@ -188,6 +279,14 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
             if loc in sitemap_urls:
                 errors.append(f"sitemap.xml: duplicate URL {loc}")
             sitemap_urls[loc] = url
+            public_path = public_path_for_url(loc, docs)
+            if public_path is None:
+                errors.append(f"sitemap.xml: URL is outside the canonical site: {loc}")
+            elif not public_path.is_file():
+                errors.append(
+                    f"sitemap.xml: URL has no published file: {loc} -> "
+                    f"{public_path.relative_to(docs)}"
+                )
             lastmod = url.findtext("s:lastmod", namespaces=namespace)
             try:
                 modified = date.fromisoformat(lastmod or "")
@@ -368,6 +467,28 @@ def run_self_test() -> None:
     parser.close()
     if parser.robots != ["noindex, follow"]:
         raise RuntimeError("self-test: robots metadata was not parsed")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        docs = Path(tmp)
+        (docs / "robots.txt").write_text(
+            f"User-agent: *\nAllow: /\n\nSitemap: {SITEMAP_URL}\n",
+            encoding="utf-8",
+        )
+        if robots_errors(docs):
+            raise RuntimeError("self-test: valid robots.txt was rejected")
+        (docs / "robots.txt").write_text(
+            "User-agent: *\nAllow: /public\nDisallow: /\n", encoding="utf-8"
+        )
+        crawl_errors = robots_errors(docs)
+        if not any("disallow" in error for error in crawl_errors):
+            raise RuntimeError("self-test: root crawl block was accepted")
+        if not any("Sitemap" in error for error in crawl_errors):
+            raise RuntimeError("self-test: missing sitemap discovery was accepted")
+
+    if expected_canonical(DOCS / "compare" / "index.html", DOCS) != f"{SITE_ROOT}compare/":
+        raise RuntimeError("self-test: directory canonical was not normalized")
+    if public_path_for_url(f"{SITE_ROOT}../private", DOCS) is not None:
+        raise RuntimeError("self-test: unsafe sitemap URL was accepted")
 
     if not has_delivery_boundary(
         "Pastes after verifying the original destination; otherwise the clipboard "

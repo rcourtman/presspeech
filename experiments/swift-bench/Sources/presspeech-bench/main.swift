@@ -2260,6 +2260,15 @@ func summarize(_ name: String,
     print("  \(name)")
     print("    latency:  p50=\(fmtMs(p50))  min=\(fmtMs(mn))  max=\(fmtMs(mx))")
     print("    memory:   peak=\(fmtMB(peak))  Δ-from-start=\(fmtMB(delta))")
+    // Emit one privacy-safe observation per measured trial. A Set of distinct
+    // transcripts below is useful for humans, but cannot establish whether an
+    // intermittent silence hallucination occurred once or on every trial.
+    // Trim exactly as the product does before deciding that there is text to
+    // deliver; never print or hash the transcript here.
+    for (index, result) in results.enumerated() {
+        let cleaned = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("    output: trial=\(index + 1)/\(results.count) empty=\(cleaned.isEmpty) characters=\(cleaned.count)")
+    }
     func wordErrorTags(_ text: String) -> (wer: String, counts: String) {
         guard let reference else { return ("", "") }
         let score = wordErrorScore(reference: reference, hypothesis: text)

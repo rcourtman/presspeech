@@ -2194,21 +2194,33 @@ class PresspeechApp:
             # this to English, and the Transformers backends ignore the hint.
             text = self.transcriber.transcribe(audio)
             model_seconds = time.perf_counter() - model_started
-        except Exception as exc:
-            self._log(traceback.format_exc())
+        except Exception:
+            # Recognizer exceptions are an untrusted text boundary: an
+            # upstream decoder may include a partial hypothesis in its error
+            # or traceback.  Keep the persistent diagnostic content-free.
+            self._log("transcription failed; recognizer error details suppressed")
             if not engine.is_parakeet(self.settings["model"]):
-                self.notify("Transcription failed", str(exc))
+                self.notify(
+                    "Transcription failed",
+                    "The local speech model could not complete this dictation. "
+                    "Try again, or choose another model in Settings.")
                 return
             try:
-                self.notify("Parakeet failed", "Falling back to Whisper base.en (%s)"
-                            % str(exc)[:100])
+                self.notify(
+                    "Parakeet failed",
+                    "Trying the local Whisper base.en fallback. Error details "
+                    "were suppressed to keep dictated text private.")
                 self.transcriber.load("base.en", notify=self.notify)
                 model_started = time.perf_counter()
                 text = self.transcriber.transcribe(audio)
                 model_seconds = time.perf_counter() - model_started
-            except Exception as exc2:
-                self._log(traceback.format_exc())
-                self.notify("Transcription failed", str(exc2))
+            except Exception:
+                self._log(
+                    "fallback transcription failed; recognizer error details suppressed")
+                self.notify(
+                    "Transcription failed",
+                    "Neither local speech model could complete this dictation. "
+                    "Try again, or choose another model in Settings.")
                 return
         timing = getattr(self.transcriber, "last_timing", {})
         timing_summary = _model_timing_summary(timing)

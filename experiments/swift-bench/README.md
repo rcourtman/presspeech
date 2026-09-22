@@ -209,6 +209,33 @@ For single-backend debugging:
 Each single-backend report ends with the same aggregate decision metrics used
 below: average and worst WER, final-word failures, and average p50 latency.
 
+Model-candidate comparisons also require reviewed non-speech controls. Put at
+least five independent recordings in the comparison input directory and give
+each a **zero-byte** `.txt` sidecar, then pass
+`--silence-controls-hand-audited` only after listening to the complete clips
+and confirming that they contain no intelligible speech. Include realistic
+microphone/room conditions (for example HVAC, keyboard, handling and device
+noise), not five copies of digital silence; source and normalized duplicates
+are rejected. The benchmark records a privacy-safe empty/non-empty result for
+every trial. A candidate cannot pass if any non-speech trial produces text,
+even when production v3 also hallucinates, and missing or unaudited controls
+remain an explicit blocker. Speech WER and final-word checks continue to use
+only non-empty references, so non-speech outputs cannot distort corpus WER.
+
+```sh
+./run-real-model-comparison.sh \
+  --input-dir candidate-corpus \
+  --candidate-backend v3-sdk-default \
+  --references-hand-audited \
+  --silence-controls-hand-audited \
+  --require-candidate-pass
+```
+
+This controls one side of the boundary trade-off. The speech corpus must still
+contain quiet, distant and noisy human dictation with hand-audited non-empty
+references; labelling quiet speech as an empty non-speech control would hide
+exactly the deletion regression the WER gate is intended to catch.
+
 For a quick non-ASR check of argument parsing and report redaction:
 
 ```sh
@@ -677,7 +704,9 @@ For a Unified, v2, SDK-default chunking, or encoder product-candidate gate, add
 trials, 25 comparable clips and 1,000 reference words, at least one
 demonstrated error reduction, no per-clip or aggregate word-error increase,
 no new final-word retention failure on any clip, and average p50 latency no
-more than 1.25× production. Final-word retention is evaluated conservatively
+more than 1.25× production. It also requires at least five independently
+recorded, hand-audited non-speech controls and rejects any candidate text on
+those controls. Final-word retention is evaluated conservatively
 and independently of total WER: the candidate's worst observed retention is
 compared with production's best, so an equal-error substitution or one
 unstable production trial cannot mask a new utterance-tail failure.
@@ -687,12 +716,15 @@ The public comparison wrapper accepts and forwards the gate, for example:
 ./run-public-model-comparison.sh \
   --candidate-backend v2 \
   --trials 3 \
+  --silence-controls-hand-audited \
   --require-candidate-pass
 ```
 
 It compares the candidate's worst observed transcript with production's best
-on every clip so unstable baseline output cannot hide a regression. Private
-corpora additionally require `--references-hand-audited`.
+on every speech clip so unstable baseline output cannot hide a regression.
+Both public and private comparisons require
+`--silence-controls-hand-audited`; private speech corpora additionally require
+`--references-hand-audited`.
 
 Unified must use the product-candidate 250 ms trailing-silence setting and
 also pass `run-tail-word-regression.sh`; the corpus gate does not replace that

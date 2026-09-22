@@ -1,9 +1,16 @@
-"""No Windows clipboard or input operations: all native calls use test doubles."""
+"""Clipboard transaction tests; native writes require an explicit opt-in."""
 import ctypes
+import os
 import unittest
 from unittest import mock
 
 import clipboard_delivery as delivery
+
+
+_NATIVE_CLIPBOARD_TEST = (
+    os.name == "nt" and
+    os.environ.get("PRESSPEECH_NATIVE_CLIPBOARD_TEST") == "1"
+)
 
 
 class ClipboardTransactionTests(unittest.TestCase):
@@ -243,3 +250,57 @@ class ClipboardTransactionTests(unittest.TestCase):
         self.assertIs(api.GlobalLock.restype, wintypes.LPVOID)
         self.assertEqual(api.GlobalAlloc.argtypes, [wintypes.UINT, ctypes.c_size_t])
         api.OpenClipboard.assert_not_called(); api.CreateWindowExW.assert_not_called()
+
+
+@unittest.skipUnless(
+    _NATIVE_CLIPBOARD_TEST,
+    "native clipboard probe is restricted to an opted-in disposable Windows runner",
+)
+class NativeClipboardTransactionTests(unittest.TestCase):
+    """Small real-Win32 gate; Clipboard History still requires manual QA."""
+
+    @staticmethod
+    def _read_block(api, format_id):
+        memory = api.GetClipboardData(format_id)
+        if not memory:
+            raise AssertionError("expected clipboard format is unavailable")
+        size = int(api.GlobalSize(memory))
+        if size <= 0:
+            raise AssertionError("clipboard format has no data")
+        pointer = api.GlobalLock(memory)
+        if not pointer:
+            raise AssertionError("clipboard format could not be locked")
+        try:
+            return ctypes.string_at(pointer, size)
+        finally:
+            api.GlobalUnlock(memory)
+
+    def test_native_unicode_and_privacy_marker_survive_owner_cleanup(self):
+        # This mutates the clipboard, so the workflow enables it only on a
+        # disposable Windows runner. It validates our real ABI and ownership
+        # lifetime, not whether the Windows history UI honours the marker.
+        text = "Presspeech CI probe\nZażółć 🐈\n"
+        receipt = delivery.write_text(text)
+        self.assertTrue(delivery.is_current(receipt))
+
+        api = delivery._WindowsAPI()
+        privacy_format = api.RegisterClipboardFormatW(
+            delivery._PRIVATE_CLIPBOARD_FORMAT)
+        self.assertNotEqual(privacy_format, 0)
+        self.assertTrue(api.OpenClipboard(None))
+        try:
+            self.assertEqual(
+                self._read_block(api, 13),
+                "Presspeech CI probe\r\nZażółć 🐈\r\n\0".encode("utf-16-le"),
+            )
+            self.assertEqual(
+                self._read_block(api, privacy_format),
+                delivery._PRIVATE_CLIPBOARD_MARKER,
+            )
+        finally:
+            self.assertTrue(api.CloseClipboard())
+
+        # Reading and closing must not disturb the receipt. The temporary
+        # owner window created by write_text has already been destroyed, so
+        # this also proves non-delayed clipboard data remains available.
+        self.assertTrue(delivery.is_current(receipt))

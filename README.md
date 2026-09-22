@@ -19,6 +19,11 @@ release, and Presspeech transcribes locally before pasting at the cursor. If it
 cannot safely identify the same destination, the transcript stays on the
 clipboard for manual paste. No account, subscription, or cloud transcription.
 
+**Start here:** [official website](https://rcourtman.github.io/presspeech/) ·
+[first private dictation](https://rcourtman.github.io/presspeech/getting-started.html) ·
+[macOS install](https://rcourtman.github.io/presspeech/install.html) ·
+[Windows install](https://rcourtman.github.io/presspeech/windows.html)
+
 Choose the build that matches your computer:
 
 | | macOS | Windows |
@@ -410,6 +415,7 @@ and NVIDIA qualification record in [`docs/manual-qa.md`](docs/manual-qa.md).
 ## Links
 
 - [Support and troubleshooting](SUPPORT.md)
+- [Contributing](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Test target-app compatibility](https://rcourtman.github.io/presspeech/app-compatibility.html)
 - [Product roadmap](ROADMAP.md)
 - [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)

@@ -134,18 +134,14 @@
     <main id="main-content">
       <div class="wrap hero">
         <div class="hero-copy">
-          <h1>Private push-to-talk dictation.</h1>
+          <h1>Private push-to-talk dictation for Mac and Windows.</h1>
           <p>Hold a key, speak, release. Presspeech transcribes locally, then pastes at the cursor or keeps a copy for manual paste when it cannot safely verify the destination. No account, subscription, telemetry, or cloud transcription.</p>
           <p class="quiet"><strong>macOS 0.3.8:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.12:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
           <div class="actions">
-            <a class="button" href="getting-started.html">Complete your first dictation</a>
-            <a class="button secondary" href="install.html">Get the macOS release</a>
+            <a class="button" href="install.html">Get the macOS release</a>
             <a class="button secondary" href="windows.html">Try the Windows prerelease</a>
           </div>
-          <div class="install-line" aria-label="macOS Homebrew install command">
-            <span class="prompt" aria-hidden="true">$</span>
-            <code>brew install --cask rcourtman/presspeech/presspeech</code>
-          </div>
+          <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Complete the four checkpoints to your first dictation</a>.</p>
           <div class="stat-row" aria-label="macOS release and benchmark summary">
             <div class="stat"><strong>~100 ms</strong><span>model transcription on benchmark clips</span></div>
             <div class="stat"><strong>8.4 MB</strong><span>signed release zip</span></div>
@@ -154,59 +150,17 @@
           </div>
         </div>
         <div class="hero-visual">
-          <figure class="menu-mock" aria-label="Presspeech macOS menu bar preview">
-            <div class="menu-mock__bar">
-              <span class="menu-mock__time">9:41</span>
-              <span class="menu-mock__bar-icons" aria-hidden="true">
-                <span class="icon-dot"></span>
-                <span class="icon-rect"></span>
-                <span class="menu-mock__active" title="Presspeech">
-                  <svg viewBox="0 0 100 100" aria-hidden="true">
-                    <g fill="currentColor">
-                      <rect x="35" y="10" width="30" height="55" rx="15"/>
-                      <rect x="48.5" y="65" width="3" height="15"/>
-                      <rect x="22" y="80" width="56" height="6" rx="3"/>
-                    </g>
-                  </svg>
-                </span>
-              </span>
-            </div>
-            <span class="menu-mock__pointer" aria-hidden="true"></span>
-            <div class="menu-mock__panel" role="presentation">
-              <div class="menu-mock__row menu-mock__row--header">
-                <strong>Presspeech</strong>
-                <span class="ready">Ready</span>
-              </div>
-              <div class="menu-mock__sep"></div>
-              <div class="menu-mock__row menu-mock__row--recent">
-                <span class="label">Most recent</span>
-                <span class="recent-text">Presspeech pastes text at the cursor.</span>
-              </div>
-              <div class="menu-mock__sep"></div>
-              <div class="menu-mock__row menu-mock__row--hover">
-                <span>Settings</span>
-                <span class="menu-mock__chev" aria-hidden="true">›</span>
-              </div>
-              <div class="menu-mock__row">
-                <span>Setup Checklist…</span>
-              </div>
-              <div class="menu-mock__row">
-                <span>About Presspeech</span>
-              </div>
-              <div class="menu-mock__row">
-                <span>Copy Diagnostics</span>
-              </div>
-              <div class="menu-mock__row">
-                <span>Save Diagnostics…</span>
-              </div>
-              <div class="menu-mock__sep"></div>
-              <div class="menu-mock__row">
-                <span>Quit Presspeech</span>
-                <span class="menu-mock__kbd">⌘ Q</span>
-              </div>
-            </div>
-            <figcaption class="menu-mock__caption">On macOS, setup and settings begin in the menu bar. If the Presspeech item is hidden, reopen the app to show Setup Checklist and optionally keep it in the Dock.</figcaption>
-          </figure>
+          <aside class="start-card" aria-labelledby="first-run-title">
+            <span class="section-eyebrow">First run</span>
+            <h2 id="first-run-title">Know when setup is working</h2>
+            <ol class="start-card__steps" role="list">
+              <li><span class="start-card__number" aria-hidden="true">1</span><span><strong>Install the right build</strong><small>Choose macOS or Windows above.</small></span></li>
+              <li><span class="start-card__number" aria-hidden="true">2</span><span><strong>Reach Ready</strong><small>Finish setup and let the local model load.</small></span></li>
+              <li><span class="start-card__number" aria-hidden="true">3</span><span><strong>Pass the private test</strong><small>Dictate once in Presspeech's scratchpad.</small></span></li>
+              <li><span class="start-card__number" aria-hidden="true">4</span><span><strong>Try one simple app</strong><small>Start with TextEdit or Notepad.</small></span></li>
+            </ol>
+            <a class="start-card__link" href="getting-started.html">Follow the first-dictation guide <span aria-hidden="true">→</span></a>
+          </aside>
         </div>
       </div>
 

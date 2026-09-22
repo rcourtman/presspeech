@@ -4547,6 +4547,12 @@ private func productionParakeetASRConfig() -> ASRConfig {
     ASRConfig(melChunkContext: true)
 }
 
+private func privacySafeTranscriptionFailureLogMessage() -> String {
+    // Deliberately has no Error parameter. Decoder errors are an untrusted
+    // text boundary and may carry a partial hypothesis in their description.
+    "transcribe failed; recognizer error details suppressed"
+}
+
 actor TranscriptionWorker {
     private var engine: LoadedSpeechEngine?
     private var loadedProfile: SpeechModelProfile?
@@ -5155,6 +5161,37 @@ struct DictationPasteTarget {
     let focusedWindow: AXUIElement
 }
 
+enum DictationPasteTargetCaptureFailure: Error, Equatable {
+    case frontmostApplicationUnavailable
+    case invalidFrontmostProcessIdentifier
+    case focusedWindowQueryFailed(Int32)
+    case focusedWindowValueUnavailable
+    case focusedWindowValueInvalid
+    case frontmostApplicationChanged
+
+    var logDescription: String {
+        switch self {
+        case .frontmostApplicationUnavailable:
+            return "frontmost application unavailable"
+        case .invalidFrontmostProcessIdentifier:
+            return "frontmost application has no valid process identifier"
+        case .focusedWindowQueryFailed(let code):
+            return "focused-window query failed (AX error \(code))"
+        case .focusedWindowValueUnavailable:
+            return "focused-window query returned no value"
+        case .focusedWindowValueInvalid:
+            return "focused-window query returned an unexpected value"
+        case .frontmostApplicationChanged:
+            return "frontmost application changed during focused-window query"
+        }
+    }
+}
+
+enum DictationPasteTargetCaptureResult {
+    case captured(DictationPasteTarget)
+    case unavailable(DictationPasteTargetCaptureFailure)
+}
+
 enum TextInsertionOutcome: Equatable {
     case inserted
     case copiedWithoutPasting
@@ -5184,19 +5221,31 @@ func dictationCompletionNotice(processedText: String,
 @MainActor
 func captureDictationPasteTarget(
     frontmostProcessIdentifier: () -> pid_t?,
-    focusedWindowForProcess: (pid_t) -> AXUIElement?
-) -> DictationPasteTarget? {
-    guard let processIdentifier = frontmostProcessIdentifier(),
-          processIdentifier > 0,
-          let focusedWindow = focusedWindowForProcess(processIdentifier),
-          frontmostProcessIdentifier() == processIdentifier else { return nil }
-    return DictationPasteTarget(processIdentifier: processIdentifier,
-                                focusedWindow: focusedWindow)
+    focusedWindowForProcess: (pid_t) -> Result<AXUIElement, DictationPasteTargetCaptureFailure>
+) -> DictationPasteTargetCaptureResult {
+    guard let processIdentifier = frontmostProcessIdentifier() else {
+        return .unavailable(.frontmostApplicationUnavailable)
+    }
+    guard processIdentifier > 0 else {
+        return .unavailable(.invalidFrontmostProcessIdentifier)
+    }
+    let focusedWindow: AXUIElement
+    switch focusedWindowForProcess(processIdentifier) {
+    case .success(let window):
+        focusedWindow = window
+    case .failure(let failure):
+        return .unavailable(failure)
+    }
+    guard frontmostProcessIdentifier() == processIdentifier else {
+        return .unavailable(.frontmostApplicationChanged)
+    }
+    return .captured(DictationPasteTarget(processIdentifier: processIdentifier,
+                                          focusedWindow: focusedWindow))
 }
 
 @MainActor
-func currentDictationPasteTarget() -> DictationPasteTarget? {
-    captureDictationPasteTarget(
+func currentDictationPasteTarget(reportFailure: Bool = false) -> DictationPasteTarget? {
+    let result = captureDictationPasteTarget(
         // Activation is tracked by the window server; it does not depend on
         // the app publishing the system-wide AX focused-application attribute.
         frontmostProcessIdentifier: {
@@ -5206,17 +5255,35 @@ func currentDictationPasteTarget() -> DictationPasteTarget? {
             let application = AXUIElementCreateApplication(processIdentifier)
             _ = AXUIElementSetMessagingTimeout(application, PASTE_TARGET_AX_TIMEOUT_SECONDS)
             var windowValue: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(application,
-                                                kAXFocusedWindowAttribute as CFString,
-                                                &windowValue) == .success,
-                  let windowValue,
-                  CFGetTypeID(windowValue) == AXUIElementGetTypeID() else { return nil }
-            return windowValue as! AXUIElement
+            let queryResult = AXUIElementCopyAttributeValue(
+                application,
+                kAXFocusedWindowAttribute as CFString,
+                &windowValue
+            )
+            guard queryResult == .success else {
+                return .failure(.focusedWindowQueryFailed(queryResult.rawValue))
+            }
+            guard let windowValue else {
+                return .failure(.focusedWindowValueUnavailable)
+            }
+            guard CFGetTypeID(windowValue) == AXUIElementGetTypeID() else {
+                return .failure(.focusedWindowValueInvalid)
+            }
+            return .success(windowValue as! AXUIElement)
         }
     )
     // captureDictationPasteTarget rechecks activation after the potentially
     // blocking AX lookup. Missing exact-window identity still means copy-only;
     // a process ID cannot distinguish two windows in the same application.
+    switch result {
+    case .captured(let target):
+        return target
+    case .unavailable(let failure):
+        if reportFailure {
+            log("paste target unavailable at recording start: \(failure.logDescription); completed dictation will use clipboard-only recovery")
+        }
+        return nil
+    }
 }
 
 @MainActor
@@ -9197,13 +9264,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // Snapshot the destination before audio startup, which can block while
         // rebuilding the engine. A focus change during that work must make the
         // eventual delivery fail closed, not retarget it to the new window.
-        let pasteTarget = currentDictationPasteTarget()
-        if pasteTarget == nil {
-            // Keep this privacy-safe and app-agnostic. The distinction matters
-            // for #33: a target that never exposed exact window identity is
-            // different from a window that changed after capture.
-            log("paste target unavailable at recording start; completed dictation will use clipboard-only recovery")
-        }
+        // Keep failure detail privacy-safe and app-agnostic. The distinction
+        // matters for #33: a target that never exposed exact window identity
+        // is different from a window that changed during the bounded lookup.
+        let pasteTarget = currentDictationPasteTarget(reportFailure: true)
         cancelAudioIdleStop()
         do {
             didTouchAudioEngine = true
@@ -9426,7 +9490,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                     }
                 }
             } catch {
-                log("transcribe failed: \(error)")
+                // Decoder failures are an untrusted text boundary: upstream
+                // errors may contain a partial hypothesis. Persist only the
+                // failure event, never Error's description or userInfo.
+                log(privacySafeTranscriptionFailureLogMessage())
                 completionNotice = .transcriptionFailed
             }
             isBusy = false
@@ -14767,6 +14834,7 @@ private enum PresspeechSelfTest {
         try testAudioInputDeviceFiltering()
         try testSpeechModelStartupStatus()
         try testDictationLanguageHints()
+        try testPrivacySafeTranscriptionFailureLog()
         try testAudioRouteChangeDecision()
         try testRecordingLifecycle()
         try testSilentCaptureHint()
@@ -15115,15 +15183,17 @@ private enum PresspeechSelfTest {
             // permissions, desktop focus changes or synthetic keys are needed.
             let firstWindow = AXUIElementCreateApplication(710)
             let otherWindow = AXUIElementCreateApplication(711)
-            let capture = captureDictationPasteTarget(
+            let captureResult = captureDictationPasteTarget(
                 frontmostProcessIdentifier: { 700 },
-                focusedWindowForProcess: { pid in pid == 700 ? firstWindow : nil }
+                focusedWindowForProcess: { pid in
+                    pid == 700 ? .success(firstWindow) : .failure(.focusedWindowValueUnavailable)
+                }
             )
-            try expect(capture?.processIdentifier, equals: pid_t(700),
-                       "frontmost process capture must not require system-wide AX focus")
-            guard let capture else {
+            guard case .captured(let capture) = captureResult else {
                 throw SelfTestFailure.failed("paste target capture should succeed with an exact window")
             }
+            try expect(capture.processIdentifier, equals: pid_t(700),
+                       "frontmost process capture must not require system-wide AX focus")
             try expect(dictationPasteTargetMatches(capture, capture), equals: true,
                        "the same process and exact window should permit delivery")
             try expect(dictationPasteTargetMatches(capture, DictationPasteTarget(
@@ -15135,30 +15205,50 @@ private enum PresspeechSelfTest {
             try expect(dictationPasteTargetMatches(capture, nil), equals: false,
                        "losing exact-window evidence must prevent delivery")
             let unavailable = captureDictationPasteTarget(
-                frontmostProcessIdentifier: { 700 }, focusedWindowForProcess: { _ in nil })
-            try expect(unavailable == nil, equals: true,
-                       "process identity alone must never authorize automatic paste")
+                frontmostProcessIdentifier: { 700 },
+                focusedWindowForProcess: { _ in .failure(.focusedWindowQueryFailed(-25212)) })
+            guard case .unavailable(let unavailableFailure) = unavailable else {
+                throw SelfTestFailure.failed("process identity alone must never authorize automatic paste")
+            }
+            try expect(unavailableFailure, equals: .focusedWindowQueryFailed(-25212),
+                       "AX failure detail must survive for privacy-safe qualification logs")
+            try expect(unavailableFailure.logDescription,
+                       equals: "focused-window query failed (AX error -25212)",
+                       "AX failure logs should identify the error without target metadata")
             var processReads = 0
             let switchedDuringLookup = captureDictationPasteTarget(
                 frontmostProcessIdentifier: {
                     processReads += 1
                     return processReads == 1 ? 700 : 701
-                }, focusedWindowForProcess: { _ in firstWindow })
-            try expect(switchedDuringLookup == nil, equals: true,
-                       "focus changes while AX replies are pending must fail closed")
-            var queriedInvalidProcess = false
-            for invalid: pid_t? in [nil, 0, -1] {
+                }, focusedWindowForProcess: { _ in .success(firstWindow) })
+            guard case .unavailable(let switchedFailure) = switchedDuringLookup else {
+                throw SelfTestFailure.failed("focus changes while AX replies are pending must fail closed")
+            }
+            try expect(switchedFailure, equals: .frontmostApplicationChanged,
+                       "focus changes should retain a distinct qualification reason")
+            try expect(switchedFailure.logDescription,
+                       equals: "frontmost application changed during focused-window query",
+                       "focus-change logs should remain free of target metadata")
+            for (invalid, expectedFailure): (pid_t?, DictationPasteTargetCaptureFailure) in [
+                (nil, .frontmostApplicationUnavailable),
+                (0, .invalidFrontmostProcessIdentifier),
+                (-1, .invalidFrontmostProcessIdentifier),
+            ] {
+                var queriedInvalidProcess = false
                 let invalidCapture = captureDictationPasteTarget(
                     frontmostProcessIdentifier: { invalid },
                     focusedWindowForProcess: { _ in
                         queriedInvalidProcess = true
-                        return firstWindow
+                        return .success(firstWindow)
                     })
-                try expect(invalidCapture == nil, equals: true,
-                           "missing or invalid frontmost process identity must fail closed")
+                guard case .unavailable(let actualFailure) = invalidCapture else {
+                    throw SelfTestFailure.failed("missing or invalid frontmost process identity must fail closed")
+                }
+                try expect(actualFailure, equals: expectedFailure,
+                           "missing and invalid frontmost processes need accurate diagnostics")
+                try expect(queriedInvalidProcess, equals: false,
+                           "invalid process identity must not trigger AX lookups")
             }
-            try expect(queriedInvalidProcess, equals: false,
-                       "invalid process identity must not trigger AX lookups")
         }
     }
 
@@ -18142,6 +18232,14 @@ private enum PresspeechSelfTest {
                                               requiredBytes: requiredBytes),
             equals: nil,
             "unknown disk-space readings should not block model startup"
+        )
+    }
+
+    private static func testPrivacySafeTranscriptionFailureLog() throws {
+        try expect(
+            privacySafeTranscriptionFailureLogMessage(),
+            equals: "transcribe failed; recognizer error details suppressed",
+            "transcription failure diagnostics must not accept recognizer error text"
         )
     }
 

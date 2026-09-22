@@ -16,6 +16,7 @@ TRIALS="3"
 CANDIDATE_BACKEND="unified"
 UNIFIED_TRAILING_SILENCE_MS="250"
 REQUIRE_CANDIDATE_PASS=0
+SILENCE_CONTROLS_HAND_AUDITED=0
 FETCH=0
 FORCE_FETCH=0
 SELF_TEST=0
@@ -43,6 +44,9 @@ Options:
                           Unified-only trailing silence in ms (default: 250)
   --require-candidate-pass
                           fail unless the candidate evidence screen passes
+  --silence-controls-hand-audited
+                          declare every zero-byte-reference control listened to
+                          and confirmed to contain no intelligible speech
   --self-test             run parser/detection self-tests only
   -h, --help              show this help
 
@@ -50,6 +54,11 @@ Examples:
   ./run-public-model-comparison.sh --fetch --count 50 --trials 3
   ./run-public-model-comparison.sh --fixture-dir public-audio/librispeech-test-other --candidate-backend v2 --trials 5
   ./run-public-model-comparison.sh --candidate-backend v2 --trials 3 --require-candidate-pass
+
+The candidate gate requires at least five unique non-speech controls in the
+fixture directory, each marked by a zero-byte .txt sidecar, plus
+--silence-controls-hand-audited. Generated LibriSpeech speech alone is useful
+comparison evidence but cannot satisfy that boundary-safety requirement.
 USAGE
 }
 
@@ -111,6 +120,9 @@ build_compare_args() {
     if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 ]]; then
         COMPARE_ARGS+=( "--require-candidate-pass" )
     fi
+    if [[ "$SILENCE_CONTROLS_HAND_AUDITED" -eq 1 ]]; then
+        COMPARE_ARGS+=( "--silence-controls-hand-audited" )
+    fi
 }
 
 assert_eq() {
@@ -152,15 +164,18 @@ run_self_test() {
     OUTDIR="$tmpdir/results"
     CANDIDATE_BACKEND="v2"
     REQUIRE_CANDIDATE_PASS=1
+    SILENCE_CONTROLS_HAND_AUDITED=1
     build_compare_args
     assert_eq "${COMPARE_ARGS[4]}" "$OUTDIR" "comparison output forwarding"
     assert_eq "${COMPARE_ARGS[8]}" "v2" "candidate backend forwarding"
-    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 3]}" "--language" "English hint forwarding"
-    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 2]}" "en" "English language forwarding"
-    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--require-candidate-pass" "candidate gate forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 4]}" "--language" "English hint forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 3]}" "en" "English language forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 2]}" "--require-candidate-pass" "candidate gate forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--silence-controls-hand-audited" "silence audit forwarding"
 
     CANDIDATE_BACKEND="v3-sdk-default"
     REQUIRE_CANDIDATE_PASS=0
+    SILENCE_CONTROLS_HAND_AUDITED=0
     build_compare_args
     assert_eq "${COMPARE_ARGS[8]}" "v3-sdk-default" "SDK-default candidate forwarding"
     assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--show-paths" \
@@ -235,6 +250,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-candidate-pass)
             REQUIRE_CANDIDATE_PASS=1
+            shift
+            ;;
+        --silence-controls-hand-audited)
+            SILENCE_CONTROLS_HAND_AUDITED=1
             shift
             ;;
         --self-test)
