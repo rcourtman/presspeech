@@ -140,6 +140,8 @@ For a quick non-ASR check of argument parsing and report redaction:
 ./run-real-model-comparison.sh --self-test
 ./run-real-dictation-regression.sh --self-test
 ./run-vocabulary-bias-regression.sh --self-test
+python3 ./compose-public-context-fixtures.py --self-test
+python3 ./analyze-context-variation.py --self-test
 ./.build/debug/presspeech-bench --self-test
 ```
 
@@ -544,6 +546,55 @@ the private human-dictation requirement as a separate product check:
 The pinned Ukrainian test split's first 60 rows exceed the default candidate
 screen's 1,000-reference-word floor; the report remains authoritative about
 the actual row and normalized-word counts.
+
+### Context-variation check
+
+Ordinary corpus WER can miss a word that changes only when identical audio has
+different right context. That distinction matters for the v3 precision
+candidate: upstream isolated the original encoder's corruption by appending
+speech to an otherwise correct single-window cut. Build paired public fixtures
+from the Ukrainian corpus to reproduce that class of test without private
+audio:
+
+```sh
+python3 ./compose-public-context-fixtures.py \
+  --input-dir public-audio/fleurs-uk_ua-test \
+  --output-dir public-audio/fleurs-uk_ua-test-context \
+  --pair-count 10
+./run-real-model-comparison.sh \
+  --input-dir public-audio/fleurs-uk_ua-test-context \
+  --out-dir public-results/fleurs-uk_ua-test-context \
+  --candidate-backend v3-int8-v2 \
+  --language uk \
+  --public-corpus --show-transcripts --show-paths \
+  --trials 3
+RESULTS_TSV=public-results/fleurs-uk_ua-test-context/YYYYMMDDTHHMMSSZ-model-comparison.tsv
+python3 ./analyze-context-variation.py \
+  --manifest public-audio/fleurs-uk_ua-test-context/manifest.tsv \
+  --results "$RESULTS_TSV" \
+  --output public-results/fleurs-uk_ua-test-context/context-analysis.md \
+  --require-nonregression
+```
+
+For every disjoint source pair, the composer emits the probe alone, the
+trailing context alone, and their byte-exact sample-payload concatenation.
+Combined audio is strictly shorter than the model's 15-second encoder window
+and includes at least four seconds of trailing speech by default, isolating
+within-window context from long-form merge behavior. The comparison helper
+validates the generated inventory, payload digests, references, and manifest
+before building. The analyser reports positive composition excess: combined
+word errors beyond the sum of both standalone clips. As elsewhere,
+production's best trial is compared with the candidate's worst trial. Replace
+the timestamp in `RESULTS_TSV` with the path printed by the comparison command.
+
+The repeated component audio is intentional experimental control, not extra
+independent evidence. `run-real-model-comparison.sh` therefore refuses
+`--require-candidate-pass` for a composer-owned context corpus. Use the context
+non-regression result alongside, never instead of, the independent public and
+human-dictation candidate gates. Transcripts and paths in the command above are
+public. The analyser also resolves the helper's deterministic redacted clip
+numbers, so keep the default redaction when adapting the method to private
+audio.
 
 ### 2026-07-22 v0.15.5 candidate recheck
 

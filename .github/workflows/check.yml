@@ -51,6 +51,8 @@ jobs:
           experiments/swift-bench/bench-power.sh --self-test
           experiments/swift-bench/add-real-dictation-fixture.sh --self-test
           experiments/swift-bench/fetch-public-speech-fixtures.sh --self-test
+          python3 experiments/swift-bench/compose-public-context-fixtures.py --self-test
+          python3 experiments/swift-bench/analyze-context-variation.py --self-test
           experiments/swift-bench/run-real-dictation-regression.sh --self-test
           experiments/swift-bench/run-real-model-comparison.sh --self-test
           experiments/swift-bench/run-vocabulary-bias-regression.sh --self-test

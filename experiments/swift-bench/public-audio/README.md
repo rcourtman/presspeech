@@ -100,3 +100,25 @@ Run it through `run-real-dictation-regression.sh`, or let
 `run-release-asr-checks.sh` validate and run it automatically. The release
 wrapper requires this seam coverage by default; only explicitly lightweight
 helper runs should pass `--allow-missing-long-public-audio`.
+
+## Context-variation fixtures
+
+For an encoder-precision comparison, generate probe/context/combined triplets
+that keep identical speech below one 15-second encoder window while changing
+its trailing speech context:
+
+```sh
+python3 ./compose-public-context-fixtures.py \
+  --input-dir public-audio/fleurs-uk_ua-test \
+  --output-dir public-audio/fleurs-uk_ua-test-context \
+  --pair-count 10
+```
+
+Run `v3` versus `v3-int8-v2` over that directory with
+`run-real-model-comparison.sh`, then pass its printed TSV path and the generated
+manifest to `analyze-context-variation.py`. The comparison helper validates the
+generated manifest and fixture digests before running. Each source utterance is
+assigned to only one pair, but its audio intentionally appears both alone and
+in the combined clip. This makes context-induced error counts measurable; it
+also means the generated triplets cannot satisfy the independent-corpus
+candidate gate.

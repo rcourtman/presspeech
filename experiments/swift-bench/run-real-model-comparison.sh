@@ -58,6 +58,9 @@ Options:
 
 Supported input extensions: wav, aiff, aif, caf, m4a, mp3, flac.
 Each audio file must have a same-stem .txt reference sidecar.
+Generated context-variation triplets deliberately repeat source audio and can
+be analysed separately, but cannot satisfy the independent-corpus candidate
+screen.
 USAGE
 }
 
@@ -572,6 +575,32 @@ run_self_test() {
     fi
     assert_contains "$missing_value_log" "--trials requires a value"
 
+    local context_gate_dir="$tmpdir/context-gate"
+    mkdir -p "$context_gate_dir"
+    touch "$context_gate_dir/one.wav"
+    printf 'one word\n' >"$context_gate_dir/one.txt"
+    printf 'Presspeech generated public context-variation speech fixtures\n' \
+        >"$context_gate_dir/.presspeech-public-context-fixtures"
+    local context_gate_log="$tmpdir/context-gate.log"
+    if bash "$SCRIPT_PATH" \
+        --input-dir "$context_gate_dir" \
+        --candidate-backend v3-int8-v2 \
+        --require-candidate-pass >"$context_gate_log" 2>&1; then
+        echo "self-test expected repeated context fixtures to be rejected by the candidate gate" >&2
+        exit 1
+    fi
+    assert_contains "$context_gate_log" \
+        "context-variation fixtures cannot satisfy the independent-corpus candidate screen"
+
+    local context_preflight_log="$tmpdir/context-preflight.log"
+    if bash "$SCRIPT_PATH" \
+        --input-dir "$context_gate_dir" \
+        --candidate-backend v3-int8-v2 >"$context_preflight_log" 2>&1; then
+        echo "self-test expected malformed context fixtures to fail preflight" >&2
+        exit 1
+    fi
+    assert_contains "$context_preflight_log" "missing regular context manifest"
+
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
     echo "real model comparison self-test passed"
@@ -676,6 +705,26 @@ fi
 if [[ ! -d "$INPUT_DIR" ]]; then
     echo "input directory not found: $INPUT_DIR" >&2
     exit 1
+fi
+
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && \
+      ( -e "$INPUT_DIR/.presspeech-public-context-fixtures" || \
+        -L "$INPUT_DIR/.presspeech-public-context-fixtures" ) ]]; then
+    cat >&2 <<'MSG'
+context-variation fixtures cannot satisfy the independent-corpus candidate screen
+
+The probe and context utterances are intentionally repeated inside each
+combined clip. Run this comparison without --require-candidate-pass, analyse
+the resulting TSV with analyze-context-variation.py, and use a separate
+general/public and human-dictation corpus for the product-candidate gate.
+MSG
+    exit 2
+fi
+
+if [[ -e "$INPUT_DIR/.presspeech-public-context-fixtures" || \
+      -L "$INPUT_DIR/.presspeech-public-context-fixtures" ]]; then
+    python3 ./compose-public-context-fixtures.py \
+        --output-dir "$INPUT_DIR" --validate-output-dir
 fi
 
 BENCHMARK_SOURCE_STATE="clean"

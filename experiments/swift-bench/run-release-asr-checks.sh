@@ -491,6 +491,8 @@ echo "running helper self-tests..."
 ./add-real-dictation-fixture.sh --self-test
 ./fetch-public-speech-fixtures.sh --self-test
 python3 ./compose-public-long-form-fixtures.py --self-test
+python3 ./compose-public-context-fixtures.py --self-test
+python3 ./analyze-context-variation.py --self-test
 ./run-real-dictation-regression.sh --self-test
 ./run-real-model-comparison.sh --self-test
 ./run-vocabulary-bias-regression.sh --self-test
