@@ -14062,7 +14062,21 @@ private final class NativeInteractionFixture {
         try require(ClipboardPasteInserter.insert("native-fixture-paste", preserveClipboard: true,
                     expectedTarget: target) == .inserted, "native paste posted")
         try wait("native text view consumed paste") { editors[0].string == "native-fixture-paste" }
-        try require(restorations == 0, "paste does not automatically restore clipboard")
+        // The retired automatic setting offered delays through three seconds.
+        // Waiting beyond that complete window makes this a regression check for
+        // the timer itself, rather than an immediate assertion that could pass
+        // before an accidentally reintroduced restore had fired. Keep pumping
+        // AppKit so a queued main-thread timer would have every opportunity to
+        // run; the fixture's normal safety check still aborts on external focus,
+        // input, or clipboard ownership changes.
+        let automaticRestoreGuardDeadline = Date().addingTimeInterval(3.25)
+        repeat {
+            try check()
+            pump()
+        } while Date() < automaticRestoreGuardDeadline
+        try require(restorations == 0
+                        && pasteboard.string(forType: .string) == "native-fixture-paste",
+                    "paste remains on clipboard without automatic restoration")
         guard let restoreToken = ClipboardPasteInserter.pendingRestoreToken(on: pasteboard) else {
             throw SelfTestFailure.failed("native manual restore offer missing")
         }

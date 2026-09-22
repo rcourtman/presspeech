@@ -47,9 +47,10 @@ swift/.build/debug/Presspeech --self-test native-interactions --allow-native-inp
 ```
 
 Only this exact argument sequence is accepted. The active interaction phase has
-an overall 30-second guard and two-second per-check deadlines, with a one-second
-cleanup drain. Snapshotting an existing lazy clipboard provider and operating
-system API calls are synchronous and cannot be promised a hard wall-clock bound.
+an overall 30-second guard and two-second per-check deadlines, plus a deliberate
+3.25-second no-automatic-restore observation and a one-second cleanup drain.
+Snapshotting an existing lazy clipboard provider and operating system API calls
+are synchronous and cannot be promised a hard wall-clock bound.
 A nonzero exit or missing final `PASS native-interactions` means acceptance has
 not passed. Preserve only fixed test labels, counts, and PASS/FAIL output in test
 evidence; do not add clipboard contents, foreground window titles, or transcripts.
@@ -62,10 +63,12 @@ The fixture checks:
   hold after modifiers have been released, and passes an extra-modifier mismatch.
 - Toggle mode rejects an unavailable start without changing its toggle state,
   starts/stops on subsequent presses, and suppresses Escape while cancelling.
-- In the upcoming 0.3.8 fixture / builds containing the manual-restore option,
+- In the 0.3.8 fixture and later builds containing the manual-restore option,
   production Command+V inserts a fixed marker into the owned text view. After
-  observing that exact field consume it, the fixture explicitly requests the
-  guarded manual restoration; posting alone never schedules restoration.
+  observing that exact field consume it, the fixture leaves the transcript on
+  the clipboard beyond the retired setting's maximum three-second timer window,
+  then explicitly requests the guarded manual restoration. Posting alone never
+  schedules restoration.
 - A newer fixture copy survives an explicit request using an older restore token.
 - Focusing the second owned window makes a target captured from the first window
   fall back to copy-only without posting paste events.
@@ -121,13 +124,15 @@ preferences or restarts the installed app.
 
 ## Limits of the evidence
 
-A successful run establishes behavior in these controlled AppKit windows. It does
-not prove Electron/VS Code AX availability, slow or asynchronous clipboard
-consumption, restoration correctness for every external clipboard provider,
-VoiceOver focus/announcements in the full recorder dialog, keyboard-layout label
-refresh, a second physical keyboard layout, right-modifier hardware behavior, or
-microphone/model behavior. Those remain separate manual checks. Explicit user
-confirmation is not a Quartz clipboard-consumption acknowledgement.
+A successful run establishes behavior in these controlled AppKit windows. The
+timer-window check proves that Presspeech does not automatically replace its
+owned transcript during that interval; it does not prove Electron/VS Code AX
+availability, slow or asynchronous clipboard consumption, restoration
+correctness for every external clipboard provider, VoiceOver focus/announcements
+in the full recorder dialog, keyboard-layout label refresh, a second physical
+keyboard layout, right-modifier hardware behavior, or microphone/model behavior.
+Those remain separate manual checks. Explicit user confirmation is not a Quartz
+clipboard-consumption acknowledgement.
 The fixture exercises the recorder's real decision function through a native
 local monitor, not its modal confirmation UI or persistence; the existing pure
 hotkey suite covers persistence and invalid input.
