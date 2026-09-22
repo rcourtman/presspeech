@@ -1,0 +1,13 @@
+{
+  "outputs": {
+    "icon/social-preview.png": {
+      "bytes": 38503,
+      "sha256": "155a3919f98e59c05f30a2939fa4af284aa9f529186eb4977567e798f8e3f376"
+    }
+  },
+  "schema": 1,
+  "sources": {
+    "icon/make-icons.sh": "9066199b6b7aa07003cca406aed6dbcdb4c3f7c6c2c75e400dc201d3ffbd067b",
+    "icon/social-preview.svg": "5f224879fbe4aeb930c6472811333df9da1536bc0078c03f3ea814b48d7d3ac1"
+  }
+}

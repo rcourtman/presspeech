@@ -1,0 +1,34 @@
+{
+  "outputs": {
+    "docs/demo-poster.jpg": {
+      "bytes": 112319,
+      "sha256": "df544d7ba089b2aa63f4f08ff89beab9fa84937da98931218d385df30a185bdb"
+    },
+    "docs/demo-video.mp4": {
+      "bytes": 723902,
+      "sha256": "84ec47ca5b4ba0ecca7887820306d52cd510d427e0f92fdaa2815fed17061fc1"
+    },
+    "docs/demo-video.webm": {
+      "bytes": 470421,
+      "sha256": "c736ea2baff638dd960c6f6f6af6fbcbe296b0b344b20f32c81b894642a76afa"
+    },
+    "marketing/demo/dist/presspeech-demo.gif": {
+      "bytes": 2147310,
+      "sha256": "fe9756a2af16c25d904b611573e31bb89cc1dc66ea99f4b7e1bc745bd0889428"
+    },
+    "marketing/demo/dist/presspeech-demo.mp4": {
+      "bytes": 723902,
+      "sha256": "84ec47ca5b4ba0ecca7887820306d52cd510d427e0f92fdaa2815fed17061fc1"
+    },
+    "marketing/demo/dist/presspeech-demo.webm": {
+      "bytes": 470421,
+      "sha256": "c736ea2baff638dd960c6f6f6af6fbcbe296b0b344b20f32c81b894642a76afa"
+    }
+  },
+  "schema": 1,
+  "sources": {
+    "marketing/demo/index.html": "f5583c4c5c7862665634edbf89a5613b8487ffff27dd3d6c63a1f28d32951ef5",
+    "marketing/demo/package.json": "4c1253b5540f91a2c6f6621def973e4ba6d1b2cbfe1be159e7ec9bcf8bf375d1",
+    "marketing/demo/render.mjs": "96e665ab9da2730740f34d16c1896c147bbe8b8f606cd6e87622797e6713bc51"
+  }
+}
