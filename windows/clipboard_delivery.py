@@ -81,7 +81,11 @@ def write_text(text, *, api=None, sleep=time.sleep, monotonic=time.monotonic):
     """
     if not isinstance(text, str) or "\0" in text:
         raise ClipboardError("clipboard text is not a supported Unicode string")
-    payload = text.encode("utf-16-le") + b"\0\0"
+    # CF_UNICODETEXT requires CRLF. Bare LF (including the Newline suffix)
+    # does not preserve trailing blank lines in standard Windows edit controls.
+    # Normalize only at this boundary: retained dictation and Tk text stay intact.
+    clipboard_text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+    payload = clipboard_text.encode("utf-16-le") + b"\0\0"
     nonce = secrets.token_bytes(32)
     api = _WindowsAPI() if api is None else api
     token_format = api.RegisterClipboardFormatW(_RECEIPT_FORMAT)

@@ -70,6 +70,27 @@ class ClipboardTransactionTests(unittest.TestCase):
             [0xC002, 13, 0xC001])
         api.GlobalFree.assert_not_called()
 
+    def test_windows_newlines_preserve_trailing_and_repeated_logical_lines(self):
+        cases = (
+            ("Finished\n", "Finished\r\n"),
+            ("First\nSecond\n", "First\r\nSecond\r\n"),
+            ("First\r\nSecond\r\n", "First\r\nSecond\r\n"),
+            ("First\rSecond\r", "First\r\nSecond\r\n"),
+            ("\n\nZażółć 🐈\rMiddle\r\nLast\n\n", "\r\n\r\nZażółć 🐈\r\nMiddle\r\nLast\r\n\r\n"),
+            ("\n\n", "\r\n\r\n"),
+            ("", ""),
+        )
+        for original, expected in cases:
+            with self.subTest(original=original):
+                api = self.backend()
+                receipt = delivery.write_text(original, api=api)
+                memory = self.state["formats"][13]
+                self.assertEqual(bytes(self.state["buffers"][memory]),
+                                 (expected + "\0").encode("utf-16-le"))
+                self.assertTrue(delivery.is_current(receipt, api=api))
+                self.assertEqual(api.SetClipboardData.call_count, 3)
+                api.GlobalFree.assert_not_called()
+
     def assert_rejected_without_rewrite(self, api):
         with self.assertRaises(delivery.ClipboardError):
             delivery.write_text("synthetic transcript", api=api)
