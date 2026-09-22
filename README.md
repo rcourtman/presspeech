@@ -191,9 +191,14 @@ each platform rather than identical.
   that menu also exposes standard Edit and Window commands for Presspeech's
   scratchpad and manager windows
 - **Settings → Dictation → Hotkey** — choose Right Option, Right Control, Right
-  Command, selected F-keys, or record another F-key/right modifier; recorded
-  keys are previewed before they replace the current choice, and Apple
-  keyboards may require **Fn** to send an F-key
+  Command, selected F-keys, or **Record Hotkey…** for another F-key/right
+  modifier or a key combined with Command, Control or Option (plus optional
+  Shift), such as Command-comma. Confirm the preview before saving. Custom
+  combinations take precedence over the same shortcut in other apps; conflicts
+  cannot all be detected. Escape remains reserved for cancellation. Bindings
+  track physical keys, and their labels follow the current keyboard layout.
+  Hold mode ends when the trigger key is released, even if its modifiers were
+  released first. Apple keyboards may require **Fn** to send an F-key
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
 - **Settings → Dictation → Language Hint** — auto-detect (default) or pin to one of
   18 Latin/Cyrillic-script languages to prevent wrong-script bleed-through

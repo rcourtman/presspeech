@@ -22,6 +22,7 @@
 //     and breaks `codesign --deep`.
 
 import AppKit
+import Carbon.HIToolbox
 import AVFoundation
 import AudioToolbox
 import Foundation
@@ -340,13 +341,38 @@ func recordingHUDRecordingStatusText(
 
 /// The hotkeys the user can pick from in Settings → Hotkey. Modifier
 /// keycodes (62/61/54) are tracked via `.flagsChanged` events; the
-/// F-keys are normal `.keyDown` / `.keyUp`.
+/// F-keys and custom combinations use `.keyDown` / `.keyUp`.
 struct HotkeyChoice: Equatable {
-    let name: String
+    private let fixedName: String
     let keycode: CGKeyCode
     let isModifier: Bool
     /// Which CGEventFlags mask bit fires for this modifier (nil for non-modifiers).
     let modifierFlag: CGEventFlags?
+    let requiredModifiers: CGEventFlags
+
+    init(name: String, keycode: CGKeyCode, isModifier: Bool,
+         modifierFlag: CGEventFlags?, requiredModifiers: CGEventFlags = []) {
+        fixedName = name
+        self.keycode = keycode
+        self.isModifier = isModifier
+        self.modifierFlag = modifierFlag
+        self.requiredModifiers = requiredModifiers
+    }
+
+    var name: String {
+        guard !requiredModifiers.isEmpty else { return fixedName }
+        let modifiers: [(CGEventFlags, String)] = [
+            (.maskControl, "Control"), (.maskAlternate, "Option"),
+            (.maskShift, "Shift"), (.maskCommand, "Command"),
+        ]
+        return (modifiers.compactMap { requiredModifiers.contains($0.0) ? $0.1 : nil }
+            + [hotkeyKeyDisplayName(keycode)]).joined(separator: " + ")
+    }
+
+    func hasSameBinding(as other: HotkeyChoice) -> Bool {
+        keycode == other.keycode && requiredModifiers == other.requiredModifiers
+            && isModifier == other.isModifier && modifierFlag == other.modifierFlag
+    }
 }
 
 let RIGHT_MODIFIER_HOTKEY_CHOICES: [HotkeyChoice] = [
@@ -404,6 +430,90 @@ let HOTKEY_CHOICES: [HotkeyChoice] = [
     HotkeyChoice(name: "F19",           keycode: 80,  isModifier: false, modifierFlag: nil),
 ]
 
+let HOTKEY_COMBINATION_MODIFIERS: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand]
+let HOTKEY_NON_TYPING_MODIFIERS: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
+let HOTKEY_COMBINATION_GUIDANCE = "Choose a right-side modifier, an F-key, or a key with Command, Control or Option. Escape and some system shortcuts cannot be used."
+
+// Ordinary ANSI/ISO positions, keypad keys and navigation keys. Modifier,
+// power/media and input-source-switch keys cannot be shortcut trigger keys.
+let HOTKEY_COMBINATION_KEYCODES: Set<CGKeyCode> = Set(0...50).union([
+    51, 65, 67, 69, 71, 75, 76, 78, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+    91, 92, 95, 102, 104, 117, 115, 119, 116, 121, 123, 124, 125, 126,
+]).union(FUNCTION_KEY_NAMES_BY_KEYCODE.keys)
+
+func hotkeyKeyDisplayName(_ keycode: CGKeyCode) -> String {
+    if let name = FUNCTION_KEY_NAMES_BY_KEYCODE[keycode] { return name }
+    let names: [CGKeyCode: String] = [
+        36: "Return", 48: "Tab", 49: "Space", 51: "Delete", 65: "Keypad Decimal",
+        67: "Keypad Multiply", 69: "Keypad Plus", 71: "Keypad Clear",
+        75: "Keypad Divide", 76: "Keypad Enter", 78: "Keypad Minus", 81: "Keypad Equals",
+        82: "Keypad 0", 83: "Keypad 1", 84: "Keypad 2", 85: "Keypad 3", 86: "Keypad 4",
+        87: "Keypad 5", 88: "Keypad 6", 89: "Keypad 7", 91: "Keypad 8", 92: "Keypad 9",
+        95: "Keypad Comma", 115: "Home", 116: "Page Up", 117: "Forward Delete",
+        119: "End", 121: "Page Down", 123: "Left Arrow", 124: "Right Arrow",
+        125: "Down Arrow", 126: "Up Arrow",
+    ]
+    if let name = names[keycode] { return name }
+    // Bindings track physical keys, while labels follow the current layout.
+    // Reading a layout is not a keyboard event or an input-monitoring action.
+    let source = TISCopyCurrentKeyboardLayoutInputSource().takeRetainedValue()
+    if let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) {
+        let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue()
+        let layout = UnsafeRawPointer(CFDataGetBytePtr(data)).assumingMemoryBound(to: UCKeyboardLayout.self)
+        var deadKeyState: UInt32 = 0
+        var characters = [UniChar](repeating: 0, count: 8)
+        var length = 0
+        let status = UCKeyTranslate(layout, keycode, UInt16(kUCKeyActionDisplay), 0,
+                                    UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysMask),
+                                    &deadKeyState, characters.count, &length, &characters)
+        if status == noErr, length > 0 {
+            let label = String(utf16CodeUnits: characters, count: length).uppercased()
+            if !label.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) {
+                return label
+            }
+        }
+    }
+    return "Physical Key \(keycode)"
+}
+
+func isReservedHotkeyCombination(keycode: CGKeyCode, modifiers: CGEventFlags) -> Bool {
+    // These are system navigation/recovery shortcuts, not an exhaustive list
+    // of shortcuts owned by macOS or installed applications.
+    if keycode == ESCAPE_KEYCODE { return true }
+    if keycode == 48, modifiers.contains(.maskCommand) { return true }
+    if keycode == 49, modifiers == .maskCommand || modifiers == .maskControl
+        || modifiers == [.maskControl, .maskAlternate] { return true }
+    if keycode == 12, modifiers == [.maskControl, .maskCommand] { return true }
+    return false
+}
+
+func recordableHotkeyChoice(forKeycode keycode: CGKeyCode,
+                            modifiers: CGEventFlags) -> HotkeyChoice? {
+    guard modifiers.subtracting(HOTKEY_COMBINATION_MODIFIERS).isEmpty else { return nil }
+    if modifiers.isEmpty { return recordableHotkeyChoice(forKeycode: keycode) }
+    guard !modifiers.intersection(HOTKEY_NON_TYPING_MODIFIERS).isEmpty,
+          HOTKEY_COMBINATION_KEYCODES.contains(keycode),
+          !isReservedHotkeyCombination(keycode: keycode, modifiers: modifiers) else { return nil }
+    return HotkeyChoice(name: "", keycode: keycode, isModifier: false,
+                        modifierFlag: nil, requiredModifiers: modifiers)
+}
+
+func normalizedHotkeyBinding(storedValue value: Any?) -> HotkeyChoice? {
+    guard let fields = value as? [String: Any] else { return nil }
+    func integer(_ key: String, maximum: UInt64) -> UInt64? {
+        guard let number = fields[key] as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite, number.doubleValue >= 0,
+              number.doubleValue <= Double(maximum),
+              number.doubleValue.rounded(.towardZero) == number.doubleValue else { return nil }
+        return number.uint64Value
+    }
+    guard integer("version", maximum: 1) == 1,
+          let keycode = integer("keycode", maximum: UInt64(CGKeyCode.max)),
+          let modifiers = integer("modifiers", maximum: HOTKEY_COMBINATION_MODIFIERS.rawValue) else { return nil }
+    return recordableHotkeyChoice(forKeycode: CGKeyCode(keycode), modifiers: CGEventFlags(rawValue: modifiers))
+}
+
 func recordableHotkeyChoice(forKeycode keycode: CGKeyCode) -> HotkeyChoice? {
     if let choice = RIGHT_MODIFIER_HOTKEY_CHOICES.first(where: { $0.keycode == keycode }) {
         return choice
@@ -422,6 +532,10 @@ func hotkeyChoice(forKeycode keycode: CGKeyCode) -> HotkeyChoice {
 func normalizedHotkeyKeycode(storedValue value: Any?) -> CGKeyCode? {
     let raw: Int?
     if let number = value as? NSNumber {
+        guard CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite, number.doubleValue >= 0,
+              number.doubleValue <= Double(CGKeyCode.max),
+              number.doubleValue.rounded(.towardZero) == number.doubleValue else { return nil }
         raw = number.intValue
     } else if let string = value as? String {
         raw = Int(string.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -2113,6 +2227,7 @@ func identityMigrationDestinationURL(forLegacyCorrectionURL url: URL) -> URL? {
 
 final class Settings: @unchecked Sendable {
     private static let keyHotkeyKeycode = "hotkey_keycode"
+    private static let keyHotkeyBinding = "hotkey_binding"
     private static let keyTriggerMode = "trigger_mode"
     private static let keyMaxRecordingSeconds = "max_recording_seconds"
     private static let keyPasteSuffix = "paste_suffix"
@@ -2178,15 +2293,23 @@ final class Settings: @unchecked Sendable {
         self.defaults = UserDefaults(suiteName: SETTINGS_SUITE) ?? .standard
     }
 
-    var hotkeyKeycode: CGKeyCode {
+    var hotkeyBinding: HotkeyChoice {
         get {
-            normalizedHotkeyKeycode(storedValue: defaults.object(forKey: Self.keyHotkeyKeycode))
-                ?? DEFAULT_HOTKEY_KEYCODE
+            if let stored = defaults.object(forKey: Self.keyHotkeyBinding) {
+                return normalizedHotkeyBinding(storedValue: stored)
+                    ?? hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
+            }
+            return hotkeyChoice(forKeycode:
+                normalizedHotkeyKeycode(storedValue: defaults.object(forKey: Self.keyHotkeyKeycode))
+                    ?? DEFAULT_HOTKEY_KEYCODE)
         }
         set {
-            let normalized = normalizedHotkeyKeycode(storedValue: NSNumber(value: Int(newValue)))
-                ?? DEFAULT_HOTKEY_KEYCODE
-            defaults.set(Int(normalized), forKey: Self.keyHotkeyKeycode)
+            guard let normalized = recordableHotkeyChoice(forKeycode: newValue.keycode,
+                                                         modifiers: newValue.requiredModifiers),
+                  normalized.hasSameBinding(as: newValue) else { return }
+            // One preference value keeps key and modifier updates atomic.
+            defaults.set(["version": 1, "keycode": Int(normalized.keycode),
+                          "modifiers": normalized.requiredModifiers.rawValue], forKey: Self.keyHotkeyBinding)
         }
     }
 
@@ -3070,13 +3193,15 @@ private enum HotkeyPreferenceUpdateResult: Equatable {
 private func hotkeyPreferenceUpdateResult(
     requested: HotkeyChoice,
     previous: HotkeyChoice,
-    persistedKeycode: CGKeyCode
+    persistedBinding: HotkeyChoice
 ) -> HotkeyPreferenceUpdateResult {
-    guard let recordable = recordableHotkeyChoice(forKeycode: requested.keycode) else {
+    guard let recordable = recordableHotkeyChoice(forKeycode: requested.keycode,
+                                                  modifiers: requested.requiredModifiers),
+          recordable.hasSameBinding(as: requested) else {
         return .rejected("That key cannot be used for dictation.")
     }
 
-    guard persistedKeycode == recordable.keycode else {
+    guard persistedBinding.hasSameBinding(as: recordable) else {
         return .rolledBack(
             previous: previous,
             message: "Presspeech could not save that hotkey, so it kept \(previous.name)."
@@ -3114,16 +3239,19 @@ private func hotkeyRecordingDecision(for event: HotkeyEventSnapshot) -> HotkeyRe
     }
 
     guard event.typeRawValue == CGEventType.keyDown.rawValue else { return .ignore }
-    guard let choice = recordableHotkeyChoice(forKeycode: event.keycode),
+    let modifiers = event.flags.intersection(HOTKEY_COMBINATION_MODIFIERS)
+    guard let choice = recordableHotkeyChoice(forKeycode: event.keycode, modifiers: modifiers),
           !choice.isModifier else {
-        return .reject("Choose a right-side modifier key or an F-key. Typing keys are not safe because Presspeech suppresses its dictation key globally.")
+        return .reject(HOTKEY_COMBINATION_GUIDANCE)
     }
     return .accept(choice)
 }
 
 private func hotkeyRecorderShouldPassThrough(_ event: HotkeyEventSnapshot) -> Bool {
     event.typeRawValue == CGEventType.keyDown.rawValue
-        && HOTKEY_RECORDER_CONTROL_KEYCODES.contains(event.keycode)
+        && (event.keycode == ESCAPE_KEYCODE
+            || (HOTKEY_RECORDER_CONTROL_KEYCODES.contains(event.keycode)
+                && event.flags.intersection(HOTKEY_NON_TYPING_MODIFIERS).isEmpty))
 }
 
 private enum HotkeyTransitionAction: Equatable, Sendable {
@@ -3166,11 +3294,13 @@ private struct HotkeyTransitionResult: Equatable, Sendable {
 
 private struct HotkeyTransitionState {
     private var hotkeyModifierDown = false
+    private var combinationKeyDown = false
     private var toggleActive = false
     private var suppressEscapeKeyUp = false
 
     mutating func resetAll() {
         hotkeyModifierDown = false
+        combinationKeyDown = false
         toggleActive = false
         suppressEscapeKeyUp = false
     }
@@ -3216,6 +3346,23 @@ private struct HotkeyTransitionState {
             } else if event.flags.contains(mask) {
                 isPress = true
                 hotkeyModifierDown = true
+            }
+        } else if !hotkey.requiredModifiers.isEmpty {
+            if event.typeRawValue == CGEventType.keyDown.rawValue {
+                if combinationKeyDown { return .suppressOnly }
+                guard !event.isAutoRepeat,
+                      event.flags.intersection(HOTKEY_COMBINATION_MODIFIERS) == hotkey.requiredModifiers
+                    else { return .pass }
+                combinationKeyDown = true
+                isPress = true
+            } else if event.typeRawValue == CGEventType.keyUp.rawValue {
+                // Release belongs to the latched trigger even if modifiers
+                // were released first. Unmatched typing must pass untouched.
+                guard combinationKeyDown else { return .pass }
+                combinationKeyDown = false
+                isRelease = true
+            } else {
+                return .pass
             }
         } else {
             if event.typeRawValue == CGEventType.keyDown.rawValue, !event.isAutoRepeat {
@@ -6853,6 +7000,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var audioConfigurationChangeSuppressedUntil: TimeInterval?
     private var workspacePowerObservers: [NSObjectProtocol] = []
     private var workspaceAccessibilityObserver: NSObjectProtocol?
+    private var keyboardLayoutObserver: NSObjectProtocol?
     private var shouldResumeRuntimeAfterWake = false
     private var didLogDeferredWakeRecovery = false
     private var didOfferSetupChecklistThisLaunch = false
@@ -7046,10 +7194,22 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
         installWorkspacePowerObservers()
         installWorkspaceAccessibilityObserver()
+        keyboardLayoutObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.isTerminating else { return }
+                // Refresh labels only; changing layouts must not reset an
+                // active hold or change the persisted physical binding.
+                self.rebuildMenu()
+                self.updateSetupChecklist()
+            }
+        }
 
         // Configure hotkey listener up front so it picks up the user's
         // saved choice the moment the tap goes live.
-        hotkey.setHotkey(hotkeyChoice(forKeycode: settings.hotkeyKeycode))
+        hotkey.setHotkey(settings.hotkeyBinding)
         hotkey.setTriggerMode(settings.triggerMode)
 
         startStartup(reason: "launch")
@@ -7110,6 +7270,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         stopSetupChecklistRefreshTimer()
         removeWorkspacePowerObservers()
         removeWorkspaceAccessibilityObserver()
+        if let observer = keyboardLayoutObserver {
+            DistributedNotificationCenter.default().removeObserver(observer)
+            keyboardLayoutObserver = nil
+        }
         correctionSyncTimer?.invalidate()
         correctionSyncTimer = nil
         cleanupPendingSharedCorrections(reason: "terminate")
@@ -10283,7 +10447,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hkSub.autoenablesItems = false
         let current = hotkey.hotkey
 
-        if !HOTKEY_CHOICES.contains(where: { $0.keycode == current.keycode }) {
+        if !HOTKEY_CHOICES.contains(where: { $0.hasSameBinding(as: current) }) {
             let currentItem = NSMenuItem(title: current.name,
                                          action: nil,
                                          keyEquivalent: "")
@@ -10298,7 +10462,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                   action: #selector(selectHotkey(_:)),
                                   keyEquivalent: "")
             item.target = self
-            item.state = (choice.keycode == current.keycode) ? .on : .off
+            item.state = choice.hasSameBinding(as: current) ? .on : .off
+            item.isEnabled = !isRecording && !isBusy && !isTerminating
             item.representedObject = Int(choice.keycode)
             item.toolTip = choice.isModifier
                 ? "Pressing this key starts dictation globally. Choose an F-key if you use it while typing special characters."
@@ -10319,7 +10484,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                action: #selector(resetHotkeyClicked(_:)),
                                keyEquivalent: "")
         reset.target = self
-        reset.isEnabled = current.keycode != DEFAULT_HOTKEY_KEYCODE
+        reset.isEnabled = !current.hasSameBinding(as: hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE))
             && !isRecording
             && !isBusy
             && !isTerminating
@@ -11873,27 +12038,30 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func applyHotkeyChoice(_ choice: HotkeyChoice) -> Bool {
+        guard !isRecording, !isBusy, !isTerminating else { return false }
         let previous = hotkey.hotkey
 
-        guard let recordable = recordableHotkeyChoice(forKeycode: choice.keycode) else {
+        guard let recordable = recordableHotkeyChoice(forKeycode: choice.keycode,
+                                                      modifiers: choice.requiredModifiers),
+              recordable.hasSameBinding(as: choice) else {
             if case .rejected(let message) = hotkeyPreferenceUpdateResult(
                 requested: choice,
                 previous: previous,
-                persistedKeycode: previous.keycode
+                persistedBinding: previous
             ) {
                 showHotkeyRecordError(message)
             }
             return false
         }
 
-        settings.hotkeyKeycode = recordable.keycode
+        settings.hotkeyBinding = recordable
         hotkey.setHotkey(recordable)
         hotkeyTestSucceeded = false
 
         switch hotkeyPreferenceUpdateResult(
             requested: recordable,
             previous: previous,
-            persistedKeycode: settings.hotkeyKeycode
+            persistedBinding: settings.hotkeyBinding
         ) {
         case .saved:
             rebuildMenu()
@@ -11903,7 +12071,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             showHotkeyRecordError(message)
             return false
         case .rolledBack(let previous, let message):
-            settings.hotkeyKeycode = previous.keycode
+            settings.hotkeyBinding = previous
             hotkey.setHotkey(previous)
             showHotkeyRecordError(message)
             rebuildMenu()
@@ -11917,7 +12085,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let alert = NSAlert()
         alert.messageText = "Record Hotkey"
-        alert.informativeText = "Press a right-side modifier key or an F-key, then confirm your choice. On an Apple keyboard, you may need to hold Fn to send an F-key."
+        alert.informativeText = "Press a right-side modifier, an F-key, or a key with Command, Control or Option (Shift is optional), then confirm. A custom combination takes precedence over the same shortcut in other apps. Conflicts cannot all be detected. On Apple keyboards, F-keys may require Fn."
         alert.addButton(withTitle: "Use Selected")
         alert.addButton(withTitle: "Cancel")
         let useButton = alert.buttons[0]
@@ -11928,7 +12096,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         status.textColor = .secondaryLabelColor
         status.lineBreakMode = .byWordWrapping
         status.maximumNumberOfLines = 0
-        status.frame = NSRect(x: 0, y: 0, width: 380, height: 42)
+        status.frame = NSRect(x: 0, y: 0, width: 380, height: 72)
         alert.accessoryView = status
 
         let shouldRestoreHotkeyTap = isReady
@@ -11954,10 +12122,18 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             case .accept(let choice):
                 selected = choice
                 status.stringValue = "Selected: \(choice.name). Choose Use Selected to save it."
+                NSAccessibility.post(element: alert.window as Any, notification: .announcementRequested,
+                                     userInfo: [.announcement: status.stringValue,
+                                                .priority: NSAccessibilityPriorityLevel.medium.rawValue])
                 useButton.isEnabled = true
                 return nil
             case .reject(let message):
+                selected = nil
+                useButton.isEnabled = false
                 status.stringValue = message
+                NSAccessibility.post(element: alert.window as Any, notification: .announcementRequested,
+                                     userInfo: [.announcement: message,
+                                                .priority: NSAccessibilityPriorityLevel.medium.rawValue])
                 NSSound.beep()
                 return nil
             case .ignore:
@@ -13251,6 +13427,8 @@ private enum PresspeechSelfTest {
     }
 
     private static func testHotkey() throws {
+        try testCustomHotkeyBindings()
+        try testCustomHotkeyTransitions()
         try testPasteTargetCapture()
         try testHotkeyPreferenceNormalization()
         try testHotkeyDiagnosticModifierNames()
@@ -13265,6 +13443,149 @@ private enum PresspeechSelfTest {
         try testToggleGatedPressDoesNotFlipToggleState()
         try testEscapePassesThroughWhenNotRecording()
         try testEscapeSuppressesCancelRepeatAndKeyUpWhileRecording()
+    }
+
+    private static func testCustomHotkeyBindings() throws {
+        guard let combination = recordableHotkeyChoice(forKeycode: 43, modifiers: .maskCommand),
+              let shifted = recordableHotkeyChoice(forKeycode: 43, modifiers: [.maskCommand, .maskShift]) else {
+            throw SelfTestFailure.failed("Command combinations should be recordable")
+        }
+        try expect(combination.requiredModifiers, equals: .maskCommand,
+                   "recording a combination must retain its modifier mask")
+        try expect(combination.name.hasPrefix("Command + "), equals: true,
+                   "custom shortcut names should include readable modifiers and a current-layout key label")
+        for (keycode, modifiers): (CGKeyCode, CGEventFlags) in [
+            (0, []), (0, .maskShift), (53, .maskCommand), (48, .maskCommand),
+            (49, .maskCommand), (49, .maskControl), (12, [.maskControl, .maskCommand]),
+            (55, .maskCommand), (999, .maskCommand), (43, [.maskCommand, .maskSecondaryFn]),
+        ] {
+            try expect(recordableHotkeyChoice(forKeycode: keycode, modifiers: modifiers) == nil,
+                       equals: true, "typing, reserved, modifier trigger and unknown combinations must be rejected")
+        }
+        try expect(hotkeyRecordingDecision(for: event(.keyDown, keycode: 43,
+                                                     flags: CGEventFlags.maskCommand.rawValue)),
+                   equals: .accept(combination), "the recorder should accept Command plus comma")
+        try expect(hotkeyRecordingDecision(for: event(.keyDown, keycode: 43,
+                                                     flags: CGEventFlags.maskShift.rawValue)),
+                   equals: .reject(HOTKEY_COMBINATION_GUIDANCE), "Shift alone must not capture ordinary punctuation")
+        try expect(hotkeyRecorderShouldPassThrough(event(.keyDown, keycode: 36,
+                                                          flags: CGEventFlags.maskCommand.rawValue)),
+                   equals: false, "modified Return must be recordable rather than confirming a stale selection")
+        try expect(hotkeyRecorderShouldPassThrough(event(.keyDown, keycode: 48,
+                                                          flags: CGEventFlags.maskShift.rawValue)),
+                   equals: true, "Shift-Tab must retain reverse keyboard navigation")
+        try expect(hotkeyRecorderShouldPassThrough(event(.keyDown, keycode: ESCAPE_KEYCODE,
+                                                          flags: CGEventFlags.maskCommand.rawValue)),
+                   equals: true, "Escape must remain available to cancel shortcut capture")
+
+        let valid: [String: Any] = ["version": 1, "keycode": 43, "modifiers": CGEventFlags.maskCommand.rawValue]
+        try expect(normalizedHotkeyBinding(storedValue: valid)?.hasSameBinding(as: combination),
+                   equals: true, "a structured binding must round-trip key and modifiers together")
+        for (key, bad): (String, Any) in [
+            ("version", 2), ("version", true), ("keycode", 43.5), ("keycode", -1),
+            ("keycode", 999), ("keycode", true), ("modifiers", true),
+            ("modifiers", Double.infinity), ("modifiers", CGEventFlags.maskSecondaryFn.rawValue),
+            ("modifiers", "1048576"), ("modifiers", 0),
+        ] {
+            var corrupted = valid
+            corrupted[key] = bad
+            try expect(normalizedHotkeyBinding(storedValue: corrupted) == nil, equals: true,
+                       "malformed structured preferences must never change typing into a global hotkey")
+        }
+        try expect(normalizedHotkeyBinding(storedValue: ["keycode": 43]) == nil,
+                   equals: true, "incomplete structured bindings must be rejected")
+        try expect(normalizedHotkeyKeycode(storedValue: 96.5), equals: nil,
+                   "a malformed legacy number must not be truncated into an F-key")
+        try expect(normalizedHotkeyKeycode(storedValue: Double.infinity), equals: nil,
+                   "nonfinite legacy preferences must be rejected")
+
+        let suite = "com.local.presspeech.self-test.hotkeys.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw SelfTestFailure.failed("hotkey test preference suite unavailable")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("98", forKey: "hotkey_keycode")
+        let settings = Settings(testDefaults: defaults)
+        try expect(settings.hotkeyBinding, equals: hotkeyChoice(forKeycode: 98),
+                   "an existing recorded F-key must survive the new preference format")
+        settings.hotkeyBinding = combination
+        try expect(Settings(testDefaults: defaults).hotkeyBinding.hasSameBinding(as: combination), equals: true,
+                   "the full custom combination must survive settings reload")
+        settings.hotkeyBinding = HotkeyChoice(name: "invalid", keycode: 0, isModifier: false, modifierFlag: nil)
+        try expect(settings.hotkeyBinding.hasSameBinding(as: combination), equals: true,
+                   "invalid updates must preserve the previous saved binding")
+        try expect(hotkeyPreferenceUpdateResult(requested: combination, previous: hotkeyChoice(forKeycode: 98),
+                                                 persistedBinding: shifted),
+                   equals: .rolledBack(previous: hotkeyChoice(forKeycode: 98),
+                                       message: "Presspeech could not save that hotkey, so it kept F7."),
+                   "persistence verification must compare modifiers as well as keycodes")
+        defaults.set(["version": 1, "keycode": 43, "modifiers": 0], forKey: "hotkey_binding")
+        try expect(settings.hotkeyBinding, equals: hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE),
+                   "corrupted combinations must recover to a safe default")
+        settings.hotkeyBinding = hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
+        try expect(Settings(testDefaults: defaults).hotkeyBinding, equals: hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE),
+                   "reset must replace the full structured binding")
+    }
+
+    private static func testCustomHotkeyTransitions() throws {
+        guard let combination = recordableHotkeyChoice(forKeycode: 43, modifiers: .maskCommand) else {
+            throw SelfTestFailure.failed("custom hotkey test binding unavailable")
+        }
+        let command = CGEventFlags.maskCommand.rawValue
+        var state = HotkeyTransitionState()
+        func step(_ event: HotkeyEventSnapshot, recording: Bool = false) -> HotkeyTransitionResult {
+            state.transition(for: event, hotkey: combination, triggerMode: .hold, isRecording: recording)
+        }
+        try expect(step(event(.keyDown, keycode: 43)), equals: .pass,
+                   "the unmodified typing key must pass through")
+        try expect(step(event(.keyUp, keycode: 43, flags: command)), equals: .pass,
+                   "pressing a modifier after an unmatched key-down must not claim its key-up")
+        try expect(step(event(.keyDown, keycode: 43, flags: command, isAutoRepeat: true)), equals: .pass,
+                   "adding modifiers during an existing typing repeat must not start dictation")
+        try expect(step(event(.keyDown, keycode: 43, flags: command | CGEventFlags.maskShift.rawValue)), equals: .pass,
+                   "additional shortcut modifiers must not accidentally match")
+        try expect(step(event(.keyDown, keycode: 43, flags: command | CGEventFlags.maskAlphaShift.rawValue)),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+                   "Caps Lock must not prevent a configured combination")
+        try expect(step(event(.keyDown, keycode: 43, flags: command, isAutoRepeat: true)), equals: .suppressOnly,
+                   "held combination repeat must be swallowed without repeated recording actions")
+        try expect(step(event(.flagsChanged, keycode: 55), recording: true), equals: .pass,
+                   "modifier release should preserve its normal application event")
+        try expect(step(event(.keyDown, keycode: 0), recording: true), equals: .pass,
+                   "unrelated typing during recording must remain untouched")
+        try expect(step(event(.keyUp, keycode: 43), recording: true),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.release]),
+                   "hold recording must stop on its trigger release even when modifiers were released first")
+        try expect(step(event(.keyUp, keycode: 43)), equals: .pass,
+                   "an unmatched later release must not trigger a second stop")
+        _ = step(event(.keyDown, keycode: 43, flags: command))
+        try expect(step(event(.keyDown, keycode: ESCAPE_KEYCODE), recording: true),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.cancel]),
+                   "Escape must still cancel a combination-started recording")
+        try expect(step(event(.keyUp, keycode: ESCAPE_KEYCODE)), equals: .suppressOnly,
+                   "the cancel key release must remain paired")
+        state.resetAll()
+        try expect(step(event(.keyUp, keycode: 43)), equals: .pass,
+                   "listener reset must forget a stale combination latch")
+
+        var toggle = HotkeyTransitionState()
+        func toggleStep(_ type: CGEventType, ready: Bool, recording: Bool = false) -> HotkeyTransitionResult {
+            toggle.transition(for: event(type, keycode: 43, flags: command), hotkey: combination,
+                              triggerMode: .toggle, isRecording: recording, canStartRecording: ready)
+        }
+        try expect(toggleStep(.keyDown, ready: false),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [], startWasDeclined: true),
+                   "a busy toggle press must not start the recording state")
+        try expect(toggleStep(.keyUp, ready: false), equals: .suppressOnly,
+                   "declined combination key-up must still pair with its suppressed key-down")
+        try expect(toggleStep(.keyDown, ready: true),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+                   "the next ready combination press must start")
+        try expect(toggleStep(.keyUp, ready: false, recording: true), equals: .suppressOnly,
+                   "toggle trigger release must leave recording active")
+        try expect(toggleStep(.keyDown, ready: false, recording: true),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.release]),
+                   "the next toggle press must stop even when a new recording cannot start")
     }
 
     private static func testHotkeyDiagnosticModifierNames() throws {
@@ -13349,7 +13670,7 @@ private enum PresspeechSelfTest {
         )
         try expect(
             hotkeyRecordingDecision(for: event(.keyDown, keycode: 0)),
-            equals: .reject("Choose a right-side modifier key or an F-key. Typing keys are not safe because Presspeech suppresses its dictation key globally."),
+            equals: .reject(HOTKEY_COMBINATION_GUIDANCE),
             "hotkey recorder should reject typing keys"
         )
         try expect(
@@ -13378,7 +13699,7 @@ private enum PresspeechSelfTest {
             hotkeyPreferenceUpdateResult(
                 requested: f7,
                 previous: f5,
-                persistedKeycode: f7.keycode
+                persistedBinding: f7
             ),
             equals: .saved(f7),
             "hotkey preference update should save supported keys after persistence confirms them"
@@ -13387,7 +13708,7 @@ private enum PresspeechSelfTest {
             hotkeyPreferenceUpdateResult(
                 requested: invalid,
                 previous: f5,
-                persistedKeycode: f5.keycode
+                persistedBinding: f5
             ),
             equals: .rejected("That key cannot be used for dictation."),
             "hotkey preference update should reject unsupported keys before mutating settings"
@@ -13396,7 +13717,7 @@ private enum PresspeechSelfTest {
             hotkeyPreferenceUpdateResult(
                 requested: f7,
                 previous: f5,
-                persistedKeycode: f5.keycode
+                persistedBinding: f5
             ),
             equals: .rolledBack(
                 previous: f5,

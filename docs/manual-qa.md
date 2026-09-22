@@ -235,7 +235,26 @@ cd swift
   previews F7 without closing or changing the current setting, then choose
   **Use Selected** and dictate once. Repeat using only Tab and Return.
 - Record a right-side modifier such as **Right Control**, then dictate once.
-- Try recording a normal letter key and confirm it is rejected.
+- Record **Command-comma**, confirm the preview, restart Presspeech and confirm
+  the entire combination persists. A bare comma must still type normally;
+  Command-comma must start/stop dictation without opening the target app's
+  preferences. Repeat with Control-Option plus a letter and with Shift added.
+- In hold mode, release modifiers before the trigger key, then repeat in the
+  opposite order. Confirm dictation stops exactly once on trigger-key release.
+  Hold the trigger through autorepeat and verify only one recording starts.
+- Start holding the bare trigger key, then add the modifiers during repeat.
+  Confirm ordinary typing is not converted into dictation midway through.
+- In toggle mode, test start/stop, a declined press during model loading or
+  transcription, and Escape cancellation. The next ready press must work.
+- Test a second keyboard layout. Confirm the physical key remains the trigger,
+  its displayed label follows the layout, and Caps Lock does not change matching.
+- Try recording an unmodified letter, Shift-only letter, Escape, Command-Tab,
+  and Command-Space. Confirm unsafe combinations cannot be saved, and rejection
+  clears any previous modifier-only preview instead of saving that stale choice.
+- Confirm VoiceOver announces accepted combinations and rejected selections;
+  cancel the dialog and verify the previous binding is unchanged.
+- Attempt to change a hotkey while recording/transcribing. Confirm the choices
+  are disabled until the current operation finishes.
 - In the hotkey recorder, confirm Escape cancels and Tab, Space, and Return
   continue to operate the dialog controls rather than being rejected as keys.
 - Use **Reset Hotkey to Default** and confirm the menu returns to

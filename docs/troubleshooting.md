@@ -45,8 +45,13 @@ and dictionary rules remain intact.
 - Confirm **Settings -> Hotkey** still shows the intended key.
 - Confirm Input Monitoring is granted in Setup Checklist.
 - Use **Settings -> Hotkey -> Reset Hotkey to Default** to test Right Option.
-- If another app reserves the key, record another supported right-side modifier
-  or F-key.
+- If another app reserves the key, record a different right-side modifier,
+  F-key, or combination with Command, Control or Option. Custom combinations
+  consume that shortcut globally; macOS or another app may reserve one first.
+- For a custom combination, press exactly the saved modifiers; extra Command,
+  Control, Option or Shift
+  keys do not match. Caps Lock does not change the match. Bindings track physical
+  keys across keyboard layouts; record it again to choose a different position.
 
 ### Try Dictation Works But Text Is Not Inserted
 
