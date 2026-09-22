@@ -24,6 +24,27 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.assertTrue(engine.is_moonshine("moonshine-streaming-medium"))
         self.assertFalse(engine.is_nemotron("small.en"))
 
+    def test_model_snapshot_reports_exact_reviewed_source(self):
+        self.assertEqual(engine.model_snapshot("parakeet-tdt-0.6b-v3"), {
+            "repository": engine.PARAKEET_MODEL,
+            "revision": engine.PARAKEET_REVISION,
+        })
+        self.assertEqual(engine.model_snapshot("base.en"), {
+            "repository": engine.WHISPER_MODELS["base.en"][0],
+            "revision": engine.WHISPER_MODELS["base.en"][1],
+        })
+        for name in config.MODELS + [engine.MOONSHINE_NAME]:
+            with self.subTest(model=name):
+                source = engine.model_snapshot(name)
+                self.assertRegex(source["revision"], r"^[0-9a-f]{40}$")
+                self.assertIn("/", source["repository"])
+        original = engine.model_snapshot("base.en")
+        modified = engine.model_snapshot("base.en")
+        modified["revision"] = "changed"
+        self.assertEqual(engine.model_snapshot("base.en"), original)
+        with self.assertRaisesRegex(ValueError, "unsupported speech model"):
+            engine.model_snapshot("unreviewed/model")
+
     def test_parakeet_uses_smallest_pre_warmed_audio_bucket(self):
         self.assertEqual(engine._parakeet_bucket_seconds(1.0), 15)
         self.assertEqual(engine._parakeet_bucket_seconds(15.0), 15)

@@ -1,7 +1,9 @@
 import json
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest import mock
 
 import benchmark
@@ -19,6 +21,94 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["word_errors"], 1)
         self.assertEqual(metrics["reference_words"], 2)
         self.assertEqual(metrics["wer"], 0.5)
+
+    def test_trial_accuracy_exposes_intermittent_non_final_error(self):
+        metrics = benchmark.trial_accuracy_metrics(
+            "open settings now",
+            ["open settings now", "open sittings now", "open settings now"],
+        )
+
+        self.assertEqual(metrics["trials"], 3)
+        self.assertEqual(metrics["exact_match_trials"], 2)
+        self.assertEqual(metrics["all_word_errors"], [0, 1, 0])
+        self.assertEqual(metrics["best_wer"], 0)
+        self.assertEqual(metrics["median_wer"], 0)
+        self.assertEqual(metrics["worst_wer"], 1 / 3)
+        self.assertIsNone(benchmark.trial_accuracy_metrics("...", ["words"]))
+
+    def test_trial_accuracy_preserves_insertions_and_empty_output(self):
+        metrics = benchmark.trial_accuracy_metrics("one", ["one two three", ""])
+        self.assertEqual(metrics["all_word_errors"], [2, 1])
+        self.assertEqual(metrics["all_wer"], [2.0, 1.0])
+        self.assertEqual(metrics["median_wer"], 1.5)
+        self.assertEqual(metrics["exact_match_trials"], 0)
+        self.assertIsNone(benchmark.trial_accuracy_metrics("one", []))
+
+    def test_invalid_run_counts_are_rejected_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            for invalid in (0, -1, True, False, 1.5, "3", None):
+                with self.subTest(manifest_runs=invalid):
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump({"runs": invalid}, handle)
+                    with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, "positive integer"):
+                            benchmark.run_benchmark(path)
+                        constructor.assert_not_called()
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"runs": 3}, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    benchmark.run_benchmark(path, runs=0)
+                constructor.assert_not_called()
+
+    def test_unknown_model_is_rejected_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "not-a-pinned-model"}, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "unsupported speech model"):
+                    benchmark.run_benchmark(path)
+                constructor.assert_not_called()
+
+    def test_unscoreable_and_unreviewed_references_do_not_pollute_trial_wer(self):
+        manifest = {"runs": 1, "samples": [
+            {"id": "punctuation", "audio": "ignored.wav", "reference": "...",
+             "reference_reviewed": True},
+            {"id": "unreviewed", "audio": "ignored.wav", "reference": "private placeholder",
+             "reference_reviewed": False},
+            {"id": "silence", "audio": "ignored.wav", "expected_silence": True,
+             "reference_reviewed": True},
+            {"id": "scored", "audio": "ignored.wav", "reference": "one two",
+             "reference_reviewed": True},
+        ]}
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "int8"
+        transcriber.transcribe.side_effect = ["wrong", "wrong", "", "one"]
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(benchmark, "load_audio",
+                                      return_value=(mock.sentinel.audio, 1.0, 16000)):
+                result = benchmark.run_benchmark(path)
+        self.assertEqual(result["reviewed_sample_count"], 1)
+        self.assertEqual(result["reviewed_reference_word_count"], 2)
+        self.assertEqual(result["reviewed_trial_reference_word_count"], 2)
+        self.assertEqual(result["reviewed_trial_word_error_count"], 1)
+        self.assertEqual(result["aggregate_trial_wer"], 0.5)
+        self.assertEqual(result["reviewed_silence_sample_count"], 1)
+        for sample in result["samples"][:3]:
+            self.assertIsNone(sample["accuracy"])
+            self.assertIsNone(sample["trial_accuracy"])
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn("Reviewed reference contains no scoreable words", output.getvalue())
+        # Reports must stay strict-JSON encodable, even with unscoreable references.
+        json.dumps(result, allow_nan=False)
 
     def test_edit_distance_handles_insert_delete_and_replace(self):
         self.assertEqual(benchmark.edit_distance(["a", "b"], ["a", "x", "b"]), 1)
@@ -153,6 +243,72 @@ class MetricTests(unittest.TestCase):
             result["samples"][0]["backend_stages"]["generate"]["median"],
             0.20,
         )
+        self.assertEqual(result["benchmark_version"], 2)
+        self.assertEqual(result["model_snapshot"], {
+            "repository": benchmark.engine.PARAKEET_MODEL,
+            "revision": benchmark.engine.PARAKEET_REVISION,
+        })
+
+    def test_benchmark_aggregates_every_accuracy_trial_conservatively(self):
+        manifest = {
+            "runs": 2,
+            "samples": [
+                {
+                    "id": "short",
+                    "audio": "short.wav",
+                    "reference": "alpha beta",
+                    "reference_reviewed": True,
+                },
+                {
+                    "id": "longer",
+                    "audio": "longer.wav",
+                    "reference": "one two three four",
+                    "reference_reviewed": True,
+                },
+            ],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "int8"
+        transcriber.transcribe.side_effect = [
+            "alpha beta",
+            "gamma beta",
+            "one too three four",
+            "one too free four",
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        self.assertAlmostEqual(result["aggregate_wer"], 1 / 6)
+        self.assertAlmostEqual(result["aggregate_trial_wer"], 4 / 12)
+        self.assertEqual(result["reviewed_reference_word_count"], 6)
+        self.assertEqual(result["reviewed_trial_reference_word_count"], 12)
+        self.assertEqual(result["reviewed_trial_word_error_count"], 4)
+        self.assertAlmostEqual(result["aggregate_best_trial_wer"], 1 / 6)
+        self.assertAlmostEqual(result["aggregate_worst_trial_wer"], 3 / 6)
+        self.assertEqual(
+            result["samples"][0]["trial_accuracy"]["all_word_errors"],
+            [0, 1],
+        )
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn(
+            "Snapshot: nvidia/parakeet-tdt-0.6b-v3@", output.getvalue())
+        self.assertIn(
+            "16.67% consensus | 33.33% all trials | "
+            "16.67/50.00% best/worst trial envelope",
+            output.getvalue(),
+        )
 
     def test_reviewed_silence_scores_empty_output_as_clean(self):
         self.assertEqual(
@@ -221,6 +377,11 @@ class MetricTests(unittest.TestCase):
                         return_value=(mock.sentinel.audio, 1.0, 16000)):
                 result = benchmark.run_benchmark(manifest_path)
 
+        self.assertIsNone(result["aggregate_wer"])
+        self.assertIsNone(result["aggregate_trial_wer"])
+        self.assertIsNone(result["aggregate_best_trial_wer"])
+        self.assertIsNone(result["aggregate_worst_trial_wer"])
+        self.assertEqual(result["reviewed_trial_reference_word_count"], 0)
         self.assertEqual(result["reviewed_silence_sample_count"], 2)
         self.assertEqual(result["silence_false_positive_count"], 1)
         self.assertEqual(result["reviewed_silence_trial_count"], 2)
