@@ -1,4 +1,5 @@
 import sys
+from contextlib import nullcontext
 import types
 import unittest
 from unittest import mock
@@ -8,6 +9,16 @@ import config
 
 
 class ParakeetConfigurationTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(engine.model_cache, "resolve_snapshot",
+                                    return_value="synthetic-pinned-snapshot")
+        self.resolve_snapshot = patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(engine.model_cache, "whisper_snapshot",
+                                    side_effect=lambda path, files, **kwargs: nullcontext(path))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_cuda_probe_fails_closed_when_torch_is_unavailable(self):
         with mock.patch.dict(sys.modules, {"torch": None}):
             self.assertFalse(engine.cuda_available())
@@ -157,29 +168,29 @@ class ParakeetConfigurationTests(unittest.TestCase):
             transcriber = engine.Transcriber(precision="auto")
             transcriber._load_parakeet(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION,
+                "synthetic-pinned-snapshot", local_files_only=True, revision=engine.PARAKEET_REVISION,
                 token=False, trust_remote_code=False)
             transformers.AutoModelForTDT.from_pretrained.assert_called_once_with(
-                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION,
+                "synthetic-pinned-snapshot", local_files_only=True, revision=engine.PARAKEET_REVISION,
                 dtype="auto", token=False, trust_remote_code=False,
                 use_safetensors=True)
 
             transcriber._load_nemotron(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION,
+                "synthetic-pinned-snapshot", local_files_only=True, revision=engine.NEMOTRON_REVISION,
                 token=False, trust_remote_code=False)
             transformers.AutoModelForRNNT.from_pretrained.assert_called_once_with(
-                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION,
+                "synthetic-pinned-snapshot", local_files_only=True, revision=engine.NEMOTRON_REVISION,
                 dtype="float32", token=False, trust_remote_code=False,
                 use_safetensors=True)
 
             transcriber._load_moonshine(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
+                "synthetic-pinned-snapshot", local_files_only=True, revision=engine.MOONSHINE_REVISION,
                 token=False, trust_remote_code=False)
             (transformers.MoonshineStreamingForConditionalGeneration
              .from_pretrained.assert_called_once_with(
-                 engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
+                 "synthetic-pinned-snapshot", local_files_only=True, revision=engine.MOONSHINE_REVISION,
                  dtype="float32", token=False, trust_remote_code=False,
                  use_safetensors=True))
 
@@ -232,7 +243,8 @@ class ParakeetConfigurationTests(unittest.TestCase):
 
         repository, revision = engine.WHISPER_MODELS["base.en"]
         faster_whisper.WhisperModel.assert_called_once_with(
-            repository, revision=revision, device="cpu", compute_type="int8",
+            "synthetic-pinned-snapshot", revision=revision, device="cpu", compute_type="int8",
+            local_files_only=True,
             use_auth_token=False)
 
     def test_unknown_whisper_model_fails_before_backend_import(self):
@@ -352,12 +364,12 @@ class ParakeetConfigurationTests(unittest.TestCase):
             transformers.AutoModelForTDT.from_pretrained.call_args_list,
             [
                 mock.call(
-                    engine.PARAKEET_MODEL,
+                    "synthetic-pinned-snapshot", local_files_only=True,
                     revision=engine.PARAKEET_REVISION,
                     dtype="float16", token=False, trust_remote_code=False,
                     use_safetensors=True),
                 mock.call(
-                    engine.PARAKEET_MODEL,
+                    "synthetic-pinned-snapshot", local_files_only=True,
                     revision=engine.PARAKEET_REVISION,
                     dtype="auto", token=False, trust_remote_code=False,
                     use_safetensors=True),
@@ -379,17 +391,71 @@ class ParakeetConfigurationTests(unittest.TestCase):
             transformers.AutoModelForTDT.from_pretrained.call_args_list,
             [
                 mock.call(
-                    engine.PARAKEET_MODEL,
+                    "synthetic-pinned-snapshot", local_files_only=True,
                     revision=engine.PARAKEET_REVISION,
                     dtype="auto", token=False, trust_remote_code=False,
                     use_safetensors=True),
                 mock.call(
-                    engine.PARAKEET_MODEL,
+                    "synthetic-pinned-snapshot", local_files_only=True,
                     revision=engine.PARAKEET_REVISION,
                     token=False, trust_remote_code=False,
                     use_safetensors=True),
             ],
         )
+
+    def test_every_selectable_backend_has_an_exact_inference_file_contract(self):
+        self.assertTrue(set(config.MODELS).issubset(engine.MODEL_CACHE_FILES))
+        self.assertEqual(set(engine.MODEL_CACHE_FILES), set(engine.WHISPER_MODELS) | {
+            "parakeet-tdt-0.6b-v3", engine.NEMOTRON_NAME, engine.MOONSHINE_NAME})
+        for name, files in engine.MODEL_CACHE_FILES.items():
+            with self.subTest(model=name):
+                self.assertIn("tokenizer.json", files)
+                self.assertIn("config.json", files)
+                self.assertFalse(any("*" in item for item in files))
+                self.assertEqual(engine._cached_model_path(name), "synthetic-pinned-snapshot")
+                snapshot = engine.model_snapshot(name)
+                self.resolve_snapshot.assert_called_with(
+                    snapshot["repository"], snapshot["revision"], files,
+                    optional_files=engine.MODEL_CACHE_OPTIONAL_FILES.get(name, ()),
+                    required_any=engine.MODEL_CACHE_ALTERNATIVES.get(name, ()))
+
+    def test_supplemental_configs_do_not_become_required_downloads(self):
+        for name in ("parakeet-tdt-0.6b-v3", engine.NEMOTRON_NAME, engine.MOONSHINE_NAME):
+            with self.subTest(model=name):
+                self.assertNotIn("generation_config.json", engine.MODEL_CACHE_FILES[name])
+                self.assertNotIn("tokenizer_config.json", engine.MODEL_CACHE_FILES[name])
+                self.assertIn("generation_config.json", engine.MODEL_CACHE_OPTIONAL_FILES[name])
+                self.assertTrue(engine.MODEL_CACHE_ALTERNATIVES[name])
+        self.assertEqual(engine.MODEL_CACHE_ALTERNATIVES[engine.MOONSHINE_NAME],
+                         (("processor_config.json", "preprocessor_config.json"),))
+        self.assertNotIn("special_tokens_map.json", engine.MODEL_CACHE_FILES[engine.MOONSHINE_NAME])
+        self.assertNotIn("preprocessor_config.json", engine.MODEL_CACHE_FILES["turbo"])
+        self.assertIn("preprocessor_config.json", engine.MODEL_CACHE_OPTIONAL_FILES["turbo"])
+
+    def test_all_whisper_aliases_construct_from_local_snapshot_with_pinned_flags(self):
+        backend = types.SimpleNamespace(WhisperModel=mock.Mock())
+        with mock.patch.dict(sys.modules, {"faster_whisper": backend}), \
+                mock.patch.object(engine, "cuda_available", return_value=False):
+            for name, (_repository, revision) in engine.WHISPER_MODELS.items():
+                with self.subTest(model=name):
+                    engine.Transcriber()._load_whisper(name, None)
+                    backend.WhisperModel.assert_called_with(
+                        "synthetic-pinned-snapshot", revision=revision,
+                        device="cpu", compute_type="int8", local_files_only=True,
+                        use_auth_token=False)
+
+    def test_corrupt_backend_parse_does_not_trigger_another_snapshot_attempt(self):
+        torch = types.SimpleNamespace(cuda=mock.Mock(), float16="float16",
+                                      float32="float32", bfloat16="bfloat16")
+        torch.cuda.is_available.return_value = True
+        transformers = types.SimpleNamespace(AutoProcessor=mock.Mock(), AutoModelForTDT=mock.Mock())
+        transformers.AutoProcessor.from_pretrained.return_value = types.SimpleNamespace(decoder_type=None)
+        transformers.AutoModelForTDT.from_pretrained.side_effect = ValueError("corrupt weights")
+        with mock.patch.dict(sys.modules, {"torch": torch, "transformers": transformers}):
+            with self.assertRaisesRegex(ValueError, "corrupt weights"):
+                engine.Transcriber(precision="fp16")._load_parakeet(None)
+        self.resolve_snapshot.assert_called_once()
+        transformers.AutoModelForTDT.from_pretrained.assert_called_once()
 
     def test_fp16_is_selected_only_for_cuda(self):
         torch = types.SimpleNamespace(float16="fp16", bfloat16="bf16")
@@ -413,3 +479,36 @@ class ParakeetConfigurationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhisperSnapshotLifecycleTests(unittest.TestCase):
+    def backend(self):
+        backend = types.SimpleNamespace(WhisperModel=mock.Mock())
+        staging = mock.MagicMock()
+        staging.__enter__.return_value = 'private-snapshot'
+        return backend, staging
+
+    def test_constructor_failure_releases_private_snapshot(self):
+        backend, staging = self.backend()
+        backend.WhisperModel.side_effect = ValueError('corrupt model')
+        with mock.patch.dict(sys.modules, {'faster_whisper': backend}), \
+                mock.patch.object(engine, 'cuda_available', return_value=False), \
+                mock.patch.object(engine, '_cached_model_path', return_value='cached-snapshot'), \
+                mock.patch.object(engine.model_cache, 'whisper_snapshot', return_value=staging):
+            with self.assertRaisesRegex(ValueError, 'corrupt model'):
+                engine.Transcriber()._load_whisper('base.en', None)
+        staging.__exit__.assert_called_once()
+        self.assertIs(staging.__exit__.call_args.args[-3], ValueError)
+
+    def test_success_keeps_private_snapshot_until_model_unload(self):
+        backend, staging = self.backend()
+        with mock.patch.dict(sys.modules, {'faster_whisper': backend}), \
+                mock.patch.object(engine, 'cuda_available', return_value=False), \
+                mock.patch.object(engine, '_cached_model_path', return_value='cached-snapshot'), \
+                mock.patch.object(engine.model_cache, 'whisper_snapshot', return_value=staging):
+            instance = engine.Transcriber(); instance._load_whisper('base.en', None)
+        staging.__exit__.assert_not_called()
+        instance._unload_locked()
+        staging.__exit__.assert_called_once()
+        self.assertEqual(staging.__exit__.call_args.args[-3:], (None, None, None))
+        self.assertIsNone(instance._model_files)

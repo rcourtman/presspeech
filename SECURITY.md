@@ -117,3 +117,14 @@ The pinned hf-xet 1.6.0 source does not expose this switch; setting it and
 importing the package does not prove a runtime telemetry opt-out. The package
 check verifies the Hub constants and Transformers request header behavior;
 future hf-xet releases still require an independent network-policy review.
+
+Upcoming Windows 0.1.13 resolves an explicit inference-file set for each pinned
+revision, tries local-only resolution first, and permits one anonymous download
+only when that snapshot or a required file is missing. Explicit offline settings
+are preserved. Present malformed input and backend parsing failures do not
+initiate download retries. Model construction uses local paths with local-only,
+no-token and existing remote-code/safetensors restrictions. Whisper's tokenizer
+and configuration are copied into a private model-lifetime directory so cache
+path deletion cannot select its upstream unpinned tokenizer fallback. Weight hard
+links isolate path deletion, not in-place modification; Windows still does not
+independently hash every model file.

@@ -11,10 +11,12 @@ Backends:
 """
 
 import gc
+from contextlib import ExitStack
 import threading
 import time
 
 import model_network
+import model_cache
 
 PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 NEMOTRON_MODEL = "nvidia/nemotron-speech-streaming-en-0.6b"
@@ -48,6 +50,50 @@ WHISPER_MODELS = {
         "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
     ),
 }
+
+# Exact inference files reviewed at the pinned commits above. Keep these in
+# sync with revision changes. Alternate .nemo/.gguf/.bin exports are deliberately
+# excluded from the Transformers path; Whisper must always have its own pinned
+# tokenizer to prevent faster-whisper's unpinned fallback tokenizer download.
+_TRANSFORMERS_FILES = ("config.json", "model.safetensors", "tokenizer.json")
+_TRANSFORMERS_OPTIONAL = ("generation_config.json", "tokenizer_config.json",
+                          "processor_config.json")
+MODEL_CACHE_FILES = {
+    "parakeet-tdt-0.6b-v3": _TRANSFORMERS_FILES,
+    "nemotron-speech-streaming-en-0.6b": _TRANSFORMERS_FILES,
+    "moonshine-streaming-medium": _TRANSFORMERS_FILES,
+    **{name: ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
+       for name in ("base.en", "small.en", "medium.en")},
+    "turbo": ("config.json", "model.bin", "tokenizer.json", "vocabulary.json"),
+}
+# The pinned loaders use existing local defaults when supplemental JSON is
+# absent. Fetch these during a necessary download, but do not turn their absence
+# into network activity. Validate any that are present before construction.
+MODEL_CACHE_OPTIONAL_FILES = {
+    "parakeet-tdt-0.6b-v3": _TRANSFORMERS_OPTIONAL,
+    "nemotron-speech-streaming-en-0.6b": _TRANSFORMERS_OPTIONAL,
+    "moonshine-streaming-medium": _TRANSFORMERS_OPTIONAL + (
+        "preprocessor_config.json", "special_tokens_map.json"),
+    "turbo": ("preprocessor_config.json",),
+}
+# Transformers requires feature-extractor settings: either the modern unified
+# processor config or a legacy preprocessor config. Only Moonshine's reviewed
+# snapshot offers both layouts; the other reviewed commits contain the former.
+MODEL_CACHE_ALTERNATIVES = {
+    name: (("processor_config.json", "preprocessor_config.json")
+           if name == "moonshine-streaming-medium" else ("processor_config.json",),)
+    for name in ("parakeet-tdt-0.6b-v3", "nemotron-speech-streaming-en-0.6b",
+                 "moonshine-streaming-medium")
+}
+
+
+def _cached_model_path(model_name):
+    snapshot = model_snapshot(model_name)
+    return model_cache.resolve_snapshot(
+        snapshot["repository"], snapshot["revision"], MODEL_CACHE_FILES[model_name],
+        optional_files=MODEL_CACHE_OPTIONAL_FILES.get(model_name, ()),
+        required_any=MODEL_CACHE_ALTERNATIVES.get(model_name, ()))
+
 
 # Pin the complete Silero boundary policy used for push-to-talk clips. In
 # faster-whisper 1.2.1, passing only vad_filter=True selects a special 160 ms
@@ -164,6 +210,7 @@ class Transcriber:
         self.backend = None
         self.model_name = None
         self.last_timing = {}
+        self._model_files = None
 
     def loaded(self, model_name):
         return self.model is not None and self.model_name == model_name
@@ -193,29 +240,30 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech",
                    "Loading Parakeet-TDT v3 on %s (first run downloads ~2.5 GB)..." % device)
+        model_path = _cached_model_path("parakeet-tdt-0.6b-v3")
         self.processor = _configure_parakeet_processor(
             AutoProcessor.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION,
+                model_path, local_files_only=True, revision=PARAKEET_REVISION,
                 token=False, trust_remote_code=False))
         requested_dtype = _parakeet_dtype(torch, device, self.precision)
         try:
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION,
+                model_path, local_files_only=True, revision=PARAKEET_REVISION,
                 dtype=requested_dtype, token=False, trust_remote_code=False,
                 use_safetensors=True)
         except TypeError:
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION,
+                model_path, local_files_only=True, revision=PARAKEET_REVISION,
                 token=False, trust_remote_code=False,
                 use_safetensors=True)
-        except Exception as exc:
+        except RuntimeError as exc:
             if requested_dtype == "auto":
                 raise
             if notify is not None:
                 notify("Presspeech", "Half-precision load failed; retrying FP32 (%s)"
                        % str(exc)[:100])
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION, dtype="auto",
+                model_path, local_files_only=True, revision=PARAKEET_REVISION, dtype="auto",
                 token=False, trust_remote_code=False,
                 use_safetensors=True)
         if device != "cpu":
@@ -231,11 +279,12 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Nemotron English ASR on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
+        model_path = _cached_model_path("nemotron-speech-streaming-en-0.6b")
         self.processor = AutoProcessor.from_pretrained(
-            NEMOTRON_MODEL, revision=NEMOTRON_REVISION,
+            model_path, local_files_only=True, revision=NEMOTRON_REVISION,
             token=False, trust_remote_code=False)
         self.model = AutoModelForRNNT.from_pretrained(
-            NEMOTRON_MODEL, revision=NEMOTRON_REVISION,
+            model_path, local_files_only=True, revision=NEMOTRON_REVISION,
             dtype=dtype, token=False, trust_remote_code=False,
             use_safetensors=True).to(device)
         self.backend = "nemotron"
@@ -249,11 +298,12 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Moonshine Medium on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
+        model_path = _cached_model_path("moonshine-streaming-medium")
         self.processor = AutoProcessor.from_pretrained(
-            MOONSHINE_MODEL, revision=MOONSHINE_REVISION,
+            model_path, local_files_only=True, revision=MOONSHINE_REVISION,
             token=False, trust_remote_code=False)
         self.model = MoonshineStreamingForConditionalGeneration.from_pretrained(
-            MOONSHINE_MODEL, revision=MOONSHINE_REVISION,
+            model_path, local_files_only=True, revision=MOONSHINE_REVISION,
             dtype=dtype, token=False, trust_remote_code=False,
             use_safetensors=True).to(device)
         self.backend = "moonshine"
@@ -270,9 +320,17 @@ class Transcriber:
         compute = "float16" if device == "cuda" else "int8"
         if notify is not None:
             notify("Presspeech", "Loading Whisper %s on %s..." % (model_name, device))
-        self.model = WhisperModel(
-            repository, revision=revision, device=device, compute_type=compute,
-            use_auth_token=False)
+        model_path = _cached_model_path(model_name)
+        # faster-whisper may otherwise download an unpinned tokenizer when a
+        # cache reset removes tokenizer.json between validation and construction.
+        with ExitStack() as staging:
+            private_path = staging.enter_context(model_cache.whisper_snapshot(
+                model_path, MODEL_CACHE_FILES[model_name],
+                optional_files=MODEL_CACHE_OPTIONAL_FILES.get(model_name, ())))
+            self.model = WhisperModel(
+                private_path, revision=revision, device=device, compute_type=compute,
+                local_files_only=True, use_auth_token=False)
+            self._model_files = staging.pop_all()
         self.backend = "whisper"
         self._device = device
 
@@ -283,6 +341,10 @@ class Transcriber:
         self.processor = None
         self.backend = None
         self.model_name = None
+        model_files = getattr(self, "_model_files", None)
+        self._model_files = None
+        if model_files is not None:
+            model_files.close()
 
     def unload(self):
         """Release the active model and its native resources while keeping the app alive."""

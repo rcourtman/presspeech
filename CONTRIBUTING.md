@@ -189,6 +189,8 @@ the native CUDA/ASR gate.
   changing the inference backend.
 - `windows/app.py` — Windows hotkey, audio, paste, and tray lifecycle.
 - `windows/engine.py` — Windows local ASR backends.
+- `windows/model_cache.py` — complete pinned inference-file resolution and
+  private Whisper tokenizer staging; update file contracts with model revisions.
 - `windows/model_network.py` — import-time endpoint, authentication, and
   telemetry policy for Windows model downloads.
 - `windows/tests/` — model-free Windows unit tests.

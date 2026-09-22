@@ -60,6 +60,28 @@ Transformers from adding a random per-launch session identifier. Every model
 call also declines account tokens and remote model code; Transformers weights
 are required to use safetensors. Inherited Hugging Face endpoint or staging
 settings therefore cannot redirect the app's pinned model request.
+Upcoming 0.1.13 tries the complete pinned inference files locally first, including
+when Hub tree metadata is absent. A missing snapshot or required file permits one
+anonymous fetch of the reviewed inference files. Missing optional generation,
+tokenizer or feature-extractor configuration uses the pinned loader's existing
+local defaults; it does not itself trigger a fetch. Present optional JSON is
+validated, and required alternative feature-extractor layouts are recognized.
+`HF_HUB_OFFLINE=1` and
+`TRANSFORMERS_OFFLINE=1` prevent that fallback. Invalid cached JSON, empty files,
+permission failures and backend parsing errors are reported without turning them
+into network retries. This checks completeness, not independent model-file hashes.
+
+Whisper loads copied tokenizer/configuration files from a private temporary
+folder, preventing an ordinary Hub-cache reset from triggering the library's
+separate unpinned tokenizer download. The weight file normally uses a hard link,
+which survives cache-path deletion but does not prevent in-place modification.
+If hard links are unsupported or the cache and temporary folder are on different
+filesystems, loading temporarily copies the weights and needs extra startup time
+and disk space up to the selected model's weight size. The folder remains until
+model unload and is removed after failed loading or normal unload. A process
+crash can leave that private temporary folder behind; no automatic broad cache
+cleanup is performed.
+
 The first-run readiness window shows model loading, microphone selection and a
 live microphone check, a selectable push-to-talk key with its global-listener
 status, and Start with Windows in one place. Speak while the check runs. It briefly opens the selected input,

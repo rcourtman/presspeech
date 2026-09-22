@@ -1966,6 +1966,16 @@ class PresspeechApp:
         try:
             if not self.transcriber.loaded(self.settings["model"]):
                 self.transcriber.load(self.settings["model"], notify=self.notify)
+        except Exception:
+            # A missing/corrupt local model or constructor failure is not
+            # permission to fetch a different model. Keep loading errors
+            # separate from the existing fallback for a failed GPU decode.
+            self._log(traceback.format_exc())
+            self.notify("Model load failed",
+                        "The selected model could not load. Retry it in Settings "
+                        "or choose another model before recording again.")
+            return
+        try:
             text = self.transcriber.transcribe(audio, language="en")
             model_seconds = time.perf_counter() - model_started
         except Exception as exc:
