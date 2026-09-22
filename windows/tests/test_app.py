@@ -2668,9 +2668,11 @@ class StartupTests(unittest.TestCase):
         instance.transcriber.load.assert_called_once_with(
             "base.en", notify=instance.notify)
         self.assertIn("Whisper base.en on CPU", instance.model_status_detail)
+        self.assertIn("English-only", instance.model_status_detail)
         instance.notify.assert_any_call(
             "CPU speech model selected",
-            "NVIDIA CUDA is unavailable; using Whisper base.en on CPU. "
+            "NVIDIA CUDA is unavailable; using English-only Whisper "
+            "base.en on CPU. "
             "You can choose another model in Settings.")
 
     def test_fresh_cuda_install_keeps_parakeet_default(self):

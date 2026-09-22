@@ -11,8 +11,10 @@ punctuation and capitalization in a fraction of real time (~50× realtime on an
 RTX 3070). Parakeet loads in FP16 on CUDA to halve resident model tensors, with
 an automatic FP32 retry if the half-precision load fails. On a fresh PC where
 the packaged runtime cannot use CUDA, Presspeech instead selects Whisper
-base.en with int8 CPU inference. The other Parakeet, Nemotron, and Whisper
-models remain available in Settings, and explicit choices are not overridden.
+base.en with int8 CPU inference; that smaller default is English-only. The
+other Parakeet, Nemotron, and Whisper models remain available in Settings, and
+explicit choices are not overridden. Parakeet TDT v3 and Whisper turbo are the
+multilingual choices; both are intended for a supported NVIDIA GPU.
 
 ## Install
 
@@ -41,8 +43,8 @@ Requirements:
 - About 4.4 GB for the app, plus about 141 MiB for the CPU default or 2.5 GB
   for the CUDA Parakeet model cache
 - A current NVIDIA driver is recommended for the fastest and most accurate
-  default; Windows PCs without usable CUDA automatically start with the smaller
-  Whisper base.en CPU model
+  multilingual default; Windows PCs without usable CUDA automatically start
+  with the smaller English-only Whisper base.en CPU model
 
 First launch detects whether the packaged Torch runtime can use NVIDIA CUDA,
 then downloads either Parakeet (~2.5 GB) or Whisper base.en (~141 MiB) into
@@ -260,8 +262,9 @@ callback details and pressed keys are not included.
 - Trigger: hold-to-talk or press-to-toggle
 - Maximum recording length: 1, 2 (default), 5, or 10 minutes
 - Microphone: automatic selection or a specific safe Windows input device
-- Engine/model: Parakeet TDT v3 and Nemotron (NVIDIA GPU recommended), or
-  Whisper turbo/small/medium/base (base.en is the CPU first-run default)
+- Engine/model: multilingual Parakeet TDT v3 or Whisper turbo (NVIDIA GPU
+  recommended), or English-only Nemotron and Whisper small.en, medium.en, and
+  base.en (base.en is the CPU first-run default)
 - After pasting: space / newline / nothing (newline can submit text in a command
   shell; review commands outside the shell first)
 - Remove filler words (um, uh, er, …)

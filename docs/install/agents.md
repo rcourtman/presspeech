@@ -38,6 +38,8 @@ Run these read-only checks in PowerShell:
 
 Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
 
+Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
+
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
   $version = '0.1.12'
   $base = "https://github.com/rcourtman/presspeech/releases/download/windows-v$version"

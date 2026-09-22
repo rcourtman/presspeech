@@ -2568,7 +2568,8 @@ class PresspeechApp:
                 % model_name)
             self.notify(
                 "CPU speech model selected",
-                "NVIDIA CUDA is unavailable; using Whisper base.en on CPU. "
+                "NVIDIA CUDA is unavailable; using English-only Whisper "
+                "base.en on CPU. "
                 "You can choose another model in Settings.")
         with model_state_lock:
             if (request_generation == self._model_load_generation and
@@ -2622,7 +2623,8 @@ class PresspeechApp:
             self.model_status = "ready"
             if cpu_first_run:
                 self.model_status_detail = (
-                    "Whisper base.en on CPU (NVIDIA CUDA unavailable)")
+                    "English-only Whisper base.en on CPU "
+                    "(NVIDIA CUDA unavailable)")
             else:
                 self.model_status_detail = "%s on %s (%s)" % (
                     model_name, getattr(self.transcriber, "_device", "unknown"),

@@ -40,7 +40,8 @@
         "softwareRequirements": [
           "Windows 10 or Windows 11, x64",
           "About 4.4 GB for the installed app",
-          "A microphone and an internet connection for the first model download"
+          "A microphone and an internet connection for the first model download",
+          "Fresh systems use multilingual Parakeet with usable NVIDIA CUDA or English-only Whisper base.en without CUDA"
         ],
         "offers": {
           "@type": "Offer",
@@ -80,6 +81,9 @@
           <a class="button secondary" href="getting-started.html#finish-setup">First dictation guide</a>
           <a class="button secondary" href="#assistant-install">Install with an assistant</a>
         </div>
+        <div class="note">
+          <p><strong>Check your language before downloading.</strong> Fresh systems with usable NVIDIA CUDA select multilingual Parakeet (~2.5 GB). Without usable CUDA, the fresh CPU default is English-only Whisper base.en (~141 MiB). Other local models remain selectable in Settings. <a href="#language-support">Compare the two first-run paths</a>.</p>
+        </div>
         <div class="note warn">
           <p><strong>This prerelease is not code-signed.</strong> Windows may show <strong>Unknown publisher</strong>, and managed PCs or Windows 11 Smart App Control may block it. <a href="https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions">Microsoft documents that Smart App Control has no per-app exception</a>. Verify that the download came from this repository and compare its SHA-256 checksum before deciding whether to run it. Never bypass a warning for a file from another source.</p>
         </div>
@@ -88,12 +92,12 @@
       <section id="download-verify-run">
         <div class="wrap">
           <span class="section-eyebrow">Before you download</span>
-          <h2>Requirements and download size</h2>
+          <h2 id="language-support">Requirements, language, and download size</h2>
           <div class="facts">
             <div class="fact"><strong>Windows 11</strong><span>A 64-bit x64 PC. Windows 10 remains compatible but needs Extended Security Updates or an edition that remains supported; Windows on Arm is not supported.</span></div>
             <div class="fact"><strong>4.4 GB installed</strong><span>The installer includes the Python and speech runtimes; Python is not required separately.</span></div>
-            <div class="fact"><strong>NVIDIA CUDA optional</strong><span>A current NVIDIA driver gives the fastest Parakeet path. CPU-only PCs use the smaller Whisper base.en model.</span></div>
-            <div class="fact"><strong>First-run model</strong><span>About 2.5 GB with CUDA Parakeet, or about 141 MiB for the CPU default.</span></div>
+            <div class="fact"><strong>Multilingual with CUDA</strong><span>A fresh PC with usable NVIDIA CUDA selects <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">Parakeet TDT v3, which lists 25 supported European languages</a>. Its first model download is about 2.5 GB.</span></div>
+            <div class="fact"><strong>English-only CPU default</strong><span>Without usable CUDA, a fresh PC selects <a href="https://huggingface.co/Systran/faster-whisper-base.en">English-only Whisper base.en</a> and downloads about 141 MiB. Other local models remain selectable in Settings, with the larger options intended for a supported NVIDIA GPU.</span></div>
           </div>
         </div>
       </section>
@@ -160,6 +164,8 @@ Run these read-only checks in PowerShell:
   (Get-CimInstance Win32_OperatingSystem).Caption
 
 Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
+
+Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
   $version = '0.1.12'

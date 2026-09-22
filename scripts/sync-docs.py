@@ -182,6 +182,70 @@ WINDOWS_UNSIGNED_GUIDANCE = {
     ),
 }
 
+# Windows chooses a first-run model from hardware availability. The compact
+# CPU path is English-only, while the CUDA default is multilingual. Keep that
+# distinction on every discovery/install surface so a model filename such as
+# `base.en` is never the only warning before a large unsigned installation.
+WINDOWS_LANGUAGE_GUIDANCE = {
+    ROOT / "llms.txt": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    ROOT / "README.md": (
+        "Default language path",
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    ROOT / "windows" / "README.md": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+        "multilingual choices",
+    ),
+    DOCS / "index.html": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "getting-started.html": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+        "before downloading",
+    ),
+    DOCS / "windows.html": (
+        "Check your language before downloading",
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "install" / "agents.md": (
+        "language and hardware split",
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "faq.html": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "llms.txt": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "llms-full.txt": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "privacy.html": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "privacy" / "network-calls.json": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+    DOCS / "compare" / "handy.html": (
+        "multilingual Parakeet",
+        "English-only Whisper base.en",
+    ),
+}
+
 # Presspeech itself has no transcript-sync feature, but normal delivery writes
 # to each platform's general clipboard. Public privacy and retrieval surfaces
 # must preserve the separate operating-system boundary, distinguish published
@@ -507,6 +571,8 @@ Run these read-only checks in PowerShell:
   (Get-CimInstance Win32_OperatingSystem).Caption
 
 Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
+
+Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
   $version = '{version}'
@@ -1273,6 +1339,25 @@ def check_windows_unsigned_guidance(
     return errors
 
 
+def check_windows_language_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = WINDOWS_LANGUAGE_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing Windows language guidance")
+            continue
+        contents = " ".join(read_text(path).split()).casefold()
+        missing = [phrase for phrase in required if phrase.casefold() not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete Windows model-language guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
 def check_clipboard_service_guidance(
     surfaces: dict[Path, tuple[str, ...]] = CLIPBOARD_SERVICE_GUIDANCE,
 ) -> list[str]:
@@ -1833,6 +1918,27 @@ def run_self_test() -> None:
         if check_windows_unsigned_guidance(required_guidance):
             raise SyncError("self-test: complete unsigned Windows guidance was rejected")
 
+        language_guidance = Path(tmp) / "windows-language.html"
+        required_language_guidance = {
+            language_guidance: (
+                "language and hardware split",
+                "multilingual Parakeet",
+                "English-only Whisper base.en",
+            )
+        }
+        language_guidance.write_text(
+            "Choose a local speech model for this computer.\n", encoding="utf-8"
+        )
+        if not check_windows_language_guidance(required_language_guidance):
+            raise SyncError("self-test: missing Windows language split was not flagged")
+        language_guidance.write_text(
+            "The language and hardware split uses multilingual Parakeet with "
+            "CUDA or English-only Whisper base.en on CPU.\n",
+            encoding="utf-8",
+        )
+        if check_windows_language_guidance(required_language_guidance):
+            raise SyncError("self-test: complete Windows language split was rejected")
+
         clipboard_guidance = Path(tmp) / "privacy.html"
         required_clipboard_guidance = {
             clipboard_guidance: (
@@ -1957,6 +2063,7 @@ def main() -> int:
             errors.extend(check_icon_stats(metadata))
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
+            errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
@@ -1989,6 +2096,7 @@ def main() -> int:
         errors.extend(check_icon_stats(metadata))
         errors.extend(check_platform_orientation())
         errors.extend(check_windows_unsigned_guidance())
+        errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())

@@ -70,12 +70,12 @@ MODELS = [
 ]
 
 MODEL_LABELS = {
-    "nemotron-speech-streaming-en-0.6b": "Nemotron English 0.6B (NVIDIA GPU recommended)",
-    "parakeet-tdt-0.6b-v3": "Parakeet TDT v3 (NVIDIA GPU recommended)",
-    "turbo": "Whisper turbo (NVIDIA GPU recommended)",
-    "small.en": "Whisper small.en",
-    "medium.en": "Whisper medium.en",
-    "base.en": "Whisper base.en (CPU \u00b7 fastest)",
+    "nemotron-speech-streaming-en-0.6b": "Nemotron 0.6B (English-only \u00b7 NVIDIA GPU)",
+    "parakeet-tdt-0.6b-v3": "Parakeet TDT v3 (multilingual \u00b7 NVIDIA GPU)",
+    "turbo": "Whisper turbo (multilingual \u00b7 NVIDIA GPU)",
+    "small.en": "Whisper small.en (English-only)",
+    "medium.en": "Whisper medium.en (English-only)",
+    "base.en": "Whisper base.en (English-only \u00b7 fastest CPU)",
 }
 
 SUFFIXES = {"space": " ", "newline": "\n", "none": ""}

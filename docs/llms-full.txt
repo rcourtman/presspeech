@@ -22,7 +22,10 @@ Windows:
 - About 4.4 GB for the installed app, plus about 141 MiB for the CPU first-run
   model or about 2.5 GB for the CUDA Parakeet model cache.
 - A current NVIDIA GPU driver is recommended for Parakeet inference. Fresh PCs
-  without usable CUDA automatically select Whisper base.en with int8 CPU inference.
+  with usable CUDA select multilingual Parakeet TDT v3. Fresh PCs without usable
+  CUDA automatically select English-only Whisper base.en with int8 CPU inference.
+  Other local models remain selectable; multilingual alternatives are intended
+  for a supported NVIDIA GPU.
 
 ## Install
 
@@ -69,7 +72,7 @@ macOS app can export, import, or keep them in a user-chosen sync file.
 
 The macOS app uses FluidAudio's Swift SDK with the local Parakeet TDT v3 CoreML speech model on the Apple Neural Engine. It is native Swift and uses AVFoundation, CoreGraphics event taps, AppKit, CoreML, NSPasteboard, a synthetic Cmd+V paste event, and direct Unicode key events as a fallback.
 
-The Windows tray app uses Python with native hotkey/audio/paste integration. It prefers Parakeet TDT v3 through CUDA and automatically starts fresh non-CUDA systems with Whisper base.en int8 on CPU. Additional local Parakeet, Nemotron, and faster-whisper models are selectable. Platform implementations do not share UI or runtime code.
+The Windows tray app uses Python with native hotkey/audio/paste integration. It prefers multilingual Parakeet TDT v3 through CUDA and automatically starts fresh non-CUDA systems with English-only Whisper base.en int8 on CPU. Additional local Parakeet, Nemotron, and faster-whisper models are selectable; Parakeet and Whisper turbo are the multilingual choices and are intended for a supported NVIDIA GPU. Platform implementations do not share UI or runtime code.
 
 ## Privacy
 

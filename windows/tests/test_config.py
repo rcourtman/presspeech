@@ -71,6 +71,16 @@ class ConfigLoadTests(unittest.TestCase):
                 self.assertEqual(
                     config.load()["max_recording_seconds"], seconds)
 
+    def test_model_labels_expose_language_scope(self):
+        for model in (
+                "nemotron-speech-streaming-en-0.6b", "small.en", "medium.en",
+                "base.en"):
+            with self.subTest(model=model):
+                self.assertIn("English-only", config.MODEL_LABELS[model])
+        for model in ("parakeet-tdt-0.6b-v3", "turbo"):
+            with self.subTest(model=model):
+                self.assertIn("multilingual", config.MODEL_LABELS[model])
+
     def test_recording_length_rejects_boolean_and_unbounded_values(self):
         for value in (True, 0, 30, 601, 3600, "300", [], None):
             with self.subTest(value=value):

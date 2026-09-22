@@ -25,6 +25,7 @@ Choose the build that matches your computer:
 | --- | --- | --- |
 | **Status** | Released, signed, and notarised | Prerelease; installer is currently unsigned |
 | **System** | Apple Silicon, macOS 14+ | x64 PC; Windows 11 recommended |
+| **Default language path** | Multilingual Parakeet | Multilingual Parakeet with usable NVIDIA CUDA; English-only Whisper base.en otherwise |
 | **First model download** | About 500–600 MB | About 141 MiB on CPU or 2.5 GB with CUDA |
 | **Start** | [Install on macOS](https://rcourtman.github.io/presspeech/install.html) | [Verify and install the Windows prerelease](https://rcourtman.github.io/presspeech/windows.html) |
 
@@ -69,7 +70,10 @@ Smart App Control or managed policy may block an unsigned app without offering
 an override; do not try to circumvent that policy. The installed app is about
 4.4 GB. On a fresh PC with NVIDIA CUDA, the default Parakeet model download is
 about 2.5 GB; without usable CUDA, Presspeech selects the smaller Whisper
-base.en CPU model (about 141 MiB).
+base.en CPU model (about 141 MiB), which is English-only. Other local models
+remain selectable in Settings; review the [Windows language and hardware
+split](https://rcourtman.github.io/presspeech/windows.html#language-support)
+before downloading if you need another language.
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.

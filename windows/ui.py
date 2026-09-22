@@ -1381,7 +1381,7 @@ class SettingsWindow:
                                       state="readonly", width=42)
         self.var_model.set(cfg.MODEL_LABELS.get(s["model"], cfg.MODEL_LABELS[cfg.MODELS[0]]))
         self.var_model.grid(row=row, column=1, sticky="w", padx=10, pady=2)
-        ttk.Label(f, text="No CUDA? First setup uses base.en on CPU").grid(
+        ttk.Label(f, text="No CUDA? First setup uses English-only base.en on CPU").grid(
             row=row, column=2, sticky="w")
         row += 1
 
