@@ -286,7 +286,12 @@ critical-term files, and the macOS and Swift
 versions. The input fingerprint depends on paired file contents rather than
 private names, so a copied or renamed frozen corpus remains comparable while
 any benchmark input, target/same-language/cross-language assignment, language
-hint, trial-count change, or reference-audit declaration is visible. Keeping
+hint, trial-count change, or reference-audit declaration is visible. Before
+building, the runner freezes private copies of all audio, references, vocabulary, and
+critical terms, then fingerprints and evaluates those copies for every policy.
+An input that changes while being copied fails the run. Editing originals after
+the snapshot does not change the comparison; temporary copies are removed when
+the run exits. Keeping
 the component hashes folded
 into one report value also avoids exposing a separately guessable digest for a
 short private vocabulary. Thresholded runs require a clean Git checkout so a

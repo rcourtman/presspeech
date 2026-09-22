@@ -189,6 +189,42 @@ file_sha256() {
     shasum -a 256 "$1" | awk '{print $1}'
 }
 
+freeze_input_file() {
+    local source="$1"
+    local destination="$2"
+    local before copied after
+    # A reference, audio file, or vocabulary edited while being copied must
+    # not produce an apparently frozen comparison. Diagnostics intentionally
+    # omit both paths and private contents.
+    if ! before="$(file_sha256 "$source" 2>/dev/null)" ||
+        ! cp "$source" "$destination" 2>/dev/null ||
+        ! copied="$(file_sha256 "$destination" 2>/dev/null)" ||
+        ! after="$(file_sha256 "$source" 2>/dev/null)" ||
+        [[ ! "$before" =~ ^[0-9a-f]{64}$ || "$before" != "$copied" || "$before" != "$after" ]]; then
+        echo "could not freeze benchmark input; an input changed or became unreadable" >&2
+        return 1
+    fi
+    chmod 400 "$destination"
+}
+
+freeze_fixture_corpus() {
+    local destination="$1"
+    shift
+    local clip index=0 frozen
+    FROZEN_CLIPS=()
+    for clip in "$@"; do
+        index=$((index + 1))
+        mkdir -p "$destination/$index"
+        # Preserve the extension required by the decoder, and the filename
+        # used by explicitly requested --show-paths reports. Unique private
+        # directories keep identical stems in different input folders apart.
+        frozen="$destination/$index/$(basename "$clip")"
+        freeze_input_file "$clip" "$frozen" || return 1
+        freeze_input_file "${clip%.*}.txt" "${frozen%.*}.txt" || return 1
+        FROZEN_CLIPS+=( "$frozen" )
+    done
+}
+
 fixture_set_sha256() {
     local clip
     local ref
@@ -860,6 +896,107 @@ assert_not_contains() {
     fi
 }
 
+test_frozen_input_run() {
+    local root="$1/frozen-run"
+    local fixture="$root/private-fixtures"
+    local bench="$root/repo/experiments/swift-bench"
+    mkdir -p "$fixture/targets" "$fixture/controls" "$root/bin" "$bench"
+    cp "$SCRIPT_PATH" "$bench/run-vocabulary-bias-regression.sh"
+    cp Package.swift "$bench/Package.swift"
+    printf 'original target audio\n' >"$fixture/targets/sample.wav"
+    printf 'original target reference\n' >"$fixture/targets/sample.txt"
+    printf 'original control audio\n' >"$fixture/controls/sample.wav"
+    printf 'original control reference\n' >"$fixture/controls/sample.txt"
+    printf 'private canonical term\n' >"$fixture/vocabulary.txt"
+    printf 'private canonical term\n' >"$fixture/critical-terms.txt"
+    local expected_digest
+    expected_digest="$(benchmark_inputs_sha256 \
+        "$(fixture_set_sha256 "$fixture/targets/sample.wav")" \
+        "$(fixture_set_sha256 "$fixture/controls/sample.wav")" none \
+        "$fixture/vocabulary.txt" "$fixture/critical-terms.txt" auto '' 3 0)"
+    cat >"$root/bin/swift" <<'MOCK_SWIFT'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == --version ]]; then echo 'Swift test toolchain'; exit 0; fi
+[[ "${1:-}" == build ]]
+# Edits during a long build must not change the inputs consumed by preflight
+# or any of the subsequent nine policy variants.
+find "$FREEZE_TEST_FIXTURES" -type f -exec sh -c 'printf "edited original\n" > "$1"' _ {} \;
+mkdir -p .build/release
+cp "$FREEZE_TEST_BENCH" .build/release/presspeech-bench
+chmod +x .build/release/presspeech-bench
+MOCK_SWIFT
+    cat >"$root/bin/afconvert" <<'MOCK_AFCONVERT'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# -eq 9 ]]
+cp "$8" "$9"
+MOCK_AFCONVERT
+    cat >"$root/bin/sw_vers" <<'MOCK_SW_VERS'
+#!/usr/bin/env bash
+echo 'test-platform'
+MOCK_SW_VERS
+    cat >"$root/mock-bench" <<'MOCK_BENCH'
+#!/usr/bin/env bash
+set -euo pipefail
+file=""; reference=""; terms=""; vocabulary=""; variant=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --reference-metrics|--redact-transcripts) shift ;;
+        --reference-file) reference="$2"; shift 2 ;;
+        --file) file="$2"; shift 2 ;;
+        --critical-terms) terms="$2"; shift 2 ;;
+        --custom-vocabulary) vocabulary="$2"; shift 2 ;;
+        --backend) variant="$2"; shift 2 ;;
+        --language|--trials) shift 2 ;;
+        *) exit 2 ;;
+    esac
+done
+[[ "$(cat "$terms")" == 'private canonical term' ]]
+if [[ -n "$vocabulary" ]]; then [[ "$(cat "$vocabulary")" == 'private canonical term' ]]; fi
+if [[ -n "$file" ]]; then reference="${file%.*}.txt"; fi
+case "$(cat "$reference")" in
+    'original target reference') group=target; hits=1 ;;
+    'original control reference') group=control; hits=0 ;;
+    *) exit 3 ;;
+esac
+if [[ -z "$file" ]]; then
+    echo "reference-metrics reference-words=3 critical-occurrences=$hits"
+    exit 0
+fi
+[[ "$(cat "$file")" == "original $group audio" ]]
+printf '%s %s\n' "$group" "$variant" >>"$FREEZE_TEST_CALLS"
+echo 'ready in 10.0 ms'
+echo 'model-cache: total=10.0 MB'
+echo 'latency: p50=10.0 ms'
+echo 'memory: peak=10.0 MB'
+echo "transcript: [WER 0.0%] [critical-terms matched=$hits total=$hits recall=100.0% unexpected=0] [word-errors=0 reference-words=3] <redacted>"
+MOCK_BENCH
+    chmod +x "$root/bin/"* "$root/mock-bench"
+    local log="$root/run.log"
+    if ! PATH="$root/bin:$PATH" \
+        FREEZE_TEST_FIXTURES="$fixture" \
+        FREEZE_TEST_BENCH="$root/mock-bench" \
+        FREEZE_TEST_CALLS="$root/calls" \
+        bash "$bench/run-vocabulary-bias-regression.sh" \
+        --input-dir "$fixture/targets" --negative-control-dir "$fixture/controls" \
+        --vocabulary "$fixture/vocabulary.txt" --critical-terms "$fixture/critical-terms.txt" \
+        --out-dir "$root/results" --no-threshold >"$log" 2>&1; then
+        cat "$log" >&2
+        echo 'self-test failed: frozen inputs did not survive original-file edits' >&2
+        exit 1
+    fi
+    assert_eq "$(wc -l <"$root/calls" | tr -d ' ')" 18 "all policy variants use frozen target and control inputs"
+    assert_eq "$(cat "$fixture/vocabulary.txt")" 'edited original' "original vocabulary changed during the test"
+    local report
+    for report in "$root/results/"*.md; do
+        assert_contains "$report" "Benchmark inputs SHA-256: $expected_digest"
+        assert_not_contains "$report" 'private canonical term'
+        assert_not_contains "$report" "$fixture"
+        assert_not_contains "$report" 'original target reference'
+    done
+}
+
 run_self_test() {
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-self-test.XXXXXX")"
@@ -1410,12 +1547,38 @@ MOCK_AFCONVERT
     assert_eq "$(clip_id_for n 4 'public clip')" "n004-public-clip" "visible negative-control clip ID"
     assert_eq "$(clip_id_for x 5 'cross clip')" "x005-cross-clip" "visible cross-language clip ID"
     REDACT_PATHS=1
+    local frozen="$tmpdir/frozen-inputs"
+    mkdir "$frozen"
+    freeze_fixture_corpus "$frozen" "$fixtures/renamed.wav" "$fixtures/second.wav"
+    local frozen_digest
+    frozen_digest="$(fixture_set_sha256 "${FROZEN_CLIPS[@]}")"
+    assert_eq "$frozen_digest" "$fixture_digest" "frozen corpus preserves input identity"
     printf 'changed reference\n' >"$fixtures/renamed.txt"
     if [[ "$(fixture_set_sha256 \
         "$fixtures/renamed.wav" "$fixtures/second.wav")" == "$fixture_digest" ]]; then
         echo "self-test expected fixture content changes to alter provenance" >&2
         exit 1
     fi
+    assert_eq "$(fixture_set_sha256 "${FROZEN_CLIPS[@]}")" "$frozen_digest" "original edits cannot change frozen references"
+    local failed_freeze_log="$tmpdir/failed-freeze.log"
+    if freeze_input_file "$fixtures/private-missing.txt" "$frozen/missing.txt" >"$failed_freeze_log" 2>&1; then
+        echo 'self-test expected unreadable snapshot input to fail' >&2
+        exit 1
+    fi
+    assert_not_contains "$failed_freeze_log" "$fixtures"
+    assert_not_contains "$failed_freeze_log" 'private-missing'
+    printf 'before copying\n' >"$fixtures/changing-private-input.txt"
+    if (
+        cp() { command cp "$@"; printf 'changed during copying\n' >"$1"; }
+        freeze_input_file "$fixtures/changing-private-input.txt" "$frozen/changed.txt"
+    ) >"$failed_freeze_log" 2>&1; then
+        echo 'self-test expected an input modified during copying to fail' >&2
+        exit 1
+    fi
+    assert_contains "$failed_freeze_log" 'could not freeze benchmark input'
+    assert_not_contains "$failed_freeze_log" 'changing-private-input'
+    assert_not_contains "$failed_freeze_log" "$fixtures"
+    test_frozen_input_run "$tmpdir"
 
     local original_repo_root="$REPO_ROOT"
     local current_source_state
@@ -1643,7 +1806,8 @@ if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "${#negative_clips[@]}" -lt "$MIN_NEGAT
     exit 1
 fi
 
-clips=( "${target_clips[@]}" "${negative_clips[@]}" "${cross_language_clips[@]}" )
+# macOS ships Bash 3.2, where an empty array is unbound under nounset.
+clips=( "${target_clips[@]}" ${negative_clips[@]+"${negative_clips[@]}"} ${cross_language_clips[@]+"${cross_language_clips[@]}"} )
 missing_refs=()
 for clip in "${clips[@]}"; do
     ref="${clip%.*}.txt"
@@ -1664,6 +1828,38 @@ if ! validate_unique_source_audio_content "${clips[@]}"; then
     exit 1
 fi
 
+tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-bias.XXXXXX")"
+stage_dir=""
+cleanup() {
+    rm -rf "$tmpdir"
+    if [[ -n "$stage_dir" ]]; then
+        rm -rf -- "$stage_dir"
+    fi
+}
+trap cleanup EXIT INT TERM
+
+# Freeze every input before computing provenance or reference metrics. A run
+# can last long enough for callers to edit their original vocabulary or
+# references; every policy must still consume exactly the fingerprinted set.
+original_vocabulary="$VOCABULARY"
+original_critical_terms="$CRITICAL_TERMS"
+mkdir -p "$tmpdir/inputs/vocabulary"
+frozen_vocabulary="$tmpdir/inputs/vocabulary/$(basename "$VOCABULARY")"
+freeze_input_file "$VOCABULARY" "$frozen_vocabulary"
+VOCABULARY="$frozen_vocabulary"
+freeze_input_file "$CRITICAL_TERMS" "$tmpdir/inputs/critical-terms.txt"
+CRITICAL_TERMS="$tmpdir/inputs/critical-terms.txt"
+freeze_fixture_corpus "$tmpdir/inputs/targets" "${target_clips[@]}"
+target_clips=( "${FROZEN_CLIPS[@]}" )
+freeze_fixture_corpus "$tmpdir/inputs/negative-controls" ${negative_clips[@]+"${negative_clips[@]}"}
+negative_clips=( ${FROZEN_CLIPS[@]+"${FROZEN_CLIPS[@]}"} )
+freeze_fixture_corpus "$tmpdir/inputs/cross-language-controls" ${cross_language_clips[@]+"${cross_language_clips[@]}"}
+cross_language_clips=( ${FROZEN_CLIPS[@]+"${FROZEN_CLIPS[@]}"} )
+clips=( "${target_clips[@]}" ${negative_clips[@]+"${negative_clips[@]}"} ${cross_language_clips[@]+"${cross_language_clips[@]}"} )
+# Recheck the files actually frozen, in case the caller changed an original
+# between the early source-content validation and snapshot creation.
+validate_unique_source_audio_content "${clips[@]}"
+
 target_fixture_sha256="$(fixture_set_sha256 "${target_clips[@]}")"
 negative_fixture_sha256="none"
 if [[ "${#negative_clips[@]}" -gt 0 ]]; then
@@ -1681,16 +1877,6 @@ if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     echo "could not fingerprint benchmark inputs" >&2
     exit 1
 fi
-
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-bias.XXXXXX")"
-stage_dir=""
-cleanup() {
-    rm -rf "$tmpdir"
-    if [[ -n "$stage_dir" ]]; then
-        rm -rf -- "$stage_dir"
-    fi
-}
-trap cleanup EXIT INT TERM
 
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
@@ -1850,8 +2036,8 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     else
         echo "- Cross-language control input directory: not supplied"
     fi
-    echo "- Vocabulary: $(path_label "$VOCABULARY")"
-    echo "- Critical terms: $(path_label "$CRITICAL_TERMS")"
+    echo "- Vocabulary: $(path_label "$original_vocabulary")"
+    echo "- Critical terms: $(path_label "$original_critical_terms")"
     echo "- Benchmark inputs SHA-256: $benchmark_input_sha256"
     echo "- Language hint: $LANGUAGE"
     echo "- Same-language negative-control language hint: $LANGUAGE"
