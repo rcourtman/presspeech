@@ -40,6 +40,7 @@ echo "  synced menu-bar PNGs into swift/Resources"
 # 1280x640 PNG used as the repo's social-share card. Upload via
 # Settings → General → Social preview on github.com.
 rsvg-convert -w 1280 -h 640 social-preview.svg --output social-preview.png
+python3 ../scripts/check-public-assets.py --update-social-preview
 echo "  built social-preview.png"
 
 # Clean up the iconset; we only need the .icns

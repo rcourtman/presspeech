@@ -21,11 +21,9 @@
     <g transform="translate(0, 440)">
       <text x="0" y="0" font-size="22" font-weight="500" fill="#10B981">macOS release · Windows prerelease</text>
 
-      <!-- Hard-number stat line — the share preview's job is to make
-           someone click through, and concrete numbers do that better
-           than adjectives. One <text> with <tspan>s so the spacing
-           flows naturally rather than being hand-positioned. -->
-      <text x="0" y="42" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="19" xml:space="preserve"><tspan font-weight="700" fill="#0F172A">macOS model: ~100 ms </tspan><tspan font-weight="400" fill="#475569">· 8.4 MB zip · ~80 MB RAM</tspan></text>
+      <!-- Stable hard-number stat line. Avoid the exact release-zip size here:
+           this raster is long-lived, while that value changes after packaging. -->
+      <text x="0" y="42" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="19" xml:space="preserve"><tspan font-weight="700" fill="#0F172A">macOS model: ~100 ms </tspan><tspan font-weight="400" fill="#475569">· ~80 MB RAM · 0% CPU idle</tspan></text>
 
       <text x="0" y="92" font-size="20" font-weight="400" fill="#64748B" letter-spacing="0.5">Local · Private · Free · MIT</text>
     </g>

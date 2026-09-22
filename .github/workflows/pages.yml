@@ -70,6 +70,7 @@ jobs:
           python3 scripts/check-docs-accessibility.py
           python3 scripts/check-docs-metadata.py --self-test
           python3 scripts/check-docs-metadata.py
+          python3 scripts/check-public-assets.py
       - name: Public release contract
         env:
           GITHUB_TOKEN: ${{ github.token }}

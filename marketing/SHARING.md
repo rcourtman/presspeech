@@ -8,8 +8,9 @@ a note where engineers look up notes, and answers where people are
 already asking.
 
 Every number below comes from `docs/site-metadata.json` and the
-benchmarks page — run `python3 scripts/sync-docs.py --check` before
-posting so claims match the current release.
+benchmarks page — run `python3 scripts/sync-docs.py --check` and
+`python3 scripts/check-public-assets.py` before posting so both claims and
+generated visuals match the current release.
 
 ## Assets
 

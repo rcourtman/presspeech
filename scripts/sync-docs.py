@@ -107,7 +107,6 @@ WINDOWS_RELEASE_REFERENCE_PATTERNS = [
 # size string appears and fails loudly when a release changes it.
 ICON_STAT_SVGS = [
     ROOT / "icon" / "hero.svg",
-    ROOT / "icon" / "social-preview.svg",
     ROOT / "icon" / "demo.svg",
 ]
 

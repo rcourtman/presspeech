@@ -10,8 +10,9 @@ Output: `dist/presspeech-demo.mp4` (also `.webm`, `.gif`).
 
 ## Render
 
-Prerequisites: macOS, Node 20+, Google Chrome installed at
-`/Applications/Google Chrome.app`, and ffmpeg at `/opt/homebrew/bin/ffmpeg`.
+Prerequisites: Node 20+, Google Chrome, and ffmpeg. The defaults are the
+standard macOS locations; set `PRESSPEECH_CHROME` and `PRESSPEECH_FFMPEG` to
+their executable paths elsewhere.
 
 ```
 cd marketing/demo
@@ -24,51 +25,46 @@ The script:
 1. Launches headless Chrome (no separate Chromium download — uses the
    system Chrome via `puppeteer-core`).
 2. Opens `index.html` and waits for `window.demoReady`.
-3. For each of the 420 frames (30 fps × 14 s), calls
+3. For each of the 465 frames (30 fps × 15.5 s), calls
    `window.renderAt(t)` to set deterministic state and screenshots the
    1920×1080 viewport into `frames/`.
 4. Encodes the frame sequence to
    - `dist/presspeech-demo.mp4`  (H.264, yuv420p, CRF 18, +faststart)
    - `dist/presspeech-demo.webm` (VP9, CRF 32)
    - `dist/presspeech-demo.gif`  (1080 px wide, 20 fps, palette-quantised)
+5. Copies MP4 and WebM into `docs/`, and creates `docs/demo-poster.jpg` from
+   the stable 12-second frame.
+6. Run `python3 ../../scripts/check-public-assets.py --update-demo` to bind the
+   checked-in outputs to their generator sources. CI rejects stale copies.
 
 Total wall-time on an M-series Mac: ≈ 1 minute.
 
 ## Timeline
 
-The demo is built around one rule: **the viewer's eye stays in a
-single vertical column** — editor in the middle, one HUD chip directly
-below it, caption underneath at the end. No popovers in the corner, no
-side terminal, no keyboard widget to hunt for. Sequential, not
-parallel.
+The demo keeps each beat visually local. A short title card establishes the
+product, then the camera stays on the menu-bar icon, Right Option keycap, and
+live speaking counter for the hold. It moves to TextEdit as the transcript
+appears, then pulls wide for the closing evidence caption. The animation is
+synthetic and does not pretend that its narration or keycap is application UI.
 
-The chip carries everything the previous version scattered:
-
-- The **Option keycap** (left of the chip) — depresses + glows green
-  while the hotkey is held.
-- The **waveform** (centre) — animates while listening, freezes the
-  instant the key releases.
-- The **status + counter** (right) — reads `Hold Right Option` before
-  the press, then `Listening 2.3s` (live counter) during recording,
-  then `✓ pasted in 94 ms` after the key releases.
-
-The lightweight claim lives in the caption subtitle at the end — not
-in a fake CLI banner. All three numbers (download / RAM / end-to-end
-latency) sit on one line in brand green, so the proof shows up where
-captions belong instead of pretending to be terminal output.
+The closing subtitle keeps the measured claims scoped: the ~94 ms number is
+model transcription on the documented fixture, not complete release-to-paste
+latency. Idle-memory and CPU figures describe the released macOS build. The
+exact download size stays in release-synchronised text rather than this
+long-lived video.
 
 | t (s)       | what happens                                                                  |
 |------------:|-------------------------------------------------------------------------------|
-| 0.0 – 0.5   | Idle establishing shot. Editor with blinking cursor.                          |
-| 0.5 – 0.8   | HUD chip slides up + fades in below the editor. Reads `Hold Right Option`.    |
-| 1.0         | KEY DOWN. ⌥ keycap depresses + glows green. Label becomes `Listening`.        |
-| 1.0 – 6.0   | Live audio meter. Counter ticks `0.0s → 5.0s` in the chip.                    |
-| 6.0         | KEY UP. Waveform freezes.                                                     |
-| 6.094       | PASTE — 94 ms after release. Text snaps into editor. Chip flips to a green `✓ pasted in 94 ms`. |
-| 6.1 – 8.0   | Result holds. Editor full, chip showing the speed claim.                      |
-| 8.0 – 8.6   | Chip fades out.                                                               |
-| 9.7 – 10.4  | Caption fades in: `Local on-device dictation. No cloud transcription.` plus the subtitle `8.4 MB download · ~80 MB RAM idle · ~94 ms end-to-end`. |
-| 10.4 – 14.0 | Hold final frame.                                                              |
+| 0.0 – 0.3   | Title card fades in.                                                          |
+| 0.3 – 1.7   | Title card holds.                                                             |
+| 1.7 – 2.1   | Title fades to the menu-bar and Right Option close-up.                       |
+| 2.7         | KEY DOWN. The keycap depresses and the real app icon's recording state is represented in red. |
+| 2.7 – 7.7   | Live `Speaking` counter and restrained recording pulse.                       |
+| 7.7         | KEY UP. The keycap and menu-bar icon return to idle.                           |
+| 7.794       | The transcript appears 94 ms after release and the camera moves to TextEdit.    |
+| 9.0 – 9.45  | The keycap narration fades while the camera pulls wide.                       |
+| 9.5 – 10.02 | Closing caption and macOS evidence line fade in.                              |
+| 10.02 – 15.5 | Hold final frame.                                                            |
 
 The 94 ms gap, the live counter, and the timing of the text reveal are
 all derived from the same `t` values, so what the viewer reads on the
@@ -88,6 +84,5 @@ console.
 - `marketing/demo/dist/presspeech-demo.webm` — for `<video>` embeds
 - `marketing/demo/dist/presspeech-demo.gif`  — for places that disallow video
 
-The docs site embeds copies as `docs/demo-video.{mp4,webm}` plus
-`docs/demo-poster.jpg` for the mobile breakpoint — re-copy them after
-re-rendering.
+The docs site embeds synchronized copies as `docs/demo-video.{mp4,webm}` plus
+`docs/demo-poster.jpg`.

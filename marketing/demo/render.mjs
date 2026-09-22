@@ -6,14 +6,22 @@
 
 import puppeteer from 'puppeteer-core';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, existsSync, statSync, readdirSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  rmSync,
+  existsSync,
+  statSync,
+  readdirSync,
+} from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const FFMPEG = '/opt/homebrew/bin/ffmpeg';
+const CHROME = process.env.PRESSPEECH_CHROME ||
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const FFMPEG = process.env.PRESSPEECH_FFMPEG || '/opt/homebrew/bin/ffmpeg';
 
 const WIDTH       = 1920;
 const HEIGHT      = 1080;
@@ -24,6 +32,8 @@ const TOTAL       = Math.round(FPS * DURATION_S);     // 465 frames
 const FRAMES_DIR  = path.join(__dirname, 'frames');
 const DIST_DIR    = path.join(__dirname, 'dist');
 const HTML_PATH   = path.join(__dirname, 'index.html');
+const DOCS_DIR    = path.resolve(__dirname, '..', '..', 'docs');
+const POSTER_TIME_S = 12;
 
 function log(...args) {
   process.stdout.write('[render] ' + args.join(' ') + '\n');
@@ -143,6 +153,27 @@ function encodeGif() {
   return out;
 }
 
+function syncDocsAssets(mp4, webm) {
+  const docsMp4 = path.join(DOCS_DIR, 'demo-video.mp4');
+  const docsWebm = path.join(DOCS_DIR, 'demo-video.webm');
+  const poster = path.join(DOCS_DIR, 'demo-poster.jpg');
+  const posterFrame = Math.round(POSTER_TIME_S * FPS);
+  const posterInput = path.join(
+    FRAMES_DIR, 'frame-' + String(posterFrame).padStart(4, '0') + '.png');
+
+  copyFileSync(mp4, docsMp4);
+  copyFileSync(webm, docsWebm);
+  run(FFMPEG, [
+    '-y',
+    '-i', posterInput,
+    '-frames:v', '1',
+    '-update', '1',
+    '-q:v', '3',
+    poster,
+  ]);
+  log(`synced docs video and poster assets (${POSTER_TIME_S}s poster frame)`);
+}
+
 function humanSize(p) {
   const b = statSync(p).size;
   if (b > 1024 * 1024) return (b / 1024 / 1024).toFixed(2) + ' MB';
@@ -153,17 +184,18 @@ function humanSize(p) {
   await captureFrames();
   const mp4  = encodeMp4();
   const webm = encodeWebm();
-  let gif    = null;
-  try { gif = encodeGif(); } catch (e) { log('gif encoding skipped:', e.message); }
+  const gif  = encodeGif();
+  syncDocsAssets(mp4, webm);
 
   log('outputs:');
   log(`  MP4 : ${mp4}  (${humanSize(mp4)})`);
   log(`  WebM: ${webm}  (${humanSize(webm)})`);
-  if (gif) log(`  GIF : ${gif}  (${humanSize(gif)})`);
+  log(`  GIF : ${gif}  (${humanSize(gif)})`);
 
   // Print a manifest of frames so callers can sanity-check.
   const frameCount = readdirSync(FRAMES_DIR).filter(n => n.startsWith('frame-')).length;
   log(`captured frames: ${frameCount}`);
+  log('run: python3 ../../scripts/check-public-assets.py --update-demo');
 })().catch(err => {
   console.error('[render] failed:', err);
   process.exit(1);
