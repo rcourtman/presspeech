@@ -293,7 +293,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Required path | Result |
 | --- | --- |
 | Verify signature, notarisation, staple, version, archive size, and SHA-256 | |
-| First launch through model, microphone, Accessibility, Input Monitoring, and keyboard-event-posting readiness | |
+| First launch through model, microphone, Accessibility / Device Control and Data Access, Input Monitoring, and keyboard-event-posting readiness | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
 | Steady-focus and same-process two-window Electron checks for issue #33 | |
@@ -350,8 +350,9 @@ item after the development-wrapper launch check.
   confirm no removed action retains focus and no current permission, Dock,
   Try Dictation, or Close/Done control is skipped.
 - With VoiceOver enabled, confirm each permission action includes its context,
-  such as **Grant Microphone** and **Grant Accessibility**, rather than being
-  announced only as **Grant**.
+  such as **Grant Microphone** and **Grant Accessibility** on macOS 14, or
+  **Grant Device Control and Data Access** on macOS 27 and later, rather than
+  being announced only as **Grant**.
 - Complete setup, close every Presspeech window, then open the already-running
   app again from Finder or Spotlight. Confirm Setup Checklist appears instead
   of a second app instance. Enable **Show in Dock**, right-click the
@@ -624,7 +625,10 @@ item after the development-wrapper launch check.
 ## Permissions And TCC
 
 - On a clean or reset machine, launch Presspeech and use **Setup Checklist...**
-  to request Microphone, Accessibility, and Input Monitoring.
+  to request Microphone, Accessibility, and Input Monitoring. On macOS 27 and
+  later, confirm the app and System Settings both call the Accessibility pane
+  **Device Control and Data Access** and that the legacy deep link still opens
+  that renamed pane.
 - Confirm each granted permission removes or updates its setup row after the
   app is reopened if macOS requires it.
 - On a disposable test account, independently reset the Presspeech `PostEvent`

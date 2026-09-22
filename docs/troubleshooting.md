@@ -27,14 +27,17 @@ icon to open dictation controls, Settings, Support, or Quit.
 
 ### Permission Is Missing Or Will Not Appear
 
-Presspeech needs Microphone, Accessibility, and Input Monitoring. Open
+Presspeech needs Microphone, Accessibility, and Input Monitoring. On macOS
+27 and later, System Settings calls Accessibility **Device Control and Data
+Access**, and Presspeech uses that current name in Setup Checklist. Open
 **Support -> Setup Checklist...** and choose the affected row. If the grant
 still does not appear, quit and reopen the copy in Applications, return to Setup
 Checklist, and choose **Try Again**. Presspeech resets only the TCC service or
-services represented by that row and asks macOS again. The Accessibility row
-checks both focused-window access and permission to send the paste shortcut;
-**Copy Diagnostics** reports those two checks separately when the visible
-Accessibility toggle and actual keyboard delivery disagree.
+services represented by that row and asks macOS again. The Accessibility /
+Device Control and Data Access row checks both focused-window access and
+permission to send the paste shortcut; **Copy Diagnostics** reports those two
+checks separately when the visible System Settings toggle and actual keyboard
+delivery disagree.
 
 ### Speech Model Fails To Load
 
@@ -58,7 +61,8 @@ and dictionary rules remain intact.
 
 ### Try Dictation Works But Text Is Not Inserted
 
-Confirm Accessibility is granted in Setup Checklist, click the destination text
+Confirm Accessibility (Device Control and Data Access on macOS 27 and later) is
+granted in Setup Checklist, click the destination text
 field, then dictate without changing apps before transcription finishes. The
 row remains Missing if either focused-window access or keyboard-event posting
 is unavailable, even when System Settings already shows Presspeech enabled; use

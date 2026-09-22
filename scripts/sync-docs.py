@@ -1055,8 +1055,8 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     )
     text = replace_regex(
         text,
-        r"<p>Presspeech needs Microphone, Accessibility, and Input Monitoring\..*?</p>",
-        "<p>Presspeech needs Microphone, Accessibility, and Input Monitoring. Setup Checklist shows each grant, explains why it is needed, and opens the relevant macOS prompt or Settings pane.</p>",
+        r"<p>Presspeech needs Microphone, Accessibility(?: \(shown as Device Control and Data Access on macOS 27 and later\))?, and Input Monitoring\..*?</p>",
+        "<p>Presspeech needs Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist shows each grant, explains why it is needed, and opens the relevant macOS prompt or Settings pane.</p>",
         path=path,
     )
     text = replace_regex(
@@ -1130,8 +1130,8 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     text = replace_regex(
         text,
-        r"<p>(?:<strong>macOS:</strong> )?Microphone, Accessibility, and Input Monitoring\..*?</p>",
-        "<p><strong>macOS:</strong> Microphone, Accessibility, and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access and Let desktop apps access your microphone; Windows does not provide a separate Presspeech toggle for an unpackaged desktop app.</p>",
+        r"<p>(?:<strong>macOS:</strong> )?Microphone, Accessibility(?: \(shown as Device Control and Data Access on macOS 27 and later\))?, and Input Monitoring\..*?</p>",
+        "<p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access and Let desktop apps access your microphone; Windows does not provide a separate Presspeech toggle for an unpackaged desktop app.</p>",
         path=path,
     )
     diagnostics_card = """            <article class="card">
@@ -1214,7 +1214,8 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     )
     setup_sentence = (
         "Use Setup Checklist from the Presspeech menu bar item to finish the speech model, "
-        "Microphone, Accessibility, Input Monitoring, and hotkey readiness checks.\n"
+        "Microphone, Accessibility (Device Control and Data Access on macOS 27+), "
+        "Input Monitoring, and hotkey readiness checks.\n"
     )
     if setup_sentence not in text:
         text = replace_literal(

@@ -111,8 +111,9 @@ First launch downloads the local speech model, about 500-600 MB. Open
 and hotkey checks. The checklist stays incomplete until the configured hotkey
 actually reaches Presspeech; if it does not respond or controls another Mac
 feature, choose a different key under Settings. Presspeech asks for Microphone,
-Accessibility, and Input Monitoring because it records while the hotkey is
-active, observes the global hotkey, and pastes text at the cursor.
+Accessibility (shown as **Device Control and Data Access** on macOS 27 and
+later), and Input Monitoring because it records while the hotkey is active,
+observes the global hotkey, and pastes text at the cursor.
 
 If the Presspeech item is hidden by a crowded or notched menu bar, open
 **Presspeech.app** again from Applications, Finder, or Spotlight. The running

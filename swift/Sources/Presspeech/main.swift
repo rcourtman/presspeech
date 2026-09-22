@@ -2830,6 +2830,19 @@ enum Permission: String, CaseIterable, Equatable {
     case microphone = "Microphone"
     case accessibility = "Accessibility"
     case inputMonitoring = "Input Monitoring"
+
+    /// Keep raw values stable for TCC service names, menu payloads, and logs,
+    /// while matching the privacy-pane label the user can actually find.
+    /// macOS 27 renamed Accessibility in System Settings without changing the
+    /// legacy `Privacy_Accessibility` deep-link anchor or AX APIs.
+    func displayName(
+        operatingSystemMajorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+    ) -> String {
+        if self == .accessibility, operatingSystemMajorVersion >= 27 {
+            return "Device Control and Data Access"
+        }
+        return rawValue
+    }
 }
 
 /// Automatic delivery needs two independently queryable capabilities: AX can
@@ -2860,14 +2873,22 @@ private func nextAccessibilityAuthorizationRequest(axTrusted: Bool,
 }
 
 private func accessibilityDiagnosticLine(axTrusted: Bool,
-                                         postEventAuthorized: Bool) -> String {
+                                         postEventAuthorized: Bool,
+                                         operatingSystemMajorVersion: Int = ProcessInfo.processInfo
+                                            .operatingSystemVersion.majorVersion) -> String {
     let overall = accessibilityDeliveryIsAuthorized(
         axTrusted: axTrusted,
         postEventAuthorized: postEventAuthorized
     ) ? "granted" : "missing"
     let focusedWindow = axTrusted ? "granted" : "missing"
     let eventPosting = postEventAuthorized ? "granted" : "missing"
-    return "Accessibility: \(overall) (focused-window access: \(focusedWindow); keyboard event posting: \(eventPosting))"
+    let displayName = Permission.accessibility.displayName(
+        operatingSystemMajorVersion: operatingSystemMajorVersion
+    )
+    let diagnosticName = displayName == Permission.accessibility.rawValue
+        ? displayName
+        : "\(displayName) (Accessibility)"
+    return "\(diagnosticName): \(overall) (focused-window access: \(focusedWindow); keyboard event posting: \(eventPosting))"
 }
 
 private func missingAccessibilityTCCServices(axTrusted: Bool,
@@ -10710,8 +10731,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 : #selector(retryStartupFromSetupClicked(_:))))
 
         for permission in snapshot.permissions {
+            let permissionName = permission.permission.displayName()
             root.addArrangedSubview(makeSetupChecklistRow(
-                title: permission.permission.rawValue,
+                title: permissionName,
                 state: SetupChecklistRowState(
                     detail: permission.detail,
                     status: permission.status,
@@ -10840,7 +10862,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         case .microphone:
             return "Captures your voice while dictating. Click 'Grant', then click 'OK' in the macOS prompt."
         case .accessibility:
-            return "Verifies the focused window and sends the paste shortcut. Click 'Grant' to open System Settings → Privacy & Security → Accessibility, then enable Presspeech. If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
+            let paneName = permission.displayName()
+            let renameNote = paneName == permission.rawValue
+                ? ""
+                : " This is the permission called Accessibility on earlier macOS versions."
+            return "Verifies the focused window and sends the paste shortcut. Click 'Grant' to open System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
         case .inputMonitoring:
             return "Lets Presspeech detect the dictation hotkey. Click 'Grant' to open System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to 'Presspeech'."
         }
@@ -11083,14 +11109,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func buildPermissionItem(_ p: Permission) -> NSMenuItem {
         let clicks = permClickCount[p] ?? 0
+        let permissionName = p.displayName()
         let title: String
         if clicks >= 1 {
             // First click already happened; permission still denied,
             // so signal explicitly that a second click will reset
             // any stuck TCC state and re-request.
-            title = "⚠ Grant \(p.rawValue) (try again — will reset stuck state)…"
+            title = "⚠ Grant \(permissionName) (try again — will reset stuck state)…"
         } else {
-            title = "⚠ Grant \(p.rawValue) permission…"
+            title = "⚠ Grant \(permissionName) permission…"
         }
         let item = NSMenuItem(title: title,
                               action: #selector(grantPermissionClicked(_:)),
@@ -15427,6 +15454,26 @@ private enum PresspeechSelfTest {
 
     private static func testReadiness() throws {
         try expect(
+            Permission.accessibility.displayName(operatingSystemMajorVersion: 26),
+            equals: "Accessibility",
+            "macOS 26 and earlier should use the historical privacy-pane name"
+        )
+        try expect(
+            Permission.accessibility.displayName(operatingSystemMajorVersion: 27),
+            equals: "Device Control and Data Access",
+            "macOS 27 should use the renamed privacy-pane label"
+        )
+        try expect(
+            Permission.accessibility.displayName(operatingSystemMajorVersion: 28),
+            equals: "Device Control and Data Access",
+            "later macOS versions should retain the renamed privacy-pane label"
+        )
+        try expect(
+            Permission.inputMonitoring.displayName(operatingSystemMajorVersion: 27),
+            equals: "Input Monitoring",
+            "the macOS 27 Accessibility rename must not alter other permission names"
+        )
+        try expect(
             accessibilityDeliveryIsAuthorized(axTrusted: true,
                                                postEventAuthorized: true),
             equals: true,
@@ -15464,9 +15511,17 @@ private enum PresspeechSelfTest {
         )
         try expect(
             accessibilityDiagnosticLine(axTrusted: true,
-                                        postEventAuthorized: false),
+                                        postEventAuthorized: false,
+                                        operatingSystemMajorVersion: 26),
             equals: "Accessibility: missing (focused-window access: granted; keyboard event posting: missing)",
             "diagnostics should distinguish a silent PostEvent denial from AX trust"
+        )
+        try expect(
+            accessibilityDiagnosticLine(axTrusted: true,
+                                        postEventAuthorized: false,
+                                        operatingSystemMajorVersion: 27),
+            equals: "Device Control and Data Access (Accessibility): missing (focused-window access: granted; keyboard event posting: missing)",
+            "macOS 27 diagnostics should pair the visible pane name with the stable technical name"
         )
         try expect(
             TCC.serviceNames[.accessibility],

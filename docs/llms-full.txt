@@ -14,7 +14,7 @@ macOS:
 
 - Apple Silicon Mac, M1 or newer, with macOS 14 Sonoma or later.
 - Direct release zip, or Homebrew for installation and updates.
-- Microphone, Accessibility, and Input Monitoring permissions granted to Presspeech.
+- Microphone, Accessibility (Device Control and Data Access on macOS 27+), and Input Monitoring permissions granted to Presspeech.
 
 Windows:
 
@@ -41,9 +41,9 @@ https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 
 First launch downloads the local speech model weights, about 500-600 MB, into `~/Library/Application Support/FluidAudio/`.
 
-Use Setup Checklist from the Presspeech menu bar item to finish the speech model, Microphone, Accessibility, Input Monitoring, and hotkey readiness checks.
+Use Setup Checklist from the Presspeech menu bar item to finish the speech model, Microphone, Accessibility (Device Control and Data Access on macOS 27+), Input Monitoring, and hotkey readiness checks.
 
-Presspeech uses the bundle identifier and preferences suite `com.local.presspeech`. An identity-changing upgrade migrates saved settings, local rules, correction-sync paths, and recovery state automatically. Because macOS binds privacy grants to the bundle identifier, users must grant Microphone, Accessibility, and Input Monitoring once to the current identity.
+Presspeech uses the bundle identifier and preferences suite `com.local.presspeech`. An identity-changing upgrade migrates saved settings, local rules, correction-sync paths, and recovery state automatically. Because macOS binds privacy grants to the bundle identifier, users must grant Microphone, Accessibility (Device Control and Data Access on macOS 27+), and Input Monitoring once to the current identity.
 
 ### Windows
 
