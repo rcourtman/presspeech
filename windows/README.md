@@ -248,7 +248,10 @@ The Try Dictation scratchpad also keeps its Dictate command and live status in
 sync when recording is stopped by the hotkey, Escape, the recording limit, or
 an input failure. While a model is preparing, transcription is finishing, or
 delivery recovery is required, it explains why another recording is not yet
-available instead of leaving a stale actionable label.
+available instead of leaving a stale actionable label. Its named editor and
+visible transcript scrollbar remain reachable with Narrator and keyboard-only
+navigation, and its initial size scales up without extending beyond the current
+desktop.
 Windows may place the icon in the notification-area overflow. If the icon is
 hard to find, launch Presspeech again from the Start Menu: the running app
 restores its existing window, opens Setup during first run, or opens Settings

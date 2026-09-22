@@ -172,6 +172,35 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertEqual(ui._scaled_pixels(42, 192), 84)
         self.assertEqual(ui._scaled_pixels(42, 0), 42)
 
+    def test_compact_window_scales_but_stays_inside_the_desktop(self):
+        self.assertEqual(
+            ui._bounded_window_size(480, 280, 96, 1920, 1080),
+            (480, 280),
+        )
+        self.assertEqual(
+            ui._bounded_window_size(480, 280, 144, 1920, 1080),
+            (720, 420),
+        )
+        self.assertEqual(
+            ui._bounded_window_size(480, 280, 216, 1024, 768),
+            (960, 630),
+        )
+        self.assertEqual(
+            ui._bounded_window_size(480, 280, 216, 300, 200),
+            (268, 168),
+        )
+
+    def test_scratchpad_editor_is_named_and_scrollable(self):
+        source = inspect.getsource(ui.ScratchpadWindow._build)
+        self.assertIn(
+            '_name_control(self.text, "Private dictation scratchpad")',
+            source,
+        )
+        self.assertIn("transcript_scrollbar = ttk.Scrollbar", source)
+        self.assertIn("_bounded_window_size(", source)
+        self.assertIn('font="TkDefaultFont"', source)
+        self.assertIn('root.bind("<Configure>", resize_status', source)
+
     def test_win32_system_colours_are_converted_from_bgr(self):
         self.assertEqual(ui._colourref_hex(0x00332211), "#112233")
 

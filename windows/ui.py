@@ -335,6 +335,17 @@ def _scaled_pixels(value, pixels_per_inch):
     return max(1, round(value * scale))
 
 
+def _bounded_window_size(
+        width, height, pixels_per_inch, screen_width, screen_height):
+    """Scale a compact window while retaining a usable desktop border."""
+    return (
+        _bounded_viewport(
+            _scaled_pixels(width, pixels_per_inch), screen_width, 64, 320),
+        _bounded_viewport(
+            _scaled_pixels(height, pixels_per_inch), screen_height, 96, 240),
+    )
+
+
 def _colourref_hex(value):
     """Convert a Win32 COLORREF (0x00bbggrr) to a Tk colour string."""
     value = int(value)
@@ -1836,18 +1847,50 @@ class ScratchpadWindow:
     def _build(self):
         root = _interactive_window("Presspeech - Try Dictation")
         self.root = root
-        root.geometry("480x280")
-        self.text = tk.Text(root, wrap="word", font=("Segoe UI", 12))
-        self.text.pack(fill="both", expand=True, padx=8, pady=8)
+        root.resizable(True, True)
+        pixels_per_inch = root.winfo_fpixels("1i")
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        width, height = _bounded_window_size(
+            480, 280, pixels_per_inch, screen_width, screen_height)
+        minimum_width, minimum_height = _bounded_window_size(
+            320, 240, pixels_per_inch, screen_width, screen_height)
+        root.geometry("%dx%d" % (width, height))
+        root.minsize(
+            min(width, minimum_width), min(height, minimum_height))
+        frame = ttk.Frame(root, padding=8)
+        frame.pack(fill="both", expand=True)
+        frame.rowconfigure(1, weight=1)
+        frame.columnconfigure(0, weight=1)
+
+        scratchpad_label = ttk.Label(frame, text="Private dictation scratchpad")
+        scratchpad_label.grid(row=0, column=0, sticky="w", pady=(0, 4))
+        self.text = tk.Text(frame, wrap="word", font="TkDefaultFont")
+        self.text.grid(row=1, column=0, sticky="nsew")
+        transcript_scrollbar = ttk.Scrollbar(
+            frame, orient="vertical", command=self.text.yview,
+            takefocus=False)
+        transcript_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.text.configure(yscrollcommand=transcript_scrollbar.set)
         self.status = ttk.Label(
-            root, text="", justify="left", wraplength=450)
-        self.status.pack(fill="x", padx=8, pady=(0, 6))
-        self.btn = ttk.Button(root, text="Dictate (or use the hotkey)", command=self.toggle)
-        self.btn.pack(pady=(0, 8))
+            frame, text="", justify="left", wraplength=max(1, width - 48))
+        self.status.grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(6, 6))
+        self.btn = ttk.Button(
+            frame, text="Dictate (or use the hotkey)", command=self.toggle)
+        self.btn.grid(row=3, column=0, columnspan=2, pady=(0, 2))
         root.protocol("WM_DELETE_WINDOW", self._close)
         _add_access_key(root, self.btn, "d")
         _bind_window_command(root, "<Escape>", self._close)
+
+        def resize_status(event):
+            if event.widget is root:
+                self.status.configure(wraplength=max(1, event.width - 48))
+
+        root.bind("<Configure>", resize_status, add="+")
         root.update_idletasks()
+        _label_control(scratchpad_label, self.text)
+        _name_control(self.text, "Private dictation scratchpad")
         self._refresh_controls()
         _mark_live_region(self.status)
         root.after_idle(self.text.focus_set)
