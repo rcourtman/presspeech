@@ -164,6 +164,20 @@ keyboard access testing in addition to assistive-technology testing.
   paste shortcut, and reports the Windows administrator boundary. Paste manually
   and confirm the complete transcript is available. Do not elevate Presspeech.
 
+## Windows Install and Removal
+
+- Install the packaged app on a clean Windows profile, clearing **Launch
+  Presspeech** on the final installer page. Confirm installation does not create
+  a Presspeech entry under **Settings → Apps → Startup** before the app has run
+  and the first-run choice has been saved.
+- Complete or defer Setup with **Start Presspeech with Windows** selected. Confirm
+  the enabled Presspeech startup entry launches the installed executable, then
+  install the next build over it and confirm the choice remains enabled.
+- Remove Presspeech through **Settings → Apps → Installed apps**. Confirm
+  its Start Menu and optional desktop shortcuts, install directory, and
+  **Start with Windows** entry are gone. Sign out and back in and confirm Windows
+  does not attempt to launch the removed executable. Preferences, diagnostics,
+  and shared Hugging Face model files are expected to remain.
 
 ## Signed App Smoke
 

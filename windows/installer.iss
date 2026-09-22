@@ -45,6 +45,12 @@ VersionInfoProductVersion={#AppVersion}
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
+[Registry]
+; Presspeech creates this value only after the user confirms the choice in
+; Setup or Settings. Do not enable startup during installation, but register
+; ownership so a later uninstall cannot leave a dead login entry behind.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Presspeech"; Flags: dontcreatekey uninsdeletevalue
+
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
