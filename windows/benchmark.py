@@ -148,7 +148,7 @@ def silence_metrics(expected_silence, reference_reviewed, hypotheses):
     }
 
 
-def speech_detection_metrics(audio_seconds, backend_timings):
+def speech_detection_metrics(audio_seconds, backend_timings, expected_trials=None):
     """Summarise the privacy-safe VAD duration reported by faster-whisper."""
     values = []
     for timing in backend_timings:
@@ -156,17 +156,22 @@ def speech_detection_metrics(audio_seconds, backend_timings):
         if (isinstance(value, (int, float)) and not isinstance(value, bool)
                 and math.isfinite(value) and value >= 0):
             values.append(float(value))
-    if not values:
+    if not values and expected_trials is None:
         return None
-    median_seconds = statistics.median(values)
+    trial_count = (len(backend_timings) if expected_trials is None
+                   else expected_trials)
+    measured_trials = len(values)
+    median_seconds = statistics.median(values) if values else None
     return {
-        "min_seconds": min(values),
+        "min_seconds": min(values) if values else None,
         "median_seconds": median_seconds,
-        "max_seconds": max(values),
+        "max_seconds": max(values) if values else None,
         "median_audio_ratio": (median_seconds / audio_seconds
-                               if audio_seconds > 0 else None),
+                               if values and audio_seconds > 0 else None),
         "rejected_trials": sum(value <= 0 for value in values),
-        "trials": len(values),
+        "trials": trial_count,
+        "measured_trials": measured_trials,
+        "missing_trials": max(0, trial_count - measured_trials),
         "all_seconds": values,
     }
 
@@ -380,7 +385,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             ),
             "reference_reviewed": bool(sample.get("reference_reviewed", False)),
             "speech_detection": speech_detection_metrics(
-                audio_seconds, backend_timings),
+                audio_seconds, backend_timings,
+                expected_trials=(runs if model_name in engine.WHISPER_MODELS
+                                 else None)),
             "detected_languages": detected_language_metrics(backend_timings),
             "backend_stages": backend_stage_metrics(backend_timings),
             "parakeet_windowing": parakeet_window_metrics(backend_timings),
@@ -569,10 +576,19 @@ def _print_summary(result):
             ))
         detection = sample["speech_detection"]
         if detection is not None:
-            print("  VAD speech: %.3fs median of %.3fs; rejected %d/%d trials" % (
-                detection["median_seconds"], sample["audio_seconds"],
-                detection["rejected_trials"], detection["trials"],
-            ))
+            if detection["median_seconds"] is None:
+                print("  VAD speech: not measured (%d/%d trials; %d missing)" % (
+                    detection["measured_trials"], detection["trials"],
+                    detection["missing_trials"],
+                ))
+            else:
+                print("  VAD speech: %.3fs median of %.3fs; rejected %d/%d measured "
+                      "trials; %d missing" % (
+                          detection["median_seconds"], sample["audio_seconds"],
+                          detection["rejected_trials"],
+                          detection["measured_trials"],
+                          detection["missing_trials"],
+                      ))
         detected_languages = sample.get("detected_languages")
         if detected_languages is not None:
             print("  Detected language trials: %s" % " | ".join(

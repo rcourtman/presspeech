@@ -42,7 +42,10 @@ but canonical fixtures make runs easier to compare.
   inspect both WER and the reported window plan for duplication or loss.
 - Keep the same clips, references, run count, model precision, and hardware when
   comparing a decoding or VAD change. Reports record the effective Whisper VAD
-  policy and per-trial VAD-retained duration.
+  policy and per-trial VAD-retained duration. `speech_detection.trials` is the
+  expected run count; compare it with `measured_trials` and `missing_trials`.
+  A missing duration is not evidence that VAD retained speech: investigate
+  incomplete timing before treating a run as a pass.
 - The manifest defaults to the historical `"language": "en"` policy. Use
   `"language": "auto"` (or `--language auto`) to exercise multilingual
   Whisper's per-dictation detection, matching Presspeech's Whisper turbo path.

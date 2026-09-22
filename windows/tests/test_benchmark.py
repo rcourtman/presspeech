@@ -229,6 +229,30 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["median_audio_ratio"], 0.5)
         self.assertEqual(metrics["rejected_trials"], 1)
         self.assertEqual(metrics["trials"], 3)
+        self.assertEqual(metrics["measured_trials"], 3)
+        self.assertEqual(metrics["missing_trials"], 0)
+
+    def test_speech_detection_metrics_expose_missing_whisper_timings(self):
+        metrics = benchmark.speech_detection_metrics(2.0, [
+            {"speech_seconds": 1.5},
+            {"generate": 0.2},
+            mock.sentinel.timing,
+        ], expected_trials=3)
+
+        self.assertEqual(metrics["trials"], 3)
+        self.assertEqual(metrics["measured_trials"], 1)
+        self.assertEqual(metrics["missing_trials"], 2)
+        self.assertEqual(metrics["rejected_trials"], 0)
+        self.assertEqual(metrics["all_seconds"], [1.5])
+
+    def test_speech_detection_metrics_keep_all_missing_whisper_trials_visible(self):
+        metrics = benchmark.speech_detection_metrics(
+            2.0, [{"generate": 0.2}, {}], expected_trials=2)
+
+        self.assertEqual(metrics["trials"], 2)
+        self.assertEqual(metrics["measured_trials"], 0)
+        self.assertEqual(metrics["missing_trials"], 2)
+        self.assertIsNone(metrics["median_seconds"])
 
     def test_speech_detection_metrics_ignore_non_whisper_timings(self):
         self.assertIsNone(benchmark.speech_detection_metrics(
@@ -547,6 +571,8 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(
             result["whisper_vad_policy"], benchmark.engine.WHISPER_VAD_POLICY)
         self.assertEqual(detection["all_seconds"], [1.25, 0.0])
+        self.assertEqual(detection["measured_trials"], 2)
+        self.assertEqual(detection["missing_trials"], 0)
         self.assertEqual(result["reviewed_speech_vad_rejection_count"], 1)
         self.assertEqual(
             result["reviewed_speech_vad_rejection_trial_count"], 1)
@@ -560,6 +586,38 @@ class MetricTests(unittest.TestCase):
             "failed_trials": 1,
             "trials": 2,
         })
+
+    def test_benchmark_prints_all_missing_whisper_vad_timings(self):
+        manifest = {
+            "model": "base.en",
+            "runs": 2,
+            "samples": [{"id": "speech", "audio": "speech.wav"}],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "int8"
+        transcriber.last_timing = {}
+        transcriber.transcribe.return_value = "speech"
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 2.0, 16000)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        detection = result["samples"][0]["speech_detection"]
+        self.assertEqual(detection["trials"], 2)
+        self.assertEqual(detection["measured_trials"], 0)
+        self.assertEqual(detection["missing_trials"], 2)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn("VAD speech: not measured (0/2 trials; 2 missing)",
+                      output.getvalue())
+        json.dumps(result, allow_nan=False)
 
 
 if __name__ == "__main__":
