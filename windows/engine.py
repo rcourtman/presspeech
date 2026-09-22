@@ -199,6 +199,48 @@ def _decoded_parakeet_text(decoded):
     return decoded.strip()
 
 
+def _parakeet_timestamp_text_parts(decoded, records):
+    """Map streamed timestamp tokens back onto the processor's decoded text.
+
+    Transformers builds timestamp records with ``tokenizers.DecodeStream``.
+    The locked tokenizer currently includes word-boundary spaces in its stream
+    chunks, but Transformers' public Parakeet TDT example documents chunks
+    without the spaces present in the complete decode.  Do not depend on that
+    implementation detail: keep the complete decode authoritative for text
+    while using records for timing, and assign intervening whitespace to the
+    following token.  Any non-whitespace disagreement still fails closed
+    rather than guessing at a long-dictation seam.
+    """
+    cursor = 0
+    parts = []
+    for index, record in enumerate(records):
+        token = record["token"]
+        if not token:
+            raise RuntimeError("Parakeet returned malformed token timestamps")
+
+        # A leading DecodeStream space can be removed by decoded.strip().  It
+        # is presentation whitespace, not part of the first spoken token.
+        match_token = token.lstrip() if index == 0 else token
+        if not match_token:
+            raise RuntimeError("Parakeet returned malformed token timestamps")
+        token_start = decoded.find(match_token, cursor)
+        gap = decoded[cursor:token_start] if token_start >= 0 else ""
+        if token_start < 0 or (gap and not gap.isspace()):
+            raise RuntimeError(
+                "Parakeet token timestamps do not match the decoded text")
+        token_end = token_start + len(match_token)
+        parts.append(decoded[cursor:token_end])
+        cursor = token_end
+
+    trailing = decoded[cursor:]
+    if trailing and not trailing.isspace():
+        raise RuntimeError(
+            "Parakeet token timestamps do not match the decoded text")
+    if parts:
+        parts[-1] += trailing
+    return parts
+
+
 def _owned_parakeet_text(decoded, timestamps, window,
                          sample_rate=PARAKEET_SAMPLE_RATE):
     """Return one window's timestamp-owned token text and boundary state."""
@@ -217,8 +259,7 @@ def _owned_parakeet_text(decoded, timestamps, window,
 
     owned_start = (window.owned_start - window.audio_start) / sample_rate
     owned_end = (window.owned_end - window.audio_start) / sample_rate
-    selected = []
-    timestamp_text = []
+    selected_indexes = []
     for index, record in enumerate(records):
         if not isinstance(record, dict) or not isinstance(record.get("token"), str):
             raise RuntimeError("Parakeet returned malformed token timestamps")
@@ -230,23 +271,20 @@ def _owned_parakeet_text(decoded, timestamps, window,
                 or not math.isfinite(start) or not math.isfinite(end)
                 or start < 0 or end < start):
             raise RuntimeError("Parakeet returned malformed token timestamps")
-        timestamp_text.append(record["token"])
         midpoint = (float(start) + float(end)) / 2
         # A token exactly on a seam belongs to the earlier range. This makes
         # adjacent ownership deterministic even for zero-duration punctuation.
         after_start = (midpoint >= owned_start if window.owned_start == 0
                        else midpoint > owned_start)
         if after_start and midpoint <= owned_end:
-            selected.append((index, record["token"]))
+            selected_indexes.append(index)
 
-    if "".join(timestamp_text).strip() != decoded:
-        raise RuntimeError(
-            "Parakeet token timestamps do not match the decoded text")
+    text_parts = _parakeet_timestamp_text_parts(decoded, records)
 
-    if not selected:
+    if not selected_indexes:
         return "", False
-    first_index = selected[0][0]
-    return "".join(token for _index, token in selected), first_index > 0
+    first_index = selected_indexes[0]
+    return "".join(text_parts[index] for index in selected_indexes), first_index > 0
 
 
 def _join_owned_parakeet_text(parts):

@@ -98,11 +98,12 @@ class ParakeetConfigurationTests(unittest.TestCase):
         first_text = engine._owned_parakeet_text(
             "Hello international",
             [[
-                # These chunks mirror DecodeStream with the pinned model's
-                # Metaspace BPE tokenizer; a token is not necessarily a word.
+                # Transformers' documented TDT timestamps omit the spaces
+                # present in the processor's complete decoded text. A token
+                # is also not necessarily a whole word.
                 {"token": "H", "start": 0.5, "end": 0.6},
                 {"token": "ello", "start": 0.6, "end": 1.0},
-                {"token": " intern", "start": 3.8, "end": 4.0},
+                {"token": "intern", "start": 3.8, "end": 4.0},
                 {"token": "ational", "start": 4.2, "end": 4.4},
             ]],
             first,
@@ -113,7 +114,7 @@ class ParakeetConfigurationTests(unittest.TestCase):
             [[
                 {"token": "intern", "start": 1.8, "end": 2.0},
                 {"token": "ational", "start": 2.2, "end": 2.4},
-                {"token": " work", "start": 3.0, "end": 3.4},
+                {"token": "work", "start": 3.0, "end": 3.4},
             ]],
             second,
             sample_rate=10,
@@ -131,6 +132,51 @@ class ParakeetConfigurationTests(unittest.TestCase):
             ]),
             "forty-two",
         )
+
+    def test_parakeet_timestamp_alignment_preserves_decoder_whitespace(self):
+        # Reduced from the public Transformers Parakeet TDT v3 example. Its
+        # timestamp token strings contain no word-boundary spaces even though
+        # the complete decode does.
+        decoded = "mister Quilter is the apostle."
+        records = [
+            {"token": "m", "start": 0.24, "end": 0.48},
+            {"token": "ister", "start": 0.48, "end": 0.64},
+            {"token": "Qu", "start": 0.64, "end": 0.88},
+            {"token": "il", "start": 0.88, "end": 1.12},
+            {"token": "ter", "start": 1.12, "end": 1.36},
+            {"token": "is", "start": 1.36, "end": 1.44},
+            {"token": "the", "start": 1.44, "end": 1.60},
+            {"token": "ap", "start": 1.68, "end": 1.76},
+            {"token": "ost", "start": 1.76, "end": 1.92},
+            {"token": "le", "start": 2.00, "end": 2.16},
+            {"token": ".", "start": 2.16, "end": 2.16},
+        ]
+        window = engine._ParakeetWindow(
+            audio_start=0, audio_end=300, owned_start=0, owned_end=300)
+
+        self.assertEqual(
+            engine._owned_parakeet_text(
+                decoded, [records], window, sample_rate=100),
+            (decoded, False),
+        )
+
+        # The exact locked tokenizers 0.23.1 stream includes those spaces.
+        # Supporting the documented shape must not regress the release shape.
+        spaced_records = [dict(record) for record in records]
+        for index in (2, 5, 6, 7):
+            spaced_records[index]["token"] = " " + spaced_records[index]["token"]
+        self.assertEqual(
+            engine._owned_parakeet_text(
+                decoded, [spaced_records], window, sample_rate=100),
+            (decoded, False),
+        )
+
+    def test_parakeet_timestamp_alignment_rejects_non_whitespace_difference(self):
+        with self.assertRaisesRegex(RuntimeError, "do not match"):
+            engine._parakeet_timestamp_text_parts(
+                "safe private text",
+                [{"token": "safe"}, {"token": "text"}],
+            )
 
     def test_parakeet_overlap_fails_closed_when_text_has_no_timestamps(self):
         window = engine._ParakeetWindow(
