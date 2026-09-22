@@ -140,6 +140,23 @@ jobs:
             Remove-Item -LiteralPath $env:PRESSPEECH_CERT_PATH -Force `
               -ErrorAction SilentlyContinue
           }
+      - name: Qualify installed Windows package
+        shell: pwsh
+        run: |
+          .\windows\smoke-installer.ps1 `
+            -Installer "windows\dist\installer\Presspeech-Setup-$env:PRESSPEECH_RELEASE_VERSION-x64.exe" `
+            -ExpectedVersion $env:PRESSPEECH_RELEASE_VERSION
+      - name: Installer qualification diagnostics
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Directory `
+            -Filter "presspeech-installer-smoke-*" | ForEach-Object {
+            Get-ChildItem -LiteralPath $_.FullName -File | ForEach-Object {
+              Write-Output "--- $($_.Name) ---"
+              Get-Content -LiteralPath $_.FullName -Tail 200
+            }
+          }
       - name: Publish Windows prerelease
         shell: pwsh
         env:

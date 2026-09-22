@@ -295,6 +295,17 @@ reproduce them exactly. The workflow compares GitHub's published asset names,
 sizes,
 SHA-256 digests, and download URLs with the local installer and checksum before
 reporting a successful release.
+
+Before publication, the hosted Windows runner installs the finished installer
+into a temporary directory, checks its version and uninstall registration,
+runs the installed executable's model-free package test, and uninstalls it.
+Any failure blocks publication; install/uninstall logs are retained and printed
+in the workflow diagnostics. This checks the packaged installation lifecycle,
+not microphone capture, first dictation, upgrades, or interaction with target apps.
+`pwsh -File windows/smoke-installer.ps1 -SelfTest` exercises its guards and process
+handling without installing anything. Real qualification refuses developer and
+self-hosted machines, including machines with an existing Presspeech installation.
+A different `/DIR` alone would still share [Inno Setup's production uninstall identity](https://jrsoftware.org/ishelp/topic_setup_appid.htm).
 If the repository later receives a code-signing
 certificate, add its base64 PFX and password as
 `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD`; the same build
