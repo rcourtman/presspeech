@@ -42,6 +42,13 @@ class DocumentParser(HTMLParser):
         self.primary_nav_count = 0
         self.primary_nav_links: list[str] = []
         self._in_primary_nav = False
+        self.brand_link_count = 0
+        self.brand_link_names: list[str] = []
+        self.brand_link_issues: list[str] = []
+        self.brand_mark_count = 0
+        self.brand_mark_issues: list[str] = []
+        self._brand_link_text: list[str] | None = None
+        self._in_brand_mark = False
         self.current_links: list[tuple[str | None, str]] = []
         self.skip_links: list[str | None] = []
         self.skip_link_names: list[str] = []
@@ -91,13 +98,34 @@ class DocumentParser(HTMLParser):
             self.primary_nav_count += 1
             self._in_primary_nav = True
         if tag == "a":
+            classes = (attributes.get("class") or "").split()
+            if "brand" in classes:
+                self.brand_link_count += 1
+                self._brand_link_text = []
+                if not self._in_primary_nav:
+                    self.brand_link_issues.append(
+                        "brand link must be inside the primary navigation"
+                    )
+                if not attributes.get("href"):
+                    self.brand_link_issues.append("brand link must have a destination")
+                if any(name in attributes for name in ("hidden", "inert")) or (
+                    attributes.get("aria-hidden") or ""
+                ).lower() == "true":
+                    self.brand_link_issues.append(
+                        "brand link must be exposed to assistive technology"
+                    )
+                if any(name in attributes for name in ("aria-label", "aria-labelledby")):
+                    self.brand_link_issues.append(
+                        "brand link must take its accessible name from visible text"
+                    )
+                if attributes.get("role", "link") != "link":
+                    self.brand_link_issues.append("brand link must retain link semantics")
             if self._in_primary_nav and attributes.get("href") is not None:
                 self.primary_nav_links.append(attributes["href"])
             if attributes.get("aria-current") is not None:
                 self.current_links.append(
                     (attributes.get("href"), attributes["aria-current"] or "")
                 )
-            classes = (attributes.get("class") or "").split()
             if "skip-link" in classes:
                 self.skip_links.append(attributes.get("href"))
                 self.skip_link_orders.append(self._element_order)
@@ -113,19 +141,38 @@ class DocumentParser(HTMLParser):
                     self.skip_link_issues.append("skip link accessible label must match 'Skip to content'")
                 if attributes.get("role", "link") != "link":
                     self.skip_link_issues.append("skip link must retain link semantics")
+        classes = (attributes.get("class") or "").split()
+        if "brand-mark" in classes:
+            self.brand_mark_count += 1
+            self._in_brand_mark = True
+            if self._brand_link_text is None:
+                self.brand_mark_issues.append("brand mark must be inside the brand link")
+            if (attributes.get("aria-hidden") or "").lower() != "true":
+                self.brand_mark_issues.append(
+                    "decorative brand mark must use aria-hidden='true'"
+                )
 
     def handle_data(self, data: str) -> None:
         if self._skip_link_text is not None:
             self._skip_link_text.append(data)
+        if self._brand_link_text is not None and not self._in_brand_mark:
+            self._brand_link_text.append(data)
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "nav" and self._in_primary_nav:
             self._in_primary_nav = False
         if tag == "body":
             self._in_body = False
+        if tag == "span" and self._in_brand_mark:
+            self._in_brand_mark = False
         if tag == "a" and self._skip_link_text is not None:
             self.skip_link_names.append(" ".join("".join(self._skip_link_text).split()))
             self._skip_link_text = None
+        if tag == "a" and self._brand_link_text is not None:
+            self.brand_link_names.append(
+                " ".join("".join(self._brand_link_text).split())
+            )
+            self._brand_link_text = None
 
 
 def expected_current_href(path: Path, docs: Path) -> str | None:
@@ -167,6 +214,16 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         errors.append(f"{parser.missing_alt_count} img element(s) lack alt")
     if parser.primary_nav_count != 1:
         errors.append(f"expected one primary navigation, found {parser.primary_nav_count}")
+    if parser.brand_link_count != 1:
+        errors.append(f"expected one brand link, found {parser.brand_link_count}")
+    if parser.brand_mark_count != 1:
+        errors.append(f"expected one decorative brand mark, found {parser.brand_mark_count}")
+    if parser.brand_link_names != ["Presspeech"]:
+        errors.append(
+            "brand link accessible name must come from its visible 'Presspeech' text; "
+            f"found {parser.brand_link_names!r}"
+        )
+    errors.extend(dict.fromkeys(parser.brand_link_issues + parser.brand_mark_issues))
     relative = path.relative_to(docs)
     if relative != ERROR_PAGE:
         expected_help_href = (
@@ -443,7 +500,9 @@ def run_self_test() -> None:
         index.write_text(
             "<!doctype html><html lang='en'><head><title>Test</title></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
-            "<nav aria-label='Primary'><a href='./' aria-current='page'>Home</a>"
+            "<nav aria-label='Primary'><a class='brand' href='./' aria-current='page'>"
+            "<span class='brand-mark' aria-hidden='true'>P</span>"
+            "<span>Presspeech</span></a>"
             "<a href='troubleshooting.html'>Help</a></nav>"
             "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''></main>"
             "</body></html>",
@@ -467,6 +526,10 @@ def run_self_test() -> None:
             (valid_index.replace("class='skip-link'", "class='skip-link' role='button'"), "link semantics"),
             (valid_index.replace("Skip to content", "Continue"), "consistent visible name"),
             (valid_index.replace("Skip to content", "<span hidden>Skip to content</span>"), "plain visible text"),
+            (valid_index.replace(" aria-hidden='true'>P", ">P"), "decorative brand mark"),
+            (valid_index.replace("<span>Presspeech</span>", "<span>Other</span>"), "brand link accessible name"),
+            (valid_index.replace("class='brand'", "class='brand' aria-label='Home'"), "visible text"),
+            (valid_index.replace("class='brand'", "class='brand' aria-hidden='true'"), "assistive technology"),
         ]
         for markup, expected_error in cases:
             index.write_text(markup, encoding="utf-8")
@@ -482,7 +545,9 @@ def run_self_test() -> None:
         compatibility.write_text(
             "<!doctype html><html lang='en'><head><title>Compatibility</title></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
-            "<nav aria-label='Primary'><a href='./'>Home</a>"
+            "<nav aria-label='Primary'><a class='brand' href='./'>"
+            "<span class='brand-mark' aria-hidden='true'>P</span>"
+            "<span>Presspeech</span></a>"
             "<a href='troubleshooting.html' aria-current='page'>Help</a></nav>"
             "<main id='main-content'><h1>Compatibility</h1></main>"
             "</body></html>",
@@ -512,7 +577,9 @@ def run_self_test() -> None:
         error_page.write_text(
             "<!doctype html><html lang='en'><head><title>Missing</title></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
-            "<nav aria-label='Primary'><a href='./'>Home</a></nav>"
+            "<nav aria-label='Primary'><a class='brand' href='./'>"
+            "<span class='brand-mark' aria-hidden='true'>P</span>"
+            "<span>Presspeech</span></a></nav>"
             "<main id='main-content'><h1>Not found</h1></main></body></html>",
             encoding="utf-8",
         )
