@@ -780,6 +780,8 @@ section p:last-child,
   margin: 0;
   border: 0;
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Code ---------- */
@@ -806,6 +808,7 @@ p code,
 td code,
 th code,
 li code {
+  overflow-wrap: anywhere;
   padding: 0.08em 0.4em;
   background: var(--code);
   border-radius: 4px;
@@ -842,12 +845,14 @@ pre code {
   padding: 0;
   margin: 18px 0 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   counter-reset: step;
 }
 
 .steps li {
   position: relative;
+  overflow-wrap: anywhere;
   padding: 16px 18px 16px 56px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -872,7 +877,7 @@ pre code {
   font-variant-numeric: tabular-nums;
 }
 
-.steps li strong {
+.steps li > strong {
   display: block;
   font-weight: 640;
   letter-spacing: -0.005em;
@@ -1040,7 +1045,7 @@ td strong {
   .grid.two,
   .facts,
   .checkpoints {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .hero h1,
