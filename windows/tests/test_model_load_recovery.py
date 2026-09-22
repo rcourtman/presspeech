@@ -42,7 +42,7 @@ class ModelLoadRecoveryTests(unittest.TestCase):
         instance._transcribe_worker_inner(audio)
         instance.transcriber.load.assert_called_once_with('base.en', notify=instance.notify)
         self.assertEqual(instance.transcriber.transcribe.call_args_list,
-                         [mock.call(audio, language='en'), mock.call(audio, language='en')])
+                         [mock.call(audio), mock.call(audio)])
         instance._deliver_text.assert_called_once()
 
     def test_nonparakeet_decode_failure_does_not_switch_models(self):
