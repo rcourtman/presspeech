@@ -26,6 +26,7 @@ MIN_TEXT_CONTRAST = 4.5
 MIN_FOCUS_CONTRAST = 3.0
 MIN_FOCUS_THICKNESS = 2
 MIN_MOBILE_NAV_TARGET = 44
+MIN_STICKY_HEADER_OFFSET = 64
 ERROR_PAGE = Path("404.html")
 
 
@@ -315,6 +316,40 @@ def navigation_target_errors(css: str) -> list[str]:
     return errors
 
 
+def sticky_header_offset_errors(css: str) -> list[str]:
+    """Keep fragment and focus scrolling clear of the shared sticky header."""
+    errors: list[str] = []
+    root = css_declarations(css, "html")
+    header = css_declarations(css, ".site-header")
+    if header is None:
+        return ["missing shared site-header rules"]
+    if header.get("position", "").strip() not in {"fixed", "sticky"}:
+        return []
+
+    offset = pixel_value(root.get("scroll-padding-top")) if root is not None else None
+    if offset is None or offset < MIN_STICKY_HEADER_OFFSET:
+        errors.append(
+            "wide-screen fragment scrolling must reserve at least "
+            f"{MIN_STICKY_HEADER_OFFSET}px above targets"
+        )
+
+    # Below this breakpoint the navigation can wrap onto a second row. Keeping
+    # that taller header sticky either needs a fragile second offset or can
+    # obscure focus at large text sizes, so the shared layout deliberately
+    # returns it to normal flow and removes the now-unneeded scroll gap.
+    tablet = css_block(css, "@media (max-width: 920px)")
+    if tablet is None:
+        errors.append("missing the max-width: 920px wrapped-navigation rules")
+        return errors
+    tablet_root = css_declarations(tablet, "html")
+    tablet_header = css_declarations(tablet, ".site-header")
+    if tablet_root is None or pixel_value(tablet_root.get("scroll-padding-top")) != 0:
+        errors.append("non-sticky wrapped navigation must reset scroll-padding-top to 0px")
+    if tablet_header is None or tablet_header.get("position", "").strip() != "static":
+        errors.append("wrapped navigation must use a static site header")
+    return errors
+
+
 def focus_indicator_errors(css: str) -> list[str]:
     """Enforce a durable keyboard focus ring on every light site surface."""
     errors: list[str] = []
@@ -391,6 +426,8 @@ def accessibility_errors(docs: Path = DOCS, styles: Path = STYLES) -> list[str]:
         errors.append(f"{styles.name}: {error}")
     css = styles.read_text(encoding="utf-8")
     for error in navigation_target_errors(css):
+        errors.append(f"{styles.name}: {error}")
+    for error in sticky_header_offset_errors(css):
         errors.append(f"{styles.name}: {error}")
     for error in focus_indicator_errors(css):
         errors.append(f"{styles.name}: {error}")
@@ -508,6 +545,35 @@ def run_self_test() -> None:
     errors = navigation_target_errors(missing_width_css)
     if not any("44px min-width" in error for error in errors):
         raise RuntimeError("self-test: mobile link without a minimum width was accepted")
+
+    sticky_header_css = """
+    html { scroll-padding-top: 76px; }
+    .site-header { position: sticky; top: 0; }
+    @media (max-width: 920px) {
+      html { scroll-padding-top: 0px; }
+      .site-header { position: static; }
+    }
+    """
+    if sticky_header_offset_errors(sticky_header_css):
+        raise RuntimeError("self-test: valid sticky-header offsets were rejected")
+    if sticky_header_offset_errors(".site-header { position: static; }"):
+        raise RuntimeError("self-test: unobstructed static header was rejected")
+    missing_offset_css = sticky_header_css.replace("scroll-padding-top: 76px;", "")
+    errors = sticky_header_offset_errors(missing_offset_css)
+    if not any("reserve at least" in error for error in errors):
+        raise RuntimeError("self-test: missing sticky-header offset was accepted")
+    wrapped_sticky_css = sticky_header_css.replace(
+        ".site-header { position: static; }", ".site-header { position: sticky; }"
+    )
+    errors = sticky_header_offset_errors(wrapped_sticky_css)
+    if not any("static site header" in error for error in errors):
+        raise RuntimeError("self-test: sticky wrapped navigation was accepted")
+    retained_offset_css = sticky_header_css.replace(
+        "scroll-padding-top: 0px;", "scroll-padding-top: 76px;"
+    )
+    errors = sticky_header_offset_errors(retained_offset_css)
+    if not any("reset scroll-padding-top" in error for error in errors):
+        raise RuntimeError("self-test: stale non-sticky scroll offset was accepted")
 
     focus_css = """
     :root {
