@@ -4797,6 +4797,11 @@ enum TextInsertionOutcome: Equatable {
     case inserted
     case copiedWithoutPasting
     case failed
+    // Terminal failure: a fallback can itself copy when focus changes, so it
+    // must not run after another process has replaced our clipboard contents.
+    case clipboardChanged
+
+    var allowsFallback: Bool { self == .failed }
 }
 
 func dictationCompletionNotice(processedText: String,
@@ -4807,7 +4812,7 @@ func dictationCompletionNotice(processedText: String,
     switch insertionOutcome {
     case .copiedWithoutPasting:
         return .copiedToClipboard
-    case .failed:
+    case .failed, .clipboardChanged:
         return keepsRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
     case .inserted:
         return nil
@@ -4928,6 +4933,7 @@ private func clipboardPasteKeyboardEventSteps(commandKey: CGKeyCode,
 private enum ClipboardPasteEventOutcome: Equatable {
     case posted
     case targetChanged
+    case clipboardChanged
     case failed
 }
 
@@ -4936,6 +4942,7 @@ private func postFocusBoundClipboardPasteSteps(
     _ steps: [KeyboardEventStep],
     pasteKey: CGKeyCode,
     targetStillFocused: () -> Bool,
+    clipboardStillOwned: () -> Bool,
     postStep: (KeyboardEventStep) -> Bool
 ) -> ClipboardPasteEventOutcome {
     var pressedKeys: [CGKeyCode] = []
@@ -4952,9 +4959,18 @@ private func postFocusBoundClipboardPasteSteps(
         // Command+V is several independent HID events. Focus can move after
         // Command goes down, so revalidate immediately before the V key-down
         // that makes the clipboard contents visible to the destination.
-        if step.virtualKey == pasteKey, step.keyDown, !targetStillFocused() {
-            releasePressedKeys()
-            return .targetChanged
+        if step.virtualKey == pasteKey, step.keyDown {
+            let focused = targetStillFocused()
+            // AX focus lookup may block. Check clipboard ownership afterward,
+            // even when focus changed, before a copy-only fallback can run.
+            guard clipboardStillOwned() else {
+                releasePressedKeys()
+                return .clipboardChanged
+            }
+            guard focused else {
+                releasePressedKeys()
+                return .targetChanged
+            }
         }
         guard postStep(step) else {
             releasePressedKeys()
@@ -4997,7 +5013,7 @@ enum TextInserter {
                 }
                 return outcome
             }
-            if outcome == .copiedWithoutPasting { return outcome }
+            if !outcome.allowsFallback { return outcome }
             log("text insertion attempt failed: \(candidate.displayName)")
         }
         return .failed
@@ -5045,6 +5061,19 @@ private enum ClipboardPasteInserter {
     struct Snapshot {
         let items: [NSPasteboardItem]
         let sourceChangeCount: Int
+    }
+
+    /// A receipt identifies the generation acquired by this write. Reading
+    /// changeCount after returning could instead adopt a newer external copy.
+    struct WriteReceipt {
+        let pasteboardName: NSPasteboard.Name
+        let changeCount: Int
+
+        func stillOwns(_ pasteboard: NSPasteboard) -> Bool {
+            pasteboard.name == pasteboardName
+                && pasteboardChangeCountAllowsRestore(current: pasteboard.changeCount,
+                                                       expected: changeCount)
+        }
     }
 
     /// One restore can still be waiting when a fast subsequent dictation
@@ -5190,10 +5219,16 @@ private enum ClipboardPasteInserter {
     }
 
     static func write(_ text: String, to pb: NSPasteboard, transient: Bool = false) -> Bool {
+        writeWithReceipt(text, to: pb, transient: transient) != nil
+    }
+
+    static func writeWithReceipt(_ text: String,
+                                 to pb: NSPasteboard,
+                                 transient: Bool = false) -> WriteReceipt? {
         // Build the complete item before taking pasteboard ownership so a
         // representation failure cannot erase the user's existing clipboard.
         let item = NSPasteboardItem()
-        guard item.setString(text, forType: .string) else { return false }
+        guard item.setString(text, forType: .string) else { return nil }
 
         if transient {
             // These community-standard markers keep cooperating clipboard
@@ -5204,15 +5239,17 @@ private enum ClipboardPasteInserter {
             guard item.setData(Data(), forType: TRANSIENT_PASTEBOARD_TYPE),
                   item.setData(Data(), forType: AUTO_GENERATED_PASTEBOARD_TYPE),
                   item.setString(SETTINGS_SUITE, forType: PASTEBOARD_SOURCE_TYPE) else {
-                return false
+                return nil
             }
         }
 
         #if DEBUG
         if pb.name == NSPasteboard.general.name {
-            guard NativeInteractionHooks.permitClipboardWrite?() ?? true else { return false }
+            guard NativeInteractionHooks.permitClipboardWrite?() ?? true else { return nil }
         }
+        #endif
         let ownedChangeCount = pb.prepareForNewContents(with: contentsOptions(transient: transient))
+        #if DEBUG
         defer {
             if pb.name == NSPasteboard.general.name {
                 // Use the generation returned by our ownership acquisition,
@@ -5220,8 +5257,6 @@ private enum ClipboardPasteInserter {
                 NativeInteractionHooks.didWriteClipboard?(ownedChangeCount)
             }
         }
-        #else
-        pb.prepareForNewContents(with: contentsOptions(transient: transient))
         #endif
         let wrote = pb.writeObjects([item])
         if wrote {
@@ -5230,7 +5265,7 @@ private enum ClipboardPasteInserter {
             // and schedules a fresh timer after posting Command+V.
             discardPendingRestore(on: pb)
         }
-        return wrote
+        return wrote ? WriteReceipt(pasteboardName: pb.name, changeCount: ownedChangeCount) : nil
     }
 
     static func insert(_ text: String,
@@ -5261,21 +5296,28 @@ private enum ClipboardPasteInserter {
             log("clipboard changed during snapshot; restore skipped")
         }
 
-        guard write(text, to: pb, transient: previous != nil) else {
+        guard let receipt = writeWithReceipt(text, to: pb, transient: previous != nil) else {
             log("pasteboard write failed")
             return .failed
         }
-        let writeChangeCount = pb.changeCount
+        let writeChangeCount = receipt.changeCount
 
         // A lazy pasteboard provider can make the optional snapshot above
         // block long enough for the user to focus another window. Recheck at
         // the last possible point before posting Command+V. Rewrite the
         // transcript without temporary-paste markers so a focus change
         // degrades to an ordinary manual paste instead of losing the words.
-        guard dictationPasteTargetMatches(expectedTarget,
-                                          currentDictationPasteTarget()) else {
-            return TextInserter.copyWithoutPasting(text)
+        let targetStillFocused = dictationPasteTargetMatches(expectedTarget,
+                                                             currentDictationPasteTarget())
+        guard receipt.stillOwns(pb) else {
+            // The target lookup can block. Do not post Command+V for a newer
+            // clipboard owner or schedule an old snapshot against its count.
+            // Stop the delivery chain: a later fallback's copy-only path
+            // could otherwise overwrite the newer owner's content.
+            log("clipboard changed before paste; clipboard insertion skipped")
+            return .clipboardChanged
         }
+        guard targetStillFocused else { return TextInserter.copyWithoutPasting(text) }
 
         let steps = clipboardPasteKeyboardEventSteps(commandKey: virtualKeyCommand,
                                                      pasteKey: virtualKeyV)
@@ -5285,8 +5327,13 @@ private enum ClipboardPasteInserter {
             targetStillFocused: {
                 dictationPasteTargetMatches(expectedTarget,
                                              currentDictationPasteTarget())
-            }
+            },
+            clipboardStillOwned: { receipt.stillOwns(pb) }
         )
+        if postOutcome == .clipboardChanged {
+            log("clipboard changed during paste focus check; insertion stopped")
+            return .clipboardChanged
+        }
         if postOutcome == .targetChanged {
             return TextInserter.copyWithoutPasting(text)
         }
@@ -5317,7 +5364,8 @@ private enum ClipboardPasteInserter {
     private static func post(
         _ steps: [KeyboardEventStep],
         pasteKey: CGKeyCode,
-        targetStillFocused: () -> Bool
+        targetStillFocused: () -> Bool,
+        clipboardStillOwned: () -> Bool
     ) -> ClipboardPasteEventOutcome {
         let source = CGEventSource(stateID: .hidSystemState)
         let events = steps.compactMap { step -> (KeyboardEventStep, CGEvent)? in
@@ -5337,7 +5385,8 @@ private enum ClipboardPasteInserter {
         return postFocusBoundClipboardPasteSteps(
             steps,
             pasteKey: pasteKey,
-            targetStillFocused: targetStillFocused
+            targetStillFocused: targetStillFocused,
+            clipboardStillOwned: clipboardStillOwned
         ) { step in
             guard let event = events.first(where: { $0.0 == step })?.1 else {
                 return false
@@ -8612,7 +8661,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             }
                         case .copiedWithoutPasting:
                             log("paste skipped; focused window changed; transcript copied")
-                        case .failed:
+                        case .failed, .clipboardChanged:
                             log("text insertion failed")
                         }
                         completionNotice = dictationCompletionNotice(
@@ -14932,6 +14981,7 @@ private enum PresspeechSelfTest {
                 steps,
                 pasteKey: 0x09,
                 targetStillFocused: { false },
+                clipboardStillOwned: { true },
                 postStep: {
                     posted.append($0)
                     return true
@@ -14952,6 +15002,64 @@ private enum PresspeechSelfTest {
             ],
             "focus-bound clipboard paste should release Command without emitting V"
         )
+
+        for focusSurvives in [true, false] {
+            let ownershipDuringFocusProbe = MainActor.assumeIsolated {
+                let pasteboard = NSPasteboard(name: NSPasteboard.Name(
+                    "com.local.presspeech.self-test.pre-v-ownership.\(UUID().uuidString)"
+                ))
+                defer { pasteboard.releaseGlobally() }
+                let receipt = ClipboardPasteInserter.writeWithReceipt(
+                    "temporary pre-V fixture", to: pasteboard
+                )
+                var posted: [KeyboardEventStep] = []
+                var callbackOrder: [String] = []
+                let outcome = postFocusBoundClipboardPasteSteps(
+                    clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                    pasteKey: 0x09,
+                    targetStillFocused: {
+                        callbackOrder.append("focus")
+                        // Model another process copying during a blocking AX
+                        // lookup, after Command-down but before V-down.
+                        pasteboard.clearContents()
+                        _ = pasteboard.setString("new external pre-V fixture", forType: .string)
+                        return focusSurvives
+                    },
+                    clipboardStillOwned: {
+                        callbackOrder.append("ownership")
+                        return receipt?.stillOwns(pasteboard) == true
+                    },
+                    postStep: {
+                        posted.append($0)
+                        return true
+                    }
+                )
+                return (outcome: outcome, posted: posted, order: callbackOrder,
+                        remaining: pasteboard.string(forType: .string))
+            }
+            try expect(ownershipDuringFocusProbe.outcome, equals: .clipboardChanged,
+                       "external copy during AX lookup must stop paste even if focus also changed")
+            try expect(ownershipDuringFocusProbe.order, equals: ["focus", "ownership"],
+                       "ownership must be rechecked after the potentially blocking focus lookup")
+            try expect(ownershipDuringFocusProbe.posted, equals: [
+                KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
+                KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
+            ], "ownership loss must unwind Command without posting either V event")
+            try expect(ownershipDuringFocusProbe.remaining, equals: "new external pre-V fixture",
+                       "ownership loss must preserve the newer external copy")
+        }
+        try expect(TextInsertionOutcome.clipboardChanged.allowsFallback, equals: false,
+                   "clipboard ownership loss must stop fallbacks that could copy over newer content")
+        try expect(dictationCompletionNotice(processedText: "fixed fixture",
+                                             insertionOutcome: .clipboardChanged,
+                                             keepsRecentTranscripts: true),
+                   equals: .insertionFailed,
+                   "ownership loss should report insertion failure with the retained transcript")
+        try expect(dictationCompletionNotice(processedText: "fixed fixture",
+                                             insertionOutcome: .clipboardChanged,
+                                             keepsRecentTranscripts: false),
+                   equals: .insertionFailedWithoutHistory,
+                   "ownership loss should honor disabled transcript history in its failure notice")
 
         let pasteboardProbe = MainActor.assumeIsolated {
             let pasteboardName = NSPasteboard.Name("com.local.presspeech.self-test.\(UUID().uuidString)")
@@ -15251,6 +15359,52 @@ private enum PresspeechSelfTest {
             equals: "new external clipboard",
             "a pending consecutive restore must not overwrite newer clipboard content"
         )
+
+        let acquiredGenerationProbe = MainActor.assumeIsolated {
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.acquired-generation.\(UUID().uuidString)"
+            ))
+            defer { pasteboard.releaseGlobally() }
+            _ = ClipboardPasteInserter.write("original receipt fixture", to: pasteboard)
+            let original = ClipboardPasteInserter.snapshot(of: pasteboard)
+            let receipt = ClipboardPasteInserter.writeWithReceipt(
+                "temporary receipt fixture", to: pasteboard, transient: true
+            )
+            let initiallyOwned = receipt?.stillOwns(pasteboard) == true
+            // Deterministically place an external copy between write return
+            // and the caller's next read of changeCount (the former race).
+            pasteboard.clearContents()
+            let wroteExternal = pasteboard.setString("new external receipt fixture", forType: .string)
+            let newerCount = pasteboard.changeCount
+            let wouldPostPaste = receipt?.stillOwns(pasteboard) == true
+            if let original, let receipt {
+                ClipboardPasteInserter.scheduleRestore(original,
+                                                       to: pasteboard,
+                                                       expectedChangeCount: receipt.changeCount,
+                                                       after: 60)
+            }
+            let restored = ClipboardPasteInserter.performPendingRestore(on: pasteboard)
+            return (
+                initiallyOwned: initiallyOwned,
+                wroteExternal: wroteExternal,
+                receiptStayedOriginal: receipt != nil && receipt?.changeCount != newerCount,
+                wouldPostPaste: wouldPostPaste,
+                restored: restored,
+                remaining: pasteboard.string(forType: .string)
+            )
+        }
+        try expect(acquiredGenerationProbe.initiallyOwned, equals: true,
+                   "a write receipt should identify its acquired pasteboard generation")
+        try expect(acquiredGenerationProbe.wroteExternal, equals: true,
+                   "the receipt test should install a newer external clipboard value")
+        try expect(acquiredGenerationProbe.receiptStayedOriginal, equals: true,
+                   "a write receipt must never adopt the count of a later external copy")
+        try expect(acquiredGenerationProbe.wouldPostPaste, equals: false,
+                   "a changed clipboard owner should veto clipboard paste before posting")
+        try expect(acquiredGenerationProbe.restored, equals: false,
+                   "a delayed restore must reject a newer external owner using the acquired count")
+        try expect(acquiredGenerationProbe.remaining, equals: "new external receipt fixture",
+                   "a later copy must survive the write-return/changeCount-read interleaving")
 
         let incompleteSnapshotProbe = MainActor.assumeIsolated {
             let pasteboardName = NSPasteboard.Name("com.local.presspeech.self-test.\(UUID().uuidString)")
