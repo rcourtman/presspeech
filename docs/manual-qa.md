@@ -359,6 +359,13 @@ cd swift
 - Leave an offer untouched for five minutes. The transcript must stay on the
   clipboard and the restore action become unavailable. Expiry must not rewrite
   text, remove transient markers, or restore old contents.
+- With preservation enabled, seed more than 64 MB of harmless generated text
+  on the clipboard and dictate once. Confirm dictation still completes, the
+  transcript remains on the clipboard, and the menu reports **Previous
+  Clipboard Too Large to Keep** instead of offering a partial restore. Dictate
+  again before copying anything and confirm the report remains unavailable
+  rather than offering to restore the first transcript. Copy a new marker and
+  confirm that report disappears without rewriting the marker.
 - While a confirmation is open, finish another dictation or copy a third
   harmless marker. The old confirmation must not restore a different offer or
   overwrite the newer copy. Disabling the option, Copy Last Transcript, other

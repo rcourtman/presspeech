@@ -79,8 +79,11 @@ No fixed delay proves that another app consumed the paste.
 **Upcoming 0.3.8 / builds containing Keep Previous Clipboard for Manual Restore:**
 automatic restoration and delay presets are retired. The new manual option is
 off by default, including when the old automatic setting was enabled. Enable it
-only if you want a complete previous clipboard snapshot kept in memory for up
-to five minutes. After verifying the latest dictated text arrived, choose
+only if you want an eligible complete previous clipboard snapshot kept in
+memory for up to five minutes. The snapshot is limited to 64 MB and 256
+representations; Presspeech never offers a partial restore if either limit is
+exceeded or a representation is unavailable. The disabled restore row explains
+why nothing was kept. After verifying the latest dictated text arrived, choose
 **Restore Previous Clipboard…** and confirm. Cancel if the target is still
 waiting to read the clipboard. macOS provides no consumption acknowledgement.
 Expiry, copying something else, disabling the option or quitting discards the

@@ -69,6 +69,15 @@ let MAX_MAX_RECORDING_SECONDS: TimeInterval = 600
 // discards the snapshot; it never changes the system clipboard. ContinuousClock
 // also counts time asleep, so waking never renews an old restore offer.
 let MANUAL_CLIPBOARD_RESTORE_LIFETIME_SECONDS: TimeInterval = 5 * 60
+// A pasteboard can contain many items and several full representations of
+// each item (for example TIFF, PNG, RTF and plain text). Manual restoration is
+// auxiliary to dictation, so never keep an unbounded aggregate snapshot or
+// synchronously ask an unbounded number of lazy providers for data. If either
+// limit is exceeded while ownership remains stable, dictation still uses the
+// clipboard normally and the menu explains that the previous contents were
+// not kept.
+let MAX_MANUAL_CLIPBOARD_SNAPSHOT_BYTES = 64 * 1024 * 1024
+let MAX_MANUAL_CLIPBOARD_SNAPSHOT_REPRESENTATIONS = 256
 
 let PASTE_TARGET_AX_TIMEOUT_SECONDS: Float = 0.25
 let UPDATE_CHECK_FIRST_DELAY_SECONDS: TimeInterval = 30
@@ -5098,6 +5107,61 @@ private enum ClipboardPasteInserter {
         }
     }
 
+    enum SnapshotFailure: Equatable {
+        case unavailableRepresentation
+        case sizeLimitExceeded
+        case representationLimitExceeded
+        case clipboardChanged
+
+        var logDescription: String {
+            switch self {
+            case .unavailableRepresentation:
+                return "one or more representations were unavailable"
+            case .sizeLimitExceeded:
+                return "the \(MAX_MANUAL_CLIPBOARD_SNAPSHOT_BYTES / 1024 / 1024) MB limit was exceeded"
+            case .representationLimitExceeded:
+                return "the \(MAX_MANUAL_CLIPBOARD_SNAPSHOT_REPRESENTATIONS)-representation limit was exceeded"
+            case .clipboardChanged:
+                return "clipboard ownership changed while reading"
+            }
+        }
+
+        var menuTitle: String {
+            switch self {
+            case .sizeLimitExceeded:
+                return "Previous Clipboard Too Large to Keep"
+            case .representationLimitExceeded:
+                return "Previous Clipboard Too Complex to Keep"
+            case .unavailableRepresentation, .clipboardChanged:
+                return "Previous Clipboard Couldn’t Be Kept"
+            }
+        }
+
+        var menuHelp: String {
+            switch self {
+            case .sizeLimitExceeded:
+                return "The previous clipboard exceeded Presspeech’s \(MAX_MANUAL_CLIPBOARD_SNAPSHOT_BYTES / 1024 / 1024) MB in-memory safety limit. The transcript remains available on the clipboard."
+            case .representationLimitExceeded:
+                return "The previous clipboard contained more than \(MAX_MANUAL_CLIPBOARD_SNAPSHOT_REPRESENTATIONS) representations. The transcript remains available on the clipboard."
+            case .unavailableRepresentation:
+                return "macOS or the source app did not provide every clipboard representation, so Presspeech did not keep a partial copy. If macOS asked for clipboard access, allow it before the next dictation. The transcript remains available on the clipboard."
+            case .clipboardChanged:
+                return "Another app changed the clipboard while Presspeech was reading it, so Presspeech left the newer contents alone."
+            }
+        }
+    }
+
+    enum SnapshotCaptureResult {
+        case captured(Snapshot)
+        case unavailable(SnapshotFailure, sourceChangeCount: Int)
+    }
+
+    struct SnapshotUnavailability {
+        let reason: SnapshotFailure
+        let sourceChangeCount: Int
+        let expiresAt: ContinuousClock.Instant
+    }
+
     /// Consecutive dictations inherit the original clipboard and its original
     /// monotonic expiry. They must not restore the preceding transcript or
     /// silently extend how long private clipboard bytes remain in memory.
@@ -5109,38 +5173,107 @@ private enum ClipboardPasteInserter {
         let expiryTimer: DispatchSourceTimer
     }
 
+    private struct PendingRestoreUnavailability {
+        let pasteboardName: NSPasteboard.Name
+        let reason: SnapshotFailure
+        let expectedChangeCount: Int
+        let expiresAt: ContinuousClock.Instant
+    }
+
     private static var pendingRestore: PendingRestore?
+    private static var pendingRestoreUnavailability: PendingRestoreUnavailability?
     private static var nextRestoreToken: UInt64 = 0
 
-    /// Returns nil rather than a partial snapshot if any advertised
-    /// representation cannot be materialized. Restoring a partial copy
-    /// would silently discard precisely the clipboard content this
-    /// option is intended to preserve.
-    static func snapshot(of pb: NSPasteboard) -> Snapshot? {
+    /// Returns an explicit failure rather than a partial snapshot if any
+    /// advertised representation cannot be materialized or the bounded
+    /// in-memory budget is exceeded. Restoring a partial copy would silently
+    /// discard precisely the clipboard content this option is intended to
+    /// preserve.
+    static func captureSnapshot(
+        of pb: NSPasteboard,
+        maxBytes: Int = MAX_MANUAL_CLIPBOARD_SNAPSHOT_BYTES,
+        maxRepresentations: Int = MAX_MANUAL_CLIPBOARD_SNAPSHOT_REPRESENTATIONS
+    ) -> SnapshotCaptureResult {
         let sourceChangeCount = pb.changeCount
+        func unavailable(_ reason: SnapshotFailure) -> SnapshotCaptureResult {
+            let currentReason: SnapshotFailure = pb.changeCount == sourceChangeCount
+                ? reason
+                : .clipboardChanged
+            return .unavailable(currentReason, sourceChangeCount: sourceChangeCount)
+        }
+
+        guard maxBytes >= 0, maxRepresentations >= 0 else {
+            return unavailable(.sizeLimitExceeded)
+        }
         guard let sourceItems = pb.pasteboardItems else {
-            return (pb.types ?? []).isEmpty
-                ? Snapshot(items: [], sourceChangeCount: sourceChangeCount)
-                : nil
+            if (pb.types ?? []).isEmpty {
+                return .captured(Snapshot(items: [], sourceChangeCount: sourceChangeCount))
+            }
+            return unavailable(.unavailableRepresentation)
+        }
+        guard sourceItems.count <= maxRepresentations else {
+            return unavailable(.representationLimitExceeded)
+        }
+
+        var advertisedItems: [(item: NSPasteboardItem,
+                               types: [NSPasteboard.PasteboardType])] = []
+        advertisedItems.reserveCapacity(min(sourceItems.count, maxRepresentations))
+        var representationCount = 0
+        for item in sourceItems {
+            let types = item.types
+            guard !types.isEmpty else {
+                return unavailable(.unavailableRepresentation)
+            }
+            guard types.count <= maxRepresentations - representationCount else {
+                return unavailable(.representationLimitExceeded)
+            }
+            representationCount += types.count
+            advertisedItems.append((item, types))
         }
 
         var copies: [NSPasteboardItem] = []
-        copies.reserveCapacity(sourceItems.count)
-        for item in sourceItems {
-            guard !item.types.isEmpty else { return nil }
+        copies.reserveCapacity(advertisedItems.count)
+        var totalBytes = 0
+        for advertised in advertisedItems {
             let copy = NSPasteboardItem()
-            for type in item.types {
-                guard let data = item.data(forType: type),
-                      copy.setData(data, forType: type) else { return nil }
+            for type in advertised.types {
+                guard let data = advertised.item.data(forType: type) else {
+                    return unavailable(.unavailableRepresentation)
+                }
+                guard pb.changeCount == sourceChangeCount else {
+                    return unavailable(.clipboardChanged)
+                }
+                guard data.count <= maxBytes - totalBytes else {
+                    return unavailable(.sizeLimitExceeded)
+                }
+                guard copy.setData(data, forType: type) else {
+                    return unavailable(.unavailableRepresentation)
+                }
+                totalBytes += data.count
             }
             copies.append(copy)
         }
 
         guard pasteboardChangeCountAllowsRestore(current: pb.changeCount,
                                                  expected: sourceChangeCount) else {
-            return nil
+            return unavailable(.clipboardChanged)
         }
-        return Snapshot(items: copies, sourceChangeCount: sourceChangeCount)
+        return .captured(Snapshot(items: copies, sourceChangeCount: sourceChangeCount))
+    }
+
+    static func snapshot(of pb: NSPasteboard) -> Snapshot? {
+        guard case .captured(let snapshot) = captureSnapshot(of: pb) else { return nil }
+        return snapshot
+    }
+
+    static func unavailableSnapshotAllowsClipboardWrite(
+        reason: SnapshotFailure,
+        sourceChangeCount: Int,
+        currentChangeCount: Int
+    ) -> Bool {
+        reason != .clipboardChanged
+            && pasteboardChangeCountAllowsRestore(current: currentChangeCount,
+                                                  expected: sourceChangeCount)
     }
 
     /// Writes the snapshot back onto the pasteboard, but only if
@@ -5183,6 +5316,45 @@ private enum ClipboardPasteInserter {
         return pending.token
     }
 
+    static func pendingRestoreUnavailableReason(
+        on pb: NSPasteboard,
+        now: ContinuousClock.Instant = ContinuousClock().now
+    ) -> SnapshotFailure? {
+        guard let unavailable = pendingRestoreUnavailability,
+              unavailable.pasteboardName == pb.name else { return nil }
+        guard now < unavailable.expiresAt,
+              pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                                  expected: unavailable.expectedChangeCount) else {
+            pendingRestoreUnavailability = nil
+            return nil
+        }
+        return unavailable.reason
+    }
+
+    static func pendingRestoreUnavailabilityForReplacement(
+        on pb: NSPasteboard,
+        now: ContinuousClock.Instant = ContinuousClock().now
+    ) -> SnapshotUnavailability? {
+        guard pendingRestoreUnavailableReason(on: pb, now: now) != nil,
+              let unavailable = pendingRestoreUnavailability else { return nil }
+        // Rebase only the ownership guard. As with a real snapshot, keep the
+        // original reason and deadline so another dictation cannot turn the
+        // previous transcript into a misleading restore offer.
+        return SnapshotUnavailability(
+            reason: unavailable.reason,
+            sourceChangeCount: unavailable.expectedChangeCount,
+            expiresAt: unavailable.expiresAt
+        )
+    }
+
+    static func manualRestoreDiagnosticStatus(on pb: NSPasteboard) -> String {
+        if pendingRestoreToken(on: pb) != nil { return "available" }
+        if let reason = pendingRestoreUnavailableReason(on: pb) {
+            return "unavailable (\(reason.logDescription))"
+        }
+        return "none"
+    }
+
     static func pendingSnapshotForReplacement(on pb: NSPasteboard) -> Snapshot? {
         guard pendingRestoreToken(on: pb) != nil, let pending = pendingRestore else { return nil }
         // Rebase only the ownership guard. Keep the original bytes/deadline.
@@ -5192,9 +5364,13 @@ private enum ClipboardPasteInserter {
     }
 
     static func discardPendingRestore(on pb: NSPasteboard) {
-        guard let pending = pendingRestore, pending.pasteboardName == pb.name else { return }
-        pending.expiryTimer.cancel()
-        pendingRestore = nil
+        if let pending = pendingRestore, pending.pasteboardName == pb.name {
+            pending.expiryTimer.cancel()
+            pendingRestore = nil
+        }
+        if pendingRestoreUnavailability?.pasteboardName == pb.name {
+            pendingRestoreUnavailability = nil
+        }
     }
 
     /// Called only after explicit confirmation (or the opt-in native fixture's
@@ -5241,6 +5417,27 @@ private enum ClipboardPasteInserter {
                                         expectedChangeCount: expectedChangeCount,
                                         expiryTimer: timer)
         timer.resume()
+    }
+
+    static func stageManualRestoreUnavailability(
+        _ reason: SnapshotFailure,
+        to pb: NSPasteboard,
+        expectedChangeCount: Int,
+        expiresAt: ContinuousClock.Instant = ContinuousClock().now.advanced(
+            by: .seconds(MANUAL_CLIPBOARD_RESTORE_LIFETIME_SECONDS)
+        )
+    ) {
+        discardPendingRestore(on: pb)
+        guard reason != .clipboardChanged,
+              ContinuousClock().now < expiresAt,
+              pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                                  expected: expectedChangeCount) else { return }
+        pendingRestoreUnavailability = PendingRestoreUnavailability(
+            pasteboardName: pb.name,
+            reason: reason,
+            expectedChangeCount: expectedChangeCount,
+            expiresAt: expiresAt
+        )
     }
 
     static func contentsOptions(transient: Bool) -> NSPasteboard.ContentsOptions {
@@ -5306,21 +5503,54 @@ private enum ClipboardPasteInserter {
 
         let pb = NSPasteboard.general
         var previous: Snapshot?
+        var snapshotUnavailability: SnapshotUnavailability?
         if preserveClipboard {
-            previous = pendingSnapshotForReplacement(on: pb) ?? snapshot(of: pb)
-            if previous == nil {
-                log("clipboard snapshot incomplete; restore skipped")
+            if let inherited = pendingSnapshotForReplacement(on: pb) {
+                previous = inherited
+            } else if let inherited = pendingRestoreUnavailabilityForReplacement(on: pb) {
+                snapshotUnavailability = inherited
+            } else {
+                switch captureSnapshot(of: pb) {
+                case .captured(let snapshot):
+                    previous = snapshot
+                case .unavailable(let reason, let sourceChangeCount):
+                    guard unavailableSnapshotAllowsClipboardWrite(
+                        reason: reason,
+                        sourceChangeCount: sourceChangeCount,
+                        currentChangeCount: pb.changeCount
+                    ) else {
+                        log("clipboard snapshot stopped: \(reason.logDescription)")
+                        return .clipboardChanged
+                    }
+                    snapshotUnavailability = SnapshotUnavailability(
+                        reason: reason,
+                        sourceChangeCount: sourceChangeCount,
+                        expiresAt: ContinuousClock().now.advanced(
+                            by: .seconds(MANUAL_CLIPBOARD_RESTORE_LIFETIME_SECONDS)
+                        )
+                    )
+                    log("clipboard snapshot unavailable: \(reason.logDescription); restore skipped")
+                }
             }
         }
 
         // A lazy data provider can make snapshotting take long enough
-        // for another process to replace the clipboard. Never restore
-        // the now-stale snapshot after taking ownership for the paste.
+        // for another process to replace the clipboard. Never take
+        // ownership after the snapshot's source generation goes stale.
         if let candidate = previous,
            !pasteboardChangeCountAllowsRestore(current: pb.changeCount,
                                                expected: candidate.sourceChangeCount) {
-            previous = nil
-            log("clipboard changed during snapshot; restore skipped")
+            log("clipboard changed after snapshot; clipboard insertion skipped")
+            return .clipboardChanged
+        }
+        if let snapshotUnavailability,
+           !unavailableSnapshotAllowsClipboardWrite(
+               reason: snapshotUnavailability.reason,
+               sourceChangeCount: snapshotUnavailability.sourceChangeCount,
+               currentChangeCount: pb.changeCount
+           ) {
+            log("clipboard changed after unavailable snapshot; clipboard insertion skipped")
+            return .clipboardChanged
         }
 
         guard let receipt = writeWithReceipt(text, to: pb, transient: previous != nil) else {
@@ -5370,6 +5600,11 @@ private enum ClipboardPasteInserter {
             // typing fallback does not prove the destination consumed a paste.
             if let previous {
                 stageManualRestore(previous, to: pb, expectedChangeCount: writeChangeCount)
+            } else if let snapshotUnavailability {
+                stageManualRestoreUnavailability(snapshotUnavailability.reason,
+                                                 to: pb,
+                                                 expectedChangeCount: writeChangeCount,
+                                                 expiresAt: snapshotUnavailability.expiresAt)
             }
             return .failed
         }
@@ -5378,6 +5613,11 @@ private enum ClipboardPasteInserter {
             // Posting Command+V is not a consumption acknowledgement. Keep
             // the transcript until the user deliberately restores or copies.
             stageManualRestore(previous, to: pb, expectedChangeCount: writeChangeCount)
+        } else if let snapshotUnavailability {
+            stageManualRestoreUnavailability(snapshotUnavailability.reason,
+                                             to: pb,
+                                             expectedChangeCount: writeChangeCount,
+                                             expiresAt: snapshotUnavailability.expiresAt)
         }
         return .inserted
     }
@@ -9352,8 +9592,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         if menu === statusItem.menu,
            let restore = menuItem(with: NSUserInterfaceItemIdentifier("manual-clipboard-restore"), in: menu) {
-            restore.isEnabled = settings.preserveClipboardForManualRestore
-                && ClipboardPasteInserter.pendingRestoreToken(on: .general) != nil
+            configureManualClipboardRestoreItem(restore)
         }
 
         // Login-item approval can be changed outside Presspeech. Refresh its
@@ -9384,9 +9623,26 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                               keyEquivalent: "")
         item.target = self
         item.identifier = NSUserInterfaceItemIdentifier("manual-clipboard-restore")
-        item.isEnabled = ClipboardPasteInserter.pendingRestoreToken(on: .general) != nil
-        item.toolTip = "Use after verifying your latest dictated text arrived. Available for up to five minutes, only while the clipboard still belongs to this dictation."
+        configureManualClipboardRestoreItem(item)
         return item
+    }
+
+    private func configureManualClipboardRestoreItem(_ item: NSMenuItem) {
+        item.title = "Restore Previous Clipboard…"
+        item.toolTip = "Use after verifying your latest dictated text arrived. Available for up to five minutes, only while the clipboard still belongs to this dictation."
+        guard settings.preserveClipboardForManualRestore else {
+            item.isEnabled = false
+            return
+        }
+        if ClipboardPasteInserter.pendingRestoreToken(on: .general) != nil {
+            item.isEnabled = true
+            return
+        }
+        if let reason = ClipboardPasteInserter.pendingRestoreUnavailableReason(on: .general) {
+            item.title = reason.menuTitle
+            item.toolTip = reason.menuHelp
+        }
+        item.isEnabled = false
     }
 
     @objc private func restorePreviousClipboardClicked(_ sender: NSMenuItem) {
@@ -9867,7 +10123,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 "Text corrections: \(settings.transcriptCorrections.count) configured",
                 "Text correction sync: \(settings.transcriptCorrectionsSyncFile.isEmpty ? "off" : "configured")",
                 "Text insertion: \(TextInserter.defaultStrategyDescription)",
-                "Manual clipboard restore: \(settings.preserveClipboardForManualRestore)",
+                "Manual clipboard restore: \(settings.preserveClipboardForManualRestore) (offer: \(ClipboardPasteInserter.manualRestoreDiagnosticStatus(on: .general)))",
                 "Recording waveform: \(settings.showRecordingWaveform)",
                 "Mute while recording: \(settings.muteWhileRecording)",
                 "Feedback sounds: \(settings.playFeedbackSounds)",
@@ -10602,7 +10858,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                           keyEquivalent: "")
         restoreClipboard.target = self
         restoreClipboard.state = settings.preserveClipboardForManualRestore ? .on : .off
-        restoreClipboard.toolTip = "Keep your previous clipboard in memory for up to five minutes. After checking the paste, choose Restore Previous Clipboard… from the main menu. Nothing is restored automatically."
+        restoreClipboard.toolTip = "Keep a complete previous clipboard of up to 64 MB and 256 representations in memory for up to five minutes. macOS may ask for clipboard access. After checking the paste, choose Restore Previous Clipboard… from the main menu. Nothing is restored automatically."
         sub.addItem(restoreClipboard)
 
         let automaticUpdates = NSMenuItem(title: "Automatically check for updates",
@@ -14993,9 +15249,183 @@ private enum PresspeechSelfTest {
         try expect(probe.8, equals: true, "disable or quit discards pending memory without a clipboard write")
     }
 
+    private static func testBoundedClipboardSnapshots() throws {
+        let probe = MainActor.assumeIsolated {
+            let pb = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.snapshot-budget.\(UUID().uuidString)"
+            ))
+            defer {
+                ClipboardPasteInserter.discardPendingRestore(on: pb)
+                pb.releaseGlobally()
+            }
+
+            let firstType = NSPasteboard.PasteboardType(
+                "com.local.presspeech.self-test.snapshot-budget.first"
+            )
+            let secondType = NSPasteboard.PasteboardType(
+                "com.local.presspeech.self-test.snapshot-budget.second"
+            )
+            let item = NSPasteboardItem()
+            let prepared = item.setData(Data([0, 1, 2, 3]), forType: firstType)
+                && item.setData(Data([4, 5, 6, 7]), forType: secondType)
+            pb.clearContents()
+            let wrote = pb.writeObjects([item])
+            let originalCount = pb.changeCount
+
+            let sizeFailure: ClipboardPasteInserter.SnapshotFailure?
+            let sizeFailureCount: Int?
+            switch ClipboardPasteInserter.captureSnapshot(
+                of: pb, maxBytes: 7, maxRepresentations: 2
+            ) {
+            case .captured:
+                sizeFailure = nil
+                sizeFailureCount = nil
+            case .unavailable(let reason, let sourceChangeCount):
+                sizeFailure = reason
+                sizeFailureCount = sourceChangeCount
+            }
+
+            let representationFailure: ClipboardPasteInserter.SnapshotFailure?
+            switch ClipboardPasteInserter.captureSnapshot(
+                of: pb, maxBytes: 8, maxRepresentations: 1
+            ) {
+            case .captured:
+                representationFailure = nil
+            case .unavailable(let reason, _):
+                representationFailure = reason
+            }
+
+            let completeSnapshot: Bool
+            switch ClipboardPasteInserter.captureSnapshot(
+                of: pb, maxBytes: 8, maxRepresentations: 2
+            ) {
+            case .captured(let snapshot):
+                completeSnapshot = snapshot.items.count == 1
+                    && snapshot.items[0].data(forType: firstType) == Data([0, 1, 2, 3])
+                    && snapshot.items[0].data(forType: secondType) == Data([4, 5, 6, 7])
+            case .unavailable:
+                completeSnapshot = false
+            }
+
+            let receipt = ClipboardPasteInserter.writeWithReceipt(
+                "transcript after oversized clipboard", to: pb, transient: true
+            )!
+            let originalFailureExpiry = ContinuousClock().now.advanced(by: .seconds(60))
+            ClipboardPasteInserter.stageManualRestoreUnavailability(
+                .sizeLimitExceeded,
+                to: pb,
+                expectedChangeCount: receipt.changeCount,
+                expiresAt: originalFailureExpiry
+            )
+            let visibleFailure = ClipboardPasteInserter.pendingRestoreUnavailableReason(on: pb)
+            let inheritedFailure = ClipboardPasteInserter
+                .pendingRestoreUnavailabilityForReplacement(on: pb)
+            let replacementReceipt = ClipboardPasteInserter.writeWithReceipt(
+                "second transcript after oversized clipboard", to: pb, transient: false
+            )!
+            if let inheritedFailure {
+                ClipboardPasteInserter.stageManualRestoreUnavailability(
+                    inheritedFailure.reason,
+                    to: pb,
+                    expectedChangeCount: replacementReceipt.changeCount,
+                    expiresAt: inheritedFailure.expiresAt
+                )
+            }
+            let repeatedFailure = ClipboardPasteInserter
+                .pendingRestoreUnavailabilityForReplacement(on: pb)
+            let consecutiveFailurePreserved = inheritedFailure?.reason == .sizeLimitExceeded
+                && inheritedFailure?.sourceChangeCount == receipt.changeCount
+                && inheritedFailure?.expiresAt == originalFailureExpiry
+                && repeatedFailure?.reason == .sizeLimitExceeded
+                && repeatedFailure?.sourceChangeCount == replacementReceipt.changeCount
+                && repeatedFailure?.expiresAt == originalFailureExpiry
+            let diagnostic = ClipboardPasteInserter.manualRestoreDiagnosticStatus(on: pb)
+
+            pb.clearContents()
+            let wroteExternal = pb.setString("new external clipboard", forType: .string)
+            let staleFailure = ClipboardPasteInserter.pendingRestoreUnavailableReason(on: pb)
+            let externalSurvived = pb.string(forType: .string) == "new external clipboard"
+
+            let expiryReceipt = ClipboardPasteInserter.writeWithReceipt(
+                "transcript before unavailable-state expiry", to: pb, transient: true
+            )!
+            let expiry = ContinuousClock().now.advanced(by: .seconds(1))
+            ClipboardPasteInserter.stageManualRestoreUnavailability(
+                .unavailableRepresentation,
+                to: pb,
+                expectedChangeCount: expiryReceipt.changeCount,
+                expiresAt: expiry
+            )
+            let countBeforeExpiry = pb.changeCount
+            let expiredFailure = ClipboardPasteInserter.pendingRestoreUnavailableReason(
+                on: pb, now: expiry
+            )
+            let expiryDidNotWrite = pb.changeCount == countBeforeExpiry
+                && pb.string(forType: .string) == "transcript before unavailable-state expiry"
+            let ownershipDecision = ClipboardPasteInserter.unavailableSnapshotAllowsClipboardWrite(
+                reason: .sizeLimitExceeded,
+                sourceChangeCount: 40,
+                currentChangeCount: 40
+            ) && !ClipboardPasteInserter.unavailableSnapshotAllowsClipboardWrite(
+                reason: .sizeLimitExceeded,
+                sourceChangeCount: 40,
+                currentChangeCount: 41
+            ) && !ClipboardPasteInserter.unavailableSnapshotAllowsClipboardWrite(
+                reason: .clipboardChanged,
+                sourceChangeCount: 40,
+                currentChangeCount: 40
+            )
+
+            return (
+                createdSource: prepared && wrote,
+                retainedSourceGeneration: originalCount == sizeFailureCount,
+                sizeFailure: sizeFailure,
+                representationFailure: representationFailure,
+                completeSnapshot: completeSnapshot,
+                visibleFailure: visibleFailure,
+                diagnostic: diagnostic,
+                retiredAfterExternalCopy: wroteExternal && staleFailure == nil
+                    && externalSurvived,
+                expiryDidNotWrite: expiredFailure == nil && expiryDidNotWrite,
+                ownershipDecision: ownershipDecision,
+                consecutiveFailurePreserved: consecutiveFailurePreserved
+            )
+        }
+
+        try expect(probe.createdSource, equals: true,
+                   "snapshot-budget test should create a two-representation clipboard")
+        try expect(probe.retainedSourceGeneration, equals: true,
+                   "a rejected snapshot should retain the source generation for a final ownership check")
+        try expect(
+            probe.sizeFailure,
+            equals: Optional(ClipboardPasteInserter.SnapshotFailure.sizeLimitExceeded),
+                   "aggregate clipboard bytes above the safety budget must not be retained")
+        try expect(
+            probe.representationFailure,
+            equals: Optional(ClipboardPasteInserter.SnapshotFailure.representationLimitExceeded),
+                   "too many clipboard representations must not invoke unbounded providers")
+        try expect(probe.completeSnapshot, equals: true,
+                   "clipboard contents exactly at both safety limits should remain fully restorable")
+        try expect(
+            probe.visibleFailure,
+            equals: Optional(ClipboardPasteInserter.SnapshotFailure.sizeLimitExceeded),
+                   "a skipped snapshot should expose a bounded restore-unavailable reason")
+        try expect(probe.diagnostic.contains("64 MB limit"), equals: true,
+                   "privacy-safe diagnostics should explain the unavailable restore offer")
+        try expect(probe.retiredAfterExternalCopy, equals: true,
+                   "a newer clipboard owner should retire unavailable-state feedback without being rewritten")
+        try expect(probe.expiryDidNotWrite, equals: true,
+                   "unavailable-state expiry must not rewrite the transcript clipboard")
+        try expect(probe.ownershipDecision, equals: true,
+                   "an unavailable snapshot may proceed only while its original clipboard generation still owns the pasteboard")
+        try expect(probe.consecutiveFailurePreserved, equals: true,
+                   "consecutive dictation must not turn an unavailable original clipboard into a transcript restore offer")
+    }
+
     private static func testPasteSuffixFormatting() throws {
         try testManualClipboardRestoreSettings()
         try testManualClipboardRestoreLifecycle()
+        try testBoundedClipboardSnapshots()
         try expect(
             pastedText(from: "hello world", suffix: .appendSpace),
             equals: "hello world ",

@@ -72,8 +72,9 @@ The fixture checks:
 
 ## Isolation and abort behavior
 
-The original clipboard is copied in memory with all items, types, and data using
-production snapshot/restore functions. Incomplete snapshots abort before window
+The eligible original clipboard is copied in memory with all items, types, and
+data using production snapshot/restore functions and the production 64 MB / 256
+representation limits. Incomplete or over-limit snapshots abort before window
 activation or mutation. Nothing serializes or logs that snapshot. Debug-only
 hooks retain the generation returned by actual ownership acquisition during
 production writes and restorations. An external change-count mismatch aborts and

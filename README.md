@@ -239,6 +239,13 @@ each platform rather than identical.
   and confirm. Expiry only discards the saved copy; it never rewrites the
   clipboard. Another copy, disabling the option, or quitting retires the offer.
   Consecutive dictations preserve the original copy and original deadline.
+  A complete snapshot is limited to 64 MB and 256 representations so an
+  unusually large or complex clipboard cannot be retained without bound. If
+  macOS or the source app cannot provide every representation, or either limit
+  is exceeded, dictation continues without a partial snapshot while clipboard
+  ownership remains stable, and the restore row explains why the previous
+  clipboard is unavailable. Newer macOS versions may ask before Presspeech can
+  read another app's clipboard for this opt-in feature.
   The old automatic-restore option and delay presets are retired; existing
   users must opt in again because manual recovery retains bytes longer.
   Confirmation is your decision, not proof that macOS acknowledged consumption
