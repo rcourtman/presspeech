@@ -310,37 +310,41 @@ cd swift
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.
-- With **Restore clipboard after paste** off, dictate distinct non-sensitive
-  markers into TextEdit and an Electron/Chromium target. Confirm the exact
-  transcript lands each time and remains available to an immediate manual
-  Command-V. This is the safe baseline for the restoration checks below.
-- Seed the clipboard with a distinct old marker, enable **Restore clipboard
-  after paste**, and complete at least ten consecutive dictations in TextEdit
-  and ten in a representative slow Electron/Chromium target. Mix short and
-  multi-sentence transcripts. For every trial, confirm the destination receives
-  the exact new transcript before a manual Command-V in a separate scratch
-  field proves that the old marker was restored. A stale marker, empty paste,
-  partial transcript, or duplicate is a release-blocking failure; one successful
-  trial is not enough to clear the race tracked in
-  [issue #36](https://github.com/rcourtman/presspeech/issues/36).
-- With the delay set to 3 seconds and the old marker still seeded, complete two
-  short dictations quickly enough that the second finishes before the first
-  restore deadline. Confirm both destinations receive their new transcript,
-  then wait for restoration and confirm Command-V yields the original old
-  marker—not either transcript. Repeat the back-to-back sequence five times.
-- Select each **Clipboard Restore Delay** preset, restart Presspeech, and
-  confirm the selected value persists without enabling restoration. Confirm
-  Copy Diagnostics reports the configured delay without transcript content.
-- Repeat that matrix for every proposed restoration-delay default or preset
-  under review, including the slowest available target. A pure self-test or a
-  delay increase without repeated native results does not establish that the
-  destination consumed Command-V before restoration.
-- While restoration is enabled, start dictating with the old marker on the
-  clipboard and change focus before transcription finishes. Confirm Presspeech
-  leaves the new transcript available for manual paste rather than restoring
-  the old marker. In a successful automatic-paste trial, copy a third marker
-  before restoration runs and confirm Presspeech does not overwrite that newer
-  clipboard content.
+- The following manual-restore checks target upcoming 0.3.8 / builds that
+  contain **Keep Previous Clipboard for Manual Restore**. They are not controls
+  available in the published macOS 0.3.7 build.
+- With **Keep Previous Clipboard for Manual Restore** off, dictate distinct
+  non-sensitive markers into TextEdit and an Electron/Chromium target. Confirm
+  the exact transcript lands and remains available for immediate manual paste.
+- Enable **Keep Previous Clipboard for Manual Restore**, seed an old harmless
+  marker, and perform ten dictations each in TextEdit and a slow
+  Electron/Chromium target, mixing short and multi-sentence transcripts. Verify
+  each new transcript arrived before choosing **Restore Previous Clipboard…**
+  and confirming. Only then should manual paste yield the original marker.
+  No fixed delay is a substitute for observing consumption. This is the manual
+  qualification boundary for [issue #36](https://github.com/rcourtman/presspeech/issues/36).
+- Open the confirmation and cancel it. The clipboard and offer must remain
+  unchanged. Return must activate Cancel, not restoration. Confirm that a
+  later explicit restore works once; repeating an old action cannot write again.
+- Complete two dictations before restoring. Confirm both arrived, then restore
+  and check the original marker returns, not the first transcript. Repeat five
+  times. The original five-minute deadline must not renew with each dictation.
+- Leave an offer untouched for five minutes. The transcript must stay on the
+  clipboard and the restore action become unavailable. Expiry must not rewrite
+  text, remove transient markers, or restore old contents.
+- While a confirmation is open, finish another dictation or copy a third
+  harmless marker. The old confirmation must not restore a different offer or
+  overwrite the newer copy. Disabling the option, Copy Last Transcript, other
+  app copy actions and quitting must retire the saved snapshot without an
+  automatic restore. Test both status and Dock menus with recent history off.
+- Upgrade a test settings domain with old automatic restoration enabled: the
+  new manual option remains off and the timer/delay controls are gone. A fresh
+  explicit choice persists; diagnostics describe manual restoration and contain
+  no clipboard snapshot bytes.
+- With preservation enabled, change focus before transcription finishes.
+  Confirm copy-only recovery remains available and no restore is pending for
+  that manual copy. A pure self-test or controlled AppKit fixture does not
+  qualify external app consumption, accessibility or clipboard providers.
 - Test hold mode: hold the hotkey, speak, release, and confirm text pastes
   at the cursor.
 - In hold mode, release directly on the last consonant of several short

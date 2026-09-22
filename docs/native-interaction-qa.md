@@ -62,9 +62,11 @@ The fixture checks:
   hold after modifiers have been released, and passes an extra-modifier mismatch.
 - Toggle mode rejects an unavailable start without changing its toggle state,
   starts/stops on subsequent presses, and suppresses Escape while cancelling.
-- Production Command+V inserts a fixed marker into the owned text view, then
-  successfully performs the guarded delayed clipboard restoration.
-- A newer fixture copy survives the pending restoration timer.
+- In the upcoming 0.3.8 fixture / builds containing the manual-restore option,
+  production Command+V inserts a fixed marker into the owned text view. After
+  observing that exact field consume it, the fixture explicitly requests the
+  guarded manual restoration; posting alone never schedules restoration.
+- A newer fixture copy survives an explicit request using an older restore token.
 - Focusing the second owned window makes a target captured from the first window
   fall back to copy-only without posting paste events.
 
@@ -123,8 +125,8 @@ not prove Electron/VS Code AX availability, slow or asynchronous clipboard
 consumption, restoration correctness for every external clipboard provider,
 VoiceOver focus/announcements in the full recorder dialog, keyboard-layout label
 refresh, a second physical keyboard layout, right-modifier hardware behavior, or
-microphone/model behavior. Those remain separate manual checks. A restoration
-delay is still a mitigation; Quartz does not acknowledge clipboard consumption.
+microphone/model behavior. Those remain separate manual checks. Explicit user
+confirmation is not a Quartz clipboard-consumption acknowledgement.
 The fixture exercises the recorder's real decision function through a native
 local monitor, not its modal confirmation UI or persistence; the existing pure
 hotkey suite covers persistence and invalid input.

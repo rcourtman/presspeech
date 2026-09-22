@@ -69,17 +69,23 @@ Last Transcript**, choose that menu action before trying again.
 
 ### Previous Clipboard Content Is Pasted
 
-Turn off **Settings -> Behavior -> Restore clipboard after paste** and retry
-with non-sensitive text in TextEdit. This option is off by default. Disabling it
-leaves the new transcript on the clipboard and avoids restoring old content
-before a slow target app has consumed the paste. Remove unintended text from the
-destination before continuing and include the target app's name with
-privacy-safe diagnostics if you report the problem.
+On the currently published macOS **0.3.7**, turn off **Settings -> Behavior ->
+Restore clipboard after paste** and retry with non-sensitive text. This leaves
+the transcript in place instead of letting an automatic restore race a slow
+target. Remove unintended text first, use **Copy Last Transcript** if available,
+and include the target app's name with privacy-safe diagnostics in a bug report.
+No fixed delay proves that another app consumed the paste.
 
-If you need restoration, **Settings -> Behavior -> Clipboard Restore Delay**
-offers waits up to 3 seconds (default 1.2 seconds). A longer delay can mitigate
-slow target apps, but macOS does not acknowledge when they consume the paste.
-No preset guarantees success. Leave restoration off if the problem persists.
+**Upcoming 0.3.8 / builds containing Keep Previous Clipboard for Manual Restore:**
+automatic restoration and delay presets are retired. The new manual option is
+off by default, including when the old automatic setting was enabled. Enable it
+only if you want a complete previous clipboard snapshot kept in memory for up
+to five minutes. After verifying the latest dictated text arrived, choose
+**Restore Previous Clipboard…** and confirm. Cancel if the target is still
+waiting to read the clipboard. macOS provides no consumption acknowledgement.
+Expiry, copying something else, disabling the option or quitting discards the
+saved snapshot without an automatic clipboard rewrite. These controls are not
+available in the currently published 0.3.7 release.
 
 ### System Audio Stays Muted
 

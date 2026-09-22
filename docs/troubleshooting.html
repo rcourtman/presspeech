@@ -97,7 +97,8 @@
             </article>
             <article class="card" id="macos-clipboard-restore">
               <h3>The previous clipboard content is pasted</h3>
-              <p>Open <strong>Settings → Behavior</strong>, turn off <strong>Restore clipboard after paste</strong>, and retry with non-sensitive text in TextEdit. The option is off by default; disabling it leaves the new transcript on the clipboard and avoids restoring old content before a slow target has consumed the paste. Remove the unintended text from the destination before continuing, and include the target app's name with privacy-safe diagnostics if you report the problem.</p>
+              <p>On the currently published macOS <strong>0.3.7</strong>, turn off <strong>Settings → Behavior → Restore clipboard after paste</strong> and retry with non-sensitive text. This leaves the transcript in place instead of letting an automatic restore race a slow target. Remove unintended text, recover with <strong>Copy Last Transcript</strong> if available, and report the target app with privacy-safe diagnostics. No fixed delay proves that another app consumed the paste.</p>
+              <p><strong>Upcoming 0.3.8 / builds containing Keep Previous Clipboard for Manual Restore:</strong> timer restoration is retired. The new option requires a fresh opt-in and keeps the previous clipboard only in memory for up to five minutes. Verify your latest dictated text arrived before choosing <strong>Restore Previous Clipboard…</strong> and confirming; cancel if the target is still waiting to paste. Expiry, copying something else, disabling the option or quitting discards the offer without an automatic rewrite. These controls are not in the published 0.3.7 release.</p>
             </article>
             <article class="card" id="macos-muted">
               <h3>System audio stays muted</h3>

@@ -26,9 +26,10 @@ recovered safely.
 2. Open a blank, disposable field in the target app and a second blank field in
    a local scratch app. Never test in a production message, document, terminal
    session, remote session, or account.
-3. On macOS, turn **Settings -> Behavior -> Restore clipboard after paste**
-   off. It is off by default. Windows always leaves the transcript on the
-   clipboard.
+3. On published macOS 0.3.7, turn **Settings -> Behavior -> Restore clipboard
+   after paste** off. In upcoming 0.3.8 / builds with **Keep Previous Clipboard
+   for Manual Restore**, leave that option off instead. Both options default
+   off. Windows leaves the transcript on the clipboard.
 4. Use only harmless phrases created for the test. Disable clipboard history,
    cross-device clipboard sync, or third-party clipboard managers if you do
    not want even that test text retained outside Presspeech. If macOS Clipboard
@@ -112,8 +113,8 @@ failure. Stop testing and report it; do not retry in a real document.
 
 - The optional macOS clipboard-restoration path has a stricter repeated-trial
   release check in [`manual-qa.md`](manual-qa.md). Leave it off for this
-  community baseline so target-app compatibility is not confused with restore
-  timing. If previous clipboard content is pasted, follow the
+  community baseline so target-app compatibility is not confused with explicit
+  restoration. If previous clipboard content is pasted, follow the
   [recovery guide](troubleshooting.md#previous-clipboard-content-is-pasted)
   and report a bug.
 - A normally running Windows app cannot send the paste shortcut into a target

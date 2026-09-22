@@ -225,14 +225,19 @@ each platform rather than identical.
   “virgule”, and “guillemet ouvrant”
 - **Settings → Text → Remove filler words** — opt-in deterministic strip of
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
-- **Settings → Behavior → Restore clipboard after paste** — off-by-default,
-  best-effort restore of the previous macOS pasteboard contents; skipped if
-  another process copies newer content. If a slow target pastes the old
-  clipboard content instead of the transcript, turn this setting off and retry
-- **Settings → Behavior → Clipboard Restore Delay** — choose a longer wait
-  (up to 3 seconds) to mitigate slow target apps when restoration is enabled.
-  The default is 1.2 seconds. No delay proves that an app has consumed the
-  paste; keep restoration off if old content or missing text persists
+- **Published macOS 0.3.7: Settings → Behavior → Restore clipboard after paste** —
+  keep this off if a slow app pastes older clipboard contents. A timer cannot
+  prove that the destination consumed the transcript.
+- **Upcoming 0.3.8 / builds containing Settings → Behavior → Keep Previous
+  Clipboard for Manual Restore** — off by default. Keeps a complete copy of the previous macOS clipboard in
+  memory for up to five minutes. After checking that your latest dictated text
+  arrived, choose **Restore Previous Clipboard…** from the main or Dock menu
+  and confirm. Expiry only discards the saved copy; it never rewrites the
+  clipboard. Another copy, disabling the option, or quitting retires the offer.
+  Consecutive dictations preserve the original copy and original deadline.
+  The old automatic-restore option and delay presets are retired; existing
+  users must opt in again because manual recovery retains bytes longer.
+  Confirmation is your decision, not proof that macOS acknowledged consumption
 - **Settings → Behavior → Launch at Login** — keep dictation available after
   sign-in; if macOS needs approval, selecting the marked setting opens Login
   Items
