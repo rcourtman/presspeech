@@ -456,6 +456,65 @@ class InputSelectionTests(unittest.TestCase):
         self.assertEqual(instance._cached_input_selector,
                          "MME::New microphone")
 
+    def test_live_identity_is_checked_before_reusing_configured_device_index(self):
+        selected = app.PresspeechApp._device_selector(DEVICES[1], "MME")
+        instance = self.make_app(selected)
+        instance.input_device = (1, 16000)
+        instance._cached_input_selector = selected
+        reordered = [dict(device) for device in DEVICES]
+        reordered[1]["name"] = "Built-in microphone"
+        reordered[2] = dict(DEVICES[1])
+        instance._find_input_device = mock.Mock(return_value=(2, 16000))
+
+        with mock.patch.object(
+                app.sd, "query_devices", return_value=reordered), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None):
+            self.assertEqual(instance._get_input_device(), (2, 16000))
+
+        instance._find_input_device.assert_called_once_with(selected)
+        self.assertEqual(instance.input_device, (2, 16000))
+
+    def test_matching_live_identity_reuses_cache_without_full_probe(self):
+        selected = app.PresspeechApp._device_selector(DEVICES[1], "MME")
+        instance = self.make_app(selected)
+        instance.input_device = (1, 16000)
+        instance._cached_input_selector = selected
+        instance._find_input_device = mock.Mock()
+
+        with mock.patch.object(
+                app.sd, "query_devices", return_value=DEVICES), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None) as check:
+            self.assertEqual(instance._get_input_device(), (1, 16000))
+
+        check.assert_called_once_with(
+            device=1, samplerate=16000, channels=1, dtype="float32")
+        instance._find_input_device.assert_not_called()
+
+    def test_automatic_cache_does_not_reuse_an_index_that_became_unsafe(self):
+        instance = self.make_app()
+        instance.input_device = (1, 16000)
+        instance._cached_input_selector = app.AUTO_INPUT_DEVICE
+        replaced = [dict(device) for device in DEVICES]
+        replaced[1]["name"] = "Stereo Mix (loopback)"
+        instance._find_input_device = mock.Mock(return_value=(0, 16000))
+
+        with mock.patch.object(
+                app.sd, "query_devices", return_value=replaced), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None):
+            self.assertEqual(instance._get_input_device(), (0, 16000))
+
+        instance._find_input_device.assert_called_once_with(
+            app.AUTO_INPUT_DEVICE)
+
     def test_failed_rescan_leaves_no_microphone(self):
         instance = self.make_app()
         instance._rescan_audio_devices = mock.Mock(return_value=False)

@@ -25,30 +25,41 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
-        "name": "Presspeech for Windows",
-        "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech pastes only when it can verify the original destination; otherwise it leaves the transcript on the clipboard for manual paste. There is no cloud transcription, account, subscription, or telemetry.",
-        "operatingSystem": "Windows 10 or Windows 11, x64",
-        "applicationCategory": "UtilitiesApplication",
-        "applicationSubCategory": "Speech recognition, dictation, transcription",
-        "softwareVersion": "0.1.12",
-        "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12",
-        "downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe",
-        "installUrl": "https://rcourtman.github.io/presspeech/windows.html",
-        "codeRepository": "https://github.com/rcourtman/presspeech/tree/main/windows",
-        "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
-        "softwareRequirements": [
-          "Windows 10 or Windows 11, x64",
-          "About 4.4 GB for the installed app",
-          "A microphone and an internet connection for the first model download",
-          "Fresh systems use multilingual Parakeet with usable NVIDIA CUDA or English-only Whisper base.en without CUDA"
-        ],
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        }
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://rcourtman.github.io/presspeech/windows.html#webpage",
+            "url": "https://rcourtman.github.io/presspeech/windows.html",
+            "dateModified": "2026-09-22",
+            "mainEntity": "https://rcourtman.github.io/presspeech/windows.html#software"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
+            "name": "Presspeech for Windows",
+            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech pastes only when it can verify the original destination; otherwise it leaves the transcript on the clipboard for manual paste. There is no cloud transcription, account, subscription, or telemetry.",
+            "operatingSystem": "Windows 10 or Windows 11, x64",
+            "applicationCategory": "UtilitiesApplication",
+            "applicationSubCategory": "Speech recognition, dictation, transcription",
+            "softwareVersion": "0.1.12",
+            "releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12",
+            "downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe",
+            "installUrl": "https://rcourtman.github.io/presspeech/windows.html",
+            "codeRepository": "https://github.com/rcourtman/presspeech/tree/main/windows",
+            "license": "https://github.com/rcourtman/presspeech/blob/main/LICENSE",
+            "softwareRequirements": [
+              "Windows 10 or Windows 11, x64",
+              "About 4.4 GB for the installed app",
+              "A microphone and an internet connection for the first model download",
+              "Fresh systems use multilingual Parakeet with usable NVIDIA CUDA or English-only Whisper base.en without CUDA"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          }
+        ]
       }
     </script>
   </head>
@@ -77,6 +88,7 @@
         <span class="section-eyebrow">Windows prerelease</span>
         <h1>Private dictation on your Windows PC</h1>
         <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it keeps the result on the clipboard for manual paste. There is no account, subscription, telemetry, or cloud transcription.</p>
+        <p class="quiet" data-release-status>Current published Windows prerelease: 0.1.12. Install metadata updated <time datetime="2026-09-22">22 September 2026</time>.</p>
         <div class="actions">
           <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe">Download Windows 0.1.12</a>
           <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12">Release notes and checksum</a>
@@ -224,7 +236,7 @@ After the user completes the installer, launch Presspeech from the Start Menu. E
             </li>
             <li>
               <strong>Check microphone access</strong>
-              <p>If setup reports that the microphone is connected but no input level was detected, unmute it, speak, and choose <strong>Check Again</strong>. If the microphone cannot be opened, use the direct buttons to open Windows Microphone Privacy or Sound Input settings. Turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>, confirm the input, then check again. After reconnecting a USB or Bluetooth microphone, <strong>Check Again</strong> refreshes device discovery without an app restart; a specifically selected unavailable input remains selected instead of silently changing to another microphone. Unpackaged desktop apps share this privacy control, so Windows does not provide a separate Presspeech toggle. Outside the brief readiness check, Presspeech captures audio only while dictation is active; all captured audio is discarded after local processing.</p>
+              <p>If setup reports that the microphone is connected but no input level was detected, unmute it, speak, and choose <strong>Check Again</strong>. If the microphone cannot be opened, use the direct buttons to open Windows Microphone Privacy or Sound Input settings. Turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>, confirm the input, then check again. After reconnecting a USB or Bluetooth microphone, <strong>Check Again</strong> refreshes device discovery without an app restart; a specifically selected unavailable input remains selected instead of silently changing to another microphone. Before opening the microphone for each recording, Presspeech confirms that its cached Windows audio-device index still names the configured microphone and remains an allowed input, rejecting a stale entry when re-enumeration shows that indexes changed after reconnect or resume. Unpackaged desktop apps share this privacy control, so Windows does not provide a separate Presspeech toggle. Outside the brief readiness check, Presspeech captures audio only while dictation is active; all captured audio is discarded after local processing.</p>
             </li>
             <li>
               <strong>Try a private test</strong>

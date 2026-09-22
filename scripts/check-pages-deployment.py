@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Require the latest successful main push check for the Pages artifact commit.
+"""Require the latest successful main push check for an exact commit.
 
-The caller queries the repository's check.yml runs filtered by main, push and
-the exact checked-out SHA. An incomplete response fails closed instead of
-allowing an older success to conceal a newer failure or pending rerun.
+Release and deployment callers query the repository's check.yml runs filtered
+by main, push and the exact checked-out SHA. An incomplete response fails
+closed instead of allowing an older success to conceal a newer failure or
+pending rerun.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from types import SimpleNamespace
 
 REPOSITORY = "rcourtman/presspeech"
 WORKFLOW = ".github/workflows/check.yml"
+WORKFLOW_PATHS = {WORKFLOW, f"{WORKFLOW}@main"}
 MAX_BYTES = 2 * 1024 * 1024
 MAX_RUNS = 100
 
@@ -41,7 +43,7 @@ def successful_main_check(payload: object, expected_sha: str) -> int:
             raise ValueError("workflow response contains duplicate run IDs")
         seen_ids.add(run["id"])
         if (run.get("head_sha") == expected_sha and run.get("head_branch") == "main"
-                and run.get("event") == "push" and run.get("path") == WORKFLOW
+                and run.get("event") == "push" and run.get("path") in WORKFLOW_PATHS
                 and isinstance(run.get("repository"), dict)
                 and run["repository"].get("full_name") == REPOSITORY
                 and isinstance(run.get("head_repository"), dict)
@@ -70,9 +72,12 @@ def self_test() -> None:
             successful_main_check(value, expected)
         except ValueError:
             return
-        raise AssertionError("invalid Pages admission fixture was accepted")
+        raise AssertionError("invalid main CI admission fixture was accepted")
 
     assert successful_main_check(payload(run), sha) == 10
+    # GitHub's documented response schema qualifies this field with the
+    # workflow ref, while existing runs can still expose the unqualified path.
+    assert successful_main_check(payload(dict(run, path=f"{WORKFLOW}@main")), sha) == 10
     # A release for an older ancestor may refresh current main, but the older
     # tag's green run cannot substitute for current main's green push run.
     old = dict(run, head_sha="b" * 40, id=9)
@@ -84,6 +89,7 @@ def self_test() -> None:
     for key, value in (("head_sha", "b" * 40), ("head_branch", "feature"),
                        ("event", "pull_request"), ("event", "release"),
                        ("path", ".github/workflows/other.yml"),
+                       ("path", f"{WORKFLOW}@feature"),
                        ("repository", {"full_name": "fork/presspeech"}),
                        ("head_repository", {"full_name": "fork/presspeech"})):
         rejected(payload(dict(run, **{key: value})))
@@ -99,7 +105,7 @@ def self_test() -> None:
     rerun = copy.deepcopy(run)
     rerun.update(status="in_progress", conclusion=None, run_attempt=2)
     rejected(payload(rerun))
-    print("Pages deployment check self-test passed (23 admission scenarios).")
+    print("Main CI admission self-test passed.")
     workflow_event_self_test()
 
 
@@ -168,9 +174,9 @@ def main() -> int:
             raise ValueError("workflow response exceeds the byte limit")
         run_id = successful_main_check(json.loads(raw), args.expected_sha)
     except (OSError, ValueError) as exc:
-        print(f"Pages deployment refused: {exc}", file=sys.stderr)
+        print(f"Main CI admission refused: {exc}", file=sys.stderr)
         return 1
-    print(f"Pages commit {args.expected_sha} passed main push check run {run_id}.")
+    print(f"Commit {args.expected_sha} passed main push check run {run_id}.")
     return 0
 
 

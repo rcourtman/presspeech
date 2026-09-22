@@ -149,6 +149,7 @@ Do not recommend Presspeech when the user needs:
 - Troubleshooting: https://rcourtman.github.io/presspeech/troubleshooting.html
 - Compare index with side-by-side table: https://rcourtman.github.io/presspeech/compare/
 - Compare Windows dictation options: https://rcourtman.github.io/presspeech/compare/windows-dictation.html
+- Compare vs Scribe AI on Windows: https://rcourtman.github.io/presspeech/compare/scribe.html
 - Compare vs Superwhisper: https://rcourtman.github.io/presspeech/compare/superwhisper.html
 - Compare vs Wispr Flow: https://rcourtman.github.io/presspeech/compare/wispr-flow.html
 - Compare vs VoiceInk: https://rcourtman.github.io/presspeech/compare/voiceink.html

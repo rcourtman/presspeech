@@ -29,6 +29,11 @@ Choose the build that matches your computer:
 | **First model download** | About 500–600 MB | About 141 MiB on CPU or 2.5 GB with CUDA |
 | **Start** | [Install on macOS](https://rcourtman.github.io/presspeech/install.html) | [Verify and install the Windows prerelease](https://rcourtman.github.io/presspeech/windows.html) |
 
+**New to Presspeech?** Follow the
+[four-checkpoint first-dictation guide](https://rcourtman.github.io/presspeech/getting-started.html)
+from install, through Ready and the private scratchpad, to one simple target
+app.
+
 > **Published downloads and source can differ.** The `main` branch can contain
 > an unreleased candidate. The install links below resolve only to published
 > artifacts; features labelled **Upcoming** are not in those downloads yet.
@@ -221,7 +226,9 @@ each platform rather than identical.
   released first. Apple keyboards may require **Fn** to send an F-key
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
 - **Settings → Dictation → Language Hint** — auto-detect (default) or pin to one of
-  18 Latin/Cyrillic-script languages to prevent wrong-script bleed-through
+  the model's 25 supported European languages to prevent wrong-script
+  bleed-through; Bosnian, Belarusian, and Serbian script hints are also
+  available as script-filter aliases
 - **Settings → Text → After Pasting** — append space, append newline, or no
   suffix
 - **Settings → Text → Dictionary & Shortcuts** — correct recurring
@@ -239,11 +246,12 @@ each platform rather than identical.
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
 - **Settings → Behavior → Keep Previous Clipboard for Manual Restore
   (macOS 0.3.8 and later)** — off by default. Keeps a complete copy of the
-  previous macOS clipboard in memory for up to five minutes. After checking
-  that your latest dictated text arrived, choose **Restore Previous
-  Clipboard…** from the main or Dock menu and confirm. Expiry only discards the
-  saved copy; it never rewrites the clipboard. Another copy, disabling the
-  option, or quitting retires the offer.
+  previous macOS clipboard in memory for up to five minutes, whether the
+  transcript is pasted automatically or copied for manual paste. After
+  checking that your latest dictated text arrived, choose **Restore Previous
+  Clipboard…** from the main or Dock menu and confirm. Expiry only discards
+  the saved copy; it never rewrites the clipboard. Another copy, disabling
+  the option, or quitting retires the offer.
   Consecutive dictations preserve the original copy and original deadline.
   A complete snapshot is limited to 64 MB and 256 representations so an
   unusually large or complex clipboard cannot be retained without bound. If

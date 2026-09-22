@@ -859,6 +859,17 @@ def metadata_text(metadata: dict[str, object]) -> str:
     return json.dumps(metadata, indent=2, sort_keys=True) + "\n"
 
 
+def display_date(value: object) -> str:
+    try:
+        raw = str(value)
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw) is None:
+            raise ValueError
+        parsed = date.fromisoformat(raw)
+    except ValueError as exc:
+        raise SyncError(f"invalid metadata date {value!r}") from exc
+    return f"{parsed.day} {parsed:%B %Y}"
+
+
 def sync_readme(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     size = str(metadata["release_zip_size"])
@@ -894,9 +905,19 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
     version = str(metadata["version"])
     windows_version = str(metadata["windows_version"])
     size = str(metadata["release_zip_size"])
+    last_updated = str(metadata["last_updated"])
+    updated_display = display_date(last_updated)
 
+    page_marker = '"@id": "https://rcourtman.github.io/presspeech/#webpage"'
     mac_marker = '"@id": "https://rcourtman.github.io/presspeech/#software"'
     windows_marker = '"@id": "https://rcourtman.github.io/presspeech/windows.html#software"'
+    text = replace_after_marker(
+        text,
+        page_marker,
+        r'"dateModified": "[^"]+"',
+        f'"dateModified": "{last_updated}"',
+        path=path,
+    )
     text = replace_after_marker(
         text,
         mac_marker,
@@ -960,6 +981,12 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
         text,
         r"<strong>Windows(?: \d+\.\d+\.\d+)?:</strong>",
         f"<strong>Windows {windows_version}:</strong>",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r'<p class="quiet" data-release-status>.*?</p>',
+        f'<p class="quiet" data-release-status>Current published downloads: macOS {version} and Windows {windows_version} prerelease. Install metadata updated <time datetime="{last_updated}">{updated_display}</time>.</p>',
         path=path,
     )
 
@@ -1028,15 +1055,17 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     digest = str(metadata["release_zip_sha256"])
     version = str(metadata["version"])
+    last_updated = str(metadata["last_updated"])
+    updated_display = display_date(last_updated)
     escaped_prompt = html.escape(MAC_INSTALL_PROMPT, quote=False)
 
     text = replace_regex(
         text,
         r'(<a class="button" href="https://github\.com/rcourtman/presspeech/'
-        r'releases/latest/download/Presspeech\.zip">)'
+        r'releases/(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip">)'
         r'(?:Download Presspeech\.zip|Download macOS \d+\.\d+\.\d+ \(\.zip\))'
         r'(</a>)',
-        rf'\1Download macOS {version} (.zip)\2',
+        f'<a class="button" href="https://github.com/rcourtman/presspeech/releases/download/v{version}/Presspeech.zip">Download macOS {version} (.zip)</a>',
         path=path,
     )
 
@@ -1056,6 +1085,12 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         text,
         r"<p>(?:The canonical install path is|Use the direct notarised download for the shortest path).*?</p>",
         "<p>Use the direct notarised download for the shortest path, or Homebrew if you want command-line install and updates. The app then guides model loading, macOS privacy grants, and hotkey readiness from Setup Checklist.</p>",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r'<p class="quiet" data-release-status>.*?</p>',
+        f'<p class="quiet" data-release-status>Current published macOS release: {version}. Install metadata updated <time datetime="{last_updated}">{updated_display}</time>.</p>',
         path=path,
     )
     text = replace_regex(
@@ -1128,10 +1163,13 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
 def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     version = str(metadata["windows_version"])
+    last_updated = str(metadata["last_updated"])
+    updated_display = display_date(last_updated)
     escaped_prompt = html.escape(WINDOWS_INSTALL_PROMPT, quote=False)
 
     replacements = [
         (r'"softwareVersion": "\d+\.\d+\.\d+"', f'"softwareVersion": "{version}"', 1),
+        (r'"dateModified": "\d{4}-\d{2}-\d{2}"', f'"dateModified": "{last_updated}"', 1),
         (r"windows-v\d+\.\d+\.\d+", f"windows-v{version}", 1),
         (
             r"Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe",
@@ -1144,6 +1182,12 @@ def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
         text, count = re.subn(pattern, replacement, text)
         if count < minimum:
             raise SyncError(f"{path}: expected at least {minimum} matches for {pattern!r}")
+    text = replace_regex(
+        text,
+        r'<p class="quiet" data-release-status>.*?</p>',
+        f'<p class="quiet" data-release-status>Current published Windows prerelease: {version}. Install metadata updated <time datetime="{last_updated}">{updated_display}</time>.</p>',
+        path=path,
+    )
     prompt_pattern = (
         r"<pre><code>Install Presspeech from https://github\.com/rcourtman/presspeech "
         r"on this Windows PC\..*?</code></pre>"
@@ -1948,6 +1992,8 @@ def run_self_test() -> None:
 
         index_page = Path(tmp) / "index.html"
         index_page.write_text(
+            '"@id": "https://rcourtman.github.io/presspeech/#webpage"\n'
+            '"dateModified": "2025-12-29"\n'
             '"@id": "https://rcourtman.github.io/presspeech/#software"\n'
             '"softwareVersion": "1.2.3"\n'
             '"installUrl": "https://example.com/old-mac"\n'
@@ -1959,6 +2005,7 @@ def run_self_test() -> None:
             '<div class="stat"><strong>1.0 MB</strong><span>signed release zip</span></div>\n'
             '<p class="quiet"><strong>macOS:</strong> released. '
             '<strong>Windows:</strong> prerelease.</p>\n'
+            '<p class="quiet" data-release-status>stale</p>\n'
             f"{SETUP_CHECKLIST} Copy Diagnostics Save Diagnostics\n",
             encoding="utf-8",
         )
@@ -1970,6 +2017,8 @@ def run_self_test() -> None:
             "<strong>7.6 MB</strong>",
             "<strong>macOS 8.7.6:</strong>",
             "<strong>Windows 9.8.7:</strong>",
+            '"dateModified": "2026-01-02"',
+            'datetime="2026-01-02">2 January 2026</time>',
         ):
             if expected not in synced_index:
                 raise SyncError(f"self-test: homepage metadata did not sync {expected!r}")
@@ -2021,9 +2070,11 @@ def run_self_test() -> None:
         windows_page = Path(tmp) / "windows.html"
         windows_page.write_text(
             '"softwareVersion": "1.2.3"\n'
+            '"dateModified": "2025-12-30"\n'
             'windows-v1.2.3\n'
             'Presspeech-Setup-1.2.3-x64.exe\n'
             'Download Windows 1.2.3\n'
+            '<p class="quiet" data-release-status>stale</p>\n'
             '<pre><code>Install Presspeech from https://github.com/rcourtman/presspeech '
             'on this Windows PC.\nold prompt</code></pre>\n',
             encoding="utf-8",
@@ -2031,7 +2082,7 @@ def run_self_test() -> None:
         synced_windows_page = sync_windows_html(windows_page, metadata)
         if (
             "1.2.3" in synced_windows_page
-            or synced_windows_page.count("9.8.7") != 4
+            or synced_windows_page.count("9.8.7") != 5
             or "Smart App Control or managed policy" not in synced_windows_page
         ):
             raise SyncError("self-test: Windows page release references were not all synced")

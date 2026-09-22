@@ -625,6 +625,15 @@ enum DictationLanguage: String, CaseIterable {
     case italian = "it"
     case portuguese = "pt"
     case romanian = "ro"
+    case dutch = "nl"
+    case danish = "da"
+    case swedish = "sv"
+    case finnish = "fi"
+    case hungarian = "hu"
+    case estonian = "et"
+    case latvian = "lv"
+    case lithuanian = "lt"
+    case maltese = "mt"
     case polish = "pl"
     case czech = "cs"
     case slovak = "sk"
@@ -636,6 +645,7 @@ enum DictationLanguage: String, CaseIterable {
     case belarusian = "be"
     case bulgarian = "bg"
     case serbian = "sr"
+    case greek = "el"
 
     /// Map to FluidAudio's `Language` enum. Returns nil for `.auto` so the
     /// caller passes no hint and the decoder script filter stays off.
@@ -649,6 +659,15 @@ enum DictationLanguage: String, CaseIterable {
         case .italian:     return .italian
         case .portuguese:  return .portuguese
         case .romanian:    return .romanian
+        case .dutch:       return .dutch
+        case .danish:      return .danish
+        case .swedish:     return .swedish
+        case .finnish:     return .finnish
+        case .hungarian:   return .hungarian
+        case .estonian:    return .estonian
+        case .latvian:     return .latvian
+        case .lithuanian:  return .lithuanian
+        case .maltese:     return .maltese
         case .polish:      return .polish
         case .czech:       return .czech
         case .slovak:      return .slovak
@@ -660,6 +679,7 @@ enum DictationLanguage: String, CaseIterable {
         case .belarusian:  return .belarusian
         case .bulgarian:   return .bulgarian
         case .serbian:     return .serbian
+        case .greek:       return .greek
         }
     }
 }
@@ -673,6 +693,15 @@ let DICTATION_LANGUAGE_DISPLAY: [DictationLanguage: String] = [
     .italian: "Italian",
     .portuguese: "Portuguese",
     .romanian: "Romanian",
+    .dutch: "Dutch",
+    .danish: "Danish",
+    .swedish: "Swedish",
+    .finnish: "Finnish",
+    .hungarian: "Hungarian",
+    .estonian: "Estonian",
+    .latvian: "Latvian",
+    .lithuanian: "Lithuanian",
+    .maltese: "Maltese",
     .polish: "Polish",
     .czech: "Czech",
     .slovak: "Slovak",
@@ -684,6 +713,7 @@ let DICTATION_LANGUAGE_DISPLAY: [DictationLanguage: String] = [
     .belarusian: "Belarusian",
     .bulgarian: "Bulgarian",
     .serbian: "Serbian",
+    .greek: "Greek",
 ]
 
 enum SpeechModelProfile: String, CaseIterable {
@@ -5359,15 +5389,19 @@ enum TextInserter {
                                                  preserveClipboard: preserveClipboard,
                                                  expectedTarget: expectedTarget)
         case .directUnicode:
-            return DirectUnicodeInserter.insert(text, expectedTarget: expectedTarget)
+            return DirectUnicodeInserter.insert(text,
+                                                preserveClipboard: preserveClipboard,
+                                                expectedTarget: expectedTarget)
         }
     }
 
-    static func copyWithoutPasting(_ text: String) -> TextInsertionOutcome {
-        ClipboardPasteInserter.discardPendingRestore(on: .general)
-        return ClipboardPasteInserter.writeTranscript(text, to: .general)
-            ? .copiedWithoutPasting
-            : .failed
+    static func copyWithoutPasting(_ text: String,
+                                   preserveClipboard: Bool = false) -> TextInsertionOutcome {
+        ClipboardPasteInserter.copyWithoutPasting(
+            text,
+            to: .general,
+            preserveClipboard: preserveClipboard
+        )
     }
 }
 
@@ -5376,6 +5410,15 @@ enum TextInserter {
 // replaced its contents, and we must not clobber them.
 func pasteboardChangeCountAllowsRestore(current: Int, expected: Int) -> Bool {
     current == expected
+}
+
+/// The transcript is already on the pasteboard when a late focus check fails.
+/// Recheck that write instead of using the generic copy fallback, which could
+/// overwrite clipboard content copied after the previous ownership check.
+func clipboardOnlyOutcomeAfterOwnedWrite(
+    clipboardStillOwned: () -> Bool
+) -> TextInsertionOutcome {
+    clipboardStillOwned() ? .copiedWithoutPasting : .clipboardChanged
 }
 
 @MainActor
@@ -5480,6 +5523,16 @@ private enum ClipboardPasteInserter {
         let reason: SnapshotFailure
         let sourceChangeCount: Int
         let expiresAt: ContinuousClock.Instant
+    }
+
+    private struct ReplacementContext {
+        let previous: Snapshot?
+        let snapshotUnavailability: SnapshotUnavailability?
+    }
+
+    private enum ReplacementPreparation {
+        case ready(ReplacementContext)
+        case clipboardChanged
     }
 
     /// Consecutive dictations inherit the original clipboard and its original
@@ -5848,54 +5901,52 @@ private enum ClipboardPasteInserter {
         return wrote ? WriteReceipt(pasteboardName: pb.name, changeCount: ownedChangeCount) : nil
     }
 
-    static func insert(_ text: String,
-                       preserveClipboard: Bool = false,
-                       expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
-        guard dictationPasteTargetMatches(expectedTarget,
-                                          currentDictationPasteTarget()) else {
-            return TextInserter.copyWithoutPasting(text)
+    private static func prepareReplacement(
+        on pb: NSPasteboard,
+        preserveClipboard: Bool
+    ) -> ReplacementPreparation {
+        guard preserveClipboard else {
+            return .ready(ReplacementContext(previous: nil,
+                                             snapshotUnavailability: nil))
         }
 
-        let pb = NSPasteboard.general
         var previous: Snapshot?
         var snapshotUnavailability: SnapshotUnavailability?
-        if preserveClipboard {
-            if let inherited = pendingSnapshotForReplacement(on: pb) {
-                previous = inherited
-            } else if let inherited = pendingRestoreUnavailabilityForReplacement(on: pb) {
-                snapshotUnavailability = inherited
-            } else {
-                switch captureSnapshot(of: pb) {
-                case .captured(let snapshot):
-                    previous = snapshot
-                case .unavailable(let reason, let sourceChangeCount):
-                    guard unavailableSnapshotAllowsClipboardWrite(
-                        reason: reason,
-                        sourceChangeCount: sourceChangeCount,
-                        currentChangeCount: pb.changeCount
-                    ) else {
-                        log("clipboard snapshot stopped: \(reason.logDescription)")
-                        return .clipboardChanged
-                    }
-                    snapshotUnavailability = SnapshotUnavailability(
-                        reason: reason,
-                        sourceChangeCount: sourceChangeCount,
-                        expiresAt: ContinuousClock().now.advanced(
-                            by: .seconds(MANUAL_CLIPBOARD_RESTORE_LIFETIME_SECONDS)
-                        )
-                    )
-                    log("clipboard snapshot unavailable: \(reason.logDescription); restore skipped")
+        if let inherited = pendingSnapshotForReplacement(on: pb) {
+            previous = inherited
+        } else if let inherited = pendingRestoreUnavailabilityForReplacement(on: pb) {
+            snapshotUnavailability = inherited
+        } else {
+            switch captureSnapshot(of: pb) {
+            case .captured(let snapshot):
+                previous = snapshot
+            case .unavailable(let reason, let sourceChangeCount):
+                guard unavailableSnapshotAllowsClipboardWrite(
+                    reason: reason,
+                    sourceChangeCount: sourceChangeCount,
+                    currentChangeCount: pb.changeCount
+                ) else {
+                    log("clipboard snapshot stopped: \(reason.logDescription)")
+                    return .clipboardChanged
                 }
+                snapshotUnavailability = SnapshotUnavailability(
+                    reason: reason,
+                    sourceChangeCount: sourceChangeCount,
+                    expiresAt: ContinuousClock().now.advanced(
+                        by: .seconds(MANUAL_CLIPBOARD_RESTORE_LIFETIME_SECONDS)
+                    )
+                )
+                log("clipboard snapshot unavailable: \(reason.logDescription); restore skipped")
             }
         }
 
-        // A lazy data provider can make snapshotting take long enough
-        // for another process to replace the clipboard. Never take
-        // ownership after the snapshot's source generation goes stale.
-        if let candidate = previous,
+        // A lazy data provider can make snapshotting take long enough for
+        // another process to replace the clipboard. Never take ownership after
+        // the snapshot's source generation goes stale.
+        if let previous,
            !pasteboardChangeCountAllowsRestore(current: pb.changeCount,
-                                               expected: candidate.sourceChangeCount) {
-            log("clipboard changed after snapshot; clipboard insertion skipped")
+                                               expected: previous.sourceChangeCount) {
+            log("clipboard changed after snapshot; transcript write skipped")
             return .clipboardChanged
         }
         if let snapshotUnavailability,
@@ -5904,7 +5955,71 @@ private enum ClipboardPasteInserter {
                sourceChangeCount: snapshotUnavailability.sourceChangeCount,
                currentChangeCount: pb.changeCount
            ) {
-            log("clipboard changed after unavailable snapshot; clipboard insertion skipped")
+            log("clipboard changed after unavailable snapshot; transcript write skipped")
+            return .clipboardChanged
+        }
+
+        return .ready(ReplacementContext(previous: previous,
+                                         snapshotUnavailability: snapshotUnavailability))
+    }
+
+    private static func stageManualPreservation(
+        _ context: ReplacementContext,
+        on pb: NSPasteboard,
+        expectedChangeCount: Int
+    ) {
+        if let previous = context.previous {
+            stageManualRestore(previous, to: pb, expectedChangeCount: expectedChangeCount)
+        } else if let unavailable = context.snapshotUnavailability {
+            stageManualRestoreUnavailability(unavailable.reason,
+                                             to: pb,
+                                             expectedChangeCount: expectedChangeCount,
+                                             expiresAt: unavailable.expiresAt)
+        }
+    }
+
+    static func copyWithoutPasting(
+        _ text: String,
+        to pb: NSPasteboard,
+        preserveClipboard: Bool = false
+    ) -> TextInsertionOutcome {
+        let context: ReplacementContext
+        switch prepareReplacement(on: pb, preserveClipboard: preserveClipboard) {
+        case .ready(let prepared):
+            context = prepared
+        case .clipboardChanged:
+            return .clipboardChanged
+        }
+
+        guard let receipt = writeTranscriptWithReceipt(text, to: pb) else {
+            log("pasteboard write failed")
+            return .failed
+        }
+        guard receipt.stillOwns(pb) else {
+            log("clipboard changed after recovery copy; manual preservation skipped")
+            return .clipboardChanged
+        }
+        stageManualPreservation(context, on: pb, expectedChangeCount: receipt.changeCount)
+        return .copiedWithoutPasting
+    }
+
+    static func insert(_ text: String,
+                       preserveClipboard: Bool = false,
+                       expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
+        guard dictationPasteTargetMatches(expectedTarget,
+                                          currentDictationPasteTarget()) else {
+            return TextInserter.copyWithoutPasting(
+                text,
+                preserveClipboard: preserveClipboard
+            )
+        }
+
+        let pb = NSPasteboard.general
+        let context: ReplacementContext
+        switch prepareReplacement(on: pb, preserveClipboard: preserveClipboard) {
+        case .ready(let prepared):
+            context = prepared
+        case .clipboardChanged:
             return .clipboardChanged
         }
 
@@ -5929,7 +6044,18 @@ private enum ClipboardPasteInserter {
             log("clipboard changed before paste; clipboard insertion skipped")
             return .clipboardChanged
         }
-        guard targetStillFocused else { return TextInserter.copyWithoutPasting(text) }
+        guard targetStillFocused else {
+            let outcome = clipboardOnlyOutcomeAfterOwnedWrite {
+                receipt.stillOwns(pb)
+            }
+            if outcome == .copiedWithoutPasting {
+                stageManualPreservation(context, on: pb,
+                                        expectedChangeCount: writeChangeCount)
+            } else {
+                log("clipboard changed after paste focus moved; insertion stopped")
+            }
+            return outcome
+        }
 
         let steps = clipboardPasteKeyboardEventSteps(commandKey: virtualKeyCommand,
                                                      pasteKey: virtualKeyV)
@@ -5947,33 +6073,28 @@ private enum ClipboardPasteInserter {
             return .clipboardChanged
         }
         if postOutcome == .targetChanged {
-            return TextInserter.copyWithoutPasting(text)
+            let outcome = clipboardOnlyOutcomeAfterOwnedWrite {
+                receipt.stillOwns(pb)
+            }
+            if outcome == .copiedWithoutPasting {
+                stageManualPreservation(context, on: pb,
+                                        expectedChangeCount: writeChangeCount)
+            } else {
+                log("clipboard changed while unwinding paste focus move; insertion stopped")
+            }
+            return outcome
         }
         guard postOutcome == .posted else {
             log("paste event creation failed")
             // Keep restoration explicit even on delivery failure. A later
             // typing fallback does not prove the destination consumed a paste.
-            if let previous {
-                stageManualRestore(previous, to: pb, expectedChangeCount: writeChangeCount)
-            } else if let snapshotUnavailability {
-                stageManualRestoreUnavailability(snapshotUnavailability.reason,
-                                                 to: pb,
-                                                 expectedChangeCount: writeChangeCount,
-                                                 expiresAt: snapshotUnavailability.expiresAt)
-            }
+            stageManualPreservation(context, on: pb, expectedChangeCount: writeChangeCount)
             return .failed
         }
 
-        if let previous {
-            // Posting Command+V is not a consumption acknowledgement. Keep
-            // the transcript until the user deliberately restores or copies.
-            stageManualRestore(previous, to: pb, expectedChangeCount: writeChangeCount)
-        } else if let snapshotUnavailability {
-            stageManualRestoreUnavailability(snapshotUnavailability.reason,
-                                             to: pb,
-                                             expectedChangeCount: writeChangeCount,
-                                             expiresAt: snapshotUnavailability.expiresAt)
-        }
+        // Posting Command+V is not a consumption acknowledgement. Keep the
+        // transcript until the user deliberately restores or copies.
+        stageManualPreservation(context, on: pb, expectedChangeCount: writeChangeCount)
         return .inserted
     }
 
@@ -6072,6 +6193,7 @@ private enum DirectUnicodeInserter {
     private static let maxUTF16UnitsPerEvent = 20
 
     static func insert(_ text: String,
+                       preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         let source = CGEventSource(stateID: .combinedSessionState)
         let chunks = unicodeInsertionChunks(
@@ -6085,7 +6207,12 @@ private enum DirectUnicodeInserter {
                                              currentDictationPasteTarget())
             },
             postChunk: { post($0, source: source) },
-            copyWithoutPasting: { TextInserter.copyWithoutPasting(text) }
+            copyWithoutPasting: {
+                TextInserter.copyWithoutPasting(
+                    text,
+                    preserveClipboard: preserveClipboard
+                )
+            }
         )
     }
 
@@ -9271,7 +9398,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                 expectedTarget: expectedTarget
                             )
                         } else {
-                            insertionOutcome = TextInserter.copyWithoutPasting(deliveredText)
+                            insertionOutcome = TextInserter.copyWithoutPasting(
+                                deliveredText,
+                                preserveClipboard: settings.preserveClipboardForManualRestore
+                            )
                         }
                         switch insertionOutcome {
                         case .inserted:
@@ -11272,7 +11402,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                           keyEquivalent: "")
         restoreClipboard.target = self
         restoreClipboard.state = settings.preserveClipboardForManualRestore ? .on : .off
-        restoreClipboard.toolTip = "Keep a complete previous clipboard of up to 64 MB and 256 representations in memory for up to five minutes. macOS may ask for clipboard access. After checking the paste, choose Restore Previous Clipboard… from the main menu. Nothing is restored automatically."
+        restoreClipboard.toolTip = "Keep a complete previous clipboard of up to 64 MB and 256 representations in memory for up to five minutes, whether the transcript is pasted automatically or copied for manual paste. macOS may ask for clipboard access. After checking delivery, choose Restore Previous Clipboard… from the main menu. Nothing is restored automatically."
         sub.addItem(restoreClipboard)
 
         let automaticUpdates = NSMenuItem(title: "Automatically check for updates",
@@ -14576,6 +14706,8 @@ private enum PresspeechSelfTest {
             return runSuite("audio-input", testAudioInputDeviceFiltering)
         case "model-status":
             return runSuite("model-status", testSpeechModelStartupStatus)
+        case "language-hints":
+            return runSuite("language-hints", testDictationLanguageHints)
         case "audio-route":
             return runSuite("audio-route", testAudioRouteChangeDecision)
         case "recording-lifecycle":
@@ -14634,6 +14766,7 @@ private enum PresspeechSelfTest {
         try testAudioConversion()
         try testAudioInputDeviceFiltering()
         try testSpeechModelStartupStatus()
+        try testDictationLanguageHints()
         try testAudioRouteChangeDecision()
         try testRecordingLifecycle()
         try testSilentCaptureHint()
@@ -14663,6 +14796,39 @@ private enum PresspeechSelfTest {
         try expect(discardedRecordingNotice(capturedSampleCount: 1),
                    equals: .recordingTooShort,
                    "a non-empty short capture should explain that it ended too soon")
+    }
+
+    private static func testDictationLanguageHints() throws {
+        let dependencyCodes = Set(Language.allCases.map(\.rawValue))
+        let selectableCodes = Set(
+            DictationLanguage.allCases
+                .filter { $0 != .auto }
+                .map(\.rawValue)
+        )
+        try expect(
+            selectableCodes,
+            equals: dependencyCodes,
+            "language hints should expose every script filter in the pinned FluidAudio API"
+        )
+        try expect(
+            DictationLanguage.allCases.allSatisfy {
+                DICTATION_LANGUAGE_DISPLAY[$0]?.isEmpty == false
+            },
+            equals: true,
+            "every language hint should have a user-facing label"
+        )
+        try expect(
+            DictationLanguage.auto.fluidLanguage,
+            equals: Language?.none,
+            "automatic language detection should leave the decoder script filter disabled"
+        )
+        for hint in DictationLanguage.allCases where hint != .auto {
+            try expect(
+                hint.fluidLanguage?.rawValue,
+                equals: Optional(hint.rawValue),
+                "language hint \(hint.rawValue) should map to the matching decoder script filter"
+            )
+        }
     }
 
     private static func testLaunchAtLogin() throws {
@@ -15967,6 +16133,39 @@ private enum PresspeechSelfTest {
         try expect(probe.6, equals: true, "failed restore must not clear or retry over a newer external copy")
         try expect(probe.7, equals: true, "deliberate copying retires the previous private snapshot")
         try expect(probe.8, equals: true, "disable or quit discards pending memory without a clipboard write")
+
+        let recoveryCopyProbe = MainActor.assumeIsolated {
+            let pb = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.manual-recovery-copy.\(UUID().uuidString)"
+            ))
+            defer {
+                ClipboardPasteInserter.discardPendingRestore(on: pb)
+                pb.releaseGlobally()
+            }
+            _ = ClipboardPasteInserter.write("previous recovery clipboard", to: pb)
+            let outcome = ClipboardPasteInserter.copyWithoutPasting(
+                "transcript awaiting manual paste",
+                to: pb,
+                preserveClipboard: true
+            )
+            let copiedText = pb.string(forType: .string)
+            let token = ClipboardPasteInserter.pendingRestoreToken(on: pb)
+            let restored = token.flatMap {
+                ClipboardPasteInserter.performPendingRestore(on: pb, token: $0)
+            }
+            return (outcome, copiedText, token != nil, restored,
+                    pb.string(forType: .string))
+        }
+        try expect(recoveryCopyProbe.0, equals: .copiedWithoutPasting,
+                   "focus-safe recovery should copy when automatic paste is unavailable")
+        try expect(recoveryCopyProbe.1, equals: "transcript awaiting manual paste",
+                   "focus-safe recovery should leave the complete transcript available")
+        try expect(recoveryCopyProbe.2, equals: true,
+                   "manual recovery copies should retain an opted-in previous clipboard")
+        try expect(recoveryCopyProbe.3, equals: Optional(true),
+                   "an opted-in recovery copy should restore only after confirmation")
+        try expect(recoveryCopyProbe.4, equals: "previous recovery clipboard",
+                   "recovery-copy restoration should recover the clipboard from before dictation")
     }
 
     private static func testBoundedClipboardSnapshots() throws {
@@ -16458,6 +16657,22 @@ private enum PresspeechSelfTest {
             pasteboardChangeCountAllowsRestore(current: 8, expected: 7),
             equals: false,
             "clipboard restore should back off when the pasteboard changed under us"
+        )
+        var ownedWriteChecks = 0
+        try expect(
+            clipboardOnlyOutcomeAfterOwnedWrite {
+                ownedWriteChecks += 1
+                return true
+            },
+            equals: .copiedWithoutPasting,
+            "a late focus change should reuse the already-written transcript without another clipboard write"
+        )
+        try expect(ownedWriteChecks, equals: 1,
+                   "late focus recovery should check the original clipboard ownership once")
+        try expect(
+            clipboardOnlyOutcomeAfterOwnedWrite { false },
+            equals: .clipboardChanged,
+            "a newer clipboard owner should stop late focus recovery without being overwritten"
         )
 
         let restoreProbe = MainActor.assumeIsolated {

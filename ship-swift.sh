@@ -311,23 +311,11 @@ path.write_text(src)
 PY
 }
 
-# Takes GitHub check-runs JSON (the commits/<sha>/check-runs payload) as
-# $1 and prints exactly one of: success | failing | pending | missing.
-check_runs_overall_state() {
-    /usr/bin/python3 - "$1" <<'PY'
-import json
-import sys
-
-runs = json.loads(sys.argv[1]).get("check_runs", [])
-if not runs:
-    print("missing")
-elif any(run.get("status") != "completed" for run in runs):
-    print("pending")
-elif any(run.get("conclusion") not in ("success", "neutral", "skipped") for run in runs):
-    print("failing")
-else:
-    print("success")
-PY
+validate_main_check_runs() {
+    local expected_sha="$1"
+    local runs_file="$2"
+    /usr/bin/python3 "$PROJECT_DIR/scripts/check-pages-deployment.py" \
+        --expected-sha "$expected_sha" --runs-json "$runs_file"
 }
 
 immutable_releases_enabled() {
@@ -647,18 +635,51 @@ run_release_script_self_test() {
     assert_self_test_fails "accepted malformed build number" \
         increment_build_number "04"
 
-    assert_self_test_equals \
-        "$(check_runs_overall_state '{"check_runs": []}')" \
-        "missing" "empty check-run list should report missing"
-    assert_self_test_equals \
-        "$(check_runs_overall_state '{"check_runs": [{"status": "completed", "conclusion": "success"}, {"status": "completed", "conclusion": "skipped"}]}')" \
-        "success" "green check runs should report success"
-    assert_self_test_equals \
-        "$(check_runs_overall_state '{"check_runs": [{"status": "completed", "conclusion": "success"}, {"status": "in_progress", "conclusion": null}]}')" \
-        "pending" "in-progress check run should report pending"
-    assert_self_test_equals \
-        "$(check_runs_overall_state '{"check_runs": [{"status": "completed", "conclusion": "failure"}]}')" \
-        "failing" "failed check run should report failing"
+    local approved_sha workflow_runs_file
+    approved_sha="$(printf 'e%.0s' {1..40})"
+    workflow_runs_file="$tmpdir/check-runs.json"
+    /usr/bin/python3 - "$workflow_runs_file" "$approved_sha" <<'PY'
+import json
+import pathlib
+import sys
+
+path, sha = pathlib.Path(sys.argv[1]), sys.argv[2]
+run = {
+    "id": 100,
+    "head_sha": sha,
+    "head_branch": "main",
+    "event": "push",
+    "path": ".github/workflows/check.yml",
+    "status": "completed",
+    "conclusion": "success",
+    "repository": {"full_name": "rcourtman/presspeech"},
+    "head_repository": {"full_name": "rcourtman/presspeech"},
+}
+path.write_text(json.dumps({"total_count": 1, "workflow_runs": [run]}))
+PY
+    validate_main_check_runs "$approved_sha" "$workflow_runs_file" >/dev/null
+    /usr/bin/python3 - "$workflow_runs_file" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text())
+payload["workflow_runs"][0]["path"] = ".github/workflows/unrelated.yml"
+path.write_text(json.dumps(payload))
+PY
+    assert_self_test_fails "accepted a successful unrelated check workflow" \
+        validate_main_check_runs "$approved_sha" "$workflow_runs_file"
+    grep -Fq -- '--hostname github.com --method GET' "$PROJECT_DIR/ship-swift.sh" \
+        || die "release CI query is not pinned to github.com"
+    grep -Fq 'actions/workflows/check.yml/runs?branch=main&event=push&head_sha=$head_sha&per_page=100' \
+        "$PROJECT_DIR/ship-swift.sh" \
+        || die "release CI query is not scoped to the exact main push workflow"
+    local generic_ci_path
+    generic_ci_path='commits/$head_sha/'"check-runs"
+    if grep -Fq "$generic_ci_path" "$PROJECT_DIR/ship-swift.sh"; then
+        die "release CI query still accepts generic commit checks"
+    fi
 
     immutable_releases_enabled '{"enabled": true, "enforced_by_owner": false}'
     assert_self_test_fails "accepted disabled immutable releases" \
@@ -911,17 +932,20 @@ if [[ "$SKIP_QA" -eq 1 ]]; then
     warn "Skipping QA gates (--skip-qa): CI status, self-test suite, packaged smoke test"
 else
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        say "Checking CI status for HEAD ($head_sha)"
-        ci_json="$(gh api "repos/rcourtman/presspeech/commits/$head_sha/check-runs?per_page=100")" \
-            || die "could not query CI check-runs for $head_sha"
-        ci_state="$(check_runs_overall_state "$ci_json")"
-        case "$ci_state" in
-            success) say "CI is green for HEAD" ;;
-            missing) die "no CI check-runs found for HEAD ($head_sha) -- wait for CI to start/finish, or --skip-qa in an emergency" ;;
-            pending) die "CI is still running for HEAD ($head_sha) -- wait for green, or --skip-qa in an emergency" ;;
-            failing) die "CI is red for HEAD ($head_sha) -- fix CI before shipping, or --skip-qa in an emergency" ;;
-            *)       die "unexpected CI state '$ci_state' for HEAD ($head_sha)" ;;
-        esac
+        say "Checking the main push workflow for HEAD ($head_sha)"
+        ci_runs_file="$(mktemp)"
+        if ! gh api --hostname github.com --method GET \
+            "repos/rcourtman/presspeech/actions/workflows/check.yml/runs?branch=main&event=push&head_sha=$head_sha&per_page=100" \
+            >"$ci_runs_file"; then
+            rm -f "$ci_runs_file"
+            die "could not query the check workflow for $head_sha"
+        fi
+        if ! validate_main_check_runs "$head_sha" "$ci_runs_file"; then
+            rm -f "$ci_runs_file"
+            die "the latest main push check workflow is not green for HEAD ($head_sha) -- wait for CI or fix it before shipping, or --skip-qa in an emergency"
+        fi
+        rm -f "$ci_runs_file"
+        say "Main push check workflow is green for HEAD"
     fi
 
     say "Running debug self-test suite (same as CI)"

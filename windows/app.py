@@ -1929,6 +1929,34 @@ class PresspeechApp:
                     return (i, rate)
         return None
 
+    def _cached_input_device_is_current(self, selected):
+        """Verify that a cached PortAudio index still names an allowed input."""
+        cached = self.input_device
+        if (not isinstance(cached, tuple) or len(cached) != 2 or
+                type(cached[0]) is not int or cached[0] < 0):
+            return False
+        index, rate = cached
+        try:
+            # Windows can reuse PortAudio indexes after unplug/reconnect or
+            # resume. Opening a reused index can succeed while capturing a
+            # different device, so an open failure is not a sufficient cache
+            # invalidation signal. Re-enumeration is cheap; retain the full
+            # open-and-level probe for cache misses only.
+            devices = sd.query_devices()
+            device = devices[index]
+            host_apis = sd.query_hostapis()
+            host_name = host_apis[device["hostapi"]]["name"]
+            if not self._safe_input_device(device, host_name):
+                return False
+            if (selected != AUTO_INPUT_DEVICE and
+                    self._device_selector(device, host_name) != selected):
+                return False
+            sd.check_input_settings(
+                device=index, samplerate=rate, channels=1, dtype="float32")
+        except Exception:
+            return False
+        return True
+
     def _get_input_device(self, epoch=None, audio_lease=None):
         scope = (AUDIO_BACKEND.operation() if audio_lease is None
                  else nullcontext(audio_lease))
@@ -1940,7 +1968,8 @@ class PresspeechApp:
             # invalidates the cache. Tag cached indexes with their stable
             # selector so stale work is never reused by a later recording.
             cached_for = getattr(self, "_cached_input_selector", selected)
-            if self.input_device is not None and cached_for == selected:
+            if (self.input_device is not None and cached_for == selected and
+                    self._cached_input_device_is_current(selected)):
                 return self.input_device
             try:
                 chosen = self._find_input_device(selected)

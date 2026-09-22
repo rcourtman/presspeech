@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presspeech vs Scribe AI - Local Windows Dictation</title>
+    <meta name="description" content="Compare Presspeech and Scribe AI: two free open-source local Windows dictation apps with different installation, hardware, history, AI, and text-delivery choices.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/scribe.html">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Presspeech vs Scribe AI - Local Windows Dictation">
+    <meta property="og:description" content="Compare two free MIT-licensed Windows dictation apps: Presspeech's minimal deterministic pipeline and Scribe AI's signed, configurable workspace.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/compare/scribe.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="640">
+    <meta property="og:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="../site-navigation.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>
+        <div class="nav-links" id="primary-navigation-links">
+          <a href="../getting-started.html">Get started</a>
+          <a href="../install.html">macOS</a>
+          <a href="../windows.html">Windows</a>
+          <a href="../privacy.html">Privacy</a>
+          <a href="../benchmarks.html">Benchmarks</a>
+          <a href="../faq.html">FAQ</a>
+          <a href="../troubleshooting.html">Help</a>
+          <a href="./" aria-current="page">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Compare on Windows</span>
+        <h1>Presspeech vs Scribe AI</h1>
+        <p>Both are free, MIT-licensed Windows tray apps with local Parakeet speech recognition, push-to-talk and toggle modes, dictionaries, voice shortcuts, and no required account or subscription. Scribe AI is a larger Windows 11 workspace with a signed Microsoft Store install, retained history, usage views, per-app profiles, and optional AI cleanup. Presspeech is a narrower deterministic dictation path with no persistent transcript history, analytics, or cloud-AI option.</p>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <div class="table-scroll">
+            <table>
+              <caption>Presspeech and Scribe AI compared</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Scribe AI</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Primary workflow</th>
+                  <td>Hold or toggle a configurable key, then normally paste after confirming the original destination. An uncertain or changed destination uses explicit clipboard recovery instead.</td>
+                  <td>Hold or toggle a configurable key, optionally stop on silence, then insert through Unicode or clipboard methods with fallback. Failed insertion keeps recent text available to copy.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Speech engine</th>
+                  <td>A usable NVIDIA CUDA installation selects multilingual Parakeet; a fresh CPU-only installation selects English-only Whisper base.en. Other local models can be selected.</td>
+                  <td>Bundles multilingual Parakeet for CPU recognition, with optional verified English-only Moonshine downloads.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Text handling</th>
+                  <td>Deterministic dictionary replacements, exact voice shortcuts, filler removal, British spelling, and paste suffixes. There is no generative rewriting path.</td>
+                  <td>Dictionary rules, curated vocabulary libraries, snippets, terminal-aware line breaks, and per-app profiles. Optional cleanup can use a local model or a user-configured cloud endpoint.</td>
+                </tr>
+                <tr>
+                  <th scope="row">History and insights</th>
+                  <td>Recent transcripts stay in process memory only and clear on quit. Transcript text, audio, and dictionary contents are excluded from logs.</td>
+                  <td>Stores local transcript history and usage statistics; audio retention is optional. History can be cleared, and an explicit AI-insight action can send bounded aggregate data to the configured provider.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Install and systems</th>
+                  <td>Unsigned prerelease for x64 Windows 10 or 11; Windows 11 is recommended. The self-contained app is about 4.4 GB before its model download.</td>
+                  <td>Microsoft-signed Store install for Windows 11 on Intel, AMD, or Arm, with the speech model bundled. Unsigned standalone installers and portable builds are also offered.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Privacy boundary</th>
+                  <td>Speech recognition is local. No account, telemetry, analytics, cloud transcription, or optional cloud text-processing endpoint exists.</td>
+                  <td>Speech recognition is local and the publisher receives no automatic telemetry. Optional AI cleanup can stay local or send transcript text—not audio—to a provider the user configures.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Price and license</th>
+                  <td>Free and MIT licensed.</td>
+                  <td>Free and MIT licensed.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p>Choose Scribe AI if a signed Store install, Windows on Arm, a bundled multilingual CPU model, optional AI cleanup, per-app profiles, or reviewable local history matters most. Choose Presspeech if Windows 10 support, a CUDA-accelerated multilingual path, no persistent transcript library, no cloud-processing option, and conservative same-destination recovery matter more. Presspeech's Windows build remains a prerelease and is not the lower-friction install.</p>
+          </div>
+          <p>Sources: <a href="https://rcourtman.github.io/presspeech/windows.html">Presspeech Windows guide</a>, <a href="https://rcourtman.github.io/presspeech/privacy.html">privacy documentation</a>, and <a href="https://github.com/rcourtman/presspeech/tree/main/windows">Windows source</a>; Scribe AI's <a href="https://github.com/ChrisMcKee1/scribe">source and feature documentation</a>, <a href="https://github.com/ChrisMcKee1/scribe/blob/main/PRIVACY.md">privacy policy</a>, and <a href="https://apps.microsoft.com/detail/9N2P0SG059TJ">Microsoft Store listing</a> (checked 22 September 2026). The products' published latency figures are not compared because they use different hardware, fixtures, and timing boundaries.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Presspeech and Scribe AI comparison.</span>
+        <span><a href="./">Compare index</a> · <a href="../windows.html">Install Presspeech for Windows</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

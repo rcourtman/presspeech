@@ -141,7 +141,10 @@ Presspeech toggle for this unpackaged desktop app. If a USB or Bluetooth input
 was disconnected, reconnect it and choose **Check Again**; the check refreshes
 microphone discovery without requiring an app restart. Presspeech keeps an
 unavailable specifically selected input selected rather than silently using a
-different microphone.
+different microphone. Before opening the microphone for each recording, it also
+confirms that its cached Windows audio-device index still names that configured
+input, rejecting a stale entry when re-enumeration shows that indexes changed
+after reconnect or resume.
 
 ### Hotkey Does Nothing
 

@@ -308,6 +308,21 @@ class AccessibleWindowTests(unittest.TestCase):
             self.assertIn("_ScrollableDialogBody(root", body)
             self.assertIn("self.scrollable_body.fit_to_screen()", body)
 
+    def test_setup_completion_actions_follow_visual_tab_order(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        # Tk's default traversal follows widget creation order, while packing
+        # two controls from the right lays out the first one at the far edge.
+        # Later must therefore be created before Finish but packed after it.
+        self.assertLess(
+            body.index("later_button = ttk.Button"),
+            body.index("self.finish_button = ttk.Button"),
+        )
+        self.assertLess(
+            body.index('self.finish_button.pack(side="right")'),
+            body.index('later_button.pack(side="right"'),
+        )
+
     def test_scrollable_dialog_routes_wheel_and_shift_wheel(self):
         body = ui._ScrollableDialogBody.__new__(ui._ScrollableDialogBody)
         body.canvas = mock.Mock()

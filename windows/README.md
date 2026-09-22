@@ -95,7 +95,10 @@ direct links to Windows Microphone Privacy or Sound Input settings first. If a
 USB or Bluetooth microphone was disconnected, reconnect it and choose **Check
 Again**; Presspeech refreshes device discovery without requiring a restart. A
 specifically selected microphone remains selected while unavailable instead of
-silently changing to Automatic or another input. Wait
+silently changing to Automatic or another input. Before opening the microphone
+for each recording, Presspeech also confirms that a cached Windows audio-device
+index still names the configured microphone, rejecting stale entries when
+re-enumeration shows device reordering after reconnect or resume. Wait
 until it says the model is ready before the
 first dictation. **Try Dictation** remains disabled until then, and **Finish
 Setup** requires both the speech model and global hotkey to be ready. If

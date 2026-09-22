@@ -21,7 +21,10 @@ SITE_ROOT = "https://rcourtman.github.io/presspeech/"
 MAC_APP_ID = f"{SITE_ROOT}#software"
 WINDOWS_APP_ID = f"{SITE_ROOT}windows.html#software"
 WEBSITE_ID = f"{SITE_ROOT}#website"
+HOME_PAGE_ID = f"{SITE_ROOT}#webpage"
+WINDOWS_PAGE_ID = f"{SITE_ROOT}windows.html#webpage"
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 ERROR_PAGE = Path("404.html")
 ERROR_PAGE_URL = f"{SITE_ROOT}404.html"
 
@@ -93,6 +96,10 @@ def website_nodes(nodes: list[dict[str, object]]) -> list[dict[str, object]]:
     return [node for node in nodes if node.get("@type") == "WebSite"]
 
 
+def webpage_nodes(nodes: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [node for node in nodes if node.get("@type") == "WebPage"]
+
+
 def app_by_id(apps: list[dict[str, object]], app_id: str) -> dict[str, object] | None:
     matches = [app for app in apps if app.get("@id") == app_id]
     return matches[0] if len(matches) == 1 else None
@@ -124,6 +131,18 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
     for app_id, version in versions.items():
         if not isinstance(version, str) or not SEMVER.fullmatch(version):
             errors.append(f"site-metadata.json: invalid version for {app_id}: {version!r}")
+    last_updated = metadata.get("last_updated")
+    try:
+        if not isinstance(last_updated, str) or not ISO_DATE.fullmatch(last_updated):
+            raise ValueError
+        if date.fromisoformat(last_updated) > today:
+            errors.append(
+                f"site-metadata.json: last_updated {last_updated!r} is in the future"
+            )
+    except ValueError:
+        errors.append(
+            f"site-metadata.json: invalid last_updated date {last_updated!r}"
+        )
 
     documents: dict[Path, tuple[DocumentParser, list[dict[str, object]]]] = {}
     canonical_paths: dict[str, Path] = {}
@@ -190,6 +209,8 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
     windows_path = docs / "windows.html"
     index_apps = app_nodes(documents.get(index_path, (DocumentParser(), []))[1])
     windows_apps = app_nodes(documents.get(windows_path, (DocumentParser(), []))[1])
+    index_pages = webpage_nodes(documents.get(index_path, (DocumentParser(), []))[1])
+    windows_pages = webpage_nodes(documents.get(windows_path, (DocumentParser(), []))[1])
     index_websites = website_nodes(
         documents.get(index_path, (DocumentParser(), []))[1]
     )
@@ -217,6 +238,40 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
         errors.append(f"index.html: expected macOS and Windows app metadata, found {len(index_apps)} app(s)")
     if len(windows_apps) != 1:
         errors.append(f"windows.html: expected one app metadata object, found {len(windows_apps)}")
+
+    expected_pages = [
+        ("index.html", index_pages, HOME_PAGE_ID, SITE_ROOT,
+         [MAC_APP_ID, WINDOWS_APP_ID]),
+        ("windows.html", windows_pages, WINDOWS_PAGE_ID,
+         f"{SITE_ROOT}windows.html", WINDOWS_APP_ID),
+    ]
+    for display, pages, page_id, page_url, main_entity in expected_pages:
+        if len(pages) != 1:
+            errors.append(
+                f"{display}: expected one WebPage metadata object, found {len(pages)}"
+            )
+        matches = [page for page in pages if page.get("@id") == page_id]
+        if len(matches) != 1:
+            errors.append(
+                f"{display}: expected exactly one WebPage with @id {page_id}, "
+                f"found {len(matches)}"
+            )
+            continue
+        page = matches[0]
+        if page.get("url") != page_url:
+            errors.append(
+                f"{display}: {page_id} URL {page.get('url')!r} does not match {page_url!r}"
+            )
+        if page.get("mainEntity") != main_entity:
+            errors.append(
+                f"{display}: {page_id} mainEntity {page.get('mainEntity')!r} "
+                f"does not identify {main_entity!r}"
+            )
+        if page.get("dateModified") != last_updated:
+            errors.append(
+                f"{display}: {page_id} dateModified {page.get('dateModified')!r} "
+                f"does not match site metadata {last_updated!r}"
+            )
 
     expected_apps: list[tuple[str, dict[str, object] | None, str]] = [
         ("index.html", app_by_id(index_apps, MAC_APP_ID), MAC_APP_ID),

@@ -149,7 +149,11 @@ keyboard access testing in addition to assistive-technology testing.
   detects input without a dictation attempt or app restart and the selector no
   longer labels the input unavailable. Reopen Setup and Settings while it is
   disconnected and confirm the unavailable device remains selected; saving or
-  deferring setup must not switch it to Automatic or another microphone.
+  deferring setup must not switch it to Automatic or another microphone. While
+  it is disconnected, connect or enable a different input so Windows can
+  reorder device indexes, then try dictation. Confirm Presspeech does not
+  capture from the substitute; reconnect the selected input and confirm the
+  next dictation uses it.
 - Turn off **Let desktop apps access your microphone**, choose **Check Again**,
   and confirm setup reports that the microphone could not be opened without
   exposing raw device or PortAudio errors.
@@ -166,6 +170,11 @@ keyboard access testing in addition to assistive-technology testing.
 - Confirm initial keyboard focus lands on the microphone selector in Setup, the
   hotkey selector in Settings, Download Update in the update prompt, and the
   text area in Try Dictation.
+- From each initial focus, traverse every enabled control with Tab and then
+  Shift-Tab. Confirm focus follows the visible reading order in both directions;
+  in Setup's final row it must move through **Try Dictation**, **Retry Speech
+  Model** when enabled, **Set Up Later**, then **Finish Setup**, without jumping
+  right and back left.
 - With Narrator, confirm the microphone selector and both recovery buttons
   expose meaningful names. Leave focus on the selector while the microphone
   check finishes and while the model becomes ready; confirm each changed status
@@ -514,6 +523,13 @@ item after the development-wrapper launch check.
   Universal Clipboard on the second test device.
   No fixed delay is a substitute for observing consumption. This is the manual
   qualification boundary for [issue #36](https://github.com/rcourtman/presspeech/issues/36).
+- With preservation still enabled, seed a new old marker and force
+  clipboard-only recovery twice: once by changing windows during transcription
+  and once in a target that does not expose exact focused-window identity.
+  In each case, verify the complete transcript remains available for manual
+  Command-V and **Restore Previous Clipboard…** restores the marker that
+  preceded dictation. Recovery must not discard the opted-in snapshot merely
+  because Presspeech declined to paste automatically.
 - On macOS 15.4 or later, first trigger the system pasteboard-access prompt,
   then configure Presspeech as **Always Deny** in the corresponding System
   Settings privacy pane. With previous-clipboard preservation still enabled,

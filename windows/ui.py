@@ -870,12 +870,16 @@ class SetupWindow:
             buttons, text="Retry Speech Model", command=self._retry_model,
             state="disabled")
         self.retry_button.pack(side="left", padx=(8, 0))
+        # Tk traverses controls in creation order. Create the secondary action
+        # before the primary action so Tab follows the visible left-to-right
+        # order (Try, Retry, Later, Finish). Pack Finish first only because
+        # successive side="right" widgets are laid out right-to-left.
+        later_button = ttk.Button(
+            buttons, text="Set Up Later", command=self._defer)
         self.finish_button = ttk.Button(
             buttons, text="Finish Setup", command=self._finish,
             state="disabled")
         self.finish_button.pack(side="right")
-        later_button = ttk.Button(
-            buttons, text="Set Up Later", command=self._defer)
         later_button.pack(side="right", padx=(0, 8))
 
         root.protocol("WM_DELETE_WINDOW", self._defer)

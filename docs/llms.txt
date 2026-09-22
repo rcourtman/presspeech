@@ -48,6 +48,7 @@ Important pages:
 - Target-app compatibility: https://rcourtman.github.io/presspeech/app-compatibility.html
 - Compare Mac and Windows dictation options: https://rcourtman.github.io/presspeech/compare/
 - Windows dictation decision guide: https://rcourtman.github.io/presspeech/compare/windows-dictation.html
+- Compare vs Scribe AI on Windows: https://rcourtman.github.io/presspeech/compare/scribe.html
 - Compare vs Handy: https://rcourtman.github.io/presspeech/compare/handy.html
 - Compare vs FluidVoice: https://rcourtman.github.io/presspeech/compare/fluidvoice.html
 - Source: https://github.com/rcourtman/presspeech
