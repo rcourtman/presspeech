@@ -8,6 +8,8 @@ longer match the documented contract. A configured version newer than the
 published version is allowed for local release preparation because release
 commits reach ``main`` before publication. Pages uses ``--require-published``
 to keep the existing site until the advertised downloads are available.
+Use ``--github-api-via-gh`` when a repository-scoped gh broker holds the API
+credentials; checksum sidecars still download over public HTTPS.
 """
 
 from __future__ import annotations
@@ -18,6 +20,10 @@ import json
 import os
 import re
 import sys
+import signal
+import subprocess
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -197,7 +203,7 @@ def github_request(url: str, *, token: str = "", limit: int = MAX_API_BYTES) -> 
         if exc.code in {403, 429} and exc.headers.get("X-RateLimit-Remaining") == "0":
             detail = "; API rate limit exhausted; retry after reset"
             if not token:
-                detail += " or supply a read-only GITHUB_TOKEN"
+                detail += " or supply a read-only GITHUB_TOKEN or use --github-api-via-gh"
         elif exc.code in {401, 403}:
             detail = "; request denied; check public access and any configured token permissions"
         raise ReleaseCheckError(f"GitHub returned HTTP {exc.code} for {url}{detail}") from exc
@@ -208,17 +214,92 @@ def github_request(url: str, *, token: str = "", limit: int = MAX_API_BYTES) -> 
     return data
 
 
-def github_json(url: str, token: str) -> object:
+def github_api_via_gh(url: str, *, limit: int = MAX_API_BYTES, timeout: float = 30) -> bytes:
+    """Read release JSON through gh (including a credential-isolating broker).
+
+    Never export credentials or ask gh to follow asset download URLs. gh owns
+    authentication and its cross-host redirect policy. The explicit hostname
+    prevents GH_HOST from redirecting these repository-scoped API requests.
+    """
+    allowed = re.fullmatch(
+        re.escape(API_ROOT) + r"/releases(?:/latest|\?per_page=100&page=([1-9]\d*))", url
+    )
+    if not allowed or (allowed[1] is not None and int(allowed[1]) > MAX_RELEASE_PAGES):
+        raise ReleaseCheckError("gh transport only accepts this repository's release JSON endpoints")
+    endpoint = url.removeprefix("https://api.github.com/")
+    command = [
+        "gh", "api", endpoint, "--hostname", "github.com", "--method", "GET",
+        "--header", "Accept: application/vnd.github+json",
+        "--header", f"X-GitHub-Api-Version: {API_VERSION}",
+    ]
+    deadline = time.monotonic() + timeout
     try:
-        return json.loads(github_request(url, token=token))
-    except json.JSONDecodeError as exc:
+        process = subprocess.Popen(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, start_new_session=(os.name == "posix"),
+        )
+    except OSError as exc:
+        raise ReleaseCheckError("could not start gh; install it or use the default HTTPS transport") from exc
+
+    data = bytearray()
+    read_errors: list[OSError] = []
+    finished = threading.Event()
+
+    def read_bounded() -> None:
+        try:
+            with process.stdout as output:
+                while len(data) <= limit:
+                    chunk = output.read1(min(65536, limit + 1 - len(data)))
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+        except OSError as exc:
+            read_errors.append(exc)
+        finally:
+            finished.set()
+
+    reader = threading.Thread(target=read_bounded, daemon=True)
+    reader.start()
+    try:
+        if not finished.wait(max(0, deadline - time.monotonic())):
+            raise ReleaseCheckError(f"gh API request timed out for {url}")
+        if len(data) > limit:
+            raise ReleaseCheckError(f"GitHub response exceeded {limit} bytes for {url}")
+        if read_errors:
+            raise ReleaseCheckError(f"could not read gh API response for {url}")
+        try:
+            result = process.wait(timeout=max(0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired as exc:
+            raise ReleaseCheckError(f"gh API request timed out for {url}") from exc
+        if result:
+            # Do not relay subprocess diagnostics: GH_DEBUG can include headers.
+            raise ReleaseCheckError(f"gh API request failed (exit {result}) for {url}; check repository read access")
+        return bytes(data)
+    finally:
+        if process.poll() is None or not finished.is_set():
+            try:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except ProcessLookupError:
+                pass
+        process.wait()
+        reader.join(timeout=1)
+
+
+def github_json(url: str, token: str, *, via_gh: bool = False) -> object:
+    try:
+        data = github_api_via_gh(url) if via_gh else github_request(url, token=token)
+        return json.loads(data)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ReleaseCheckError(f"GitHub returned invalid JSON for {url}") from exc
 
 
-def github_releases(token: str) -> list[object]:
+def github_releases(token: str, *, via_gh: bool = False) -> list[object]:
     releases: list[object] = []
     for page in range(1, MAX_RELEASE_PAGES + 1):
-        batch = github_json(f"{API_ROOT}/releases?per_page=100&page={page}", token)
+        batch = github_json(f"{API_ROOT}/releases?per_page=100&page={page}", token, via_gh=via_gh)
         if not isinstance(batch, list):
             raise ReleaseCheckError("GitHub release list is not an array")
         releases.extend(batch)
@@ -438,6 +519,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help="run without network access")
     parser.add_argument("--require-published", action="store_true", help="block deployment while configured downloads are not public yet")
+    parser.add_argument("--github-api-via-gh", action="store_true", help="read API JSON through repo-scoped gh api without exporting credentials; checksum downloads remain public HTTPS")
     args = parser.parse_args()
     try:
         if args.self_test:
@@ -445,10 +527,10 @@ def main() -> int:
             print("public release check self-test passed")
             return 0
 
-        token = os.environ.get("GITHUB_TOKEN", "").strip()
+        token = "" if args.github_api_via_gh else os.environ.get("GITHUB_TOKEN", "").strip()
         metadata = load_metadata()
-        mac_release = github_json(f"{API_ROOT}/releases/latest", token)
-        releases = github_releases(token)
+        mac_release = github_json(f"{API_ROOT}/releases/latest", token, via_gh=args.github_api_via_gh)
+        releases = github_releases(token, via_gh=args.github_api_via_gh)
         errors, status = public_release_errors(
             metadata,
             mac_release,
