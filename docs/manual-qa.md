@@ -375,6 +375,12 @@ item after the development-wrapper launch check.
 - Confirm `/tmp/Presspeech-dev.app` launches and the menu-bar item appears.
 - Open **Support -> Setup Checklist...** and confirm model, permissions,
   audio input, and hotkey rows render.
+- Select a specific USB or Bluetooth microphone, disconnect it while Presspeech
+  remains open, and confirm Setup Checklist reports **Using default** (not
+  **Ready**) while explaining that the saved microphone is unavailable and the
+  system default is in use. Choose another input, reconnect the saved device,
+  select it again, and confirm the row returns to **Ready** with the selected
+  input identified. Do not record device names in qualification notes.
 - Enable macOS keyboard navigation for controls (or Full Keyboard Access),
   then navigate the checklist using Tab and Shift-Tab. Activate a permission
   action that remains missing and changes from **Grant** to **Try Again**;

@@ -865,9 +865,17 @@ class SetupWindow:
         self.progress.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 13))
         self.progress.start(12)
         self._progress_active = True
+        ttk.Label(
+            frame,
+            text=("If the selected speech model is not already on this PC, "
+                  "Presspeech downloads it before first use. Stay online "
+                  "while it prepares."),
+            justify="left",
+            wraplength=560,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
         microphone_label = ttk.Label(frame, text="Microphone")
-        microphone_label.grid(row=4, column=0, sticky="w")
+        microphone_label.grid(row=5, column=0, sticky="w")
         options = self.app.input_device_options()
         self.device_values = {label: value for label, value in options}
         current = self.app.settings.get("input_device", cfg.DEFAULTS["input_device"])
@@ -877,13 +885,13 @@ class SetupWindow:
             frame, values=[label for label, _value in options],
             state="readonly", width=48)
         self.device.set(selected)
-        self.device.grid(row=4, column=1, sticky="w", padx=(12, 0), pady=3)
+        self.device.grid(row=5, column=1, sticky="w", padx=(12, 0), pady=3)
         self.device.bind("<<ComboboxSelected>>", self._microphone_changed)
 
         microphone_check_label = ttk.Label(frame, text="Microphone check")
-        microphone_check_label.grid(row=5, column=0, sticky="w", pady=(5, 3))
+        microphone_check_label.grid(row=6, column=0, sticky="w", pady=(5, 3))
         microphone_check = ttk.Frame(frame)
-        microphone_check.grid(row=5, column=1, sticky="ew", padx=(12, 0), pady=(5, 3))
+        microphone_check.grid(row=6, column=1, sticky="ew", padx=(12, 0), pady=(5, 3))
         self.microphone_status = ttk.Label(microphone_check, text="Waiting to check…")
         self.microphone_status.pack(side="left")
         self.check_microphone_button = ttk.Button(
@@ -895,9 +903,9 @@ class SetupWindow:
             text=("Speak while the check runs. If it fails, enable Microphone "
                   "access and Let desktop apps access your microphone."),
             justify="left",
-        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 3))
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 3))
         microphone_actions = ttk.Frame(frame)
-        microphone_actions.grid(row=7, column=0, columnspan=2, sticky="w")
+        microphone_actions.grid(row=8, column=0, columnspan=2, sticky="w")
         privacy_button = ttk.Button(
             microphone_actions, text="Open Microphone Privacy Settings",
             command=self.app.open_microphone_privacy_settings,
@@ -910,24 +918,24 @@ class SetupWindow:
         sound_button.pack(side="left", padx=(8, 0))
 
         hotkey_label = ttk.Label(frame, text="Dictation hotkey")
-        hotkey_label.grid(row=8, column=0, sticky="w")
+        hotkey_label.grid(row=9, column=0, sticky="w")
         self.hotkey = ttk.Combobox(
             frame, values=cfg.HOTKEYS, state="readonly", width=18)
         self.hotkey.set(self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]))
-        self.hotkey.grid(row=8, column=1, sticky="w", padx=(12, 0), pady=3)
+        self.hotkey.grid(row=9, column=1, sticky="w", padx=(12, 0), pady=3)
         self.hotkey.bind("<<ComboboxSelected>>", self._hotkey_changed)
         ttk.Label(
             frame,
             text=ALTGR_HOTKEY_GUIDANCE,
             justify="left",
             wraplength=560,
-        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(3, 8))
+        ).grid(row=10, column=0, columnspan=2, sticky="w", pady=(3, 8))
 
         trigger_label = ttk.Label(frame, text="Dictation style")
-        trigger_label.grid(row=10, column=0, sticky="w", pady=(0, 6))
+        trigger_label.grid(row=11, column=0, sticky="w", pady=(0, 6))
         trigger_options = ttk.Frame(frame)
         trigger_options.grid(
-            row=10, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
+            row=11, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
         self.trigger = tk.StringVar(
             value=self.app.settings.get("trigger", cfg.DEFAULTS["trigger"]))
         hold_trigger = ttk.Radiobutton(
@@ -940,9 +948,9 @@ class SetupWindow:
         toggle_trigger.pack(side="left", padx=(12, 0))
 
         hotkey_status_label = ttk.Label(frame, text="Global hotkey status")
-        hotkey_status_label.grid(row=11, column=0, sticky="w", pady=(0, 6))
+        hotkey_status_label.grid(row=12, column=0, sticky="w", pady=(0, 6))
         hotkey_actions = ttk.Frame(frame)
-        hotkey_actions.grid(row=11, column=1, sticky="ew", padx=(12, 0), pady=(0, 6))
+        hotkey_actions.grid(row=12, column=1, sticky="ew", padx=(12, 0), pady=(0, 6))
         self.hotkey_status = ttk.Label(hotkey_actions, text="Starting\u2026")
         self.hotkey_status.pack(side="left")
         self.repair_hotkey_button = ttk.Button(
@@ -954,10 +962,10 @@ class SetupWindow:
             value=self.app.settings.get("autostart", True))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
-                            row=12, column=0, columnspan=2, sticky="w", pady=(2, 6))
+                            row=13, column=0, columnspan=2, sticky="w", pady=(2, 6))
 
         startup_actions = ttk.Frame(frame)
-        startup_actions.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(0, 14))
+        startup_actions.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(0, 14))
         self.autostart_status = ttk.Label(startup_actions, text="")
         self.autostart_status.pack(side="left")
         startup_button = ttk.Button(
@@ -967,7 +975,7 @@ class SetupWindow:
         startup_button.pack(side="right")
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=14, column=0, columnspan=2, sticky="ew")
+        buttons.grid(row=15, column=0, columnspan=2, sticky="ew")
         self.try_button = ttk.Button(
             buttons, text="Try Dictation", command=self.app.open_scratchpad,
             state="disabled")

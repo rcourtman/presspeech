@@ -254,6 +254,34 @@ contain quiet, distant and noisy human dictation with hand-audited non-empty
 references; labelling quiet speech as an empty non-speech control would hide
 exactly the deletion regression the WER gate is intended to catch.
 
+### VAD and segmentation are not yet evaluated
+
+The benchmark currently has no VAD backend or VAD preprocessing arm, and no
+VAD comparison results are recorded here. Its silence controls test whether a
+model emits text on non-speech; they do **not** measure a VAD's speech
+boundaries, missed quiet speech, or end-to-end latency. The shipped macOS
+recognizer is Parakeet TDT v3, not Whisper, so Whisper/WhisperX findings must
+not be presented as evidence that VAD will improve macOS dictation.
+
+This is an evidence gap, not a reason to add VAD as a product option. Research
+does justify a controlled experiment if a concrete VAD candidate is proposed:
+WhisperX reports quality and speed changes with its VAD Cut & Merge pipeline
+on long-form TED-LIUM/AMI audio, while a 2026 Whisper segmentation study finds
+the preferred strategy differs between podcast and entertainment audio. The
+results are system- and corpus-specific ([WhisperX, Interspeech 2023](https://www.isca-archive.org/interspeech_2023/bain23_interspeech.pdf);
+[Iranmanesh et al., ACL Anthology 2026](https://aclanthology.org/2026.silkroadnlp-1.13/)).
+
+Before considering a VAD candidate for Presspeech, add a paired, reproducible
+comparison that feeds identical recordings to the unmodified and VAD paths
+with the same model, SDK, and hardware. Include hand-audited short push-to-talk
+dictation with quiet speech, natural pauses, disfluencies, and vulnerable
+initial/final words, plus realistic non-speech controls. Freeze inputs and
+report the VAD configuration, speech-boundary misses, exact aggregate and
+worst-clip WER, final-word deletions, text emitted on non-speech, and p50
+end-to-end latency including VAD. A VAD arm that improves silence behavior
+but clips or suppresses speech is not a pass. Until that comparison exists,
+make no Presspeech accuracy, latency, or hallucination claim for VAD.
+
 For a quick non-ASR check of argument parsing and report redaction:
 
 ```sh

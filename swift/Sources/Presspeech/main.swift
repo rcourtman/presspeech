@@ -2891,9 +2891,9 @@ enum Permission: String, CaseIterable, Equatable {
 func microphoneSetupDetail(authorizationStatus: AVAuthorizationStatus) -> String {
     switch authorizationStatus {
     case .notDetermined:
-        return "Captures your voice while dictating. Click 'Grant', then click 'OK' in the macOS prompt."
+        return "Captures your voice while dictating. Choose Grant, then choose OK in the macOS prompt."
     case .denied:
-        return "Microphone access was previously denied. Click 'Grant' to open System Settings → Privacy & Security → Microphone, then enable Presspeech."
+        return "Microphone access was previously denied. Choose Grant to open System Settings → Privacy & Security → Microphone, then enable Presspeech."
     case .restricted:
         return "Microphone access is restricted by macOS or device management. Contact your administrator if you need access."
     case .authorized:
@@ -3348,6 +3348,7 @@ private func audioInputSetupRowState(isSpeechModelReady: Bool,
                                      startupStatusTitle: String = "Starting audio input…",
                                      failure: StartupFailure?,
                                      readyDetail: String = "Microphone capture is ready.",
+                                     savedInputUnavailable: Bool = false,
                                      lastCaptureHadNoSamples: Bool = false) -> SetupChecklistRowState {
     if let failure, failure.stage == .audioInput {
         return SetupChecklistRowState(detail: failure.detail,
@@ -3362,7 +3363,7 @@ private func audioInputSetupRowState(isSpeechModelReady: Bool,
     }
     if isCoreRuntimeReady {
         return SetupChecklistRowState(detail: readyDetail,
-                                      status: "Ready",
+                                      status: savedInputUnavailable ? "Using default" : "Ready",
                                       buttonTitle: "Choose…")
     }
     if !isSpeechModelReady {
@@ -3415,6 +3416,23 @@ private func setupChecklistCompletionState(isSpeechModelReady: Bool,
                                            permissionsGranted: Bool,
                                            hotkeyTestSucceeded: Bool) -> Bool {
     isSpeechModelReady && isReady && permissionsGranted && hotkeyTestSucceeded
+}
+
+private func permissionSetupDetail(_ permission: Permission,
+                                   microphoneAuthorizationStatus: AVAuthorizationStatus,
+                                   operatingSystemMajorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> String {
+    switch permission {
+    case .microphone:
+        return microphoneSetupDetail(authorizationStatus: microphoneAuthorizationStatus)
+    case .accessibility:
+        let paneName = permission.displayName(operatingSystemMajorVersion: operatingSystemMajorVersion)
+        let renameNote = paneName == permission.rawValue
+            ? ""
+            : " This is the permission called Accessibility on earlier macOS versions."
+        return "Verifies the focused window and sends the paste shortcut. Choose Grant to open System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
+    case .inputMonitoring:
+        return "Lets Presspeech detect the dictation hotkey. Choose Grant to open System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to Presspeech."
+    }
 }
 
 @MainActor
@@ -10956,6 +10974,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 startupStatusTitle: startupStatusTitle,
                 failure: startupFailure,
                 readyDetail: audioReadyDetail,
+                savedInputUnavailable: normalizedInputDevicePreference(savedAudioInput) != nil
+                    && audioInputDevice(matching: savedAudioInput, in: audioInputDevices) == nil,
                 lastCaptureHadNoSamples: dictationNotice == .noAudioCaptured),
             permissions: permissions,
             hotkey: hotkeySetupRowState(
@@ -11268,20 +11288,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func setupDetail(for permission: Permission) -> String {
-        switch permission {
-        case .microphone:
-            return microphoneSetupDetail(
-                authorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio)
-            )
-        case .accessibility:
-            let paneName = permission.displayName()
-            let renameNote = paneName == permission.rawValue
-                ? ""
-                : " This is the permission called Accessibility on earlier macOS versions."
-            return "Verifies the focused window and sends the paste shortcut. Click 'Grant' to open System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
-        case .inputMonitoring:
-            return "Lets Presspeech detect the dictation hotkey. Click 'Grant' to open System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to 'Presspeech'."
-        }
+        permissionSetupDetail(
+            permission,
+            microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio)
+        )
     }
 
     private func makeSetupChecklistRow(title: String,
@@ -11353,7 +11363,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         switch status {
         case "Granted", "Ready", "Detected", "Set":
             return .systemGreen
-        case "Missing", "Needs retry", "Required", "Check input":
+        case "Missing", "Needs retry", "Required", "Check input", "Using default":
             return .systemOrange
         default:
             return .secondaryLabelColor
@@ -15934,18 +15944,36 @@ private enum PresspeechSelfTest {
     private static func testReadiness() throws {
         try expect(
             microphoneSetupDetail(authorizationStatus: .notDetermined),
-            equals: "Captures your voice while dictating. Click 'Grant', then click 'OK' in the macOS prompt.",
+            equals: "Captures your voice while dictating. Choose Grant, then choose OK in the macOS prompt.",
             "first-time microphone authorization should explain the system prompt"
         )
         try expect(
             microphoneSetupDetail(authorizationStatus: .denied),
-            equals: "Microphone access was previously denied. Click 'Grant' to open System Settings → Privacy & Security → Microphone, then enable Presspeech.",
+            equals: "Microphone access was previously denied. Choose Grant to open System Settings → Privacy & Security → Microphone, then enable Presspeech.",
             "a previous microphone denial should direct users to the persistent Settings control"
         )
         try expect(
             microphoneSetupDetail(authorizationStatus: .restricted),
             equals: "Microphone access is restricted by macOS or device management. Contact your administrator if you need access.",
             "restricted microphone access should not imply that a user can grant it"
+        )
+        for permission in Permission.allCases {
+            let detail = permissionSetupDetail(
+                permission,
+                microphoneAuthorizationStatus: .notDetermined,
+                operatingSystemMajorVersion: 14
+            )
+            try expect(detail.localizedCaseInsensitiveContains("click"),
+                       equals: false,
+                       "\(permission.rawValue) setup instructions should work for keyboard and pointer users")
+        }
+        try expect(
+            permissionSetupDetail(.accessibility,
+                                  microphoneAuthorizationStatus: .notDetermined,
+                                  operatingSystemMajorVersion: 27)
+                .contains("System Settings → Privacy & Security → Device Control and Data Access"),
+            equals: true,
+            "accessibility setup should use the current macOS privacy-pane label"
         )
         let setupPermission = SetupChecklistPermissionState(
             permission: .microphone,
@@ -16269,6 +16297,21 @@ private enum PresspeechSelfTest {
                 status: "Ready",
                 buttonTitle: "Choose…"),
             "ready audio setup should expose the microphone chooser"
+        )
+        try expect(
+            audioInputSetupRowState(
+                isSpeechModelReady: true,
+                isCoreRuntimeReady: true,
+                isStartupInProgress: false,
+                failure: nil,
+                readyDetail: "The saved microphone is unavailable; Presspeech is using the system default.",
+                savedInputUnavailable: true
+            ),
+            equals: SetupChecklistRowState(
+                detail: "The saved microphone is unavailable; Presspeech is using the system default.",
+                status: "Using default",
+                buttonTitle: "Choose…"),
+            "setup should distinguish fallback capture from the saved microphone being ready"
         )
         try expect(
             audioInputSetupRowState(isSpeechModelReady: true,

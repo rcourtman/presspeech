@@ -371,6 +371,16 @@ class AccessibleWindowTests(unittest.TestCase):
             body.index('text="Try Dictation"'),
         )
 
+    def test_setup_explains_first_model_download_before_microphone_checks(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        self.assertIn("downloads it before first use", body)
+        self.assertIn("Stay online", body)
+        self.assertLess(
+            body.index("downloads it before first use"),
+            body.index('text="Microphone"'),
+        )
+
     def test_scrollable_dialog_routes_wheel_and_shift_wheel(self):
         body = ui._ScrollableDialogBody.__new__(ui._ScrollableDialogBody)
         body.canvas = mock.Mock()

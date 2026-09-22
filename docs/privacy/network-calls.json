@@ -35,7 +35,7 @@
       "purpose": "Check whether a newer immutable Presspeech release is available and notify the user",
       "user_triggered": false,
       "can_disable": true,
-      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
+      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-update-check; Presspeech adds no version, device, or user identifier and sends no transcript, microphone audio, settings, or usage counts. GitHub can observe the source IP address and request timing as ordinary connection metadata"
     },
     {
       "name": "windows_update_check",
@@ -44,7 +44,7 @@
       "purpose": "Find a newer complete, immutable windows-vX.Y.Z release and offer it to the user",
       "user_triggered": false,
       "can_disable": true,
-      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
+      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; Presspeech adds no version, device, or user identifier and sends no transcript, microphone audio, settings, or usage counts. GitHub can observe the source IP address and request timing as ordinary connection metadata"
     },
     {
       "name": "user_triggered_feedback_form",
