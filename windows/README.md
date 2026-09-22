@@ -66,7 +66,11 @@ status, and Start with Windows in one place. Speak while the check runs. It brie
 discards its samples in memory, and distinguishes an input level from a
 connected-but-silent device or one that cannot be opened. If it is silent,
 unmute it and choose **Check Again**; if it cannot be opened, use the window's
-direct links to Windows Microphone Privacy or Sound Input settings first. Wait
+direct links to Windows Microphone Privacy or Sound Input settings first. If a
+USB or Bluetooth microphone was disconnected, reconnect it and choose **Check
+Again**; Presspeech refreshes device discovery without requiring a restart. A
+specifically selected microphone remains selected while unavailable instead of
+silently changing to Automatic or another input. Wait
 until it says the model is ready before the
 first dictation. **Try Dictation** remains disabled until then, and **Finish
 Setup** requires both the speech model and global hotkey to be ready. If
@@ -237,6 +241,9 @@ the background immediately. Settings shows whether the selected model is being
 prepared, is ready, or needs attention, and offers a retry after a failure.
 Dictation remains unavailable until the selected model reports ready; there is
 no need to sacrifice a hotkey press to start the change or restart Presspeech.
+A microphone selection saved during an active recording applies to the next
+dictation. The recording already in progress stays on the input it opened, so
+changing Settings cannot alter its timing or cut off its final words.
 
 If **Start with Windows** cannot be registered, Setup stays open and Settings
 reports that the startup state was not updated instead of claiming success.

@@ -7,14 +7,22 @@ body:
       value: |
         Thanks for testing one target app. Run the short
         [compatibility protocol](https://rcourtman.github.io/presspeech/app-compatibility.html)
-        before filling this in. Passing reports are useful too. Search existing
-        issues first and add to a matching app/version report rather than
-        opening a duplicate.
+        before filling this in. Passing reports are useful too. [Browse existing
+        compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
+        first and add to a report only when its platform, app version, and
+        generic field type match yours.
+
+        For a new report, put the platform, public app name/version, and field
+        type after the fixed `[Compatibility]:` title prefix. Include no
+        document, tab, account, server, form, or window name.
 
         Issues are public. Report counts and classifications only. Never include
         dictated or recognized text, audio, clipboard contents, dictionary or
         shortcut contents, document/window titles, private paths, credentials,
         or screenshots containing user data.
+
+        Never run this protocol at a command shell or in a field where pasted
+        text can submit, send, or execute. Use only blank disposable fields.
   - type: input
     id: target-app
     attributes:
@@ -31,7 +39,7 @@ body:
         - Native desktop app
         - Browser page or web editor
         - Electron/Chromium desktop app
-        - Terminal or console
+        - Terminal-based non-executing editor
         - Remote desktop or virtual machine
         - Elevated Windows app
         - Other
@@ -44,6 +52,19 @@ body:
       options:
         - macOS
         - Windows
+    validations:
+      required: true
+  - type: dropdown
+    id: field-type
+    attributes:
+      label: Target field type
+      description: Choose only the generic control type; do not name a document, tab, account, server, form, or window.
+      options:
+        - Single-line plain-text field
+        - Multi-line plain-text editor
+        - Rich-text or contenteditable editor
+        - Terminal-based non-executing editor
+        - Other or unknown
     validations:
       required: true
   - type: input
@@ -115,7 +136,7 @@ body:
     id: conditions
     attributes:
       label: Relevant conditions
-      description: Note trigger mode, suffix, field type, clipboard manager/history, assistive technology, or a minimal repro. Separately count known clipboard-change interruptions excluded from completed attempts; do not exclude unexplained failures. Omit private document, account, server, and window names.
+      description: Note trigger mode, suffix, clipboard manager/history, assistive technology, or a minimal repro. Separately count known clipboard-change interruptions excluded from completed attempts; do not exclude unexplained failures. Omit private document, account, server, and window names.
       placeholder: e.g. Hold mode; plain-text editor field; append-space suffix; no clipboard manager
   - type: textarea
     id: diagnostics
@@ -130,7 +151,9 @@ body:
       options:
         - label: I used only blank disposable fields and harmless test phrases.
           required: true
+        - label: My three steady-focus counts total five and my three focus-change counts total three.
+          required: true
         - label: I removed all dictated/recognized text, clipboard contents, private names, titles, paths, credentials, and sensitive screenshots from this report.
           required: true
-        - label: I understand this report describes only the versions and conditions above, not universal app support.
+        - label: I understand this report describes only the versions, field type, and conditions above, not universal app support.
           required: true

@@ -883,6 +883,7 @@ class SetupWindow:
             # from the previous automatic input and setup can be resumed later.
             settings["input_device"] = selected
             self.app.input_device = None
+            self.app._cached_input_selector = None
             cfg.save(settings)
         _set_accessible_text(self.microphone_status, "Waiting to check…")
         self.root.after(0, self._check_microphone)
@@ -931,7 +932,31 @@ class SetupWindow:
 
     def _check_microphone_worker(self, selected):
         result = self.app.check_input_device(selected)
-        self.microphone_events.put((selected, result))
+        # Query again after the check: it may have refreshed PortAudio after a
+        # reconnect. Do this on the worker so a slow driver never blocks Tk.
+        try:
+            options = self.app.input_device_options()
+        except Exception:
+            options = None
+        self.microphone_events.put((selected, result, options))
+
+    def _refresh_microphone_options(self, options, selected):
+        """Replace picker choices while retaining the user's stable selector."""
+        if not options:
+            return
+        values = {label: value for label, value in options}
+        selected_label = next(
+            (label for label, value in options if value == selected),
+            None,
+        )
+        # A concurrent selection change can beat this worker result. Retain the
+        # current picker rather than visually falling back to Automatic; the
+        # queued follow-up check will provide choices for the new selection.
+        if selected_label is None:
+            return
+        self.device_values = values
+        self.device.config(values=list(values))
+        self.device.set(selected_label)
 
     def _poll_microphone_events(self):
         latest = None
@@ -942,9 +967,12 @@ class SetupWindow:
             pass
         if latest is None:
             return
-        selected, result = latest
+        selected, result, options = latest
         self.microphone_checking = False
         self.check_microphone_button.config(state="normal")
+        current = self.device_values.get(
+            self.device.get(), cfg.DEFAULTS["input_device"])
+        self._refresh_microphone_options(options, current)
         current = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])
         if selected != current:
@@ -976,6 +1004,7 @@ class SetupWindow:
             self.device.get(), cfg.DEFAULTS["input_device"])
         if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
             self.app.input_device = None
+            self.app._cached_input_selector = None
         settings["input_device"] = selected
         settings["autostart"] = bool(self.autostart.get())
         settings["setup_complete"] = True
@@ -994,6 +1023,7 @@ class SetupWindow:
             self.device.get(), cfg.DEFAULTS["input_device"])
         if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
             self.app.input_device = None
+            self.app._cached_input_selector = None
         settings["input_device"] = selected
         settings["autostart"] = bool(self.autostart.get())
         cfg.save(settings)
@@ -1513,6 +1543,7 @@ class SettingsWindow:
             self.var_device.get(), cfg.DEFAULTS["input_device"])
         if s["input_device"] != old_input_device:
             self.app.input_device = None
+            self.app._cached_input_selector = None
         s["model"] = label_to_value.get(self.var_model.get(), cfg.DEFAULTS["model"])
         s["model_explicit"] = True
         s["suffix"] = self.var_suffix.get() or cfg.DEFAULTS["suffix"]

@@ -1,3 +1,4 @@
+import threading
 import unittest
 from unittest import mock
 
@@ -320,7 +321,11 @@ class UpdateWindowTests(unittest.TestCase):
 class InputSelectionTests(unittest.TestCase):
     def make_app(self, selected="auto"):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = False
+        instance.stream = None
         instance.input_device = None
+        instance._cached_input_selector = None
         instance.settings = {"input_device": selected}
         instance._log = mock.Mock()
         instance._rescan_audio_devices = mock.Mock(return_value=True)
@@ -358,6 +363,30 @@ class InputSelectionTests(unittest.TestCase):
         self.assertFalse(any("WDM-KS" in label for label in labels))
         self.assertFalse(any("HyperX" in label for label in labels))
 
+    def test_picker_preserves_a_configured_microphone_while_unavailable(self):
+        selected = "MME::USB conference microphone"
+        instance = self.make_app(selected)
+        with mock.patch.object(app.sd, "query_devices", return_value=DEVICES), \
+                mock.patch.object(app.sd, "query_hostapis", return_value=HOST_APIS):
+            options = instance.input_device_options()
+
+        unavailable = [
+            label for label, selector in options if selector == selected
+        ]
+        self.assertEqual(len(unavailable), 1)
+        self.assertIn("USB conference microphone", unavailable[0])
+        self.assertIn("currently unavailable", unavailable[0])
+
+    def test_picker_preserves_configuration_when_device_query_fails(self):
+        selected = "MME::USB conference microphone"
+        instance = self.make_app(selected)
+        with mock.patch.object(
+                app.sd, "query_devices", side_effect=OSError("backend busy")):
+            options = instance.input_device_options()
+
+        self.assertEqual(options[-1][1], selected)
+        self.assertIn("currently unavailable", options[-1][0])
+
     def test_configured_device_never_falls_back_to_another_microphone(self):
         instance = self.make_app("MME::Missing microphone")
         patches = self.sounddevice_mocks()
@@ -379,6 +408,45 @@ class InputSelectionTests(unittest.TestCase):
 
         self.assertEqual(instance._get_input_device(), (0, 16000))
         instance._rescan_audio_devices.assert_not_called()
+
+    def test_lookup_for_changed_selection_is_returned_but_not_cached(self):
+        instance = self.make_app("MME::Old microphone")
+
+        def finish_old_lookup(selected):
+            self.assertEqual(selected, "MME::Old microphone")
+            instance.settings["input_device"] = "MME::New microphone"
+            instance.input_device = None
+            instance._cached_input_selector = None
+            return (1, 48000)
+
+        instance._find_input_device = mock.Mock(side_effect=finish_old_lookup)
+
+        # The recording that began the lookup may use its result, but a later
+        # recording must not reuse it for the newly selected microphone.
+        self.assertEqual(instance._get_input_device(), (1, 48000))
+        self.assertIsNone(instance.input_device)
+        self.assertIsNone(instance._cached_input_selector)
+
+        instance._find_input_device = mock.Mock(return_value=(2, 16000))
+        self.assertEqual(instance._get_input_device(), (2, 16000))
+        instance._find_input_device.assert_called_once_with(
+            "MME::New microphone")
+        self.assertEqual(instance._cached_input_selector,
+                         "MME::New microphone")
+
+    def test_cache_from_another_selector_is_not_reused(self):
+        instance = self.make_app("MME::New microphone")
+        instance.input_device = (1, 48000)
+        instance._cached_input_selector = "MME::Old microphone"
+        instance._find_input_device = mock.Mock(return_value=(2, 16000))
+
+        self.assertEqual(instance._get_input_device(), (2, 16000))
+
+        instance._find_input_device.assert_called_once_with(
+            "MME::New microphone")
+        self.assertEqual(instance.input_device, (2, 16000))
+        self.assertEqual(instance._cached_input_selector,
+                         "MME::New microphone")
 
     def test_failed_rescan_leaves_no_microphone(self):
         instance = self.make_app()
@@ -480,6 +548,107 @@ class InputSelectionTests(unittest.TestCase):
         self.assertEqual(
             instance.check_input_device("auto"),
             app.MICROPHONE_CHECK_SILENT)
+
+    def test_setup_check_recovers_a_reconnected_device_by_rescanning(self):
+        instance = self.make_app("MME::USB microphone")
+        instance.input_device = (9, 48000)
+        instance._probe_input_level = mock.Mock(return_value=0.02)
+        attempts = []
+
+        def find_input(selected, probe=None):
+            attempts.append(selected)
+            if len(attempts) == 1:
+                return None
+            self.assertTrue(probe(1, 16000))
+            return (1, 16000)
+
+        instance._find_input_device = mock.Mock(side_effect=find_input)
+
+        self.assertEqual(
+            instance.check_input_device("MME::USB microphone"),
+            app.MICROPHONE_CHECK_LEVEL)
+
+        self.assertEqual(attempts, [
+            "MME::USB microphone", "MME::USB microphone"])
+        instance._rescan_audio_devices.assert_called_once_with(
+            audio_lease=mock.ANY)
+        self.assertIsNone(instance.input_device)
+
+    def test_setup_check_refreshes_the_real_coordinated_backend(self):
+        instance = self.make_app()
+        del instance._rescan_audio_devices
+        instance._probe_input_level = mock.Mock(return_value=0.02)
+        refreshed = [False]
+
+        def devices():
+            return DEVICES if refreshed[0] else []
+
+        def initialize():
+            refreshed[0] = True
+
+        with mock.patch.object(app.sd, "query_devices", side_effect=devices), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None), \
+                mock.patch.object(app.sd, "_terminate", create=True) as terminate, \
+                mock.patch.object(
+                    app.sd, "_initialize", create=True,
+                    side_effect=initialize) as initialize_backend:
+            result = instance.check_input_device("auto")
+
+        self.assertEqual(result, app.MICROPHONE_CHECK_LEVEL)
+        terminate.assert_called_once_with()
+        initialize_backend.assert_called_once_with()
+
+    def test_setup_check_recovers_when_stale_enumeration_raises(self):
+        instance = self.make_app()
+        instance._probe_input_level = mock.Mock(return_value=0.02)
+        attempts = [0]
+
+        def find_input(_selected, probe=None):
+            attempts[0] += 1
+            if attempts[0] == 1:
+                raise OSError("stale backend")
+            self.assertTrue(probe(1, 16000))
+            return (1, 16000)
+
+        instance._find_input_device = mock.Mock(side_effect=find_input)
+
+        self.assertEqual(
+            instance.check_input_device("auto"),
+            app.MICROPHONE_CHECK_LEVEL)
+
+        instance._rescan_audio_devices.assert_called_once_with(
+            audio_lease=mock.ANY)
+        instance._log.assert_not_called()
+
+    def test_setup_check_reports_unavailable_when_rescan_is_vetoed(self):
+        instance = self.make_app()
+        instance.input_device = (4, 44100)
+        instance._find_input_device = mock.Mock(return_value=None)
+        instance._rescan_audio_devices.return_value = False
+
+        self.assertEqual(
+            instance.check_input_device("auto"),
+            app.MICROPHONE_CHECK_UNAVAILABLE)
+
+        instance._find_input_device.assert_called_once()
+        self.assertIsNone(instance.input_device)
+
+    def test_setup_check_does_not_invalidate_an_active_recording(self):
+        instance = self.make_app()
+        instance.input_device = (4, 44100)
+        instance.recording = True
+        instance.stream = mock.sentinel.active_stream
+        instance._find_input_device = mock.Mock(return_value=None)
+
+        self.assertEqual(
+            instance.check_input_device("auto"),
+            app.MICROPHONE_CHECK_UNAVAILABLE)
+
+        self.assertEqual(instance.input_device, (4, 44100))
+        instance._rescan_audio_devices.assert_not_called()
 
     def test_setup_check_reports_device_enumeration_failure_safely(self):
         instance = self.make_app()
@@ -1859,6 +2028,33 @@ class TextRegressionTests(unittest.TestCase):
             "including 'Let desktop apps access your microphone', then try "
             "again. Details: device disconnected")
 
+    def test_recording_rate_is_bound_before_native_stream_starts(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance.input_device = (3, 48000)
+        instance._recording_input_device = None
+        instance.stream = None
+        instance.icon = None
+        instance._get_input_device = mock.Mock(return_value=(3, 48000))
+        instance._log = mock.Mock()
+        stream = mock.Mock()
+
+        def verify_rate_is_owned():
+            # PortAudio may deliver its first callback from inside start().
+            self.assertEqual(instance._recording_input_device, (3, 48000))
+
+        stream.start.side_effect = verify_rate_is_owned
+        with mock.patch.object(
+                app.AUDIO_BACKEND, "open_input_stream",
+                return_value=stream) as open_stream:
+            instance._open_mic_worker(7)
+
+        open_stream.assert_called_once()
+        self.assertIs(instance.stream, stream)
+        self.assertEqual(instance._recording_input_device, (3, 48000))
+
     def test_missing_microphone_cancels_recording_limit(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = __import__("threading").Lock()
@@ -1970,6 +2166,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.buffer = []
         instance.stream = None
         instance.icon = None
+        instance._recording_input_device = None
         instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
         timer = mock.Mock()
         instance._recording_limit_timer = timer
@@ -1994,6 +2191,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.stream = None
         instance.icon = None
         instance.input_device = (0, 16000)
+        instance._recording_input_device = (0, 16000)
         instance._recording_paste_target = app.PasteTarget(
             "notepad.exe", 1234)
         instance._recording_scratchpad = None
@@ -2127,6 +2325,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.stream = None
         instance.icon = None
         instance.input_device = (0, 16000)
+        instance._recording_input_device = (0, 16000)
         paste_target = app.PasteTarget("notepad.exe", 1234)
         instance._recording_paste_target = paste_target
         instance._recording_scratchpad = None
@@ -2148,6 +2347,45 @@ class TextRegressionTests(unittest.TestCase):
         __import__("numpy").testing.assert_array_equal(queued[1], audio)
         self.assertEqual(queued[2:], (paste_target, None))
 
+    def test_active_stream_rate_survives_microphone_cache_invalidation(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = __import__("threading").Lock()
+        instance.recording = True
+        instance.transcribing = False
+        instance._rec_epoch = 7
+        raw_audio = __import__("numpy").ones(14400, dtype="float32")
+        instance.buffer = [raw_audio]
+        instance.stream = None
+        instance.icon = None
+        # Settings has selected another input and invalidated the reusable
+        # cache while this 48 kHz stream remains the recording's source.
+        instance.input_device = None
+        instance._cached_input_selector = None
+        instance._recording_input_device = (3, 48000)
+        instance._recording_paste_target = app.PasteTarget(
+            "notepad.exe", 1234)
+        instance._recording_scratchpad = None
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._capture_benchmark_if_armed = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._model_executor = mock.Mock()
+        converted = __import__("numpy").ones(4800, dtype="float32")
+
+        with mock.patch.object(
+                app, "_resample_to_16k", return_value=converted) as resample:
+            self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        resample.assert_called_once()
+        __import__("numpy").testing.assert_array_equal(
+            resample.call_args.args[0], raw_audio)
+        self.assertEqual(resample.call_args.args[1], 48000)
+        self.assertIsNone(instance._recording_input_device)
+        queued = instance._model_executor.submit.call_args.args
+        self.assertIs(queued[1], converted)
+
 
 class PostRollTests(unittest.TestCase):
     def make_app(self, value, peak=0.1, rate=16000):
@@ -2156,6 +2394,7 @@ class PostRollTests(unittest.TestCase):
         instance.buffer = [__import__("numpy").full(
             (int(rate * app.POST_ROLL_TAIL_SEC), 1), value, dtype="float32")]
         instance.input_device = (0, rate)
+        instance._recording_input_device = (0, rate)
         instance._peak_rms = peak
         return instance
 
@@ -2167,6 +2406,21 @@ class PostRollTests(unittest.TestCase):
     def test_voiced_tail_keeps_recording(self):
         instance = self.make_app(0.03)
         rms, threshold = instance._post_roll_tail()
+        self.assertGreater(rms, threshold)
+
+    def test_cache_invalidation_does_not_shorten_a_48khz_tail(self):
+        numpy = __import__("numpy")
+        instance = self.make_app(0.001, rate=48000)
+        # Only the earliest two thirds of the 90 ms tail are still voiced. A
+        # wrong 16 kHz fallback would inspect just the final quiet 30 ms.
+        instance.buffer = [numpy.concatenate((
+            numpy.full(2880, 0.03, dtype="float32"),
+            numpy.full(1440, 0.001, dtype="float32"),
+        ))]
+        instance.input_device = None
+
+        rms, threshold = instance._post_roll_tail()
+
         self.assertGreater(rms, threshold)
 
     def test_release_keeps_the_capture_epoch_through_post_roll(self):

@@ -11,7 +11,7 @@ matches the problem:
 If the problem remains, search the [existing issues](https://github.com/rcourtman/presspeech/issues), then choose the closest route:
 
 - [Report a bug](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml). In Presspeech, choose **Copy Diagnostics** first and paste that privacy-safe summary into the form.
-- [Share a target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml) after running the [short privacy-safe protocol](https://rcourtman.github.io/presspeech/app-compatibility.html). Passing reports are useful as well as failures because they show how often automatic paste and focus-change recovery worked across repeated attempts.
+- [Browse existing target-app compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22), then [share a report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml) after running the [short privacy-safe protocol](https://rcourtman.github.io/presspeech/app-compatibility.html). Passing reports are useful as well as failures because they show how often automatic paste and focus-change recovery worked across repeated attempts.
 - [Suggest an improvement](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml). Describe the recurring problem and a measurable result.
 - [Ask a usage question](https://github.com/rcourtman/presspeech/issues/new/choose) by selecting **Open a blank issue**. Include the platform, Presspeech version, and what you already tried.
 
@@ -29,6 +29,8 @@ and window names.
 Use the compatibility form rather than the general bug form when you can run
 the complete repeated protocol, including when every check passes. Use the bug
 form for a problem you cannot safely repeat or that is outside text delivery.
+Match an existing report only when the platform, target app version, and
+generic field type are comparable; otherwise open a separate report.
 
 Before proposing a larger capability, read the [product roadmap](ROADMAP.md).
 It describes current priorities, evidence gates, and workflows that are

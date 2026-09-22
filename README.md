@@ -259,6 +259,24 @@ each platform rather than identical.
 See the [Windows guide](https://rcourtman.github.io/presspeech/windows.html#first-launch)
 for model readiness, AltGr-safe hotkey selection, and every Windows setting.
 
+## Help qualify target apps
+
+Automatic paste depends on how the destination exposes its focused window and
+consumes clipboard content. Before relying on Presspeech in an important app,
+run the [eight-check target-app
+protocol](https://rcourtman.github.io/presspeech/app-compatibility.html) in
+blank disposable fields. It records five steady-focus attempts and three
+focus-change attempts as aggregate counts: pasted once, recovered safely, or
+incorrect/unsafe. Never publish the phrases or transcripts.
+
+Passing reports matter as much as failures because they provide the denominator
+for platform/app/version/field combinations. [Browse existing compatibility
+reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
+before opening the focused [compatibility report
+form](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml).
+Community observations are exploratory evidence, not a promise of universal
+support or a substitute for native release qualification.
+
 ## Privacy
 
 Presspeech is local-first:

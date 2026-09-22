@@ -124,7 +124,11 @@ choose **Check Again**. If the input cannot open, use Setup's links to Windows
 Microphone Privacy and Sound Input settings. Turn on **Microphone access** and
 **Let desktop apps access your microphone**, then confirm the input under
 **Settings -> System -> Sound -> Input**. Windows does not show a separate
-Presspeech toggle for this unpackaged desktop app.
+Presspeech toggle for this unpackaged desktop app. If a USB or Bluetooth input
+was disconnected, reconnect it and choose **Check Again**; the check refreshes
+microphone discovery without requiring an app restart. Presspeech keeps an
+unavailable specifically selected input selected rather than silently using a
+different microphone.
 
 ### Hotkey Does Nothing
 

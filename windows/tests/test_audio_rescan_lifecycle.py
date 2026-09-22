@@ -59,6 +59,7 @@ class RescanLifecycleRegression(unittest.TestCase):
         instance.stream = None
         instance.buffer = []
         instance.icon = None
+        instance._recording_input_device = None
         instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
         instance._recording_limit_timer = mock.Mock()
         for name in ("_restore_playback_after_recording", "_play_cue",

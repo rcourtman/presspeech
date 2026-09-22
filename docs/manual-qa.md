@@ -84,9 +84,22 @@ keyboard access testing in addition to assistive-technology testing.
   detected**. Change the selected input and confirm setup checks the new device.
   After the model is ready, use **Try Dictation** and confirm it captures that
   selected device before setup is finished.
+- On at least one configuration, select an input that diagnostics reports at
+  44.1 or 48 kHz. Start a toggle-mode recording, open Settings while continuing
+  to speak, change the microphone selection, save, and then stop recording.
+  Confirm the complete transcript is at normal speed with its final words
+  present. Confirm the next dictation uses the saved selection; switching
+  between Automatic and that explicit input is sufficient when only one safe
+  physical microphone is available.
 - Mute the selected microphone, choose **Check Again**, and confirm setup says
   it is connected but no input level was detected instead of claiming it is
   ready. Unmute it, speak, and check again successfully.
+- Select a specific USB or Bluetooth microphone, disconnect and reconnect it
+  while Presspeech remains open, then choose **Check Again**. Confirm the check
+  detects input without a dictation attempt or app restart and the selector no
+  longer labels the input unavailable. Reopen Setup and Settings while it is
+  disconnected and confirm the unavailable device remains selected; saving or
+  deferring setup must not switch it to Automatic or another microphone.
 - Turn off **Let desktop apps access your microphone**, choose **Check Again**,
   and confirm setup reports that the microphone could not be opened without
   exposing raw device or PortAudio errors.
@@ -312,6 +325,9 @@ cd swift
   the text on the clipboard instead of pasting into that same-process window.
   This is the acceptance check for the accessibility-focus gap tracked in
   [issue #33](https://github.com/rcourtman/presspeech/issues/33).
+  If the steady-focus attempt falls back, copy diagnostics and confirm the log
+  says the target was unavailable at recording start rather than claiming the
+  focused window changed; either result is still an automatic-paste failure.
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.

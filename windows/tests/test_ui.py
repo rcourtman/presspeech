@@ -323,6 +323,10 @@ class SetupWindowTests(unittest.TestCase):
         window.device_values = {"Automatic (recommended)": "auto"}
         window.device = mock.Mock()
         window.device.get.return_value = "Automatic (recommended)"
+        window.device.set.side_effect = (
+            lambda value: setattr(window.device.get, "return_value", value))
+        window.app.input_device_options.return_value = [
+            ("Automatic (recommended)", "auto")]
         return window
 
     def test_error_remains_observed_and_enables_retry(self):
@@ -494,6 +498,7 @@ class SetupWindowTests(unittest.TestCase):
         window = self.make_window("ready")
         window.app.settings = {"input_device": "auto"}
         window.app.input_device = (4, 48000)
+        window.app._cached_input_selector = "auto"
         window.device_values["Desk microphone"] = "MME::Desk microphone"
         window.device.get.return_value = "Desk microphone"
 
@@ -504,6 +509,7 @@ class SetupWindowTests(unittest.TestCase):
         self.assertEqual(
             window.app.settings["input_device"], "MME::Desk microphone")
         self.assertIsNone(window.app.input_device)
+        self.assertIsNone(window.app._cached_input_selector)
         save.assert_called_once_with(window.app.settings)
         set_text.assert_called_once_with(
             window.microphone_status, "Waiting to check…")
@@ -517,6 +523,7 @@ class SetupWindowTests(unittest.TestCase):
             "setup_complete": False,
         }
         window.app.input_device = (2, 16000)
+        window.app._cached_input_selector = "auto"
         window.device_values["Headset"] = "MME::Headset"
         window.device.get.return_value = "Headset"
         window.autostart = mock.Mock()
@@ -530,6 +537,7 @@ class SetupWindowTests(unittest.TestCase):
         self.assertFalse(window.app.settings["autostart"])
         self.assertFalse(window.app.settings["setup_complete"])
         self.assertIsNone(window.app.input_device)
+        self.assertIsNone(window.app._cached_input_selector)
         save.assert_called_once_with(window.app.settings)
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
@@ -574,6 +582,7 @@ class SetupWindowTests(unittest.TestCase):
             window._poll_microphone_events()
 
         window.app.check_input_device.assert_called_once_with("auto")
+        window.app.input_device_options.assert_called_once_with()
         self.assertFalse(window.microphone_checking)
         window.check_microphone_button.config.assert_called_once_with(
             state="normal")
@@ -585,7 +594,8 @@ class SetupWindowTests(unittest.TestCase):
     def test_silent_microphone_result_does_not_claim_readiness(self):
         window = self.make_window("ready")
         window.microphone_checking = True
-        window.microphone_events.put(("auto", "silent"))
+        window.microphone_events.put((
+            "auto", "silent", [("Automatic (recommended)", "auto")]))
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_microphone_events()
@@ -598,7 +608,9 @@ class SetupWindowTests(unittest.TestCase):
     def test_failed_microphone_result_points_to_recovery_controls(self):
         window = self.make_window("ready")
         window.microphone_checking = True
-        window.microphone_events.put(("auto", "unavailable"))
+        window.microphone_events.put((
+            "auto", "unavailable",
+            [("Automatic (recommended)", "auto")]))
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_microphone_events()
@@ -607,6 +619,40 @@ class SetupWindowTests(unittest.TestCase):
             window.microphone_status,
             "Needs attention — microphone could not be opened",
         )
+
+    def test_reconnected_microphone_refreshes_picker_without_losing_selection(self):
+        window = self.make_window("ready")
+        selected = "MME::USB microphone"
+        unavailable_label = "USB microphone — MME (currently unavailable)"
+        available_label = "USB microphone — MME (device 1)"
+        window.microphone_checking = True
+        window.device_values = {unavailable_label: selected}
+        window.device.get.return_value = unavailable_label
+        options = [
+            ("Automatic (recommended)", "auto"),
+            (available_label, selected),
+        ]
+        window.microphone_events.put((selected, "level", options))
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_microphone_events()
+
+        self.assertEqual(window.device_values[available_label], selected)
+        window.device.config.assert_called_once_with(
+            values=["Automatic (recommended)", available_label])
+        window.device.set.assert_called_once_with(available_label)
+
+    def test_picker_refresh_never_falls_back_from_a_newer_selection(self):
+        window = self.make_window("ready")
+        selected = "MME::Headset microphone"
+        window.device_values = {"Headset microphone": selected}
+
+        window._refresh_microphone_options(
+            [("Automatic (recommended)", "auto")], selected)
+
+        self.assertEqual(window.device_values, {"Headset microphone": selected})
+        window.device.config.assert_not_called()
+        window.device.set.assert_not_called()
 
 
 class DictionarySettingsTests(unittest.TestCase):

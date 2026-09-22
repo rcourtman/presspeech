@@ -208,12 +208,15 @@
           <h2>Hold. Speak. Release.</h2>
           <p>The video below shows the macOS build with its default <strong>Right Option</strong> hotkey. On Windows, use the same hold–speak–release gesture with <strong>Right Alt</strong> by default; if that key acts as AltGr for your keyboard layout, Setup lets you choose F8 or another available key.</p>
           <figure class="demo-figure">
-            <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — the sentence quickly appears at the cursor.">
+            <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — Presspeech checks the original destination before pasting.">
               <source src="demo-video.webm" type="video/webm">
               <source src="demo-video.mp4" type="video/mp4">
-              <p>Your browser cannot play the demo video. The workflow is: hold Right Option, speak, and release; the sentence then quickly appears at the cursor.</p>
+              <p>Your browser cannot play the demo video. The workflow is: hold Right Option, speak, and release; Presspeech pastes only after checking the original destination, otherwise it leaves the transcript available for manual paste.</p>
             </video>
           </figure>
+          <div class="note">
+            <p><strong>Check an app before relying on automatic paste.</strong> Target apps, including browser editors, Electron/Chromium apps, terminal-based editors, and remote sessions, expose focus and paste behavior differently. Run the <a href="app-compatibility.html">privacy-safe target-app check</a> to separate automatic paste from clipboard recovery; it records outcomes, never your words.</p>
+          </div>
         </div>
       </section>
 
@@ -249,7 +252,7 @@
             </article>
             <article class="card">
               <h3>Local speech recognition</h3>
-              <p>Audio is captured in memory, transcribed locally, pasted, then discarded. Transcripts are not written to disk.</p>
+              <p>Audio is captured in memory and transcribed locally. Presspeech pastes only after confirming the original window, or keeps the transcript available for deliberate manual paste; audio is then discarded and transcripts are not written to disk.</p>
             </article>
             <article class="card">
               <h3>Native macOS stack</h3>
@@ -284,7 +287,12 @@
             <div class="fact"><strong>Benchmarked</strong><span>FluidAudio on the Apple Neural Engine is measured against the prior GPU path on the same WAV clips.</span></div>
             <div class="fact"><strong>Auditable</strong><span>The macOS app is a single Swift source file; the separate Windows implementation is readable Python. Release scripts and packaging metadata are public.</span></div>
             <div class="fact"><strong>Private by design</strong><span>The full network surface is documented: model download, update check, and user-triggered install/update downloads.</span></div>
+            <div class="fact"><strong>Delivery is testable</strong><span>The <a href="app-compatibility.html">eight-check target-app protocol</a> distinguishes automatic paste, safe clipboard recovery, and incorrect results without publishing anyone's words.</span></div>
             <div class="fact"><strong>Agent-readable</strong><span>Install instructions, benchmark results, privacy facts, and comparison pages are available as plain HTML, Markdown, JSON, and text.</span></div>
+          </div>
+          <div class="actions">
+            <a class="button secondary" href="app-compatibility.html">Test one target app</a>
+            <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22">Browse compatibility reports</a>
           </div>
         </div>
       </section>

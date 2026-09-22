@@ -250,6 +250,53 @@ DELIVERY_BOUNDARY_GUIDANCE = {
     ROOT / "marketing" / "SHARING.md": ("cannot be verified", "clipboard"),
 }
 
+# Target-app evidence must remain discoverable, comparable, and safe. Keep the
+# public entry points linked to the repeated protocol and filtered report
+# index, and keep the issue form's field classification aligned with them.
+COMPATIBILITY_EVIDENCE_GUIDANCE = {
+    ROOT / "README.md": (
+        "Help qualify target apps",
+        "five steady-focus attempts",
+        "three focus-change attempts",
+        "Browse existing compatibility",
+    ),
+    ROOT / "SUPPORT.md": (
+        "Browse existing target-app compatibility reports",
+        "generic field type",
+    ),
+    ROOT / "CONTRIBUTING.md": (
+        "per platform/app/version/field type",
+        "Browse existing compatibility",
+    ),
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "compatibility_report.yml": (
+        "id: field-type",
+        "Single-line plain-text field",
+        "Rich-text or contenteditable editor",
+        "Never run this protocol at a command shell",
+        "after the fixed `[Compatibility]:` title prefix",
+        "issues?q=is%3Aissue%20in%3Atitle",
+    ),
+    DOCS / "index.html": (
+        "Delivery is testable",
+        "eight-check target-app protocol",
+        "Browse compatibility reports",
+    ),
+    DOCS / "app-compatibility.md": (
+        "generic field type",
+        "Add your counts even when the outcome differs",
+        "ordinary command-shell prompt is outside",
+        "after the fixed `[Compatibility]:` title prefix",
+        "issues?q=is%3Aissue%20in%3Atitle",
+    ),
+    DOCS / "app-compatibility.html": (
+        "generic field type",
+        "variation under comparable conditions",
+        "ordinary command-shell prompt is outside",
+        "fixed <code>[Compatibility]:</code> title prefix",
+        "issues?q=is%3Aissue%20in%3Atitle",
+    ),
+}
+
 # A newline is not cosmetic in a command shell: it can submit the pasted text.
 # Keep the safe review workflow on the onboarding and retrieval surfaces most
 # likely to be used before someone dictates into Terminal or PowerShell.
@@ -303,6 +350,17 @@ STALE_PATTERNS = [
     (
         re.compile(r"(?:text|transcript) appears wherever (?:your|the) cursor", re.IGNORECASE),
         "unsupported universal paste-delivery promise",
+    ),
+    (
+        re.compile(
+            r"(?:push-to-talk dictation|text entry) at the cursor",
+            re.IGNORECASE,
+        ),
+        "paste delivery presented without its focus boundary",
+    ),
+    (
+        re.compile(r"transcribed locally, pasted, then discarded", re.IGNORECASE),
+        "delivery pipeline omits clipboard recovery",
     ),
     (
         re.compile(r"Anywhere you can type", re.IGNORECASE),
@@ -1140,6 +1198,25 @@ def check_delivery_boundary_guidance(
     return errors
 
 
+def check_compatibility_evidence_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = COMPATIBILITY_EVIDENCE_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing compatibility-evidence guidance")
+            continue
+        contents = " ".join(read_text(path).split())
+        missing = [phrase for phrase in required if phrase not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete compatibility-evidence guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
 def check_command_shell_guidance(
     surfaces: dict[Path, tuple[str, ...]] = COMMAND_SHELL_GUIDANCE,
 ) -> list[str]:
@@ -1495,6 +1572,18 @@ def run_self_test() -> None:
         stale_delivery.write_text("Anywhere you can type\n", encoding="utf-8")
         if not stale_copy_errors([stale_delivery]):
             raise SyncError("self-test: anywhere-you-can-type promise was not flagged")
+        stale_delivery.write_text(
+            "Private push-to-talk dictation at the cursor.\n",
+            encoding="utf-8",
+        )
+        if not stale_copy_errors([stale_delivery]):
+            raise SyncError("self-test: unqualified at-cursor promise was not flagged")
+        stale_delivery.write_text(
+            "Audio is transcribed locally, pasted, then discarded.\n",
+            encoding="utf-8",
+        )
+        if not stale_copy_errors([stale_delivery]):
+            raise SyncError("self-test: incomplete delivery pipeline was not flagged")
 
         stale_evidence = Path(tmp) / "claims.md"
         stale_evidence.write_text(
@@ -1631,6 +1720,33 @@ def run_self_test() -> None:
         if check_delivery_boundary_guidance(required_delivery_guidance):
             raise SyncError("self-test: complete delivery boundary was rejected")
 
+        compatibility_guidance = Path(tmp) / "compatibility.md"
+        required_compatibility_guidance = {
+            compatibility_guidance: (
+                "field type",
+                "five steady-focus attempts",
+                "filtered reports",
+            ),
+        }
+        compatibility_guidance.write_text(
+            "Please test automatic paste.\n", encoding="utf-8"
+        )
+        if not check_compatibility_evidence_guidance(
+            required_compatibility_guidance
+        ):
+            raise SyncError(
+                "self-test: incomplete compatibility-evidence guidance was not flagged"
+            )
+        compatibility_guidance.write_text(
+            "Choose a field type, run five steady-focus attempts, then view "
+            "the filtered reports.\n",
+            encoding="utf-8",
+        )
+        if check_compatibility_evidence_guidance(required_compatibility_guidance):
+            raise SyncError(
+                "self-test: complete compatibility-evidence guidance was rejected"
+            )
+
         command_guidance = Path(tmp) / "command-safety.html"
         required_command_guidance = {
             command_guidance: ("command shell", "Append newline", "review"),
@@ -1673,6 +1789,7 @@ def main() -> int:
             errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_delivery_boundary_guidance())
+            errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_command_shell_guidance())
             errors.extend(check_compare_freshness())
             for path, want in expected.items():
@@ -1704,6 +1821,7 @@ def main() -> int:
         errors.extend(check_windows_unsigned_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_delivery_boundary_guidance())
+        errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_command_shell_guidance())
         errors.extend(check_compare_freshness())
         errors.extend(check_install_prompt_sync())

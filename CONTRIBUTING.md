@@ -42,12 +42,15 @@ paste-consumption race without exposing the user's work.
 To test text delivery systematically, follow
 [`docs/app-compatibility.md`](docs/app-compatibility.md) and submit one
 [target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml)
-per app/version. The protocol records five steady-focus attempts and three
-focus-change attempts using blank disposable fields. Successful reports matter
-as much as failures: without them, issue counts cannot show the denominator or
-distinguish an app-class limitation from a one-machine failure. These community
-reports are exploratory evidence and do not replace the native release checks
-in [`docs/manual-qa.md`](docs/manual-qa.md).
+per platform/app/version/field type. [Browse existing compatibility
+reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
+first and add counts only when those conditions are comparable. The protocol
+records five steady-focus attempts and three focus-change attempts using blank
+disposable fields. Successful reports matter as much as failures: without
+them, issue counts cannot show the denominator or distinguish an app-class
+limitation from a one-machine failure. These community reports are exploratory
+evidence and do not replace the native release checks in
+[`docs/manual-qa.md`](docs/manual-qa.md).
 
 If Presspeech cannot open, include only the relevant last ~30 lines from
 `~/Library/Logs/Presspeech.log` on macOS or

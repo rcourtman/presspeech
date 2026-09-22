@@ -8423,6 +8423,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // rebuilding the engine. A focus change during that work must make the
         // eventual delivery fail closed, not retarget it to the new window.
         let pasteTarget = currentDictationPasteTarget()
+        if pasteTarget == nil {
+            // Keep this privacy-safe and app-agnostic. The distinction matters
+            // for #33: a target that never exposed exact window identity is
+            // different from a window that changed after capture.
+            log("paste target unavailable at recording start; completed dictation will use clipboard-only recovery")
+        }
         cancelAudioIdleStop()
         do {
             didTouchAudioEngine = true
@@ -8623,7 +8629,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                 Sounds.playDone()
                             }
                         case .copiedWithoutPasting:
-                            log("paste skipped; focused window changed; transcript copied")
+                            if recordingPasteTarget == nil {
+                                log("paste skipped; target unavailable at recording start; transcript copied")
+                            } else {
+                                log("paste skipped; focused window changed; transcript copied")
+                            }
                         case .failed, .clipboardChanged:
                             log("text insertion failed")
                         }

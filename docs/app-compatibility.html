@@ -73,7 +73,7 @@
             </li>
             <li>
               <strong>Open two disposable fields</strong>
-              <p>Use one blank field in the target app and one blank field in a local scratch app. Never use a production message, document, terminal, remote session, form that can submit, or account.</p>
+              <p>Use one blank field in the target app and one blank field in a local scratch app. Never use a production message, document, account, command shell, or field where pasted text can submit, send, or execute. Test a remote/virtual environment or terminal-based editor only when it is isolated, disposable, and non-executing; otherwise skip that target.</p>
             </li>
             <li>
               <strong>Use harmless, distinct phrases</strong>
@@ -85,7 +85,7 @@
             </li>
             <li>
               <strong>Record versions, not private context</strong>
-              <p>Note the Presspeech, operating-system, and target-app versions. Classify the target as native, browser/web editor, Electron/Chromium, terminal, remote desktop/virtual machine, or elevated Windows app. Omit account, server, document, tab, and window names.</p>
+              <p>Note the Presspeech, operating-system, and target-app versions. Classify the target as native, browser/web editor, Electron/Chromium, terminal, remote desktop/virtual machine, or elevated Windows app, and record the generic field type (for example, plain text, rich text, or browser content editor). Omit account, server, document, tab, form, and window names.</p>
             </li>
           </ol>
         </div>
@@ -172,7 +172,7 @@
             </article>
             <article class="card">
               <h3>Remote and specialist targets</h3>
-              <p>Remote desktop, virtual machine, terminal, browser editor, and assistive-technology paths are useful reports. Identify the class without sharing host names, commands, account names, document titles, or private paths.</p>
+              <p>Remote desktop, virtual machine, terminal-based editor, browser editor, and assistive-technology paths are useful reports only when the field is isolated, disposable, and cannot submit or execute a paste. An ordinary command-shell prompt is outside this community protocol. Identify the class without sharing host names, commands, account names, document titles, or private paths.</p>
             </article>
             <article class="card">
               <h3>Clipboard restoration regression</h3>
@@ -188,12 +188,12 @@
           <h2>Share counts, not content</h2>
           <ol class="steps">
             <li>
-              <strong>Search for the same app and version</strong>
-              <p>Search the <a href="https://github.com/rcourtman/presspeech/issues">existing public issues</a> for the target app and version. Add aggregate counts to a matching report instead of opening a duplicate.</p>
+              <strong>Find the same platform, app, version, and field type</strong>
+              <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22">Browse existing compatibility reports</a>. Add aggregate counts when the platform, app version, and generic field type match, even if your outcome differs; variation under comparable conditions is important evidence. Open a separate report for a different platform or field type.</p>
             </li>
             <li>
               <strong>Submit one target-app report</strong>
-              <p>Open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
+              <p>Open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
             </li>
             <li>
               <strong>Review diagnostics before pasting</strong>
@@ -202,6 +202,7 @@
           </ol>
           <div class="actions">
             <a class="button" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Open the compatibility form</a>
+            <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22">Browse compatibility reports</a>
             <a class="button secondary" href="troubleshooting.html">Troubleshoot first</a>
           </div>
           <p class="quiet">Community reports are exploratory evidence for the exact versions and conditions recorded. They do not replace native release qualification or promise universal support.</p>

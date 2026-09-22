@@ -672,7 +672,13 @@ class PresspeechApp:
         self._playback_mute_lock = threading.Lock()
         self._playback_restore = None
         self.indicator = ui.DictationIndicator()
+        # This is a reusable discovery cache for the configured selector. An
+        # open recording owns a separate snapshot because Settings can
+        # invalidate the cache while that stream still needs its original
+        # sample rate for post-roll analysis and resampling.
         self.input_device = None
+        self._cached_input_selector = None
+        self._recording_input_device = None
         self.idle_icon = _make_icon((140, 140, 140))
         self.rec_icon = _make_icon((225, 60, 60))
 
@@ -1233,6 +1239,7 @@ class PresspeechApp:
             self.recording = True
             self.buffer = []
             self._peak_rms = 0.0
+            self._recording_input_device = None
             self._model_idle_epoch += 1
             self._recording_paste_target = paste_target
             # Delivery belongs to this recording. Model work is serialized and
@@ -1330,7 +1337,10 @@ class PresspeechApp:
                 with self.lock:
                     if not self.recording or epoch != self._rec_epoch:
                         return
-                    self.input_device = chosen
+                    # Capture the rate before starting the stream: native
+                    # backends may invoke the audio callback from start(), and
+                    # Settings may invalidate the reusable cache at any time.
+                    self._recording_input_device = chosen
                 idx, rate = chosen
                 stream = AUDIO_BACKEND.open_input_stream(
                     device=idx, samplerate=rate, channels=1, dtype="float32",
@@ -1361,6 +1371,8 @@ class PresspeechApp:
                 else:
                     stale = False
                     self.input_device = None
+                    self._cached_input_selector = None
+                    self._recording_input_device = None
                     self.recording = False
                     self.stream = None
             if stream is not None:
@@ -1385,7 +1397,7 @@ class PresspeechApp:
                 "including 'Let desktop apps access your microphone', then try "
                 "again. Details: %s" % str(exc))
             return
-        self._log("mic open ok: %s" % (self.input_device,))
+        self._log("mic open ok: %s" % (chosen,))
         if self.icon is not None:
             self.icon.icon = self.rec_icon
 
@@ -1419,6 +1431,7 @@ class PresspeechApp:
             self._peak_rms = 0.0
             self._recording_paste_target = PasteTarget("", 0)
             self._recording_scratchpad = None
+            self._recording_input_device = None
             recording_limit_timer = getattr(
                 self, "_recording_limit_timer", None)
             self._recording_limit_timer = None
@@ -1493,7 +1506,8 @@ class PresspeechApp:
 
     def _post_roll_tail(self):
         with self.lock:
-            rate = self.input_device[1] if self.input_device is not None else 16000
+            recording_device = self._recording_input_device
+            rate = recording_device[1] if recording_device is not None else 16000
             needed = max(1, int(rate * POST_ROLL_TAIL_SEC))
             remaining = needed
             parts = []
@@ -1549,6 +1563,8 @@ class PresspeechApp:
             paste_target = self._recording_paste_target
             scratchpad_target = getattr(self, "_recording_scratchpad", None)
             self._recording_scratchpad = None
+            recording_device = self._recording_input_device
+            self._recording_input_device = None
             stream = self.stream
             self.stream = None
             self.buffer = []
@@ -1579,8 +1595,8 @@ class PresspeechApp:
             return True
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
-        if self.input_device is not None and self.input_device[1] != 16000:
-            audio = _resample_to_16k(audio, self.input_device[1])
+        if recording_device is not None and recording_device[1] != 16000:
+            audio = _resample_to_16k(audio, recording_device[1])
         if audio.size / 16000.0 < 0.25:
             self._finish_transcribing(NO_SPEECH_OUTCOME)
             self._log("recording stopped; too short (%.2fs)" % (audio.size / 16000.0))
@@ -1651,7 +1667,7 @@ class PresspeechApp:
         return not any(word in host_name for word in UNSAFE_INPUT_HOST_APIS)
 
     def input_device_options(self):
-        """Return (label, selector) pairs for Settings, excluding unsafe devices."""
+        """Return safe live inputs while preserving an unavailable saved choice."""
         options = [("Automatic (recommended)", AUTO_INPUT_DEVICE)]
         try:
             with AUDIO_BACKEND.operation():
@@ -1659,13 +1675,26 @@ class PresspeechApp:
                 host_apis = sd.query_hostapis()
         except Exception as exc:
             self._log("could not list input devices: %s" % exc)
-            return options
-        for i, device in enumerate(devices):
-            host_name = host_apis[device["hostapi"]]["name"]
-            if not self._safe_input_device(device, host_name):
-                continue
-            label = "%s — %s (device %d)" % (device["name"], host_name, i)
-            options.append((label, self._device_selector(device, host_name)))
+        else:
+            for i, device in enumerate(devices):
+                host_name = host_apis[device["hostapi"]]["name"]
+                if not self._safe_input_device(device, host_name):
+                    continue
+                label = "%s — %s (device %d)" % (device["name"], host_name, i)
+                options.append((label, self._device_selector(device, host_name)))
+        configured = self.settings.get("input_device", AUTO_INPUT_DEVICE)
+        if (configured != AUTO_INPUT_DEVICE and
+                all(selector != configured for _label, selector in options)):
+            # A disconnected explicit choice must remain selected in Setup and
+            # Settings. Falling back visually to Automatic would make merely
+            # opening and saving either window silently switch microphones.
+            host_name, separator, device_name = configured.partition("::")
+            if separator and host_name and device_name:
+                label = "%s — %s (currently unavailable)" % (
+                    device_name, host_name)
+            else:
+                label = "Configured microphone (currently unavailable)"
+            options.append((label, configured))
         return options
 
     @AUDIO_BACKEND.guarded
@@ -1722,9 +1751,13 @@ class PresspeechApp:
         with scope as lease:
             if epoch is not None and not self._recording_epoch_active(epoch):
                 return None
-            if self.input_device is not None:
-                return self.input_device
             selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
+            # A slow lookup for an earlier choice can finish after Settings
+            # invalidates the cache. Tag cached indexes with their stable
+            # selector so stale work is never reused by a later recording.
+            cached_for = getattr(self, "_cached_input_selector", selected)
+            if self.input_device is not None and cached_for == selected:
+                return self.input_device
             try:
                 chosen = self._find_input_device(selected)
             except Exception as exc:
@@ -1739,9 +1772,17 @@ class PresspeechApp:
                 with self.lock:
                     if not self.recording or epoch != self._rec_epoch:
                         return None
-                    self.input_device = chosen
+                    if self.settings.get(
+                            "input_device", AUTO_INPUT_DEVICE) == selected:
+                        self.input_device = chosen
+                        self._cached_input_selector = (
+                            selected if chosen is not None else None)
             else:
-                self.input_device = chosen
+                if self.settings.get(
+                        "input_device", AUTO_INPUT_DEVICE) == selected:
+                    self.input_device = chosen
+                    self._cached_input_selector = (
+                        selected if chosen is not None else None)
             return chosen
 
     def _rescan_audio_devices(self, epoch=None, audio_lease=None):
@@ -1774,9 +1815,38 @@ class PresspeechApp:
             levels.append(level)
             return True
 
+        initial_error = None
         try:
-            chosen = self._find_input_device(selected, probe=probe)
+            # Keep one discovery lease across lookup, reset, and retry. A
+            # reconnect can leave PortAudio's process-wide device table stale,
+            # and Setup's Check Again must recover it just as recording does.
+            with AUDIO_BACKEND.operation() as audio_lease:
+                try:
+                    chosen = self._find_input_device(selected, probe=probe)
+                except Exception as exc:
+                    # A stale backend can fail the enumeration itself rather
+                    # than return an empty lookup. Give that case the same one
+                    # safe refresh before exposing failure to Setup.
+                    initial_error = exc
+                    chosen = None
+                if chosen is None:
+                    # A reset may reorder device indexes. Discard the old tuple
+                    # before requesting it. Holding the app lock makes a new
+                    # recording either keep its active tuple or start after the
+                    # cache is empty; never clear the sample rate underneath an
+                    # active stream merely because its separate check failed.
+                    with self.lock:
+                        can_rescan = (not self.recording and self.stream is None)
+                        if can_rescan:
+                            self.input_device = None
+                    if (can_rescan and self._rescan_audio_devices(
+                            audio_lease=audio_lease)):
+                        initial_error = None
+                        chosen = self._find_input_device(selected, probe=probe)
             if chosen is None:
+                if initial_error is not None:
+                    self._log(
+                        "microphone readiness check failed: %s" % initial_error)
                 return MICROPHONE_CHECK_UNAVAILABLE
             if levels and max(levels) >= MICROPHONE_CHECK_AUDIO_RMS:
                 return MICROPHONE_CHECK_LEVEL
@@ -2197,7 +2267,9 @@ class PresspeechApp:
         model = getattr(transcriber, "model", None)
         dtype = str(getattr(model, "dtype", "not loaded"))
         device = str(getattr(transcriber, "_device", "not loaded"))
-        active_input = self.input_device or "not opened yet"
+        active_input = (
+            getattr(self, "_recording_input_device", None) or
+            self.input_device or "not opened yet")
         lines = [
             "Presspeech diagnostics",
             "Version: %s" % cfg.VERSION,

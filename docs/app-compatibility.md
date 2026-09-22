@@ -24,8 +24,10 @@ recovered safely.
 
 1. Use the current official Presspeech build and finish its setup checks.
 2. Open a blank, disposable field in the target app and a second blank field in
-   a local scratch app. Never test in a production message, document, terminal
-   session, remote session, or account.
+   a local scratch app. Never test in a production message, document, account,
+   command shell, or field where pasted text can submit, send, or execute. Test
+   a remote/virtual environment or terminal-based editor only when it is
+   isolated, disposable, and non-executing; otherwise skip that target.
 3. On published macOS 0.3.7, turn **Settings -> Behavior -> Restore clipboard
    after paste** off. In upcoming 0.3.8 / builds with **Keep Previous Clipboard
    for Manual Restore**, leave that option off instead. Both options default
@@ -37,7 +39,8 @@ recovered safely.
    check if you do not want the harmless text retained there.
 5. Note the exact Presspeech, operating-system, and target-app versions. Also
    note whether the target is a native app, browser page, Electron/Chromium
-   app, terminal, remote desktop, or elevated Windows app.
+   app, terminal, remote desktop, or elevated Windows app, plus the generic
+   field type (for example, plain text, rich text, or browser content editor).
 
 ## Check steady-focus delivery
 
@@ -120,21 +123,30 @@ failure. Stop testing and report it; do not retry in a real document.
 - A normally running Windows app cannot send the paste shortcut into a target
   running as administrator. A copied/manual-paste notice is the expected
   boundary. Do not elevate Presspeech as a workaround.
-- Remote-desktop, virtual-machine, terminal, browser-editor, and assistive
-  technology paths are useful reports, but identify the class without sharing
+- Remote-desktop, virtual-machine, terminal-based editor, browser-editor, and
+  assistive-technology paths are useful reports only when the field is isolated,
+  disposable, and cannot submit or execute a paste. An ordinary command-shell
+  prompt is outside this community protocol. Identify the class without sharing
   host names, account names, document titles, commands, or other private
   context.
 
 ## Share the result
 
-Submit one
+First [browse existing compatibility
+reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22),
+then submit one
 [target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml)
-per target app and version. Reports in which every attempt passed are useful:
-they provide the denominator that failure-only bug reports cannot.
+per platform, target app, version, and generic field type. Reports in which
+every attempt passed are useful: they provide the denominator that failure-only
+bug reports cannot. For a new report, put the platform, public app name/version,
+and generic field type after the fixed `[Compatibility]:` title prefix; include
+no private document, tab, account, server, form, or window name.
 
-Search existing issues first. If the same app/version and result already has a
-compatibility report, add only your aggregate counts and environment there
-instead of opening a duplicate.
+If the same platform, app version, and field type already has a compatibility
+report, add only your aggregate counts and environment there instead of opening
+a duplicate. Add your counts even when the outcome differs: variation under
+comparable conditions is important evidence. Use a separate report for a
+different platform or field type.
 
 Report only counts and classifications. Never include the phrases, recognized
 transcripts, clipboard contents, audio, dictionary or shortcut contents,
