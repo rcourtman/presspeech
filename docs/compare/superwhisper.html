@@ -39,7 +39,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare</span>
         <h1>Presspeech vs Superwhisper</h1>
-        <p>Both can transcribe on-device on Apple Silicon. Superwhisper is a configurable dictation workspace: model choice, AI post-processing modes, and Windows/iOS support, with free and paid tiers. Presspeech is a free single-purpose push-to-talk pipeline tuned for one thing — latency.</p>
+        <p>Both can transcribe on-device on Apple Silicon. Superwhisper is a configurable dictation workspace with model choice, optional AI post-processing, meeting and file tools, and Mac, Windows, iOS, and Android apps. Presspeech is a free single-purpose push-to-talk pipeline tuned for one thing — latency.</p>
       </div>
 
       <section>
@@ -63,22 +63,22 @@
                 <tr>
                   <th scope="row">Engine path</th>
                   <td>Local Parakeet TDT v3 CoreML model on the Apple Neural Engine, decoded in a single pass on key release.</td>
-                  <td>Choice of local Whisper-family models, local Parakeet models on the Pro tier, plus optional cloud models and LLM post-processing from multiple providers.</td>
+                  <td>Choice of local Whisper models on the Free tier, local Parakeet and Cohere models on Pro, plus optional cloud voice models and local or cloud language models.</td>
                 </tr>
                 <tr>
                   <th scope="row">Privacy posture</th>
                   <td>No cloud path exists: no account, no telemetry, transcript history in memory only.</td>
-                  <td>Local models run fully offline; the optional cloud models and cloud AI modes send data out when you choose them.</td>
+                  <td>Voice transcription and optional text post-processing are configured independently; either stage can stay local or use a cloud provider.</td>
                 </tr>
                 <tr>
                   <th scope="row">Platforms</th>
-                  <td>Apple Silicon Macs, macOS 14 or later.</td>
-                  <td>macOS, Windows, and iOS; Superwhisper notes Intel Macs work best with its cloud models.</td>
+                  <td>Apple Silicon Macs, macOS 14 or later; a separate Windows preview is available.</td>
+                  <td>macOS 14+, Windows, iOS, and Android; model and acceleration support varies by device.</td>
                 </tr>
                 <tr>
                   <th scope="row">Price</th>
                   <td>Free and MIT licensed.</td>
-                  <td>Free tier with smaller local models; Pro is $8.49/month, $84.99/year, or a $249.99 lifetime license.</td>
+                  <td>Free tier with all local Whisper models and up to two modes; Pro is $8.49/month, $84.99/year, or $249.99 once.</td>
                 </tr>
                 <tr>
                   <th scope="row">Configurability</th>
@@ -89,9 +89,9 @@
             </table>
           </div>
           <div class="note">
-            <p>Choose Superwhisper if you want model choice, AI-shaped output, or Windows and iOS coverage, and the tiers fit your budget. Choose Presspeech if you want a free tool that does exactly one job with the lowest possible friction and no cloud path at all.</p>
+            <p>Choose Superwhisper if you want model choice, AI-shaped output, meetings, or desktop and mobile coverage, and the tiers fit your budget. Choose Presspeech if you want a free tool that does one job with a fixed engine, deterministic text handling, and no cloud path at all.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>, <a href="https://superwhisper.com/">Superwhisper official site</a> and its published pricing (checked June 2026).</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; Superwhisper's <a href="https://superwhisper.com/docs/get-started/introduction">platform and workflow overview</a>, <a href="https://superwhisper.com/docs/get-started/quickstart">system requirements</a>, <a href="https://superwhisper.com/docs/models/voice">voice-model catalog</a>, <a href="https://superwhisper.com/docs/security/sensitive-data">data-flow guidance</a>, and <a href="https://superwhisper.com/docs/billing/plans">plans and pricing</a> (checked 22 September 2026).</p>
         </div>
       </section>
     </main>

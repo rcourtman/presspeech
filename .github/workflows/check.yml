@@ -68,6 +68,10 @@ jobs:
           python3 scripts/test-public-releases-gh.py
       - name: Pages deployment gate self-test
         run: python3 scripts/check-pages-deployment.py --self-test
+      - name: Comparison release checker self-test
+        run: |
+          python3 scripts/check-compare-releases.py --self-test
+          python3 scripts/check-compare-releases.py --check-docs
       - name: Log privacy guard
         run: |
           python3 scripts/check-log-privacy.py --self-test

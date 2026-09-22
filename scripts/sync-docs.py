@@ -267,15 +267,17 @@ COMMAND_SHELL_GUIDANCE = {
     DOCS / "llms-full.txt": ("execution surfaces", "Append newline", "reviewing the exact result"),
 }
 
-# Compare pages quote competitor pricing and claims. Each page must carry a
-# "checked <Month> <Year>" stamp; --check fails once the oldest stamp ages out
-# so a release forces a re-verify against the cited sources.
+# Compare pages quote fast-moving competitor pricing and claims. Each page must
+# carry an exact "checked <day> <Month> <Year>" stamp; sync and --check fail
+# once the oldest stamp ages out so a release forces a re-verify against the
+# cited sources. scripts/check-compare-releases.py separately watches products
+# whose first-party GitHub release can be checked between those reviews.
 COMPARE_DIR = DOCS / "compare"
-COMPARE_MAX_AGE_DAYS = 180
+COMPARE_MAX_AGE_DAYS = 90
 COMPARE_CHECKED_RE = re.compile(
-    r"checked (?:\d{1,2} )?"
+    r"\bchecked (\d{1,2}) "
     r"(January|February|March|April|May|June|July|August|September|October|November|December)"
-    r" (\d{4})"
+    r" (\d{4})\b"
 )
 MONTH_NUMBERS = {
     name: number
@@ -1231,14 +1233,36 @@ def check_compare_freshness(
         if not stamps:
             errors.append(
                 f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
-                "competitor claims carry no 'checked <Month> <Year>' stamp"
+                "competitor claims carry no exact "
+                "'checked <day> <Month> <Year>' stamp"
             )
             continue
-        oldest = min(date(int(year), MONTH_NUMBERS[month], 1) for month, year in stamps)
+        checked_dates: list[date] = []
+        for day, month, year in stamps:
+            try:
+                checked_dates.append(
+                    date(int(year), MONTH_NUMBERS[month], int(day))
+                )
+            except ValueError:
+                errors.append(
+                    f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
+                    f"invalid competitor-check date {day} {month} {year}"
+                )
+        if not checked_dates:
+            continue
+        oldest = min(checked_dates)
+        newest = max(checked_dates)
+        if newest > today:
+            errors.append(
+                f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
+                "competitor claims have a future check date, "
+                f"{newest.day} {newest.strftime('%B %Y')}"
+            )
         if (today - oldest).days > COMPARE_MAX_AGE_DAYS:
             errors.append(
                 f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
-                f"competitor claims last checked {oldest.strftime('%B %Y')}, more than "
+                f"competitor claims last checked {oldest.day} "
+                f"{oldest.strftime('%B %Y')}, more than "
                 f"{COMPARE_MAX_AGE_DAYS} days ago — re-verify against the cited sources "
                 "and update the stamp"
             )
@@ -1392,14 +1416,23 @@ def run_self_test() -> None:
         compare_dir = Path(tmp) / "compare"
         compare_dir.mkdir()
         page = compare_dir / "sample.html"
-        page.write_text("<p>Sources: example (checked January 2026).</p>", encoding="utf-8")
+        page.write_text("<p>Sources: example (checked 1 January 2026).</p>", encoding="utf-8")
         if check_compare_freshness(today=date(2026, 3, 1), compare_dir=compare_dir):
             raise SyncError("self-test: fresh compare stamp was flagged")
-        if not check_compare_freshness(today=date(2027, 1, 1), compare_dir=compare_dir):
+        if not check_compare_freshness(today=date(2026, 4, 2), compare_dir=compare_dir):
             raise SyncError("self-test: stale compare stamp was not flagged")
         page.write_text("<p>Sources: example (checked 11 June 2026).</p>", encoding="utf-8")
         if check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
             raise SyncError("self-test: day-carrying compare stamp was not parsed")
+        page.write_text("<p>Sources: example (checked June 2026).</p>", encoding="utf-8")
+        if not check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
+            raise SyncError("self-test: inexact compare stamp was not flagged")
+        page.write_text("<p>Sources: example (checked 31 June 2026).</p>", encoding="utf-8")
+        if not check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
+            raise SyncError("self-test: invalid compare stamp was not flagged")
+        page.write_text("<p>Sources: example (checked 2 July 2026).</p>", encoding="utf-8")
+        if not check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
+            raise SyncError("self-test: future compare stamp was not flagged")
         page.write_text("<p>Sources: example.</p>", encoding="utf-8")
         if not check_compare_freshness(today=date(2026, 3, 1), compare_dir=compare_dir):
             raise SyncError("self-test: missing compare stamp was not flagged")
@@ -1672,6 +1705,7 @@ def main() -> int:
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_command_shell_guidance())
+        errors.extend(check_compare_freshness())
         errors.extend(check_install_prompt_sync())
         if errors:
             for error in errors:

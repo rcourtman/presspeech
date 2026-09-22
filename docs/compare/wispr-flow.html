@@ -39,7 +39,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare</span>
         <h1>Presspeech vs Wispr Flow</h1>
-        <p>The main difference is where transcription happens and what it costs. Wispr Flow transcribes in the cloud, adds AI formatting, and runs across Mac, Windows, and mobile on a subscription. Presspeech transcribes on-device, pastes verbatim text, and is free.</p>
+        <p>The main difference is where transcription happens and how broad the product is. Wispr Flow transcribes in the cloud, adds AI formatting and meeting notes, and runs across Mac, Windows, and mobile on free and subscription tiers. Presspeech transcribes on-device, applies only deterministic text handling, and is free.</p>
       </div>
 
       <section>
@@ -63,7 +63,7 @@
                 <tr>
                   <th scope="row">Where transcription happens</th>
                   <td>On the Mac. The local Parakeet TDT v3 CoreML model runs on the Apple Neural Engine; no network round-trip for transcription.</td>
-                  <td>In the cloud — Wispr's privacy page states "Transcription always happens in the cloud." Privacy Mode prevents retention on their servers, but audio is still processed remotely.</td>
+                  <td>In the cloud — Wispr's privacy page states "Transcription always happens in the cloud." A separate cloud-storage control governs retained dictation audio, transcripts, and history; it does not make processing local.</td>
                 </tr>
                 <tr>
                   <th scope="row">Platforms</th>
@@ -76,22 +76,22 @@
                   <td>Free tier of 2,000 words/week on desktop; Pro is $15/month, or $12/month billed annually.</td>
                 </tr>
                 <tr>
-                  <th scope="row">Accounts and telemetry</th>
+                  <th scope="row">Account and data controls</th>
                   <td>No account, no telemetry, transcript history in memory only.</td>
-                  <td>Requires an account; without Privacy Mode, data may be used to improve their models per their privacy FAQ.</td>
+                  <td>Requires an account. Settings control model-improvement permission, dictation cloud storage, and Notetaker retention; Notetaker transcripts use Wispr's cloud for sync and meeting resumption.</td>
                 </tr>
                 <tr>
                   <th scope="row">Beyond dictation</th>
                   <td>Deliberately narrow: verbatim transcription, local text corrections, opt-in filler-word removal.</td>
-                  <td>AI editing and formatting, tone adjustment, command mode, and cross-device personalization.</td>
+                  <td>AI editing and formatting, tone adjustment, command mode, cross-device personalization, and Notetaker for meetings and voice memos.</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div class="note">
-            <p>Choose Wispr Flow if you want AI-shaped output across many devices and a subscription with cloud processing fits your needs. Choose Presspeech if you want dictation whose audio never leaves the Mac, with no account and no recurring cost.</p>
+            <p>Choose Wispr Flow if you want AI-shaped output across many devices, cloud-synced personalization, and meeting notes. Choose Presspeech if you want dictation whose audio never leaves the computer, with no account, cloud service, or recurring cost.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>, <a href="https://wisprflow.ai/">Wispr Flow official site</a> and its published pricing and privacy pages (checked June 2026).</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; the <a href="https://wisprflow.ai/">Wispr Flow official site</a>, <a href="https://wisprflow.ai/pricing">pricing and feature matrix</a>, and <a href="https://wisprflow.ai/privacy">privacy and data-control summary</a> (checked 22 September 2026).</p>
         </div>
       </section>
     </main>

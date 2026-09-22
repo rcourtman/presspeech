@@ -39,7 +39,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare</span>
         <h1>How Presspeech fits next to other dictation options</h1>
-        <p>Start with the platform you use. The macOS table compares five tools on the same questions; the Windows guide separates Microsoft's online and offline built-ins from dedicated local and cloud apps. Product claims come from published sources, and Presspeech performance claims come from its reproducible macOS benchmark.</p>
+        <p>Start with the platform you use. The macOS table compares five representative tools on the same questions; it is a focused sample, not an exhaustive directory. The Windows guide separates Microsoft's online and offline built-ins from dedicated local and cloud apps. Product claims come from published sources, and Presspeech performance claims come from its reproducible macOS benchmark.</p>
       </div>
 
       <section>
@@ -89,7 +89,7 @@
                   <td>On-device for supported languages; otherwise sent to Apple servers. Keyboard settings shows which applies.</td>
                   <td>Your choice per model: fully local models or cloud services.</td>
                   <td>In the cloud &mdash; &ldquo;Transcription always happens in the cloud&rdquo; per its privacy page.</td>
-                  <td>On-device by default; optional cloud providers.</td>
+                  <td>On-device with local models; optional cloud transcription sends audio, while optional cloud enhancement sends text and enabled context.</td>
                 </tr>
                 <tr>
                   <th scope="row">Account required</th>
@@ -103,7 +103,7 @@
                   <th scope="row">Published latency evidence</th>
                   <td>Model-only p50 of 92&ndash;152 ms across the published clips; the <a href="../benchmarks.html">reproducible benchmark</a> does not time clipboard or paste work.</td>
                   <td>Not published.</td>
-                  <td>Not published.</td>
+                  <td>Publishes median response times on 8&ndash;15-second clips and a <a href="https://superwhisper.com/docs/models/benchmarks">benchmark methodology</a>; these use different workloads and timing boundaries from Presspeech.</td>
                   <td>Its engineering blog describes a ~700 ms end-to-end target, which is not directly comparable with Presspeech's model-only measurement.</td>
                   <td>Not published.</td>
                 </tr>
@@ -113,7 +113,7 @@
                   <td>Built in; on-device languages need a model download, size not published.</td>
                   <td>Not published; local models are 75 MB&ndash;3 GB.</td>
                   <td>Not published; docs ask for ~500 MB free storage.</td>
-                  <td>47.8 MiB download (v2.13 DMG); models extra.</td>
+                  <td>48.1 MiB download (v2.20 DMG); models extra.</td>
                 </tr>
                 <tr>
                   <th scope="row">Idle footprint</th>
@@ -135,17 +135,17 @@
                   <th scope="row">Platforms</th>
                   <td>Released on Apple Silicon Macs, macOS 14+; a separate Windows preview is available.</td>
                   <td>Every Mac.</td>
-                  <td>macOS 13.3+, Windows, iOS; local models work best on Apple Silicon.</td>
+                  <td>macOS 14+, Windows, iOS, and Android; local models work best on Apple Silicon.</td>
                   <td>macOS 11+ including Intel, Windows, iPhone, Android.</td>
-                  <td>Apple Silicon Macs, macOS 14.4+.</td>
+                  <td>Apple Silicon Macs, macOS 14.4+; a separate iPhone/iPad app is in beta.</td>
                 </tr>
                 <tr>
                   <th scope="row">Beyond verbatim dictation</th>
                   <td>Deterministic local corrections and shortcuts, opt-in spoken formatting, and filler-word removal; no AI rewriting.</td>
                   <td>Auto-punctuation, spoken punctuation and emoji commands.</td>
                   <td>AI modes, meeting transcription, file transcription, translation.</td>
-                  <td>AI formatting, tone styles, command mode, cross-device dictionary.</td>
-                  <td>AI enhancement modes, per-app Power Mode profiles, file transcription.</td>
+                  <td>AI formatting, tone styles, command mode, cross-device dictionary, and meeting notes.</td>
+                  <td>AI enhancement and per-app Modes, file transcription, local history, and a dictionary that can learn from corrections.</td>
                 </tr>
               </tbody>
             </table>
@@ -153,8 +153,8 @@
           <div class="note">
             <p>Every tool here wins somewhere. Pick the AI-formatting tools if you want your words reshaped, Apple Dictation if you want zero install, VoiceInk if you want one configurable local Mac app, or <a href="handy.html">Handy</a> if you want a larger cross-platform open-source community and model choice. Presspeech's case is narrow on purpose: a measured low-latency local model path, a small native macOS app, and no cloud transcription path to audit.</p>
           </div>
-          <p>Presspeech's figures are measured on an M4 Mac mini and reproducible from the <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench">benchmark harness</a>. Other tools' figures come from their official sites, docs, and release assets, checked 1 September 2026. &ldquo;Not published&rdquo; means we could not find an official number, nothing more. MacWhisper sits out this table because it is primarily a file-transcription app; it has its <a href="macwhisper.html">own page</a>. Handy is the closest high-adoption open-source alternative and has its <a href="handy.html">own page</a> rather than making this Mac-focused table wider. Spotted an error? <a href="https://github.com/rcourtman/presspeech/issues">Open an issue</a> and we will fix it.</p>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a> and <a href="../benchmarks.html">benchmarks</a>; <a href="https://support.apple.com/guide/mac-help/use-dictation-mh40584/mac">Apple Dictation guide</a>, <a href="https://www.apple.com/macos/feature-availability/">macOS feature availability</a>, and <a href="https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/">Siri &amp; Dictation privacy</a>; <a href="https://superwhisper.com/">Superwhisper</a> site and docs; <a href="https://wisprflow.ai/pricing">Wispr Flow pricing</a> and <a href="https://wisprflow.ai/privacy">privacy</a>; <a href="https://tryvoiceink.com/">VoiceInk</a> site and <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.13">v2.13 release</a>; <a href="https://github.com/cjpais/Handy">Handy source and documentation</a>.</p>
+          <p>Presspeech's figures are measured on an M4 Mac mini and reproducible from the <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench">benchmark harness</a>. Other tools' figures come from their official sites, docs, and release assets, checked 22 September 2026. &ldquo;Not published&rdquo; means we could not find an official number, nothing more. MacWhisper now includes system-wide dictation as well as file and meeting transcription; it has its <a href="macwhisper.html">own page</a> only to keep this table readable. Handy likewise has a focused <a href="handy.html">comparison</a>. Spotted an error? <a href="https://github.com/rcourtman/presspeech/issues">Open an issue</a> and we will fix it.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a> and <a href="../benchmarks.html">benchmarks</a>; <a href="https://support.apple.com/guide/mac-help/use-dictation-mh40584/mac">Apple Dictation guide</a>, <a href="https://www.apple.com/macos/feature-availability/">macOS feature availability</a>, and <a href="https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/">Siri &amp; Dictation privacy</a>; Superwhisper's <a href="https://superwhisper.com/docs/get-started/introduction">platform overview</a>, <a href="https://superwhisper.com/docs/get-started/quickstart">system requirements</a>, <a href="https://superwhisper.com/docs/models/voice">model catalog</a>, and <a href="https://superwhisper.com/docs/billing/plans">pricing</a>; <a href="https://wisprflow.ai/pricing">Wispr Flow pricing</a> and <a href="https://wisprflow.ai/privacy">privacy</a>; <a href="https://tryvoiceink.com/">VoiceInk</a> site, <a href="https://tryvoiceink.com/privacy">privacy policy</a>, <a href="https://tryvoiceink.com/ios">iOS beta</a>, and <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.20">v2.20 release</a>; the <a href="https://www.macwhisper.com/">MacWhisper official site</a> and <a href="https://docs.macwhisper.com/article/14-how-to-use-the-dictation-feature">dictation guide</a>; and <a href="https://github.com/cjpais/Handy">Handy source and documentation</a> with its <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.7">v0.9.7 release</a>.</p>
         </div>
       </section>
 

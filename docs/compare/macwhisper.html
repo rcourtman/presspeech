@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Presspeech vs MacWhisper - Local Mac Speech-to-Text Workflows</title>
-    <meta name="description" content="Compare Presspeech and MacWhisper by workflow: push-to-talk dictation at the cursor versus broader audio and video transcription on macOS.">
+    <title>Presspeech vs MacWhisper - Mac Dictation and Transcription</title>
+    <meta name="description" content="Compare Presspeech and MacWhisper for system-wide Mac dictation, local processing, AI options, file transcription, price, and product scope.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/macwhisper.html">
     <link rel="icon" href="../favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
-    <meta property="og:title" content="Presspeech vs MacWhisper - Local Mac Speech-to-Text Workflows">
-    <meta property="og:description" content="Compare Presspeech and MacWhisper by workflow: push-to-talk dictation at the cursor versus broader audio and video transcription on macOS.">
+    <meta property="og:title" content="Presspeech vs MacWhisper - Mac Dictation and Transcription">
+    <meta property="og:description" content="Compare Presspeech and MacWhisper for system-wide Mac dictation, local processing, AI options, file transcription, price, and product scope.">
     <meta property="og:url" content="https://rcourtman.github.io/presspeech/compare/macwhisper.html">
     <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:type" content="website">
@@ -39,7 +39,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare</span>
         <h1>Presspeech vs MacWhisper</h1>
-        <p>The main difference is workflow. Presspeech is for quick push-to-talk text entry at the cursor. MacWhisper is a fuller transcription app for audio files, video, model choice, exports, and long transcripts.</p>
+        <p>Both apps now support system-wide dictation into the active text field. Presspeech is a small, fixed local pipeline built around that one job. MacWhisper combines dictation with file, meeting, video, export, model-choice, and optional AI workflows.</p>
       </div>
 
       <section>
@@ -58,35 +58,45 @@
                 <tr>
                   <th scope="row">Primary workflow</th>
                   <td>Hold hotkey, speak, release; normally paste after confirming the same window is still focused, with manual clipboard recovery when the destination cannot be verified.</td>
-                  <td>Drop or capture audio/video, transcribe, review, export, and manage transcripts.</td>
+                  <td>Use a configurable shortcut to dictate directly into any text field, or import and record audio for a managed transcript.</td>
                 </tr>
                 <tr>
-                  <th scope="row">Best for</th>
-                  <td>Short everyday dictation into existing apps.</td>
-                  <td>Meetings, files, long-form transcripts, exports, and richer transcription workflows.</td>
+                  <th scope="row">Product scope</th>
+                  <td>Everyday dictation, deterministic corrections and shortcuts, spoken formatting, and filler removal.</td>
+                  <td>Everyday dictation plus files, app audio, meetings, speaker recognition, exports, watched folders, and workflow integrations.</td>
                 </tr>
                 <tr>
                   <th scope="row">Engine path</th>
                   <td>Local Parakeet TDT v3 CoreML model on the Apple Neural Engine via FluidAudio.</td>
-                  <td>MacWhisper documents multiple model choices, including local and optional cloud-backed options.</td>
+                  <td>Multiple local transcription models, with optional remote transcription services and local or cloud AI providers.</td>
                 </tr>
                 <tr>
                   <th scope="row">Privacy posture</th>
                   <td>No cloud transcription, no telemetry, in-memory transcript history only.</td>
-                  <td>MacWhisper documents local transcription for core workflows; check its current model and feature choices before using optional remote services.</td>
+                  <td>Local transcription is available for offline processing. Remote transcription and AI integrations are optional, so data handling depends on the selected model and provider.</td>
+                </tr>
+                <tr>
+                  <th scope="row">AI shaping</th>
+                  <td>None: the transcript is not sent through a generative model.</td>
+                  <td>Pro can clean up, translate, expand, or otherwise process dictation with custom and app-specific prompts; provider credentials and charges may be separate.</td>
                 </tr>
                 <tr>
                   <th scope="row">Price</th>
                   <td>Free and MIT licensed.</td>
-                  <td>MacWhisper has free and paid editions.</td>
+                  <td>Free edition; Pro is &euro;64 one-time with lifetime updates.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Dictation availability</th>
+                  <td>Included in the direct-download app.</td>
+                  <td>Included in the direct-download edition; MacWhisper says its Mac App Store edition cannot offer dictation because of store restrictions.</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div class="note">
-            <p>Choose Presspeech when the job is fast text entry. Choose MacWhisper when the job is transcript production, file handling, export formats, or a broader transcription workspace.</p>
+            <p>Choose Presspeech if you want an open-source utility with no cloud transcription path and deliberately few choices. Choose MacWhisper if you want system-wide dictation and a much broader transcription workspace in one app, especially if model choice, AI prompts, meetings, or file workflows matter.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://www.macwhisper.net/">MacWhisper official site</a> (checked June 2026).</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>; the <a href="https://www.macwhisper.com/">MacWhisper official site and pricing</a>; and its <a href="https://docs.macwhisper.com/article/14-how-to-use-the-dictation-feature">system-wide dictation guide</a> (checked 22 September 2026).</p>
         </div>
       </section>
     </main>

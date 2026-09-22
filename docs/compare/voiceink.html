@@ -58,7 +58,7 @@
                 <tr>
                   <th scope="row">Primary workflow</th>
                   <td>Hold hotkey, speak, release; local model transcription is followed by deterministic text handling and normally a paste after confirming the same window is still focused, with manual clipboard recovery when needed.</td>
-                  <td>Hotkey dictation with optional AI enhancement, per-app Power Mode profiles, and audio/video file transcription.</td>
+                  <td>Hotkey dictation with optional AI enhancement, per-app Modes, and audio/video file transcription.</td>
                 </tr>
                 <tr>
                   <th scope="row">Engine path</th>
@@ -68,7 +68,7 @@
                 <tr>
                   <th scope="row">Privacy posture</th>
                   <td>No cloud path exists: no account, no telemetry, transcript history in memory only.</td>
-                  <td>Local by default — &ldquo;your voice data never leaves your Mac&rdquo; — with optional cloud transcription and cloud enhancement if you enable them.</td>
+                  <td>Local models are the default. Optional cloud transcription sends audio; optional cloud enhancement sends text and any context you enable. Transcript history is stored locally until you delete it or configure cleanup.</td>
                 </tr>
                 <tr>
                   <th scope="row">Price and license</th>
@@ -78,20 +78,25 @@
                 <tr>
                   <th scope="row">Footprint</th>
                   <td>8.4 MB app, ~80 MB RAM idle, 0% CPU between dictations; <a href="../benchmarks.html">published benchmark</a>.</td>
-                  <td>47.8 MiB v2.13 DMG; resource figures not published, 8 GB RAM recommended.</td>
+                  <td>48.1 MiB v2.20 DMG; resource figures not published, 8 GB RAM recommended.</td>
                 </tr>
                 <tr>
                   <th scope="row">Configurability</th>
                   <td>Focused and deterministic: hotkey and trigger style, language pinning, local corrections and shortcuts, spoken formatting, and filler removal.</td>
-                  <td>Extensive: model management, AI modes with custom prompts, per-app profiles, custom vocabulary, transcription history with audio replay.</td>
+                  <td>Extensive: model management, Modes with custom prompts and app triggers, a dictionary that can learn from corrections, and searchable history with optional audio replay.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Platforms</th>
+                  <td>Apple Silicon Macs on macOS 14+; a separate Windows preview is available.</td>
+                  <td>The prebuilt Mac app requires Apple Silicon and macOS 14.4+; a separate iPhone/iPad companion is in beta.</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div class="note">
-            <p>Choose VoiceInk if you want one local tool that also handles AI cleanup, per-app behavior, and file transcription, and a one-time price fits. Choose Presspeech if you want the smallest possible utility that does exactly one job — both apps can run the same Parakeet model, so this choice is about surface area, not engine.</p>
+            <p>Choose VoiceInk if you want one configurable tool that also handles AI cleanup, per-app behavior, saved history, and file transcription, and a one-time price fits. Choose Presspeech if you want a smaller fixed utility with no cloud path or persistent transcript history. Both Mac apps can run Parakeet, so the larger difference is product surface and data-flow choice.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>, <a href="https://tryvoiceink.com/">VoiceInk official site</a>, <a href="https://tryvoiceink.com/docs/ai-models">model documentation</a>, and <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.13">v2.13 release</a> (checked 1 September 2026).</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; the <a href="https://tryvoiceink.com/">VoiceInk official site</a>, <a href="https://tryvoiceink.com/docs/introduction">workflow guide</a>, <a href="https://tryvoiceink.com/docs/ai-models">model catalog</a>, <a href="https://tryvoiceink.com/docs/transcription-history">history documentation</a>, <a href="https://tryvoiceink.com/privacy">privacy policy</a>, <a href="https://tryvoiceink.com/ios">iOS beta</a>, and <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.20">v2.20 release</a> (checked 22 September 2026).</p>
         </div>
       </section>
     </main>
