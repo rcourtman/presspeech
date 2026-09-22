@@ -802,6 +802,13 @@ against Unified with 0 ms and 250 ms trailing silence. It writes ignored
 Markdown and TSV reports under `tail-results/`. The candidate threshold
 requires Unified at 250 ms to retain the final word on the known
 regression cases and keep max WER at or below 20% before further evaluation.
+All five known cases and valid default-environment receipts are required; a
+custom sweep omitting cases cannot pass. `--no-threshold` preserves exploratory
+results and exits successfully even when the report marks this prerequisite
+blocked; it does not skip assessment or convert failing metrics into a pass.
+The report records benchmark/application SDK pins and verifies the built SDK
+checkout after compilation. Passing this synthetic prerequisite alone does not
+establish clean benchmark source, real-dictation performance or approval to ship.
 
 To tune the number instead of only checking the current candidate value:
 
@@ -1076,14 +1083,19 @@ Even empty or invalid control values count as configured. The benchmark does
 not clear or replace them: intentionally configured exploratory runs retain
 the caller's behavior.
 
-The vocabulary and real-model candidate screens require a valid zero-control
+The vocabulary, real-model and tail-word candidate screens require a valid zero-control
 receipt from every benchmark process. Configured, missing, malformed, duplicate
 or unsupported receipts block qualification, including in exploratory reports;
 a later default receipt cannot erase an earlier blocker. Count-only evidence
 does not establish the settings or reproducibility of a configured run. Use
 `--no-threshold` for vocabulary exploration, or omit `--require-candidate-pass`
-for real-model exploration. Explicit CLI-selected policies remain supported
-and recorded separately.
+for real-model exploration; tail-word exploration also uses `--no-threshold`.
+Real-dictation reports retain their numeric error-gate verdicts separately from
+the environment prerequisite: when either quality gate is requested, configured
+or unreported receipts make the command fail even if numeric limits pass. Omit
+both quality-gate options for exploration. Numeric passes alone do not establish
+production qualification. Explicit CLI-selected policies remain supported and
+recorded separately.
 
 `presspeech-bench --experiment-environment` inspects the actual process without
 loading audio or models. In the pinned FluidAudio source, these benchmark ASR

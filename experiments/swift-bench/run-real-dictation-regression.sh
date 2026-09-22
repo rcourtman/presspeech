@@ -35,6 +35,7 @@ REDACT_TRANSCRIPTS=1
 REDACT_PATHS=1
 CORPUS_KIND="private"
 SELF_TEST=0
+EXPERIMENT_ENVIRONMENT_STATE="unreported"
 MAX_REFERENCE_DELETION_RUN=""
 MAX_CORPUS_WER=""
 
@@ -230,6 +231,30 @@ conservative_corpus_metrics() {
 
 conservative_corpus_wer() {
     conservative_corpus_metrics "$1" | cut -f1
+}
+
+# Keep the requested numeric checks visible, but never let them qualify a
+# configured or unreported runtime as default-environment ASR evidence.
+append_environment_gate() {
+    local report="$1"
+    {
+        echo
+        echo "## Inherited SDK environment"
+        echo
+        echo "- State: $EXPERIMENT_ENVIRONMENT_STATE"
+        echo "Numeric gate verdicts describe measured errors only; they do not establish production or whole-app qualification."
+        if [[ "$EXPERIMENT_ENVIRONMENT_STATE" == "default" ]]; then
+            echo "- Default-environment prerequisite: passes"
+        else
+            echo "- Default-environment prerequisite: blocked"
+        fi
+        if [[ -z "$MAX_REFERENCE_DELETION_RUN" && -z "$MAX_CORPUS_WER" ]]; then
+            echo "Exploratory run: no quality gate requested."
+        fi
+    } >>"$report"
+    # Ungated exploration preserves intentionally configured environments.
+    [[ "$EXPERIMENT_ENVIRONMENT_STATE" == "default" || \
+       ( -z "$MAX_REFERENCE_DELETION_RUN" && -z "$MAX_CORPUS_WER" ) ]]
 }
 
 append_quality_gate() {
@@ -582,7 +607,28 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$summary_source" "- Verdict: fails"
+    local state environment_report="$tmpdir/environment-gate.md"
+    MAX_REFERENCE_DELETION_RUN="0"
+    MAX_CORPUS_WER="0"
+    for state in default configured unreported pending; do
+        EXPERIMENT_ENVIRONMENT_STATE="$state"
+        : >"$environment_report"
+        # Both actual numeric gates pass; only runtime provenance differs.
+        append_quality_gate "$environment_report" "0"
+        append_corpus_wer_gate "$environment_report" "0"
+        if append_environment_gate "$environment_report"; then
+            assert_eq "$state" "default" "default environment quality prerequisite"
+        else
+            if [[ "$state" == "default" ]]; then exit 1; fi
+            assert_contains "$environment_report" "Default-environment prerequisite: blocked"
+        fi
+    done
+    MAX_REFERENCE_DELETION_RUN=""
     MAX_CORPUS_WER=""
+    EXPERIMENT_ENVIRONMENT_STATE="configured"
+    append_environment_gate "$environment_report"
+    assert_contains "$environment_report" "Exploratory run: no quality gate requested."
+    EXPERIMENT_ENVIRONMENT_STATE="unreported"
     assert_eq "$(expected_backend_count v3)" "1" "single backend count"
     assert_eq "$(expected_backend_count fluid)" "5" "fluid backend count"
     assert_eq "$(expected_backend_count both)" "6" "all backend count"
@@ -890,6 +936,7 @@ backend_count="$(expected_backend_count "$BACKEND")"
 
 write_report_header "$report" "$timestamp" "${#clips[@]}"
 
+EXPERIMENT_ENVIRONMENT_STATE="pending"
 clip_index=0
 for clip in "${clips[@]}"; do
     clip_index=$((clip_index + 1))
@@ -930,6 +977,7 @@ for clip in "${clips[@]}"; do
         exit 1
     fi
     python3 ./audio-input-evidence.py --audio "$normalized" --log "$log_file" >>"$log_file"
+    EXPERIMENT_ENVIRONMENT_STATE="$(python3 ./experiment-environment.py --log "$log_file" --previous "$EXPERIMENT_ENVIRONMENT_STATE")"
     cat "$log_file" >>"$report"
 
     require_reference=0
@@ -948,6 +996,9 @@ done
 append_single_backend_summary "$report"
 
 quality_gate_passed=1
+if ! append_environment_gate "$report"; then
+    quality_gate_passed=0
+fi
 if [[ -n "$MAX_REFERENCE_DELETION_RUN" ]]; then
     observed_deletion_run="$(worst_reference_deletion_run "$report")"
     if ! append_quality_gate "$report" "$observed_deletion_run"; then

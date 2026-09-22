@@ -13,6 +13,8 @@ export LC_ALL=C
 
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$SCRIPT_PATH")"
+dependency_provenance="$(python3 ./dependency-provenance.py)" || exit 1
+IFS=$'\t' read -r FLUID_REVISION PRODUCTION_FLUID_REVISION BASELINE_DEPENDENCY <<<"$dependency_provenance"
 
 OUTDIR="tail-results"
 VOICE="Samantha"
@@ -25,6 +27,7 @@ REQUIRE_CANDIDATE_PASS=1
 CANDIDATE_UNIFIED_TRAILING_MS="250"
 MAX_CANDIDATE_WER="20.0"
 SELF_TEST=0
+EXPERIMENT_ENVIRONMENT_STATE="unreported"
 KEEP_TEMP=0
 tmpdir=""
 stage_dir=""
@@ -86,10 +89,6 @@ effective_cut_ms() {
     else
         printf '%d' $((cut_ms - grace_ms))
     fi
-}
-
-float_le() {
-    awk -v a="$1" -v b="$2" 'BEGIN { exit(a <= b ? 0 : 1) }'
 }
 
 extract_final_word_retained() {
@@ -175,27 +174,6 @@ assert_eq() {
     fi
 }
 
-is_required_candidate_case() {
-    local phrase="$1"
-    local cut_ms="$2"
-    local grace_ms="$3"
-    local backend="$4"
-    local trailing_ms="$5"
-
-    [[ "$backend" == "unified" ]] || return 1
-    [[ "$trailing_ms" == "$CANDIDATE_UNIFIED_TRAILING_MS" ]] || return 1
-    [[ "$grace_ms" == "0" ]] || return 1
-
-    case "$phrase:$cut_ms" in
-        why:100|why:150|why:200|done:150|done:200)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
 write_wav_variant() {
     local input="$1"
     local output="$2"
@@ -277,6 +255,53 @@ output_path.write_bytes(
 PY
 }
 
+# Assess measured rows even for --no-threshold; that option changes only exit
+# enforcement. Missing sweep cases must never satisfy the Unified prerequisite.
+append_candidate_gate() {
+    local report="$1"
+    local results="$2"
+    local blockers
+    blockers="$(awk -F '\t' -v limit="$MAX_CANDIDATE_WER" \
+        -v trailing="$CANDIDATE_UNIFIED_TRAILING_MS" '
+        BEGIN { split("why:100 why:150 why:200 done:150 done:200", keys, " ")
+                for (i = 1; i <= 5; i++) required[keys[i]] = 1 }
+        NR > 1 && $3 == "0" && $5 == "unified" && $6 == trailing {
+            key = $1 ":" $2
+            if (key in required) {
+                seen[key] = 1
+                if ($8 != "true" || $7 !~ /^[0-9]+([.][0-9]+)?$/ || $7 + 0 > limit)
+                    failed[key] = 1
+            }
+        }
+        END {
+            for (i = 1; i <= 5; i++) {
+                key = keys[i]
+                if (!(key in seen)) print "missing required case " key
+                else if (key in failed) print "metric threshold failed for " key
+            }
+        }' "$results")"
+    if [[ "$EXPERIMENT_ENVIRONMENT_STATE" != "default" ]]; then
+        blockers="${blockers}${blockers:+$'\n'}inherited SDK environment is $EXPERIMENT_ENVIRONMENT_STATE"
+    fi
+    {
+        echo
+        echo "## Candidate prerequisite"
+        echo
+        echo "Inherited SDK environment: $EXPERIMENT_ENVIRONMENT_STATE."
+        echo "All five known cases must satisfy the measured thresholds with default inherited SDK controls. This synthetic check is not production or whole-app qualification."
+        if [[ -n "$blockers" ]]; then
+            echo "Candidate prerequisite blocked:"
+            printf '%s\n' "$blockers" | sed 's/^/- /'
+        else
+            echo "Candidate threshold passed."
+        fi
+        if [[ "$REQUIRE_CANDIDATE_PASS" -eq 0 ]]; then
+            echo "Exploratory run: threshold exit enforcement disabled; this does not waive any prerequisite."
+        fi
+    } >>"$report"
+    [[ -z "$blockers" ]]
+}
+
 run_self_test() {
     local self_tmp
     self_tmp="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-tail-self-test.XXXXXX")"
@@ -306,14 +331,37 @@ run_self_test() {
     assert_eq "$(effective_cut_ms 150 50)" "100" "effective cut"
     assert_eq "$(effective_cut_ms 50 150)" "0" "grace caps at full tail"
 
-    if ! is_required_candidate_case "why" "100" "0" "unified" "250"; then
-        echo "self-test expected why/100 to be a required candidate case" >&2
-        exit 1
+    local gate_tsv="$self_tmp/gate.tsv" gate_report="$self_tmp/gate.md" state
+    printf 'phrase\tcut\tgrace\teffective\tbackend\ttrailing\twer\tretained\tlatency\n' >"$gate_tsv"
+    local key
+    for key in why:100 why:150 why:200 done:150 done:200; do
+        printf '%s\t%s\t0\t0\tunified\t250\t0.0\ttrue\t1\n' "${key%:*}" "${key#*:}" >>"$gate_tsv"
+    done
+    EXPERIMENT_ENVIRONMENT_STATE="default"
+    append_candidate_gate "$gate_report" "$gate_tsv"
+    for state in configured unreported pending; do
+        EXPERIMENT_ENVIRONMENT_STATE="$state"
+        : >"$gate_report"
+        if append_candidate_gate "$gate_report" "$gate_tsv"; then
+            echo "self-test accepted $state otherwise-passing tail metrics" >&2; exit 1
+        fi
+        if grep -Fq 'Candidate threshold passed.' "$gate_report"; then exit 1; fi
+    done
+    EXPERIMENT_ENVIRONMENT_STATE="default"
+    head -n 5 "$gate_tsv" >"$self_tmp/incomplete.tsv"
+    if append_candidate_gate "$gate_report" "$self_tmp/incomplete.tsv"; then
+        echo 'self-test accepted an incomplete required sweep' >&2; exit 1
     fi
-    if is_required_candidate_case "done" "100" "0" "unified" "250"; then
-        echo "self-test did not expect done/100 to be a required candidate case" >&2
-        exit 1
+    sed 's/true/false/g' "$gate_tsv" >"$self_tmp/failed.tsv"
+    REQUIRE_CANDIDATE_PASS=0
+    : >"$gate_report"
+    if append_candidate_gate "$gate_report" "$self_tmp/failed.tsv"; then
+        echo 'self-test accepted failing metrics with --no-threshold' >&2; exit 1
     fi
+    if grep -Fq 'Candidate threshold passed.' "$gate_report"; then exit 1; fi
+    grep -Fq 'Exploratory run:' "$gate_report"
+    REQUIRE_CANDIDATE_PASS=1
+    EXPERIMENT_ENVIRONMENT_STATE="unreported"
 
     local stage_dir="$self_tmp/staged"
     local final_dir="$self_tmp/published"
@@ -480,6 +528,11 @@ trap cleanup EXIT INT TERM
 
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
+built_dependency_provenance="$(python3 ./dependency-provenance.py --verify-built)" || exit 1
+if [[ "$built_dependency_provenance" != "$dependency_provenance" ]]; then
+    echo "dependency provenance changed during benchmark build" >&2
+    exit 1
+fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 final_report="$OUTDIR/$timestamp-tail-word.md"
@@ -501,6 +554,9 @@ tsv="$stage_dir/results.tsv"
     echo "# Presspeech Tail-Word Regression"
     echo
     echo "- Date: $timestamp"
+    echo "- Benchmark FluidAudio revision: $FLUID_REVISION"
+    echo "- Application FluidAudio revision: $PRODUCTION_FLUID_REVISION"
+    echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
     echo "- Voice: $VOICE"
     echo "- Trials per case: $TRIALS"
     echo "- Cut ms list: $CUT_MS_LIST"
@@ -525,8 +581,7 @@ declare -a CLIPS=(
     "done|Okay, let's get that done."
 )
 
-failures=0
-failure_details=()
+EXPERIMENT_ENVIRONMENT_STATE="pending"
 
 for entry in "${CLIPS[@]}"; do
     phrase="${entry%%|*}"
@@ -572,6 +627,7 @@ for entry in "${CLIPS[@]}"; do
                 fi
 
                 python3 ./audio-input-evidence.py --audio "$case_wav" --log "$log_file" >>"$log_file"
+                EXPERIMENT_ENVIRONMENT_STATE="$(python3 ./experiment-environment.py --log "$log_file" --previous "$EXPERIMENT_ENVIRONMENT_STATE")"
 
                 wer="$(extract_max_wer_percent "$log_file")"
                 retained="$(extract_final_word_retained "$log_file")"
@@ -587,48 +643,15 @@ for entry in "${CLIPS[@]}"; do
                 printf '| `%s` | %s | %s | %s | `%s` | %s | %s | %s | %s |\n' \
                     "$phrase" "$cut_ms" "$grace_ms" "$effective_cut" "$backend" "$trailing_ms" "$wer" "$retained" "$p50" >>"$report"
 
-                if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 ]] \
-                    && is_required_candidate_case "$phrase" "$cut_ms" "$grace_ms" "$backend" "$trailing_ms"; then
-                    if [[ "$retained" != "true" ]]; then
-                        failures=$((failures + 1))
-                        failure_details+=( "$phrase cut=${cut_ms}ms did not retain final word" )
-                    elif [[ "$wer" == "unknown" ]] || ! float_le "$wer" "$MAX_CANDIDATE_WER"; then
-                        failures=$((failures + 1))
-                        failure_details+=( "$phrase cut=${cut_ms}ms WER ${wer}% exceeded ${MAX_CANDIDATE_WER}%" )
-                    fi
-                fi
             done
         done
     done
 done
 
-if [[ "$failures" -gt 0 ]]; then
-    {
-        echo
-        echo "## Threshold Failures"
-        echo
-        printf -- '- %s\n' "${failure_details[@]}"
-    } >>"$report"
-    publish_report_artifacts \
-        "$stage_dir" \
-        "$report" \
-        "$tsv" \
-        "$final_report" \
-        "$final_tsv"
-    stage_dir=""
-    printf 'tail-word regression failed %d candidate threshold(s):\n' "$failures" >&2
-    printf '  %s\n' "${failure_details[@]}" >&2
-    echo "report: $final_report" >&2
-    echo "tsv: $final_tsv" >&2
-    exit 1
+candidate_gate_passed=1
+if ! append_candidate_gate "$report" "$tsv"; then
+    candidate_gate_passed=0
 fi
-
-{
-    echo
-    echo "## Threshold Result"
-    echo
-    echo "Candidate threshold passed."
-} >>"$report"
 
 publish_report_artifacts \
     "$stage_dir" \
@@ -640,3 +663,8 @@ stage_dir=""
 
 echo "report: $final_report"
 echo "tsv: $final_tsv"
+
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$candidate_gate_passed" -ne 1 ]]; then
+    echo "tail-word candidate prerequisite blocked; inspect the report" >&2
+    exit 1
+fi
