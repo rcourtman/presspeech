@@ -309,6 +309,11 @@ cd swift
   partial transcript, or duplicate is a release-blocking failure; one successful
   trial is not enough to clear the race tracked in
   [issue #36](https://github.com/rcourtman/presspeech/issues/36).
+- With the delay set to 3 seconds and the old marker still seeded, complete two
+  short dictations quickly enough that the second finishes before the first
+  restore deadline. Confirm both destinations receive their new transcript,
+  then wait for restoration and confirm Command-V yields the original old
+  marker—not either transcript. Repeat the back-to-back sequence five times.
 - Select each **Clipboard Restore Delay** preset, restart Presspeech, and
   confirm the selected value persists without enabling restoration. Confirm
   Copy Diagnostics reports the configured delay without transcript content.

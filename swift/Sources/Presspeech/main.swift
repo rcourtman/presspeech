@@ -5047,6 +5047,22 @@ private enum ClipboardPasteInserter {
         let sourceChangeCount: Int
     }
 
+    /// One restore can still be waiting when a fast subsequent dictation
+    /// finishes. In that case the pasteboard contains Presspeech's temporary
+    /// transcript, not the clipboard contents the user asked us to preserve.
+    /// Keep the original snapshot in memory so the subsequent paste inherits
+    /// it instead of eventually "restoring" the preceding transcript.
+    private struct PendingRestore {
+        let token: UInt64
+        let pasteboardName: NSPasteboard.Name
+        let snapshot: Snapshot
+        let expectedChangeCount: Int
+        let workItem: DispatchWorkItem
+    }
+
+    private static var pendingRestore: PendingRestore?
+    private static var pendingRestoreToken: UInt64 = 0
+
     /// Returns nil rather than a partial snapshot if any advertised
     /// representation cannot be materialized. Restoring a partial copy
     /// would silently discard precisely the clipboard content this
@@ -5104,6 +5120,71 @@ private enum ClipboardPasteInserter {
         return pb.writeObjects(snapshot.items)
     }
 
+    /// Return the user's original snapshot when this pasteboard still holds a
+    /// transcript whose delayed restore has not fired. A changed count means
+    /// another process owns the pasteboard now; cancel and discard our stale
+    /// work rather than carrying it into the next dictation.
+    static func pendingSnapshotForReplacement(on pb: NSPasteboard) -> Snapshot? {
+        guard let pending = pendingRestore,
+              pending.pasteboardName == pb.name else { return nil }
+        let currentChangeCount = pb.changeCount
+        guard pasteboardChangeCountAllowsRestore(current: currentChangeCount,
+                                                 expected: pending.expectedChangeCount) else {
+            discardPendingRestore(on: pb)
+            return nil
+        }
+        // `sourceChangeCount` protects the interval between selecting a
+        // snapshot and replacing the pasteboard. Rebase it to the current
+        // temporary transcript; the snapshot's items still contain the
+        // original user clipboard.
+        return Snapshot(items: pending.snapshot.items,
+                        sourceChangeCount: currentChangeCount)
+    }
+
+    private static func discardPendingRestore(on pb: NSPasteboard) {
+        guard let pending = pendingRestore,
+              pending.pasteboardName == pb.name else { return }
+        pending.workItem.cancel()
+        pendingRestore = nil
+    }
+
+    @discardableResult
+    static func performPendingRestore(on pb: NSPasteboard, token: UInt64? = nil) -> Bool? {
+        guard let pending = pendingRestore,
+              pending.pasteboardName == pb.name,
+              token == nil || token == pending.token else { return nil }
+        pending.workItem.cancel()
+        pendingRestore = nil
+        return restore(pending.snapshot,
+                       to: pb,
+                       expectedChangeCount: pending.expectedChangeCount)
+    }
+
+    static func scheduleRestore(_ snapshot: Snapshot,
+                                to pb: NSPasteboard,
+                                expectedChangeCount: Int,
+                                after delay: TimeInterval) {
+        discardPendingRestore(on: pb)
+        pendingRestoreToken &+= 1
+        let token = pendingRestoreToken
+        let work = DispatchWorkItem {
+            if performPendingRestore(on: pb, token: token) == true {
+                #if DEBUG
+                if pb.name == NSPasteboard.general.name {
+                    NativeInteractionHooks.didRestoreClipboard?()
+                }
+                #endif
+                log("clipboard restored after paste")
+            }
+        }
+        pendingRestore = PendingRestore(token: token,
+                                        pasteboardName: pb.name,
+                                        snapshot: snapshot,
+                                        expectedChangeCount: expectedChangeCount,
+                                        workItem: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
     static func contentsOptions(transient: Bool) -> NSPasteboard.ContentsOptions {
         transient ? .currentHostOnly : []
     }
@@ -5142,7 +5223,14 @@ private enum ClipboardPasteInserter {
         #else
         pb.prepareForNewContents(with: contentsOptions(transient: transient))
         #endif
-        return pb.writeObjects([item])
+        let wrote = pb.writeObjects([item])
+        if wrote {
+            // Any successful replacement makes an older timer obsolete. The
+            // insertion path keeps a local reference to an inherited snapshot
+            // and schedules a fresh timer after posting Command+V.
+            discardPendingRestore(on: pb)
+        }
+        return wrote
     }
 
     static func insert(_ text: String,
@@ -5157,7 +5245,7 @@ private enum ClipboardPasteInserter {
         let pb = NSPasteboard.general
         var previous: Snapshot?
         if restoreClipboard {
-            previous = snapshot(of: pb)
+            previous = pendingSnapshotForReplacement(on: pb) ?? snapshot(of: pb)
             if previous == nil {
                 log("clipboard snapshot incomplete; restore skipped")
             }
@@ -5218,14 +5306,10 @@ private enum ClipboardPasteInserter {
             // acknowledge that the destination has read the pasteboard.
             let delay = normalizedClipboardRestoreDelaySeconds(storedValue: restoreDelaySeconds)
                 ?? DEFAULT_CLIPBOARD_RESTORE_DELAY_SECONDS
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                if restore(previous, to: pb, expectedChangeCount: writeChangeCount) {
-                    #if DEBUG
-                    NativeInteractionHooks.didRestoreClipboard?()
-                    #endif
-                    log("clipboard restored after paste")
-                }
-            }
+            scheduleRestore(previous,
+                            to: pb,
+                            expectedChangeCount: writeChangeCount,
+                            after: delay)
         }
         return .inserted
     }
@@ -13336,6 +13420,20 @@ private final class NativeInteractionFixture {
                     "fixture clipboard write")
     }
 
+    /// Emulate a different clipboard writer without calling production write(),
+    /// which intentionally cancels its own pending restore. Keep the fixture's
+    /// separate ownership accounting so a real intervening user copy still wins.
+    private func replaceClipboardAsExternalWriter(_ marker: String) throws {
+        let item = NSPasteboardItem()
+        try require(item.setString(marker, forType: .string), "external-writer fixture item")
+        try check()
+        let ownedCount = pasteboard.prepareForNewContents(with: .currentHostOnly)
+        changedClipboard = true
+        expectedClipboardCount = ownedCount
+        try require(pasteboard.writeObjects([item]), "external-writer fixture copy")
+        try check()
+    }
+
     private func runChecks() throws {
         try require(NativeInteractionPolicy.authorized(Array(CommandLine.arguments.dropFirst())),
                     "native interaction requires explicit acknowledgement")
@@ -13524,7 +13622,7 @@ private final class NativeInteractionFixture {
         try require(ClipboardPasteInserter.insert("native-fixture-second", restoreClipboard: true,
                     restoreDelaySeconds: 1.2, expectedTarget: target) == .inserted, "second paste posted")
         try wait("second paste consumed") { editors[0].string == "native-fixture-second" }
-        try ownClipboard("native-fixture-newer-copy")
+        try replaceClipboardAsExternalWriter("native-fixture-newer-copy")
         let newerCount = expectedClipboardCount
         let restoreDeadline = Date().addingTimeInterval(1.4)
         try wait("newer copy survives restore deadline") { Date() >= restoreDeadline }
@@ -15035,6 +15133,117 @@ private enum PresspeechSelfTest {
             restoreProbe.afterBlocked,
             equals: "newer text",
             "clipboard restore should not clobber content copied after the transcript"
+        )
+
+        let consecutiveRestoreProbe = MainActor.assumeIsolated {
+            let pasteboardName = NSPasteboard.Name(
+                "com.local.presspeech.self-test.consecutive-restore.\(UUID().uuidString)"
+            )
+            let pasteboard = NSPasteboard(name: pasteboardName)
+            _ = ClipboardPasteInserter.write("original clipboard", to: pasteboard)
+            let original = ClipboardPasteInserter.snapshot(of: pasteboard)
+
+            _ = ClipboardPasteInserter.write("first transcript",
+                                               to: pasteboard,
+                                               transient: true)
+            if let original {
+                ClipboardPasteInserter.scheduleRestore(
+                    original,
+                    to: pasteboard,
+                    expectedChangeCount: pasteboard.changeCount,
+                    after: 60
+                )
+            }
+
+            // Simulate a second transcription completing before the first
+            // delayed restore. It must inherit the original clipboard rather
+            // than snapshotting the temporary first transcript.
+            let inherited = ClipboardPasteInserter.pendingSnapshotForReplacement(on: pasteboard)
+            let inheritedText = inherited?.items.first?.string(forType: .string)
+            let inheritedIsCurrent = inherited?.sourceChangeCount == pasteboard.changeCount
+            _ = ClipboardPasteInserter.write("second transcript",
+                                               to: pasteboard,
+                                               transient: true)
+            if let inherited {
+                ClipboardPasteInserter.scheduleRestore(
+                    inherited,
+                    to: pasteboard,
+                    expectedChangeCount: pasteboard.changeCount,
+                    after: 60
+                )
+            }
+            let restored = ClipboardPasteInserter.performPendingRestore(on: pasteboard)
+            let restoredMarkedTransient = pasteboard.types?
+                .contains(TRANSIENT_PASTEBOARD_TYPE) == true
+            let originalAgain = ClipboardPasteInserter.snapshot(of: pasteboard)
+            _ = ClipboardPasteInserter.write("third transcript",
+                                               to: pasteboard,
+                                               transient: true)
+            if let originalAgain {
+                ClipboardPasteInserter.scheduleRestore(
+                    originalAgain,
+                    to: pasteboard,
+                    expectedChangeCount: pasteboard.changeCount,
+                    after: 60
+                )
+            }
+            pasteboard.clearContents()
+            let wroteExternal = pasteboard.setString("new external clipboard", forType: .string)
+            let inheritedAfterExternalChange = ClipboardPasteInserter
+                .pendingSnapshotForReplacement(on: pasteboard)
+            let staleRestore = ClipboardPasteInserter.performPendingRestore(on: pasteboard)
+            return (
+                inheritedText: inheritedText,
+                inheritedIsCurrent: inheritedIsCurrent,
+                restored: restored,
+                restoredMarkedTransient: restoredMarkedTransient,
+                restoredText: originalAgain?.items.first?.string(forType: .string),
+                wroteExternal: wroteExternal,
+                rejectedStaleInheritance: inheritedAfterExternalChange == nil,
+                rejectedStaleRestore: staleRestore == nil,
+                finalText: pasteboard.string(forType: .string)
+            )
+        }
+        try expect(
+            consecutiveRestoreProbe.inheritedText,
+            equals: "original clipboard",
+            "a consecutive dictation should carry the user's original clipboard snapshot forward"
+        )
+        try expect(
+            consecutiveRestoreProbe.inheritedIsCurrent,
+            equals: true,
+            "a carried snapshot should remain guarded by the current temporary pasteboard owner"
+        )
+        try expect(
+            consecutiveRestoreProbe.restored,
+            equals: true,
+            "the replacement restore timer should remain able to restore the carried snapshot"
+        )
+        try expect(
+            consecutiveRestoreProbe.restoredText,
+            equals: "original clipboard",
+            "back-to-back dictations must not restore the preceding transcript"
+        )
+        try expect(
+            consecutiveRestoreProbe.restoredMarkedTransient,
+            equals: false,
+            "a consecutive restore must not retain temporary transcript markers"
+        )
+        try expect(
+            consecutiveRestoreProbe.wroteExternal,
+            equals: true,
+            "the consecutive-restore test should install a newer external clipboard value"
+        )
+        try expect(
+            consecutiveRestoreProbe.rejectedStaleInheritance
+                && consecutiveRestoreProbe.rejectedStaleRestore,
+            equals: true,
+            "new clipboard ownership should cancel pending inheritance and restoration"
+        )
+        try expect(
+            consecutiveRestoreProbe.finalText,
+            equals: "new external clipboard",
+            "a pending consecutive restore must not overwrite newer clipboard content"
         )
 
         let incompleteSnapshotProbe = MainActor.assumeIsolated {
