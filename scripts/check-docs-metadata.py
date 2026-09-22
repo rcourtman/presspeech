@@ -20,6 +20,7 @@ DOCS = ROOT / "docs"
 SITE_ROOT = "https://rcourtman.github.io/presspeech/"
 MAC_APP_ID = f"{SITE_ROOT}#software"
 WINDOWS_APP_ID = f"{SITE_ROOT}windows.html#software"
+WEBSITE_ID = f"{SITE_ROOT}#website"
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
 ERROR_PAGE = Path("404.html")
 ERROR_PAGE_URL = f"{SITE_ROOT}404.html"
@@ -86,6 +87,10 @@ def document_metadata(path: Path) -> tuple[DocumentParser, list[dict[str, object
 
 def app_nodes(nodes: list[dict[str, object]]) -> list[dict[str, object]]:
     return [node for node in nodes if node.get("@type") == "SoftwareApplication"]
+
+
+def website_nodes(nodes: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [node for node in nodes if node.get("@type") == "WebSite"]
 
 
 def app_by_id(apps: list[dict[str, object]], app_id: str) -> dict[str, object] | None:
@@ -185,6 +190,29 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
     windows_path = docs / "windows.html"
     index_apps = app_nodes(documents.get(index_path, (DocumentParser(), []))[1])
     windows_apps = app_nodes(documents.get(windows_path, (DocumentParser(), []))[1])
+    index_websites = website_nodes(
+        documents.get(index_path, (DocumentParser(), []))[1]
+    )
+    expected_website = {
+        "@type": "WebSite",
+        "@id": WEBSITE_ID,
+        "url": SITE_ROOT,
+        "name": "Presspeech",
+    }
+    if len(index_websites) != 1:
+        errors.append(
+            f"index.html: expected one WebSite identity, found {len(index_websites)}"
+        )
+    else:
+        website = index_websites[0]
+        for field, expected_value in expected_website.items():
+            if website.get(field) != expected_value:
+                errors.append(
+                    f"index.html: WebSite {field} is {website.get(field)!r}; "
+                    f"expected {expected_value!r}"
+                )
+        if not isinstance(website.get("description"), str) or not website["description"]:
+            errors.append("index.html: WebSite identity is missing description")
     if len(index_apps) != 2:
         errors.append(f"index.html: expected macOS and Windows app metadata, found {len(index_apps)} app(s)")
     if len(windows_apps) != 1:

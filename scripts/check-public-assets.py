@@ -265,6 +265,11 @@ def social_metadata_errors(docs: Path = DOCS) -> list[str]:
             value = one(parser.properties, name)
             if value is None or not value.strip():
                 errors.append(f"{display}: expected one non-empty {name}")
+        if (
+            display == Path("index.html")
+            and one(parser.properties, "og:site_name") != "Presspeech"
+        ):
+            errors.append("index.html: expected one og:site_name='Presspeech'")
         canonical = parser.canonicals[0] if len(parser.canonicals) == 1 else None
         if one(parser.properties, "og:url") != canonical:
             errors.append(f"{display}: og:url must equal its one canonical URL")
@@ -320,6 +325,7 @@ def run_self_test() -> None:
             '<link rel="canonical" href="https://example.test/">'
             '<meta property="og:title" content="Title">'
             '<meta property="og:description" content="Description">'
+            '<meta property="og:site_name" content="Presspeech">'
             '<meta property="og:url" content="https://example.test/">'
             + "".join(
                 f'<meta property="{name}" content="{value}">'

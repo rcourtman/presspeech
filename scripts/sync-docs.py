@@ -17,6 +17,7 @@ import plistlib
 import re
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
 
@@ -1275,12 +1276,53 @@ def sync_demo_svg(path: Path, metadata: dict[str, object]) -> str:
 
 
 def sync_sitemap(path: Path, metadata: dict[str, object]) -> str:
+    # A sitemap date is useful only when it tracks a significant change to the
+    # named resource. ``expected_files`` supplies the release-synced resources
+    # whose rendered contents actually changed; leave every other URL's date
+    # alone instead of making the whole site look newly rewritten on release.
+    changed = metadata.get("_changed_public_paths", ())
+    if not isinstance(changed, (list, tuple, set, frozenset)):
+        raise SyncError("internal sitemap change set has an invalid type")
+    changed_paths = {Path(value).resolve() for value in changed}
+
     text = read_text(path)
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as exc:
+        raise SyncError(f"{path}: cannot parse sitemap: {exc}") from exc
+
+    namespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
+    entries = root.findall(f"{{{namespace}}}url")
+    if not entries:
+        raise SyncError(f"{path}: expected at least one sitemap URL entry")
+
     last_updated = str(metadata["last_updated"])
-    pattern = r"<lastmod>\d{4}-\d{2}-\d{2}</lastmod>"
-    text, count = re.subn(pattern, f"<lastmod>{last_updated}</lastmod>", text)
-    if count == 0:
-        raise SyncError(f"{path}: expected at least one match for {pattern!r}, found 0")
+    changed_urls: list[str] = []
+    for entry in entries:
+        loc = entry.findtext(f"{{{namespace}}}loc")
+        lastmod = entry.findtext(f"{{{namespace}}}lastmod")
+        if not loc or not lastmod:
+            raise SyncError(f"{path}: sitemap URL entry is missing loc or lastmod")
+        if not loc.startswith("https://rcourtman.github.io/presspeech/"):
+            continue
+        relative = loc.removeprefix("https://rcourtman.github.io/presspeech/")
+        if not relative:
+            relative = "index.html"
+        elif relative.endswith("/"):
+            relative += "index.html"
+        public_path = (DOCS / relative).resolve()
+        if public_path in changed_paths and lastmod != last_updated:
+            changed_urls.append(loc)
+
+    for loc in changed_urls:
+        pattern = (
+            rf"(<url>\s*<loc>{re.escape(loc)}</loc>\s*<lastmod>)"
+            r"\d{4}-\d{2}-\d{2}"
+            r"(</lastmod>\s*</url>)"
+        )
+        text, count = re.subn(pattern, rf"\g<1>{last_updated}\g<2>", text, count=1)
+        if count != 1:
+            raise SyncError(f"{path}: could not update lastmod for {loc}")
     return text
 
 
@@ -1615,7 +1657,19 @@ def check_repository_install_guidance(
 def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
     expected: dict[Path, str] = {}
     for path, syncer in SYNCERS.items():
+        if path == DOCS / "sitemap.xml":
+            continue
         expected[path] = syncer(path, metadata)
+    sitemap_metadata = dict(metadata)
+    sitemap_metadata["_changed_public_paths"] = [
+        path
+        for path, want in expected.items()
+        if path.is_relative_to(DOCS)
+        and (not path.exists() or read_text(path) != want)
+    ]
+    expected[DOCS / "sitemap.xml"] = sync_sitemap(
+        DOCS / "sitemap.xml", sitemap_metadata
+    )
     expected[METADATA_PATH] = metadata_text(metadata)
     return expected
 
@@ -1874,12 +1928,27 @@ def run_self_test() -> None:
 
         sitemap = Path(tmp) / "sitemap.xml"
         sitemap.write_text(
-            "<url><lastmod>2025-12-30</lastmod></url>\n<url><lastmod>2025-12-31</lastmod></url>\n",
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            "  <url>\n"
+            "    <loc>https://rcourtman.github.io/presspeech/</loc>\n"
+            "    <lastmod>2025-12-30</lastmod>\n"
+            "  </url>\n"
+            "  <url>\n"
+            "    <loc>https://rcourtman.github.io/presspeech/faq.html</loc>\n"
+            "    <lastmod>2025-12-31</lastmod>\n"
+            "  </url>\n"
+            "</urlset>\n",
             encoding="utf-8",
         )
-        updated = sync_sitemap(sitemap, metadata)
-        if updated.count("<lastmod>2026-01-02</lastmod>") != 2:
-            raise SyncError("self-test: sitemap lastmod entries were not all rewritten")
+        sitemap_metadata = dict(metadata)
+        sitemap_metadata["_changed_public_paths"] = [DOCS / "index.html"]
+        updated = sync_sitemap(sitemap, sitemap_metadata)
+        if (
+            updated.count("<lastmod>2026-01-02</lastmod>") != 1
+            or "<lastmod>2025-12-31</lastmod>" not in updated
+        ):
+            raise SyncError("self-test: sitemap did not update only the changed resource")
 
         sitemap.write_text("<urlset></urlset>\n", encoding="utf-8")
         try:
