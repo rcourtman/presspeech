@@ -2102,6 +2102,10 @@ final class Logger: @unchecked Sendable {
         let line = "[\(stamp)] \(msg)\n"
         let data = Data(line.utf8)
         FileHandle.standardError.write(data)
+        #if DEBUG
+        // Native acceptance must not append fixture diagnostics to the user's log.
+        if NativeInteractionPolicy.authorized(Array(CommandLine.arguments.dropFirst())) { return }
+        #endif
         q.async { [url] in
             do {
                 try appendPrivateLogData(data, to: url)
@@ -3456,6 +3460,9 @@ final class HotkeyListener {
     /// Describes why a new recording cannot start. Toggle mode uses this to
     /// report a rejected press without flipping its state. nil means ready.
     fileprivate var recordingStartBlocker: (() -> RecordingStartBlocker?)?
+    #if DEBUG
+    fileprivate var nativeTestEventFilter: ((CGEvent) -> Bool)?
+    #endif
 
     @discardableResult
     func start() -> Bool {
@@ -3484,7 +3491,10 @@ final class HotkeyListener {
                     isAutoRepeat: type == .keyDown && event.getIntegerValueField(.keyboardEventAutorepeat) != 0
                 )
                 let shouldSuppress = MainActor.assumeIsolated {
-                    listener.handleTapCallback(snapshot)
+                    #if DEBUG
+                    if let filter = listener.nativeTestEventFilter, !filter(event) { return false }
+                    #endif
+                    return listener.handleTapCallback(snapshot)
                 }
                 return shouldSuppress ? nil : Unmanaged.passUnretained(event)
             },
@@ -5077,7 +5087,19 @@ private enum ClipboardPasteInserter {
                                                  expected: expectedChangeCount) else {
             return false
         }
+        #if DEBUG
+        if pb.name == NSPasteboard.general.name {
+            guard NativeInteractionHooks.permitClipboardWrite?() ?? true else { return false }
+        }
+        let ownedChangeCount = pb.clearContents()
+        defer {
+            if pb.name == NSPasteboard.general.name {
+                NativeInteractionHooks.didWriteClipboard?(ownedChangeCount)
+            }
+        }
+        #else
         pb.clearContents()
+        #endif
         guard !snapshot.items.isEmpty else { return true }
         return pb.writeObjects(snapshot.items)
     }
@@ -5105,7 +5127,21 @@ private enum ClipboardPasteInserter {
             }
         }
 
+        #if DEBUG
+        if pb.name == NSPasteboard.general.name {
+            guard NativeInteractionHooks.permitClipboardWrite?() ?? true else { return false }
+        }
+        let ownedChangeCount = pb.prepareForNewContents(with: contentsOptions(transient: transient))
+        defer {
+            if pb.name == NSPasteboard.general.name {
+                // Use the generation returned by our ownership acquisition,
+                // never adopt a later external changeCount as a fixture write.
+                NativeInteractionHooks.didWriteClipboard?(ownedChangeCount)
+            }
+        }
+        #else
         pb.prepareForNewContents(with: contentsOptions(transient: transient))
+        #endif
         return pb.writeObjects([item])
     }
 
@@ -5184,6 +5220,9 @@ private enum ClipboardPasteInserter {
                 ?? DEFAULT_CLIPBOARD_RESTORE_DELAY_SECONDS
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 if restore(previous, to: pb, expectedChangeCount: writeChangeCount) {
+                    #if DEBUG
+                    NativeInteractionHooks.didRestoreClipboard?()
+                    #endif
                     log("clipboard restored after paste")
                 }
             }
@@ -5219,6 +5258,9 @@ private enum ClipboardPasteInserter {
             guard let event = events.first(where: { $0.0 == step })?.1 else {
                 return false
             }
+            #if DEBUG
+            guard NativeInteractionHooks.permitEvent?(event) ?? true else { return false }
+            #endif
             event.post(tap: .cghidEventTap)
             return true
         }
@@ -12974,6 +13016,588 @@ private enum SelfTestFailure: Error, CustomStringConvertible {
     }
 }
 
+// Only installed by the explicitly acknowledged debug fixture. These hooks
+// observe/guard real production operations; they never replace their logic.
+@MainActor
+private enum NativeInteractionHooks {
+    static var permitEvent: ((CGEvent) -> Bool)?
+    static var permitClipboardWrite: (() -> Bool)?
+    static var didWriteClipboard: ((Int) -> Void)?
+    static var didRestoreClipboard: (() -> Void)?
+}
+
+private enum NativeInteractionPolicy {
+    static let arguments = ["--self-test", "native-interactions", "--allow-native-input"]
+
+    static func authorized(_ arguments: [String]) -> Bool { arguments == self.arguments }
+
+    static func conflictingApplication(pid: pid_t, owner: pid_t,
+                                       bundleID: String?, executableName: String?) -> Bool {
+        guard pid != owner else { return false }
+        return [SETTINGS_SUITE, LEGACY_SETTINGS_SUITE].contains(bundleID ?? "")
+            || ["presspeech", "parakey"].contains(executableName?.lowercased() ?? "")
+    }
+
+    static func postedKeysAreDisjoint(saved: [CGKeyCode], punctuation: CGKeyCode) -> Bool {
+        // Plain sentinel key-up, paste V, Escape cancellation, left Command,
+        // and every modifier variant of the selected punctuation all count.
+        Set(saved).isDisjoint(with: [0, 9, 53, 55, punctuation])
+    }
+
+    static func permits(foreground: pid_t?, owner: pid_t, ownsWindow: Bool,
+                        clipboardCount: Int, expectedCount: Int, aborted: Bool) -> Bool {
+        !aborted && owner > 0 && foreground == owner && ownsWindow
+            && clipboardCount == expectedCount
+    }
+
+    struct EventGate {
+        private var commandDownForwarded = false
+
+        mutating func permitsOwnedEvent(command: Bool, commandDown: Bool, safe: Bool) -> Bool {
+            if command && !commandDown {
+                guard commandDownForwarded else { return false }
+                commandDownForwarded = false
+                return true // Release only our paired modifier, even after abort.
+            }
+            guard safe else { return false }
+            if command && commandDown { commandDownForwarded = true }
+            return true
+        }
+    }
+
+    static func test() throws {
+        func require(_ value: Bool, _ name: String) throws {
+            if !value { throw SelfTestFailure.failed(name) }
+        }
+        try require(authorized(arguments), "native opt-in accepted")
+        try require(!conflictingApplication(pid: 42, owner: 42, bundleID: SETTINGS_SUITE,
+                                           executableName: "Presspeech"), "fixture excludes itself")
+        try require(conflictingApplication(pid: 43, owner: 42, bundleID: SETTINGS_SUITE,
+                                          executableName: nil), "installed app blocks native run")
+        try require(conflictingApplication(pid: 43, owner: 42, bundleID: LEGACY_SETTINGS_SUITE,
+                                          executableName: nil), "legacy app blocks native run")
+        try require(conflictingApplication(pid: 43, owner: 42, bundleID: nil,
+                                          executableName: "Presspeech"), "unbundled app blocks native run")
+        try require(!conflictingApplication(pid: 43, owner: 42, bundleID: "example.other",
+                                           executableName: "Other"), "unrelated app is allowed")
+        try require(postedKeysAreDisjoint(saved: [DEFAULT_HOTKEY_KEYCODE], punctuation: 43),
+                    "fixed right modifier is never posted")
+        for key: CGKeyCode in [0, 9, 53, 55, 43] {
+            try require(!postedKeysAreDisjoint(saved: [key], punctuation: 43),
+                        "every posted keycode is screened")
+        }
+        for invalid in [Array(arguments.prefix(2)), arguments + ["extra"],
+                        ["--self-test", "all", "--allow-native-input"], []] {
+            try require(!authorized(invalid), "native opt-in must be exact")
+        }
+        func allowed(_ foreground: pid_t? = 42, _ window: Bool = true,
+                     _ count: Int = 7, _ abort: Bool = false) -> Bool {
+            permits(foreground: foreground, owner: 42, ownsWindow: window,
+                    clipboardCount: count, expectedCount: 7, aborted: abort)
+        }
+        try require(allowed(), "owned fixture allowed")
+        try require(!allowed(nil) && !allowed(43), "external focus refused")
+        try require(!allowed(42, false), "other window refused")
+        try require(!allowed(42, true, 8), "intervening clipboard copy refused")
+        try require(!allowed(42, true, 7, true), "abort is sticky")
+        var gate = EventGate()
+        try require(!gate.permitsOwnedEvent(command: true, commandDown: false, safe: true),
+                    "never release a modifier the fixture did not press")
+        try require(gate.permitsOwnedEvent(command: true, commandDown: true, safe: true),
+                    "owned command down")
+        try require(!gate.permitsOwnedEvent(command: false, commandDown: false, safe: false),
+                    "focus loss blocks queued V and punctuation")
+        try require(gate.permitsOwnedEvent(command: true, commandDown: false, safe: false),
+                    "abort permits paired modifier cleanup")
+        try require(!gate.permitsOwnedEvent(command: true, commandDown: false, safe: false),
+                    "modifier cleanup is single use")
+        try require(!gate.permitsOwnedEvent(command: true, commandDown: true, safe: false),
+                    "abort never presses a modifier")
+        let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .privateState),
+                            virtualKey: 0, keyDown: false)
+        try require(event?.getIntegerValueField(.eventSourceUnixProcessID) == Int64(getpid()),
+                    "native event source carries fixture PID before posting")
+        let board = NSPasteboard(name: NSPasteboard.Name("presspeech-native-policy-" + UUID().uuidString))
+        defer { board.releaseGlobally() }
+        let ownedCount = board.prepareForNewContents(with: .currentHostOnly)
+        let item = NSPasteboardItem()
+        try require(item.setString("native-policy-marker", forType: .string) && board.writeObjects([item]),
+                    "named test clipboard write")
+        try require(board.changeCount == ownedCount, "write preserves acquired clipboard generation")
+        _ = board.clearContents()
+        try require(board.changeCount != ownedCount, "a newer copy cannot be adopted as fixture ownership")
+    }
+}
+
+/// A bounded, opt-in interaction check, not a second Presspeech application.
+/// No Settings, PresspeechApp, audio engine, microphone, or model is created.
+@MainActor
+private final class NativeInteractionFixture {
+    private let app = NSApplication.shared
+    private let owner = getpid()
+    private let pasteboard = NSPasteboard.general
+    private let listener = HotkeyListener()
+    private var windows: [NSWindow] = []
+    private var editors: [NSTextView] = []
+    private var expectedWindow: NSWindow?
+    private var expectedClipboardCount = 0
+    private var changedClipboard = false
+    private var abortReason: String?
+    private var deadline = Date.distantPast
+    private var taps: [(CFMachPort, CFRunLoopSource)] = []
+    private var sequence: Int64 = 0
+    private let tagBase = Int64.random(in: 1...0x7fff_ffff) << 24
+    private var observed = Set<Int64>()
+    private var recordingDecision: HotkeyRecordingDecision?
+    private var monitor: Any?
+    private var originalApplication: NSRunningApplication?
+    private var originalClipboard: ClipboardPasteInserter.Snapshot?
+    private var presses = 0
+    private var releases = 0
+    private var cancellations = 0
+    private var active = false
+    private var blocked = false
+    private var restorations = 0
+    private var eventGate = NativeInteractionPolicy.EventGate()
+    private var upstreamSeen: Int64 = 0
+    private var activationObserver: NSObjectProtocol?
+
+    static func run() throws {
+        let fixture = NativeInteractionFixture()
+        try fixture.runChecks()
+        if let reason = fixture.abortReason { throw SelfTestFailure.failed(reason) }
+    }
+
+    private func require(_ condition: @autoclosure () -> Bool, _ name: String) throws {
+        guard condition() else { throw SelfTestFailure.failed(name) }
+    }
+
+    private func abort(_ reason: String) { if abortReason == nil { abortReason = reason } }
+
+    private func otherPresspeechIsRunning() -> Bool {
+        NSWorkspace.shared.runningApplications.contains {
+            NativeInteractionPolicy.conflictingApplication(
+                pid: $0.processIdentifier, owner: owner, bundleID: $0.bundleIdentifier,
+                executableName: $0.executableURL?.lastPathComponent)
+        }
+    }
+
+    private func safety() -> Bool {
+        if otherPresspeechIsRunning() { abort("another Presspeech application is running") }
+        if Date() > deadline { abort("native fixture deadline exceeded") }
+        let allowed = NativeInteractionPolicy.permits(
+            foreground: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+            owner: owner, ownsWindow: app.keyWindow === expectedWindow && expectedWindow != nil,
+            clipboardCount: pasteboard.changeCount, expectedCount: expectedClipboardCount,
+            aborted: abortReason != nil)
+        if !allowed { abort("focus, clipboard ownership, or input changed") }
+        return allowed
+    }
+
+    private func check() throws {
+        try require(safety(), abortReason ?? "native safety guard")
+    }
+
+    private func pump() {
+        if let event = app.nextEvent(matching: .any, until: Date().addingTimeInterval(0.01),
+                                     inMode: .default, dequeue: true) {
+            app.sendEvent(event)
+        }
+    }
+
+    private func wait(_ name: String, timeout: TimeInterval = 2,
+                      until predicate: () -> Bool) throws {
+        let end = Date().addingTimeInterval(timeout)
+        repeat {
+            try check()
+            if predicate() { return }
+            pump()
+        } while Date() < end
+        throw SelfTestFailure.failed("timed out: \(name)")
+    }
+
+    private func isOwned(_ event: CGEvent) -> Bool {
+        let tag = event.getIntegerValueField(.eventSourceUserData)
+        return event.getIntegerValueField(.eventSourceUnixProcessID) == Int64(owner)
+            && tag > tagBase && tag <= tagBase + sequence
+    }
+
+    private func prepare(_ event: CGEvent) -> Bool {
+        // Release a previously posted left Command even during abort cleanup;
+        // this is the only event allowed to leave the fixture after focus loss.
+        let commandRelease = event.getIntegerValueField(.keyboardEventKeycode) == 55
+            && !event.flags.contains(.maskCommand)
+        guard safety() || commandRelease else { return false }
+        guard event.getIntegerValueField(.eventSourceUnixProcessID) == Int64(owner) else {
+            abort("native event source ownership unavailable")
+            return false
+        }
+        sequence += 1
+        event.setIntegerValueField(.eventSourceUserData, value: tagBase + sequence)
+        return true
+    }
+
+    private func installGuard() throws {
+        let types: [CGEventType] = [.keyDown, .keyUp, .flagsChanged,
+                                   .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+        let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
+        guard let tap = CGEvent.tapCreate(
+            tap: .cghidEventTap, place: .headInsertEventTap,
+            options: .defaultTap, eventsOfInterest: mask,
+            callback: { _, type, event, context in
+                guard let context else { return Unmanaged.passUnretained(event) }
+                let fixture = Unmanaged<NativeInteractionFixture>.fromOpaque(context).takeUnretainedValue()
+                let pass = MainActor.assumeIsolated {
+                    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                        fixture.abort("native guard tap disabled")
+                        return true
+                    }
+                    guard fixture.isOwned(event) else {
+                        // Never swallow the user's input. Stop our test instead.
+                        fixture.abort("external input detected")
+                        return true
+                    }
+                    fixture.upstreamSeen = max(fixture.upstreamSeen,
+                        event.getIntegerValueField(.eventSourceUserData))
+                    let safe = fixture.safety()
+                    return fixture.eventGate.permitsOwnedEvent(
+                        command: event.getIntegerValueField(.keyboardEventKeycode) == 55,
+                        commandDown: event.flags.contains(.maskCommand), safe: safe)
+                }
+                return pass ? Unmanaged.passUnretained(event) : nil
+            }, userInfo: Unmanaged.passUnretained(self).toOpaque()),
+            let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            throw SelfTestFailure.failed("native event guard installation")
+        }
+        taps.append((tap, source))
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    private func installTail() throws {
+        let mask = (CGEventMask(1) << CGEventType.keyDown.rawValue)
+            | (CGEventMask(1) << CGEventType.keyUp.rawValue)
+            | (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
+        guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .tailAppendEventTap,
+            options: .listenOnly, eventsOfInterest: mask, callback: { _, type, event, context in
+                guard let context else { return Unmanaged.passUnretained(event) }
+                let fixture = Unmanaged<NativeInteractionFixture>.fromOpaque(context).takeUnretainedValue()
+                MainActor.assumeIsolated {
+                    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                        fixture.abort("native observation tap disabled")
+                    } else if fixture.isOwned(event) {
+                        fixture.observed.insert(event.getIntegerValueField(.eventSourceUserData))
+                    }
+                }
+                return Unmanaged.passUnretained(event)
+            }, userInfo: Unmanaged.passUnretained(self).toOpaque()),
+            let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            throw SelfTestFailure.failed("native observation tap installation")
+        }
+        taps.append((tap, source))
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    @discardableResult
+    private func send(_ key: CGKeyCode, down: Bool, flags: CGEventFlags = [],
+                      repeated: Bool = false) throws -> Int64 {
+        try check()
+        guard let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .privateState),
+                                  virtualKey: key, keyDown: down) else {
+            throw SelfTestFailure.failed("native event allocation")
+        }
+        event.flags = flags
+        event.setIntegerValueField(.keyboardEventAutorepeat, value: repeated ? 1 : 0)
+        try require(prepare(event), "native event permission")
+        let tag = event.getIntegerValueField(.eventSourceUserData)
+        event.post(tap: .cghidEventTap)
+        return tag
+    }
+
+    private func drain() throws {
+        // An unbound key-up is harmless to the editor and proves downstream
+        // delivery has reached the end of our posted sequence.
+        let sentinel = try send(0, down: false)
+        try wait("event sequence delivered") { observed.contains(sentinel) }
+    }
+
+    private func selectWindow(_ index: Int) throws {
+        try check()
+        expectedWindow = windows[index]
+        windows[index].makeKeyAndOrderFront(nil)
+        windows[index].makeFirstResponder(editors[index])
+        try wait("owned window focused") { app.keyWindow === windows[index] }
+    }
+
+    private func ownClipboard(_ marker: String) throws {
+        try check()
+        try require(ClipboardPasteInserter.write(marker, to: pasteboard, transient: true),
+                    "fixture clipboard write")
+    }
+
+    private func runChecks() throws {
+        try require(NativeInteractionPolicy.authorized(Array(CommandLine.arguments.dropFirst())),
+                    "native interaction requires explicit acknowledgement")
+        try require(!otherPresspeechIsRunning(),
+                    "native acceptance requires other Presspeech/Parakey apps already quit; fixture will not stop them")
+        try require(AXIsProcessTrusted() && CGPreflightListenEventAccess() && CGPreflightPostEventAccess(),
+                    "existing Accessibility, Input Monitoring, and posting permission required")
+        try require(CGEventSource.flagsState(.combinedSessionState)
+                        .intersection(HOTKEY_COMBINATION_MODIFIERS).isEmpty,
+                    "release physical modifiers before running fixture")
+        // Read only: do not instantiate Settings, which performs migrations.
+        // Check both identities and both preference generations. The installed
+        // process may still be an older build using the legacy fixed-key value.
+        let savedKeycodes = [SETTINGS_SUITE, LEGACY_SETTINGS_SUITE].flatMap { suite -> [CGKeyCode] in
+            let defaults = UserDefaults(suiteName: suite)
+            var keys = [normalizedHotkeyKeycode(storedValue: defaults?.object(forKey: "hotkey_keycode"))
+                ?? DEFAULT_HOTKEY_KEYCODE]
+            if let raw = defaults?.object(forKey: "hotkey_binding") {
+                keys.append(normalizedHotkeyBinding(storedValue: raw)?.keycode ?? DEFAULT_HOTKEY_KEYCODE)
+            }
+            return keys
+        }
+        let modifiers: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate]
+        guard let binding = [CGKeyCode(43), 47, 44].compactMap({
+            recordableHotkeyChoice(forKeycode: $0, modifiers: modifiers)
+        }).first(where: {
+            NativeInteractionPolicy.postedKeysAreDisjoint(saved: savedKeycodes, punctuation: $0.keycode)
+        }) else {
+            throw SelfTestFailure.failed("no nonconflicting fixture binding")
+        }
+        originalApplication = NSWorkspace.shared.frontmostApplication
+        originalClipboard = ClipboardPasteInserter.snapshot(of: pasteboard)
+        try require(originalApplication != nil && originalClipboard != nil,
+                    "foreground application and complete clipboard snapshot required")
+        expectedClipboardCount = originalClipboard!.sourceChangeCount
+        defer { cleanup() }
+        deadline = Date().addingTimeInterval(30)
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let activatedPID = (note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication)?.processIdentifier
+            MainActor.assumeIsolated {
+                guard let self, let activatedPID else { return }
+                if activatedPID != self.owner { self.abort("external application activated") }
+            }
+        }
+        _ = app.setActivationPolicy(.regular)
+        let menu = NSMenu()
+        let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Edit")
+        submenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.submenu = submenu
+        menu.addItem(edit)
+        app.mainMenu = menu
+        app.finishLaunching()
+        for index in 0..<2 {
+            let window = NSWindow(contentRect: NSRect(x: 150 + index * 60, y: 200, width: 500, height: 220),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.title = "Presspeech native acceptance \(index + 1)"
+            window.isReleasedWhenClosed = false
+            let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 220))
+            editor.isRichText = false
+            window.contentView = editor
+            windows.append(window)
+            editors.append(editor)
+        }
+        let beforeActivation = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        try require((beforeActivation == originalApplication?.processIdentifier || beforeActivation == owner)
+                        && pasteboard.changeCount == expectedClipboardCount && abortReason == nil,
+                    "state changed before fixture activation")
+        expectedWindow = windows[0]
+        windows[0].makeKeyAndOrderFront(nil)
+        windows[0].makeFirstResponder(editors[0])
+        app.activate(ignoringOtherApps: true)
+        let activationDeadline = Date().addingTimeInterval(2)
+        while NSWorkspace.shared.frontmostApplication?.processIdentifier != owner,
+              Date() < activationDeadline { pump() }
+        try check()
+        NativeInteractionHooks.permitEvent = { [weak self] in self?.prepare($0) ?? false }
+        NativeInteractionHooks.permitClipboardWrite = { [weak self] in self?.safety() ?? false }
+        NativeInteractionHooks.didRestoreClipboard = { [weak self] in self?.restorations += 1 }
+        NativeInteractionHooks.didWriteClipboard = { [weak self] count in
+            self?.changedClipboard = true
+            self?.expectedClipboardCount = count
+        }
+        try installGuard()
+        try installTail()
+        listener.nativeTestEventFilter = { [weak self] in self?.isOwned($0) ?? false }
+        listener.setHotkey(binding)
+        listener.onPress = { [weak self] in self?.presses += 1; self?.active = self?.blocked == false }
+        listener.onRelease = { [weak self] in self?.releases += 1; self?.active = false }
+        listener.onCancel = { [weak self] in
+            self?.cancellations += 1
+            self?.active = false
+            self?.listener.resetToggleState()
+        }
+        listener.isRecordingActive = { [weak self] in self?.active ?? false }
+        listener.recordingStartBlocker = { [weak self] in self?.blocked == true ? .notReady : nil }
+
+        // Deliver a real local event into the production recorder decision.
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            let consumed = MainActor.assumeIsolated {
+                guard let self, let cgEvent = event.cgEvent, self.isOwned(cgEvent) else { return false }
+                if event.type == .keyDown {
+                    self.recordingDecision = hotkeyRecordingDecision(for: HotkeyEventSnapshot(
+                        typeRawValue: CGEventType.keyDown.rawValue, keycode: event.keyCode,
+                        flagsRawValue: cgEvent.flags.rawValue, isAutoRepeat: event.isARepeat))
+                }
+                return true
+            }
+            return consumed ? nil : event
+        }
+        try send(binding.keycode, down: true, flags: modifiers)
+        try send(binding.keycode, down: false)
+        try wait("native recorder capture") { recordingDecision != nil }
+        try require(recordingDecision == .accept(binding), "native recorder decision")
+        recordingDecision = nil
+        try send(binding.keycode, down: true)
+        try send(binding.keycode, down: false)
+        try wait("native invalid recorder input") { recordingDecision != nil }
+        guard case .reject = recordingDecision else {
+            throw SelfTestFailure.failed("native recorder must reject bare typing")
+        }
+        if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil
+        print("PASS native recorder capture")
+
+        try require(listener.start(), "production hotkey tap installation")
+        observed.removeAll()
+        let held = try send(binding.keycode, down: true, flags: modifiers)
+        let repeated = try send(binding.keycode, down: true, flags: modifiers, repeated: true)
+        let released = try send(binding.keycode, down: false) // modifiers already released
+        try drain()
+        try wait("native hold callbacks") { presses == 1 && releases == 1 && !active }
+        try require(!observed.contains(held) && !observed.contains(repeated)
+                        && !observed.contains(released), "native hold/repeat/release suppression")
+        let unmatched = try send(binding.keycode, down: true, flags: modifiers.union(.maskShift))
+        try send(binding.keycode, down: false)
+        try drain()
+        try require(observed.contains(unmatched) && presses == 1, "extra modifiers pass through")
+        let plain = try send(binding.keycode, down: true)
+        try send(binding.keycode, down: false)
+        try drain()
+        try require(observed.contains(plain) && presses == 1, "plain typing passes through")
+        print("PASS native hold, repeat, exact modifiers, plain typing, suppression")
+
+        listener.setTriggerMode(.toggle)
+        blocked = true
+        try send(binding.keycode, down: true, flags: modifiers)
+        try send(binding.keycode, down: false)
+        try drain()
+        try require(presses == 1 && !active, "blocked toggle does not start recording")
+        blocked = false
+        try send(binding.keycode, down: true, flags: modifiers)
+        try send(binding.keycode, down: false)
+        try drain()
+        try wait("toggle starts after rejected attempt") { active && presses == 2 }
+        try send(binding.keycode, down: true, flags: modifiers)
+        try send(binding.keycode, down: false)
+        try drain()
+        try wait("toggle second press stops") { !active && releases == 2 }
+        try send(binding.keycode, down: true, flags: modifiers)
+        try send(binding.keycode, down: false)
+        try wait("toggle starts for cancellation") { active }
+        let escape = try send(ESCAPE_KEYCODE, down: true)
+        let escapeUp = try send(ESCAPE_KEYCODE, down: false)
+        try drain()
+        try wait("native escape cancels") { !active && cancellations == 1 }
+        try require(!observed.contains(escape) && !observed.contains(escapeUp), "escape suppression")
+        print("PASS native toggle and readiness gate")
+        listener.stop()
+
+        editors[0].string = ""
+        try ownClipboard("native-fixture-before")
+        guard let target = currentDictationPasteTarget() else {
+            throw SelfTestFailure.failed("own window AX target unavailable")
+        }
+        try require(ClipboardPasteInserter.insert("native-fixture-paste", restoreClipboard: true,
+                    restoreDelaySeconds: 1.2, expectedTarget: target) == .inserted, "native paste posted")
+        try wait("native text view consumed paste") { editors[0].string == "native-fixture-paste" }
+        try wait("guarded restoration", timeout: 2) { restorations == 1 }
+        try drain()
+        print("PASS native paste and guarded delayed restore")
+
+        editors[0].string = ""
+        try require(ClipboardPasteInserter.insert("native-fixture-second", restoreClipboard: true,
+                    restoreDelaySeconds: 1.2, expectedTarget: target) == .inserted, "second paste posted")
+        try wait("second paste consumed") { editors[0].string == "native-fixture-second" }
+        try ownClipboard("native-fixture-newer-copy")
+        let newerCount = expectedClipboardCount
+        let restoreDeadline = Date().addingTimeInterval(1.4)
+        try wait("newer copy survives restore deadline") { Date() >= restoreDeadline }
+        try require(restorations == 1 && expectedClipboardCount == newerCount,
+                    "newer copy ownership prevents scheduled restore")
+        print("PASS native intervening copy survives scheduled restore")
+
+        try selectWindow(1)
+        editors[1].string = ""
+        let count = sequence
+        try require(ClipboardPasteInserter.insert("native-fixture-copy-only", expectedTarget: target)
+                        == .copiedWithoutPasting, "original window target enforced")
+        try drain()
+        try require(editors[1].string.isEmpty && sequence == count + 1, "wrong window receives no paste events")
+        print("PASS native same-process different-window copy-only")
+        try check()
+    }
+
+    private func cleanup() {
+        // Drain already queued events while the guard is still installed. An
+        // abort blocks further key-downs but releases only our paired Command.
+        if !taps.isEmpty {
+            if let release = CGEvent(keyboardEventSource: CGEventSource(stateID: .privateState),
+                                     virtualKey: 55, keyDown: false) {
+                release.flags = []
+                sequence += 1
+                release.setIntegerValueField(.eventSourceUserData, value: tagBase + sequence)
+                release.post(tap: .cghidEventTap)
+                let end = Date().addingTimeInterval(1)
+                while upstreamSeen < tagBase + sequence && Date() < end { pump() }
+                if upstreamSeen < tagBase + sequence { abort("native cleanup event drain timed out") }
+            }
+        }
+        listener.stop()
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let activationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
+        }
+        NativeInteractionHooks.permitEvent = nil
+        NativeInteractionHooks.permitClipboardWrite = nil
+        NativeInteractionHooks.didWriteClipboard = nil
+        NativeInteractionHooks.didRestoreClipboard = nil
+        for (tap, source) in taps {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        // No clipboard bytes or previous application/window contents are logged.
+        if changedClipboard, let originalClipboard {
+            if !ClipboardPasteInserter.restore(originalClipboard, to: pasteboard,
+                                               expectedChangeCount: expectedClipboardCount) {
+                print("NOTE native original clipboard not restored: ownership changed or restore failed")
+                abort("original clipboard restoration skipped or failed")
+            }
+        }
+        let stillOwnsFocus = NSWorkspace.shared.frontmostApplication?.processIdentifier == owner
+        for window in windows { window.close() }
+        if stillOwnsFocus, let originalApplication {
+            if originalApplication.activate(options: []) {
+                let end = Date().addingTimeInterval(1)
+                while NSWorkspace.shared.frontmostApplication?.processIdentifier == owner,
+                      Date() < end { pump() }
+                if NSWorkspace.shared.frontmostApplication?.processIdentifier
+                    != originalApplication.processIdentifier {
+                    abort("previous application focus was not restored")
+                }
+            } else {
+                abort("previous application could not be reactivated")
+            }
+        }
+    }
+}
+
 private enum PresspeechSelfTest {
     private final class UnavailablePasteboardDataProvider: NSObject, NSPasteboardItemDataProvider {
         func pasteboard(_ pasteboard: NSPasteboard?,
@@ -12984,10 +13608,23 @@ private enum PresspeechSelfTest {
     }
 
     static func run(arguments: [String]) -> Int32? {
-        guard arguments.count >= 2, arguments[0] == "--self-test" else { return nil }
+        guard arguments.first == "--self-test" else {
+            return arguments.contains("--allow-native-input") ? fail("usage") : nil
+        }
+        guard arguments.count >= 2 else { return fail("usage") }
+        if arguments[1] == "native-interactions" {
+            guard NativeInteractionPolicy.authorized(arguments) else {
+                return fail("native-interactions requires --allow-native-input; see docs/native-interaction-qa.md")
+            }
+            return MainActor.assumeIsolated {
+                runSuite("native-interactions", NativeInteractionFixture.run)
+            }
+        }
         guard arguments.count == 2 else { return fail("usage") }
 
         switch arguments[1] {
+        case "native-interaction-policy":
+            return runSuite("native-interaction-policy", NativeInteractionPolicy.test)
         case "hotkey":
             return runSuite("hotkey", testHotkey)
         case "readiness":
@@ -13056,6 +13693,7 @@ private enum PresspeechSelfTest {
     }
 
     private static func testAll() throws {
+        try NativeInteractionPolicy.test()
         try testHotkey()
         try testReadiness()
         try testPasteSuffixFormatting()
@@ -17287,6 +17925,12 @@ private enum PresspeechSelfTest {
 
 if let status = PresspeechSelfTest.run(arguments: Array(CommandLine.arguments.dropFirst())) {
     exit(status)
+}
+#else
+// A mistyped acceptance command must never launch the production application.
+if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contains("--allow-native-input") {
+    FileHandle.standardError.write(Data("Self-tests require a debug build.\n".utf8))
+    exit(EXIT_FAILURE)
 }
 #endif
 
