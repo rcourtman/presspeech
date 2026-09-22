@@ -4625,6 +4625,17 @@ private struct DictationMenuControlState: Equatable {
     let help: String
 }
 
+/// Trigger semantics must stay fixed from the start of a recording until its
+/// transcription has completed. In particular, changing a menu-started hold
+/// recording to toggle mode would leave the toggle state unarmed, so the next
+/// hotkey press would be rejected as an attempted start instead of stopping the
+/// recording. Keep the menu state and its selector guard on one pure decision.
+private func canChangeTriggerMode(isRecording: Bool,
+                                  isBusy: Bool,
+                                  isTerminating: Bool) -> Bool {
+    !isRecording && !isBusy && !isTerminating
+}
+
 private func dictationMenuControlState(isReady: Bool,
                                        isRecording: Bool,
                                        isBusy: Bool,
@@ -10713,6 +10724,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let tmParent = NSMenuItem(title: "Trigger", action: nil, keyEquivalent: "")
         let tmSub = NSMenu()
         tmSub.autoenablesItems = false
+        let canChange = canChangeTriggerMode(isRecording: isRecording,
+                                             isBusy: isBusy,
+                                             isTerminating: isTerminating)
         for mode in [TriggerMode.hold, .toggle] {
             let item = NSMenuItem(title: TRIGGER_DISPLAY[mode] ?? mode.rawValue,
                                   action: #selector(selectTriggerMode(_:)),
@@ -10720,8 +10734,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             item.target = self
             item.state = (mode == settings.triggerMode) ? .on : .off
             item.representedObject = mode.rawValue
+            item.isEnabled = canChange
             tmSub.addItem(item)
         }
+        tmParent.toolTip = canChange
+            ? "Choose whether the hotkey is held or pressed once to start and stop."
+            : "Wait for the current dictation to finish before changing its trigger."
         tmParent.submenu = tmSub
         return tmParent
     }
@@ -12406,7 +12424,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     @objc private func selectTriggerMode(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
+        guard canChangeTriggerMode(isRecording: isRecording,
+                                   isBusy: isBusy,
+                                   isTerminating: isTerminating),
+              let raw = sender.representedObject as? String,
               let m = TriggerMode(rawValue: raw) else { return }
         settings.triggerMode = m
         hotkey.setTriggerMode(m)
@@ -17731,6 +17752,26 @@ private enum PresspeechSelfTest {
             equals: false,
             "menu start should stay disabled while a permission is missing"
         )
+        try expect(canChangeTriggerMode(isRecording: false,
+                                        isBusy: false,
+                                        isTerminating: false),
+                   equals: true,
+                   "idle app should allow trigger-mode changes")
+        try expect(canChangeTriggerMode(isRecording: true,
+                                        isBusy: false,
+                                        isTerminating: false),
+                   equals: false,
+                   "active recording should keep its original trigger semantics")
+        try expect(canChangeTriggerMode(isRecording: false,
+                                        isBusy: true,
+                                        isTerminating: false),
+                   equals: false,
+                   "transcription should keep trigger-mode settings stable")
+        try expect(canChangeTriggerMode(isRecording: false,
+                                        isBusy: false,
+                                        isTerminating: true),
+                   equals: false,
+                   "terminating app should reject trigger-mode changes")
         try expect(menuBarAccessibilityValue(for: .recording),
                    equals: "Recording",
                    "menu-bar accessibility value should announce recording state")

@@ -285,8 +285,9 @@ cd swift
   clears any previous modifier-only preview instead of saving that stale choice.
 - Confirm VoiceOver announces accepted combinations and rejected selections;
   cancel the dialog and verify the previous binding is unchanged.
-- Attempt to change a hotkey while recording/transcribing. Confirm the choices
-  are disabled until the current operation finishes.
+- Attempt to change the hotkey or trigger mode while recording/transcribing.
+  Confirm both sets of choices are disabled until the current operation
+  finishes, and that the original hotkey gesture still stops the recording.
 - In the hotkey recorder, confirm Escape cancels and Tab, Space, and Return
   continue to operate the dialog controls rather than being rejected as keys.
 - Use **Reset Hotkey to Default** and confirm the menu returns to
