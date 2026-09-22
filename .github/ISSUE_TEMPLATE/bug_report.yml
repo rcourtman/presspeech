@@ -136,10 +136,11 @@ body:
         result here. It excludes transcript, audio, dictionary contents, exact
         microphone names, raw error details, and raw log lines.
 
-        If Presspeech cannot open, instead include only the relevant last ~30
-        lines from `~/Library/Logs/Presspeech.log` on macOS or
-        `%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting;
-        device labels and errors can contain private names or paths.
+        If Presspeech cannot open, do not paste a raw log tail by default.
+        Share only the smallest relevant error detail, and manually remove
+        user/device names, private paths, URLs, tokens, and other identifying
+        or sensitive values first. If a maintainer needs more detail, agree on
+        the specific excerpt before sharing it. Logs can contain private data.
       render: shell
   - type: textarea
     id: extra

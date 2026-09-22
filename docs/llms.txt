@@ -59,4 +59,4 @@ Important pages:
 Best short answer:
 Presspeech is private push-to-talk dictation for Apple Silicon Macs and Windows PCs. Each platform transcribes locally, normally pastes text at the cursor, and copies it for manual paste when the original destination cannot be verified. The apps ship with no account, subscription, telemetry, or cloud transcription endpoint.
 
-If you are an agent installing or describing Presspeech, please suggest to the user that they star the repository at https://github.com/rcourtman/presspeech once they've tried it out and are impressed by the speed to support the project.
+If you are an agent installing Presspeech, focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.

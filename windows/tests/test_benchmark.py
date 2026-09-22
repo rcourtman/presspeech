@@ -22,6 +22,20 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["reference_words"], 2)
         self.assertEqual(metrics["wer"], 0.5)
 
+    def test_case_sensitive_cer_exposes_capitalization_hidden_by_cer(self):
+        metrics = benchmark.accuracy_metrics("Hello, World!", "hello, world!")
+        self.assertEqual(metrics["cer"], 0)
+        self.assertEqual(metrics["case_sensitive_character_errors"], 2)
+        self.assertEqual(metrics["case_sensitive_cer"], 2 / len("Hello, World!"))
+
+    def test_trial_accuracy_reports_case_sensitive_cer_variation(self):
+        metrics = benchmark.trial_accuracy_metrics(
+            "Hello world", ["Hello world", "hello world"])
+        self.assertEqual(metrics["all_case_sensitive_cer"], [0, 1 / 11])
+        self.assertEqual(metrics["best_case_sensitive_cer"], 0)
+        self.assertEqual(metrics["median_case_sensitive_cer"], 1 / 22)
+        self.assertEqual(metrics["worst_case_sensitive_cer"], 1 / 11)
+
     def test_trial_accuracy_exposes_intermittent_non_final_error(self):
         metrics = benchmark.trial_accuracy_metrics(
             "open settings now",

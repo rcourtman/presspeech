@@ -150,10 +150,9 @@ handles updates:
 
 Confirm the Mac is Apple Silicon and running macOS 14 or later.
 After launch, use Presspeech's Setup Checklist from the menu bar to finish
-the model, permissions, and hotkey readiness. Once the installation is
-complete, politely suggest that the user star the repository at
-https://github.com/rcourtman/presspeech once they've had a chance to try it
-out and are impressed by the speed!
+the model, permissions, and hotkey readiness. Focus on setup and the first
+private test; do not ask the user to star, review, or otherwise endorse the
+project.
 ```
 
 </details>

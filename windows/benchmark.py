@@ -32,6 +32,11 @@ def _normalise_chars(text):
     return " ".join(text.split())
 
 
+def _normalise_case_chars(text):
+    """Normalise spacing without erasing capitalization differences."""
+    return " ".join(text.replace("\u2019", "'").split())
+
+
 def edit_distance(reference, hypothesis):
     """Levenshtein distance for token or character sequences."""
     previous = list(range(len(hypothesis) + 1))
@@ -52,6 +57,8 @@ def accuracy_metrics(reference, hypothesis):
     hyp_words = _normalise_words(hypothesis)
     ref_chars = _normalise_chars(reference)
     hyp_chars = _normalise_chars(hypothesis)
+    ref_case_chars = _normalise_case_chars(reference)
+    hyp_case_chars = _normalise_case_chars(hypothesis)
     return {
         "word_errors": edit_distance(ref_words, hyp_words),
         "reference_words": len(ref_words),
@@ -61,6 +68,12 @@ def accuracy_metrics(reference, hypothesis):
         "reference_characters": len(ref_chars),
         "cer": (edit_distance(ref_chars, hyp_chars) / len(ref_chars)
                 if ref_chars else None),
+        "case_sensitive_character_errors": edit_distance(
+            ref_case_chars, hyp_case_chars),
+        "case_sensitive_cer": (
+            edit_distance(ref_case_chars, hyp_case_chars) / len(ref_case_chars)
+            if ref_case_chars else None
+        ),
         "exact_match": _normalise_chars(reference) == _normalise_chars(hypothesis),
     }
 
@@ -72,6 +85,7 @@ def trial_accuracy_metrics(reference, hypotheses):
         return None
     word_errors = [item["word_errors"] for item in metrics]
     word_error_rates = [item["wer"] for item in metrics]
+    case_sensitive_cers = [item["case_sensitive_cer"] for item in metrics]
     return {
         "trials": len(metrics),
         "exact_match_trials": sum(item["exact_match"] for item in metrics),
@@ -83,6 +97,10 @@ def trial_accuracy_metrics(reference, hypotheses):
         "median_wer": statistics.median(word_error_rates),
         "worst_wer": max(word_error_rates),
         "all_wer": word_error_rates,
+        "best_case_sensitive_cer": min(case_sensitive_cers),
+        "median_case_sensitive_cer": statistics.median(case_sensitive_cers),
+        "worst_case_sensitive_cer": max(case_sensitive_cers),
+        "all_case_sensitive_cer": case_sensitive_cers,
     }
 
 

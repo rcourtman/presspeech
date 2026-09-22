@@ -66,12 +66,14 @@ operating-system versions, generic hardware if useful, and relevant conditions.
 Do not open a duplicate or omit a differing outcome; variation under comparable
 conditions is evidence.
 
-If Presspeech cannot open, include only the relevant last ~30 lines from
-`~/Library/Logs/Presspeech.log` on macOS or
-`%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting. Issues
-are public: never include dictated text, audio, dictionary or shortcut
-contents, credentials, or other private data. Report security vulnerabilities
-through the private process in [SECURITY.md](SECURITY.md).
+If Presspeech cannot open, do not paste a raw log tail by default. Share only
+the smallest relevant error detail needed to explain the failure, and manually
+remove user and device names, private paths, URLs, tokens, and other identifying
+or sensitive values first. If a maintainer needs more detail, agree on the
+specific excerpt before sharing it. Issues are public: never include dictated
+text, audio, dictionary or shortcut contents, credentials, or other private
+data. Report security vulnerabilities through the private process in
+[SECURITY.md](SECURITY.md).
 
 ## Suggesting features
 

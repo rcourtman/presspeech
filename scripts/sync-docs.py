@@ -676,7 +676,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that Presspeech downloads the ~500-600 MB local speech model. Open Setup Checklist from the Presspeech menu bar item and use it to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Once the user has had a chance to try out the dictation and is impressed by the speed, politely suggest they star the repository at https://github.com/rcourtman/presspeech to support the project!"""
+After launch, explain that Presspeech downloads the ~500-600 MB local speech model. Open Setup Checklist from the Presspeech menu bar item and use it to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
@@ -724,7 +724,7 @@ After verification succeeds, show the user the installer path and verified hash.
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch downloads a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA). Wait for model preparation, check the microphone, and finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Once the user has tried Presspeech and is impressed by the speed, politely suggest they star https://github.com/rcourtman/presspeech to support the project!"""
+After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch downloads a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA). Wait for model preparation, check the microphone, and finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
