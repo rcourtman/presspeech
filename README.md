@@ -78,11 +78,11 @@ source-build details.
 
 Download the notarised app:
 
-- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/download/v0.3.7/Presspeech.zip)
+- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/download/v0.3.8/Presspeech.zip)
 - Optionally verify the current archive against its published SHA-256:
   ```sh
   cd ~/Downloads
-  echo '6ef0d73ca5b799d215bbb1b31367082411f8e4e07cfd3a692f47a062575f94bc  Presspeech.zip' | shasum -a 256 -c -
+  echo '7edc7987d2bf6a47db10381f5b39bb740ae331c2a2a5b9780b1e57898baf291f  Presspeech.zip' | shasum -a 256 -c -
   ```
 - Unzip it, move **Presspeech.app** to **Applications**, then open it.
 
