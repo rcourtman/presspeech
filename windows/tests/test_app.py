@@ -1829,9 +1829,26 @@ class TextRegressionTests(unittest.TestCase):
         self.assertIn("Model status: ready", diagnostics)
         self.assertIn("Global hotkey status: not started", diagnostics)
         self.assertIn("Windows UI Automation: not initialized", diagnostics)
+        self.assertIn("Configured microphone: Specific input (name omitted)", diagnostics)
+        self.assertIn("Active microphone: Open at 16000 Hz (name omitted)", diagnostics)
+        self.assertIn("exact microphone names, raw error details, or raw log lines included",
+                      diagnostics)
         self.assertNotIn("\\Users\\", diagnostics)
+        self.assertNotIn("MME::Yeti Nano", diagnostics)
         self.assertNotIn("private spoken phrase", diagnostics)
         self.assertNotIn("private replacement", diagnostics)
+
+    def test_diagnostic_microphone_summary_does_not_render_untrusted_values(self):
+        configured = "MME::Alice's private office microphone\nsecret"
+        lines = app._diagnostic_microphone_lines(configured, (7, 48000))
+
+        rendered = "\n".join(lines)
+        self.assertEqual(lines, (
+            "Configured microphone: Specific input (name omitted)",
+            "Active microphone: Open at 48000 Hz (name omitted)",
+        ))
+        self.assertNotIn("Alice", rendered)
+        self.assertNotIn("secret", rendered)
 
     def test_visual_indicator_routes_states_without_stealing_app_logic(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

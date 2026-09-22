@@ -87,7 +87,7 @@ Documented network calls:
 4. User-triggered feedback links: Report a Problem and Suggest an Improvement open fixed public GitHub forms in the default browser. Presspeech adds no app or user data to the URL.
 5. User-approved install/update downloads: the signed macOS archive directly or through Homebrew, or a Windows installer whose published size and SHA-256 are verified before launch.
 
-For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe local reports with runtime metadata and bounded recent log lines. The reports exclude transcript text and dictionary/correction contents.
+For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe local reports with runtime metadata and microphone availability. The reports exclude transcript text, dictionary/correction contents, exact microphone names, raw error details, and raw log lines.
 
 Machine-readable network surface:
 https://rcourtman.github.io/presspeech/privacy/network-calls.json

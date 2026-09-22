@@ -255,7 +255,7 @@ each platform rather than identical.
 - **Settings → Behavior → Launch at Login** — keep dictation available after
   sign-in; if macOS needs approval, selecting the marked setting opens Login
   Items
-- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, and bounded recent logs
+- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, microphone availability, and update state; exact device names, raw error details, and logs stay local
 
 ### Windows controls
 

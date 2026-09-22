@@ -30,7 +30,7 @@ METADATA_PATH = DOCS / "site-metadata.json"
 
 MODEL_CACHE_SIZE = "~600 MB"
 SETUP_CHECKLIST = "Setup Checklist\u2026"
-DIAGNOSTICS_SUMMARY = "privacy-safe diagnostics report with app state, permission state, settings counts, microphone devices, memory, update state, and bounded recent log lines; no transcript text or text-correction contents"
+DIAGNOSTICS_SUMMARY = "privacy-safe diagnostics report with app state, permission state, settings counts, microphone availability, memory, and update state; no transcript text, text-correction contents, exact microphone names, raw error details, or raw log lines"
 
 SYNCED_PATHS = [
     ROOT / "README.md",
@@ -720,7 +720,7 @@ def sync_readme(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r'- \*\*(?:Copy Diagnostics|Copy/Save Diagnostics)\*\* — .*',
-        "- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, and bounded recent logs",
+        "- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, microphone availability, and update state; exact device names, raw error details, and logs stay local",
         path=path,
     )
     text = replace_regex(
@@ -1014,10 +1014,17 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
     )
     diagnostics_card = """            <article class="card">
               <h3>What is in diagnostics?</h3>
-              <p>macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe reports with app, model, microphone, settings, update, and bounded log state. They omit transcript text, audio, and dictionary contents.</p>
+              <p>macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe reports with app, model, microphone availability, settings, and update state. They omit transcript text, audio, dictionary contents, exact microphone names, raw error details, and raw log lines; review the separate local log before sharing any part of it.</p>
             </article>
 """
-    if "What is in diagnostics?" not in text:
+    if "What is in diagnostics?" in text:
+        text = replace_regex(
+            text,
+            r'(<h3>What is in diagnostics\?</h3>\s*)<p>.*?</p>',
+            r'\1<p>macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe reports with app, model, microphone availability, settings, and update state. They omit transcript text, audio, dictionary contents, exact microphone names, raw error details, and raw log lines; review the separate local log before sharing any part of it.</p>',
+            path=path,
+        )
+    else:
         text = replace_literal(text, "          </div>\n        </div>\n      </section>", diagnostics_card + "          </div>\n        </div>\n      </section>", path=path)
     return text
 
@@ -1051,8 +1058,10 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n" + setup_line,
             path=path,
         )
-    diagnostics_line = "- Diagnostics: macOS Copy/Save Diagnostics and Windows Copy Diagnostics produce privacy-safe local reports without transcript or dictionary contents.\n"
-    if diagnostics_line not in text:
+    diagnostics_line = "- Diagnostics: macOS Copy/Save Diagnostics and Windows Copy Diagnostics report runtime and microphone availability without transcript, dictionary, exact microphone names, raw error details, or raw log lines.\n"
+    if re.search(r"(?m)^- Diagnostics:.*$", text):
+        text = re.sub(r"(?m)^- Diagnostics:.*$", diagnostics_line.rstrip("\n"), text, count=1)
+    else:
         text = replace_literal(
             text,
             "- Privacy: no cloud transcription, no telemetry, no transcript persistence.\n",
@@ -1106,10 +1115,21 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         )
     diagnostics_sentence = (
         "For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics create privacy-safe "
-        "local reports with runtime metadata and bounded recent log lines. The reports exclude "
-        "transcript text and dictionary/correction contents.\n"
+        "local reports with runtime metadata and microphone availability. The reports exclude "
+        "transcript text, dictionary/correction contents, exact microphone names, raw error details, and raw log lines.\n"
     )
-    if diagnostics_sentence not in text:
+    diagnostics_pattern = (
+        r"^For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics .*$"
+    )
+    if re.search(diagnostics_pattern, text, flags=re.M):
+        text = replace_regex(
+            text,
+            diagnostics_pattern,
+            diagnostics_sentence.rstrip("\n"),
+            path=path,
+            flags=re.M,
+        )
+    else:
         text = replace_literal(
             text,
             "Machine-readable network surface:\n",
@@ -1604,10 +1624,30 @@ def run_self_test() -> None:
         for expected in (
             "<strong>Windows:</strong> Turn on Microphone access",
             "Windows Copy Diagnostics",
-            "They omit transcript text, audio, and dictionary contents.",
+            "exact microphone names, raw error details, and raw log lines",
         ):
             if expected not in synced_faq:
                 raise SyncError(f"self-test: FAQ did not sync {expected!r}")
+
+        llms_full = Path(tmp) / "llms-full.txt"
+        old_diagnostics = (
+            "For support, macOS Copy/Save Diagnostics and Windows Copy Diagnostics "
+            "create privacy-safe local reports with bounded recent log lines.\n"
+        )
+        llms_full.write_text(
+            "First launch downloads the local speech model weights, about 500-600 MB, "
+            "into `~/Library/Application Support/FluidAudio/`.\n\n"
+            "Use Setup Checklist from the Presspeech menu bar item to finish the speech model, "
+            "Microphone, Accessibility, Input Monitoring, and hotkey readiness checks.\n\n"
+            + old_diagnostics
+            + "\nMachine-readable network surface:\n",
+            encoding="utf-8",
+        )
+        synced_llms_full = sync_llms_full(llms_full, metadata)
+        if (old_diagnostics in synced_llms_full
+                or synced_llms_full.count("For support, macOS Copy/Save Diagnostics") != 1
+                or "raw error details, and raw log lines" not in synced_llms_full):
+            raise SyncError("self-test: llms-full diagnostics paragraph was not replaced")
 
         compare_dir = Path(tmp) / "compare"
         compare_dir.mkdir()

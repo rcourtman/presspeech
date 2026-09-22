@@ -131,11 +131,13 @@ body:
       label: Privacy-safe diagnostics
       description: |
         In the Presspeech menu, choose **Copy Diagnostics**, then paste the
-        result here. It excludes transcript, audio, and dictionary contents.
+        result here. It excludes transcript, audio, dictionary contents, exact
+        microphone names, raw error details, and raw log lines.
 
         If Presspeech cannot open, instead include only the relevant last ~30
         lines from `~/Library/Logs/Presspeech.log` on macOS or
-        `%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting.
+        `%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting;
+        device labels and errors can contain private names or paths.
       render: shell
   - type: textarea
     id: extra

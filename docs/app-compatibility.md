@@ -155,7 +155,8 @@ Report only counts and classifications. Never include the phrases, recognized
 transcripts, clipboard contents, audio, dictionary or shortcut contents,
 document or window titles, private paths, credentials, or screenshots that
 contain user data. **Copy Diagnostics** produces a privacy-safe summary if you
-choose to include it.
+choose to include it; exact microphone names, raw error details, and raw local
+log lines are not copied into that report.
 
 An incorrect or unsafe result should also include the smallest repeatable
 sequence in the report. Security-sensitive behavior belongs in the private

@@ -142,7 +142,7 @@ body:
     id: diagnostics
     attributes:
       label: Privacy-safe diagnostics (optional)
-      description: In Presspeech, choose Copy Diagnostics and review the result before pasting. It excludes transcript, audio, and dictionary contents.
+      description: In Presspeech, choose Copy Diagnostics and review the result before pasting. It excludes transcript, audio, dictionary contents, exact microphone names, raw error details, and raw log lines.
       render: shell
   - type: checkboxes
     id: privacy-confirmation

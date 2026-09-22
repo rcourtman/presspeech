@@ -290,8 +290,9 @@ Use **Open Startup Settings** to review Presspeech under Windows
 - All audio is processed in memory and discarded after transcription.
 - Transcript content is never written to logs; diagnostics retain timings and
   character counts only.
-- **Copy Diagnostics** includes configuration counts and runtime state, never
-  transcripts, audio, or dictionary contents.
+- **Copy Diagnostics** includes configuration counts, runtime state, and
+  microphone availability, never transcripts, audio, dictionary contents,
+  exact microphone names, raw error details, or raw log lines.
 - Clipboard is used briefly to paste; it is overwritten.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;

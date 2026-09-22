@@ -175,9 +175,12 @@ or the [private vulnerability-reporting
 form](https://github.com/rcourtman/presspeech/security/advisories/new) for a
 security issue.
 
-GitHub issues are public. Diagnostics omit transcript text, audio, and dictionary
-contents. Do not add dictated text, audio, references, dictionary or shortcut
-contents, credentials, or other private data yourself.
+GitHub issues are public. Diagnostics omit transcript text, audio, dictionary
+contents, exact microphone names, raw error details, and raw log lines. Review
+the separate local log before sharing any excerpt because device labels and
+errors can contain private names or paths. Do not add dictated text, audio,
+references, dictionary or shortcut contents, credentials, or other private data
+yourself.
 
 ### Windows Delivery Recovery in Upcoming 0.1.13
 

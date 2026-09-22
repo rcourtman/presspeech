@@ -16,7 +16,10 @@ form](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml
 and include the affected platform, app and operating-system versions,
 reproduction steps, and hardware. Choose **Copy Diagnostics** from the
 Presspeech menu and paste its privacy-safe summary when the app can open. The
-summary excludes transcript, audio, and dictionary contents.
+summary excludes transcript, audio, dictionary contents, exact microphone
+names, raw error details, and raw log lines. If a maintainer asks for local log
+lines, review them before sharing because device labels and dependency errors
+can contain private names or paths.
 
 For macOS, also include:
 

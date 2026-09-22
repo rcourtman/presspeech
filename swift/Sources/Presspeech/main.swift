@@ -100,9 +100,6 @@ let UPDATE_PROGRESS_APP_PREFIX = "Presspeech-update-progress-"
 let MAX_SKIPPED_UPDATE_VERSIONS = 20
 let MAX_CORRECTION_SYNC_PATH_BYTES = 4096
 let MAX_INPUT_DEVICE_PREFERENCE_BYTES = 512
-let DIAGNOSTICS_LOG_MAX_BYTES = 128 * 1024
-let DIAGNOSTICS_LOG_MAX_LINES = 40
-let DIAGNOSTICS_LOG_MAX_LINE_CHARACTERS = 4096
 let RECORDING_HUD_EXPANDED_SIZE = NSSize(width: 232, height: 54)
 let RECORDING_HUD_COLLAPSED_SIZE = NSSize(width: 58, height: 42)
 let RECORDING_HUD_ANIMATE_IN_SECONDS: TimeInterval = 0.12
@@ -2060,6 +2057,25 @@ func audioInputDevice(matching preference: String,
         ?? devices.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
 }
 
+/// Keep public support reports useful without copying user-controlled device
+/// labels. Bluetooth and USB input names can contain a person's, room's, or
+/// organisation's name, so exact labels belong only in the local UI and log.
+func diagnosticMicrophoneLines(savedPreference: String,
+                               devices: [AudioInputDevice]) -> [String] {
+    let selection: String
+    if normalizedInputDevicePreference(savedPreference) == nil {
+        selection = "System default"
+    } else if audioInputDevice(matching: savedPreference, in: devices) != nil {
+        selection = "Specific input (available; name omitted)"
+    } else {
+        selection = "Specific input (currently unavailable; name omitted)"
+    }
+    return [
+        "Selected: \(selection)",
+        "Available input count: \(devices.count) (names omitted)",
+    ]
+}
+
 // MARK: - Logger
 //
 // All output goes to stderr (line-buffered, so we don't lose lines
@@ -2117,7 +2133,10 @@ func privacySafeBundlePath(_ path: String) -> String {
     case "/Applications/Presspeech.app", "/tmp/Presspeech-dev.app":
         return path
     default:
-        return privacySafeLogPath(path)
+        // A downloaded or renamed bundle can contain a person's name in both
+        // its parent directories and filename. Install kind carries the useful
+        // support signal without exporting either part of that path.
+        return "<nonstandard location>"
     }
 }
 
@@ -2768,6 +2787,22 @@ private struct StartupFailure {
 
     var statusTitle: String { stage.statusTitle }
     var retryTitle: String { stage.retryTitle }
+}
+
+private func diagnosticStartupSummary(failure: StartupFailure?,
+                                      startupInProgress: Bool,
+                                      startupStatusTitle: String,
+                                      coreRuntimeReady: Bool) -> String {
+    if let failure {
+        // Framework errors may contain cache paths, account names, URLs, or
+        // device labels. The stage is enough for a public issue; detailed
+        // troubleshooting remains available in the local log.
+        return "\(failure.statusTitle) (details omitted; see local log)"
+    }
+    if startupInProgress {
+        return startupStatusTitle
+    }
+    return coreRuntimeReady ? "Runtime ready" : "Runtime not ready"
 }
 
 private enum PreviousExitNoticeAction: Equatable {
@@ -6120,8 +6155,8 @@ func formattedByteCount(_ bytes: UInt64) -> String {
 // MARK: - Diagnostics
 //
 // User-triggered local diagnostics for GitHub issue triage. Keep the
-// report useful but metadata-only: no transcript text and no text
-// correction contents.
+// report useful but metadata-only: no user text, device labels, raw
+// framework errors, or log contents.
 
 struct DiagnosticsReportSnapshot {
     let generated: String
@@ -6144,7 +6179,6 @@ struct DiagnosticsReportSnapshot {
     let updateLines: [String]
     let microphoneLines: [String]
     let logPath: String
-    let recentLogLines: [String]
 }
 
 private func diagnosticBulletLines(_ lines: [String], emptyText: String) -> String {
@@ -6186,77 +6220,10 @@ func diagnosticsReportText(from snapshot: DiagnosticsReportSnapshot) -> String {
     Microphone:
     \(diagnosticBulletLines(snapshot.microphoneLines, emptyText: "Unavailable"))
 
-    Recent log lines:
-    \(diagnosticBulletLines(snapshot.recentLogLines, emptyText: "No recent log lines available"))
-
     Logs: \(snapshot.logPath)
-    Privacy: transcript text and text-correction contents are not included.
+    Log contents: Omitted from this shareable report; review the local log separately before posting any lines.
+    Privacy: transcript text, text-correction contents, exact microphone names, raw startup errors, and raw log lines are not included.
     """
-}
-
-func recentDiagnosticLogLines(from url: URL = Logger.shared.fileURL,
-                              maxBytes: Int = DIAGNOSTICS_LOG_MAX_BYTES,
-                              maxLines: Int = DIAGNOSTICS_LOG_MAX_LINES) throws -> [String] {
-    guard maxBytes > 0, maxLines > 0 else { return [] }
-
-    let fd = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
-    guard fd >= 0 else {
-        if errno == ENOENT { return [] }
-        throw currentPOSIXError()
-    }
-    defer { _ = Darwin.close(fd) }
-
-    try validateSingleLinkRegularFileDescriptor(fd)
-
-    var st = stat()
-    guard Darwin.fstat(fd, &st) == 0 else { throw currentPOSIXError() }
-    guard st.st_size > 0 else { return [] }
-
-    let startOffset = max(Int64(0), Int64(st.st_size) - Int64(maxBytes))
-    guard Darwin.lseek(fd, off_t(startOffset), SEEK_SET) >= 0 else {
-        throw currentPOSIXError()
-    }
-
-    var data = Data()
-    data.reserveCapacity(min(maxBytes, Int(st.st_size)))
-    while data.count < maxBytes {
-        let remaining = maxBytes - data.count
-        var buffer = [UInt8](repeating: 0, count: min(8192, remaining))
-        let bytesRead = buffer.withUnsafeMutableBytes { rawBuffer in
-            Darwin.read(fd, rawBuffer.baseAddress, rawBuffer.count)
-        }
-        if bytesRead < 0 {
-            if errno == EINTR { continue }
-            throw currentPOSIXError()
-        }
-        guard bytesRead > 0 else { break }
-        data.append(buffer, count: bytesRead)
-    }
-
-    var text = String(decoding: data, as: UTF8.self)
-    if startOffset > 0, let firstNewline = text.firstIndex(of: "\n") {
-        text = String(text[text.index(after: firstNewline)...])
-    }
-
-    let sanitized = text
-        .components(separatedBy: .newlines)
-        .map(sanitizedDiagnosticLogLine)
-        .filter { !$0.isEmpty }
-    return Array(sanitized.suffix(maxLines))
-}
-
-private func sanitizedDiagnosticLogLine(_ line: String) -> String {
-    var result = String()
-    result.reserveCapacity(min(line.count, DIAGNOSTICS_LOG_MAX_LINE_CHARACTERS))
-    for scalar in line.unicodeScalars {
-        guard result.count < DIAGNOSTICS_LOG_MAX_LINE_CHARACTERS else { break }
-        if scalar == "\t" || (scalar.value >= 0x20 && scalar.value != 0x7f) {
-            result.unicodeScalars.append(scalar)
-        } else {
-            result.append(" ")
-        }
-    }
-    return result.trimmingCharacters(in: .whitespaces)
 }
 
 func parseSemver(_ s: String) -> [Int] {
@@ -10033,30 +10000,16 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let devices = availableAudioInputDevices()
         let savedInput = settings.inputDevice.trimmingCharacters(in: .whitespacesAndNewlines)
-        let selectedInput = audioInputDevice(matching: savedInput, in: devices)
-        let inputLabel: String
-        if savedInput.isEmpty || isDefaultAggregateAudioInputPreference(savedInput) {
-            inputLabel = "System default"
-        } else if let selectedInput {
-            inputLabel = "\(selectedInput.name) (available)"
-        } else {
-            inputLabel = "Saved device unavailable"
-        }
 
-        let startupText: String
-        if let failure = startupFailure {
-            startupText = "\(failure.statusTitle): \(failure.detail)"
-        } else if startupTask != nil || isRestartingAudioInput || isSwitchingSpeechModel {
-            startupText = startupStatusTitle
-        } else {
-            startupText = isCoreRuntimeReady ? "Runtime ready" : "Runtime not ready"
-        }
+        let startupText = diagnosticStartupSummary(
+            failure: startupFailure,
+            startupInProgress: startupTask != nil || isRestartingAudioInput || isSwitchingSpeechModel,
+            startupStatusTitle: startupStatusTitle,
+            coreRuntimeReady: isCoreRuntimeReady
+        )
 
         let permissionLines = Permission.allCases
             .map { "\($0.rawValue): \(Permissions.isGranted($0) ? "granted" : "missing")" }
-        let availableInputLines = devices.isEmpty
-            ? ["Available inputs: none reported"]
-            : ["Available inputs (\(devices.count)):"] + devices.map { "  \($0.name)" }
         let pendingUpdateText = pendingUpdate.map { "v\($0.version)" } ?? "none"
         let lastUpdateCheckText = updateCheckDiagnosticText(
             checkedAt: settings.lastUpdateCheckAt,
@@ -10098,13 +10051,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let speechModelProfile = settings.speechModelProfile
         let languageSettingText = DICTATION_LANGUAGE_DISPLAY[settings.dictationLanguage]
             ?? settings.dictationLanguage.rawValue
-
-        let logLines: [String]
-        do {
-            logLines = try recentDiagnosticLogLines()
-        } catch {
-            logLines = ["Unavailable: \(error.localizedDescription)"]
-        }
 
         let snapshot = DiagnosticsReportSnapshot(
             generated: generated,
@@ -10150,9 +10096,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 "Reminder paused: \(updateReminderText)",
                 "Update helper log: \((UPDATE_HELPER_LOG_PATH as NSString).abbreviatingWithTildeInPath)",
             ],
-            microphoneLines: ["Selected: \(inputLabel)"] + availableInputLines,
-            logPath: (Logger.shared.fileURL.path as NSString).abbreviatingWithTildeInPath,
-            recentLogLines: logLines
+            microphoneLines: diagnosticMicrophoneLines(savedPreference: savedInput,
+                                                        devices: devices),
+            logPath: (Logger.shared.fileURL.path as NSString).abbreviatingWithTildeInPath
         )
         return diagnosticsReportText(from: snapshot)
     }
@@ -14351,8 +14297,8 @@ private enum PresspeechSelfTest {
         )
         try expect(
             privacySafeBundlePath("/Users/example/Downloads/Presspeech.app"),
-            equals: "Presspeech.app",
-            "bundle path labels should omit parent directories for nonstandard installs"
+            equals: "<nonstandard location>",
+            "bundle path labels should omit all user-controlled path components"
         )
 
         let fm = FileManager.default
@@ -14422,6 +14368,22 @@ private enum PresspeechSelfTest {
     private static func testDiagnostics() throws {
         let transcriptSecret = "secret dictated phrase 58A03D"
         let correctionSecret = "private correction replacement 9F42"
+        let microphoneSecret = "Alice's Conference Room AirPods"
+        let startupSecret = "/Users/alice/Private Models/model.mlmodelc"
+        let startupSummary = diagnosticStartupSummary(
+            failure: StartupFailure(stage: .speechModel, detail: startupSecret),
+            startupInProgress: false,
+            startupStatusTitle: "unused",
+            coreRuntimeReady: false
+        )
+        let microphoneLines = diagnosticMicrophoneLines(
+            savedPreference: microphoneSecret,
+            devices: [
+                AudioInputDevice(id: 1,
+                                 uid: "private-device-uid",
+                                 name: microphoneSecret),
+            ]
+        )
         let report = diagnosticsReportText(
             from: DiagnosticsReportSnapshot(
                 generated: "2026-05-28T10:00:00Z",
@@ -14432,7 +14394,7 @@ private enum PresspeechSelfTest {
                 bundlePath: "/Applications/Presspeech.app",
                 installKind: "Applications app",
                 status: "Hold Right Option to dictate",
-                startup: "Runtime ready",
+                startup: startupSummary,
                 speechModelReady: true,
                 coreRuntimeReady: true,
                 readyForDictation: true,
@@ -14448,66 +14410,47 @@ private enum PresspeechSelfTest {
                     "Text correction sync: configured",
                 ],
                 updateLines: ["Pending update: none"],
-                microphoneLines: ["Selected: System default", "Available inputs: none reported"],
-                logPath: "~/Library/Logs/Presspeech.log",
-                recentLogLines: ["[10:00:00] release: 1.23 s captured, transcribing"]
+                microphoneLines: microphoneLines,
+                logPath: "~/Library/Logs/Presspeech.log"
             )
         )
         try expect(report.contains(transcriptSecret), equals: false,
                    "diagnostics report should not include transcript contents")
         try expect(report.contains(correctionSecret), equals: false,
                    "diagnostics report should not include text correction contents")
+        try expect(report.contains(microphoneSecret), equals: false,
+                   "diagnostics report should not include user-controlled microphone names")
+        try expect(report.contains(startupSecret), equals: false,
+                   "diagnostics report should not include raw startup errors or paths")
+        try expect(report.contains("Speech model failed to load (details omitted; see local log)"), equals: true,
+                   "diagnostics report should retain the failed startup stage")
+        try expect(
+            diagnosticStartupSummary(failure: nil,
+                                     startupInProgress: false,
+                                     startupStatusTitle: "unused",
+                                     coreRuntimeReady: true),
+            equals: "Runtime ready",
+            "diagnostics should retain a successful startup state"
+        )
+        try expect(
+            diagnosticStartupSummary(failure: nil,
+                                     startupInProgress: true,
+                                     startupStatusTitle: "Downloading speech model… 50%",
+                                     coreRuntimeReady: false),
+            equals: "Downloading speech model… 50%",
+            "diagnostics should retain bounded startup progress"
+        )
         try expect(report.contains("Text corrections: 1 configured"), equals: true,
                    "diagnostics report should include correction counts")
         try expect(report.contains("Speech model: Multilingual (Parakeet TDT v3)"), equals: true,
                    "diagnostics report should include the speech model")
-        try expect(report.contains("Recent log lines:"), equals: true,
-                   "diagnostics report should include the recent log section")
-        try expect(report.contains("Privacy: transcript text and text-correction contents are not included."),
+        try expect(report.contains("Specific input (available; name omitted)"), equals: true,
+                   "diagnostics report should retain microphone availability without its name")
+        try expect(report.contains("raw log lines are not included"), equals: true,
+                   "diagnostics report should state that local logs are not copied")
+        try expect(report.contains("Privacy: transcript text, text-correction contents, exact microphone names, raw startup errors, and raw log lines are not included."),
                    equals: true,
                    "diagnostics report should state the privacy boundary")
-
-        let fm = FileManager.default
-        let root = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("presspeech-diagnostics-test-\(UUID().uuidString)", isDirectory: true)
-        try fm.createDirectory(at: root, withIntermediateDirectories: false)
-        defer { try? fm.removeItem(at: root) }
-
-        let logFile = root.appendingPathComponent("Presspeech.log")
-        for line in 1...6 {
-            try appendPrivateLogData(Data("[10:00:0\(line)] line \(line)\n".utf8), to: logFile)
-        }
-        try expect(
-            try recentDiagnosticLogLines(from: logFile, maxBytes: 4096, maxLines: 3),
-            equals: ["[10:00:04] line 4", "[10:00:05] line 5", "[10:00:06] line 6"],
-            "diagnostic log tail should return the newest bounded lines"
-        )
-
-        let target = root.appendingPathComponent("target.log")
-        try Data("[10:00:00] target\n".utf8).write(to: target)
-        let symlink = root.appendingPathComponent("symlink.log")
-        try fm.createSymbolicLink(at: symlink, withDestinationURL: target)
-        var symlinkRejected = false
-        do {
-            _ = try recentDiagnosticLogLines(from: symlink, maxBytes: 4096, maxLines: 3)
-        } catch {
-            symlinkRejected = true
-        }
-        try expect(symlinkRejected, equals: true,
-                   "diagnostic log tail should reject leaf symlinks")
-
-        let hardlink = root.appendingPathComponent("hardlink.log")
-        guard Darwin.link(target.path, hardlink.path) == 0 else {
-            throw currentPOSIXError()
-        }
-        var hardlinkRejected = false
-        do {
-            _ = try recentDiagnosticLogLines(from: hardlink, maxBytes: 4096, maxLines: 3)
-        } catch {
-            hardlinkRejected = true
-        }
-        try expect(hardlinkRejected, equals: true,
-                   "diagnostic log tail should reject hard-linked files")
     }
 
     private static func testPasteTargetCapture() throws {

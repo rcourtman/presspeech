@@ -603,6 +603,23 @@ def _model_timing_summary(timing):
     )
 
 
+def _diagnostic_microphone_lines(configured, active):
+    """Describe microphone state without exporting user-controlled labels."""
+    configured_state = (
+        "Automatic" if configured == AUTO_INPUT_DEVICE
+        else "Specific input (name omitted)"
+    )
+    active_state = "Not opened"
+    if (isinstance(active, tuple) and len(active) >= 2 and
+            type(active[1]) in (int, float) and
+            math.isfinite(active[1]) and active[1] > 0):
+        active_state = "Open at %d Hz (name omitted)" % active[1]
+    return (
+        "Configured microphone: %s" % configured_state,
+        "Active microphone: %s" % active_state,
+    )
+
+
 def _make_icon(color):
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -2309,14 +2326,16 @@ class PresspeechApp:
         self.exit_app()
 
     def diagnostics_text(self):
-        """Return useful support facts without transcript or dictionary contents."""
+        """Return support state without user text, device labels, or raw errors."""
         transcriber = self.transcriber
         model = getattr(transcriber, "model", None)
         dtype = str(getattr(model, "dtype", "not loaded"))
         device = str(getattr(transcriber, "_device", "not loaded"))
         active_input = (
             getattr(self, "_recording_input_device", None) or
-            self.input_device or "not opened yet")
+            self.input_device)
+        microphone_lines = _diagnostic_microphone_lines(
+            self.settings.get("input_device", AUTO_INPUT_DEVICE), active_input)
         lines = [
             "Presspeech diagnostics",
             "Version: %s" % cfg.VERSION,
@@ -2326,8 +2345,7 @@ class PresspeechApp:
             "Model status: %s" % getattr(self, "model_status", "unknown"),
             "Backend: %s" % (getattr(transcriber, "backend", None) or "not loaded"),
             "Device / dtype: %s / %s" % (device, dtype),
-            "Configured microphone: %s" % self.settings.get("input_device", "auto"),
-            "Active microphone: %s" % (active_input,),
+            *microphone_lines,
             "Hotkey / trigger: %s / %s" % (
                 self.settings.get("hotkey", "unknown"),
                 self.settings.get("trigger", "unknown")),
@@ -2344,7 +2362,8 @@ class PresspeechApp:
             "Dictionary rule count: %d" % len(self.settings.get("dictionary", [])),
             r"Config path: %APPDATA%\Presspeech\config.json",
             r"Log path: %APPDATA%\Presspeech\log.txt",
-            "Privacy: no transcript, audio, or dictionary contents included",
+            "Privacy: no transcript, audio, dictionary contents, exact microphone "
+            "names, raw error details, or raw log lines included",
         ]
         return "\r\n".join(lines)
 

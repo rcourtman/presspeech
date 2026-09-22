@@ -169,7 +169,7 @@
           <ol class="steps">
             <li>
               <strong>Copy the built-in diagnostics</strong>
-              <p>On macOS choose <strong>Support → Copy Diagnostics</strong>; on Windows choose <strong>Copy Diagnostics</strong> from the notification-area menu. The report includes bounded app, system, model, permission, microphone, settings, update, and log state.</p>
+              <p>On macOS choose <strong>Support → Copy Diagnostics</strong>; on Windows choose <strong>Copy Diagnostics</strong> from the notification-area menu. The report includes bounded app, system, model, permission, microphone availability, settings, and update state. Exact microphone names, raw error details, and raw log lines stay in the separate local log.</p>
             </li>
             <li>
               <strong>Describe what you expected and what happened</strong>
@@ -180,7 +180,7 @@
               <p>Choose <strong>Report a Problem…</strong> in Presspeech or open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml">bug report form</a>. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private vulnerability-reporting form</a> instead for a security issue.</p>
             </li>
           </ol>
-          <div class="note warn"><p><strong>GitHub issues are public.</strong> Diagnostics omit transcript text, audio, and dictionary contents. Do not add dictated text, audio, references, dictionary or shortcut contents, credentials, or other private data yourself.</p></div>
+          <div class="note warn"><p><strong>GitHub issues are public.</strong> Diagnostics omit transcript text, audio, dictionary contents, exact microphone names, raw error details, and raw log lines. Review the separate local log before sharing any excerpt because device labels and errors can contain private names or paths. Do not add dictated text, audio, references, dictionary or shortcut contents, credentials, or other private data yourself.</p></div>
           <p>If the problem is specific to automatic paste in one app and can be repeated safely, follow the <a href="app-compatibility.html">eight-attempt target-app protocol</a> and share only aggregate outcomes. Use the general bug form when repeating the behavior would be unsafe.</p>
           <p class="quiet">Prefer plain text? The repository also keeps a concise <a href="troubleshooting.md">Markdown recovery reference</a>.</p>
         </div>
