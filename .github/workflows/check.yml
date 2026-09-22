@@ -179,8 +179,10 @@ jobs:
               workflow.match?(/\bgh\s+release\s+delete\b/)
             abort "Windows draft recovery must not replace releases or assets"
           end
-          unless workflow.include?("repos/rcourtman/presspeech/immutable-releases") &&
-              workflow.include?('X-GitHub-Api-Version: 2026-03-10') &&
+          if workflow.include?("repos/rcourtman/presspeech/immutable-releases")
+            abort "The workflow token cannot read administrative release policy; check it before dispatch"
+          end
+          unless workflow.include?('X-GitHub-Api-Version: 2026-03-10') &&
               workflow.match?(/^\s*attestations:\s+read\s*$/) &&
               workflow.match?(/gh\s+release\s+verify\s+\$tag\s+--repo\s+rcourtman\/presspeech/) &&
               workflow.match?(/gh\s+release\s+verify-asset\s+\$tag\s+\$installer\s+--repo\s+rcourtman\/presspeech/) &&

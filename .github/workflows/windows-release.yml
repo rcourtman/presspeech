@@ -104,25 +104,6 @@ jobs:
             -CheckWorkflowJson $checkJson `
             -WindowsWorkflowJson $windowsJson `
             -ExpectedSha $sha
-      - name: Require immutable release provenance
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $immutabilityJson = gh api `
-            -H "X-GitHub-Api-Version: 2026-03-10" `
-            "repos/rcourtman/presspeech/immutable-releases"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not read GitHub release immutability settings"
-          }
-          try {
-            $immutability = $immutabilityJson | ConvertFrom-Json
-          } catch {
-            throw "GitHub returned invalid release immutability settings"
-          }
-          if ($immutability.enabled -cne $true) {
-            throw "GitHub release immutability must be enabled before publishing"
-          }
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           # release_requirements.py verifies this exact interpreter version.
@@ -190,23 +171,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          function Assert-ImmutableReleasePolicy {
-            $json = gh api `
-              -H "X-GitHub-Api-Version: 2026-03-10" `
-              "repos/rcourtman/presspeech/immutable-releases"
-            if ($LASTEXITCODE -ne 0) {
-              throw "Could not recheck GitHub release immutability settings"
-            }
-            try {
-              $settings = $json | ConvertFrom-Json
-            } catch {
-              throw "GitHub returned invalid release immutability settings"
-            }
-            if ($settings.enabled -cne $true) {
-              throw "GitHub release immutability was disabled during the build"
-            }
-          }
-
+          # Release operators must check the immutability setting before dispatch.
+          # GITHUB_TOKEN cannot read it; verify the actual published release and
+          # asset attestations below to detect any setting change during build.
           $version = $env:PRESSPEECH_RELEASE_VERSION
           $tag = "windows-v$version"
           $notes = "windows/release-notes/$version.md"
@@ -241,7 +208,6 @@ jobs:
             # uploads succeed. If the CLI exits after creating that draft, do
             # not discard this runner's exact (potentially timestamped) build:
             # inspect and finish the draft through the guarded recovery below.
-            Assert-ImmutableReleasePolicy
             gh release create $tag `
               $installer `
               "$installer.sha256" `
@@ -302,10 +268,8 @@ jobs:
               -Checksum "$installer.sha256" `
               -Notes $notes
             if ($disposition -ceq "publish-draft") {
-              # Asset uploads can take long enough for the remote tag or
-              # repository release policy to change. Recheck both at the last
-              # possible point before making the draft public.
-              Assert-ImmutableReleasePolicy
+              # Asset uploads can take long enough for the remote tag to move.
+              # Recheck it immediately before making the draft public.
               .\windows\validate-release-tag.ps1 `
                 -Tag $tag `
                 -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
