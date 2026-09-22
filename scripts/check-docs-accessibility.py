@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Check static documentation for durable, testable accessibility basics."""
+"""Check static documentation conventions; not a browser accessibility audit.
+
+The skip link must be the body's first element and use plain visible text.
+Positive tabindex is forbidden. These intentionally strict site conventions
+avoid approximating browser focus order with an HTML parser. CSS checks cover
+explicit site rules, not computed styles, responsive visibility, or scripting.
+"""
 
 from __future__ import annotations
 
@@ -37,9 +43,37 @@ class DocumentParser(HTMLParser):
         self._in_primary_nav = False
         self.current_links: list[tuple[str | None, str]] = []
         self.skip_links: list[str | None] = []
+        self.skip_link_names: list[str] = []
+        self.skip_link_orders: list[int] = []
+        self.skip_link_issues: list[str] = []
+        self._skip_link_text: list[str] | None = None
+        self._in_body = False
+        self.body_count = 0
+        self._element_order = 0
+        self.first_body_element: int | None = None
+        self.tabindex_issues: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
+        self._element_order += 1
+        if self._skip_link_text is not None:
+            self.skip_link_issues.append("skip link must use plain visible text without child elements")
+        if tag == "body":
+            self.body_count += 1
+            self._in_body = True
+        elif self._in_body and self.first_body_element is None:
+            self.first_body_element = self._element_order
+        if tag in {"html", "body"} and (
+            "hidden" in attributes or "inert" in attributes
+            or (attributes.get("aria-hidden") or "").lower() == "true"
+        ):
+            self.skip_link_issues.append("skip-link ancestors must not be hidden or inert")
+        tabindex = attributes.get("tabindex")
+        if "tabindex" in attributes:
+            if tabindex is None or re.fullmatch(r"[+-]?[0-9]+", tabindex.strip()) is None:
+                self.tabindex_issues.append("tabindex must be an integer")
+            elif int(tabindex) > 0:
+                self.tabindex_issues.append("positive tabindex is forbidden by the site's source-order convention")
         if tag == "html":
             self.html_lang = attributes.get("lang")
         if tag == "main":
@@ -65,10 +99,32 @@ class DocumentParser(HTMLParser):
             classes = (attributes.get("class") or "").split()
             if "skip-link" in classes:
                 self.skip_links.append(attributes.get("href"))
+                self.skip_link_orders.append(self._element_order)
+                self._skip_link_text = []
+                if "tabindex" in attributes and (tabindex is None or tabindex.strip() != "0"):
+                    self.skip_link_issues.append("skip link tabindex must be absent or 0")
+                if any(name in attributes for name in ("hidden", "inert", "style", "aria-labelledby")):
+                    self.skip_link_issues.append("skip link must use shared styles and its visible text name")
+                if any((attributes.get(name) or "").lower() == "true"
+                       for name in ("aria-hidden", "aria-disabled")):
+                    self.skip_link_issues.append("skip link must not be hidden or disabled to assistive technology")
+                if attributes.get("aria-label", "Skip to content") != "Skip to content":
+                    self.skip_link_issues.append("skip link accessible label must match 'Skip to content'")
+                if attributes.get("role", "link") != "link":
+                    self.skip_link_issues.append("skip link must retain link semantics")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_link_text is not None:
+            self._skip_link_text.append(data)
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "nav" and self._in_primary_nav:
             self._in_primary_nav = False
+        if tag == "body":
+            self._in_body = False
+        if tag == "a" and self._skip_link_text is not None:
+            self.skip_link_names.append(" ".join("".join(self._skip_link_text).split()))
+            self._skip_link_text = None
 
 
 def expected_current_href(path: Path, docs: Path) -> str | None:
@@ -130,6 +186,13 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         errors.append(
             f"expected one skip link to #main-content, found {parser.skip_links!r}"
         )
+    if parser.body_count != 1:
+        errors.append("expected one body element")
+    if parser.skip_link_orders != [parser.first_body_element]:
+        errors.append("site convention: skip link must be the first element inside body")
+    if parser.skip_link_names != ["Skip to content"]:
+        errors.append("skip link must have the consistent visible name 'Skip to content'")
+    errors.extend(dict.fromkeys(parser.skip_link_issues + parser.tabindex_issues))
     if "main-content" not in parser.ids:
         errors.append("skip-link target #main-content is missing")
     return errors
@@ -292,6 +355,31 @@ def focus_indicator_errors(css: str) -> list[str]:
     return errors
 
 
+def skip_link_style_errors(css: str) -> list[str]:
+    """Check explicit skip-link stylesheet conventions, not computed visibility."""
+    resting = css_declarations(css, ".skip-link")
+    focused = css_declarations(css, ".skip-link:focus")
+    if resting is None:
+        return ["missing .skip-link rules"]
+
+    def value(declarations: dict[str, str], name: str) -> str:
+        return re.sub(r"\s*!important\s*$", "", declarations.get(name, ""),
+                      flags=re.I).strip().lower()
+
+    for declarations in (resting, focused or {}):
+        if value(declarations, "display") == "none":
+            return ["skip link must not use display: none in its shared resting/focus rules"]
+        if value(declarations, "visibility") in {"hidden", "collapse"}:
+            return ["skip link must not use hidden visibility in its shared resting/focus rules"]
+    # Always-visible links are valid. This site's transform-hidden variant
+    # must explicitly reset on focus; we do not interpret arbitrary CSS.
+    if value(resting, "transform") in {"", "none"}:
+        return []
+    if focused is None or value(focused, "transform") not in {"translatey(0)", "none"}:
+        return ["transform-hidden skip link must reset with translateY(0) or none on focus"]
+    return []
+
+
 def accessibility_errors(docs: Path = DOCS, styles: Path = STYLES) -> list[str]:
     errors: list[str] = []
     for path in sorted(docs.rglob("*.html")):
@@ -304,6 +392,8 @@ def accessibility_errors(docs: Path = DOCS, styles: Path = STYLES) -> list[str]:
         errors.append(f"{styles.name}: {error}")
     for error in focus_indicator_errors(css):
         errors.append(f"{styles.name}: {error}")
+    for error in skip_link_style_errors(css):
+        errors.append(f"{styles.name}: {error}")
     return errors
 
 
@@ -313,7 +403,7 @@ def run_self_test() -> None:
         index = docs / "index.html"
         index.write_text(
             "<!doctype html><html lang='en'><head><title>Test</title></head><body>"
-            "<a class='skip-link' href='#main-content'>Skip</a>"
+            "<a class='skip-link' href='#main-content'>Skip to content</a>"
             "<nav aria-label='Primary'><a href='./' aria-current='page'>Home</a>"
             "<a href='troubleshooting.html'>Help</a></nav>"
             "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''></main>"
@@ -322,6 +412,32 @@ def run_self_test() -> None:
         )
         if document_errors(index, docs):
             raise RuntimeError("self-test: valid document was rejected")
+        valid_index = index.read_text(encoding="utf-8")
+        cases = [
+            (valid_index.replace("<body>", "<body><button>Before</button>"), "first element"),
+            # A same-href anchor must not impersonate the actual skip-link element.
+            (valid_index.replace("<body>", "<body><a href='#main-content'>Other</a>"), "first element"),
+            (valid_index.replace("</main>", "</main><button tabindex='1'>Later</button>"), "positive tabindex"),
+            (valid_index.replace("<body>", "<body hidden>"), "ancestors"),
+            (valid_index.replace("<html lang='en'>", "<html lang='en' inert>"), "ancestors"),
+            (valid_index.replace("class='skip-link'", "class='skip-link' tabindex='-1'"), "tabindex"),
+            (valid_index.replace("class='skip-link'", "class='skip-link' tabindex='nonsense'"), "tabindex"),
+            (valid_index.replace("class='skip-link'", "class='skip-link' hidden"), "shared styles"),
+            (valid_index.replace("class='skip-link'", "class='skip-link' aria-hidden='true'"), "assistive technology"),
+            (valid_index.replace("class='skip-link'", "class='skip-link' aria-label='Wrong'"), "accessible label"),
+            (valid_index.replace("class='skip-link'", "class='skip-link' role='button'"), "link semantics"),
+            (valid_index.replace("Skip to content", "Continue"), "consistent visible name"),
+            (valid_index.replace("Skip to content", "<span hidden>Skip to content</span>"), "plain visible text"),
+        ]
+        for markup, expected_error in cases:
+            index.write_text(markup, encoding="utf-8")
+            if not any(expected_error in error for error in document_errors(index, docs)):
+                raise RuntimeError(f"self-test: missing {expected_error!r} rejection")
+        index.write_text(valid_index.replace("class='skip-link'", "class='skip-link' tabindex='0'"),
+                         encoding="utf-8")
+        if document_errors(index, docs):
+            raise RuntimeError("self-test: zero-tabindex skip link was rejected")
+        index.write_text(valid_index, encoding="utf-8")
         index.write_text(
             index.read_text(encoding="utf-8").replace(" aria-current='page'", ""),
             encoding="utf-8",
@@ -342,7 +458,7 @@ def run_self_test() -> None:
         error_page = docs / ERROR_PAGE
         error_page.write_text(
             "<!doctype html><html lang='en'><head><title>Missing</title></head><body>"
-            "<a class='skip-link' href='#main-content'>Skip</a>"
+            "<a class='skip-link' href='#main-content'>Skip to content</a>"
             "<nav aria-label='Primary'><a href='./'>Home</a></nav>"
             "<main id='main-content'><h1>Not found</h1></main></body></html>",
             encoding="utf-8",
@@ -405,6 +521,20 @@ def run_self_test() -> None:
     errors = focus_indicator_errors(thin_focus_css)
     if not any("at least 2px thick" in error for error in errors):
         raise RuntimeError("self-test: thin focus indicator was accepted")
+
+    valid_skip_css = ".skip-link { transform: translateY(-100%); } .skip-link:focus { transform: translateY(0); }"
+    if skip_link_style_errors(valid_skip_css):
+        raise RuntimeError("self-test: valid shared skip-link styles were rejected")
+    if skip_link_style_errors(".skip-link { color: blue; }"):
+        raise RuntimeError("self-test: always-visible skip link was rejected")
+    if skip_link_style_errors(valid_skip_css.replace("translateY(0)", "none")):
+        raise RuntimeError("self-test: transform reset to none was rejected")
+    for css in [".skip-link { display: none; }", ".skip-link { visibility: hidden; }",
+                ".skip-link { display: none !important; }",
+                ".skip-link { transform: translateY(-100%); }",
+                valid_skip_css.replace("transform: translateY(0);", "transform: translateY(0); display: none;")]:
+        if not skip_link_style_errors(css):
+            raise RuntimeError("self-test: explicitly hidden skip-link style was accepted")
 
 
 def main() -> int:
