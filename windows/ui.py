@@ -226,6 +226,13 @@ def _name_control(control, name):
         _accessibility_failed()
 
 
+def _label_trigger_choices(label, hold, toggle):
+    """Give both trigger choices context in UI Automation, not just visually."""
+    _label_control(label, hold)
+    _name_control(hold, "Dictation style: Hold to talk")
+    _name_control(toggle, "Dictation style: Press to toggle")
+
+
 def _set_accessible_text(widget, text, announce=None):
     """Keep visible/UIA text aligned and announce marked status changes."""
     try:
@@ -1014,9 +1021,7 @@ class SetupWindow:
         # This status must retain its changing text as its accessible name.
         # label_for would pin the static caption across live-region updates.
         _label_control(hotkey_label, self.hotkey)
-        _label_control(trigger_label, hold_trigger)
-        _name_control(hold_trigger, "Dictation style: Hold to talk")
-        _name_control(toggle_trigger, "Dictation style: Press to toggle")
+        _label_trigger_choices(trigger_label, hold_trigger, toggle_trigger)
         _label_control(hotkey_status_label, self.hotkey_status)
         _name_control(
             self.hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
@@ -1503,12 +1508,18 @@ class SettingsWindow:
         self.repair_hotkey_button.grid(row=row, column=2, sticky="w", pady=(0, 5))
         row += 1
 
-        ttk.Label(f, text="Trigger").grid(row=row, column=0, sticky="w", pady=2)
+        trigger_label = ttk.Label(f, text="Trigger")
+        trigger_label.grid(row=row, column=0, sticky="w", pady=2)
         self.var_trigger = tk.StringVar(value=s["trigger"])
-        ttk.Radiobutton(f, text="Hold to talk", value="hold", variable=self.var_trigger).grid(
+        hold_trigger = ttk.Radiobutton(
+            f, text="Hold to talk", value="hold", variable=self.var_trigger)
+        hold_trigger.grid(
             row=row, column=1, sticky="w", padx=10)
-        ttk.Radiobutton(f, text="Press to toggle", value="toggle", variable=self.var_trigger).grid(
+        toggle_trigger = ttk.Radiobutton(
+            f, text="Press to toggle", value="toggle", variable=self.var_trigger)
+        toggle_trigger.grid(
             row=row, column=2, sticky="w")
+        _label_trigger_choices(trigger_label, hold_trigger, toggle_trigger)
         row += 1
 
         recording_length_label = ttk.Label(f, text="Maximum recording length")

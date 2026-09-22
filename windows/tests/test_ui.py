@@ -428,6 +428,19 @@ class AccessibleWindowTests(unittest.TestCase):
         label_for.assert_called_once_with(label, control)
         set_name.assert_called_once_with(control, "Dictionary rules")
 
+    def test_trigger_choices_keep_context_in_ui_automation(self):
+        label, hold, toggle = mock.Mock(), mock.Mock(), mock.Mock()
+
+        with mock.patch.object(ui.tk_uia, "label_for") as label_for, \
+                mock.patch.object(ui.tk_uia, "set_acc_name") as set_name:
+            ui._label_trigger_choices(label, hold, toggle)
+
+        label_for.assert_called_once_with(label, hold)
+        self.assertEqual(set_name.call_args_list, [
+            mock.call(hold, "Dictation style: Hold to talk"),
+            mock.call(toggle, "Dictation style: Press to toggle"),
+        ])
+
     def test_changed_visible_text_refreshes_its_accessible_name(self):
         widget = mock.Mock()
         widget.cget.return_value = "Ready to download"
