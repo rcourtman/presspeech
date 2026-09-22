@@ -17,12 +17,12 @@
     },
     {
       "name": "windows_first_launch_model_download",
-      "when": "First Windows launch until the automatically selected local model is cached; again after the user selects an uncached model in Settings. Upcoming 0.1.13 reports a present file that fails its compiled size/SHA-256 manifest without automatically retrying the network",
+      "when": "First Windows launch until the automatically selected local model is cached; again after the user selects an uncached model in Settings",
       "destination": [
         "huggingface.co and its subdomains",
         "Hugging Face model-storage and CDN hosts under hf.co"
       ],
-      "purpose": "Download local speech-model weights: multilingual Parakeet TDT v3 when NVIDIA CUDA is usable, or English-only Whisper base.en for the automatic CPU first-run path; other models are user-selectable. Upcoming 0.1.13 verifies every reviewed model input before backend loading",
+      "purpose": "Download local speech-model weights: multilingual Parakeet TDT v3 when NVIDIA CUDA is usable, or English-only Whisper base.en for the automatic CPU first-run path; other models are user-selectable",
       "approximate_size": "About 2.5 GB for Parakeet TDT v3 or 141 MiB for Whisper base.en",
       "user_triggered": false,
       "can_disable": false,

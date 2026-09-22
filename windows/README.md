@@ -51,14 +51,10 @@ then downloads either Parakeet (~2.5 GB) or Whisper base.en (~141 MiB) into
 `%USERPROFILE%\.cache\huggingface`, and loads and warms it in the background.
 Each Presspeech release pins every Windows Hugging Face model to an exact
 repository commit reviewed for that app version, so a fresh install cannot
-silently receive a different snapshot. Upcoming 0.1.13 additionally verifies
-the exact byte length and SHA-256 of every required model input and every
-optional input that is present before a backend can parse it. The manifest is
-compiled into the app and tied to those full repository commits, so verification
-does not trust mutable cache metadata or contact the network. Model preparation
-includes one complete sequential read of the selected weight file for this
-check. Upcoming 0.1.13 also applies the following policy before any model
-library imports: it fixes downloads to the public
+silently receive a different snapshot. Windows relies on the immutable Hugging
+Face snapshot identity; unlike the macOS model cache, it does not independently
+verify every downloaded model file against a SHA-256 manifest. Upcoming 0.1.13
+applies the following policy before any model library imports: it fixes downloads to the public
 `https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
 disables implicit
 authentication and inherited User-Agent origin data, and prevents
@@ -74,14 +70,13 @@ local defaults; it does not itself trigger a fetch. Present optional JSON is
 validated, and required alternative feature-extractor layouts are recognized.
 `HF_HUB_OFFLINE=1` and
 `TRANSFORMERS_OFFLINE=1` prevent that fallback. Invalid cached JSON, empty files,
-size or SHA-256 mismatches, permission failures and backend parsing errors are
-reported without turning them into network retries.
+permission failures and backend parsing errors are reported without turning them
+into network retries. This checks completeness, not independent model-file hashes.
 
 Whisper loads copied tokenizer/configuration files from a private temporary
 folder, preventing an ordinary Hub-cache reset from triggering the library's
 separate unpinned tokenizer download. The weight file normally uses a hard link,
-which survives cache-path deletion but does not prevent in-place modification
-after verification; a later model load hashes the reviewed cache inputs again.
+which survives cache-path deletion but does not prevent in-place modification.
 If hard links are unsupported or the cache and temporary folder are on different
 filesystems, loading temporarily copies the weights and needs extra startup time
 and disk space up to the selected model's weight size. The folder remains until
@@ -338,19 +333,6 @@ Always run the Windows code with its project virtual environment:
 The unit tests do not load a speech model. The self-test does, and therefore
 also verifies the installed Torch/CUDA/model pipeline. Local benchmark audio,
 results, virtual environments, caches, and logs are ignored by Git.
-
-When an intentional model revision or inference-file contract changes, edit
-`model_manifest.py`, then regenerate every expected size and SHA-256 from the
-exact revisions at the repository root:
-
-```bat
-python scripts\update-model-manifest.py --windows --write
-python scripts\update-model-manifest.py --windows --check
-```
-
-Review both the upstream revision and generated diff. The updater reads LFS/Xet
-SHA-256 identities from the exact-revision tree and downloads the remaining
-small files to hash their bytes; it never downloads the multi-gigabyte weights.
 
 ## Build the installer
 

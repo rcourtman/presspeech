@@ -121,14 +121,9 @@ per-process request ID with the fixed non-unique value `telemetry-off`. Model
 calls explicitly decline account tokens and remote model code, and Transformers
 backends require safetensors weights. The packaged-app self-test verifies the
 policy values cached by the actual bundled libraries so an incompatible
-dependency change fails the release build. Upcoming Windows 0.1.13 also embeds
-the expected byte length and SHA-256 of every reviewed inference input. It
-hashes required files and every optional file that is present after local cache
-resolution or download, before a model backend can parse them. The manifest is
-bound to the full repository commits above and is regenerated with
-`scripts/update-model-manifest.py --windows --write`; large LFS/Xet files use
-their exact-revision SHA-256 object identities, while the updater downloads and
-hashes the remaining small Git files.
+dependency change fails the release build. Windows currently trusts the
+pinned Hub snapshot and HTTPS storage path rather than independently hashing
+every model file.
 
 The process also sets `HF_XET_TELEMETRY_ENABLED=0` for forward compatibility.
 The pinned hf-xet 1.6.0 source does not expose this switch; setting it and
@@ -139,12 +134,10 @@ future hf-xet releases still require an independent network-policy review.
 Upcoming Windows 0.1.13 resolves an explicit inference-file set for each pinned
 revision, tries local-only resolution first, and permits one anonymous download
 only when that snapshot or a required file is missing. Explicit offline settings
-are preserved. A size or SHA-256 mismatch, malformed input, permission failure,
-or backend parsing failure does not initiate a download retry; the integrity
-error remains visible for deliberate cache recovery. Model construction uses
-local paths with local-only, no-token and existing remote-code/safetensors
-restrictions. Whisper's tokenizer and configuration are copied into a private
-model-lifetime directory so cache path deletion cannot select its upstream
-unpinned tokenizer fallback. Weight hard links isolate path deletion, not
-in-place modification after verification; every later model load hashes the
-reviewed cache inputs again.
+are preserved. Present malformed input and backend parsing failures do not
+initiate download retries. Model construction uses local paths with local-only,
+no-token and existing remote-code/safetensors restrictions. Whisper's tokenizer
+and configuration are copied into a private model-lifetime directory so cache
+path deletion cannot select its upstream unpinned tokenizer fallback. Weight hard
+links isolate path deletion, not in-place modification; Windows still does not
+independently hash every model file.
