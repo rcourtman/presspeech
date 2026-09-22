@@ -17,80 +17,42 @@ import time
 
 import model_network
 import model_cache
+import model_manifest
 
-PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
-NEMOTRON_MODEL = "nvidia/nemotron-speech-streaming-en-0.6b"
-MOONSHINE_MODEL = "UsefulSensors/moonshine-streaming-medium"
+PARAKEET_MODEL, PARAKEET_REVISION = model_manifest.MODEL_SOURCES[
+    "parakeet-tdt-0.6b-v3"]
+NEMOTRON_MODEL, NEMOTRON_REVISION = model_manifest.MODEL_SOURCES[
+    "nemotron-speech-streaming-en-0.6b"]
+MOONSHINE_MODEL, MOONSHINE_REVISION = model_manifest.MODEL_SOURCES[
+    "moonshine-streaming-medium"]
 
-# A Presspeech release should always load the model snapshots exercised by its
-# native QA. Hugging Face model names otherwise resolve through mutable main
-# branches, allowing a fresh install to change without a Presspeech update.
-PARAKEET_REVISION = "541d1f99c6b0c3cd0b11a95167540bb8edefd82b"
-NEMOTRON_REVISION = "ebe59e5a817142986528bbbee5dba8db7b38ed50"
-MOONSHINE_REVISION = "57b843633a8c183cadf6699ffa761377a933a866"
-
-# faster-whisper's short model names otherwise resolve through its mutable
-# alias table and the repositories' main branches. Keep both parts explicit so
-# a Presspeech release always downloads the CTranslate2 snapshots it reviewed.
+# faster-whisper's short names otherwise resolve through a mutable alias table.
 WHISPER_MODELS = {
-    "base.en": (
-        "Systran/faster-whisper-base.en",
-        "3d3d5dee26484f91867d81cb899cfcf72b96be6c",
-    ),
-    "small.en": (
-        "Systran/faster-whisper-small.en",
-        "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
-    ),
-    "medium.en": (
-        "Systran/faster-whisper-medium.en",
-        "a29b04bd15381511a9af671baec01072039215e3",
-    ),
-    "turbo": (
-        "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
-        "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
-    ),
+    name: model_manifest.MODEL_SOURCES[name]
+    for name in ("base.en", "small.en", "medium.en", "turbo")
 }
 
 # Exact inference files reviewed at the pinned commits above. Keep these in
 # sync with revision changes. Alternate .nemo/.gguf/.bin exports are deliberately
 # excluded from the Transformers path; Whisper must always have its own pinned
 # tokenizer to prevent faster-whisper's unpinned fallback tokenizer download.
-_TRANSFORMERS_FILES = ("config.json", "model.safetensors", "tokenizer.json")
-_TRANSFORMERS_OPTIONAL = ("generation_config.json", "tokenizer_config.json",
-                          "processor_config.json")
-MODEL_CACHE_FILES = {
-    "parakeet-tdt-0.6b-v3": _TRANSFORMERS_FILES,
-    "nemotron-speech-streaming-en-0.6b": _TRANSFORMERS_FILES,
-    "moonshine-streaming-medium": _TRANSFORMERS_FILES,
-    **{name: ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
-       for name in ("base.en", "small.en", "medium.en")},
-    "turbo": ("config.json", "model.bin", "tokenizer.json", "vocabulary.json"),
-}
+MODEL_CACHE_FILES = model_manifest.MODEL_REQUIRED_FILES
 # The pinned loaders use existing local defaults when supplemental JSON is
 # absent. Fetch these during a necessary download, but do not turn their absence
 # into network activity. Validate any that are present before construction.
-MODEL_CACHE_OPTIONAL_FILES = {
-    "parakeet-tdt-0.6b-v3": _TRANSFORMERS_OPTIONAL,
-    "nemotron-speech-streaming-en-0.6b": _TRANSFORMERS_OPTIONAL,
-    "moonshine-streaming-medium": _TRANSFORMERS_OPTIONAL + (
-        "preprocessor_config.json", "special_tokens_map.json"),
-    "turbo": ("preprocessor_config.json",),
-}
+MODEL_CACHE_OPTIONAL_FILES = model_manifest.MODEL_OPTIONAL_FILES
 # Transformers requires feature-extractor settings: either the modern unified
 # processor config or a legacy preprocessor config. Only Moonshine's reviewed
 # snapshot offers both layouts; the other reviewed commits contain the former.
-MODEL_CACHE_ALTERNATIVES = {
-    name: (("processor_config.json", "preprocessor_config.json")
-           if name == "moonshine-streaming-medium" else ("processor_config.json",),)
-    for name in ("parakeet-tdt-0.6b-v3", "nemotron-speech-streaming-en-0.6b",
-                 "moonshine-streaming-medium")
-}
+MODEL_CACHE_ALTERNATIVES = model_manifest.MODEL_ALTERNATIVE_FILES
+MODEL_FILE_MANIFESTS = model_manifest.MODEL_FILE_MANIFESTS
 
 
 def _cached_model_path(model_name):
     snapshot = model_snapshot(model_name)
     return model_cache.resolve_snapshot(
         snapshot["repository"], snapshot["revision"], MODEL_CACHE_FILES[model_name],
+        MODEL_FILE_MANIFESTS[model_name],
         optional_files=MODEL_CACHE_OPTIONAL_FILES.get(model_name, ()),
         required_any=MODEL_CACHE_ALTERNATIVES.get(model_name, ()))
 

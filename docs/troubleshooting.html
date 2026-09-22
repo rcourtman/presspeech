@@ -129,7 +129,7 @@
             </article>
             <article class="card" id="windows-model">
               <h3>The model is still preparing or failed</h3>
-              <p>Keep Setup open and wait for the selected model to report ready. A hotkey press while it is preparing is intentionally ignored. If Setup reports a failure, choose <strong>Retry Speech Model</strong>. Check the connection and available disk space; on an NVIDIA system, also update the display driver or select a local Whisper model in Settings.</p>
+              <p>Keep Setup open and wait for the selected model to report ready. A hotkey press while it is preparing is intentionally ignored. If Setup reports a failure, choose <strong>Retry Speech Model</strong>. Check the connection and available disk space; on an NVIDIA system, also update the display driver or select a local Whisper model in Settings. In upcoming 0.1.13, an error that says a cached input failed its SHA-256 manifest is deliberately not retried over the network. Do not bypass the check or keep retrying the same cache; copy the privacy-safe diagnostics and report the named model input, then use another model or deliberately remove only that model repository from the Hugging Face cache before requesting a fresh download.</p>
             </article>
             <article class="card" id="windows-microphone">
               <h3>The microphone is silent or cannot open</h3>

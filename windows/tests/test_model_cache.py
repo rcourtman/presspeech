@@ -1,5 +1,6 @@
 """Synthetic Hub snapshots only: no model downloads or real cache mutation."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import sys
@@ -37,8 +38,18 @@ class CacheFirstTests(unittest.TestCase):
         for name in self.files:
             (self.snapshot / name).write_bytes(b'{}' if name.endswith('.json') else b'synthetic weights')
 
+    def manifest_for(self, files=None, optional=()):
+        files = self.files if files is None else tuple(files)
+        manifest = {}
+        for name in files + tuple(optional):
+            payload = (b'{}' if name.endswith('.json')
+                       else b'synthetic weights')
+            manifest[name] = (len(payload), hashlib.sha256(payload).hexdigest())
+        return manifest
+
     def resolve(self):
-        return model_cache.resolve_snapshot('fixture/public', self.revision, self.files)
+        return model_cache.resolve_snapshot(
+            'fixture/public', self.revision, self.files, self.manifest_for())
 
     def flags(self):
         return [call.kwargs['local_files_only'] for call in self.download.call_args_list]
@@ -120,20 +131,26 @@ class CacheFirstTests(unittest.TestCase):
                                 (self.revision, ('*.json',)), (self.revision, ())]:
             with self.subTest(revision=revision,files=files):
                 with self.assertRaises(ValueError):
-                    model_cache.resolve_snapshot('fixture/public', revision, files)
+                    model_cache.resolve_snapshot(
+                        'fixture/public', revision, files,
+                        self.manifest_for(files=files))
         self.download.assert_not_called()
 
     def test_absent_optional_json_uses_complete_cache_without_fetch(self):
         optional = ('generation_config.json', 'tokenizer_config.json')
         self.assertEqual(model_cache.resolve_snapshot(
-            'fixture/public', self.revision, self.files, optional_files=optional), str(self.snapshot))
+            'fixture/public', self.revision, self.files,
+            self.manifest_for(optional=optional), optional_files=optional),
+            str(self.snapshot))
         self.assertEqual(self.flags(), [True])
         self.assertEqual(self.download.call_args.kwargs['allow_patterns'], list(self.files + optional))
 
     def test_missing_required_file_fetches_reviewed_optional_files_too(self):
         optional = ('generation_config.json',)
         self.download.side_effect = [self.missing('no cache'), str(self.snapshot)]
-        model_cache.resolve_snapshot('fixture/public', self.revision, self.files, optional_files=optional)
+        model_cache.resolve_snapshot(
+            'fixture/public', self.revision, self.files,
+            self.manifest_for(optional=optional), optional_files=optional)
         self.assertEqual(self.flags(), [True, False])
         for call in self.download.call_args_list:
             self.assertEqual(call.kwargs['allow_patterns'], list(self.files + optional))
@@ -145,6 +162,7 @@ class CacheFirstTests(unittest.TestCase):
         (self.snapshot/'model.safetensors').unlink()
         with self.assertRaises(model_cache.ModelCacheCorruptError):
             model_cache.resolve_snapshot('fixture/public', self.revision, self.files,
+                                         self.manifest_for(optional=('generation_config.json',)),
                                          optional_files=('generation_config.json',))
         self.assertEqual(self.flags(), [True])
 
@@ -156,6 +174,7 @@ class CacheFirstTests(unittest.TestCase):
                 (self.snapshot/name).write_text('{}')
                 self.assertEqual(model_cache.resolve_snapshot(
                     'fixture/public', self.revision, self.files,
+                    self.manifest_for(optional=alternatives),
                     optional_files=alternatives, required_any=(alternatives,)), str(self.snapshot))
                 self.assertEqual(self.flags(), [True])
                 (self.snapshot/name).unlink()
@@ -165,6 +184,7 @@ class CacheFirstTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {'HF_HUB_OFFLINE':'1'}):
             with self.assertRaisesRegex(model_cache.ModelCacheMissingError, 'one of'):
                 model_cache.resolve_snapshot('fixture/public', self.revision, self.files,
+                                             self.manifest_for(optional=alternatives),
                                              optional_files=alternatives, required_any=(alternatives,))
         self.assertEqual(self.flags(), [True])
 
@@ -173,7 +193,57 @@ class CacheFirstTests(unittest.TestCase):
                         {'optional_files':('config.json',)},
                         {'required_any':(('other.json',),)}):
             with self.subTest(options=options), self.assertRaises(ValueError):
-                model_cache.resolve_snapshot('fixture/public', self.revision, self.files, **options)
+                model_cache.resolve_snapshot(
+                    'fixture/public', self.revision, self.files,
+                    self.manifest_for(optional=options.get('optional_files', ())),
+                    **options)
+        self.download.assert_not_called()
+
+    def test_size_or_sha256_mismatch_is_corruption_without_network_retry(self):
+        for entry in ((len(b'synthetic weights') + 1, hashlib.sha256(
+                        b'synthetic weights').hexdigest()),
+                      (len(b'synthetic weights'), '0' * 64)):
+            with self.subTest(entry=entry):
+                self.download.reset_mock()
+                manifest = self.manifest_for()
+                manifest['model.safetensors'] = entry
+                with self.assertRaisesRegex(
+                        model_cache.ModelCacheCorruptError, 'SHA-256 manifest'):
+                    model_cache.resolve_snapshot(
+                        'fixture/public', self.revision, self.files, manifest)
+                self.assertEqual(self.flags(), [True])
+
+    def test_manifest_hashes_the_blob_behind_a_hub_cache_symlink(self):
+        model = self.snapshot / 'model.safetensors'
+        blob = self.snapshot.parent / 'blob'
+        blob.write_bytes(b'synthetic weights')
+        model.unlink()
+        try:
+            model.symlink_to(blob)
+        except OSError as exc:
+            self.skipTest('symlinks unavailable: ' + type(exc).__name__)
+        self.assertEqual(self.resolve(), str(self.snapshot))
+
+        self.download.reset_mock()
+        blob.write_bytes(b'X' + b'synthetic weights'[1:])
+        with self.assertRaisesRegex(
+                model_cache.ModelCacheCorruptError, 'SHA-256 manifest'):
+            self.resolve()
+        self.assertEqual(self.flags(), [True])
+
+    def test_manifest_must_exactly_cover_contract_with_canonical_values(self):
+        valid = self.manifest_for()
+        invalid = [
+            {name: value for name, value in valid.items() if name != 'tokenizer.json'},
+            {**valid, 'other.bin': (1, '0' * 64)},
+            {**valid, 'model.safetensors': (0, '0' * 64)},
+            {**valid, 'model.safetensors': (1, 'A' * 64)},
+            {**valid, 'model.safetensors': ('1', '0' * 64)},
+        ]
+        for manifest in invalid:
+            with self.subTest(manifest=manifest), self.assertRaises(ValueError):
+                model_cache.resolve_snapshot(
+                    'fixture/public', self.revision, self.files, manifest)
         self.download.assert_not_called()
 
 

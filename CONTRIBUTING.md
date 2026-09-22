@@ -195,7 +195,11 @@ the native CUDA/ASR gate.
 - `windows/app.py` — Windows hotkey, audio, paste, and tray lifecycle.
 - `windows/engine.py` — Windows local ASR backends.
 - `windows/model_cache.py` — complete pinned inference-file resolution and
-  private Whisper tokenizer staging; update file contracts with model revisions.
+  SHA-256 verification plus private Whisper tokenizer staging.
+- `windows/model_manifest.py` — reviewed repositories, revisions, exact file
+  contracts, and the generated Windows byte manifest. After changing a source
+  or contract, run `python scripts/update-model-manifest.py --windows --write`
+  and review the generated sizes and hashes.
 - `windows/model_network.py` — import-time endpoint, authentication, and
   telemetry policy for Windows model downloads.
 - `windows/tests/` — model-free Windows unit tests.

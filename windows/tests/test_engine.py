@@ -407,15 +407,24 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.assertTrue(set(config.MODELS).issubset(engine.MODEL_CACHE_FILES))
         self.assertEqual(set(engine.MODEL_CACHE_FILES), set(engine.WHISPER_MODELS) | {
             "parakeet-tdt-0.6b-v3", engine.NEMOTRON_NAME, engine.MOONSHINE_NAME})
+        self.assertEqual(set(engine.MODEL_FILE_MANIFESTS), set(engine.MODEL_CACHE_FILES))
         for name, files in engine.MODEL_CACHE_FILES.items():
             with self.subTest(model=name):
                 self.assertIn("tokenizer.json", files)
                 self.assertIn("config.json", files)
                 self.assertFalse(any("*" in item for item in files))
+                complete_contract = set(
+                    files + engine.MODEL_CACHE_OPTIONAL_FILES.get(name, ()))
+                self.assertEqual(
+                    set(engine.MODEL_FILE_MANIFESTS[name]), complete_contract)
+                for size, digest in engine.MODEL_FILE_MANIFESTS[name].values():
+                    self.assertGreater(size, 0)
+                    self.assertRegex(digest, r"^[0-9a-f]{64}$")
                 self.assertEqual(engine._cached_model_path(name), "synthetic-pinned-snapshot")
                 snapshot = engine.model_snapshot(name)
                 self.resolve_snapshot.assert_called_with(
                     snapshot["repository"], snapshot["revision"], files,
+                    engine.MODEL_FILE_MANIFESTS[name],
                     optional_files=engine.MODEL_CACHE_OPTIONAL_FILES.get(name, ()),
                     required_any=engine.MODEL_CACHE_ALTERNATIVES.get(name, ()))
 

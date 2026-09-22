@@ -7,6 +7,7 @@ not become network retries. Backend construction remains local-only afterward.
 import json
 import errno
 from contextlib import contextmanager
+import hashlib
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -35,7 +36,36 @@ def offline_requested():
     return bool(getattr(constants, "HF_HUB_OFFLINE", False))
 
 
-def _validate_snapshot(snapshot, revision, required_files, optional_files=(), required_any=()):
+def _validated_file_manifest(file_manifest, all_files):
+    """Return a canonical size/digest map covering the exact file contract."""
+    if not isinstance(file_manifest, dict) or set(file_manifest) != set(all_files):
+        raise ValueError("model byte manifest must exactly cover the inference files")
+    validated = {}
+    for name in all_files:
+        entry = file_manifest[name]
+        if not isinstance(entry, (tuple, list)) or len(entry) != 2:
+            raise ValueError("model byte manifest entries must contain size and SHA-256")
+        size, digest = entry
+        if (isinstance(size, bool) or not isinstance(size, int) or size <= 0 or
+                not isinstance(digest, str) or
+                not re.fullmatch(r"[0-9a-f]{64}", digest)):
+            raise ValueError("model byte manifest contains invalid size or SHA-256")
+        validated[name] = (size, digest)
+    return validated
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while True:
+            block = stream.read(4 * 1024 * 1024)
+            if not block:
+                return digest.hexdigest()
+            digest.update(block)
+
+
+def _validate_snapshot(snapshot, revision, required_files, optional_files=(),
+                       required_any=(), file_manifest=None):
     path = Path(snapshot)
     if path.name != revision:
         raise ModelCacheCorruptError("model cache is not the requested pinned snapshot")
@@ -54,6 +84,12 @@ def _validate_snapshot(snapshot, revision, required_files, optional_files=(), re
         present.add(name)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_size == 0:
             raise ModelCacheCorruptError("cached model input is empty or not a file: " + name)
+        if file_manifest is not None:
+            expected_size, expected_digest = file_manifest[name]
+            if (metadata.st_size != expected_size or
+                    _sha256(item) != expected_digest):
+                raise ModelCacheCorruptError(
+                    "cached model input failed its SHA-256 manifest: " + name)
         if name.endswith(".json"):
             try:
                 with item.open(encoding="utf-8") as stream:
@@ -70,8 +106,9 @@ def _validate_snapshot(snapshot, revision, required_files, optional_files=(), re
     return str(path)
 
 
-def resolve_snapshot(repository, revision, required_files, *, optional_files=(), required_any=()):
-    """Resolve only the reviewed inference files; never fetch alternative weights."""
+def resolve_snapshot(repository, revision, required_files, file_manifest, *,
+                     optional_files=(), required_any=()):
+    """Resolve and hash the reviewed inference files before backend loading."""
     if not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("model revision must be an immutable commit")
     required_files = tuple(required_files)
@@ -87,6 +124,7 @@ def resolve_snapshot(repository, revision, required_files, *, optional_files=(),
         if (parsed.is_absolute() or ".." in parsed.parts or "\\" in name or
                 any(char in name for char in "*?[") or str(parsed) != name):
             raise ValueError("model inference file contract must contain exact relative paths")
+    file_manifest = _validated_file_manifest(file_manifest, all_files)
     from huggingface_hub import snapshot_download
     from huggingface_hub.errors import LocalEntryNotFoundError
 
@@ -95,7 +133,9 @@ def resolve_snapshot(repository, revision, required_files, *, optional_files=(),
         snapshot = snapshot_download(
             repository, revision=revision, token=False,
             local_files_only=local_only, allow_patterns=list(all_files))
-        return _validate_snapshot(snapshot, revision, required_files, optional_files, required_any)
+        return _validate_snapshot(
+            snapshot, revision, required_files, optional_files, required_any,
+            file_manifest)
 
     try:
         return attempt(True)

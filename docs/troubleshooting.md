@@ -118,7 +118,12 @@ Keep Setup open and wait for the selected model to report ready. A hotkey press
 while it is preparing is intentionally ignored. If Setup reports a failure,
 choose **Retry Speech Model**. Check the connection and available disk space; on
 an NVIDIA system, also update the display driver or select a local Whisper model
-in Settings.
+in Settings. In upcoming 0.1.13, an error that says a cached input failed its
+SHA-256 manifest is deliberately not retried over the network. Do not bypass the
+check or keep retrying the same cache; copy the privacy-safe diagnostics and
+report the named model input, then use another model or deliberately remove only
+that model repository from the Hugging Face cache before requesting a fresh
+download.
 
 ### Microphone Is Silent Or Cannot Open
 
