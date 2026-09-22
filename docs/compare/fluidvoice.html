@@ -81,7 +81,7 @@
                 <tr>
                   <th scope="row">Privacy and network</th>
                   <td>No cloud transcription or AI path, account, telemetry, analytics, or crash reporter. The documented network surface is model downloads, optional update checks, and user-triggered feedback and installation links.</td>
-                  <td>Speech models run locally, and cloud AI enhancement is opt-in. FluidVoice documents one anonymous daily activity signal uploaded in a weekly batch even when detailed analytics is disabled; it says voice, audio, transcripts, selected text, prompts, window titles, and clipboard content are not collected.</td>
+                  <td>Speech models run locally, and external AI providers are optional. FluidVoice's privacy policy says its default-on PostHog analytics can be disabled; its repository README separately says disabling detailed analytics still leaves a weekly batch of daily activity signals. The documented analytics cover app and activity metadata plus high-level outcomes, not audio, transcripts, dictated or rewritten text, prompts, paths, clipboard contents, or API keys.</td>
                 </tr>
                 <tr>
                   <th scope="row">History</th>
@@ -94,6 +94,11 @@
                   <td>macOS 15+. Apple Silicon supports the full model catalogue; Intel Macs use Apple Speech or Whisper. The v1.6.9 DMG is 47 MB, speech models range from built-in to about 2.9 GB, and optional Fluid Intelligence needs about 3.5 GB.</td>
                 </tr>
                 <tr>
+                  <th scope="row">Platform maturity</th>
+                  <td>The macOS app is the signed and notarised release. A separate x64 Windows build is an unsigned prerelease.</td>
+                  <td>The macOS app is the stable release. FluidVoice's official site also offers a separate 64-bit Windows 0.0.9 beta.</td>
+                </tr>
+                <tr>
                   <th scope="row">Price and license</th>
                   <td>Free and MIT licensed.</td>
                   <td>The app is free and GPLv3 licensed. Fluid Intelligence is a separate, privately maintained local runtime; cloud AI providers require the user's own configuration.</td>
@@ -104,7 +109,7 @@
           <div class="note">
             <p>Choose FluidVoice if live transcription, model switching, Intel Mac support, optional audio history, or local AI rewriting matters most. Choose Presspeech if you want macOS 14 support and a smaller fixed pipeline with deterministic output, explicit paste-destination recovery, no retained audio, and no analytics or cloud-AI path.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, <a href="https://github.com/altic-dev/FluidVoice">FluidVoice source and documentation</a>, and its <a href="https://github.com/altic-dev/FluidVoice/releases/tag/v1.6.9">v1.6.9 release</a> and <a href="https://github.com/altic-dev/FluidVoice/releases/expanded_assets/v1.6.9">release assets</a> (checked 22 September 2026). No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, the <a href="https://fluidvoice.org/">official FluidVoice site</a>, <a href="https://fluidvoice.org/privacy-policy/">privacy policy</a>, and <a href="https://fluidvoice.org/download/">download page</a>, plus its <a href="https://github.com/altic-dev/FluidVoice">source and documentation</a>, <a href="https://github.com/altic-dev/FluidVoice/releases/tag/v1.6.9">v1.6.9 release</a>, and <a href="https://github.com/altic-dev/FluidVoice/releases/expanded_assets/v1.6.9">release assets</a> (checked 22 September 2026). No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
         </div>
       </section>
     </main>
