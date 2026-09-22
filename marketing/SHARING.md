@@ -200,7 +200,7 @@ Privacy angle:
 > it; it's free and MIT.
 
 Comparison ("how is this different from Superwhisper / Wispr Flow /
-VoiceInk?"):
+VoiceInk / FluidVoice?"):
 
 > Mostly scope. Presspeech only does push-to-talk dictation — verbatim,
 > on-device, free — where those are fuller workspaces with AI
@@ -218,6 +218,16 @@ Open-source comparison ("why not Handy?"):
 > with a published model-transcription benchmark, plus a separate Windows
 > preview. Both are free, MIT licensed, and local. Current factual comparison:
 > https://rcourtman.github.io/presspeech/compare/handy.html. I maintain
+> Presspeech, so read it with that in mind.
+
+Local Mac comparison ("why not FluidVoice?"):
+
+> FluidVoice is the stronger choice if you want live preview, model switching,
+> Intel Mac support, optional audio history, or local AI rewriting. Presspeech
+> is narrower: one fixed model path, deterministic text handling, explicit
+> paste-destination recovery, and no telemetry or cloud-AI path. Both are free,
+> local-first, and open source. Current factual comparison:
+> https://rcourtman.github.io/presspeech/compare/fluidvoice.html. I maintain
 > Presspeech, so read it with that in mind.
 
 Windows comparison:
@@ -257,9 +267,9 @@ For directories and "what is this" replies:
   "I maintain it" / "I built this".
 - Answer questions that were actually asked; don't seed them.
 - The compare section answers "why not Superwhisper / Wispr Flow /
-  VoiceInk / Handy / Apple Dictation / MacWhisper" and separates the Windows
-  built-ins from local and cloud apps — link the relevant table or per-tool
-  page instead of arguing in threads.
+  VoiceInk / Handy / FluidVoice / Apple Dictation / MacWhisper" and separates
+  the Windows built-ins from local and cloud apps — link the relevant table or
+  per-tool page instead of arguing in threads.
 - Expect "Intel support?" and "why Homebrew?" — Apple Silicon is an
   honest scope decision because the latency story depends on the ANE;
   Homebrew is optional but remains the easiest update path.

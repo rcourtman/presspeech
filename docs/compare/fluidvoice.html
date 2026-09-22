@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presspeech vs FluidVoice - Free Local Mac Dictation</title>
+    <meta name="description" content="Compare Presspeech and FluidVoice: two free local-first Mac dictation apps with different model choice, live preview, AI enhancement, history, analytics, and system requirements.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/fluidvoice.html">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Presspeech vs FluidVoice - Free Local Mac Dictation">
+    <meta property="og:description" content="Compare Presspeech and FluidVoice: two free local-first Mac dictation apps with different model choice, live preview, AI enhancement, history, analytics, and system requirements.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/compare/fluidvoice.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="../styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="../"><span class="brand-mark">P</span><span>Presspeech</span></a>
+        <div class="nav-links">
+          <a href="../getting-started.html">Get started</a>
+          <a href="../install.html">macOS</a>
+          <a href="../windows.html">Windows</a>
+          <a href="../privacy.html">Privacy</a>
+          <a href="../benchmarks.html">Benchmarks</a>
+          <a href="../faq.html">FAQ</a>
+          <a href="../troubleshooting.html">Help</a>
+          <a href="./" aria-current="page">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Compare</span>
+        <h1>Presspeech vs FluidVoice</h1>
+        <p>Both are free local-first Mac dictation apps built around native speech engines. FluidVoice offers live preview, a broad model catalogue, and optional local or cloud AI enhancement. Presspeech uses one fixed local model path and deterministic text handling, with no AI rewriting, analytics, or persistent audio history.</p>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <div class="table-scroll">
+            <table>
+              <caption>Presspeech and FluidVoice compared</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">FluidVoice</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Primary workflow</th>
+                  <td>Hold-to-talk or toggle, then transcribe on release. Presspeech normally pastes only after confirming the same window is still focused, with manual clipboard recovery when that destination cannot be verified.</td>
+                  <td>Start from a global hotkey, see supported engines transcribe in a live preview, and insert text into the active field through macOS Accessibility APIs.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Speech engines</th>
+                  <td>One fixed path: multilingual Parakeet TDT v3 through FluidAudio and CoreML on the Apple Neural Engine.</td>
+                  <td>A selectable catalogue including Nemotron Speech 3.5, Parakeet Flash, Parakeet TDT v2/v3, Cohere Transcribe, Apple Speech, and Whisper-family models.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Text handling</th>
+                  <td>Deterministic dictionary corrections, exact voice shortcuts, filler removal, and opt-in spoken formatting. No AI rewriting.</td>
+                  <td>A custom dictionary and configurable spoken formatting, plus optional rewriting and formatting through local Fluid Intelligence or a configured cloud AI provider.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Privacy and network</th>
+                  <td>No cloud transcription or AI path, account, telemetry, analytics, or crash reporter. The documented network surface is model downloads, optional update checks, and user-triggered feedback and installation links.</td>
+                  <td>Speech models run locally, and cloud AI enhancement is opt-in. FluidVoice documents one anonymous daily activity signal uploaded in a weekly batch even when detailed analytics is disabled; it says voice, audio, transcripts, selected text, prompts, window titles, and clipboard content are not collected.</td>
+                </tr>
+                <tr>
+                  <th scope="row">History</th>
+                  <td>Recent transcript history is held in memory only and clears on quit. Audio is discarded after transcription.</td>
+                  <td>Optional local audio history can retain recordings with storage-budget controls and ZIP export.</td>
+                </tr>
+                <tr>
+                  <th scope="row">System and footprint</th>
+                  <td>Apple Silicon and macOS 14+. The release zip is 8.4 MB and the fixed speech model cache is about 500&ndash;600 MB.</td>
+                  <td>macOS 15+. Apple Silicon supports the full model catalogue; Intel Macs use Apple Speech or Whisper. The v1.6.9 DMG is 47 MB, speech models range from built-in to about 2.9 GB, and optional Fluid Intelligence needs about 3.5 GB.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Price and license</th>
+                  <td>Free and MIT licensed.</td>
+                  <td>The app is free and GPLv3 licensed. Fluid Intelligence is a separate, privately maintained local runtime; cloud AI providers require the user's own configuration.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p>Choose FluidVoice if live transcription, model switching, Intel Mac support, optional audio history, or local AI rewriting matters most. Choose Presspeech if you want macOS 14 support and a smaller fixed pipeline with deterministic output, explicit paste-destination recovery, no retained audio, and no analytics or cloud-AI path.</p>
+          </div>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, <a href="https://github.com/altic-dev/FluidVoice">FluidVoice source and documentation</a>, and its <a href="https://github.com/altic-dev/FluidVoice/releases/tag/v1.6.9">v1.6.9 release</a> and <a href="https://github.com/altic-dev/FluidVoice/releases/expanded_assets/v1.6.9">release assets</a> (checked 22 September 2026). No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Presspeech and FluidVoice comparison.</span>
+        <span><a href="./">Compare index</a> · <a href="../install.html">Install Presspeech</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

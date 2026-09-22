@@ -47,6 +47,7 @@ Important pages:
 - Compare Mac and Windows dictation options: https://rcourtman.github.io/presspeech/compare/
 - Windows dictation decision guide: https://rcourtman.github.io/presspeech/compare/windows-dictation.html
 - Compare vs Handy: https://rcourtman.github.io/presspeech/compare/handy.html
+- Compare vs FluidVoice: https://rcourtman.github.io/presspeech/compare/fluidvoice.html
 - Source: https://github.com/rcourtman/presspeech
 - Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 - Homebrew tap: https://github.com/rcourtman/homebrew-presspeech

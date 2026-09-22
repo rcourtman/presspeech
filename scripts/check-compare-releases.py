@@ -36,6 +36,11 @@ TRACKED_RELEASES = (
         "cjpais/Handy",
         (Path("docs/compare/index.html"), Path("docs/compare/handy.html")),
     ),
+    TrackedRelease(
+        "FluidVoice",
+        "altic-dev/FluidVoice",
+        (Path("docs/compare/index.html"), Path("docs/compare/fluidvoice.html")),
+    ),
 )
 
 
