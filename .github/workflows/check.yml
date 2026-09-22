@@ -8,6 +8,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Release metadata is pushed before assets are published. Recheck the exact
+  # published tag so Pages can retry after those downloads become available.
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -56,7 +60,9 @@ jobs:
       - name: Model manifest updater self-test
         run: python3 scripts/update-model-manifest.py --self-test
       - name: Docs sync self-test
-        run: python3 scripts/sync-docs.py --self-test
+        run: |
+          python3 scripts/sync-docs.py --self-test
+          python3 scripts/check-public-releases.py --self-test
       - name: Log privacy guard
         run: |
           python3 scripts/check-log-privacy.py --self-test
@@ -214,6 +220,7 @@ jobs:
 
           for path in [
               Path("scripts/sync-docs.py"),
+              Path("scripts/check-public-releases.py"),
               Path("scripts/update-model-manifest.py"),
               Path("scripts/check-log-privacy.py"),
           ]:
@@ -239,3 +246,11 @@ jobs:
           PY
       - name: Docs freshness
         run: python3 scripts/sync-docs.py --check
+      - name: Public site integrity
+        run: |
+          python3 scripts/check-docs-links.py --self-test
+          python3 scripts/check-docs-links.py
+          python3 scripts/check-docs-accessibility.py --self-test
+          python3 scripts/check-docs-accessibility.py
+          python3 scripts/check-docs-metadata.py --self-test
+          python3 scripts/check-docs-metadata.py
