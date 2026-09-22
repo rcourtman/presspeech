@@ -458,7 +458,8 @@ The real `bench-power.sh` run requires interactive sudo because
 real-dictation regressions only when local clips exist under
 `experiments/swift-bench/real-audio/`; its generated multi-window public corpus
 is required so the release check cannot silently exercise only short speech.
-The wrapper also fails closed unless the app and benchmark package pin the same
-FluidAudio revision. During an intentional candidate-API pin, use
+The wrapper also fails closed unless each package manifest matches its resolved
+lock and the app and benchmark pin the same FluidAudio revision. During an
+intentional candidate-API pin, use
 `--include-candidate-models --allow-candidate-dependency` only for candidate
 evidence; restore the exact app pin before recording a production release pass.

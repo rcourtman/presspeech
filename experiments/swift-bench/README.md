@@ -68,20 +68,42 @@ swift build
 ../../.venv/bin/python bench-py.py --file test-audio/short-clean.wav --trials 5
 ```
 
-The Swift benchmark normally pins FluidAudio to the same revision as the
-production app. Its current pin is an intentional candidate-only exception:
-it includes FluidAudio's opt-in `int8-v2` encoder API while the app remains on
-the released v0.15.6 commit. Both direct-v3 benchmark lanes explicitly retain
-the app's released mel-context chunking behavior because the candidate
-revision also changed that long-form default; an encoder-precision comparison
-must not vary both controls at once. Do not move the app pin until the
-candidate checks below have passed.
+The Swift benchmark pins FluidAudio to the same exact revision as the
+production app (currently the released v0.15.6 commit). The default benchmark
+and `run-release-asr-checks.sh` therefore use the app's speech-library revision.
+Both direct-v3 benchmark lanes also explicitly retain the app's released
+mel-context chunking behavior. The remaining qualification limits are below.
 
-`Package.resolved` is committed for the benchmark for the same reason
-as the app: dependency changes should be visible in review. Candidate-only
-API evaluation may move the benchmark pin with the exception documented
-above. When promoting a validated FluidAudio revision to production, update
-the app and benchmark manifests plus both resolved files together.
+Candidate-only APIs require a dedicated evaluation branch that moves this
+package's manifest and resolved file together to the reviewed candidate
+revision. The `v3-int8-v2` runners add their compile condition only for that
+explicit backend; an ordinary production-pinned build rejects it. Commit the
+candidate pin before using a clean-checkout product gate, and do not move the
+app pin until the candidate checks below have passed.
+
+`Package.resolved` is committed for the benchmark for the same reason as the
+app: dependency changes should be visible in review. When promoting a
+validated FluidAudio revision to production, update the app and benchmark
+manifests plus both resolved files together.
+
+### Interpret dependency provenance
+
+Reports record both the benchmark and app FluidAudio revisions after checking
+that each manifest matches its resolved lock. `production-dependency` means
+those revisions match; it does not establish that preprocessing, model files,
+post-processing, hardware or end-to-end latency match the installed app.
+`candidate-dependency` identifies comparisons within a different SDK. Vocabulary
+product-candidate gates reject that mismatch; `--no-threshold` still permits
+exploration, records the mismatch and keeps the product screen blocked.
+
+Older reports may call their unmodified `v3` lane “production” while recording
+FluidAudio `c7246f4dc78d05f75cdfc5a550cd72ced0c658bf`; the app remained on
+`4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b`. Interpret those rows as an unbiased
+benchmark baseline at the recorded dependency, not measured shipped-app results.
+Both direct-v3 benchmark paths explicitly kept `melChunkContext: true`, matching
+the app's older default, and used the original int8 encoder. This controlled
+those settings but did not turn the newer SDK into the production dependency.
+Keep original results intact and qualify their provenance when sharing them.
 
 ## Private real-dictation regression
 
@@ -481,6 +503,13 @@ upstream had not completed broad WER or Apple Neural Engine latency checks
 ([FluidAudio issue #760](https://github.com/FluidInference/FluidAudio/issues/760),
 [implementation #872](https://github.com/FluidInference/FluidAudio/pull/872)).
 
+The default production pin deliberately does not expose this API. On a
+candidate evaluation branch, move the benchmark manifest and resolved file to
+FluidAudio commit `c7246f4dc78d05f75cdfc5a550cd72ced0c658bf` and commit that
+reviewable dependency change. The comparison runners then supply the
+`PRESSPEECH_ENCODER_INT8_V2` compile condition automatically. Keep the app on
+its production pin until the gates pass.
+
 Compare it with Presspeech's production encoder on exactly the same fixtures:
 
 ```sh
@@ -693,9 +722,13 @@ For a lightweight helper run that is explicitly not release evidence, use
 
 The wrapper also requires the benchmark package and app to pin the exact same
 FluidAudio revision. A mismatch fails before corpus output can be labelled
-production evidence. The benchmark currently pins an unreleased FluidAudio
-commit to compare Parakeet v2, linear-int8 v3, Unified, and the repaired
-Nemotron paths. Run that explicitly candidate-only suite with both flags:
+production evidence. With the normal matching pins,
+`--include-candidate-models` compares candidate engines available in the
+released SDK while preserving a production release verdict; it skips the
+unavailable linear-int8 encoder.
+
+On a committed candidate branch using the encoder revision documented above,
+run the dependency-mismatched suite explicitly with both flags:
 
 ```sh
 ./run-release-asr-checks.sh \
@@ -703,10 +736,10 @@ Nemotron paths. Run that explicitly candidate-only suite with both flags:
   --allow-candidate-dependency
 ```
 
-That mode labels v3 as a candidate-revision baseline and ends with a candidate
-evaluation verdict, never a production release pass. Restore the benchmark
-manifest and resolved file to the app's exact pin before using the wrapper as
-release evidence.
+That mode adds the linear-int8 comparison, labels v3 as a candidate-revision
+baseline, and ends with a candidate evaluation verdict, never a production
+release pass. Restore the benchmark manifest and resolved file to the app's
+exact pin before using the wrapper as release evidence.
 
 ## Power measurement
 

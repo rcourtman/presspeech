@@ -14,6 +14,10 @@ For a reproducible multilingual encoder check, fetch the pinned FLEURS
 Ukrainian test rows that exercise the language family where the upstream
 linear-int8 encoder fix was first demonstrated:
 
+This candidate backend requires the dedicated FluidAudio revision and compile
+condition documented in the parent benchmark README; it is unavailable in the
+normal production-pinned build.
+
 ```sh
 ./fetch-public-speech-fixtures.sh \
   --source fleurs --language uk_ua --split test \

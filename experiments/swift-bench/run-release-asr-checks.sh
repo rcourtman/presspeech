@@ -52,8 +52,9 @@ Options:
                             fail if conservative multi-window corpus WER exceeds
                             this percentage (default: 10)
   --include-candidate-models
-                            also run Parakeet v2, linear-int8 v3, Unified,
-                            and current Nemotron candidate checks
+                            also run Parakeet v2, Unified, and current Nemotron
+                            candidate checks; a candidate dependency run also
+                            includes the opt-in linear-int8 v3 encoder
   --allow-candidate-dependency
                             permit the benchmark package to differ from the
                             production app pin; requires --include-candidate-models
@@ -106,6 +107,10 @@ fluid_revision_from_package() {
     printf '%s' "$revisions"
 }
 
+validated_fluid_revision() {
+    python3 ./dependency-provenance.py --package "$1"
+}
+
 validate_fluid_dependency_alignment() {
     local production_package="$1"
     local benchmark_package="$2"
@@ -113,8 +118,8 @@ validate_fluid_dependency_alignment() {
     local include_candidates="$4"
     local production_revision benchmark_revision
 
-    production_revision="$(fluid_revision_from_package "$production_package")" || return 1
-    benchmark_revision="$(fluid_revision_from_package "$benchmark_package")" || return 1
+    production_revision="$(validated_fluid_revision "$production_package")" || return 1
+    benchmark_revision="$(validated_fluid_revision "$benchmark_package")" || return 1
 
     if [[ "$production_revision" == "$benchmark_revision" ]]; then
         if [[ "$allow_candidate" -eq 1 ]]; then
@@ -131,7 +136,7 @@ benchmark FluidAudio pin does not match the production app
   production: $production_revision
   benchmark:  $benchmark_revision
 Refusing to label benchmark-revision transcripts as production release evidence.
-Restore benchmark Package.swift to the production pin, or use
+Restore benchmark Package.swift and Package.resolved to the production pin, or use
 --include-candidate-models --allow-candidate-dependency for an explicit
 candidate-only comparison.
 MSG
@@ -216,22 +221,47 @@ run_self_test() {
 
     local production_sha="1111111111111111111111111111111111111111"
     local candidate_sha="2222222222222222222222222222222222222222"
-    printf '.package(url: "https://example.invalid/FluidAudio.git", revision: "%s")\n' \
+    printf '.package(url: "https://github.com/FluidInference/FluidAudio.git", revision: "%s")\n' \
         "$production_sha" >"$tmpdir/production-package.swift"
     cp "$tmpdir/production-package.swift" "$tmpdir/matching-package.swift"
-    printf '.package(url: "https://example.invalid/FluidAudio.git", revision: "%s")\n' \
+    printf '.package(url: "https://github.com/FluidInference/FluidAudio.git", revision: "%s")\n' \
         "$candidate_sha" >"$tmpdir/candidate-package.swift"
+    printf '{"pins":[{"identity":"fluidaudio","location":"https://github.com/FluidInference/FluidAudio.git","state":{"revision":"%s"}}]}\n' \
+        "$production_sha" >"$tmpdir/Package.resolved"
+    mkdir -p "$tmpdir/matching" "$tmpdir/candidate" "$tmpdir/mismatched-lock"
+    cp "$tmpdir/matching-package.swift" "$tmpdir/matching/Package.swift"
+    cp "$tmpdir/candidate-package.swift" "$tmpdir/candidate/Package.swift"
+    cp "$tmpdir/production-package.swift" "$tmpdir/mismatched-lock/Package.swift"
+    printf '{"pins":[{"identity":"fluidaudio","location":"https://github.com/FluidInference/FluidAudio.git","state":{"revision":"%s"}}]}\n' \
+        "$production_sha" >"$tmpdir/matching/Package.resolved"
+    printf '{"pins":[{"identity":"fluidaudio","location":"https://github.com/FluidInference/FluidAudio.git","state":{"revision":"%s"}}]}\n' \
+        "$candidate_sha" >"$tmpdir/candidate/Package.resolved"
+    printf '{"pins":[{"identity":"fluidaudio","location":"https://github.com/FluidInference/FluidAudio.git","state":{"revision":"%s"}}]}\n' \
+        "$candidate_sha" >"$tmpdir/mismatched-lock/Package.resolved"
     assert_eq "$(fluid_revision_from_package "$tmpdir/production-package.swift")" \
         "$production_sha" "FluidAudio revision extraction"
+    python3 ./dependency-provenance.py --self-test
+    assert_eq "$(validated_fluid_revision "$tmpdir/production-package.swift")" \
+        "$production_sha" "locked FluidAudio revision extraction"
+
+    local mismatched_lock_log="$tmpdir/mismatched-lock.log"
+    if validate_fluid_dependency_alignment \
+        "$tmpdir/mismatched-lock/Package.swift" "$tmpdir/matching/Package.swift" 0 0 \
+        >"$mismatched_lock_log" 2>&1; then
+        echo "self-test expected a manifest/lock mismatch to fail closed" >&2
+        exit 1
+    fi
+    assert_contains "$mismatched_lock_log" \
+        "FluidAudio manifest and resolved revisions differ"
 
     DEPENDENCY_MODE="unset"
     validate_fluid_dependency_alignment \
-        "$tmpdir/production-package.swift" "$tmpdir/matching-package.swift" 0 0
+        "$tmpdir/matching/Package.swift" "$tmpdir/matching/Package.swift" 0 0
     assert_eq "$DEPENDENCY_MODE" "production" "matching production dependency mode"
 
     local mismatch_log="$tmpdir/dependency-mismatch.log"
     if validate_fluid_dependency_alignment \
-        "$tmpdir/production-package.swift" "$tmpdir/candidate-package.swift" 0 0 \
+        "$tmpdir/matching/Package.swift" "$tmpdir/candidate/Package.swift" 0 0 \
         >"$mismatch_log" 2>&1; then
         echo "self-test expected a benchmark dependency mismatch to fail closed" >&2
         exit 1
@@ -241,7 +271,7 @@ run_self_test() {
 
     local unscoped_candidate_log="$tmpdir/unscoped-candidate.log"
     if validate_fluid_dependency_alignment \
-        "$tmpdir/production-package.swift" "$tmpdir/candidate-package.swift" 1 0 \
+        "$tmpdir/matching/Package.swift" "$tmpdir/candidate/Package.swift" 1 0 \
         >"$unscoped_candidate_log" 2>&1; then
         echo "self-test expected candidate dependency mode without candidate models to fail" >&2
         exit 1
@@ -251,7 +281,7 @@ run_self_test() {
 
     DEPENDENCY_MODE="unset"
     validate_fluid_dependency_alignment \
-        "$tmpdir/production-package.swift" "$tmpdir/candidate-package.swift" 1 1 \
+        "$tmpdir/matching/Package.swift" "$tmpdir/candidate/Package.swift" 1 1 \
         >"$tmpdir/candidate-mode.log" 2>&1
     assert_eq "$DEPENDENCY_MODE" "candidate" "explicit candidate dependency mode"
     assert_contains "$tmpdir/candidate-mode.log" \
@@ -534,12 +564,17 @@ else
             --language en \
             --trials "$TRIALS"
 
-        echo
-        echo "running private v3 linear-int8 encoder candidate comparison on $real_count clip(s)..."
-        ./run-real-model-comparison.sh \
-            --input-dir "$REAL_AUDIO_DIR" \
-            --candidate-backend v3-int8-v2 \
-            --trials "$TRIALS"
+        if [[ "$DEPENDENCY_MODE" == "candidate" ]]; then
+            echo
+            echo "running private v3 linear-int8 encoder candidate comparison on $real_count clip(s)..."
+            ./run-real-model-comparison.sh \
+                --input-dir "$REAL_AUDIO_DIR" \
+                --candidate-backend v3-int8-v2 \
+                --trials "$TRIALS"
+        else
+            echo
+            echo "skipping linear-int8 encoder candidate (not exposed by the production FluidAudio pin)"
+        fi
 
         echo
         echo "running private repaired Nemotron English candidate regression on $real_count clip(s)..."
@@ -583,12 +618,17 @@ else
             --candidate-backend v2 \
             --trials "$TRIALS"
 
-        echo
-        echo "running public v3 linear-int8 encoder candidate comparison on $public_count clip(s)..."
-        ./run-public-model-comparison.sh \
-            --fixture-dir "$PUBLIC_AUDIO_DIR" \
-            --candidate-backend v3-int8-v2 \
-            --trials "$TRIALS"
+        if [[ "$DEPENDENCY_MODE" == "candidate" ]]; then
+            echo
+            echo "running public v3 linear-int8 encoder candidate comparison on $public_count clip(s)..."
+            ./run-public-model-comparison.sh \
+                --fixture-dir "$PUBLIC_AUDIO_DIR" \
+                --candidate-backend v3-int8-v2 \
+                --trials "$TRIALS"
+        else
+            echo
+            echo "skipping linear-int8 encoder candidate (not exposed by the production FluidAudio pin)"
+        fi
 
         echo
         echo "running public repaired Nemotron English candidate regression on $public_count clip(s)..."
@@ -633,7 +673,7 @@ else
         --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
         --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
 
-    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 && "$DEPENDENCY_MODE" == "candidate" ]]; then
         echo
         echo "running long-form public v3 linear-int8 encoder candidate comparison..."
         ./run-public-model-comparison.sh \
@@ -641,6 +681,9 @@ else
             --out-dir public-results/long-form \
             --candidate-backend v3-int8-v2 \
             --trials "$TRIALS"
+    elif [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        echo
+        echo "skipping linear-int8 encoder candidate (not exposed by the production FluidAudio pin)"
     fi
 fi
 

@@ -26,11 +26,13 @@
 // FluidAudio benchmarks run on Presspeech's macOS 14+ product floor.
 // Only the optional Apple `SpeechAnalyzer` / `DictationTranscriber`
 // backend requires macOS 26; its implementation and construction are
-// availability-gated in main.swift. This normally stays pinned to the
-// production app. The current candidate-only exception is the first upstream
-// commit exposing Parakeet `int8-v2`; the benchmark explicitly preserves the
-// app's prior chunking config so the encoder A/B changes one control. Do not
-// move the app pin until that candidate clears the corpus gates.
+// availability-gated in main.swift. Keep this package pinned to the production
+// app by default so `run-release-asr-checks.sh` validates the dependency used
+// by the release. The opt-in `int8-v2` encoder needs the later candidate
+// revision documented in README.md plus the PRESSPEECH_ENCODER_INT8_V2 compile
+// condition; the benchmark explicitly preserves the app's prior chunking
+// config so that A/B changes one control. Do not move the app pin until that
+// candidate clears the corpus gates.
 import PackageDescription
 
 let package = Package(
@@ -43,7 +45,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git",
-                 revision: "c7246f4dc78d05f75cdfc5a550cd72ced0c658bf"),
+                 revision: "4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b"),
     ],
     targets: [
         .executableTarget(

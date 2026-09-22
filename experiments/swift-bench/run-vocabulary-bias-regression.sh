@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compare production Parakeet v3 with unbiased and vocabulary-rescored
+# Compare an unbiased Parakeet v3 baseline with unbiased and vocabulary-rescored
 # sliding-window v3 policies on the same multilingual dictation fixtures.
 
 set -euo pipefail
@@ -45,6 +45,7 @@ MIN_TARGET_CRITICAL_OCCURRENCES="50"
 MIN_NEGATIVE_CONTROL_CLIPS="10"
 MIN_NEGATIVE_CONTROL_REFERENCE_WORDS="1000"
 BENCHMARK_SOURCE_STATE="unavailable"
+BASELINE_DEPENDENCY="unavailable"
 SELF_TEST=0
 BENCH_EXECUTABLE=".build/release/presspeech-bench"
 
@@ -54,6 +55,9 @@ BENCHMARK_SOURCE_PATHS=(
     "experiments/swift-bench/Package.resolved"
     "experiments/swift-bench/Sources/presspeech-bench"
     "experiments/swift-bench/run-vocabulary-bias-regression.sh"
+    "experiments/swift-bench/dependency-provenance.py"
+    "swift/Package.swift"
+    "swift/Package.resolved"
 )
 
 usage() {
@@ -90,8 +94,8 @@ Options:
 
 The nine variants run in separate processes so memory measurements stay
 isolated:
-  v3             production AsrManager path
-  v3-vocab       production v3 plus auxiliary CTC rescoring
+  v3             unbiased AsrManager baseline at the recorded dependency
+  v3-vocab       unbiased v3 plus auxiliary CTC rescoring
   v3-vocab-conservative
                   v3-vocab with short-term taper and similarity floors
   v3-vocab-no-rescue
@@ -125,7 +129,7 @@ critical-term hit,
 no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected
 insertions or WER, at least 10 same-language negative-control clips containing
 at least 1,000 reference words in total, and average p50 latency no more than
-2x production. The target corpus must contain at least 25 clips, 1,000
+2x baseline. The target corpus must contain at least 25 clips, 1,000
 reference words, and 50 critical-term occurrences. Passing
 is necessary evidence for product evaluation, not approval to ship. Thresholded
 runs also require a clean Git checkout so a shared report identifies the exact
@@ -175,10 +179,6 @@ benchmark_source_state() {
     fi
 }
 
-fluid_audio_revision() {
-    local package_file="${1:-Package.swift}"
-    sed -nE 's/.*revision: "([0-9a-f]{40})".*/\1/p' "$package_file" | head -n 1
-}
 
 macos_deployment_target() {
     local package_file="$1"
@@ -778,7 +778,8 @@ candidate_assessment() {
         -v references_hand_audited="$REFERENCES_HAND_AUDITED" \
         -v trials="$TRIALS" \
         -v min_candidate_trials="$MIN_CANDIDATE_TRIALS" \
-        -v source_state="$BENCHMARK_SOURCE_STATE" '
+        -v source_state="$BENCHMARK_SOURCE_STATE" \
+        -v dependency_mode="$BASELINE_DEPENDENCY" '
         function add_blocker(message) {
             blockers = blockers (blockers == "" ? "" : "; ") message
         }
@@ -795,7 +796,7 @@ candidate_assessment() {
             }
             # Compare the adverse candidate envelope with the favorable
             # baseline envelope. Worst-versus-worst lets one unstable bad
-            # production trial hide a candidate regression.
+            # baseline trial hide a candidate regression.
             baseline_hits[$1] = $16 == "" ? $4 : $16
             baseline_total[$1] = $5
             baseline_unexpected[$1] = $17 == "" ? $7 : $17
@@ -848,6 +849,7 @@ candidate_assessment() {
             if (references_hand_audited != 1) add_blocker("references not declared hand-audited")
             if (trials < min_candidate_trials) add_blocker("measured trials below " min_candidate_trials)
             if (source_state != "clean") add_blocker("benchmark source is not clean")
+            if (dependency_mode != "production-dependency") add_blocker("baseline dependency differs from app")
             if (baseline_target_clips < min_target_clips) add_blocker("target clips below " min_target_clips)
             if (baseline_target_words < min_target_words) add_blocker("target reference words below " min_target_words)
             if (baseline_target_occurrences < min_target_occurrences) add_blocker("target critical-term occurrences below " min_target_occurrences)
@@ -859,7 +861,7 @@ candidate_assessment() {
             if (!total_reference_words || wer_delta > max_wer_regression + 0.0000001) add_blocker("corpus WER regressed")
             if (unexpected_regressed_clips > max_unexpected_regressed_clips) add_blocker("per-clip unexpected insertions increased")
             if (wer_regressed_clips > max_wer_regressed_clips) add_blocker("per-clip WER regressions present")
-            if (!comparable || latency_ratio > max_latency_ratio + 0.0000001) add_blocker("latency exceeded " max_latency_ratio "x production")
+            if (!comparable || latency_ratio > max_latency_ratio + 0.0000001) add_blocker("latency exceeded " max_latency_ratio "x baseline")
 
             verdict = blockers == "" ? "passes" : "blocked"
             wer_display = total_reference_words ? sprintf("%+.2f", wer_delta) : "unknown"
@@ -926,7 +928,9 @@ test_frozen_input_run() {
     local bench="$root/repo/experiments/swift-bench"
     mkdir -p "$fixture/targets" "$fixture/controls" "$root/bin" "$bench"
     cp "$SCRIPT_PATH" "$bench/run-vocabulary-bias-regression.sh"
-    cp Package.swift "$bench/Package.swift"
+    cp Package.swift Package.resolved dependency-provenance.py "$bench/"
+    mkdir -p "$root/repo/swift"
+    cp "$REPO_ROOT/swift/Package.swift" "$REPO_ROOT/swift/Package.resolved" "$root/repo/swift/"
     printf 'original target audio\n' >"$fixture/targets/sample.wav"
     printf 'original target reference\n' >"$fixture/targets/sample.txt"
     printf 'original control audio\n' >"$fixture/controls/sample.wav"
@@ -1019,6 +1023,8 @@ MOCK_BENCH
     local report
     for report in "$root/results/"*.md; do
         assert_contains "$report" "Benchmark inputs SHA-256: $expected_digest"
+        assert_contains "$report" "App FluidAudio revision:"
+        assert_contains "$report" "Baseline dependency: production-dependency"
         assert_not_contains "$report" 'private canonical term'
         assert_not_contains "$report" "$fixture"
         assert_not_contains "$report" 'original target reference'
@@ -1081,6 +1087,7 @@ PY_AUDIO_CHECKS
 }
 
 run_self_test() {
+    BASELINE_DEPENDENCY="production-dependency"
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-self-test.XXXXXX")"
     local quoted_tmpdir
@@ -1383,6 +1390,13 @@ MOCK
     candidate_assessment_row "$passing_assessment" >"$summary"
     assert_contains "$summary" '| `sliding-vocab-no-rescue` | 35/35 | 25 / 1135 / 50 | 10 / 2000 | +2 | +0 | -0.13 | 0 | 0 | 0 | 1.50x | **passes** | -- |'
 
+    BASELINE_DEPENDENCY="candidate-dependency"
+    local candidate_dependency_assessment
+    candidate_dependency_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    assert_contains <(printf '%s\n' "$candidate_dependency_assessment") \
+        $'blocked\tbaseline dependency differs from app'
+    BASELINE_DEPENDENCY="production-dependency"
+
     # --no-threshold controls command failure, not the truth of the screen.
     # Exploratory reports must retain prerequisite blockers rather than turn
     # unaudited or irreproducible evidence into a passing product candidate.
@@ -1444,7 +1458,7 @@ MOCK
     assert_eq "$masked_critical_assessment" $'sliding-vocab-no-rescue\t35\t35\t25\t1135\t50\t10\t2000\t+1\t+0\t-0.13\t1\t0\t0\t1.50\tblocked\tper-clip critical-term recall regressed' "masked per-clip critical-term regression"
 
     # Repeated-trial instability in production must not make a vocabulary
-    # candidate look safe. The descriptive row records production's adverse
+    # candidate look safe. The descriptive row records baseline's adverse
     # trial, while the appended extrema retain its clean trial for the gate.
     {
         printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritical_recall_percent\tcritical_unexpected\tp50_ms\tpeak_mb\tcache_mb\tprepare_ms\tword_errors\treference_words\tcritical_precision_percent\tbest_word_errors\thighest_critical_matched\tlowest_critical_unexpected\n'
@@ -1480,8 +1494,7 @@ MOCK
         printf '%s\n' '.macOS("14.0"),'
         printf '%s\n' '.package(url: "https://example.invalid/FluidAudio.git", revision: "0123456789abcdef0123456789abcdef01234567")'
     } >"$package_file"
-    assert_eq "$(fluid_audio_revision "$package_file")" \
-        "0123456789abcdef0123456789abcdef01234567" "FluidAudio revision parser"
+    python3 ./dependency-provenance.py --self-test
     assert_eq "$(macos_deployment_target "$package_file")" "14.0" \
         "macOS deployment target parser"
     assert_eq \
@@ -2021,12 +2034,15 @@ if [[ ! "$benchmark_input_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     exit 1
 fi
 
+provenance_args=( --benchmark-package Package.swift )
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 ]]; then provenance_args+=( --require-production ); fi
+dependency_provenance="$(python3 ./dependency-provenance.py "${provenance_args[@]}")" || exit 1
+IFS=$'\t' read -r fluid_revision production_fluid_revision BASELINE_DEPENDENCY <<<"$dependency_provenance"
+
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
-
-fluid_revision="$(fluid_audio_revision)"
-if [[ ! "$fluid_revision" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "could not identify the exact FluidAudio revision from Package.swift" >&2
+if [[ "$(python3 ./dependency-provenance.py "${provenance_args[@]}")" != "$dependency_provenance" ]]; then
+    echo "dependency provenance changed during benchmark build" >&2
     exit 1
 fi
 benchmark_sha256="$(file_sha256 "$BENCH_EXECUTABLE")"
@@ -2165,6 +2181,8 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "- Presspeech source revision: $source_revision"
     echo "- Benchmark source state: $BENCHMARK_SOURCE_STATE"
     echo "- FluidAudio revision: $fluid_revision"
+    echo "- App FluidAudio revision: $production_fluid_revision"
+    echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
     echo "- Benchmark executable SHA-256: $benchmark_sha256"
     echo "- Platform: $platform_description"
     echo "- Swift toolchain: $swift_toolchain"
@@ -2354,9 +2372,9 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with production \`v3\`. Repeated-trial safety compares each candidate's adverse extrema with production's favorable extrema, so a bad production trial cannot hide a candidate regression. A policy passes only with human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x production. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with unbiased \`v3\`. Repeated-trial safety compares each candidate's adverse extrema with baseline's favorable extrema, so a bad baseline trial cannot hide a candidate regression. A policy passes only with matching declared/locked app and benchmark dependencies, human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x baseline. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
-    echo "| Candidate | Comparable clips | Target evidence (clips / words / critical occurrences) | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / production | Verdict | Blockers |"
+    echo "| Candidate | Comparable clips | Target evidence (clips / words / critical occurrences) | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / baseline | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
 } >>"$report"
 

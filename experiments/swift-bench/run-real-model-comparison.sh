@@ -13,6 +13,8 @@ export LC_ALL=C
 
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$SCRIPT_PATH")"
+dependency_provenance="$(python3 ./dependency-provenance.py)" || exit 1
+IFS=$'\t' read -r FLUID_REVISION PRODUCTION_FLUID_REVISION BASELINE_DEPENDENCY <<<"$dependency_provenance"
 
 INPUT_DIR="real-audio"
 OUTDIR="real-results"
@@ -356,7 +358,7 @@ candidate_screen() {
         blockers+=("Unified trailing silence must be ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms")
     fi
     if [[ ( "$candidate" == "unified" || "$candidate" == "v2" ) && "$LANGUAGE" != "en" ]]; then
-        blockers+=("English-only candidate requires an English production baseline")
+        blockers+=("English-only candidate requires an English unbiased baseline")
     fi
     [[ "$TRIALS" -ge "$MIN_CANDIDATE_TRIALS" ]] || blockers+=("fewer than $MIN_CANDIDATE_TRIALS trials")
     if [[ "$CORPUS_KIND" != "public" && "$REFERENCES_HAND_AUDITED" -ne 1 ]]; then
@@ -369,7 +371,7 @@ candidate_screen() {
     [[ "$candidate_errors" -le "$baseline_errors" ]] || blockers+=("corpus word errors increased")
     [[ "$regressed" -eq 0 ]] || blockers+=("$regressed clip(s) regressed")
     awk -v ratio="$latency_ratio" -v max="$MAX_CANDIDATE_LATENCY_RATIO" \
-        'BEGIN { exit !(ratio <= max) }' || blockers+=("latency exceeds ${MAX_CANDIDATE_LATENCY_RATIO}x production")
+        'BEGIN { exit !(ratio <= max) }' || blockers+=("latency exceeds ${MAX_CANDIDATE_LATENCY_RATIO}x baseline")
 
     if [[ "${#blockers[@]}" -eq 0 ]]; then
         printf 'passes\t'
@@ -531,12 +533,12 @@ run_self_test() {
     LANGUAGE=auto
     raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean unified)"
     assert_contains <(printf '%s' "$raw_unified_screen") \
-        "English-only candidate requires an English production baseline"
+        "English-only candidate requires an English unbiased baseline"
     local blocked_screen
     blocked_screen="$(candidate_screen $'25\t1200\t10\t11\t0\t1\t1.300' clean v3-int8-v2)"
     assert_contains <(printf '%s' "$blocked_screen") "no clip demonstrates an error reduction"
     assert_contains <(printf '%s' "$blocked_screen") "corpus word errors increased"
-    assert_contains <(printf '%s' "$blocked_screen") "latency exceeds 1.25x production"
+    assert_contains <(printf '%s' "$blocked_screen") "latency exceeds 1.25x baseline"
     TRIALS="$original_trials"
     CORPUS_KIND="$original_kind"
     REFERENCES_HAND_AUDITED="$original_audit"
@@ -676,8 +678,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$SELF_TEST" -eq 1 ]]; then
+    if ! [[ "$FLUID_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "self-test could not identify the exact FluidAudio revision" >&2
+        exit 1
+    fi
     run_self_test
     exit 0
+fi
+
+if ! [[ "$FLUID_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "could not identify the exact FluidAudio revision from Package.swift" >&2
+    exit 1
 fi
 
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
@@ -792,7 +803,18 @@ if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then
 fi
 
 echo "building presspeech-bench..."
-swift build -c release >/dev/null
+swift_build_args=( -c release )
+if [[ "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
+    # The opt-in enum case exists only on the documented candidate FluidAudio
+    # revision. Keep it out of ordinary builds so this package can stay pinned
+    # to and validate the dependency used by the production app.
+    swift_build_args+=( -Xswiftc -D -Xswiftc PRESSPEECH_ENCODER_INT8_V2 )
+fi
+swift build "${swift_build_args[@]}" >/dev/null
+if [[ "$(python3 ./dependency-provenance.py)" != "$dependency_provenance" ]]; then
+    echo "dependency provenance changed during benchmark build" >&2
+    exit 1
+fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 final_report="$OUTDIR/$timestamp-model-comparison.md"
@@ -826,6 +848,9 @@ mkdir -p "$raw_dir"
     echo "- Input directory: $(path_label "$INPUT_DIR")"
     echo "- Trials per clip/backend: $TRIALS"
     echo "- Candidate backend: $CANDIDATE_BACKEND"
+    echo "- FluidAudio revision: $FLUID_REVISION"
+    echo "- App FluidAudio revision: $PRODUCTION_FLUID_REVISION"
+    echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
     echo "- Parakeet language hint: $LANGUAGE"
     if [[ "$CANDIDATE_BACKEND" == "unified" ]]; then
         echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
@@ -899,7 +924,7 @@ for clip in "${clips[@]}"; do
             setting="trailing-silence=${UNIFIED_TRAILING_SILENCE_MS}ms"
         elif [[ "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
             if [[ "$backend" == "v3" ]]; then
-                setting="encoder=int8-production"
+                setting="encoder=int8-original"
             else
                 setting="encoder=int8-v2"
             fi
@@ -953,9 +978,9 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
         echo
         echo "## Model Candidate Evidence Screen"
         echo
-        echo "The candidate's worst observed transcript is compared with production's best observed transcript on each clip; a noisy production trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x production. English-only candidates require an English production baseline. Unified additionally requires ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms trailing silence and the separate tail-word gate. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
+        echo "The candidate's worst observed transcript is compared with baseline's best observed transcript on each clip; a noisy baseline trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x baseline. English-only candidates require an English unbiased baseline. Unified additionally requires ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms trailing silence and the separate tail-word gate. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
         echo
-        echo "| Candidate | Comparable clips | Reference words | Production best errors | Candidate worst errors | Improved clips | Regressed clips | p50 / production | Verdict | Blockers |"
+        echo "| Candidate | Comparable clips | Reference words | Baseline best errors | Candidate worst errors | Improved clips | Regressed clips | p50 / baseline | Verdict | Blockers |"
         echo "|---|---:|---:|---:|---:|---:|---:|---:|---|---|"
         printf '| `%s` | %s | %s | %s | %s | %s | %s | %.3f | %s | %s |\n' \
             "$CANDIDATE_BACKEND" "$comparable" "$reference_words" "$baseline_errors" \

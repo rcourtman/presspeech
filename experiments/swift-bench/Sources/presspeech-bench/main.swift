@@ -146,10 +146,10 @@ func parseArgs() -> CLIArgs {
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
                          v2    FluidAudio Parakeet TDT v2 — English-only candidate
                          v3-int8-v2
-                              production v3 path with FluidAudio's candidate
+                              unbiased v3 path with FluidAudio's candidate
                               linear-int8 Encoder_v2 model
                          v3-vocab
-                              production v3 path plus auxiliary CTC vocabulary rescoring;
+                              unbiased v3 path plus auxiliary CTC vocabulary rescoring;
                               requires --custom-vocabulary
                          v3-vocab-conservative
                               v3-vocab with FluidAudio's recommended short-term taper
@@ -1973,6 +1973,7 @@ struct PresspeechBench {
             )
         }
         if args.backend == "v3-int8-v2" {
+#if PRESSPEECH_ENCODER_INT8_V2
             backends.append(
                 FluidBackend(
                     name: "fluid-ParakeetTDTv3-Int8V2",
@@ -1981,6 +1982,13 @@ struct PresspeechBench {
                     encoderPrecision: .int8V2
                 )
             )
+#else
+            let message = "v3-int8-v2 is unavailable in the production-pinned "
+                + "benchmark build; use the documented candidate FluidAudio revision "
+                + "and PRESSPEECH_ENCODER_INT8_V2 compile condition\n"
+            FileHandle.standardError.write(Data(message.utf8))
+            exit(2)
+#endif
         }
         if args.backend == "v3-vocab" ||
             args.backend == "v3-vocab-conservative" ||

@@ -20,6 +20,8 @@ export LC_ALL=C
 
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$SCRIPT_PATH")"
+dependency_provenance="$(python3 ./dependency-provenance.py)" || exit 1
+IFS=$'\t' read -r FLUID_REVISION PRODUCTION_FLUID_REVISION BASELINE_DEPENDENCY <<<"$dependency_provenance"
 
 INPUT_DIR="real-audio"
 OUTDIR="real-results"
@@ -399,6 +401,9 @@ write_report_header() {
         echo "- Date: $timestamp"
         echo "- Input directory: $(path_label "$INPUT_DIR")"
         echo "- Backend: $BACKEND"
+        echo "- FluidAudio revision: $FLUID_REVISION"
+        echo "- App FluidAudio revision: $PRODUCTION_FLUID_REVISION"
+        echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
         echo "- Trials per clip: $TRIALS"
         if backend_uses_unified; then
             echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
@@ -506,6 +511,7 @@ run_self_test() {
     local clip_id
     clip_id="$(clip_id_for 1 "$secret_stem")"
     write_report_header "$report" "20260101T000000Z" 1
+    assert_contains "$report" "- FluidAudio revision: $FLUID_REVISION"
     assert_not_contains "$report" "Unified trailing silence"
 
     BACKEND="unified"
@@ -742,8 +748,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$SELF_TEST" -eq 1 ]]; then
+    if ! [[ "$FLUID_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "self-test could not identify the exact FluidAudio revision" >&2
+        exit 1
+    fi
     run_self_test
     exit 0
+fi
+
+if ! [[ "$FLUID_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "could not identify the exact FluidAudio revision from Package.swift" >&2
+    exit 1
 fi
 
 if [[ ! -d "$INPUT_DIR" ]]; then
@@ -842,7 +857,18 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "building presspeech-bench..."
-swift build -c release >/dev/null
+swift_build_args=( -c release )
+if [[ "$BACKEND" == "v3-int8-v2" ]]; then
+    # This backend is intentionally absent from the production FluidAudio pin.
+    # Defining it only for an explicit encoder-v2 run keeps normal and release
+    # builds compatible with the exact dependency shipped by the app.
+    swift_build_args+=( -Xswiftc -D -Xswiftc PRESSPEECH_ENCODER_INT8_V2 )
+fi
+swift build "${swift_build_args[@]}" >/dev/null
+if [[ "$(python3 ./dependency-provenance.py)" != "$dependency_provenance" ]]; then
+    echo "dependency provenance changed during benchmark build" >&2
+    exit 1
+fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 safe_backend="$(printf '%s' "$BACKEND" | tr -c '[:alnum:]_.-' '-')"

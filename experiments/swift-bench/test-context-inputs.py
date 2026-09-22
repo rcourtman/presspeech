@@ -160,8 +160,13 @@ class ContextInputTests(unittest.TestCase):
     def test_runner_freezes_before_build_and_emits_bound_redacted_results(self):
         bench = self.root / "repo/experiments/swift-bench"
         bench.mkdir(parents=True)
-        for name in ("run-real-model-comparison.sh", "compose-public-context-fixtures.py"):
+        for name in ("run-real-model-comparison.sh", "compose-public-context-fixtures.py",
+                     "dependency-provenance.py", "Package.swift", "Package.resolved"):
             shutil.copyfile(ROOT / name, bench / name)
+        production = self.root / "repo/swift"
+        production.mkdir()
+        for name in ("Package.swift", "Package.resolved"):
+            shutil.copyfile(ROOT.parents[1] / "swift" / name, production / name)
         fake_bin = self.root / "bin"
         fake_bin.mkdir()
         expected = {hashlib.sha256(p.read_bytes()).hexdigest(): p.with_suffix(".txt").read_text()
@@ -215,6 +220,34 @@ Path('.build/release/presspeech-bench').chmod(0o755)
         self.assertNotIn(str(self.output), report)
         self.assertNotIn("private utterance", report)
         self.assertIn(self.digest, report)
+        self.assertIn("App FluidAudio revision:", report)
+        self.assertIn("Baseline dependency: production-dependency", report)
+
+        # A coherent dependency change during build must still invalidate the
+        # provenance captured before the build, before any inference/report.
+        swift = fake_bin / "swift"
+        swift.write_text("#!" + sys.executable + "\n" + """
+import json
+from pathlib import Path
+package=Path('Package.swift')
+lock=Path('Package.resolved')
+data=json.loads(lock.read_text())
+pin=next(p for p in data['pins'] if p['identity']=='fluidaudio')
+original=pin['state']['revision']
+pin['state']['revision']='b'*40
+package.write_text(package.read_text().replace(original, 'b'*40))
+lock.write_text(json.dumps(data))
+""")
+        refused_dir = self.root / "refused-results"
+        refused = subprocess.run(["bash", str(bench / "run-real-model-comparison.sh"),
+            "--input-dir", str(self.source), "--out-dir", str(refused_dir),
+            "--candidate-backend", "v3-int8-v2", "--trials", "3"],
+            env={**os.environ, "PATH":str(fake_bin)+os.pathsep+os.environ['PATH']},
+            capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("dependency provenance changed during benchmark build", refused.stderr)
+        self.assertFalse(list(refused_dir.glob("*.tsv")))
+        self.assertFalse(list(refused_dir.glob("*.md")))
 
 
 if __name__ == "__main__":
