@@ -207,6 +207,11 @@ assert_not_contains() {
 
 run_self_test() {
     python3 ./benchmark-inputs.py --self-test
+    # Long-form fixtures are a default release-gate precondition, not an
+    # optional candidate helper. Keep their composition and validation tests
+    # inside this wrapper's self-test so CI cannot report the release boundary
+    # healthy while its required multi-window corpus helper has rotted.
+    python3 ./compose-public-long-form-fixtures.py --self-test
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-release-asr-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
