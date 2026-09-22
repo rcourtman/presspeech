@@ -359,6 +359,8 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Never run this protocol at a command shell",
         "after the fixed `[Compatibility]:` title prefix",
         "issues?q=is%3Aissue%20in%3Atitle",
+        "Focus-change recovery is expected",
+        "Manual-paste recovery occurred during steady focus",
     ),
     DOCS / "index.html": (
         "Delivery is testable",
@@ -371,6 +373,8 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "ordinary command-shell prompt is outside",
         "after the fixed `[Compatibility]:` title prefix",
         "issues?q=is%3Aissue%20in%3Atitle",
+        "Focus-change recovery is expected",
+        "manual-paste recovery occurred while the original target stayed focused",
     ),
     DOCS / "app-compatibility.html": (
         "generic field type",
@@ -378,6 +382,8 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "ordinary command-shell prompt is outside",
         "fixed <code>[Compatibility]:</code> title prefix",
         "issues?q=is%3Aissue%20in%3Atitle",
+        "Focus-change recovery is expected",
+        "manual-recovery option only when it occurred while the original target stayed focused",
     ),
 }
 

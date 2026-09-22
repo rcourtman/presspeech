@@ -151,6 +151,13 @@ a duplicate. Add your counts even when the outcome differs: variation under
 comparable conditions is important evidence. Use a separate report for a
 different platform or field type.
 
+For the form's **Overall result**, a complete automatic-paste pass means all
+five steady-focus attempts pasted once and all three focus-change attempts
+recovered safely. Focus-change recovery is expected, so it does not count as a
+manual-recovery limitation. Choose that option only when manual-paste recovery
+occurred while the original target stayed focused. An incorrect or unsafe
+result takes precedence over either successful classification.
+
 Report only counts and classifications. Never include the phrases, recognized
 transcripts, clipboard contents, audio, dictionary or shortcut contents,
 document or window titles, private paths, credentials, or screenshots that

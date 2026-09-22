@@ -125,9 +125,10 @@ body:
     id: overall-result
     attributes:
       label: Overall result
+      description: Focus-change recovery is expected. Select the recovery option only when it happened during a steady-focus attempt; choose the most severe applicable result.
       options:
-        - Every completed result matched the protocol
-        - Manual-paste recovery appeared at least once
+        - All five steady-focus attempts pasted once; all three focus-change attempts recovered safely
+        - Manual-paste recovery occurred during steady focus; no incorrect or unsafe result occurred
         - An incorrect or unsafe result occurred
         - Testing could not be completed
     validations:
