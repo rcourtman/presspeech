@@ -23,12 +23,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          # Exercise the same interpreter and wheel set required by releases.
+          python-version: "3.12.10"
+          architecture: x64
           cache: pip
-          cache-dependency-path: windows/requirements.txt
-      - name: Install dependencies
+          cache-dependency-path: |
+            windows/requirements-release.txt
+            windows/requirements-cuda.txt
+      - name: Install and verify the locked release environment
         working-directory: windows
-        run: python -m pip install -r requirements.txt
+        run: |
+          # Isolated pip still reads global/site configuration unless disabled.
+          $env:PIP_CONFIG_FILE = 'NUL'
+          python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Hash-locked PyPI installation failed' }
+          python -m pip install --isolated --no-deps --only-binary=:all: -r requirements-cuda.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CUDA installation failed' }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { throw 'Release dependency graph is inconsistent' }
+          python release_requirements.py --verify-environment
+          if ($LASTEXITCODE -ne 0) { throw 'Release runtime does not match its pins' }
       - name: Unit tests
         working-directory: windows
         run: python -m unittest discover -s tests -v

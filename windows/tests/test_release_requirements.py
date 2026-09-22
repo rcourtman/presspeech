@@ -64,6 +64,54 @@ class ReleaseRequirementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "resolution fingerprint"):
             release_requirements.validate(text.replace("altgraph==", "altgraph==9", 1))
 
+    def test_multiple_reviewed_hashes_remain_bound_to_one_pin(self):
+        text = "alpha==1 \\\n    --hash=sha256:" + "a" * 64 + " \\\n    --hash=sha256:" + "b" * 64 + "\n"
+        self.assertEqual(release_requirements.pin_map(text), {"alpha": "1"})
+
+    def test_wildcard_version_is_not_an_exact_pin(self):
+        text = "alpha==1.* \\\n    --hash=sha256:" + "a" * 64 + "\n"
+        with self.assertRaisesRegex(ValueError, "non-exact requirement"):
+            release_requirements.pin_map(text)
+
+    def test_hash_cannot_attach_to_a_different_requirement(self):
+        cases = (
+            "alpha==1 \\\n    --hash=sha256:" + "a" * 64 + "\n    --hash=sha256:" + "b" * 64 + "\n",
+            "alpha==1 \\\n    --hash=sha256:" + "a" * 64 + " \\\nzeta==2 \\\n    --hash=sha256:" + "b" * 64 + "\n",
+        )
+        for text in cases:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                release_requirements.pin_map(text)
+
+    def test_hash_must_be_valid_unique_sha256(self):
+        cases = (
+            "    --hash=sha256:" + "A" * 64,
+            "    --hash=sha512:" + "a" * 64,
+            "    --hash=sha256:" + "a" * 63,
+            "    --hash=sha256:" + "a" * 64 + " \\\n    --hash=sha256:" + "a" * 64,
+        )
+        for hashes in cases:
+            with self.subTest(hashes=hashes), self.assertRaises(ValueError):
+                release_requirements.pin_map("alpha==1 \\\n" + hashes + "\n")
+
+    def test_index_include_and_editable_directives_are_rejected(self):
+        valid = "alpha==1 \\\n    --hash=sha256:" + "a" * 64 + "\n"
+        for directive in ("--extra-index-url https://invalid.example", "-r other.txt", "-e ."):
+            with self.subTest(directive=directive), self.assertRaises(ValueError):
+                release_requirements.pin_map(valid + directive + "\n")
+
+    def test_torch_removal_preserves_adjacent_multihash_packages(self):
+        def entry(name):
+            return name + "==1 \\\n    --hash=sha256:" + "a" * 64 + " \\\n    --hash=sha256:" + "b" * 64 + "\n    # via fixture\n"
+        compiled = entry("alpha") + entry("torch") + entry("zeta")
+        self.assertEqual(release_requirements.without_torch(compiled), entry("alpha") + entry("zeta"))
+
+    def test_pypi_only_environment_rejects_missing_optional_torch(self):
+        pins = release_requirements.validate(release_requirements.LOCK.read_text(encoding="utf-8"))
+        self.assertEqual(
+            release_requirements.environment_errors(pins, (3, 12, 10)),
+            ["torch is not installed; expected " + release_requirements.torch_version()],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

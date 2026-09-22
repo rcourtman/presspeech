@@ -221,6 +221,7 @@ jobs:
               Path("CONTRIBUTING.md"),
               Path("windows/README.md"),
               Path(".github/workflows/windows-release.yml"),
+              Path(".github/workflows/windows.yml"),
           ]
           direct_installs = []
           for path in install_paths:
@@ -233,7 +234,52 @@ jobs:
               raise SystemExit(
                   "CUDA Torch installs must use requirements-cuda.txt: " +
                   ", ".join(direct_installs))
+
+          release_workflow = Path(".github/workflows/windows-release.yml").read_text(
+              encoding="utf-8")
+          windows_ci = Path(".github/workflows/windows.yml").read_text(
+              encoding="utf-8")
+          locked_install = (
+              "python -m pip install --isolated --no-cache-dir --no-deps "
+              "--only-binary=:all: --require-hashes "
+              "--index-url https://pypi.org/simple -r requirements-release.txt"
+          )
+          ci_locked_install = (
+              "python -m pip install --isolated --no-deps "
+              "--only-binary=:all: --require-hashes "
+              "--index-url https://pypi.org/simple -r requirements-release.txt"
+          )
+          cuda_install = (
+              "python -m pip install --isolated --no-cache-dir --no-deps "
+              "--only-binary=:all: -r requirements-cuda.txt"
+          )
+          if locked_install not in release_workflow:
+              raise SystemExit(
+                  "Windows releases must install the PyPI lock with hashes, "
+                  "the canonical index, binary-only mode, isolated pip "
+                  "configuration, and dependency resolution disabled")
+          if cuda_install not in release_workflow:
+              raise SystemExit(
+                  "Windows releases must install CUDA Torch as an isolated "
+                  "binary without dependency resolution")
+          if ci_locked_install not in windows_ci:
+              raise SystemExit(
+                  "Windows CI must exercise the hash-locked release wheels")
+          ci_cuda_install = cuda_install.replace(" --no-cache-dir", "")
+          if ci_cuda_install not in windows_ci:
+              raise SystemExit("Windows CI must install the pinned CUDA runtime")
+          for workflow in (windows_ci, release_workflow):
+              if "python release_requirements.py --verify-environment" not in workflow:
+                  raise SystemExit("Windows builds must verify the complete release runtime")
+              if "$env:PIP_CONFIG_FILE = 'NUL'" not in workflow:
+                  raise SystemExit("Windows builds must disable inherited pip config files")
+          if ('python-version: "3.12.10"' not in windows_ci or
+                  "architecture: x64" not in windows_ci):
+              raise SystemExit(
+                  "Windows CI must exercise the release Python and architecture")
           PY
+          python3 windows/release_requirements.py --self-test
+          python3 windows/release_requirements.py --check
       - name: Docs syntax
         run: |
           python3 - <<'PY'

@@ -108,17 +108,25 @@ jobs:
         with:
           # release_requirements.py verifies this exact interpreter version.
           python-version: "3.12.10"
+          architecture: x64
       - name: Install the locked release environment
         working-directory: windows
         shell: pwsh
         run: |
-          # The release build verifies the environment against the compiled
-          # lock, so install that graph rather than re-resolving the loose
-          # inputs: CUDA Torch first, then every locked pin without further
-          # resolution so nothing Torch pulled in can drift past the lock.
-          python -m pip install --no-cache-dir -r requirements-cuda.txt
-          python -m pip install --no-cache-dir --no-deps -r requirements-release.txt
+          # Install only reviewed wheel hashes and the separately pinned CUDA
+          # runtime. Disable all pip configuration files, including global/site
+          # files that --isolated alone would still read.
+          $env:PIP_CONFIG_FILE = 'NUL'
+          python -m pip install --isolated --no-cache-dir --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Hash-locked PyPI installation failed' }
+          python -m pip install --isolated --no-cache-dir --no-deps --only-binary=:all: -r requirements-cuda.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned CUDA installation failed' }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { throw 'Release dependency graph is inconsistent' }
+          python release_requirements.py --verify-environment
+          if ($LASTEXITCODE -ne 0) { throw 'Release runtime does not match its pins' }
           winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --force --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
       - name: Import optional signing certificate
         env:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}

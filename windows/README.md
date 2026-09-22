@@ -342,17 +342,30 @@ clean release environment, then run the build script from `windows/`:
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact
 py -3.12 -m venv .release-venv
-.\.release-venv\Scripts\python -m pip install --only-binary=:all: -r requirements-release.txt
-.\.release-venv\Scripts\python -m pip install --no-deps -r requirements-cuda.txt
+$env:PIP_CONFIG_FILE = 'NUL'
+.\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt
+.\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: -r requirements-cuda.txt
 .\.release-venv\Scripts\python -m pip check
 powershell -ExecutionPolicy Bypass -File .\build-release.ps1 `
   -Version 0.1.12 -Python .\.release-venv\Scripts\python.exe
 ```
 
+For source builds containing this hash lock, `requirements-release.txt` lists
+reviewed SHA-256 artifact hashes for every PyPI package. The committed lock
+currently selects one Windows-compatible wheel per package; regeneration with
+`uv pip compile --generate-hashes` can list additional artifacts of the same pinned version.
+Review that hash set with the dependency update. Installation permits only
+compatible wheels, never source archives or dependency resolution. Both CI and
+release builds install the separate CUDA pin and verify the complete runtime;
+`pip check` alone cannot detect an omitted optional Torch dependency.
+Pip runs in isolated mode and `PIP_CONFIG_FILE=NUL` disables all configuration
+files, including global and environment-specific settings. This does not
+retroactively qualify older published installers.
 `build-release.ps1` refuses to package with a different Python patch or any
 missing/drifted dependency. When an intentional dependency update changes an
-input requirements file, install [uv](https://docs.astral.sh/uv/) and regenerate
-the resolved set from the repository root with
+input requirements file, install
+[uv](https://docs.astral.sh/uv/) and regenerate the resolved, hash-locked set
+from the repository root with
 `python windows/release_requirements.py`.
 
 The build uses a short temporary staging path to avoid Windows path-length

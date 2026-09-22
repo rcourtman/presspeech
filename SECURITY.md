@@ -38,6 +38,19 @@ unsigned until a code-signing certificate is configured; release attestation
 proves which immutable Presspeech release supplied the bytes, but it is not a
 substitute for Authenticode publisher identity.
 
+For source builds containing the SHA-256 dependency lock, the Windows packaging
+environment is also fixed before PyInstaller runs. Its PyPI dependency graph is exact-version locked to CPython 3.12 on Windows x64,
+and every selected wheel has a reviewed SHA-256 in
+`windows/requirements-release.txt`. The release workflow disables dependency
+resolution and source distributions while installing that lock, names the
+canonical PyPI index explicitly, ignores pip option environment variables, and
+disables all pip configuration files. CI verifies the same complete runtime,
+including the separate CUDA pin; optional dependencies are not covered by
+`pip check` alone. These build controls do not retroactively qualify older
+published installers. CUDA Torch is kept on its dedicated PyTorch index at an
+exact version and is installed with dependencies disabled so that index cannot
+substitute another transitive package.
+
 ## What's in scope
 
 - Anything that lets a non-Presspeech process read transcripts in flight,
