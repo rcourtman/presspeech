@@ -93,7 +93,28 @@ normal typing and does not start dictation from it. Choose **F8** or another
 push-to-talk key in first-run setup; the choice applies immediately and remains
 selected if setup is deferred.
 
-### Install from source
+### Upcoming 0.1.13: delivery recovery
+
+These recovery controls are not part of the 0.1.12 download above. Builds containing
+this change retain a finished dictation in process memory when clipboard access
+fails, a newer copy replaces it before the paste shortcut, the original target
+cannot be used, or keyboard delivery becomes uncertain. Check the intended field
+first: an input error can happen after part or all of the paste has completed.
+
+Use **Copy Undelivered Dictation** in the tray menu to copy the retained text
+explicitly, then paste manually. A verified copy clears that retained entry.
+Use **Discard Undelivered Dictation** to forget retained text without changing
+the clipboard. New recording waits for Copy or Discard; exiting also discards
+retained text. Reopening Presspeech only shows controls and a recovery notice;
+it never silently copies retained text over your current clipboard.
+
+Retention stays in process memory, without transcript logs, settings storage or
+a recovery file. Explicit Copy can still be retained or synced by Windows
+clipboard history or another clipboard manager. Clipboard sequence checks reduce
+replacement races; they do not make Ctrl+V atomic or acknowledge that the target
+application consumed the text. Another copy after the final check remains possible.
+
+## Install from source
 
 For development, install Python 3.12 and create a project virtual environment:
 

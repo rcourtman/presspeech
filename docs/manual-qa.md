@@ -463,3 +463,29 @@ lock and the app and benchmark pin the same FluidAudio revision. During an
 intentional candidate-API pin, use
 `--include-candidate-models --allow-candidate-dependency` only for candidate
 evidence; restore the exact app pin before recording a production release pass.
+
+## Windows delivery recovery (upcoming 0.1.13)
+
+Use a disposable Windows desktop and benign synthetic text for clipboard/input
+qualification. The unit suite uses doubles and does not qualify real clipboard
+or input behavior. Do not run these steps against a user's active clipboard.
+
+- Hold the clipboard from a separate process during delivery. Confirm retained
+  text is recoverable, recording is paused, and no transcript enters logs/files.
+- Replace the clipboard after its write, during the route delay, and between
+  modifier-down and V. Confirm detected changes skip V, release attempted keys,
+  and retain text without replacing the newer copy automatically.
+- Reopen the app with pending recovery. Existing controls remain reachable and
+  a notice appears, without copying or clearing private recovery.
+- Choose Copy while the clipboard is locked, then after it is released. Failure
+  retains text; successful owned Copy clears that entry and permits recording.
+  Test an external copy immediately after write and confirm it is not adopted
+  as the recovery write's receipt.
+- Choose Discard and Exit separately. Both forget private recovery; Discard must
+  leave a newer external clipboard untouched. No late worker may retain after Exit.
+- Inject key-down and key-up errors, including an error after an event may have
+  reached Windows. Release attempts must run; review the field before retrying.
+  A successful shortcut is not evidence of target consumption.
+- Repeat ordinary local, elevated-window, RDP and Moonlight dictation checks;
+  use non-ASCII text and emoji to qualify the Unicode clipboard path. Verify the
+  non-delayed clipboard data survives its private owner window being destroyed.

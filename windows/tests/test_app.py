@@ -1230,7 +1230,8 @@ class TextRegressionTests(unittest.TestCase):
         instance.notify = mock.Mock()
         target = app.PasteTarget("notepad.exe", 1234)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target",
@@ -1240,19 +1241,16 @@ class TextRegressionTests(unittest.TestCase):
 
         copy.assert_called_once_with("private transcript")
         controller.assert_not_called()
-        instance.notify.assert_called_once_with(
-            "Transcript copied, not pasted",
-            "The focused window changed while Presspeech was transcribing. "
-            "Paste from the clipboard when ready.")
-        instance._log.assert_called_once_with(
-            "paste skipped; focus changed from notepad.exe to calculator.exe")
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        instance.notify.assert_called_once()
 
     def test_missing_recording_target_copies_without_pasting(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
                 mock.patch.object(app.time, "sleep") as sleep, \
                 mock.patch.object(
                     app, "_foreground_paste_target") as foreground, \
@@ -1263,12 +1261,8 @@ class TextRegressionTests(unittest.TestCase):
         sleep.assert_not_called()
         foreground.assert_not_called()
         controller.assert_not_called()
-        instance._log.assert_called_once_with(
-            "paste skipped; no foreground window was captured")
-        instance.notify.assert_called_once_with(
-            "Transcript copied, not pasted",
-            "Presspeech couldn't identify the window focused when recording "
-            "began. Paste from the clipboard when ready.")
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        instance.notify.assert_called_once()
 
     def test_reused_window_handle_from_another_process_never_receives_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1277,7 +1271,8 @@ class TextRegressionTests(unittest.TestCase):
         target = app.PasteTarget("notepad.exe", 1234, 41)
         replacement = app.PasteTarget("notepad.exe", 1234, 42)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target",
@@ -1287,10 +1282,8 @@ class TextRegressionTests(unittest.TestCase):
 
         copy.assert_called_once_with("private transcript")
         controller.assert_not_called()
-        instance.notify.assert_called_once_with(
-            "Transcript copied, not pasted",
-            "The focused window changed while Presspeech was transcribing. "
-            "Paste from the clipboard when ready.")
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        instance.notify.assert_called_once()
 
     def test_focus_change_during_shortcut_never_emits_paste_key(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1302,7 +1295,8 @@ class TextRegressionTests(unittest.TestCase):
         target = app.PasteTarget("moonlight.exe", 1234, 41)
         replacement = app.PasteTarget("calculator.exe", 5678, 42)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target",
@@ -1327,12 +1321,8 @@ class TextRegressionTests(unittest.TestCase):
         self.assertNotIn(mock.call("v"), keyboard.press.call_args_list)
         self.assertNotIn(mock.call("v"), keyboard.release.call_args_list)
         self.assertFalse(instance._injecting_keys)
-        instance.notify.assert_called_once_with(
-            "Transcript copied, not pasted",
-            "The focused window changed while Presspeech was transcribing. "
-            "Paste from the clipboard when ready.")
-        instance._log.assert_called_once_with(
-            "paste skipped; focus changed from moonlight.exe to calculator.exe")
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        instance.notify.assert_called_once()
 
     def test_original_window_still_receives_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1340,7 +1330,8 @@ class TextRegressionTests(unittest.TestCase):
         instance._log = mock.Mock()
         target = app.PasteTarget("notepad.exe", 1234, 41)
 
-        with mock.patch.object(app.pyperclip, "copy"), \
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text"), \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
@@ -1359,7 +1350,8 @@ class TextRegressionTests(unittest.TestCase):
         instance.notify = mock.Mock()
         target = app.PasteTarget("admin-tool.exe", 1234, 41, 0x3000)
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
@@ -1370,13 +1362,8 @@ class TextRegressionTests(unittest.TestCase):
 
         copy.assert_called_once_with("private transcript")
         controller.assert_not_called()
-        instance._log.assert_called_once_with(
-            "paste skipped; target runs at a higher Windows integrity level")
-        instance.notify.assert_called_once_with(
-            "Transcript copied, not pasted",
-            "Windows prevents Presspeech from typing into an app running as "
-            "administrator. Paste from the clipboard, or reopen that app "
-            "without Run as administrator.")
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        instance.notify.assert_called_once()
 
     def test_equal_integrity_target_still_receives_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1384,7 +1371,8 @@ class TextRegressionTests(unittest.TestCase):
         instance._log = mock.Mock()
         target = app.PasteTarget("notepad.exe", 1234, 41, 0x2000)
 
-        with mock.patch.object(app.pyperclip, "copy"), \
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text"), \
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
@@ -2430,6 +2418,160 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(instance.model_status, "loading")
         self.assertEqual(instance._model_load_target, "small.en")
         instance._schedule_model_idle_unload.assert_not_called()
+
+
+
+
+class DeliveryRecoveryTests(unittest.TestCase):
+    """Delivery control-flow tests; never touch the clipboard or inject input."""
+    def setUp(self):
+        self.instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        self.instance._log = mock.Mock()
+        self.instance.notify = mock.Mock()
+        self.instance._undelivered_dictations = []
+        self.instance._undelivered_lock = __import__("threading").Lock()
+        self.instance._injecting_keys = False
+        self.target = app.PasteTarget("notepad.exe", 1234, 41)
+        def patch(*args, **kwargs):
+            patcher = mock.patch.object(*args, **kwargs)
+            value = patcher.start()
+            self.addCleanup(patcher.stop)
+            return value
+        self.copy = patch(app.clipboard_delivery, "write_text",
+                          return_value=app.clipboard_delivery.WriteReceipt(101))
+        self.owned = patch(app.clipboard_delivery, "is_current", return_value=True)
+        self.controller = patch(app.pkb, "Controller")
+        self.keyboard = self.controller.return_value
+        self.sleep = patch(app.time, "sleep")
+        patch(app, "_foreground_paste_target", return_value=self.target)
+        patch(app, "_paste_target_blocks_simulated_input", return_value=False)
+
+    def paste(self):
+        return self.instance._paste("private transcript", self.target)
+
+    def assert_retained_without_content_logs(self):
+        self.assertEqual(self.instance._undelivered_dictations, ["private transcript"])
+        self.assertNotIn("private transcript", str(self.instance._log.mock_calls))
+        self.assertNotIn("private transcript", str(self.instance.notify.mock_calls))
+
+    def test_clipboard_failure_retains_text_and_never_constructs_keyboard(self):
+        self.copy.side_effect = RuntimeError("private clipboard detail")
+        self.assertFalse(self.paste())
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.assertNotIn("private clipboard detail", str(self.instance._log.mock_calls))
+
+    def test_external_copy_immediately_after_write_stops_delivery(self):
+        self.owned.return_value = False
+        self.assertFalse(self.paste())
+        self.sleep.assert_not_called()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.copy.assert_called_once()
+
+    def test_external_copy_during_delay_stops_delivery(self):
+        self.owned.side_effect = [True, False]
+        self.assertFalse(self.paste())
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+
+    def test_external_copy_after_modifiers_releases_keys_without_v(self):
+        self.owned.side_effect = [True, True, False]
+        self.assertFalse(self.paste())
+        self.keyboard.press.assert_called_once_with(app.pkb.Key.ctrl_l)
+        self.keyboard.release.assert_called_once_with(app.pkb.Key.ctrl_l)
+        self.assertFalse(self.instance._injecting_keys)
+        self.assert_retained_without_content_logs()
+
+    def test_controller_failure_does_not_claim_current_clipboard_contains_text(self):
+        self.controller.side_effect = RuntimeError("synthetic controller failure")
+        self.assertFalse(self.paste())
+        self.assert_retained_without_content_logs()
+        self.assertNotIn("remains on the clipboard", str(self.instance.notify.mock_calls))
+        self.assertIn("may have partly completed", str(self.instance.notify.mock_calls))
+
+    def test_ambiguous_key_down_failure_still_attempts_release(self):
+        self.keyboard.press.side_effect = RuntimeError("side effect then failure")
+        self.assertFalse(self.paste())
+        self.keyboard.release.assert_called_once_with(app.pkb.Key.ctrl_l)
+        self.assertFalse(self.instance._injecting_keys)
+        self.assert_retained_without_content_logs()
+
+    def test_failed_v_release_is_retried_and_modifiers_released(self):
+        self.keyboard.release.side_effect = [RuntimeError("uncertain"), None, None]
+        self.assertFalse(self.paste())
+        self.assertEqual(self.keyboard.release.call_args_list, [
+            mock.call("v"), mock.call("v"), mock.call(app.pkb.Key.ctrl_l)])
+        self.assertFalse(self.instance._injecting_keys)
+        self.assert_retained_without_content_logs()
+
+    def test_successful_shortcut_does_not_claim_consumption(self):
+        self.assertTrue(self.paste())
+        self.assertFalse(self.instance.has_undelivered_dictation())
+        self.instance.notify.assert_not_called()
+
+    def test_explicit_copy_failure_or_new_owner_preserves_recovery(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.copy.side_effect = RuntimeError("clipboard locked")
+        self.assertFalse(self.instance.copy_undelivered_dictation())
+        self.assert_retained_without_content_logs()
+        self.copy.side_effect = None
+        self.owned.return_value = False
+        self.assertFalse(self.instance.copy_undelivered_dictation())
+        self.assert_retained_without_content_logs()
+        self.controller.assert_not_called()
+
+    def test_explicit_owned_copy_clears_only_the_copied_transcript(self):
+        self.instance._undelivered_dictations = ["private transcript", "next transcript"]
+        self.assertTrue(self.instance.copy_undelivered_dictation())
+        self.copy.assert_called_once_with("private transcript")
+        self.assertEqual(self.instance._undelivered_dictations, ["next transcript"])
+        self.controller.assert_not_called()
+
+    def test_discard_does_not_write_clipboard_and_unblocks_capture(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance.discard_undelivered_dictation()
+        self.assertFalse(self.instance.has_undelivered_dictation())
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+
+    def test_repeated_launch_opens_controls_without_copying_retained_text(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance.settings = {"setup_complete": True}
+        self.instance.update_window = None
+        self.instance.setup_window = None
+        self.instance.settings_window = None
+        self.instance.scratchpad = None
+        self.instance.open_settings = mock.Mock()
+        self.instance._activate_from_launch()
+        self.instance.open_settings.assert_called_once()
+        self.copy.assert_not_called()
+        self.assert_retained_without_content_logs()
+
+    def test_pending_recovery_blocks_new_capture_before_device_or_model_work(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance._dictation_model_ready = mock.Mock()
+        self.assertFalse(self.instance.start_recording())
+        self.instance._dictation_model_ready.assert_not_called()
+        self.copy.assert_not_called()
+        self.assert_retained_without_content_logs()
+
+    def test_exiting_discards_recovery_and_rejects_late_retention(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance._restore_playback_after_recording = mock.Mock()
+        self.instance.indicator = mock.Mock()
+        self.instance.listener = None
+        self.instance.update_window = None
+        self.instance.settings_window = None
+        self.instance.setup_window = None
+        self.instance.scratchpad = None
+        self.instance.icon = None
+        with mock.patch.object(app.os, "_exit") as terminate:
+            self.instance.exit_app()
+        terminate.assert_called_once_with(0)
+        self.instance._remember_undelivered_dictation("private transcript", "clipboard-unavailable")
+        self.assertFalse(self.instance.has_undelivered_dictation())
+        self.copy.assert_not_called()
 
 
 if __name__ == "__main__":

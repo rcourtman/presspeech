@@ -171,3 +171,19 @@ security issue.
 GitHub issues are public. Diagnostics omit transcript text, audio, and dictionary
 contents. Do not add dictated text, audio, references, dictionary or shortcut
 contents, credentials, or other private data yourself.
+
+### Windows Delivery Recovery in Upcoming 0.1.13
+
+These controls are not included in Windows 0.1.12. In builds containing the new
+recovery actions, clipboard failure, a newer clipboard copy, an unavailable
+original target, or uncertain keyboard delivery keeps the finished dictation in
+memory and pauses new recording. Check the intended field before retrying: a
+shortcut error does not prove that nothing was pasted.
+
+Choose **Copy Undelivered Dictation** from the tray menu to copy explicitly and
+paste manually, or **Discard Undelivered Dictation** to forget it and resume
+recording. Discard leaves the clipboard unchanged. Exit forgets retained text.
+Reopening Presspeech shows controls and a notice; it does not copy automatically.
+If another writer changes the clipboard during recovery, the text stays available
+for another deliberate Copy or Discard. These checks cannot acknowledge target
+consumption or remove the final clipboard-check/input race.

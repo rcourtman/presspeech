@@ -30,6 +30,7 @@ import numpy as np
 import soxr
 import sounddevice as sd
 import pyperclip
+import clipboard_delivery
 from pynput import keyboard as pkb
 from PIL import Image, ImageDraw
 from pystray import Icon, Menu, MenuItem
@@ -649,6 +650,11 @@ class PresspeechApp:
         self._passthrough_hotkey_vks = set()
         self._suppressed_hotkey_vks = {}
         self._injecting_keys = False
+        # Clipboard and input failures can leave delivery uncertain. Keep the
+        # transcript in process memory until an explicit Copy, Discard or Exit.
+        # Never write this recovery queue to configuration, diagnostics, or the log.
+        self._undelivered_dictations = []
+        self._undelivered_lock = threading.Lock()
         self._recording_paste_target = PasteTarget("", 0)
         self._recording_scratchpad = None
         self._rec_epoch = 0
@@ -695,6 +701,11 @@ class PresspeechApp:
                 MenuItem("Settings\u2026", self.open_settings),
                 MenuItem("Repair Global Hotkey", self.repair_hotkey),
                 Menu.SEPARATOR,
+                MenuItem(
+                    "Copy Undelivered Dictation",
+                    self.copy_undelivered_dictation),
+                MenuItem("Discard Undelivered Dictation",
+                         self.discard_undelivered_dictation),
                 MenuItem("Check for Updates\u2026", self.check_for_updates),
                 MenuItem("Copy Diagnostics", self.copy_diagnostics),
                 MenuItem("Report a Problem\u2026", self.report_problem),
@@ -782,6 +793,10 @@ class PresspeechApp:
 
     def _activate_from_launch(self):
         """Reveal the most relevant control surface after a repeated launch."""
+        # Reopening the app is navigation, never consent to overwrite a newer
+        # clipboard with retained private text. Keep existing controls reachable.
+        if self.has_undelivered_dictation():
+            self._notify_undelivered_dictation()
         # Preserve the user's current task when a window already exists,
         # including a minimized or covered update/setup/settings window.
         for window in (
@@ -800,6 +815,7 @@ class PresspeechApp:
 
     def exit_app(self, icon=None, item=None):
         self._exiting = True
+        self._clear_undelivered_dictations()
         self._restore_playback_after_recording()
         self.indicator.close()
         if self.listener is not None:
@@ -1197,6 +1213,10 @@ class PresspeechApp:
         if getattr(self, "transcribing", False):
             self._set_indicator("transcribing")
             self._log("dictation ignored; previous transcription is still being delivered")
+            return False
+        if self.has_undelivered_dictation():
+            self._log("dictation deferred; an undelivered transcript is waiting")
+            self._notify_undelivered_dictation()
             return False
         if not self._dictation_model_ready():
             return False
@@ -1943,65 +1963,158 @@ class PresspeechApp:
         text += cfg.SUFFIXES.get(self.settings["suffix"], " ")
         return text
 
+    def has_undelivered_dictation(self):
+        """Return whether uncertain delivery left private text in memory."""
+        lock = getattr(self, "_undelivered_lock", None)
+        if lock is None:
+            return bool(getattr(self, "_undelivered_dictations", ()))
+        with lock:
+            return bool(self._undelivered_dictations)
+
+    def _notify_undelivered_dictation(self):
+        self.notify(
+            "Dictation waiting for review",
+            "Presspeech is keeping a dictation in memory only. "
+            "Check the intended field first. Use Copy Undelivered Dictation "
+            "or Discard Undelivered Dictation in the tray menu before "
+            "recording again. Exiting discards this text.")
+
+    def _remember_undelivered_dictation(self, text, reason):
+        """Retain private text, never exception details or transcript contents."""
+        lock = getattr(self, "_undelivered_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._undelivered_lock = lock
+            self._undelivered_dictations = []
+        with lock:
+            if getattr(self, "_exiting", False):
+                return
+            self._undelivered_dictations.append(text)
+        # Callers supply fixed status codes, never exception messages.
+        self._log("dictation retained in memory; delivery status: %s" % reason)
+        prefix = {
+            "clipboard-unavailable": "The clipboard write could not be verified. ",
+            "clipboard-changed": "The clipboard changed; no paste shortcut was sent. ",
+            "target-unavailable": "The original input window could not be identified. ",
+            "focus-changed": "The focused window changed; no paste shortcut was sent. ",
+            "target-elevated": "Windows blocks simulated input into this elevated app. ",
+            "shortcut-uncertain": "The paste shortcut may have partly completed. ",
+        }[reason]
+        self.notify("Dictation needs review", prefix +
+                    "Check the intended field before trying again. The dictation is "
+                    "kept in memory only: use Copy Undelivered Dictation or Discard "
+                    "Undelivered Dictation in the tray menu to resume recording. "
+                    "Exiting discards it.")
+
+    def _clear_undelivered_dictations(self):
+        lock = getattr(self, "_undelivered_lock", None)
+        if lock is not None:
+            with lock:
+                self._undelivered_dictations.clear()
+
+    def discard_undelivered_dictation(self, icon=None, item=None):
+        """Explicitly discard retained dictation without changing the clipboard."""
+        self._clear_undelivered_dictations()
+        self.notify("Retained dictation discarded", "You can record again.")
+
+    def copy_undelivered_dictation(self, icon=None, item=None):
+        """Explicitly copy the oldest retained transcript; never simulate input."""
+        lock = getattr(self, "_undelivered_lock", None)
+        if lock is None:
+            self.notify("No undelivered dictation", "There is nothing waiting to copy.")
+            return False
+        with lock:
+            if not self._undelivered_dictations or getattr(self, "_exiting", False):
+                self.notify("No undelivered dictation", "There is nothing waiting to copy.")
+                return False
+            try:
+                receipt = clipboard_delivery.write_text(self._undelivered_dictations[0])
+            except Exception:
+                self._log("clipboard recovery unavailable; dictation retained")
+                self.notify("Clipboard unavailable", "The dictation is still kept in memory. "
+                            "Try Copy Undelivered Dictation again, or choose Discard.")
+                return False
+            if not clipboard_delivery.is_current(receipt):
+                self._log("clipboard changed during recovery; dictation retained")
+                self.notify("Clipboard changed", "The dictation is still kept in memory. "
+                            "Check the clipboard before choosing Copy or Discard.")
+                return False
+            del self._undelivered_dictations[0]
+            remaining = bool(self._undelivered_dictations)
+        message = "Dictation copied. Check the intended field before pasting manually."
+        if remaining:
+            message += " Another dictation is waiting for Copy or Discard."
+        self.notify("Dictation copied", message)
+        return True
+
     def _paste(self, text, paste_target=PasteTarget("", 0)):
-        pyperclip.copy(text)
+        try:
+            receipt = clipboard_delivery.write_text(text)
+        except Exception:
+            self._remember_undelivered_dictation(text, "clipboard-unavailable")
+            return False
+        if not clipboard_delivery.is_current(receipt):
+            self._remember_undelivered_dictation(text, "clipboard-changed")
+            return False
         if not isinstance(paste_target, PasteTarget):
-            # Legacy callers cannot prove which window owned the cursor when
-            # recording began, so normalize them into the same fail-closed
-            # clipboard-only path as an unavailable Win32 snapshot.
             paste_target = PasteTarget(str(paste_target or ""), 0)
         if not paste_target.window_handle:
-            self._log("paste skipped; no foreground window was captured")
-            self.notify(
-                "Transcript copied, not pasted",
-                "Presspeech couldn't identify the window focused when "
-                "recording began. Paste from the clipboard when ready.")
-            return
+            self._remember_undelivered_dictation(text, "target-unavailable")
+            return False
         process_name = paste_target.process_name
         route = _paste_route(process_name)
         time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
+        if not clipboard_delivery.is_current(receipt):
+            self._remember_undelivered_dictation(text, "clipboard-changed")
+            return False
         if not self._paste_target_still_focused(paste_target):
-            return
+            self._remember_undelivered_dictation(text, "focus-changed")
+            return False
         if _paste_target_blocks_simulated_input(paste_target):
-            self._log(
-                "paste skipped; target runs at a higher Windows integrity level")
-            self.notify(
-                "Transcript copied, not pasted",
-                "Windows prevents Presspeech from typing into an app running "
-                "as administrator. Paste from the clipboard, or reopen that "
-                "app without Run as administrator.")
-            return
-        keyboard = pkb.Controller()
+            self._remember_undelivered_dictation(text, "target-elevated")
+            return False
+        keyboard = None
         modifiers = [pkb.Key.ctrl_l]
         if route == "moonlight":
-            # Moonlight's client-side shortcut types clipboard text on the host.
             modifiers.extend((pkb.Key.alt_l, pkb.Key.shift_l))
-        self._injecting_keys = True
-        pressed = []
+        attempted = []
+        failure = None
         try:
+            keyboard = pkb.Controller()
+            self._injecting_keys = True
             for key in modifiers:
+                # A backend exception does not prove that key-down was absent.
+                attempted.append(key)
                 keyboard.press(key)
-                pressed.append(key)
-            # pynput emits each key event separately. A mouse click can move
-            # focus after Ctrl (or Moonlight's longer modifier chord) but
-            # before V, so revalidate at the last point before the event that
-            # actually exposes the clipboard contents.
             if not self._paste_target_still_focused(paste_target):
-                return
-            if route == "moonlight":
-                self._log("paste route: Moonlight clipboard typing")
-            elif route == "rdp":
-                self._log("paste route: Remote Desktop clipboard")
+                failure = "focus-changed"
+            elif not clipboard_delivery.is_current(receipt):
+                failure = "clipboard-changed"
             else:
-                self._log("paste route: local (%s)" % (process_name or "unknown"))
-            keyboard.press("v")
-            keyboard.release("v")
+                # Sequence equality is a last-point guard, not atomic input or
+                # acknowledgement that another application consumed the text.
+                attempted.append("v")
+                keyboard.press("v")
+                keyboard.release("v")
+                attempted.pop()
+        except Exception:
+            failure = "shortcut-uncertain"
         finally:
-            for key in reversed(pressed):
-                keyboard.release(key)
-            # Let hook callbacks consume the injected releases before re-enabling PTT.
+            for key in reversed(attempted):
+                try:
+                    keyboard.release(key)
+                except Exception:
+                    failure = failure or "shortcut-uncertain"
+                    try:
+                        keyboard.release(key)
+                    except Exception:
+                        pass
             time.sleep(0.02)
             self._injecting_keys = False
+        if failure:
+            self._remember_undelivered_dictation(text, failure)
+            return False
+        return True
 
     def _paste_target_still_focused(self, paste_target):
         current_target = _foreground_paste_target()
@@ -2012,10 +2125,6 @@ class PresspeechApp:
                 paste_target.process_name or "unknown",
                 current_target.process_name or "unknown",
             ))
-        self.notify(
-            "Transcript copied, not pasted",
-            "The focused window changed while Presspeech was transcribing. "
-            "Paste from the clipboard when ready.")
         return False
 
     # ---------------- windows ----------------
@@ -2109,6 +2218,8 @@ class PresspeechApp:
             cfg.recording_length_seconds(
                 self.settings.get("max_recording_seconds")),
             "Windows UI Automation: %s" % ui.accessibility_status(),
+            "Undelivered dictation waiting: %s" %
+            self.has_undelivered_dictation(),
             "Automatic update checks: %s" % bool(
                 self.settings.get("check_updates", True)),
             "Dictionary rule count: %d" % len(self.settings.get("dictionary", [])),
