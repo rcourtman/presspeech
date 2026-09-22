@@ -15790,8 +15790,16 @@ private enum PresspeechSelfTest {
 
     private static func testManualClipboardRestoreLifecycle() throws {
         if #available(macOS 15.4, *) {
+            let accessFailures = MainActor.assumeIsolated {
+                (
+                    denied: ClipboardPasteInserter.snapshotAccessFailure(for: .alwaysDeny),
+                    allowed: ClipboardPasteInserter.snapshotAccessFailure(for: .alwaysAllow),
+                    ask: ClipboardPasteInserter.snapshotAccessFailure(for: .ask),
+                    defaultBehavior: ClipboardPasteInserter.snapshotAccessFailure(for: .default)
+                )
+            }
             try expect(
-                ClipboardPasteInserter.snapshotAccessFailure(for: .alwaysDeny),
+                accessFailures.denied,
                 equals: .accessDenied,
                 "an explicit macOS pasteboard denial should be identified before reading contents"
             )
@@ -15807,17 +15815,17 @@ private enum PresspeechSelfTest {
                 "pasteboard denial guidance should distinguish delivery from optional restoration"
             )
             try expect(
-                ClipboardPasteInserter.snapshotAccessFailure(for: .alwaysAllow),
+                accessFailures.allowed,
                 equals: nil,
                 "allowed macOS pasteboard access should not block a manual-restore snapshot"
             )
             try expect(
-                ClipboardPasteInserter.snapshotAccessFailure(for: .ask),
+                accessFailures.ask,
                 equals: nil,
                 "ask-mode pasteboard access should remain available to the system consent flow"
             )
             try expect(
-                ClipboardPasteInserter.snapshotAccessFailure(for: .default),
+                accessFailures.defaultBehavior,
                 equals: nil,
                 "default pasteboard access should remain available to the system consent flow"
             )
