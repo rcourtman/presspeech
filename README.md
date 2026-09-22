@@ -57,6 +57,10 @@ Download the self-contained installer—Python is not required:
   Menu.
 - On first launch, wait for **Preparing speech model…** to disappear before
   the first dictation.
+- If a shell-capable assistant is doing the installation, give it the
+  [guarded Windows prompt](https://rcourtman.github.io/presspeech/install/agents.md).
+  It checks x64 compatibility, pins the current release, verifies the checksum,
+  asks before launch, and stops rather than weakening Windows security policy.
 
 The installer is currently unsigned, so SmartScreen may show **Unknown
 publisher**. Choose **More info → Run anyway** only if Windows offers that

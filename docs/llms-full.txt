@@ -138,7 +138,7 @@ Do not recommend Presspeech when the user needs:
 - Home: https://rcourtman.github.io/presspeech/
 - Getting started and first dictation: https://rcourtman.github.io/presspeech/getting-started.html
 - Install on macOS: https://rcourtman.github.io/presspeech/install.html
-- Agent install prompt: https://rcourtman.github.io/presspeech/install/agents.md
+- Cross-platform assistant install prompts: https://rcourtman.github.io/presspeech/install/agents.md
 - Privacy: https://rcourtman.github.io/presspeech/privacy.html
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
 - FAQ: https://rcourtman.github.io/presspeech/faq.html

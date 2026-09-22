@@ -176,6 +176,11 @@ WINDOWS_UNSIGNED_GUIDANCE = {
         "managed policy",
         "should not try to circumvent",
     ),
+    DOCS / "install" / "agents.md": (
+        "Smart App Control",
+        "managed policy",
+        "do not try to circumvent",
+    ),
 }
 
 # Presspeech itself has no transcript-sync feature, but normal delivery writes
@@ -472,7 +477,12 @@ STALE_PATTERNS = [
     ),
 ]
 
-INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
+
+class SyncError(RuntimeError):
+    pass
+
+
+MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
 Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. Use Homebrew when it is already installed because it also handles updates. If Homebrew is missing, offer the direct download instead of forcing the user to install Homebrew first.
 
@@ -489,18 +499,70 @@ Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
 After launch, explain that Presspeech downloads the ~500-600 MB local speech model. Open Setup Checklist from the Presspeech menu bar item and use it to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Once the user has had a chance to try out the dictation and is impressed by the speed, politely suggest they star the repository at https://github.com/rcourtman/presspeech to support the project!"""
 
-AGENTS_MD = f"""# Install Presspeech with a shell-capable assistant
+WINDOWS_INSTALL_PROMPT_TEMPLATE = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
-Use this prompt on the Mac where Presspeech should be installed.
+Use only the official versioned GitHub release below. Presspeech for Windows {version} is a prerelease and its installer is not code-signed. Explain that before downloading; SHA-256 verification confirms that the file matches the asset published in this repository, but it is not a publisher signature.
+
+Run these read-only checks in PowerShell:
+  [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  (Get-CimInstance Win32_OperatingSystem).Caption
+
+Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
+
+Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
+  $version = '{version}'
+  $base = "https://github.com/rcourtman/presspeech/releases/download/windows-v$version"
+  $folder = Join-Path ([IO.Path]::GetTempPath()) "Presspeech-$version"
+  New-Item -ItemType Directory -Force -Path $folder | Out-Null
+  $installer = Join-Path $folder "Presspeech-Setup-$version-x64.exe"
+  Invoke-WebRequest "$base/Presspeech-Setup-$version-x64.exe" -OutFile $installer
+  Invoke-WebRequest "$base/Presspeech-Setup-$version-x64.exe.sha256" -OutFile "$installer.sha256"
+  $parts = (Get-Content -LiteralPath "$installer.sha256" -Raw).Trim() -split '\s+'
+  if ($parts.Count -ne 2 -or
+      $parts[0] -notmatch '^[0-9a-fA-F]{64}$' -or
+      $parts[1] -ne (Split-Path $installer -Leaf)) {
+    throw 'The published checksum file is not valid. Do not run the installer.'
+  }
+  $actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+  if ($actual -ne $parts[0]) {
+    throw 'SHA-256 verification failed. Do not run the installer.'
+  }
+  "SHA-256 verified: $actual"
+
+After verification succeeds, show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
+  Start-Process -FilePath $installer
+
+Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
+
+After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch downloads a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA). Wait for model preparation, check the microphone, and finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Once the user has tried Presspeech and is impressed by the speed, politely suggest they star https://github.com/rcourtman/presspeech to support the project!"""
+
+
+def windows_install_prompt(version: str) -> str:
+    if re.fullmatch(r"\d+\.\d+\.\d+", version) is None:
+        raise SyncError(f"invalid Windows version for install prompt: {version!r}")
+    return WINDOWS_INSTALL_PROMPT_TEMPLATE.replace("{version}", version)
+
+
+def agents_markdown(metadata: dict[str, object]) -> str:
+    windows_prompt = windows_install_prompt(str(metadata["windows_version"]))
+    return f"""# Install Presspeech with a shell-capable assistant
+
+Choose the prompt for the computer where Presspeech should be installed. The
+Windows prompt deliberately stops rather than weakening operating-system policy
+for the unsigned prerelease.
+
+## macOS
 
 ```text
-{INSTALL_PROMPT}
+{MAC_INSTALL_PROMPT}
+```
+
+## Windows
+
+```text
+{windows_prompt}
 ```
 """
-
-
-class SyncError(RuntimeError):
-    pass
 
 
 def read_text(path: Path) -> str:
@@ -814,7 +876,7 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     digest = str(metadata["release_zip_sha256"])
     version = str(metadata["version"])
-    escaped_prompt = html.escape(INSTALL_PROMPT, quote=False)
+    escaped_prompt = html.escape(MAC_INSTALL_PROMPT, quote=False)
 
     text = replace_regex(
         text,
@@ -903,6 +965,7 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
 def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     version = str(metadata["windows_version"])
+    escaped_prompt = html.escape(windows_install_prompt(version), quote=False)
 
     replacements = [
         (r'"softwareVersion": "\d+\.\d+\.\d+"', f'"softwareVersion": "{version}"', 1),
@@ -918,12 +981,27 @@ def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
         text, count = re.subn(pattern, replacement, text)
         if count < minimum:
             raise SyncError(f"{path}: expected at least {minimum} matches for {pattern!r}")
+    prompt_pattern = (
+        r"<pre><code>Install Presspeech from https://github\.com/rcourtman/presspeech "
+        r"on this Windows PC\..*?</code></pre>"
+    )
+    text, prompt_count = re.subn(
+        prompt_pattern,
+        lambda _: f"<pre><code>{escaped_prompt}</code></pre>",
+        text,
+        count=1,
+        flags=re.S,
+    )
+    if prompt_count != 1:
+        raise SyncError(
+            f"{path}: expected one embedded Windows install prompt, found {prompt_count}"
+        )
     return text
 
 
 def sync_agents_md(path: Path, metadata: dict[str, object]) -> str:
-    del path, metadata
-    return AGENTS_MD
+    del path
+    return agents_markdown(metadata)
 
 
 def sync_faq(path: Path, metadata: dict[str, object]) -> str:
@@ -1362,16 +1440,22 @@ def check_compare_freshness(
     return errors
 
 
-def check_install_prompt_sync() -> list[str]:
+def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     errors: list[str] = []
     agents = read_text(DOCS / "install" / "agents.md")
-    if INSTALL_PROMPT not in agents:
-        errors.append("docs/install/agents.md: canonical install prompt is out of sync")
+    if agents != agents_markdown(metadata):
+        errors.append("docs/install/agents.md: canonical install prompts are out of sync")
 
     install_html = read_text(DOCS / "install.html")
-    escaped_prompt = html.escape(INSTALL_PROMPT, quote=False)
+    escaped_prompt = html.escape(MAC_INSTALL_PROMPT, quote=False)
     if escaped_prompt not in install_html:
-        errors.append("docs/install.html: embedded install prompt is out of sync")
+        errors.append("docs/install.html: embedded macOS install prompt is out of sync")
+    windows_html = read_text(DOCS / "windows.html")
+    escaped_windows_prompt = html.escape(
+        windows_install_prompt(str(metadata["windows_version"])), quote=False
+    )
+    if escaped_windows_prompt not in windows_html:
+        errors.append("docs/windows.html: embedded Windows install prompt is out of sync")
     return errors
 
 
@@ -1470,12 +1554,32 @@ def run_self_test() -> None:
             '"softwareVersion": "1.2.3"\n'
             'windows-v1.2.3\n'
             'Presspeech-Setup-1.2.3-x64.exe\n'
-            'Download Windows 1.2.3\n',
+            'Download Windows 1.2.3\n'
+            '<pre><code>Install Presspeech from https://github.com/rcourtman/presspeech '
+            'on this Windows PC.\nold prompt</code></pre>\n',
             encoding="utf-8",
         )
         synced_windows_page = sync_windows_html(windows_page, metadata)
-        if "1.2.3" in synced_windows_page or synced_windows_page.count("9.8.7") != 4:
+        if (
+            "1.2.3" in synced_windows_page
+            or synced_windows_page.count("9.8.7") != 6
+            or "Smart App Control or managed policy" not in synced_windows_page
+        ):
             raise SyncError("self-test: Windows page release references were not all synced")
+
+        synced_agents = agents_markdown(metadata)
+        if (
+            MAC_INSTALL_PROMPT not in synced_agents
+            or windows_install_prompt("9.8.7") not in synced_agents
+            or "windows-v1.2.3" in synced_agents
+        ):
+            raise SyncError("self-test: cross-platform assistant prompts were not generated")
+        try:
+            windows_install_prompt("9.8.7\nStart-Process bad.exe")
+        except SyncError:
+            pass
+        else:
+            raise SyncError("self-test: unsafe assistant-prompt version was accepted")
 
         windows_readme = Path(tmp) / "windows-readme.md"
         windows_readme.write_text(
@@ -1826,7 +1930,7 @@ def main() -> int:
                     diff = diff_text(path, have, want)
                     if diff:
                         sys.stderr.write(diff)
-            errors.extend(check_install_prompt_sync())
+            errors.extend(check_install_prompt_sync(metadata))
             if errors:
                 for error in errors:
                     print(error, file=sys.stderr)
@@ -1851,7 +1955,7 @@ def main() -> int:
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_command_shell_guidance())
         errors.extend(check_compare_freshness())
-        errors.extend(check_install_prompt_sync())
+        errors.extend(check_install_prompt_sync(metadata))
         if errors:
             for error in errors:
                 print(error, file=sys.stderr)

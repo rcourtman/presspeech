@@ -36,7 +36,7 @@ Important pages:
 - First dictation: https://rcourtman.github.io/presspeech/getting-started.html
 - Install on macOS: https://rcourtman.github.io/presspeech/install.html
 - Windows install: https://rcourtman.github.io/presspeech/windows.html
-- Agent install prompt: https://rcourtman.github.io/presspeech/install/agents.md
+- Cross-platform assistant install prompts: https://rcourtman.github.io/presspeech/install/agents.md
 - Privacy: https://rcourtman.github.io/presspeech/privacy.html
 - Network calls JSON: https://rcourtman.github.io/presspeech/privacy/network-calls.json
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
