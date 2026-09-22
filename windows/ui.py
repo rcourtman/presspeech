@@ -105,8 +105,60 @@ def _window_host():
         return _WINDOW_HOST
 
 
+class _WindowCallbacks:
+    """Cancel one dialog's Tcl callbacks before its widget commands disappear.
+
+    Tk deletes Python callback commands on destroy, but its interpreter-wide
+    after queue survives while the shared host runs. Keep this lifetime local
+    to each Toplevel; the host and sibling windows retain their own callbacks.
+    """
+
+    def __init__(self, root):
+        self._after = root.after
+        self._cancel = root.after_cancel
+        self._destroy = root.destroy
+        self._pending = set()
+        self._closed = False
+        root.after = self.after
+        root.after_cancel = self.cancel
+        root.destroy = self.destroy
+
+    def after(self, ms, func=None, *args):
+        if self._closed:
+            raise tk.TclError("Cannot schedule a closed dialog callback")
+        if func is None:
+            return self._after(ms)
+
+        def run(*values):
+            self._pending.discard(identifier)
+            if not self._closed:
+                return func(*values)
+
+        # Tk's after_idle delegates to after("idle", ...), so it shares the
+        # same ownership without changing idle scheduling or callback arguments.
+        identifier = self._after(ms, run, *args)
+        self._pending.add(identifier)
+        return identifier
+
+    def cancel(self, id):
+        self._cancel(id)
+        self._pending.discard(id)
+
+    def destroy(self):
+        self._closed = True
+        for identifier in tuple(self._pending):
+            try:
+                self._cancel(identifier)
+            except tk.TclError:
+                # Tcl may already have removed a completed/cancelled command.
+                pass
+        self._pending.clear()
+        return self._destroy()
+
+
 def _interactive_window(title):
     root = tk.Toplevel(_window_host().root)
+    _WindowCallbacks(root)
     root.title(title)
     return root
 

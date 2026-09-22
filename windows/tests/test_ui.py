@@ -17,6 +17,145 @@ except ModuleNotFoundError:
 import ui
 
 
+class WindowCallbackLifetimeTests(unittest.TestCase):
+    class Interpreter:
+        def __init__(self):
+            self.pending = {}
+            self.next_id = 0
+
+        def drain(self):
+            ready, self.pending = self.pending, {}
+            for owner, callback, args in ready.values():
+                if owner.destroyed:
+                    raise RuntimeError("Tcl callback command deleted by destroy")
+                callback(*args)
+
+    class Root:
+        def __init__(self, interpreter):
+            self.interpreter = interpreter
+            self.destroyed = False
+            self.cancelled = []
+            self.blocking_delays = []
+
+        def after(self, delay, callback=None, *args):
+            if callback is None:
+                self.blocking_delays.append(delay)
+                return None
+            self.interpreter.next_id += 1
+            identifier = str(self.interpreter.next_id)
+            self.interpreter.pending[identifier] = (self, callback, args)
+            return identifier
+
+        def after_idle(self, callback, *args):
+            return self.after("idle", callback, *args)
+
+        def after_cancel(self, identifier):
+            self.cancelled.append(identifier)
+            self.interpreter.pending.pop(identifier, None)
+
+        def destroy(self):
+            self.destroyed = True
+
+    def setUp(self):
+        self.interpreter = self.Interpreter()
+        self.root = self.Root(self.interpreter)
+        self.lifetime = ui._WindowCallbacks(self.root)
+
+    def test_destroy_cancels_delayed_and_idle_commands_but_preserves_other_windows(self):
+        calls = []
+        sibling = self.Root(self.interpreter)
+        host = self.Root(self.interpreter)
+        ui._WindowCallbacks(sibling)
+        delayed = self.root.after(250, calls.append, "closed poll")
+        idle = self.root.after_idle(calls.append, "closed focus")
+        sibling.after(250, calls.append, "sibling")
+        host.after(25, calls.append, "host")
+
+        self.root.destroy()
+        self.interpreter.drain()
+
+        self.assertEqual(calls, ["sibling", "host"])
+        self.assertCountEqual(self.root.cancelled, [delayed, idle])
+        self.assertFalse(self.lifetime._pending)
+
+    def test_completed_and_explicitly_cancelled_callbacks_do_not_accumulate(self):
+        called = mock.Mock()
+        completed = self.root.after(0, called, "argument")
+        self.interpreter.drain()
+        called.assert_called_once_with("argument")
+        self.assertFalse(self.lifetime._pending)
+        cancelled = self.root.after_idle(called)
+        self.root.after_cancel(cancelled)
+        self.root.destroy()
+        self.assertEqual(self.root.cancelled, [cancelled])
+        self.assertNotIn(completed, self.root.cancelled)
+        self.interpreter.drain()
+        called.assert_called_once()
+
+    def test_recurring_poll_cancels_only_its_pending_successor(self):
+        def poll():
+            self.root.after(250, poll)
+        self.root.after(250, poll)
+        for _ in range(20):
+            self.interpreter.drain()
+            self.assertEqual(len(self.lifetime._pending), 1)
+        successor = next(iter(self.lifetime._pending))
+        self.root.destroy()
+        self.interpreter.drain()
+        self.assertEqual(self.root.cancelled, [successor])
+
+    def test_callback_that_closes_window_is_retired_before_destruction(self):
+        self.root.after_idle(self.root.destroy)
+        self.interpreter.drain()
+        self.assertTrue(self.root.destroyed)
+        self.assertFalse(self.lifetime._pending)
+        self.assertEqual(self.root.cancelled, [])
+
+    def test_callback_exception_does_not_retain_completed_identifier(self):
+        self.root.after(1, mock.Mock(side_effect=RuntimeError("callback failed")))
+        with self.assertRaisesRegex(RuntimeError, "callback failed"):
+            self.interpreter.drain()
+        self.assertFalse(self.lifetime._pending)
+        self.root.destroy()
+        self.assertEqual(self.root.cancelled, [])
+
+    def test_every_interactive_dialog_installs_callback_lifetime(self):
+        root = mock.Mock()
+        with mock.patch.object(ui.tk, "Toplevel", return_value=root, create=True), \
+                mock.patch.object(ui, "_window_host"), \
+                mock.patch.object(ui, "_WindowCallbacks") as lifetime:
+            self.assertIs(ui._interactive_window("Test"), root)
+        lifetime.assert_called_once_with(root)
+        root.title.assert_called_once_with("Test")
+
+    def test_named_tk_scheduling_and_cancellation_arguments_are_preserved(self):
+        callback = mock.Mock()
+        identifier = self.root.after(ms=1, func=callback)
+        self.root.after_cancel(id=identifier)
+        self.interpreter.drain()
+        callback.assert_not_called()
+        self.assertFalse(self.lifetime._pending)
+
+    def test_blocking_after_retains_existing_contract(self):
+        self.assertIsNone(self.root.after(3))
+        self.assertEqual(self.root.blocking_delays, [3])
+        self.assertFalse(self.lifetime._pending)
+
+    def test_failed_recovery_build_cancels_callbacks_before_destroy(self):
+        window = ui.DeliveryRecoveryWindow.__new__(ui.DeliveryRecoveryWindow)
+        window.app = mock.Mock()
+        window.root = self.root
+        def fail():
+            self.root.after(500, lambda: None)
+            raise RuntimeError("build failed")
+        window._build_window = fail
+        with self.assertRaisesRegex(RuntimeError, "build failed"):
+            window._build()
+        self.interpreter.drain()
+        self.assertTrue(self.root.destroyed)
+        self.assertFalse(self.lifetime._pending)
+
+
 class AccessibleWindowTests(unittest.TestCase):
     def test_dialog_viewport_uses_content_size_until_screen_margin(self):
         self.assertEqual(ui._bounded_viewport(500, 1920, 96, 320), 500)
