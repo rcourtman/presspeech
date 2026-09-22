@@ -865,7 +865,8 @@ if [[ "$BACKEND" == "v3-int8-v2" ]]; then
     swift_build_args+=( -Xswiftc -D -Xswiftc PRESSPEECH_ENCODER_INT8_V2 )
 fi
 swift build "${swift_build_args[@]}" >/dev/null
-if [[ "$(python3 ./dependency-provenance.py)" != "$dependency_provenance" ]]; then
+built_dependency_provenance="$(python3 ./dependency-provenance.py --verify-built)" || exit 1
+if [[ "$built_dependency_provenance" != "$dependency_provenance" ]]; then
     echo "dependency provenance changed during benchmark build" >&2
     exit 1
 fi

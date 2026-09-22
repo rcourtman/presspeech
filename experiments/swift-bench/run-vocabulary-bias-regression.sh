@@ -935,6 +935,10 @@ test_frozen_input_run() {
     cp Package.swift Package.resolved dependency-provenance.py rescoring-evidence.py "$bench/"
     mkdir -p "$root/repo/swift"
     cp "$REPO_ROOT/swift/Package.swift" "$REPO_ROOT/swift/Package.resolved" "$root/repo/swift/"
+    # Exercise the real provenance gate even though compilation itself is a
+    # frozen-input test double. The minimal SDK has genuine committed objects,
+    # matching manifests/locks and a canonical SwiftPM checkout selection.
+    python3 ./test-dependency-provenance.py --prepare-fixture "$bench" "$root/repo/swift"
     printf 'original target audio\n' >"$fixture/targets/sample.wav"
     printf 'original target reference\n' >"$fixture/targets/sample.txt"
     printf 'original control audio\n' >"$fixture/controls/sample.wav"
@@ -957,6 +961,9 @@ find "$FREEZE_TEST_FIXTURES" -type f -exec sh -c 'printf "edited original\n" > "
 mkdir -p .build/release
 cp "$FREEZE_TEST_BENCH" .build/release/presspeech-bench
 chmod +x .build/release/presspeech-bench
+if [[ "${FREEZE_TEST_DIRTY_SDK:-0}" == 1 ]]; then
+    printf 'public let injected = true\n' >.build/checkouts/FluidAudio/Sources/FluidAudio/Injected.swift
+fi
 MOCK_SWIFT
     cat >"$root/bin/afconvert" <<'MOCK_AFCONVERT'
 #!/usr/bin/env bash
@@ -1033,6 +1040,38 @@ MOCK_BENCH
         assert_not_contains "$report" "$fixture"
         assert_not_contains "$report" 'original target reference'
     done
+    # A successful build does not qualify mutated SDK inputs. Refuse before
+    # any benchmark invocation or a successful report can be produced.
+    # The first mock build deliberately replaced both originals with identical
+    # bytes. Restore independent synthetic clips before the second invocation.
+    printf 'original target audio\n' >"$fixture/targets/sample.wav"
+    printf 'original target reference\n' >"$fixture/targets/sample.txt"
+    printf 'original control audio\n' >"$fixture/controls/sample.wav"
+    printf 'original control reference\n' >"$fixture/controls/sample.txt"
+    printf 'private canonical term\n' >"$fixture/vocabulary.txt"
+    printf 'private canonical term\n' >"$fixture/critical-terms.txt"
+    local dirty_log="$root/dirty-sdk.log"
+    if PATH="$root/bin:$PATH" \
+        FREEZE_TEST_FIXTURES="$fixture" \
+        FREEZE_TEST_BENCH="$root/mock-bench" \
+        FREEZE_TEST_CALLS="$root/refused-calls" \
+        FREEZE_TEST_DIRTY_SDK=1 \
+        bash "$bench/run-vocabulary-bias-regression.sh" \
+        --input-dir "$fixture/targets" --negative-control-dir "$fixture/controls" \
+        --vocabulary "$fixture/vocabulary.txt" --critical-terms "$fixture/critical-terms.txt" \
+        --out-dir "$root/refused-results" --no-threshold >"$dirty_log" 2>&1; then
+        echo 'self-test accepted a build with modified SDK source' >&2
+        exit 1
+    fi
+    if ! grep -Fq 'built dependency contains untracked or missing files' "$dirty_log"; then
+        cat "$dirty_log" >&2
+        echo 'self-test did not reach the SDK provenance gate' >&2
+        exit 1
+    fi
+    if [[ -e "$root/refused-calls" ]]; then
+        echo 'self-test ran benchmark after SDK provenance refusal' >&2
+        exit 1
+    fi
 }
 
 test_native_audio_normalization() {
@@ -2054,7 +2093,8 @@ IFS=$'\t' read -r fluid_revision production_fluid_revision BASELINE_DEPENDENCY <
 
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
-if [[ "$(python3 ./dependency-provenance.py "${provenance_args[@]}")" != "$dependency_provenance" ]]; then
+built_dependency_provenance="$(python3 ./dependency-provenance.py "${provenance_args[@]}" --verify-built)" || exit 1
+if [[ "$built_dependency_provenance" != "$dependency_provenance" ]]; then
     echo "dependency provenance changed during benchmark build" >&2
     exit 1
 fi

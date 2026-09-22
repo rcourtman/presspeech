@@ -167,6 +167,10 @@ class ContextInputTests(unittest.TestCase):
         production.mkdir()
         for name in ("Package.swift", "Package.resolved"):
             shutil.copyfile(ROOT.parents[1] / "swift" / name, production / name)
+        # The runner's postbuild gate inspects actual Git objects and source;
+        # keep this dependency fixture genuine even though Swift itself is mocked.
+        provenance_fixture = load_module("provenance_fixture", "test-dependency-provenance.py")
+        provenance_fixture.prepare_fixture(bench, production)
         fake_bin = self.root / "bin"
         fake_bin.mkdir()
         expected = {hashlib.sha256(p.read_bytes()).hexdigest(): p.with_suffix(".txt").read_text()
@@ -184,7 +188,6 @@ print(f'transcript: [WER 0.0%] [final-word retained=true] [word-errors=0 referen
 ''')
         mock_bench.chmod(0o755)
         commands = {
-            "git": "pass\n",
             "afconvert": "import shutil,sys\nshutil.copyfile(sys.argv[-2],sys.argv[-1])\n",
             "swift": '''import os,shutil
 from pathlib import Path
@@ -245,7 +248,7 @@ lock.write_text(json.dumps(data))
             env={**os.environ, "PATH":str(fake_bin)+os.pathsep+os.environ['PATH']},
             capture_output=True, text=True, timeout=30)
         self.assertNotEqual(refused.returncode, 0)
-        self.assertIn("dependency provenance changed during benchmark build", refused.stderr)
+        self.assertIn("built workspace uses an edited or different FluidAudio dependency", refused.stderr)
         self.assertFalse(list(refused_dir.glob("*.tsv")))
         self.assertFalse(list(refused_dir.glob("*.md")))
 

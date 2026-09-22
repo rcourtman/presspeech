@@ -96,6 +96,16 @@ post-processing, hardware or end-to-end latency match the installed app.
 product-candidate gates reject that mismatch; `--no-threshold` still permits
 exploration, records the mismatch and keeps the product screen blocked.
 
+After building, the vocabulary, real-dictation and model-comparison runners also
+inspect SwiftPM's selected checkout, its actual Git revision and every source
+file against that revision. Edited dependencies, changed bytes, missing files
+and added files (including ignored source files) fail before inference. An
+experimental SDK therefore needs its own committed revision and matching pins;
+a modified checkout cannot be reported as the production dependency. This is a
+source check at inspection time, not an attestation of the compiler, binary
+artifacts or the complete build environment. Older reports need their separately
+recorded source evidence because this check does not apply retroactively.
+
 Older reports may call their unmodified `v3` lane “production” while recording
 FluidAudio `c7246f4dc78d05f75cdfc5a550cd72ced0c658bf`; the app remained on
 `4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b`. Interpret those rows as an unbiased
