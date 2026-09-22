@@ -273,6 +273,12 @@ callback details and pressed keys are not included.
 
 ## Settings
 
+Settings can be edited while Presspeech is busy, but **Save** waits until the
+current recording, cancellation, transcription, and delivery have finished.
+This keeps one dictation on one coherent microphone, model, hotkey, and text
+processing configuration. The window announces when saving becomes available
+again; unsaved edits remain in place while it waits.
+
 - Hotkey: right/left Alt, Ctrl, Shift, Win, or F8–F12
 - Trigger: hold-to-talk or press-to-toggle
 - Maximum recording length: 1, 2 (default), 5, or 10 minutes

@@ -332,9 +332,9 @@ Presspeech is local-first:
 - Completed transcripts pass through the operating-system clipboard. macOS
   0.3.8 can expose those entries to macOS Universal Clipboard. Builds containing
   local-only transcript clipboard writes keep every Presspeech transcript on
-  the current Mac and add standard transient markers for cooperating clipboard
-  managers while preserving local Command-V. They also republish a restored
-  previous clipboard on the current Mac only. macOS Clipboard History in
+  the current Mac and add standard transient, auto-generated, and concealed
+  markers for cooperating clipboard managers while preserving local Command-V.
+  They also republish a restored previous clipboard on the current Mac only. macOS Clipboard History in
   Spotlight on macOS 26 or later and other local clipboard readers remain
   separate boundaries. Published Windows 0.1.12 Windows clipboard writes can be
   retained or synced; Upcoming Windows 0.1.13 asks Windows to exclude every

@@ -7,25 +7,26 @@ import keyboard_delivery as delivery
 
 
 class CheckedKeyboardDeliveryTests(unittest.TestCase):
-    def backend(self, *, inserted=1):
+    def backend(self, *, inserted=None):
         api = mock.Mock()
         api.MapVirtualKeyW.return_value = 0x1D
         self.events = []
 
         def send_input(count, pointer, size):
-            event = ctypes.cast(
-                pointer, ctypes.POINTER(delivery._INPUT)).contents
-            self.events.append({
-                "count": count,
-                "size": size,
-                "type": event.type,
-                "vk": event.value.ki.wVk,
-                "scan": event.value.ki.wScan,
-                "flags": event.value.ki.dwFlags,
-                "time": event.value.ki.time,
-                "extra": event.value.ki.dwExtraInfo,
-            })
-            return inserted
+            events = ctypes.cast(
+                pointer, ctypes.POINTER(delivery._INPUT * count)).contents
+            for event in events:
+                self.events.append({
+                    "count": count,
+                    "size": size,
+                    "type": event.type,
+                    "vk": event.value.ki.wVk,
+                    "scan": event.value.ki.wScan,
+                    "flags": event.value.ki.dwFlags,
+                    "time": event.value.ki.time,
+                    "extra": event.value.ki.dwExtraInfo,
+                })
+            return count if inserted is None else inserted
 
         api.SendInput.side_effect = send_input
         return api
@@ -54,6 +55,49 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         self.assertEqual(self.events[0]["vk"], delivery.VK_V)
         self.assertEqual(
             self.events[0]["flags"], delivery._KEYEVENTF_KEYUP)
+
+    def test_shortcut_is_one_non_interleavable_send_input_batch(self):
+        api = self.backend()
+        delivery.Controller(api=api).shortcut(
+            [delivery.VK_LCONTROL, delivery.VK_LMENU, delivery.VK_LSHIFT],
+            delivery.VK_V)
+
+        api.SendInput.assert_called_once()
+        self.assertEqual(
+            [(event["vk"], event["flags"]) for event in self.events],
+            [
+                (delivery.VK_LCONTROL, 0),
+                (delivery.VK_LMENU, 0),
+                (delivery.VK_LSHIFT, 0),
+                (delivery.VK_V, 0),
+                (delivery.VK_V, delivery._KEYEVENTF_KEYUP),
+                (delivery.VK_LSHIFT, delivery._KEYEVENTF_KEYUP),
+                (delivery.VK_LMENU, delivery._KEYEVENTF_KEYUP),
+                (delivery.VK_LCONTROL, delivery._KEYEVENTF_KEYUP),
+            ],
+        )
+        self.assertTrue(all(event["count"] == 8 for event in self.events))
+
+    def test_partial_shortcut_batch_is_reported_as_uncertain(self):
+        api = self.backend(inserted=2)
+        with self.assertRaises(delivery.KeyboardDeliveryError):
+            delivery.Controller(api=api).shortcut(
+                [delivery.VK_LCONTROL], delivery.VK_V)
+
+        api.SendInput.assert_called_once()
+        self.assertEqual(len(self.events), 4)
+
+    def test_shortcut_rejects_ambiguous_key_sets_before_native_calls(self):
+        for modifiers, key in (([], delivery.VK_V),
+                               ([delivery.VK_LCONTROL, delivery.VK_LCONTROL],
+                                delivery.VK_V),
+                               ([delivery.VK_V], delivery.VK_V)):
+            with self.subTest(modifiers=modifiers):
+                api = self.backend()
+                with self.assertRaises(ValueError):
+                    delivery.Controller(api=api).shortcut(modifiers, key)
+                api.MapVirtualKeyW.assert_not_called()
+                api.SendInput.assert_not_called()
 
     def test_unaccepted_event_is_reported_as_uncertain_delivery(self):
         api = self.backend(inserted=0)

@@ -1721,6 +1721,26 @@ def check_compatibility_worksheet_contract(
             )
         if re.search(r'<button\b(?![^>]*\btype="(?:button|reset)")[^>]*>', form, flags=re.I):
             errors.append("docs/app-compatibility.html: worksheet buttons must not submit")
+        report_actions = re.search(
+            r'<div\b(?=[^>]*\bid="worksheet-report-actions")(?=[^>]*\bhidden\b)[^>]*>'
+            r'(?P<body>.*?)</div>',
+            form,
+            flags=re.I | re.S,
+        )
+        if report_actions is None:
+            errors.append(
+                "docs/app-compatibility.html: completed worksheet must reveal "
+                "report actions"
+            )
+        else:
+            actions = report_actions.group("body")
+            browse_position = actions.find("issues?q=")
+            new_position = actions.find("issues/new?template=compatibility_report.yml")
+            if browse_position < 0 or new_position < 0 or browse_position > new_position:
+                errors.append(
+                    "docs/app-compatibility.html: worksheet handoff must check "
+                    "matching reports before opening a new report"
+                )
 
     for pattern, label in COMPATIBILITY_WORKSHEET_FORBIDDEN:
         if re.search(pattern, script):
@@ -1739,6 +1759,11 @@ def check_compatibility_worksheet_contract(
         errors.append(
             "docs/compatibility-worksheet.js: copied worksheet summary must include "
             "the canonical overall result"
+        )
+    if "reportActions.hidden = !result.complete" not in script:
+        errors.append(
+            "docs/compatibility-worksheet.js: report actions must remain hidden "
+            "until all outcomes are complete"
         )
     return errors
 
@@ -2602,24 +2627,63 @@ def run_self_test() -> None:
             + worksheet_inputs
             + '<textarea id="worksheet-summary" readonly></textarea>'
             '<button type="button">Copy</button><button type="reset">Reset</button>'
+            '<div id="worksheet-report-actions" hidden>'
+            '<a href="https://github.com/example/issues?q=matching">Browse</a>'
+            '<a href="https://github.com/example/issues/new?template=compatibility_report.yml">New</a>'
+            '</div>'
             '</form>',
             encoding="utf-8",
         )
         worksheet_script.write_text(
             'document.getElementById("compatibility-worksheet");\n'
+            'reportActions.hidden = !result.complete;\n'
             '`Overall result: ${result.overall}`\n'
             + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
             encoding="utf-8",
         )
         if check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
             raise SyncError("self-test: local compatibility worksheet was rejected")
+        valid_worksheet_page = worksheet_page.read_text(encoding="utf-8")
+        valid_worksheet_script = worksheet_script.read_text(encoding="utf-8")
+        worksheet_page.write_text(
+            re.sub(
+                r'<div id="worksheet-report-actions" hidden>.*?</div>',
+                "",
+                valid_worksheet_page,
+                count=1,
+                flags=re.S,
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "must reveal report actions" in error
+            for error in check_compatibility_worksheet_contract(
+                worksheet_page, worksheet_script
+            )
+        ):
+            raise SyncError("self-test: missing worksheet report handoff was accepted")
+        worksheet_page.write_text(valid_worksheet_page, encoding="utf-8")
+        worksheet_script.write_text(
+            valid_worksheet_script.replace(
+                "reportActions.hidden = !result.complete;\n", "", 1
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "must remain hidden" in error
+            for error in check_compatibility_worksheet_contract(
+                worksheet_page, worksheet_script
+            )
+        ):
+            raise SyncError("self-test: always-visible worksheet report handoff was accepted")
         worksheet_script.write_text(
             'localStorage.setItem("result", "unsafe");\n', encoding="utf-8"
         )
         if not check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
             raise SyncError("self-test: persistent compatibility worksheet was accepted")
         worksheet_script.write_text(
-            "// local only\n`Overall result: ${result.overall}`\n"
+            "// local only\nreportActions.hidden = !result.complete;\n"
+            "`Overall result: ${result.overall}`\n"
             + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
             encoding="utf-8",
         )

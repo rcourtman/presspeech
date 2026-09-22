@@ -34,8 +34,6 @@
           <a href="../install.html">macOS</a>
           <a href="../windows.html">Windows</a>
           <a href="../privacy.html">Privacy</a>
-          <a href="../benchmarks.html">Benchmarks</a>
-          <a href="../faq.html">FAQ</a>
           <a href="../troubleshooting.html">Help</a>
           <a href="./" aria-current="page">Compare</a>
           <a href="https://github.com/rcourtman/presspeech">GitHub</a>
@@ -79,6 +77,11 @@
                   <td>User-selectable local Whisper models and Parakeet models. Its documentation describes GPU acceleration for Whisper and CPU operation for Parakeet.</td>
                 </tr>
                 <tr>
+                  <th scope="row">Paste and clipboard recovery</th>
+                  <td>Checks that the captured destination is still the focused window before automatic paste; otherwise it keeps the transcript available for explicit manual paste. On macOS 0.3.8, optional preservation of the previous clipboard requires a separate Restore action and confirmation rather than restoring on a timer.</td>
+                  <td>Handy's documented standard clipboard method restores the previous clipboard after a fixed delay. Its troubleshooting guide warns that a slow target can read the old content instead; macOS and Windows also offer a Reliable Paste beta that waits for a clipboard-read notification, plus adjustable delays for the standard method.</td>
+                </tr>
+                <tr>
                   <th scope="row">Privacy posture</th>
                   <td>No cloud transcription, account, telemetry, or crash reporter. Audio is held in memory and discarded; the documented network surface is model downloads and optional release checks.</td>
                   <td>Core transcription happens on the computer without uploading audio. Model downloads and update checks use the network; optional post-processing can call a configured local or cloud LLM provider.</td>
@@ -104,7 +107,7 @@
           <div class="note">
             <p>Choose Handy if Linux or Intel Mac support, one cross-platform application, model switching, or a much larger open-source community matters most. Choose Presspeech if you want the smaller native macOS surface and its published model-transcription benchmark, or its intentionally fixed engine and deterministic text pipeline. On Windows, test both on the actual hardware: their packaging and acceleration paths differ substantially.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, <a href="https://github.com/cjpais/Handy">Handy source and documentation</a>, and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.7">Handy v0.9.7 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.9.7">release assets</a> (checked 22 September 2026). No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, <a href="https://github.com/cjpais/Handy#previous-clipboard-content-is-pasted-instead-of-the-transcription">Handy source and clipboard troubleshooting guidance</a>, and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.7">Handy v0.9.7 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.9.7">release assets</a> (checked 22 September 2026). No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
         </div>
       </section>
     </main>

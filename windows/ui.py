@@ -8,6 +8,13 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+try:
+    import winreg
+except ImportError:
+    # Keep the model-free UI helpers importable on non-Windows development
+    # hosts. The packaged application always has the standard winreg module.
+    winreg = None
+
 import config as cfg
 import live_region
 import updates
@@ -305,6 +312,22 @@ def _hotkey_readiness(app):
     return result
 
 
+def _settings_save_block_reason(app):
+    """Explain why mutable settings cannot be committed at this instant."""
+    # The UI poll is advisory. SettingsWindow._save repeats this check while
+    # holding the app lock so Ctrl+S cannot race a recording start or the
+    # transition from capture to transcription and delivery.
+    if getattr(app, "_starting_recording", False) is True:
+        return "Wait for the current dictation to finish starting before saving settings."
+    if getattr(app, "recording", False) is True:
+        return "Finish or cancel the current dictation before saving settings."
+    if getattr(app, "_canceling_recording", False) is True:
+        return "Wait for the canceled dictation to finish closing before saving settings."
+    if getattr(app, "transcribing", False) is True:
+        return "Wait for the current dictation to finish before saving settings."
+    return ""
+
+
 def _add_access_key(root, widget, key):
     """Give a command its conventional Windows Alt mnemonic."""
     key = key.casefold()
@@ -346,6 +369,40 @@ def _scaled_pixels(value, pixels_per_inch):
     if scale <= 0:
         scale = 1.0
     return max(1, round(value * scale))
+
+
+def _windows_text_scale(registry=None):
+    """Return Windows' independent accessibility text-size multiplier."""
+    registry = winreg if registry is None else registry
+    if registry is None:
+        return 1.0
+    try:
+        with registry.OpenKey(
+                registry.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Accessibility") as key:
+            percentage, value_type = registry.QueryValueEx(
+                key, "TextScaleFactor")
+        if value_type != registry.REG_DWORD or type(percentage) is not int:
+            return 1.0
+    except (AttributeError, OSError, TypeError, ValueError):
+        return 1.0
+    # UISettings.TextScaleFactor documents the same system value as 1–2.25.
+    # Treat an out-of-contract registry value as unavailable rather than
+    # making the always-on-top indicator unusably large or small.
+    if not 100 <= percentage <= 225:
+        return 1.0
+    return percentage / 100.0
+
+
+def _scaled_font_points(points, text_scale):
+    """Scale one small custom font without changing display-DPI geometry."""
+    try:
+        text_scale = float(text_scale)
+    except (TypeError, ValueError):
+        text_scale = 1.0
+    if not 1.0 <= text_scale <= 2.25:
+        text_scale = 1.0
+    return max(1, int(points * text_scale + 0.5))
 
 
 def _bounded_window_size(
@@ -672,6 +729,7 @@ class DictationIndicator:
             bottom_offset = _scaled_pixels(42, pixels_per_inch)
             visible_state = None
             current_palette = None
+            current_text_scale = None
 
             def apply_palette(state, force=False):
                 nonlocal current_palette
@@ -697,6 +755,30 @@ class DictationIndicator:
                 label.configure(bg=background, fg=foreground)
                 root.attributes("-alpha", opacity)
 
+            def apply_text_scale(force=False):
+                nonlocal current_text_scale
+                text_scale = _windows_text_scale()
+                if not force and text_scale == current_text_scale:
+                    return False
+                current_text_scale = text_scale
+                dot.configure(font=(
+                    "Segoe UI", _scaled_font_points(11, text_scale)))
+                label.configure(font=(
+                    "Segoe UI", _scaled_font_points(10, text_scale), "bold"))
+                return True
+
+            def position_visible_indicator():
+                root.update_idletasks()
+                width = max(minimum_width, frame.winfo_reqwidth())
+                height = max(minimum_height, frame.winfo_reqheight())
+                area = self._work_area()
+                x = area.left + ((area.right - area.left - width) // 2)
+                y = area.bottom - height - bottom_offset
+                user32.SetWindowPos(
+                    hwnd, ctypes.c_void_p(-1), x, y, width, height,
+                    0x0010 | 0x0040,  # SWP_NOACTIVATE | SWP_SHOWWINDOW
+                )
+
             def apply_command(command):
                 nonlocal visible_state
                 if command == "close":
@@ -710,17 +792,9 @@ class DictationIndicator:
                 # Refresh even if the colours are otherwise unchanged because
                 # the default accent is specific to the current state.
                 apply_palette(command, force=True)
+                apply_text_scale(force=True)
                 visible_state = command
-                root.update_idletasks()
-                width = max(minimum_width, frame.winfo_reqwidth())
-                height = max(minimum_height, frame.winfo_reqheight())
-                area = self._work_area()
-                x = area.left + ((area.right - area.left - width) // 2)
-                y = area.bottom - height - bottom_offset
-                user32.SetWindowPos(
-                    hwnd, ctypes.c_void_p(-1), x, y, width, height,
-                    0x0010 | 0x0040,  # SWP_NOACTIVATE | SWP_SHOWWINDOW
-                )
+                position_visible_indicator()
                 return True
 
             def poll():
@@ -734,16 +808,19 @@ class DictationIndicator:
                     return
                 root.after(25, poll)
 
-            def refresh_contrast_theme():
+            def refresh_accessibility_settings():
                 if visible_state is not None:
                     # Contrast themes can be toggled while a two-minute
-                    # recording is active. Keep a visible indicator in sync
-                    # without requiring another dictation state transition.
+                    # recording is active, and Text size is independent from
+                    # display DPI. Keep both in sync without requiring another
+                    # dictation state transition or an app restart.
                     apply_palette(visible_state)
-                root.after(250, refresh_contrast_theme)
+                    if apply_text_scale():
+                        position_visible_indicator()
+                root.after(250, refresh_accessibility_settings)
 
             root.after(0, poll)
-            root.after(250, refresh_contrast_theme)
+            root.after(250, refresh_accessibility_settings)
             root.mainloop()
         except Exception:
             # Dictation must remain usable even if Windows refuses the overlay.
@@ -1576,8 +1653,8 @@ class SettingsWindow:
                                                    sticky="ew", pady=8)
         row += 1
 
-        save_button = ttk.Button(f, text="Save", command=self._save)
-        save_button.grid(row=row, column=0, sticky="w")
+        self.save_button = ttk.Button(f, text="Save", command=self._save)
+        self.save_button.grid(row=row, column=0, sticky="w")
         self.status = ttk.Label(f, text="")
         self.status.grid(row=row, column=1, columnspan=2, sticky="w", padx=10)
 
@@ -1587,7 +1664,7 @@ class SettingsWindow:
         _add_access_key(root, self.repair_hotkey_button, "h")
         _add_access_key(root, startup_button, "o")
         _add_access_key(root, self.retry_model_button, "m")
-        _add_access_key(root, save_button, "s")
+        _add_access_key(root, self.save_button, "s")
         _bind_window_command(root, "<Control-s>", self._save)
         _bind_window_command(root, "<Escape>", self._close)
         root.update_idletasks()
@@ -1634,7 +1711,20 @@ class SettingsWindow:
         _set_control_state(
             self.root, self.retry_model_button,
             "normal" if status == "error" else "disabled", self.var_model)
+        self._refresh_save_state()
         self.root.after(300, self._poll_model)
+
+    def _refresh_save_state(self):
+        """Keep Save truthful while an in-flight dictation owns app settings."""
+        reason = _settings_save_block_reason(self.app)
+        previous = getattr(self, "_save_block_reason", "")
+        self._save_block_reason = reason
+        self.save_button.config(state="disabled" if reason else "normal")
+        if reason and reason != previous:
+            _set_accessible_text(self.status, reason)
+        elif not reason and previous:
+            _set_accessible_text(
+                self.status, "Dictation finished. Settings can now be saved.")
 
     def _add_rule(self):
         spoken = self.var_spoken.get().strip()
@@ -1662,37 +1752,52 @@ class SettingsWindow:
             self.listbox.delete(index)
 
     def _save(self):
-        s = self.app.settings
-        label_to_value = {v: k for k, v in cfg.MODEL_LABELS.items()}
-        old_model = s.get("model", cfg.DEFAULTS["model"])
-        s["hotkey"] = self.var_hotkey.get() or cfg.DEFAULTS["hotkey"]
-        s["trigger"] = self.var_trigger.get()
-        s["max_recording_seconds"] = self.recording_length_values.get(
-            self.var_recording_length.get(),
-            cfg.DEFAULTS["max_recording_seconds"],
-        )
-        old_input_device = s.get("input_device", cfg.DEFAULTS["input_device"])
-        s["input_device"] = self.device_values.get(
-            self.var_device.get(), cfg.DEFAULTS["input_device"])
-        if s["input_device"] != old_input_device:
-            self.app.input_device = None
-            self.app._cached_input_selector = None
-        s["model"] = label_to_value.get(self.var_model.get(), cfg.DEFAULTS["model"])
-        s["model_explicit"] = True
-        s["suffix"] = self.var_suffix.get() or cfg.DEFAULTS["suffix"]
-        s["remove_fillers"] = bool(self.var_fillers.get())
-        s["british"] = bool(self.var_british.get())
-        s["audio_cues"] = bool(self.var_audio_cues.get())
-        s["mute_playback_while_recording"] = bool(self.var_mute_playback.get())
-        s["visual_indicator"] = bool(self.var_visual_indicator.get())
-        if not s["visual_indicator"]:
-            self.app._set_indicator(None)
-        s["check_updates"] = bool(self.var_check_updates.get())
-        s["autostart"] = bool(self.var_autostart.get())
-        s["dictionary"] = cfg.validated_dictionary(self.dictionary_rules) or []
-        cfg.save(s)
-        if s["model"] != old_model:
-            self.app.prepare_configured_model()
+        # Save is disabled while busy, but Ctrl+S and a recording that starts
+        # between UI polls can still invoke this path. Serialize the definitive
+        # check and settings mutation with the app's recording lifecycle.
+        with self.app.lock:
+            reason = _settings_save_block_reason(self.app)
+            if reason:
+                self._save_block_reason = reason
+                self.save_button.config(state="disabled")
+                _set_accessible_text(self.status, reason)
+                return False
+
+            s = self.app.settings
+            label_to_value = {v: k for k, v in cfg.MODEL_LABELS.items()}
+            old_model = s.get("model", cfg.DEFAULTS["model"])
+            s["hotkey"] = self.var_hotkey.get() or cfg.DEFAULTS["hotkey"]
+            s["trigger"] = self.var_trigger.get()
+            s["max_recording_seconds"] = self.recording_length_values.get(
+                self.var_recording_length.get(),
+                cfg.DEFAULTS["max_recording_seconds"],
+            )
+            old_input_device = s.get("input_device", cfg.DEFAULTS["input_device"])
+            s["input_device"] = self.device_values.get(
+                self.var_device.get(), cfg.DEFAULTS["input_device"])
+            if s["input_device"] != old_input_device:
+                self.app.input_device = None
+                self.app._cached_input_selector = None
+            s["model"] = label_to_value.get(
+                self.var_model.get(), cfg.DEFAULTS["model"])
+            s["model_explicit"] = True
+            s["suffix"] = self.var_suffix.get() or cfg.DEFAULTS["suffix"]
+            s["remove_fillers"] = bool(self.var_fillers.get())
+            s["british"] = bool(self.var_british.get())
+            s["audio_cues"] = bool(self.var_audio_cues.get())
+            s["mute_playback_while_recording"] = bool(self.var_mute_playback.get())
+            s["visual_indicator"] = bool(self.var_visual_indicator.get())
+            if not s["visual_indicator"]:
+                self.app._set_indicator(None)
+            s["check_updates"] = bool(self.var_check_updates.get())
+            s["autostart"] = bool(self.var_autostart.get())
+            s["dictionary"] = cfg.validated_dictionary(self.dictionary_rules) or []
+            cfg.save(s)
+            # Publish the new model lifecycle before recording start can take
+            # the app lock. Readiness must not pass against the old model after
+            # Settings has committed the new selection.
+            if s["model"] != old_model:
+                self.app.prepare_configured_model()
         if self.app.apply_autostart():
             status = "Saved. Changes apply immediately."
         else:
@@ -1700,6 +1805,7 @@ class SettingsWindow:
                 "Saved, but Start with Windows was not updated. "
                 "Open Startup Settings to review it.")
         _set_accessible_text(self.status, status)
+        return True
 
     def _close(self):
         try:

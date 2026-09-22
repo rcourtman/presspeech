@@ -247,6 +247,10 @@ def expected_current_href(path: Path, docs: Path) -> str | None:
         return "./"
     if relative == Path("app-compatibility.html"):
         return "troubleshooting.html"
+    if relative == Path("benchmarks.html"):
+        return "compare/"
+    if relative == Path("faq.html"):
+        return "troubleshooting.html"
     return relative.name
 
 
@@ -267,8 +271,6 @@ def expected_primary_nav(path: Path, docs: Path) -> list[tuple[str, str]]:
         (f"{prefix}install.html", "macOS"),
         (f"{prefix}windows.html", "Windows"),
         (f"{prefix}privacy.html", "Privacy"),
-        (f"{prefix}benchmarks.html", "Benchmarks"),
-        (f"{prefix}faq.html", "FAQ"),
         (f"{prefix}troubleshooting.html", "Help"),
         (compare_href, "Compare"),
         ("https://github.com/rcourtman/presspeech", "GitHub"),
@@ -762,7 +764,7 @@ def run_self_test() -> None:
             raise RuntimeError("self-test: incomplete shared navigation was accepted")
 
         index.write_text(
-            valid_index.replace(">Benchmarks</a>", ">Performance</a>"),
+            valid_index.replace(">Privacy</a>", ">Data handling</a>"),
             encoding="utf-8",
         )
         errors = document_errors(index, docs)

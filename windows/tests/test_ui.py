@@ -3,6 +3,7 @@ import types
 import unittest
 import queue
 import inspect
+import threading
 from unittest import mock
 
 try:
@@ -171,6 +172,39 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertEqual(ui._scaled_pixels(224, 144), 336)
         self.assertEqual(ui._scaled_pixels(42, 192), 84)
         self.assertEqual(ui._scaled_pixels(42, 0), 42)
+
+    def test_windows_accessibility_text_scale_is_read_independently(self):
+        registry = mock.MagicMock()
+        registry.HKEY_CURRENT_USER = object()
+        registry.REG_DWORD = 4
+        registry.QueryValueEx.return_value = (225, registry.REG_DWORD)
+
+        self.assertEqual(ui._windows_text_scale(registry), 2.25)
+        registry.OpenKey.assert_called_once_with(
+            registry.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Accessibility",
+        )
+        registry.QueryValueEx.assert_called_once_with(
+            registry.OpenKey.return_value.__enter__.return_value,
+            "TextScaleFactor",
+        )
+
+    def test_invalid_windows_text_scale_fails_back_without_extreme_ui(self):
+        registry = mock.MagicMock()
+        registry.REG_DWORD = 4
+        for value in (99, 226, True, "225", None):
+            with self.subTest(value=value):
+                registry.QueryValueEx.return_value = (value, registry.REG_DWORD)
+                self.assertEqual(ui._windows_text_scale(registry), 1.0)
+        registry.QueryValueEx.side_effect = OSError("setting unavailable")
+        self.assertEqual(ui._windows_text_scale(registry), 1.0)
+
+    def test_indicator_custom_fonts_follow_accessibility_text_scale(self):
+        self.assertEqual(ui._scaled_font_points(10, 1.0), 10)
+        self.assertEqual(ui._scaled_font_points(10, 1.5), 15)
+        self.assertEqual(ui._scaled_font_points(10, 2.25), 23)
+        self.assertEqual(ui._scaled_font_points(11, 2.25), 25)
+        self.assertEqual(ui._scaled_font_points(10, 9), 10)
 
     def test_compact_window_scales_but_stays_inside_the_desktop(self):
         self.assertEqual(
@@ -1234,6 +1268,7 @@ class DictionarySettingsTests(unittest.TestCase):
         window.var_replace = mock.Mock()
         window.listbox = mock.Mock()
         window.status = mock.Mock()
+        window.save_button = mock.Mock()
         return window
 
     def test_add_rule_keeps_arrow_and_exact_replacement_whitespace(self):
@@ -1291,6 +1326,7 @@ class DictionarySettingsTests(unittest.TestCase):
         rules = [["maps \u2192 arrow", "  exact \u2192 text  "]]
         window = self.make_window(rules)
         window.app = mock.Mock()
+        window.app.lock = threading.Lock()
         window.app.apply_autostart.return_value = True
         window.app.settings = {
             "hotkey": "right alt",
@@ -1361,6 +1397,7 @@ class DictionarySettingsTests(unittest.TestCase):
     def test_save_prepares_a_changed_model_immediately(self):
         window = self.make_window()
         window.app = mock.Mock()
+        window.app.lock = threading.Lock()
         window.app.apply_autostart.return_value = True
         window.app.settings = {
             "hotkey": "right alt",
@@ -1455,6 +1492,90 @@ class DictionarySettingsTests(unittest.TestCase):
             set_text.call_args_list,
         )
         window.retry_model_button.config.assert_called_with(state="normal")
+
+    def test_save_is_blocked_atomically_during_recording(self):
+        window = self.make_window([["original", "rule"]])
+        window.app = mock.Mock()
+        window.app.lock = threading.Lock()
+        window.app._starting_recording = False
+        window.app.recording = True
+        window.app.transcribing = False
+        window.app._canceling_recording = False
+        window.app.settings = {"model": "base.en", "dictionary": []}
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            result = window._save()
+
+        self.assertFalse(result)
+        self.assertEqual(
+            window.app.settings, {"model": "base.en", "dictionary": []})
+        save.assert_not_called()
+        window.app.apply_autostart.assert_not_called()
+        window.save_button.config.assert_called_once_with(state="disabled")
+        set_text.assert_called_once_with(
+            window.status,
+            "Finish or cancel the current dictation before saving settings.",
+        )
+
+    def test_every_dictation_transition_has_specific_save_guidance(self):
+        app = types.SimpleNamespace(
+            _starting_recording=False,
+            recording=False,
+            _canceling_recording=False,
+            transcribing=False,
+        )
+        states = (
+            ("_starting_recording",
+             "Wait for the current dictation to finish starting before saving settings."),
+            ("recording",
+             "Finish or cancel the current dictation before saving settings."),
+            ("_canceling_recording",
+             "Wait for the canceled dictation to finish closing before saving settings."),
+            ("transcribing",
+             "Wait for the current dictation to finish before saving settings."),
+        )
+        for name, message in states:
+            with self.subTest(state=name):
+                setattr(app, name, True)
+                self.assertEqual(ui._settings_save_block_reason(app), message)
+                setattr(app, name, False)
+        self.assertEqual(ui._settings_save_block_reason(app), "")
+
+    def test_save_state_announces_busy_and_ready_transitions_once(self):
+        window = self.make_window()
+        window.app = mock.Mock()
+        window.app._starting_recording = False
+        window.app.recording = True
+        window.app.transcribing = False
+        window.app._canceling_recording = False
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_save_state()
+            window._refresh_save_state()
+            window.app.recording = False
+            window.app.transcribing = True
+            window._refresh_save_state()
+            window.app.transcribing = False
+            window._refresh_save_state()
+
+        self.assertEqual(set_text.call_args_list, [
+            mock.call(
+                window.status,
+                "Finish or cancel the current dictation before saving settings."),
+            mock.call(
+                window.status,
+                "Wait for the current dictation to finish before saving settings."),
+            mock.call(
+                window.status,
+                "Dictation finished. Settings can now be saved."),
+        ])
+        self.assertEqual(window.save_button.config.call_args_list, [
+            mock.call(state="disabled"),
+            mock.call(state="disabled"),
+            mock.call(state="disabled"),
+            mock.call(state="normal"),
+        ])
 
 
 if __name__ == "__main__":

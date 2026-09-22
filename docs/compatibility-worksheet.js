@@ -81,6 +81,7 @@
     const summary = doc.getElementById("worksheet-summary");
     const status = doc.getElementById("worksheet-status");
     const copy = doc.getElementById("copy-worksheet-summary");
+    const reportActions = doc.getElementById("worksheet-report-actions");
     const countOutputs = {
       "steady-pasted-count": ["steady", "pasted"],
       "steady-recovered-count": ["steady", "recovered"],
@@ -104,6 +105,7 @@
       }
       summary.value = formatSummary(result);
       copy.disabled = !result.complete;
+      reportActions.hidden = !result.complete;
       status.textContent = result.complete
         ? `All eight outcomes recorded. Overall: ${result.overall}.`
         : `${result.remaining} ${result.remaining === 1 ? "outcome remains" : "outcomes remain"}.`;

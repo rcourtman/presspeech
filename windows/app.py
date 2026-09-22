@@ -647,6 +647,10 @@ class PresspeechApp:
         self.buffer = []
         self.stream = None
         self.recording = False
+        # Covers readiness/target checks before recording becomes true so
+        # Settings cannot commit a different dictation configuration midway
+        # through that start transition.
+        self._starting_recording = False
         self._canceling_recording = False
         self.transcribing = False
         self.lock = threading.Lock()
@@ -1368,6 +1372,20 @@ class PresspeechApp:
             return True
 
     def start_recording(self):
+        # Claim the transition before model and foreground discovery. The
+        # Settings window uses this same lock and lifecycle flag when saving.
+        with self.lock:
+            if getattr(self, "_starting_recording", False):
+                self._log("dictation ignored; another recording is starting")
+                return False
+            self._starting_recording = True
+        try:
+            return self._start_recording_claimed()
+        finally:
+            with self.lock:
+                self._starting_recording = False
+
+    def _start_recording_claimed(self):
         # Keep transcription and paste delivery exclusive with capture. A
         # previous worker injects Ctrl+V and briefly suppresses hook callbacks;
         # overlapping that with a new recording could swallow its hotkey
@@ -2406,6 +2424,15 @@ class PresspeechApp:
         if _paste_target_blocks_simulated_input(paste_target):
             self._remember_undelivered_dictation(text, "target-elevated")
             return False
+        # Keep these checks adjacent to the single input submission. The
+        # earlier checks protect the delay and integrity lookup, which can both
+        # outlive the originally focused target or clipboard value.
+        if not self._paste_target_still_focused(paste_target):
+            self._remember_undelivered_dictation(text, "focus-changed")
+            return False
+        if not clipboard_delivery.is_current(receipt):
+            self._remember_undelivered_dictation(text, "clipboard-changed")
+            return False
         keyboard = None
         modifiers = [keyboard_delivery.VK_LCONTROL]
         if route == "moonlight":
@@ -2413,38 +2440,30 @@ class PresspeechApp:
                 keyboard_delivery.VK_LMENU,
                 keyboard_delivery.VK_LSHIFT,
             ))
-        attempted = []
         failure = None
         try:
             keyboard = keyboard_delivery.Controller()
             self._injecting_keys = True
-            for key in modifiers:
-                # A backend exception does not prove that key-down was absent.
-                attempted.append(key)
-                keyboard.press(key)
-            if not self._paste_target_still_focused(paste_target):
-                failure = "focus-changed"
-            elif not clipboard_delivery.is_current(receipt):
-                failure = "clipboard-changed"
-            else:
-                # Sequence equality is a last-point guard, not atomic input or
-                # acknowledgement that another application consumed the text.
-                attempted.append(keyboard_delivery.VK_V)
-                keyboard.press(keyboard_delivery.VK_V)
-                keyboard.release(keyboard_delivery.VK_V)
-                attempted.pop()
+            # Sequence equality and focused-window identity are last-point
+            # guards, not acknowledgement that the target consumed the text.
+            # Submit the complete chord in one SendInput call so physical or
+            # separately injected input cannot interleave its chord events.
+            keyboard.shortcut(modifiers, keyboard_delivery.VK_V)
         except Exception:
             failure = "shortcut-uncertain"
         finally:
-            for key in reversed(attempted):
-                try:
-                    keyboard.release(key)
-                except Exception:
-                    failure = failure or "shortcut-uncertain"
+            if failure and keyboard is not None:
+                # A short SendInput result can mean a prefix was inserted.
+                # Release every possible down key without assuming how much of
+                # the batch Windows accepted. Retrying cleanup is best effort.
+                for key in (keyboard_delivery.VK_V, *reversed(modifiers)):
                     try:
                         keyboard.release(key)
                     except Exception:
-                        pass
+                        try:
+                            keyboard.release(key)
+                        except Exception:
+                            pass
             time.sleep(0.02)
             self._injecting_keys = False
         if failure:

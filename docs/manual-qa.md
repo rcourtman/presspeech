@@ -217,6 +217,10 @@ keyboard access testing in addition to assistive-technology testing.
   the **Listening…** and **Transcribing…** indicator text is not clipped, the
   surface remains above the taskbar on the active display, and it never takes
   keyboard focus or intercepts pointer input.
+- At each 100%, 150%, and 225% Windows **Text size** value, start a dictation
+  and confirm the indicator text grows with the setting without clipping.
+  Change Text size while **Listening…** remains visible and confirm the text
+  and indicator bounds update without another hotkey press or app restart.
 - Apply each Windows contrast theme in turn and confirm the dictation indicator
   uses the theme's selected-text colour pair and remains fully opaque. Toggle a
   contrast theme during an active recording and confirm the visible indicator
@@ -239,6 +243,11 @@ keyboard access testing in addition to assistive-technology testing.
 - With Setup, Settings, Try Dictation, and the update prompt open in turn,
   select the same notification-area command or launch Presspeech again and
   confirm the existing window is restored instead of being ignored.
+- Begin a recording with Settings open and change several controls without
+  saving. Confirm **Save** is disabled and Ctrl+S does not apply any change
+  during recording, transcription, or delivery. Confirm the status announces
+  each wait state, then announces that saving is available when delivery ends;
+  the pending edits must remain available and save normally afterward.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm
   capture stops, muted playback is restored, and no transcription is pasted or
   copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.
@@ -378,6 +387,11 @@ item after the development-wrapper launch check.
   such as **Grant Microphone** and **Grant Accessibility** on macOS 14, or
   **Grant Device Control and Data Access** on macOS 27 and later, rather than
   being announced only as **Grant**.
+- During a speech-model download, leave the VoiceOver cursor on a lower row's
+  title, detail, and status in turn while the progress text changes. Confirm
+  routine live refreshes keep the cursor on that element instead of resetting
+  reading position to **Set Up Presspeech**. Repeat while a permission action
+  changes from **Grant** to **Try Again** without adding or removing the row.
 - Complete setup, close every Presspeech window, then open the already-running
   app again from Finder or Spotlight. Confirm Setup Checklist appears instead
   of a second app instance. Enable **Show in Dock**, right-click the
@@ -536,10 +550,11 @@ item after the development-wrapper launch check.
   standard Command-C and Command-X. Confirm every result remains available to
   local Command-V and that Cut removes only the selected text. With Handoff and
   Universal Clipboard enabled on a second test Apple device, confirm none of
-  those unique markers appears there. If a cooperating
-  clipboard manager exposes whether it skipped a transient item, confirm it does;
-  do not treat that community marker as protection from arbitrary local readers
-  or macOS Clipboard History.
+  those unique markers appears there. If a cooperating clipboard manager
+  exposes item handling, confirm it skips the transcript rather than archiving
+  or visibly previewing it because the item is marked transient, auto-generated,
+  and concealed; do not treat those community markers as protection from
+  arbitrary local readers or macOS Clipboard History.
 - Enable **Keep Previous Clipboard for Manual Restore**, seed an old harmless
   marker, and perform ten dictations each in TextEdit and a slow
   Electron/Chromium target, mixing short and multi-sentence transcripts. Verify

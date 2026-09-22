@@ -1,8 +1,9 @@
 """Checked Win32 keyboard events for paste-shortcut delivery.
 
-Each event is sent separately so the caller can retain dictation and attempt
-key-up cleanup whenever Windows does not accept the complete event. Importing
-this module does not load a Windows DLL or inject input.
+A complete shortcut is submitted in one SendInput call so Windows cannot
+interleave physical or separately injected input between its events. The
+caller can still attempt key-up cleanup when Windows does not accept the whole
+batch. Importing this module does not load a Windows DLL or inject input.
 """
 import ctypes
 
@@ -96,32 +97,54 @@ class Controller:
                 not 1 <= virtual_key <= 0xFE):
             raise ValueError("virtual key must be an integer from 1 through 254")
 
-    def _send(self, virtual_key, flags):
+    def _input(self, virtual_key, flags):
         self._validate_virtual_key(virtual_key)
+        scan_code = int(self._api.MapVirtualKeyW(
+            virtual_key, _MAPVK_VK_TO_VSC))
+        return _INPUT(
+            type=_INPUT_KEYBOARD,
+            value=_INPUT_VALUE(ki=_KEYBDINPUT(
+                wVk=virtual_key,
+                wScan=scan_code,
+                dwFlags=flags,
+                time=0,
+                dwExtraInfo=0,
+            )),
+        )
+
+    def _send(self, events):
+        events = tuple(events)
+        for virtual_key, _flags in events:
+            self._validate_virtual_key(virtual_key)
         try:
-            scan_code = int(self._api.MapVirtualKeyW(
-                virtual_key, _MAPVK_VK_TO_VSC))
-            event = _INPUT(
-                type=_INPUT_KEYBOARD,
-                value=_INPUT_VALUE(ki=_KEYBDINPUT(
-                    wVk=virtual_key,
-                    wScan=scan_code,
-                    dwFlags=flags,
-                    time=0,
-                    dwExtraInfo=0,
-                )),
-            )
+            inputs = (_INPUT * len(events))(*(
+                self._input(virtual_key, flags)
+                for virtual_key, flags in events
+            ))
             inserted = int(self._api.SendInput(
-                1, ctypes.byref(event), ctypes.sizeof(_INPUT)))
+                len(inputs), inputs, ctypes.sizeof(_INPUT)))
         except Exception:
             raise KeyboardDeliveryError(
                 "Windows did not accept the keyboard event") from None
-        if inserted != 1:
+        if inserted != len(inputs):
             raise KeyboardDeliveryError(
                 "Windows did not accept the keyboard event")
 
     def press(self, virtual_key):
-        self._send(virtual_key, 0)
+        self._send(((virtual_key, 0),))
 
     def release(self, virtual_key):
-        self._send(virtual_key, _KEYEVENTF_KEYUP)
+        self._send(((virtual_key, _KEYEVENTF_KEYUP),))
+
+    def shortcut(self, modifiers, virtual_key):
+        """Insert one non-interleavable modifier/key shortcut transaction."""
+        modifiers = tuple(modifiers)
+        if (not modifiers or virtual_key in modifiers or
+                len(set(modifiers)) != len(modifiers)):
+            raise ValueError("shortcut requires distinct modifier keys")
+        events = [*(
+            (modifier, 0) for modifier in modifiers
+        ), (virtual_key, 0), (virtual_key, _KEYEVENTF_KEYUP), *(
+            (modifier, _KEYEVENTF_KEYUP) for modifier in reversed(modifiers)
+        )]
+        self._send(events)

@@ -9,7 +9,10 @@ Presspeech-created transcript entry. In those builds, a restored previous
 clipboard is likewise republished for the current device only because its
 original cross-device scope cannot be recovered from the snapshot. macOS
 Clipboard History and arbitrary local clipboard readers remain separate
-boundaries.
+boundaries. Builds with that protection also add the standard transient,
+auto-generated, and concealed markers, asking cooperating clipboard managers
+not to archive or visibly expose transcript entries; these advisory markers do
+not constrain arbitrary local readers.
 
 ## Reporting a vulnerability
 

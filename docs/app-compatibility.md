@@ -78,7 +78,12 @@ counted as completed protocol evidence.
 
 Run five completed attempts. Use a different harmless phrase each time so stale or
 duplicated delivery is visible; for example, say a colour, an animal, and the
-attempt number.
+attempt number. If English suits the selected language hint, an optional full
+set is: **amber rabbit one**, **blue otter two**, **copper robin three**,
+**green badger four**, **ivory falcon five**, **purple fox six**, **silver
+heron seven**, and **yellow turtle eight**. Otherwise use the same pattern in
+the test language. Recognition accuracy is not scored; compare the finished
+target text with the scratch paste, and never publish either version.
 
 For each attempt:
 
@@ -154,7 +159,9 @@ Selections stay only in the page controls: the worksheet does not send
 selections, write them to browser storage, or provide a field for a phrase or
 transcript. Use **Reset worksheet** to clear them. **Copy report block**
 places only the labelled six counts and overall classification on the
-clipboard; the user decides what to paste into GitHub.
+clipboard; the user decides what to paste into GitHub. Once all eight outcomes
+are selected, the worksheet also reveals the existing-report search and new
+report form beside the result, with duplicate-checking first.
 
 Without the worksheet, tally the same six categories manually:
 

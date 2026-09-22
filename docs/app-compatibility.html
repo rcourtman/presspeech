@@ -35,8 +35,6 @@
           <a href="install.html">macOS</a>
           <a href="windows.html">Windows</a>
           <a href="privacy.html">Privacy</a>
-          <a href="benchmarks.html">Benchmarks</a>
-          <a href="faq.html">FAQ</a>
           <a href="troubleshooting.html" aria-current="page">Help</a>
           <a href="compare/">Compare</a>
           <a href="https://github.com/rcourtman/presspeech">GitHub</a>
@@ -115,6 +113,10 @@
             <li>
               <strong>Use harmless, distinct phrases</strong>
               <p>Create a different phrase for every attempt so stale or duplicate delivery is visible. Do not use names, credentials, commands, customer data, or text from real work.</p>
+              <details>
+                <summary>Optional eight-phrase prompt</summary>
+                <p>If English suits the selected language hint, use these in order: <strong>amber rabbit one</strong>; <strong>blue otter two</strong>; <strong>copper robin three</strong>; <strong>green badger four</strong>; <strong>ivory falcon five</strong>; <strong>purple fox six</strong>; <strong>silver heron seven</strong>; <strong>yellow turtle eight</strong>. Otherwise use the same colour-animal-number pattern in the test language. Recognition accuracy is not scored; compare the finished target text with the scratch paste. Never add either version to the public report.</p>
+              </details>
             </li>
             <li>
               <strong>Make clipboard behavior comparable</strong>
@@ -289,6 +291,13 @@
                 <button class="button" id="copy-worksheet-summary" type="button" disabled>Copy report block</button>
                 <a class="button secondary" href="#share-result">Continue to reporting steps</a>
                 <button class="button secondary" type="reset">Reset worksheet</button>
+              </div>
+              <div class="note" id="worksheet-report-actions" hidden>
+                <p><strong>All eight outcomes are ready.</strong> Copy the aggregate block above, then check for the same platform, app version, and field type before opening a new report. Add your counts to a matching report even when your result differs.</p>
+                <div class="actions">
+                  <a class="button" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22">Check matching reports</a>
+                  <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Open a new report</a>
+                </div>
               </div>
             </div>
           </form>
