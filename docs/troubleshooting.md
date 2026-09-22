@@ -71,6 +71,11 @@ before a slow target app has consumed the paste. Remove unintended text from the
 destination before continuing and include the target app's name with
 privacy-safe diagnostics if you report the problem.
 
+If you need restoration, **Settings -> Behavior -> Clipboard Restore Delay**
+offers waits up to 3 seconds (default 1.2 seconds). A longer delay can mitigate
+slow target apps, but macOS does not acknowledge when they consume the paste.
+No preset guarantees success. Leave restoration off if the problem persists.
+
 ### System Audio Stays Muted
 
 Unmute the Mac from Control Center or Sound settings, then reopen Presspeech.

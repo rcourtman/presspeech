@@ -216,6 +216,10 @@ each platform rather than identical.
   best-effort restore of the previous macOS pasteboard contents; skipped if
   another process copies newer content. If a slow target pastes the old
   clipboard content instead of the transcript, turn this setting off and retry
+- **Settings → Behavior → Clipboard Restore Delay** — choose a longer wait
+  (up to 3 seconds) to mitigate slow target apps when restoration is enabled.
+  The default is 1.2 seconds. No delay proves that an app has consumed the
+  paste; keep restoration off if old content or missing text persists
 - **Settings → Behavior → Launch at Login** — keep dictation available after
   sign-in; if macOS needs approval, selecting the marked setting opens Login
   Items

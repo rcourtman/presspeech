@@ -290,6 +290,9 @@ cd swift
   partial transcript, or duplicate is a release-blocking failure; one successful
   trial is not enough to clear the race tracked in
   [issue #36](https://github.com/rcourtman/presspeech/issues/36).
+- Select each **Clipboard Restore Delay** preset, restart Presspeech, and
+  confirm the selected value persists without enabling restoration. Confirm
+  Copy Diagnostics reports the configured delay without transcript content.
 - Repeat that matrix for every proposed restoration-delay default or preset
   under review, including the slowest available target. A pure self-test or a
   delay increase without repeated native results does not establish that the
