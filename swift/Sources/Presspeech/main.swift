@@ -2885,6 +2885,24 @@ enum Permission: String, CaseIterable, Equatable {
     }
 }
 
+/// Match first-run microphone guidance to the system's actual authorization
+/// path: macOS prompts only before a decision, while a prior denial must be
+/// changed in Privacy & Security.
+func microphoneSetupDetail(authorizationStatus: AVAuthorizationStatus) -> String {
+    switch authorizationStatus {
+    case .notDetermined:
+        return "Captures your voice while dictating. Click 'Grant', then click 'OK' in the macOS prompt."
+    case .denied:
+        return "Microphone access was previously denied. Click 'Grant' to open System Settings → Privacy & Security → Microphone, then enable Presspeech."
+    case .restricted:
+        return "Microphone access is restricted by macOS or device management. Contact your administrator if you need access."
+    case .authorized:
+        return "Captures your voice while dictating."
+    @unknown default:
+        return "Captures your voice while dictating. Use 'Grant' to review microphone access in System Settings."
+    }
+}
+
 /// Automatic delivery needs two independently queryable capabilities: AX can
 /// identify the exact focused window, while Quartz PostEvent authorization lets
 /// the synthesized Command+V reach it. `CGEvent.post` has no failure result, so
@@ -11252,7 +11270,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private func setupDetail(for permission: Permission) -> String {
         switch permission {
         case .microphone:
-            return "Captures your voice while dictating. Click 'Grant', then click 'OK' in the macOS prompt."
+            return microphoneSetupDetail(
+                authorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio)
+            )
         case .accessibility:
             let paneName = permission.displayName()
             let renameNote = paneName == permission.rawValue
@@ -15912,6 +15932,21 @@ private enum PresspeechSelfTest {
     }
 
     private static func testReadiness() throws {
+        try expect(
+            microphoneSetupDetail(authorizationStatus: .notDetermined),
+            equals: "Captures your voice while dictating. Click 'Grant', then click 'OK' in the macOS prompt.",
+            "first-time microphone authorization should explain the system prompt"
+        )
+        try expect(
+            microphoneSetupDetail(authorizationStatus: .denied),
+            equals: "Microphone access was previously denied. Click 'Grant' to open System Settings → Privacy & Security → Microphone, then enable Presspeech.",
+            "a previous microphone denial should direct users to the persistent Settings control"
+        )
+        try expect(
+            microphoneSetupDetail(authorizationStatus: .restricted),
+            equals: "Microphone access is restricted by macOS or device management. Contact your administrator if you need access.",
+            "restricted microphone access should not imply that a user can grant it"
+        )
         let setupPermission = SetupChecklistPermissionState(
             permission: .microphone,
             detail: "Needs microphone access.",

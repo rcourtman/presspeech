@@ -1029,7 +1029,10 @@ class SetupWindow:
         detail = getattr(self.app, "model_status_detail", "")
         labels = {
             "pending": "Waiting to start…",
-            "loading": detail or "Downloading or loading…",
+            # A first launch can still be fetching files when the model
+            # loader reports "Loading …". Do not present that as a distinct
+            # load-only phase: setup may take time while downloading too.
+            "loading": "Preparing speech model — downloading or loading…",
             "ready": "Ready" + ((" — " + detail) if detail else ""),
             "error": "Needs attention" + ((" — " + detail) if detail else ""),
         }
@@ -1087,8 +1090,9 @@ class SetupWindow:
             )
         else:
             action = "Hold %s, speak, then release to type at the cursor." % hotkey
-        return (action + "\nSpeech stays on this PC; no audio or transcripts "
-                "are uploaded.")
+        return (action + "\nFirst setup may take time while the speech model "
+                "downloads and loads. Speech stays on this PC; no audio or "
+                "transcripts are uploaded.")
 
     def _hotkey_changed(self, _event=None):
         selected = self.hotkey.get()

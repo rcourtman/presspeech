@@ -68,7 +68,7 @@
             <div class="fact"><strong>Apple Silicon</strong><span>M1 or newer. Intel Macs are not supported.</span></div>
             <div class="fact"><strong>macOS 14+</strong><span>Sonoma or later.</span></div>
             <div class="fact"><strong>Direct or Homebrew</strong><span>Download the signed zip manually, or use Homebrew for install and updates. Presspeech has no Homebrew runtime dependency after installation.</span></div>
-            <div class="fact"><strong>Model download</strong><span>First launch downloads the local model, about 500-600 MB.</span></div>
+            <div class="fact"><strong>First model download</strong><span>Internet is required on first launch to download the local model, about 500-600 MB. Afterward, speech recognition runs on your Mac.</span></div>
           </div>
         </div>
       </section>
@@ -87,7 +87,14 @@
               <p>In Downloads, verify the current archive against its published SHA-256:</p>
               <pre><code>cd ~/Downloads
 echo '7edc7987d2bf6a47db10381f5b39bb740ae331c2a2a5b9780b1e57898baf291f  Presspeech.zip' | shasum -a 256 -c -</code></pre>
-              <p>Continue only if it reports <code>Presspeech.zip: OK</code>.</p>
+              <p>Continue only if it reports <code>Presspeech.zip: OK</code>. A checksum detects a damaged or different download; by itself, it does not establish who built or published the file.</p>
+              <details>
+                <summary>Verify the release attestation (optional)</summary>
+                <p>For an additional check, install <a href="https://cli.github.com/">GitHub CLI</a> and verify both the immutable release and the exact archive you downloaded. Replace the tag below if you downloaded a different version:</p>
+                <pre><code>gh release verify v0.3.8 --repo rcourtman/presspeech
+gh release verify-asset v0.3.8 ~/Downloads/Presspeech.zip --repo rcourtman/presspeech</code></pre>
+                <p>Both commands must succeed. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>
+              </details>
             </li>
             <li>
               <strong>Move it to Applications</strong>

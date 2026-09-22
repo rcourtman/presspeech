@@ -645,6 +645,19 @@ class SetupWindowTests(unittest.TestCase):
         window.progress.start.assert_called_once_with(12)
         self.assertTrue(window._progress_active)
 
+    def test_loading_status_does_not_mislabel_download_as_load_only(self):
+        window = self.make_window("loading", "Loading parakeet")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertEqual(
+            set_text.call_args_list[0],
+            mock.call(
+                window.model_label,
+                "Preparing speech model — downloading or loading…"),
+        )
+
     def test_stopped_global_hotkey_exposes_repair_and_blocks_finish(self):
         window = self.make_window("ready", "base.en on cpu")
         window.app.hotkey_listener_status.return_value = (
@@ -762,7 +775,8 @@ class SetupWindowTests(unittest.TestCase):
         set_text.assert_called_once_with(
             window.instructions,
             "Hold F8, speak, then release to type at the cursor.\n"
-            "Speech stays on this PC; no audio or transcripts are uploaded.",
+            "First setup may take time while the speech model downloads and "
+            "loads. Speech stays on this PC; no audio or transcripts are uploaded.",
         )
 
     def test_setup_rejects_unknown_hotkey_without_saving(self):
@@ -794,7 +808,8 @@ class SetupWindowTests(unittest.TestCase):
         set_text.assert_called_once_with(
             window.instructions,
             "Press F8 to start, then press it again to type at the cursor.\n"
-            "Speech stays on this PC; no audio or transcripts are uploaded.",
+            "First setup may take time while the speech model downloads and "
+            "loads. Speech stays on this PC; no audio or transcripts are uploaded.",
         )
 
     def test_setup_rejects_unknown_trigger_without_saving(self):
@@ -865,7 +880,8 @@ class SetupWindowTests(unittest.TestCase):
         self.assertEqual(
             window._dictation_instructions(),
             "Press F9 to start, then press it again to type at the cursor.\n"
-            "Speech stays on this PC; no audio or transcripts are uploaded.",
+            "First setup may take time while the speech model downloads and "
+            "loads. Speech stays on this PC; no audio or transcripts are uploaded.",
         )
 
     def test_microphone_check_runs_off_the_ui_thread(self):

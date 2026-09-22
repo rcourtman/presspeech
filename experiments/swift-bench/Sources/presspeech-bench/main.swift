@@ -1763,6 +1763,15 @@ func runBenchSelfTests() throws {
     try expect(positiveTrialCount("0") == nil, "trial parser should reject zero")
     try expect(positiveTrialCount("-1") == nil, "trial parser should reject negative integers")
     try expect(positiveTrialCount("three") == nil, "trial parser should reject non-integers")
+    try expect(percentile([], 0.5) == 0, "empty latency samples should have a safe zero summary")
+    try expect(percentile([4, 1, 3, 2], 0.5) == 2.5,
+        "even-sized latency samples should report the interpolated median")
+    try expect(percentile([5, 1, 3], 0.5) == 3,
+        "odd-sized latency samples should report the middle sample")
+    try expect(percentile([1, 2, 3], -1) == 1 && percentile([1, 2, 3], 2) == 3,
+        "percentile endpoints should clamp to the observed range")
+    try expect(percentile([1, 2, 3], .nan) == 0,
+        "a non-finite percentile should not produce a non-finite latency")
     try expect(
         FluidBackend.ChunkingPolicy.releasedV3.config.melChunkContext,
         "released v3 benchmark policy should keep mel-context chunking explicit"
@@ -2208,10 +2217,13 @@ struct TrialResult {
 }
 
 func percentile(_ values: [Double], _ p: Double) -> Double {
-    guard !values.isEmpty else { return 0 }
+    guard !values.isEmpty, p.isFinite else { return 0 }
     let sorted = values.sorted()
-    let idx = max(0, min(sorted.count - 1, Int(Double(sorted.count - 1) * p)))
-    return sorted[idx]
+    let position = Double(sorted.count - 1) * min(max(p, 0), 1)
+    let lower = Int(position.rounded(.down))
+    let upper = min(lower + 1, sorted.count - 1)
+    let fraction = position - Double(lower)
+    return sorted[lower] + (sorted[upper] - sorted[lower]) * fraction
 }
 
 func fmtMs(_ s: Double) -> String { String(format: "%7.1f ms", s * 1000) }

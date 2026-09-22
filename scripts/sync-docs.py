@@ -1072,8 +1072,8 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     )
     text = replace_regex(
         text,
-        r"<div class=\"fact\"><strong>Model download</strong><span>.*?</span></div>",
-        '<div class="fact"><strong>Model download</strong><span>First launch downloads the local model, about 500-600 MB.</span></div>',
+        r'<div class="fact"><strong>(?:Model download|First model download)</strong><span>.*?</span></div>',
+        '<div class="fact"><strong>First model download</strong><span>Internet is required on first launch to download the local model, about 500-600 MB. Afterward, speech recognition runs on your Mac.</span></div>',
         path=path,
     )
     text = replace_regex(
@@ -1093,11 +1093,20 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         r"download/Presspeech\.zip\.sha256\">.*?|The current archive's published SHA-256 is .*?"
         r"|In Downloads, verify the current archive against its published SHA-256:)</p>"
         r"(?:\s*<pre><code>.*?</code></pre>\s*"
-        r"<p>Continue only if it reports <code>Presspeech\.zip: OK</code>\.</p>)?",
+        r"<p>Continue only if it reports <code>Presspeech\.zip: OK</code>\."
+        r"(?: A checksum detects.*?)?</p>"
+        r"(?:\s*<details>.*?</details>)?)?",
         "<p>In Downloads, verify the current archive against its published SHA-256:</p>\n"
         "              <pre><code>cd ~/Downloads\n"
         f"echo '{digest}  Presspeech.zip' | shasum -a 256 -c -</code></pre>\n"
-        "              <p>Continue only if it reports <code>Presspeech.zip: OK</code>.</p>",
+        "              <p>Continue only if it reports <code>Presspeech.zip: OK</code>. A checksum detects a damaged or different download; by itself, it does not establish who built or published the file.</p>\n"
+        "              <details>\n"
+        "                <summary>Verify the release attestation (optional)</summary>\n"
+        "                <p>For an additional check, install <a href=\"https://cli.github.com/\">GitHub CLI</a> and verify both the immutable release and the exact archive you downloaded. Replace the tag below if you downloaded a different version:</p>\n"
+        f"                <pre><code>gh release verify v{version} --repo rcourtman/presspeech\n"
+        f"gh release verify-asset v{version} ~/Downloads/Presspeech.zip --repo rcourtman/presspeech</code></pre>\n"
+        "                <p>Both commands must succeed. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>\n"
+        "              </details>",
         path=path,
         flags=re.S,
     )
@@ -2112,6 +2121,21 @@ def run_self_test() -> None:
             or "<h3>Windows 9.8.7 prerelease</h3>" not in synced_getting_started
         ):
             raise SyncError("self-test: getting-started release versions did not sync")
+
+        install_page = Path(tmp) / "install.html"
+        install_page.write_text(read_text(DOCS / "install.html"), encoding="utf-8")
+        synced_install = sync_install_html(install_page, metadata)
+        if (
+            "gh release verify v8.7.6 --repo rcourtman/presspeech" not in synced_install
+            or "gh release verify-asset v8.7.6 ~/Downloads/Presspeech.zip"
+            not in synced_install
+            or "gh release verify v0.3.8" in synced_install
+            or "First model download" not in synced_install
+        ):
+            raise SyncError("self-test: install verification commands did not follow release metadata")
+        install_page.write_text(synced_install, encoding="utf-8")
+        if sync_install_html(install_page, metadata) != synced_install:
+            raise SyncError("self-test: install guidance sync was not idempotent")
 
         sitemap = Path(tmp) / "sitemap.xml"
         sitemap.write_text(
