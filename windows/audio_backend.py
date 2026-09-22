@@ -14,6 +14,9 @@ class AudioBackend:
         self.backend = backend
         self._lock = threading.Lock()
         self._users = set()
+        # A failed native close may leave a live handle. Keep both the handle
+        # and its reservation after application cleanup drops its reference.
+        self._failed_closes = set()
         self._initialized = True
 
     def _acquire(self):
@@ -28,10 +31,16 @@ class AudioBackend:
         finally:
             self._lock.release()
 
-    def _release(self, token):
+    def _release(self, token, closed_stream=None):
         # A reset cannot hold this lock while this token is outstanding.
         with self._lock:
             self._users.remove(token)
+            if closed_stream is not None:
+                self._failed_closes.discard(closed_stream)
+
+    def _retain_failed_close(self, stream):
+        with self._lock:
+            self._failed_closes.add(stream)
 
     @contextmanager
     def operation(self):
@@ -63,8 +72,28 @@ class AudioBackend:
         if not self._lock.acquire(blocking=False):
             return False
         try:
-            # The caller's operation is idle between discovery and retry.
-            # Every other lease, including a stream being closed, vetoes reset.
+            failed_closes = tuple(self._failed_closes)
+            cleanup_tokens = {stream._token for stream in failed_closes}
+            # Only the requesting operation and retained failed-close handles
+            # may participate. Active streams, constructors and other queries
+            # veto both cleanup retries and reset.
+            if self._users != ({token} | cleanup_tokens) or not still_current():
+                return False
+        finally:
+            self._lock.release()
+
+        # rescan is called on the discovery worker. Drivers may block in close,
+        # so never hold the admission lock here. Each stream keeps its lease
+        # until native close succeeds; new callers remain safe and responsive.
+        for stream in failed_closes:
+            if not stream.retry_close():
+                return False
+
+        if not self._lock.acquire(blocking=False):
+            return False
+        try:
+            # A new operation or recording epoch may have arrived while close
+            # was pending. Revalidate ownership before touching PortAudio.
             if self._users != {token} or not still_current():
                 return False
             terminate = getattr(self.backend, "_terminate", None)
@@ -96,10 +125,32 @@ class _InputStream:
 
     def close(self):
         with self._close_lock:
-            if self._closed:
-                return
-            # Keep the lease if native close fails: resetting a possibly live
-            # handle would be unsafe. A later successful close releases it.
+            self._close_locked()
+
+    def retry_close(self):
+        # A concurrent application cleanup owns this handle already. Do not
+        # queue a second driver call or make discovery wait for its close lock.
+        if not self._close_lock.acquire(blocking=False):
+            return False
+        try:
+            try:
+                self._close_locked()
+            except Exception:
+                return False
+            return True
+        finally:
+            self._close_lock.release()
+
+    def _close_locked(self):
+        if self._closed:
+            return
+        try:
             self._stream.close()
-            self._closed = True
-            self._owner._release(self._token)
+        except BaseException:
+            # Application cleanup intentionally catches native close failures.
+            # Retaining the wrapper here makes a later worker rescan able to
+            # retry safely even after that caller has discarded its reference.
+            self._owner._retain_failed_close(self)
+            raise
+        self._closed = True
+        self._owner._release(self._token, closed_stream=self)

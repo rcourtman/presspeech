@@ -3,9 +3,24 @@ import threading
 import unittest
 from unittest import mock
 import app
+from audio_backend import AudioBackend
 
 
 class RescanLifecycleRegression(unittest.TestCase):
+    def test_failed_probe_cleanup_can_be_retried_after_app_discards_stream(self):
+        native = mock.Mock()
+        native.InputStream.return_value.start.side_effect = OSError("device disconnected")
+        native.InputStream.return_value.close.side_effect = [OSError("temporarily busy"), None]
+        audio = AudioBackend(native)
+        with mock.patch.object(app, "AUDIO_BACKEND", audio):
+            self.assertIsNone(app.PresspeechApp._probe_input_level(2, 16000))
+        # Production probe cleanup swallows close failure and drops its local
+        # stream reference. The controller must still own a safe retry handle.
+        with audio.operation() as token:
+            self.assertTrue(audio.rescan(token, lambda: True))
+        self.assertEqual(native.InputStream.return_value.close.call_count, 2)
+        native._terminate.assert_called_once()
+
     def test_expired_discovery_does_not_terminate_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = threading.Lock()
