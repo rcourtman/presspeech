@@ -162,7 +162,7 @@ class ContextInputTests(unittest.TestCase):
         bench = self.root / "repo/experiments/swift-bench"
         bench.mkdir(parents=True)
         for name in ("run-real-model-comparison.sh", "compose-public-context-fixtures.py",
-                     "dependency-provenance.py", "audio-input-evidence.py", "Package.swift", "Package.resolved"):
+                     "dependency-provenance.py", "audio-input-evidence.py", "experiment-environment.py", "Package.swift", "Package.resolved"):
             shutil.copyfile(ROOT / name, bench / name)
         production = self.root / "repo/swift"
         production.mkdir()
@@ -186,6 +186,7 @@ assert json.loads(os.environ['EXPECTED'])[hashlib.sha256(audio.read_bytes()).hex
 assert '--redact-transcripts' in args
 with wave.open(str(audio), 'rb') as source: frames = source.getnframes()
 print(f'audio: {frames} samples (~1.00 s @ 16 kHz mono)')
+print('experiment-environment: schema=1 inherited-controls=0 ci-present=0')
 print('latency: p50=1.0 ms')
 print(f'transcript: [WER 0.0%] [final-word retained=true] [word-errors=0 reference-words={len(reference.split())}] <redacted>')
 ''')

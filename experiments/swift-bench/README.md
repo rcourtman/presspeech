@@ -1065,3 +1065,31 @@ Missing, duplicate or shortened audio records fail the run. Successful logs
 include a numeric `audio-input-check` receipt without source paths or content.
 This checks input duration, including partial final buffers; it does not prove
 that a recognition backend used every sample or retained the last spoken word.
+
+### Inherited experiment controls
+
+Every native benchmark invocation emits one versioned `experiment-environment`
+receipt before model preparation. It records only the count of inherited
+`FLUID_*`, `FLUIDAUDIO_*` and `TDT_EMISSION_DELAY_FRAMES` controls and whether
+`CI` is present. Names, values, value hashes and private paths are not included.
+Even empty or invalid control values count as configured. The benchmark does
+not clear or replace them: intentionally configured exploratory runs retain
+the caller's behavior.
+
+The vocabulary and real-model candidate screens require a valid zero-control
+receipt from every benchmark process. Configured, missing, malformed, duplicate
+or unsupported receipts block qualification, including in exploratory reports;
+a later default receipt cannot erase an earlier blocker. Count-only evidence
+does not establish the settings or reproducibility of a configured run. Use
+`--no-threshold` for vocabulary exploration, or omit `--require-candidate-pass`
+for real-model exploration. Explicit CLI-selected policies remain supported
+and recorded separately.
+
+`presspeech-bench --experiment-environment` inspects the actual process without
+loading audio or models. In the pinned FluidAudio source, these benchmark ASR
+paths use `AsrModels.defaultConfiguration()`; they do not call the unused
+CI-sensitive `optimizedConfiguration()` or the diarization/TTS CI paths.
+Therefore CI presence is recorded separately and does not by itself block
+qualification. Recheck this distinction when updating the dependency or model
+loading paths. Receipts describe the inherited controls, not all possible
+hardware, model-artifact or operating-system differences.

@@ -28,6 +28,7 @@ CORPUS_KIND="private"
 REFERENCES_HAND_AUDITED=0
 REQUIRE_CANDIDATE_PASS=0
 SELF_TEST=0
+EXPERIMENT_ENVIRONMENT_STATE="unreported"
 
 MIN_CANDIDATE_TRIALS=3
 MIN_CANDIDATE_CLIPS=25
@@ -414,6 +415,7 @@ candidate_screen() {
         blockers+=("private references not declared hand-audited")
     fi
     [[ "$source_state" == "clean" ]] || blockers+=("benchmark source modified")
+    [[ "$EXPERIMENT_ENVIRONMENT_STATE" == "default" ]] || blockers+=("inherited SDK environment is $EXPERIMENT_ENVIRONMENT_STATE")
     [[ "$comparable" -ge "$MIN_CANDIDATE_CLIPS" ]] || blockers+=("fewer than $MIN_CANDIDATE_CLIPS comparable clips")
     [[ "$words" -ge "$MIN_CANDIDATE_REFERENCE_WORDS" ]] || blockers+=("fewer than $MIN_CANDIDATE_REFERENCE_WORDS reference words")
     [[ "$improved" -ge 1 ]] || blockers+=("no clip demonstrates an error reduction")
@@ -462,6 +464,8 @@ assert_not_contains() {
 }
 
 run_self_test() {
+    EXPERIMENT_ENVIRONMENT_STATE="default"
+    python3 ./test-experiment-environment.py
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-compare-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -603,6 +607,15 @@ run_self_test() {
         $'passes\t' "passing English model candidate screen"
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100' clean unified)" \
         $'passes\t' "passing Unified model candidate screen"
+    local test_environment
+    for test_environment in configured unreported pending; do
+        EXPERIMENT_ENVIRONMENT_STATE="$test_environment"
+        local environment_screen
+        environment_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100' clean v3-int8-v2)"
+        assert_contains <(printf '%s' "$environment_screen") "blocked"
+        assert_contains <(printf '%s' "$environment_screen") "inherited SDK environment is $test_environment"
+    done
+    EXPERIMENT_ENVIRONMENT_STATE="default"
     UNIFIED_TRAILING_SILENCE_MS=0
     local raw_unified_screen
     raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100' clean unified)"
@@ -954,6 +967,7 @@ mkdir -p "$raw_dir"
     echo "|---|---|---:|---:|---|---:|"
 } >"$report"
 
+EXPERIMENT_ENVIRONMENT_STATE="pending"
 clip_index=0
 for clip in "${clips[@]}"; do
     clip_index=$((clip_index + 1))
@@ -987,6 +1001,7 @@ for clip in "${clips[@]}"; do
         fi
 
         python3 ./audio-input-evidence.py --audio "$normalized" --log "$log_file" >>"$log_file"
+        EXPERIMENT_ENVIRONMENT_STATE="$(python3 ./experiment-environment.py --log "$log_file" --previous "$EXPERIMENT_ENVIRONMENT_STATE")"
 
         wer_metrics="$(extract_worst_wer_metrics "$log_file")"
         IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"
@@ -1044,6 +1059,8 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
 
 {
     echo
+    echo "Inherited SDK environment: $EXPERIMENT_ENVIRONMENT_STATE (configured or unreported runs cannot qualify)."
+    echo
     echo "## Summary"
     echo
     echo "| Backend | Clip rows | Corpus WER % | Worst WER % | Final-word failures | Average p50 ms |"
@@ -1055,7 +1072,7 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
         echo
         echo "## Model Candidate Evidence Screen"
         echo
-        echo "The candidate's worst observed transcript is compared with baseline's best observed transcript on each clip; a noisy baseline trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, no new final-word retention failure, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x baseline. English-only candidates require an English unbiased baseline. Unified additionally requires ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms trailing silence and the separate tail-word gate. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
+        echo "The candidate's worst observed transcript is compared with baseline's best observed transcript on each clip; a noisy baseline trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, default inherited SDK controls in every native invocation, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, no new final-word retention failure, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x baseline. English-only candidates require an English unbiased baseline. Unified additionally requires ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms trailing silence and the separate tail-word gate. Private references must be hand-audited; licensed public references are accepted. This is a per-corpus prerequisite, not approval to ship."
         echo
         echo "| Candidate | Comparable clips | Reference words | Baseline best errors | Candidate worst errors | Improved clips | Regressed clips | New final-word failures | p50 / baseline | Verdict | Blockers |"
         echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"

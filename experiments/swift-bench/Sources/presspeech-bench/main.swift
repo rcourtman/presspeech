@@ -210,6 +210,9 @@ func parseArgs() -> CLIArgs {
               --critical-terms <path>
                          plain text, one canonical word or phrase per line; report
                          exact surface-form recall without printing term content
+              --experiment-environment
+                         report inherited SDK control counts without loading audio/models;
+                         names and values are never printed or changed
               --reference-metrics --reference-file <path>
                          inspect one reference without loading audio or an ASR model;
                          prints only normalized word and critical-occurrence counts
@@ -2153,6 +2156,19 @@ func runBenchSelfTests() throws {
     try expect(RescoringObservation.unobservable(attempted: nil).fields.contains("attempted=unknown"), "sliding API cannot claim an observed attempt")
     try expect(RescoringObservation.skipped.fields.contains("attempted=0"), "missing timings skip rescoring without claiming an attempt")
 
+    let noControls = experimentEnvironmentReceipt([:])
+    try expect(noControls == "experiment-environment: schema=1 inherited-controls=0 ci-present=0",
+        "absence of inherited controls must be explicit")
+    let configuredEnvironment = ["FLUID_PRIVATE_NAME": "/PRIVATE_PATH", "FLUIDAUDIO_UNKNOWN": "PRIVATE_SECRET",
+        "TDT_EMISSION_DELAY_FRAMES": "", "HF_TOKEN": "PRIVATE_CREDENTIAL", "CI": "PRIVATE_CI_VALUE"]
+    let configuredReceipt = experimentEnvironmentReceipt(configuredEnvironment)
+    try expect(configuredReceipt == "experiment-environment: schema=1 inherited-controls=3 ci-present=1" &&
+        !configuredReceipt.contains("PRIVATE"), "environment receipts must count controls without exposing any names or values")
+    try expect(configuredEnvironment["FLUID_PRIVATE_NAME"] == "/PRIVATE_PATH",
+        "environment inspection must not replace caller configuration")
+    try expect(experimentEnvironmentReceipt(["CI": ""]) ==
+        "experiment-environment: schema=1 inherited-controls=0 ci-present=1",
+        "CI presence must be recorded separately from ASR tuning")
     try runAudioLoadingSelfTests()
 
     print("presspeech-bench self-test passed")
@@ -2293,6 +2309,22 @@ func benchmarkErrorDescription(_ error: Error, redactSensitiveText: Bool) -> Str
     redactSensitiveText ? "<redacted error detail>" : String(describing: error)
 }
 
+// MARK: - Experiment environment
+
+/// Preserve caller configuration, but never serialize names, values, or value
+/// hashes. Even empty/invalid prefixed controls make a run explicitly configured.
+/// These receipts qualify the environment only, not the CLI-selected policies.
+func experimentEnvironmentReceipt(_ environment: [String: String]) -> String {
+    let count = environment.keys.filter {
+        $0.hasPrefix("FLUID_") || $0.hasPrefix("FLUIDAUDIO_") || $0 == "TDT_EMISSION_DELAY_FRAMES"
+    }.count
+    // In the pinned SDK, benchmark ASR loads defaultConfiguration() rather than
+    // the unused CI-sensitive optimizedConfiguration(). Record CI separately;
+    // its presence alone does not change these benchmark inference paths.
+    let ciPresent = environment["CI"] != nil ? 1 : 0
+    return "experiment-environment: schema=1 inherited-controls=\(count) ci-present=\(ciPresent)"
+}
+
 // MARK: - Main
 
 @main
@@ -2300,6 +2332,10 @@ struct PresspeechBench {
     static func main() async throws {
         if CommandLine.arguments.dropFirst() == ["--self-test"] {
             try runBenchSelfTests()
+            return
+        }
+        if CommandLine.arguments.dropFirst() == ["--experiment-environment"] {
+            print(experimentEnvironmentReceipt(ProcessInfo.processInfo.environment))
             return
         }
         if CommandLine.arguments.dropFirst().first == "--reference-metrics" {
@@ -2354,6 +2390,7 @@ struct PresspeechBench {
             runSummary += ", vocabulary-policy=exact-normalized-similarity"
         }
         log(runSummary)
+        log(experimentEnvironmentReceipt(ProcessInfo.processInfo.environment))
         let samples = try load16kMono(url: args.file)
         let durSec = Double(samples.count) / 16_000
         log("audio: \(samples.count) samples (~\(String(format: "%.2f", durSec)) s @ 16 kHz mono)")

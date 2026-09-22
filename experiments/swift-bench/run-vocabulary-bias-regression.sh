@@ -46,6 +46,7 @@ MIN_NEGATIVE_CONTROL_CLIPS="10"
 MIN_NEGATIVE_CONTROL_REFERENCE_WORDS="1000"
 BENCHMARK_SOURCE_STATE="unavailable"
 BASELINE_DEPENDENCY="unavailable"
+EXPERIMENT_ENVIRONMENT_STATE="unreported"
 SELF_TEST=0
 BENCH_EXECUTABLE=".build/release/presspeech-bench"
 
@@ -58,6 +59,7 @@ BENCHMARK_SOURCE_PATHS=(
     "experiments/swift-bench/dependency-provenance.py"
     "experiments/swift-bench/rescoring-evidence.py"
     "experiments/swift-bench/audio-input-evidence.py"
+    "experiments/swift-bench/experiment-environment.py"
     "swift/Package.swift"
     "swift/Package.resolved"
 )
@@ -782,6 +784,7 @@ candidate_assessment() {
         -v trials="$TRIALS" \
         -v min_candidate_trials="$MIN_CANDIDATE_TRIALS" \
         -v source_state="$BENCHMARK_SOURCE_STATE" \
+        -v environment_state="$EXPERIMENT_ENVIRONMENT_STATE" \
         -v rescoring_blockers="$rescoring_blockers" \
         -v dependency_mode="$BASELINE_DEPENDENCY" '
         function add_blocker(message) {
@@ -854,6 +857,7 @@ candidate_assessment() {
             if (references_hand_audited != 1) add_blocker("references not declared hand-audited")
             if (trials < min_candidate_trials) add_blocker("measured trials below " min_candidate_trials)
             if (source_state != "clean") add_blocker("benchmark source is not clean")
+            if (environment_state != "default") add_blocker("inherited SDK environment is " environment_state)
             if (dependency_mode != "production-dependency") add_blocker("baseline dependency differs from app")
             if (baseline_target_clips < min_target_clips) add_blocker("target clips below " min_target_clips)
             if (baseline_target_words < min_target_words) add_blocker("target reference words below " min_target_words)
@@ -933,7 +937,7 @@ test_frozen_input_run() {
     local bench="$root/repo/experiments/swift-bench"
     mkdir -p "$fixture/targets" "$fixture/controls" "$root/bin" "$bench"
     cp "$SCRIPT_PATH" "$bench/run-vocabulary-bias-regression.sh"
-    cp Package.swift Package.resolved dependency-provenance.py rescoring-evidence.py audio-input-evidence.py "$bench/"
+    cp Package.swift Package.resolved dependency-provenance.py rescoring-evidence.py audio-input-evidence.py experiment-environment.py "$bench/"
     mkdir -p "$root/repo/swift"
     cp "$REPO_ROOT/swift/Package.swift" "$REPO_ROOT/swift/Package.resolved" "$root/repo/swift/"
     # Exercise the real provenance gate even though compilation itself is a
@@ -1028,6 +1032,9 @@ if [[ "$group" == target ]]; then [[ "$frames" == 16037 ]]; else [[ "$frames" ==
 observed="$frames"
 if [[ "${FREEZE_TEST_SHORT_AUDIO:-0}" == 1 ]]; then observed=$((frames - 704)); fi
 echo "audio: $observed samples (~1.00 s @ 16 kHz mono)"
+if [[ "${FREEZE_TEST_MISSING_ENVIRONMENT:-0}" != 1 ]]; then
+    echo "experiment-environment: schema=1 inherited-controls=${FREEZE_TEST_ENVIRONMENT_CONTROLS:-0} ci-present=0"
+fi
 printf '%s %s\n' "$group" "$variant" >>"$FREEZE_TEST_CALLS"
 echo 'ready in 10.0 ms'
 echo 'model-cache: total=10.0 MB'
@@ -1126,6 +1133,28 @@ FIXTURE_WAV
         echo 'self-test published artifacts for incomplete decoded audio' >&2
         exit 1
     fi
+
+    # Preserve exploratory runs, while the report must not qualify configured
+    # or old/missing native receipts. The passing-metrics unit cases above
+    # separately establish that this blocker alone prevents a pass.
+    local environment_case
+    for environment_case in configured unreported; do
+        cp -R "$root/original-fixtures/." "$fixture/"
+        local configured=0 missing=0
+        if [[ "$environment_case" == configured ]]; then configured=1; else missing=1; fi
+        PATH="$root/bin:$PATH" \
+            FREEZE_TEST_FIXTURES="$fixture" \
+            FREEZE_TEST_BENCH="$root/mock-bench" \
+            FREEZE_TEST_CALLS="$root/$environment_case-calls" \
+            FREEZE_TEST_ENVIRONMENT_CONTROLS="$configured" \
+            FREEZE_TEST_MISSING_ENVIRONMENT="$missing" \
+            bash "$bench/run-vocabulary-bias-regression.sh" \
+            --input-dir "$fixture/targets" --negative-control-dir "$fixture/controls" \
+            --vocabulary "$fixture/vocabulary.txt" --critical-terms "$fixture/critical-terms.txt" \
+            --out-dir "$root/$environment_case-results" --no-threshold >"$root/$environment_case.log" 2>&1
+        assert_contains "$root/$environment_case-results/"*.md "Inherited SDK environment: $environment_case"
+        assert_contains "$root/$environment_case-results/"*.md "inherited SDK environment is $environment_case"
+    done
 }
 
 test_native_audio_normalization() {
@@ -1184,6 +1213,8 @@ PY_AUDIO_CHECKS
 }
 
 run_self_test() {
+    EXPERIMENT_ENVIRONMENT_STATE="default"
+    python3 ./test-experiment-environment.py
     BASELINE_DEPENDENCY="production-dependency"
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-vocabulary-self-test.XXXXXX")"
@@ -1484,6 +1515,15 @@ MOCK
     local passing_assessment
     passing_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_eq "$passing_assessment" $'sliding-vocab-no-rescue\t35\t35\t25\t1135\t50\t10\t2000\t+2\t+0\t-0.13\t0\t0\t0\t1.50\tpasses\t' "passing candidate assessment"
+    local test_environment
+    for test_environment in configured unreported pending; do
+        EXPERIMENT_ENVIRONMENT_STATE="$test_environment"
+        local environment_assessment
+        environment_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "")"
+        assert_contains <(printf '%s\n' "$environment_assessment") "blocked"
+        assert_contains <(printf '%s\n' "$environment_assessment") "inherited SDK environment is $test_environment"
+    done
+    EXPERIMENT_ENVIRONMENT_STATE="default"
     candidate_assessment_row "$passing_assessment" >"$summary"
     assert_contains "$summary" '| `sliding-vocab-no-rescue` | 35/35 | 25 / 1135 / 50 | 10 / 2000 | +2 | +0 | -0.13 | 0 | 0 | 0 | 1.50x | **passes** | -- |'
 
@@ -2347,6 +2387,7 @@ printf 'clip_id\tvariant\twer_percent\tcritical_matched\tcritical_total\tcritica
     echo "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
 } >"$report"
 
+EXPERIMENT_ENVIRONMENT_STATE="pending"
 for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1)); do
     normalized="${normalized_clips[$clip_offset]}"
     clip_id="${clip_ids[$clip_offset]}"
@@ -2383,6 +2424,7 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
         fi
 
         python3 ./audio-input-evidence.py --audio "$normalized" --log "$log_file" >>"$log_file"
+        EXPERIMENT_ENVIRONMENT_STATE="$(python3 ./experiment-environment.py --log "$log_file" --previous "$EXPERIMENT_ENVIRONMENT_STATE")"
 
         wer_metrics="$(extract_worst_wer_metrics "$log_file")"
         IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"
@@ -2457,6 +2499,8 @@ python3 ./rescoring-evidence.py --evidence "$rescoring_evidence" --markdown >>"$
 
 {
     echo
+    echo "Inherited SDK environment: $EXPERIMENT_ENVIRONMENT_STATE (configured or unreported runs cannot qualify)."
+    echo
     echo "## Summary"
     echo
     echo "| Variant | Clips | Corpus WER % | Worst WER % | Critical hits | Critical recall % | Critical precision % | Unexpected critical insertions | Avg p50 ms | Max peak MB | Cache MB | Avg prepare ms |"
@@ -2489,7 +2533,7 @@ python3 ./rescoring-evidence.py --evidence "$rescoring_evidence" --markdown >>"$
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with unbiased \`v3\`. Repeated-trial safety compares each candidate's adverse extrema with baseline's favorable extrema, so a bad baseline trial cannot hide a candidate regression. A policy passes only with complete observable successful rescoring on every measured trial, matching declared/locked app and benchmark dependencies, human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x baseline. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with unbiased \`v3\`. Repeated-trial safety compares each candidate's adverse extrema with baseline's favorable extrema, so a bad baseline trial cannot hide a candidate regression. A policy passes only with complete observable successful rescoring on every measured trial, matching declared/locked app and benchmark dependencies, default inherited SDK controls in every native invocation, human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x baseline. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
     echo "| Candidate | Comparable clips | Target evidence (clips / words / critical occurrences) | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / baseline | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
