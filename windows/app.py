@@ -21,6 +21,11 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from typing import NamedTuple
 
+# Hugging Face clients read privacy and endpoint settings at import time.  This
+# local bootstrap must precede every third-party import, including indirect
+# imports added by a future dependency.
+import model_network
+
 import numpy as np
 import soxr
 import sounddevice as sd
@@ -147,6 +152,13 @@ UPDATE_CHECK_INTERVAL_SEC = 24 * 60 * 60
 # created, without downloading weights or opening the microphone.
 PACKAGE_SMOKE_IMPORTS = (
     ("torch", ("cuda",)),
+    ("hf_xet", ()),
+    ("huggingface_hub.constants", (
+        "ENDPOINT",
+        "HF_HUB_DISABLE_IMPLICIT_TOKEN",
+        "HF_HUB_DISABLE_TELEMETRY",
+        "HF_DEBUG",
+    )),
     ("transformers", (
         "AutoModelForRNNT",
         "AutoModelForTDT",
@@ -154,6 +166,7 @@ PACKAGE_SMOKE_IMPORTS = (
         "MoonshineStreamingForConditionalGeneration",
     )),
     ("faster_whisper", ("WhisperModel",)),
+    ("transformers.utils.hub", ("SESSION_ID", "http_user_agent")),
     ("onnxruntime", ("InferenceSession",)),
     ("ctranslate2", ()),
     ("sentencepiece", ("SentencePieceProcessor",)),
@@ -2425,6 +2438,9 @@ def _package_selftest():
                 raise RuntimeError(
                     "packaged import unavailable: %s.%s" %
                     (module_name, symbol)) from None
+    # Validate the values cached by the real bundled libraries, not only the
+    # environment from which they were imported.
+    model_network.harden_loaded_runtime(require_loaded=True)
 
 
 def _write_package_selftest_result(result):

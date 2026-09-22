@@ -203,7 +203,7 @@ gh release verify-asset windows-v0.1.12 $installer --repo rcourtman/presspeech</
           <div class="grid two">
             <article class="card">
               <h3>No transcription service</h3>
-              <p>Model files download from Hugging Face during setup, but dictation audio is not uploaded. There is no account, analytics SDK, crash reporter, or transcript history.</p>
+              <p>Model files download from pinned revisions on Hugging Face during setup, but dictation audio is not uploaded. The Hub necessarily observes the model fetch. Upcoming Windows 0.1.13 explicitly declines account tokens and disables the bundled model libraries' telemetry and implicit account-token use before they load. There is no account, analytics SDK, crash reporter, or transcript history.</p>
             </article>
             <article class="card">
               <h3>Diagnostics omit your words</h3>

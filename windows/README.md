@@ -51,7 +51,15 @@ Each Presspeech release pins every Windows Hugging Face model to an exact
 repository commit reviewed for that app version, so a fresh install cannot
 silently receive a different snapshot. Windows relies on the immutable Hugging
 Face snapshot identity; unlike the macOS model cache, it does not independently
-verify every downloaded model file against a SHA-256 manifest.
+verify every downloaded model file against a SHA-256 manifest. Upcoming 0.1.13
+applies the following policy before any model library imports: it fixes downloads to the public
+`https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
+disables implicit
+authentication and inherited User-Agent origin data, and prevents
+Transformers from adding a random per-launch session identifier. Every model
+call also declines account tokens and remote model code; Transformers weights
+are required to use safetensors. Inherited Hugging Face endpoint or staging
+settings therefore cannot redirect the app's pinned model request.
 The first-run readiness window shows model loading, microphone selection and a
 live microphone check, a selectable push-to-talk key with its global-listener
 status, and Start with Windows in one place. Speak while the check runs. It briefly opens the selected input,

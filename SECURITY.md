@@ -97,3 +97,23 @@ maintainer-vetted upstream model commit. Pre-populating
 `~/Library/Application Support/FluidAudio/Models/` from a trusted
 machine is still supported; Presspeech verifies that cache before loading
 it.
+
+On Windows, each selectable model is likewise pinned to a full Hugging Face
+repository commit. Upcoming Windows 0.1.13 applies its network policy before importing
+Transformers, faster-whisper, or huggingface_hub: it fixes the public
+`https://huggingface.co` endpoint, disables Hub telemetry and request debug
+logging, disables implicit authentication,
+removes inherited User-Agent origin data, and replaces Transformers' random
+per-process request ID with the fixed non-unique value `telemetry-off`. Model
+calls explicitly decline account tokens and remote model code, and Transformers
+backends require safetensors weights. The packaged-app self-test verifies the
+policy values cached by the actual bundled libraries so an incompatible
+dependency change fails the release build. Windows currently trusts the
+pinned Hub snapshot and HTTPS storage path rather than independently hashing
+every model file.
+
+The process also sets `HF_XET_TELEMETRY_ENABLED=0` for forward compatibility.
+The pinned hf-xet 1.6.0 source does not expose this switch; setting it and
+importing the package does not prove a runtime telemetry opt-out. The package
+check verifies the Hub constants and Transformers request header behavior;
+future hf-xet releases still require an independent network-policy review.

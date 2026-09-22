@@ -14,6 +14,8 @@ import gc
 import threading
 import time
 
+import model_network
+
 PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 NEMOTRON_MODEL = "nvidia/nemotron-speech-streaming-en-0.6b"
 MOONSHINE_MODEL = "UsefulSensors/moonshine-streaming-medium"
@@ -186,21 +188,26 @@ class Transcriber:
     def _load_parakeet(self, notify):
         import torch
         from transformers import AutoModelForTDT, AutoProcessor
+        model_network.harden_loaded_runtime()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if notify is not None:
             notify("Presspeech",
                    "Loading Parakeet-TDT v3 on %s (first run downloads ~2.5 GB)..." % device)
         self.processor = _configure_parakeet_processor(
             AutoProcessor.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION))
+                PARAKEET_MODEL, revision=PARAKEET_REVISION,
+                token=False, trust_remote_code=False))
         requested_dtype = _parakeet_dtype(torch, device, self.precision)
         try:
             self.model = AutoModelForTDT.from_pretrained(
                 PARAKEET_MODEL, revision=PARAKEET_REVISION,
-                dtype=requested_dtype)
+                dtype=requested_dtype, token=False, trust_remote_code=False,
+                use_safetensors=True)
         except TypeError:
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION)
+                PARAKEET_MODEL, revision=PARAKEET_REVISION,
+                token=False, trust_remote_code=False,
+                use_safetensors=True)
         except Exception as exc:
             if requested_dtype == "auto":
                 raise
@@ -208,7 +215,9 @@ class Transcriber:
                 notify("Presspeech", "Half-precision load failed; retrying FP32 (%s)"
                        % str(exc)[:100])
             self.model = AutoModelForTDT.from_pretrained(
-                PARAKEET_MODEL, revision=PARAKEET_REVISION, dtype="auto")
+                PARAKEET_MODEL, revision=PARAKEET_REVISION, dtype="auto",
+                token=False, trust_remote_code=False,
+                use_safetensors=True)
         if device != "cpu":
             self.model.to(device)
         self.backend = "parakeet"
@@ -217,30 +226,36 @@ class Transcriber:
     def _load_nemotron(self, notify):
         import torch
         from transformers import AutoModelForRNNT, AutoProcessor
+        model_network.harden_loaded_runtime()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if notify is not None:
             notify("Presspeech", "Loading Nemotron English ASR on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
         self.processor = AutoProcessor.from_pretrained(
-            NEMOTRON_MODEL, revision=NEMOTRON_REVISION)
+            NEMOTRON_MODEL, revision=NEMOTRON_REVISION,
+            token=False, trust_remote_code=False)
         self.model = AutoModelForRNNT.from_pretrained(
             NEMOTRON_MODEL, revision=NEMOTRON_REVISION,
-            dtype=dtype).to(device)
+            dtype=dtype, token=False, trust_remote_code=False,
+            use_safetensors=True).to(device)
         self.backend = "nemotron"
         self._device = device
 
     def _load_moonshine(self, notify):
         import torch
         from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
+        model_network.harden_loaded_runtime()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if notify is not None:
             notify("Presspeech", "Loading Moonshine Medium on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
         self.processor = AutoProcessor.from_pretrained(
-            MOONSHINE_MODEL, revision=MOONSHINE_REVISION)
+            MOONSHINE_MODEL, revision=MOONSHINE_REVISION,
+            token=False, trust_remote_code=False)
         self.model = MoonshineStreamingForConditionalGeneration.from_pretrained(
             MOONSHINE_MODEL, revision=MOONSHINE_REVISION,
-            dtype=dtype).to(device)
+            dtype=dtype, token=False, trust_remote_code=False,
+            use_safetensors=True).to(device)
         self.backend = "moonshine"
         self._device = device
 
@@ -250,12 +265,14 @@ class Transcriber:
         except KeyError:
             raise ValueError("unsupported Whisper model: %s" % model_name) from None
         from faster_whisper import WhisperModel
+        model_network.harden_loaded_runtime()
         device = "cuda" if cuda_available() else "cpu"
         compute = "float16" if device == "cuda" else "int8"
         if notify is not None:
             notify("Presspeech", "Loading Whisper %s on %s..." % (model_name, device))
         self.model = WhisperModel(
-            repository, revision=revision, device=device, compute_type=compute)
+            repository, revision=revision, device=device, compute_type=compute,
+            use_auth_token=False)
         self.backend = "whisper"
         self._device = device
 

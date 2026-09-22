@@ -12,6 +12,7 @@ ROOT = Path(SPECPATH)
 datas = []
 binaries = []
 hiddenimports = [
+    "hf_xet",
     "torch",
     "sentencepiece",
     "tokenizers",
@@ -40,6 +41,7 @@ hiddenimports += collect_submodules("transformers.models", on_error="ignore")
 for distribution in (
     "transformers",
     "huggingface-hub",
+    "hf-xet",
     "tokenizers",
     "safetensors",
     "sentencepiece",

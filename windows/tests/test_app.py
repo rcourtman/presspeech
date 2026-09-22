@@ -947,7 +947,9 @@ class TextRegressionTests(unittest.TestCase):
 
         with mock.patch.object(app.sys, "frozen", True, create=True), \
                 mock.patch.object(app.importlib, "import_module",
-                                  side_effect=load_module) as importer:
+                                  side_effect=load_module) as importer, \
+                mock.patch.object(
+                    app.model_network, "harden_loaded_runtime") as harden:
             app._package_selftest()
 
         self.assertEqual(
@@ -956,10 +958,12 @@ class TextRegressionTests(unittest.TestCase):
         )
         self.assertEqual(set(loaded), {
             "comtypes", "ctranslate2", "faster_whisper", "librosa",
-            "onnxruntime", "pycaw.constants", "pycaw.pycaw", "safetensors",
-            "sentencepiece", "soundfile", "soxr", "tokenizers", "torch",
-            "tk_uia", "transformers",
+            "hf_xet", "huggingface_hub.constants", "onnxruntime",
+            "pycaw.constants", "pycaw.pycaw", "safetensors", "sentencepiece",
+            "soundfile", "soxr", "tokenizers", "torch", "tk_uia",
+            "transformers", "transformers.utils.hub",
         })
+        harden.assert_called_once_with(require_loaded=True)
 
     def test_packaged_selftest_redacts_import_exception_details(self):
         with mock.patch.object(app.sys, "frozen", True, create=True), \

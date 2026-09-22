@@ -5,7 +5,10 @@
     {
       "name": "macos_first_launch_model_download",
       "when": "First launch until the model weights are cached locally; again if the local cache fails its integrity check and is re-downloaded; again when the user chooses Reset Speech Model Cache",
-      "destination": "huggingface.co",
+      "destination": [
+        "huggingface.co and its subdomains",
+        "Hugging Face model-storage and CDN hosts under hf.co"
+      ],
       "purpose": "FluidAudio downloads the Parakeet TDT v3 CoreML model weights",
       "approximate_size": "500-600 MB",
       "user_triggered": false,
@@ -15,12 +18,15 @@
     {
       "name": "windows_first_launch_model_download",
       "when": "First Windows launch until the automatically selected local model is cached; again after the user selects an uncached model in Settings",
-      "destination": "huggingface.co",
+      "destination": [
+        "huggingface.co and its subdomains",
+        "Hugging Face model-storage and CDN hosts under hf.co"
+      ],
       "purpose": "Download local speech-model weights: Parakeet TDT v3 when NVIDIA CUDA is usable, or Whisper base.en for the automatic CPU first-run path; other models are user-selectable",
       "approximate_size": "About 2.5 GB for Parakeet TDT v3 or 141 MiB for Whisper base.en",
       "user_triggered": false,
       "can_disable": false,
-      "data_sent": "Standard HTTPS request metadata; no dictation audio, transcript, settings, or usage data"
+      "data_sent": "HTTPS request metadata, selected public model and revision, and bundled library/runtime versions in User-Agent fields; no dictation audio or transcript. Hugging Face necessarily observes and can count the model fetch itself. Upcoming Windows 0.1.13 additionally fixes the public huggingface.co endpoint, disables Hugging Face library telemetry, removes inherited User-Agent origin data and implicit authentication, explicitly declines account tokens, and replaces Transformers' random request session ID with the fixed non-unique value telemetry-off. These additional controls are not claimed for published 0.1.12."
     },
     {
       "name": "macos_update_check",

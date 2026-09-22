@@ -277,7 +277,7 @@ Presspeech is local-first:
 
 Network calls made by Presspeech are limited to:
 
-- speech model download from Hugging Face (first launch, integrity-failure re-download, or user-triggered cache reset),
+- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming Windows 0.1.13 disables the Hub libraries' telemetry and implicit authentication before import,
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, which open fixed GitHub
   forms in the default browser without adding app or user data to the URL,

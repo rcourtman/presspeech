@@ -157,25 +157,57 @@ class ParakeetConfigurationTests(unittest.TestCase):
             transcriber = engine.Transcriber(precision="auto")
             transcriber._load_parakeet(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION)
+                engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION,
+                token=False, trust_remote_code=False)
             transformers.AutoModelForTDT.from_pretrained.assert_called_once_with(
                 engine.PARAKEET_MODEL, revision=engine.PARAKEET_REVISION,
-                dtype="auto")
+                dtype="auto", token=False, trust_remote_code=False,
+                use_safetensors=True)
 
             transcriber._load_nemotron(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION)
+                engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION,
+                token=False, trust_remote_code=False)
             transformers.AutoModelForRNNT.from_pretrained.assert_called_once_with(
                 engine.NEMOTRON_MODEL, revision=engine.NEMOTRON_REVISION,
-                dtype="float32")
+                dtype="float32", token=False, trust_remote_code=False,
+                use_safetensors=True)
 
             transcriber._load_moonshine(None)
             transformers.AutoProcessor.from_pretrained.assert_called_with(
-                engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION)
+                engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
+                token=False, trust_remote_code=False)
             (transformers.MoonshineStreamingForConditionalGeneration
              .from_pretrained.assert_called_once_with(
                  engine.MOONSHINE_MODEL, revision=engine.MOONSHINE_REVISION,
-                 dtype="float32"))
+                 dtype="float32", token=False, trust_remote_code=False,
+                 use_safetensors=True))
+
+    def test_model_load_rejects_a_preimported_endpoint_override(self):
+        torch = types.ModuleType("torch")
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = False
+        transformers = types.ModuleType("transformers")
+        transformers.AutoProcessor = mock.Mock()
+        transformers.AutoModelForTDT = mock.Mock()
+        hostile_constants = types.SimpleNamespace(
+            ENDPOINT="https://attacker.example",
+            HF_HUB_DISABLE_TELEMETRY=True,
+            HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
+            HF_HUB_USER_AGENT_ORIGIN=None,
+        )
+
+        with mock.patch.dict(sys.modules, {
+                "torch": torch,
+                "transformers": transformers,
+                "huggingface_hub.constants": hostile_constants,
+        }):
+            with self.assertRaisesRegex(
+                    engine.model_network.ModelNetworkPolicyError, "endpoint"):
+                engine.Transcriber()._load_parakeet(None)
+
+        transformers.AutoProcessor.from_pretrained.assert_not_called()
+        transformers.AutoModelForTDT.from_pretrained.assert_not_called()
 
     def test_selectable_whisper_models_have_immutable_snapshots(self):
         transformers_models = {
@@ -200,7 +232,8 @@ class ParakeetConfigurationTests(unittest.TestCase):
 
         repository, revision = engine.WHISPER_MODELS["base.en"]
         faster_whisper.WhisperModel.assert_called_once_with(
-            repository, revision=revision, device="cpu", compute_type="int8")
+            repository, revision=revision, device="cpu", compute_type="int8",
+            use_auth_token=False)
 
     def test_unknown_whisper_model_fails_before_backend_import(self):
         with mock.patch.dict(sys.modules, {"faster_whisper": None}):
@@ -321,11 +354,13 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 mock.call(
                     engine.PARAKEET_MODEL,
                     revision=engine.PARAKEET_REVISION,
-                    dtype="float16"),
+                    dtype="float16", token=False, trust_remote_code=False,
+                    use_safetensors=True),
                 mock.call(
                     engine.PARAKEET_MODEL,
                     revision=engine.PARAKEET_REVISION,
-                    dtype="auto"),
+                    dtype="auto", token=False, trust_remote_code=False,
+                    use_safetensors=True),
             ],
         )
 
@@ -346,10 +381,13 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 mock.call(
                     engine.PARAKEET_MODEL,
                     revision=engine.PARAKEET_REVISION,
-                    dtype="auto"),
+                    dtype="auto", token=False, trust_remote_code=False,
+                    use_safetensors=True),
                 mock.call(
                     engine.PARAKEET_MODEL,
-                    revision=engine.PARAKEET_REVISION),
+                    revision=engine.PARAKEET_REVISION,
+                    token=False, trust_remote_code=False,
+                    use_safetensors=True),
             ],
         )
 
