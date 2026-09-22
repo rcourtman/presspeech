@@ -177,6 +177,13 @@ keyboard access testing in addition to assistive-technology testing.
   in Setup's final row it must move through **Try Dictation**, **Retry Speech
   Model** when enabled, **Set Up Later**, then **Finish Setup**, without jumping
   right and back left.
+- Invoke **Check Again**, **Retry Speech Model**, and **Download Update** using
+  the keyboard. While each operation is active, confirm focus moves to the
+  microphone or model selector, or to **Later**, before the invoked command is
+  disabled. When model readiness changes with **Try Dictation** or **Finish
+  Setup** focused, confirm focus returns to the microphone selector rather than
+  remaining on an unavailable command. Repeat these transitions with Narrator
+  and confirm Tab and Shift-Tab continue from the announced usable control.
 - With Narrator, confirm the microphone selector and both recovery buttons
   expose meaningful names. Leave focus on the selector while the microphone
   check finishes and while the model becomes ready; confirm each changed status

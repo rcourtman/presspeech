@@ -314,6 +314,19 @@ def _add_access_key(root, widget, key):
         root, "<Alt-KeyPress-%s>" % key, widget.invoke)
 
 
+def _set_control_state(root, control, state, fallback=None):
+    """Change a control's state without leaving focus on a disabled widget."""
+    if state == "disabled" and fallback is not None:
+        try:
+            if root.focus_get() is control:
+                fallback.focus_set()
+        except (AttributeError, tk.TclError):
+            # The control can race its window's destruction or a lightweight
+            # test host may not implement Tk's complete focus contract.
+            pass
+    control.config(state=state)
+
+
 def _bounded_viewport(content_size, screen_size, margin, minimum):
     """Keep a scrollable dialog on screen without inventing a fixed size."""
     available = max(1, screen_size - margin)
@@ -948,13 +961,16 @@ class SetupWindow:
         hotkey_state, hotkey_detail = _hotkey_readiness(self.app)
         _set_accessible_text(self.hotkey_status, hotkey_detail)
         self.repair_hotkey_button.config(state="normal")
-        self.retry_button.config(
-            state="normal" if status == "error" else "disabled")
-        self.try_button.config(
-            state="normal" if status == "ready" else "disabled")
-        self.finish_button.config(
-            state=("normal" if status == "ready" and
-                   hotkey_state == "ready" else "disabled"))
+        _set_control_state(
+            self.root, self.retry_button,
+            "normal" if status == "error" else "disabled", self.device)
+        _set_control_state(
+            self.root, self.try_button,
+            "normal" if status == "ready" else "disabled", self.device)
+        _set_control_state(
+            self.root, self.finish_button,
+            ("normal" if status == "ready" and
+             hotkey_state == "ready" else "disabled"), self.device)
         if status in ("ready", "error"):
             if getattr(self, "_progress_active", False):
                 self.progress.stop()
@@ -1032,7 +1048,8 @@ class SetupWindow:
         selected = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])
         self.microphone_checking = True
-        self.check_microphone_button.config(state="disabled")
+        _set_control_state(
+            self.root, self.check_microphone_button, "disabled", self.device)
         _set_accessible_text(
             self.microphone_status, "Listening — speak a few words…")
         threading.Thread(
@@ -1109,7 +1126,8 @@ class SetupWindow:
         hotkey_state, _hotkey_detail = _hotkey_readiness(self.app)
         if (getattr(self.app, "model_status", "pending") != "ready" or
                 hotkey_state != "ready"):
-            self.finish_button.config(state="disabled")
+            _set_control_state(
+                self.root, self.finish_button, "disabled", self.device)
             return
         settings = self.app.settings
         selected = self.device_values.get(
@@ -1187,14 +1205,15 @@ class UpdateWindow:
         self.progress.pack(fill="x", pady=(5, 14))
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
-        later_button = ttk.Button(buttons, text="Later", command=self._close)
-        later_button.pack(side="left")
+        self.later_button = ttk.Button(
+            buttons, text="Later", command=self._close)
+        self.later_button.pack(side="left")
         self.download_button = ttk.Button(
             buttons, text="Download Update", command=self._download,
             default="active")
         self.download_button.pack(side="right")
         root.protocol("WM_DELETE_WINDOW", self._close)
-        _add_access_key(root, later_button, "l")
+        _add_access_key(root, self.later_button, "l")
         _add_access_key(root, self.download_button, "d")
         _bind_window_command(root, "<Escape>", self._close)
         root.update_idletasks()
@@ -1207,7 +1226,8 @@ class UpdateWindow:
         self._discard_completed_download()
         self.cancel_download.clear()
         self.download_finished.clear()
-        self.download_button.config(state="disabled")
+        _set_control_state(
+            self.root, self.download_button, "disabled", self.later_button)
         _set_accessible_text(self.status, "Downloading…")
         threading.Thread(target=self._download_worker, daemon=True).start()
 
@@ -1611,8 +1631,9 @@ class SettingsWindow:
         _set_accessible_text(
             self.hotkey_status, "Global hotkey status: " + hotkey_detail)
         self.repair_hotkey_button.config(state="normal")
-        self.retry_model_button.config(
-            state="normal" if status == "error" else "disabled")
+        _set_control_state(
+            self.root, self.retry_model_button,
+            "normal" if status == "error" else "disabled", self.var_model)
         self.root.after(300, self._poll_model)
 
     def _add_rule(self):

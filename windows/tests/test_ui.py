@@ -473,6 +473,32 @@ class AccessibleWindowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not present"):
             ui._access_key_index("Later", "z")
 
+    def test_disabling_a_focused_control_moves_focus_first(self):
+        root = mock.Mock()
+        control = mock.Mock()
+        fallback = mock.Mock()
+        root.focus_get.return_value = control
+        order = []
+        fallback.focus_set.side_effect = lambda: order.append("focus")
+        control.config.side_effect = lambda **_values: order.append("disable")
+
+        ui._set_control_state(root, control, "disabled", fallback)
+
+        self.assertEqual(order, ["focus", "disable"])
+        fallback.focus_set.assert_called_once_with()
+        control.config.assert_called_once_with(state="disabled")
+
+    def test_state_change_does_not_move_focus_from_another_control(self):
+        root = mock.Mock()
+        control = mock.Mock()
+        fallback = mock.Mock()
+        root.focus_get.return_value = object()
+
+        ui._set_control_state(root, control, "disabled", fallback)
+
+        fallback.focus_set.assert_not_called()
+        control.config.assert_called_once_with(state="disabled")
+
     def test_every_interactive_window_supports_escape(self):
         commands = {
             ui.SetupWindow: "self._defer",
@@ -575,10 +601,12 @@ class SetupWindowTests(unittest.TestCase):
     def test_retry_resumes_progress_animation_after_an_error(self):
         window = self.make_window("loading", "Downloading model")
         window._progress_active = False
+        window.root.focus_get.return_value = window.retry_button
 
         with mock.patch.object(ui, "_set_accessible_text"):
             window._poll_model()
 
+        window.device.focus_set.assert_called_once_with()
         window.progress.config.assert_called_once_with(mode="indeterminate")
         window.progress.start.assert_called_once_with(12)
         self.assertTrue(window._progress_active)
@@ -808,12 +836,14 @@ class SetupWindowTests(unittest.TestCase):
 
     def test_microphone_check_runs_off_the_ui_thread(self):
         window = self.make_window("ready")
+        window.root.focus_get.return_value = window.check_microphone_button
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text, \
                 mock.patch.object(ui.threading, "Thread") as thread:
             window._check_microphone()
 
         self.assertTrue(window.microphone_checking)
+        window.device.focus_set.assert_called_once_with()
         window.check_microphone_button.config.assert_called_once_with(
             state="disabled")
         set_text.assert_called_once_with(
@@ -907,6 +937,33 @@ class SetupWindowTests(unittest.TestCase):
         self.assertEqual(window.device_values, {"Headset microphone": selected})
         window.device.config.assert_not_called()
         window.device.set.assert_not_called()
+
+
+class UpdateWindowTests(unittest.TestCase):
+    def test_download_moves_focus_before_disabling_its_command(self):
+        window = ui.UpdateWindow.__new__(ui.UpdateWindow)
+        window.root = mock.Mock()
+        window.download_button = mock.Mock()
+        window.later_button = mock.Mock()
+        window.status = mock.Mock()
+        window.cancel_download = mock.Mock()
+        window.download_finished = mock.Mock()
+        window._discard_completed_download = mock.Mock()
+        window.root.focus_get.return_value = window.download_button
+        order = []
+        window.later_button.focus_set.side_effect = lambda: order.append("focus")
+        window.download_button.config.side_effect = (
+            lambda **_values: order.append("disable"))
+
+        with mock.patch.object(ui, "_set_accessible_text"), \
+                mock.patch.object(ui.threading, "Thread") as thread:
+            window._download()
+
+        self.assertEqual(order, ["focus", "disable"])
+        window._discard_completed_download.assert_called_once_with()
+        window.cancel_download.clear.assert_called_once_with()
+        window.download_finished.clear.assert_called_once_with()
+        thread.return_value.start.assert_called_once_with()
 
 
 class ScratchpadWindowTests(unittest.TestCase):
@@ -1358,6 +1415,7 @@ class DictionarySettingsTests(unittest.TestCase):
         window.root = mock.Mock()
         window.model_status = mock.Mock()
         window.retry_model_button = mock.Mock()
+        window.var_model = mock.Mock()
         window.hotkey_status = mock.Mock()
         window.repair_hotkey_button = mock.Mock()
         window.app = mock.Mock()
@@ -1367,6 +1425,7 @@ class DictionarySettingsTests(unittest.TestCase):
         window.app.transcriber.loaded.return_value = True
         window.app.hotkey_listener_status.return_value = (
             "ready", "Ready — Right Alt")
+        window.root.focus_get.return_value = window.retry_model_button
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_model()
@@ -1380,6 +1439,7 @@ class DictionarySettingsTests(unittest.TestCase):
                 "Global hotkey status: Ready — Right Alt"),
         ])
         window.retry_model_button.config.assert_called_once_with(state="disabled")
+        window.var_model.focus_set.assert_called_once_with()
         window.repair_hotkey_button.config.assert_called_once_with(
             state="normal")
 

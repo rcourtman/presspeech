@@ -228,14 +228,42 @@
             </article>
             <article class="card">
               <h3>Presspeech gate</h3>
-              <p><code>run-vocabulary-bias-regression.sh</code> compares production v3 with four direct-v3 policies over repeated target clips and same-language negative controls. A candidate cannot pass by improving aggregate recall while making even one compared clip worse.</p>
+              <p><code>run-vocabulary-bias-regression.sh</code> compares production v3 with four direct-v3 policies and four sliding-window paths over repeated target clips and same-language negative controls. A candidate cannot pass by improving aggregate recall while making even one compared clip worse.</p>
             </article>
             <article class="card">
               <h3>Current status</h3>
-              <p>No vocabulary policy has cleared the product-candidate gate, so Presspeech still uses its deterministic Dictionary &amp; Shortcuts pass. That avoids silently trading occasional proper-name fixes for unrelated word substitutions.</p>
+              <p>No vocabulary policy has cleared the product-candidate gate, so Presspeech still uses its deterministic Dictionary &amp; Shortcuts pass. The corrected full-audio evidence rules out enabling the tested standard policy, not just enabling it by default.</p>
             </article>
           </div>
-          <p>People affected by this gap can help without publishing private speech. Follow the <a href="https://github.com/rcourtman/presspeech/blob/main/CONTRIBUTING.md#suggesting-features">privacy-redacted contribution workflow</a> and attach only the aggregate report to <a href="https://github.com/rcourtman/presspeech/issues/21">issue #21</a>. The local fixtures, transcripts, vocabulary terms, and paths stay on the contributor's Mac. Technical background: <a href="https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Documentation/ASR/CustomVocabulary.md">FluidAudio custom-vocabulary documentation at Presspeech's pinned revision</a>.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>Corrected Polish vocabulary experiments against the production dependency</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Baseline</th>
+                  <th scope="col">Vocabulary result</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Do five supplied lemmas recover withheld inflected forms?</th>
+                  <td>14/15 forms; 6.12% WER on 60 negative controls</td>
+                  <td>0/15 forms; 37.10–37.62% control WER; about 2.54× latency</td>
+                  <td>Failed the held-out-inflection test</td>
+                </tr>
+                <tr>
+                  <th scope="row">Do 20 explicitly supplied surface forms help?</th>
+                  <td>41/67 target hits; 10.50% target WER</td>
+                  <td>66/67 hits; 8.34% aggregate WER, but seven recordings regressed, unexpected terms appeared, and latency was 2.65–2.67×</td>
+                  <td>Useful recall signal, but failed the per-clip safety gate</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>These are bounded natural read-speech experiments, not a universal language claim. They show that this mechanism is neither morphological generalisation nor a safe product candidate under the current evidence. Read the <a href="https://github.com/rcourtman/presspeech/issues/21#issuecomment-5777963850">held-out-form report</a> and <a href="https://github.com/rcourtman/presspeech/issues/21#issuecomment-5778506977">complete-audio supplied-form replay</a> for cohort limits and measurement details.</p>
+          <p>People evaluating a materially different policy can still help without publishing private speech. Follow the <a href="https://github.com/rcourtman/presspeech/blob/main/CONTRIBUTING.md#suggesting-features">privacy-redacted contribution workflow</a> and attach only the aggregate report to <a href="https://github.com/rcourtman/presspeech/issues/21">issue #21</a>. The local fixtures, transcripts, vocabulary terms, and paths stay on the contributor's Mac. Technical background: <a href="https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Documentation/ASR/CustomVocabulary.md">FluidAudio custom-vocabulary documentation at Presspeech's pinned revision</a>.</p>
         </div>
       </section>
 

@@ -281,10 +281,25 @@ Custom vocabulary / proper names:
 
 > Presspeech's released Dictionary & Shortcuts feature applies deterministic
 > replacements after transcription; it does not currently teach or bias the
-> speech model, so related inflections need separate rules. Decode-time
-> vocabulary changes can also introduce wrong words, so the project evaluates
-> them against fixed target and same-language control corpora before shipping.
-> Privacy-safe benchmark guidance is in CONTRIBUTING.md. I maintain Presspeech.
+> speech model, so related inflections need separate rules. Corrected Polish
+> experiments found that the tested lemma-only vocabulary did not generalise
+> to held-out inflected forms; supplying the tested forms explicitly improved
+> aggregate recall but also regressed individual clips, introduced unexpected
+> terms, and took about 2.6 times the inference latency. That decoder path
+> remains disabled.
+> The evidence and privacy-safe benchmark method are linked from the benchmarks
+> page. I maintain Presspeech.
+
+Local Mac workspace comparison ("why not MacParakeet?"):
+
+> MacParakeet is the stronger choice if you want file and meeting
+> transcription, broad model choice, persistent history, optional AI features,
+> or command-line automation in the same free Mac app. Presspeech is narrower:
+> dictation only, no persistent transcript archive or telemetry, deterministic
+> text handling, and explicit manual recovery when it cannot verify the
+> original paste window. Both run their core speech recognition locally. Current
+> sourced comparison: https://rcourtman.github.io/presspeech/compare/macparakeet.html.
+> I maintain Presspeech, so read it with that in mind.
 
 ## One-liner boilerplate
 
@@ -304,7 +319,7 @@ For directories and "what is this" replies:
   "I maintain it" / "I built this".
 - Answer questions that were actually asked; don't seed them.
 - The compare section answers "why not Superwhisper / Wispr Flow /
-  VoiceInk / Handy / FluidVoice / Apple Dictation / MacWhisper" and separates
+  VoiceInk / Handy / FluidVoice / MacParakeet / Apple Dictation / MacWhisper" and separates
   the Windows built-ins from local and cloud apps — link the relevant table or
   per-tool page instead of arguing in threads.
 - Expect "Intel support?" and "why Homebrew?" — Apple Silicon is an

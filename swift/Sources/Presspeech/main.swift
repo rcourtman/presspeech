@@ -11088,9 +11088,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private var setupChecklistIsComplete: Bool {
-        isSpeechModelReady
-            && isReady
-            && missingPermissions().isEmpty
+        setupChecklistCompletionState(
+            isSpeechModelReady: isSpeechModelReady,
+            isReady: isReady,
+            permissionsGranted: missingPermissions().isEmpty,
+            hotkeyTestSucceeded: hotkeyTestSucceeded
+        )
     }
 
     private func setupDetail(for permission: Permission) -> String {

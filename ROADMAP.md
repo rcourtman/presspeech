@@ -100,17 +100,31 @@ repeatable install-to-first-dictation path on supported Windows hardware.
   [Windows release qualification](docs/manual-qa.md#windows-release-qualification)
   rather than treating portable tests as native evidence.
 
-## Explore: improve recognition with private evidence
+## Explore: reduce proper-name correction work safely
 
-Decode-time custom vocabulary could address names and inflected languages more
-effectively than exact post-transcription replacements. A user has supplied a
-privacy-preserving benchmark offer in
-[issue #21](https://github.com/rcourtman/presspeech/issues/21), and the
-repository now contains a redacted comparison harness.
+The need behind [issue
+#21](https://github.com/rcourtman/presspeech/issues/21) is established: a daily
+Polish user maintains hundreds of exact post-transcription rules for names and
+domain terms across their inflected forms. The tested FluidAudio vocabulary
+path is not the solution yet. In the corrected, complete-audio experiments:
 
-This remains exploration until a candidate demonstrates a material improvement
-over the released path on an adequately varied, human-audited corpus without
-unacceptable regressions, latency, memory, or power cost. The evidence gate in
+- [lemma-only vocabulary did not recover the held-out inflected
+  forms](https://github.com/rcourtman/presspeech/issues/21#issuecomment-5777963850)
+  and raised negative-control WER from 6.12% to about 37%; and
+- [explicitly supplied forms improved aggregate target
+  recall](https://github.com/rcourtman/presspeech/issues/21#issuecomment-5778506977),
+  but regressed seven individual recordings, produced unexpected supplied-term
+  occurrences, and took about 2.6 times the baseline inference latency.
+
+No tested decoder policy qualifies for the app. Presspeech will keep exact,
+deterministic Dictionary & Shortcuts rules rather than expose an experimental
+toggle that can silently replace unrelated words. A correction-side pattern or
+stem rule also needs evidence before it enters the roadmap: it must define
+bounded matching and prove, with positive and same-language negative fixtures,
+that ordinary words and neighbouring text are not changed unexpectedly.
+
+The redacted comparison harness remains available for materially different
+upstream policies or correction approaches. The evidence gate in
 [`experiments/swift-bench/README.md`](experiments/swift-bench/README.md) is
 deliberately stricter than a promising small sample. Private audio, reference
 text, hypotheses, vocabulary, and paths stay on the evaluator's computer.

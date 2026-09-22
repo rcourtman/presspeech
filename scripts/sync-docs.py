@@ -1147,7 +1147,6 @@ def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
             f"Presspeech-Setup-{version}-x64.exe",
             1,
         ),
-        (r"Download Windows \d+\.\d+\.\d+", f"Download Windows {version}", 1),
     ]
     for pattern, replacement, minimum in replacements:
         text, count = re.subn(pattern, replacement, text)
@@ -1481,6 +1480,89 @@ def check_windows_unsigned_guidance(
                 f"{display}: incomplete unsigned Windows guidance — "
                 f"missing {', '.join(repr(phrase) for phrase in missing)}"
             )
+    return errors
+
+
+def check_windows_verified_download_flow(
+    path: Path = DOCS / "windows.html",
+) -> list[str]:
+    """Keep the unsigned installer behind its compatibility and trust checks.
+
+    The JSON-LD download URL remains direct for software catalogues. The visible
+    primary action is different: it must take a person to the page's language,
+    hardware, checksum, and signing guidance before a binary starts downloading.
+    """
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing Windows install guide"]
+
+    contents = read_text(path)
+    anchors = []
+    for match in re.finditer(r"<a\b(?P<attrs>[^>]*)>(?P<label>.*?)</a>", contents, re.I | re.S):
+        attributes = {
+            name.lower(): value
+            for name, _quote, value in re.findall(
+                r"([:\w-]+)\s*=\s*([\"'])(.*?)\2", match.group("attrs"), re.S
+            )
+        }
+        anchors.append((match, attributes))
+    primary_actions = [
+        (match, attributes)
+        for match, attributes in anchors
+        if "button" in attributes.get("class", "").split()
+        and "secondary" not in attributes.get("class", "").split()
+    ]
+    errors: list[str] = []
+    if len(primary_actions) != 1:
+        errors.append(
+            f"{display}: expected one primary Windows download action, "
+            f"found {len(primary_actions)}"
+        )
+        return errors
+
+    primary, primary_attributes = primary_actions[0]
+    if primary_attributes.get("href") != "#download-verify-run":
+        errors.append(
+            f"{display}: primary Windows download action must lead to "
+            "#download-verify-run before downloading the unsigned installer"
+        )
+    primary_label = html.unescape(re.sub(r"<[^>]+>", "", primary.group("label"))).strip()
+    if primary_label != "Review requirements and download":
+        errors.append(
+            f"{display}: primary Windows action must be named "
+            "'Review requirements and download'"
+        )
+
+    required_before_action = (
+        "<strong>Check your language before downloading.</strong>",
+        "<strong>This prerelease is not code-signed.</strong>",
+    )
+    for marker in required_before_action:
+        position = contents.find(marker)
+        if position < 0 or position > primary.start():
+            errors.append(
+                f"{display}: Windows compatibility and signing warnings must "
+                f"precede the primary download action; missing or late {marker!r}"
+            )
+
+    guide_position = contents.find('id="download-verify-run"')
+    installer_href = re.compile(
+        r"^https://github\.com/rcourtman/presspeech/releases/download/"
+        r"windows-v[^\"/]+/Presspeech-Setup-[^\"]+-x64\.exe$"
+    )
+    visible_downloads = [
+        match
+        for match, attributes in anchors
+        if installer_href.fullmatch(attributes.get("href", ""))
+    ]
+    if guide_position < 0:
+        errors.append(f"{display}: missing #download-verify-run guidance target")
+    if not visible_downloads:
+        errors.append(f"{display}: verified install steps contain no installer link")
+    elif guide_position >= 0 and any(match.start() < guide_position for match in visible_downloads):
+        errors.append(
+            f"{display}: visible installer links must follow #download-verify-run guidance"
+        )
     return errors
 
 
@@ -2044,7 +2126,6 @@ def run_self_test() -> None:
             '"dateModified": "2025-12-30"\n'
             'windows-v1.2.3\n'
             'Presspeech-Setup-1.2.3-x64.exe\n'
-            'Download Windows 1.2.3\n'
             '<p class="quiet" data-release-status>stale</p>\n'
             '<pre><code>Install Presspeech from https://github.com/rcourtman/presspeech '
             'on this Windows PC.\nold prompt</code></pre>\n',
@@ -2053,7 +2134,7 @@ def run_self_test() -> None:
         synced_windows_page = sync_windows_html(windows_page, metadata)
         if (
             "1.2.3" in synced_windows_page
-            or synced_windows_page.count("9.8.7") != 5
+            or synced_windows_page.count("9.8.7") != 4
             or "Smart App Control or managed policy" not in synced_windows_page
         ):
             raise SyncError("self-test: Windows page release references were not all synced")
@@ -2362,6 +2443,43 @@ def run_self_test() -> None:
         if check_windows_unsigned_guidance(required_guidance):
             raise SyncError("self-test: complete unsigned Windows guidance was rejected")
 
+        verified_download = Path(tmp) / "windows-download.html"
+        verified_download.write_text(
+            "<strong>Check your language before downloading.</strong>\n"
+            "<strong>This prerelease is not code-signed.</strong>\n"
+            '<a class="button" href="#download-verify-run">'
+            "Review requirements and download</a>\n"
+            '<section id="download-verify-run">\n'
+            '<a href="https://github.com/rcourtman/presspeech/releases/download/'
+            'windows-v1.2.3/Presspeech-Setup-1.2.3-x64.exe">Installer</a>\n',
+            encoding="utf-8",
+        )
+        if check_windows_verified_download_flow(verified_download):
+            raise SyncError("self-test: verified Windows download flow was rejected")
+        safe_download = verified_download.read_text(encoding="utf-8")
+        early_download = safe_download.replace(
+            '<section id="download-verify-run">',
+            '<a data-test="early" class="button secondary" '
+            'href="https://github.com/rcourtman/presspeech/releases/download/'
+            'windows-v1.2.3/Presspeech-Setup-1.2.3-x64.exe">Early</a>\n'
+            '<section id="download-verify-run">',
+        )
+        verified_download.write_text(early_download, encoding="utf-8")
+        flow_errors = check_windows_verified_download_flow(verified_download)
+        if not any("must follow #download-verify-run" in error for error in flow_errors):
+            raise SyncError("self-test: reordered early installer link was accepted")
+
+        unsafe_download = safe_download.replace(
+            'href="#download-verify-run"',
+            'href="https://github.com/rcourtman/presspeech/releases/download/'
+            'windows-v1.2.3/Presspeech-Setup-1.2.3-x64.exe"',
+            1,
+        )
+        verified_download.write_text(unsafe_download, encoding="utf-8")
+        flow_errors = check_windows_verified_download_flow(verified_download)
+        if not any("must lead to #download-verify-run" in error for error in flow_errors):
+            raise SyncError("self-test: direct primary Windows download was accepted")
+
         language_guidance = Path(tmp) / "windows-language.html"
         required_language_guidance = {
             language_guidance: (
@@ -2594,6 +2712,7 @@ def main() -> int:
             errors.extend(check_icon_stats(metadata))
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
+            errors.extend(check_windows_verified_download_flow())
             errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_delivery_boundary_guidance())
@@ -2630,6 +2749,7 @@ def main() -> int:
         errors.extend(check_icon_stats(metadata))
         errors.extend(check_platform_orientation())
         errors.extend(check_windows_unsigned_guidance())
+        errors.extend(check_windows_verified_download_flow())
         errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_delivery_boundary_guidance())

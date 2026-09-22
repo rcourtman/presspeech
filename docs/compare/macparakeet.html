@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presspeech vs MacParakeet - Free Local Mac Dictation</title>
+    <meta name="description" content="Compare Presspeech and MacParakeet: two free local Apple Silicon dictation apps with different delivery, history, model choice, meeting, AI, and telemetry tradeoffs.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/macparakeet.html">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Presspeech vs MacParakeet - Free Local Mac Dictation">
+    <meta property="og:description" content="Compare Presspeech and MacParakeet: two free local Apple Silicon dictation apps with different delivery, history, model choice, meeting, AI, and telemetry tradeoffs.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/compare/macparakeet.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="640">
+    <meta property="og:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="../site-navigation.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>
+        <div class="nav-links" id="primary-navigation-links">
+          <a href="../getting-started.html">Get started</a>
+          <a href="../install.html">macOS</a>
+          <a href="../windows.html">Windows</a>
+          <a href="../privacy.html">Privacy</a>
+          <a href="../benchmarks.html">Benchmarks</a>
+          <a href="../faq.html">FAQ</a>
+          <a href="../troubleshooting.html">Help</a>
+          <a href="./" aria-current="page">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Compare</span>
+        <h1>Presspeech vs MacParakeet</h1>
+        <p>Both are free, open-source Apple Silicon apps whose standard path runs Parakeet locally through FluidAudio and CoreML. MacParakeet is a broad voice workspace with model choice, file and meeting transcription, retained history, and optional AI. Presspeech stays focused on dictation, deterministic text handling, and explicit recovery when it cannot verify the original paste destination.</p>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <div class="table-scroll">
+            <table>
+              <caption>Presspeech and MacParakeet compared</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">MacParakeet</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Primary workflow</th>
+                  <td>Hold-to-talk or toggle, then normally paste only after confirming the same window is still focused. If that destination cannot be verified, keep the complete transcript on the clipboard for manual paste.</td>
+                  <td>Hold-to-talk or use a hands-free shortcut, then paste into the active app. An optional beta path can stream text at the caret; its broader app also handles files, media URLs, and meetings.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Speech engines and languages</th>
+                  <td>One fixed multilingual Parakeet TDT v3 path with auto-detection or a pinned hint for any of its 25 European languages.</td>
+                  <td>Parakeet v3 is the standard-path default, with selectable Parakeet variants, Nemotron Beta, Cohere Transcribe, and WhisperKit. Its site documents 98 languages across engines and can select WhisperKit during setup for preferred CJK or Korean languages.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Text handling</th>
+                  <td>Deterministic dictionary corrections, exact shortcuts, filler removal, and opt-in spoken formatting. No generative rewriting.</td>
+                  <td>Deterministic cleanup, replacements, snippets, and voice-return triggers, plus optional formatting, summaries, chat, and selected-text transforms through local or configured cloud AI providers.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Stored history</th>
+                  <td>Audio is discarded after transcription. Optional recent transcripts remain in memory only and clear on quit; Presspeech has no persistent transcript archive.</td>
+                  <td>A local library stores completed work. Dictation history can retain raw and processed text, and meeting audio is kept by default unless the user changes its retention setting.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Privacy and network</th>
+                  <td>No cloud transcription or AI path, account, telemetry, analytics, or crash reporter. The complete network surface is documented and does not include a launch-time content feed.</td>
+                  <td>Speech recognition is local and needs no account. Optional cloud AI receives text, not captured audio. Analytics and crash reporting are opt-out; a Discover feed also loads at launch by default until Show Discover is disabled. Neither preference is a global network-off switch.</td>
+                </tr>
+                <tr>
+                  <th scope="row">System and installation</th>
+                  <td>Apple Silicon and macOS 14+. Signed and notarised 8.4 MB zip or a project Homebrew tap; the fixed model cache is about 500&ndash;600 MB.</td>
+                  <td>Apple Silicon and macOS 14.2+. Signed and notarised DMG or the main Homebrew Cask. The standard first run downloads about 465 MB for Parakeet, with roughly 130 MB of speaker assets as needed; other engines require separate downloads.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Published evidence</th>
+                  <td>Publishes model-only release-to-transcript latency on fixed short clips, plus a separate target-app protocol for automatic paste and safe focus-change recovery.</td>
+                  <td>Publishes accuracy, throughput, and memory benchmarks across its local engines on LibriSpeech and FLEURS fixtures. These do not measure the same workload or boundary as Presspeech's latency results.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Platform and automation scope</th>
+                  <td>The released app is macOS-only; a separate x64 Windows build is available as an unsigned prerelease. No command-line automation surface.</td>
+                  <td>macOS-only. A bundled and separately packaged command-line tool can automate models, file transcription, history, meetings, and exports.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Price and license</th>
+                  <td>Free and MIT licensed.</td>
+                  <td>Free and GPL-3.0 licensed.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p>Choose MacParakeet if you want one local Mac workspace for dictation, files, media, meetings, broad-language model choice, persistent history, AI features, or command-line automation. Choose Presspeech if you want a smaller dictation-only app with no persistent transcript archive, telemetry, content feed, or AI-provider path, and with same-window delivery checks plus explicit manual recovery. Test either app in the exact target fields you rely on; no product's &ldquo;any app&rdquo; wording proves universal insertion behavior.</p>
+          </div>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, and its <a href="../app-compatibility.html">target-app protocol</a>; the <a href="https://macparakeet.com/">official MacParakeet site</a>, <a href="https://macparakeet.com/changelog/">release history</a>, and <a href="https://github.com/moona3k/macparakeet">source, privacy, feature, and benchmark documentation</a> for stable version 0.8.7 (checked 22 September 2026). No cross-product latency or accuracy winner is claimed because the projects publish different fixtures, hardware, and timing boundaries.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Presspeech and MacParakeet comparison.</span>
+        <span><a href="./">Compare index</a> · <a href="../install.html">Install Presspeech</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

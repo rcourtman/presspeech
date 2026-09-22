@@ -318,6 +318,19 @@ validate_main_check_runs() {
         --expected-sha "$expected_sha" --runs-json "$runs_file"
 }
 
+# The release archive determines hashes, sizes, versioned links, and dates in
+# the generated public surfaces, so these files necessarily change after the
+# ordinary pre-build QA gate. Validate that final candidate before committing
+# or publishing it; otherwise a bad generated link or metadata row can reach
+# main and a GitHub release even though Pages later (correctly) refuses it.
+validate_generated_release_surfaces() {
+    /usr/bin/python3 "$PROJECT_DIR/scripts/sync-docs.py" --check
+    /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-links.py"
+    /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-metadata.py"
+    /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-accessibility.py"
+    /usr/bin/python3 "$PROJECT_DIR/scripts/check-public-assets.py"
+}
+
 immutable_releases_enabled() {
     /usr/bin/python3 - "$1" <<'PY'
 import json
@@ -634,6 +647,14 @@ run_release_script_self_test() {
         compute_target_version "1.2.3" explicit "1.2"
     assert_self_test_fails "accepted malformed build number" \
         increment_build_number "04"
+
+    local sync_line validation_line commit_line
+    sync_line="$(grep -n 'scripts/sync-docs.py.*--release-zip' "$PROJECT_DIR/ship-swift.sh" | tail -1 | cut -d: -f1)"
+    validation_line="$(grep -n '^validate_generated_release_surfaces ' "$PROJECT_DIR/ship-swift.sh" | tail -1 | cut -d: -f1)"
+    commit_line="$(grep -n '^git -C "\$PROJECT_DIR" commit -m "\$release_commit_message"' "$PROJECT_DIR/ship-swift.sh" | tail -1 | cut -d: -f1)"
+    [[ -n "$sync_line" && -n "$validation_line" && -n "$commit_line" &&
+       "$sync_line" -lt "$validation_line" && "$validation_line" -lt "$commit_line" ]] \
+        || die "generated release surfaces must be validated after sync and before commit"
 
     local approved_sha workflow_runs_file
     approved_sha="$(printf 'e%.0s' {1..40})"
@@ -1056,6 +1077,10 @@ say "Wrote $ZIP_CHECKSUM"
 say "Syncing release docs metadata"
 /usr/bin/python3 "$PROJECT_DIR/scripts/sync-docs.py" --release-zip "$ZIP_OUT" \
     || die "docs metadata sync failed"
+
+say "Validating generated release surfaces"
+validate_generated_release_surfaces \
+    || die "generated release surfaces failed validation"
 
 # Tidy up the unzipped .app so Spotlight / Launch Services don't
 # accidentally favour it over /Applications/Presspeech.app.
