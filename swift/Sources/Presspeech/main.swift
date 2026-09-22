@@ -3271,13 +3271,40 @@ private func hotkeyRecorderRestartAction(
     return restartSucceeded ? .restoredListener : .recordFailure
 }
 
+private func hotkeyRecorderSnapshot(for event: NSEvent) -> HotkeyEventSnapshot {
+    HotkeyEventSnapshot(
+        typeRawValue: event.type == .flagsChanged
+            ? CGEventType.flagsChanged.rawValue
+            : CGEventType.keyDown.rawValue,
+        keycode: CGKeyCode(event.keyCode),
+        flagsRawValue: event.cgEvent?.flags.rawValue ?? 0,
+        // AppKit raises an exception if isARepeat is read on flagsChanged.
+        isAutoRepeat: event.type == .keyDown && event.isARepeat
+    )
+}
+
+private func hotkeyRecorderRightModifierMask(for keycode: CGKeyCode) -> UInt64? {
+    switch keycode {
+    case 54: return UInt64(NX_DEVICERCMDKEYMASK)
+    case 61: return UInt64(NX_DEVICERALTKEYMASK)
+    case 62: return UInt64(NX_DEVICERCTLKEYMASK)
+    default: return nil
+    }
+}
+
 private func hotkeyRecordingDecision(for event: HotkeyEventSnapshot) -> HotkeyRecordingDecision {
     if event.isAutoRepeat { return .ignore }
 
     if event.typeRawValue == CGEventType.flagsChanged.rawValue {
+        // Read this event's side-specific state, not a shared modifier flag
+        // or a press/release toggle. The opposite side may remain held, and
+        // the recorder may have opened (or regained focus) after the press.
+        // Without right-side evidence, leave the current selection intact.
         guard let choice = RIGHT_MODIFIER_HOTKEY_CHOICES.first(where: { $0.keycode == event.keycode }),
               let mask = choice.modifierFlag,
-              event.flags.contains(mask) else {
+              event.flags.contains(mask),
+              let rightMask = hotkeyRecorderRightModifierMask(for: event.keycode),
+              event.flagsRawValue & rightMask != 0 else {
             return .ignore
         }
         return .accept(choice)
@@ -12660,14 +12687,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         var selected: HotkeyChoice?
         var monitor: Any?
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
-            let snapshot = HotkeyEventSnapshot(
-                typeRawValue: event.type == .flagsChanged
-                    ? CGEventType.flagsChanged.rawValue
-                    : CGEventType.keyDown.rawValue,
-                keycode: CGKeyCode(event.keyCode),
-                flagsRawValue: event.cgEvent?.flags.rawValue ?? 0,
-                isAutoRepeat: event.isARepeat
-            )
+            let snapshot = hotkeyRecorderSnapshot(for: event)
             if hotkeyRecorderShouldPassThrough(snapshot) {
                 return event
             }
@@ -14605,6 +14625,8 @@ private enum PresspeechSelfTest {
 
     private static func testHotkey() throws {
         try testCustomHotkeyBindings()
+        try testHotkeyRecorderModifierReleaseOrdering()
+        try testHotkeyRecorderEventSnapshot()
         try testCustomHotkeyTransitions()
         try testPasteTargetCapture()
         try testHotkeyPreferenceNormalization()
@@ -14702,6 +14724,97 @@ private enum PresspeechSelfTest {
         settings.hotkeyBinding = hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
         try expect(Settings(testDefaults: defaults).hotkeyBinding, equals: hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE),
                    "reset must replace the full structured binding")
+    }
+
+    private static func testHotkeyRecorderModifierReleaseOrdering() throws {
+        let sides: [(CGKeyCode, CGKeyCode, UInt64, UInt64)] = [
+            (54, 55, UInt64(NX_DEVICERCMDKEYMASK), UInt64(NX_DEVICELCMDKEYMASK)),
+            (61, 58, UInt64(NX_DEVICERALTKEYMASK), UInt64(NX_DEVICELALTKEYMASK)),
+            (62, 59, UInt64(NX_DEVICERCTLKEYMASK), UInt64(NX_DEVICELCTLKEYMASK)),
+        ]
+        for (rightCode, leftCode, rightBit, leftBit) in sides {
+            let right = hotkeyChoice(forKeycode: rightCode)
+            let mask = right.modifierFlag!.rawValue
+            let both = mask | rightBit | leftBit
+            let leftOnly = mask | leftBit
+            let combination = recordableHotkeyChoice(forKeycode: 43,
+                                                      modifiers: CGEventFlags(rawValue: mask))!
+            func decision(_ keycode: CGKeyCode, flags: UInt64) -> HotkeyRecordingDecision {
+                hotkeyRecordingDecision(for: event(.flagsChanged, keycode: keycode, flags: flags))
+            }
+            try expect(decision(rightCode, flags: mask | rightBit), equals: .accept(right),
+                       "a right modifier press remains selectable")
+            try expect(decision(leftCode, flags: both), equals: .ignore,
+                       "the opposite-side modifier must not replace the selection")
+            try expect(hotkeyRecordingDecision(for: event(.keyDown, keycode: 43, flags: both)),
+                       equals: .accept(combination), "device bits must not change a custom binding")
+            try expect(decision(rightCode, flags: leftOnly), equals: .ignore,
+                       "right release must preserve the selection while its left partner remains held")
+            try expect(decision(rightCode, flags: both), equals: .accept(right),
+                       "a deliberate right press while the left partner is held remains selectable")
+            try expect(decision(rightCode, flags: 0), equals: .ignore,
+                       "ordinary right release must not select a binding")
+            try expect(decision(rightCode, flags: mask), equals: .ignore,
+                       "aggregate-only flags do not prove the right modifier is pressed")
+            try expect(decision(rightCode, flags: rightBit), equals: .ignore,
+                       "inconsistent device-only flags must not select a binding")
+            try expect(hotkeyRecordingDecision(for: event(.flagsChanged, keycode: rightCode,
+                                                           flags: both, isAutoRepeat: true)),
+                       equals: .ignore, "modifier repeats must not select a binding")
+
+            // The monitor starts after both keys were pressed: no earlier
+            // flagsChanged event is available to establish a toggle latch.
+            var selected: HotkeyChoice?
+            for snapshot in [event(.keyDown, keycode: 43, flags: both),
+                             event(.flagsChanged, keycode: rightCode, flags: leftOnly)] {
+                if case .accept(let choice) = hotkeyRecordingDecision(for: snapshot) {
+                    selected = choice
+                }
+            }
+            try expect(selected, equals: combination,
+                       "held-before-open right release must retain the selected combination")
+
+            // A release or press may be absent across a local-monitor focus
+            // gap. Each observed event must stand on its own event-time flags.
+            try expect(decision(rightCode, flags: both), equals: .accept(right),
+                       "a press after an unobserved release must not be mistaken for release")
+            try expect(decision(rightCode, flags: both), equals: .accept(right),
+                       "missing intervening events must not invert press detection")
+            try expect(decision(rightCode, flags: leftOnly), equals: .ignore,
+                       "a release after an unobserved press must not become a selection")
+            try expect(decision(rightCode, flags: leftOnly), equals: .ignore,
+                       "missing intervening events must not invert release detection")
+        }
+    }
+
+    private static func testHotkeyRecorderEventSnapshot() throws {
+        // Construct private event objects only; never post or monitor input.
+        guard let source = CGEventSource(stateID: .privateState) else {
+            throw SelfTestFailure.failed("private recorder event source unavailable")
+        }
+        for right in RIGHT_MODIFIER_HOTKEY_CHOICES {
+            let side = hotkeyRecorderRightModifierMask(for: right.keycode)!
+            let aggregate = right.modifierFlag!.rawValue
+            for flags in [aggregate | side, aggregate] {
+                guard let cg = CGEvent(keyboardEventSource: source, virtualKey: right.keycode, keyDown: true) else {
+                    throw SelfTestFailure.failed("private recorder event unavailable")
+                }
+                cg.type = .flagsChanged
+                cg.location = .zero
+                cg.flags = CGEventFlags(rawValue: flags)
+                guard let event = NSEvent(cgEvent: cg) else {
+                    throw SelfTestFailure.failed("private AppKit recorder event unavailable")
+                }
+                let snapshot = hotkeyRecorderSnapshot(for: event)
+                try expect(snapshot.flagsRawValue, equals: flags,
+                           "AppKit round-trip must preserve event-time side-specific flags")
+                try expect(snapshot.isAutoRepeat, equals: false,
+                           "flagsChanged must not read AppKit's key-only repeat accessor")
+                try expect(hotkeyRecordingDecision(for: snapshot),
+                           equals: flags & side != 0 ? .accept(right) : .ignore,
+                           "the production snapshot must distinguish right press from release")
+            }
+        }
     }
 
     private static func testCustomHotkeyTransitions() throws {
@@ -14858,7 +14971,7 @@ private enum PresspeechSelfTest {
         try expect(
             hotkeyRecordingDecision(for: event(.flagsChanged,
                                                keycode: 61,
-                                               flags: CGEventFlags.maskAlternate.rawValue)),
+                                               flags: CGEventFlags.maskAlternate.rawValue | UInt64(NX_DEVICERALTKEYMASK))),
             equals: .accept(HotkeyChoice(name: "Right Option",
                                          keycode: 61,
                                          isModifier: true,
