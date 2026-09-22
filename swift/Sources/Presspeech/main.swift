@@ -231,6 +231,8 @@ enum DictationNotice: Equatable {
     case insertionFailedWithoutHistory
     case transcriptionFailed
     case noSpeechDetected
+    case noAudioCaptured
+    case recordingTooShort
 
     var statusTitle: String {
         switch self {
@@ -244,6 +246,10 @@ enum DictationNotice: Equatable {
             return "Transcription failed — try again"
         case .noSpeechDetected:
             return "No speech detected — try again"
+        case .noAudioCaptured:
+            return "No microphone audio — choose Check Microphone"
+        case .recordingTooShort:
+            return "Recording too short — speak a little longer"
         }
     }
 
@@ -259,6 +265,10 @@ enum DictationNotice: Equatable {
             return "Transcription failed — try again"
         case .noSpeechDetected:
             return "No speech detected — try again"
+        case .noAudioCaptured:
+            return "No mic audio — check setup"
+        case .recordingTooShort:
+            return "Too short — speak longer"
         }
     }
 
@@ -274,6 +284,10 @@ enum DictationNotice: Equatable {
             return "Transcription failed. Try again."
         case .noSpeechDetected:
             return "No speech detected. Try again."
+        case .noAudioCaptured:
+            return "No microphone audio was captured. Choose Check Microphone in the Presspeech menu, select an input, then try again."
+        case .recordingTooShort:
+            return "The recording was too short. Try again and speak a little longer."
         }
     }
 
@@ -2076,6 +2090,17 @@ func diagnosticMicrophoneLines(savedPreference: String,
     ]
 }
 
+private func audioInputSetupReadyDetail(savedPreference: String,
+                                        devices: [AudioInputDevice]) -> String {
+    guard let preference = normalizedInputDevicePreference(savedPreference) else {
+        return "Microphone capture is ready using the system default."
+    }
+    guard let selected = audioInputDevice(matching: preference, in: devices) else {
+        return "The saved microphone is unavailable; Presspeech is using the system default."
+    }
+    return "Microphone capture is ready using \(selected.name)."
+}
+
 // MARK: - Logger
 //
 // All output goes to stderr (line-buffered, so we don't lose lines
@@ -3049,16 +3074,24 @@ private func audioInputSetupRowState(isSpeechModelReady: Bool,
                                      isCoreRuntimeReady: Bool,
                                      isStartupInProgress: Bool,
                                      startupStatusTitle: String = "Starting audio input…",
-                                     failure: StartupFailure?) -> SetupChecklistRowState {
+                                     failure: StartupFailure?,
+                                     readyDetail: String = "Microphone capture is ready.",
+                                     lastCaptureHadNoSamples: Bool = false) -> SetupChecklistRowState {
     if let failure, failure.stage == .audioInput {
         return SetupChecklistRowState(detail: failure.detail,
                                       status: "Needs retry",
                                       buttonTitle: "Retry")
     }
+    if lastCaptureHadNoSamples {
+        return SetupChecklistRowState(
+            detail: "No microphone samples reached Presspeech. Choose another input, then try again; use System Settings → Sound → Input to check its level.",
+            status: "Check input",
+            buttonTitle: "Choose…")
+    }
     if isCoreRuntimeReady {
-        return SetupChecklistRowState(detail: "Microphone capture is ready.",
+        return SetupChecklistRowState(detail: readyDetail,
                                       status: "Ready",
-                                      buttonTitle: nil)
+                                      buttonTitle: "Choose…")
     }
     if !isSpeechModelReady {
         return SetupChecklistRowState(detail: "Available after the speech model loads.",
@@ -4751,6 +4784,10 @@ private func noAudioCapturedHint(capturedSampleCount: Int) -> String? {
     return "release: no samples captured — the input tap delivered nothing. "
         + "Compare the \"AudioCapture: input\" rate logged above against the "
         + "input device's actual rate; a mismatch yields silence, not an error."
+}
+
+private func discardedRecordingNotice(capturedSampleCount: Int) -> DictationNotice {
+    capturedSampleCount <= 0 ? .noAudioCaptured : .recordingTooShort
 }
 
 private struct DictationTextProcessingResult: Equatable {
@@ -8818,11 +8855,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         case .discardTooShort(let duration):
             recordingPasteTarget = nil
             dur = duration
+            let notice = discardedRecordingNotice(capturedSampleCount: samples.count)
             if let hint = noAudioCapturedHint(capturedSampleCount: samples.count) {
                 log(hint)
             }
             log("release: clip too short (\(String(format: "%.2f", dur)) s), discarding")
-            setMenuBarState(.idle)
+            signalDictationFailure(notice)
+            updateSetupChecklist()
             rebuildMenu()
             if !runDeferredAudioRouteRefreshIfNeeded() {
                 scheduleAudioIdleStop(reason: "short clip")
@@ -9617,6 +9656,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         item.isEnabled = false
     }
 
+    private func buildMicrophoneRecoveryItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Check Microphone…",
+                              action: #selector(showSetupChecklistClicked(_:)),
+                              keyEquivalent: "")
+        item.target = self
+        item.toolTip = "Open Setup Checklist to review the selected microphone and choose another input."
+        return item
+    }
+
     @objc private func restorePreviousClipboardClicked(_ sender: NSMenuItem) {
         guard settings.preserveClipboardForManualRestore,
               let token = ClipboardPasteInserter.pendingRestoreToken(on: .general) else {
@@ -9671,6 +9719,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         dictationControl.isEnabled = controlState.isEnabled
         dictationControl.toolTip = controlState.help
         menu.addItem(dictationControl)
+
+        if dictationNotice == .noAudioCaptured {
+            menu.addItem(buildMicrophoneRecoveryItem())
+        }
 
         if isRecording {
             let cancel = NSMenuItem(title: "Cancel Recording",
@@ -9731,6 +9783,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         dictationControl.isEnabled = controlState.isEnabled
         dictationControl.toolTip = controlState.help
         menu.addItem(dictationControl)
+
+        if dictationNotice == .noAudioCaptured {
+            menu.addItem(buildMicrophoneRecoveryItem())
+        }
 
         if isRecording {
             let cancel = NSMenuItem(title: "Cancel Recording",
@@ -10224,6 +10280,16 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func setupChecklistSnapshot() -> SetupChecklistSnapshot {
+        let savedAudioInput = settings.inputDevice
+        // Most users follow the system default. Avoid polling every CoreAudio
+        // device once per second while their checklist is open; enumerate only
+        // when a saved explicit device needs to be resolved or reported absent.
+        let audioInputDevices = normalizedInputDevicePreference(savedAudioInput) == nil
+            ? [] : availableAudioInputDevices()
+        let audioReadyDetail = audioInputSetupReadyDetail(
+            savedPreference: savedAudioInput,
+            devices: audioInputDevices
+        )
         let permissions = Permission.allCases.map { permission in
             let granted = Permissions.isGranted(permission)
             let clicks = permClickCount[permission] ?? 0
@@ -10245,7 +10311,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 isCoreRuntimeReady: isCoreRuntimeReady,
                 isStartupInProgress: startupTask != nil || isRestartingAudioInput,
                 startupStatusTitle: startupStatusTitle,
-                failure: startupFailure),
+                failure: startupFailure,
+                readyDetail: audioReadyDetail,
+                lastCaptureHadNoSamples: dictationNotice == .noAudioCaptured),
             permissions: permissions,
             hotkey: hotkeySetupRowState(
                 isReady: isReady,
@@ -10308,8 +10376,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             title: "Audio input",
             state: snapshot.audioInput,
             identifier: "audio-input",
-            action: snapshot.audioInput.buttonTitle == nil
-                ? nil : #selector(retryStartupFromSetupClicked(_:))))
+            action: snapshot.audioInput.buttonTitle == "Choose…"
+                ? #selector(showInputDevicesFromSetupClicked(_:))
+                : #selector(retryStartupFromSetupClicked(_:))))
 
         for permission in snapshot.permissions {
             root.addArrangedSubview(makeSetupChecklistRow(
@@ -10487,6 +10556,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             button.tag = tag
             button.identifier = NSUserInterfaceItemIdentifier("setup-\(identifier)-action")
             button.setAccessibilityLabel("\(buttonTitle) \(title)")
+            if title == "Audio input", buttonTitle == "Choose…" {
+                let help = "Review available microphones and select the input Presspeech should use."
+                button.toolTip = help
+                button.setAccessibilityHelp(help)
+            }
             button.setContentHuggingPriority(.required, for: .horizontal)
             row.addArrangedSubview(button)
         }
@@ -10508,7 +10582,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         switch status {
         case "Granted", "Ready", "Detected", "Set":
             return .systemGreen
-        case "Missing", "Needs retry", "Required":
+        case "Missing", "Needs retry", "Required", "Check input":
             return .systemOrange
         default:
             return .secondaryLabelColor
@@ -10656,6 +10730,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     @objc private func retryStartupFromSetupClicked(_ sender: NSButton) {
         startStartup(reason: "setup checklist retry")
+    }
+
+    @objc private func showInputDevicesFromSetupClicked(_ sender: NSButton) {
+        guard !isRecording, !isBusy, !isTerminating,
+              let menu = buildInputDeviceItem().submenu else { return }
+        let selected = menu.items.first { $0.state == .on && $0.isEnabled }
+        menu.popUp(positioning: selected,
+                   at: NSPoint(x: sender.bounds.minX, y: sender.bounds.minY),
+                   in: sender)
     }
 
     @objc private func grantSetupPermissionClicked(_ sender: NSButton) {
@@ -11061,20 +11144,25 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             sub.addItem(unavailable)
         }
 
-        if !devices.isEmpty {
-            sub.addItem(.separator())
-        }
-
-        for device in devices {
-            let item = NSMenuItem(title: device.name,
-                                  action: #selector(selectInputDevice(_:)),
-                                  keyEquivalent: "")
-            item.target = self
-            item.representedObject = device.uid
-            item.toolTip = device.uid
-            item.state = (selectedDevice?.uid == device.uid) ? .on : .off
-            item.isEnabled = canSwitch
-            sub.addItem(item)
+        sub.addItem(.separator())
+        if devices.isEmpty {
+            let unavailable = NSMenuItem(title: "No selectable input devices found",
+                                         action: nil,
+                                         keyEquivalent: "")
+            unavailable.isEnabled = false
+            sub.addItem(unavailable)
+        } else {
+            for device in devices {
+                let item = NSMenuItem(title: device.name,
+                                      action: #selector(selectInputDevice(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.representedObject = device.uid
+                item.toolTip = device.uid
+                item.state = (selectedDevice?.uid == device.uid) ? .on : .off
+                item.isEnabled = canSwitch
+                sub.addItem(item)
+            }
         }
 
         parent.submenu = sub
@@ -11085,6 +11173,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard !isRecording, !isBusy, !isTerminating,
               let preference = sender.representedObject as? String else { return }
 
+        if dictationNotice == .noAudioCaptured {
+            clearDictationNotice()
+        }
         settings.inputDevice = preference
         let label = preference.isEmpty
             ? "system default"
@@ -14173,6 +14264,12 @@ private enum PresspeechSelfTest {
         try expect(noAudioCapturedHint(capturedSampleCount: 16_000) == nil,
                    equals: true,
                    "a full clip should not emit the silent-capture hint")
+        try expect(discardedRecordingNotice(capturedSampleCount: 0),
+                   equals: .noAudioCaptured,
+                   "an empty capture should direct the user to microphone recovery")
+        try expect(discardedRecordingNotice(capturedSampleCount: 1),
+                   equals: .recordingTooShort,
+                   "a non-empty short capture should explain that it ended too soon")
     }
 
     private static func testLaunchAtLogin() throws {
@@ -14979,6 +15076,52 @@ private enum PresspeechSelfTest {
                                            status: "Waiting",
                                            buttonTitle: nil),
             "setup checklist should not start audio before the speech model is ready"
+        )
+        let setupMicrophone = AudioInputDevice(id: 7,
+                                               uid: "fixture-microphone",
+                                               name: "Fixture Microphone")
+        try expect(
+            audioInputSetupReadyDetail(savedPreference: "", devices: []),
+            equals: "Microphone capture is ready using the system default.",
+            "setup checklist should identify system-default microphone use"
+        )
+        try expect(
+            audioInputSetupReadyDetail(savedPreference: "fixture-microphone",
+                                       devices: [setupMicrophone]),
+            equals: "Microphone capture is ready using Fixture Microphone.",
+            "setup checklist should identify the selected microphone"
+        )
+        try expect(
+            audioInputSetupReadyDetail(savedPreference: "missing-microphone",
+                                       devices: [setupMicrophone]),
+            equals: "The saved microphone is unavailable; Presspeech is using the system default.",
+            "setup checklist should explain fallback from an unavailable microphone"
+        )
+        try expect(
+            audioInputSetupRowState(
+                isSpeechModelReady: true,
+                isCoreRuntimeReady: true,
+                isStartupInProgress: false,
+                failure: nil,
+                readyDetail: "Microphone capture is ready using Fixture Microphone."
+            ),
+            equals: SetupChecklistRowState(
+                detail: "Microphone capture is ready using Fixture Microphone.",
+                status: "Ready",
+                buttonTitle: "Choose…"),
+            "ready audio setup should expose the microphone chooser"
+        )
+        try expect(
+            audioInputSetupRowState(isSpeechModelReady: true,
+                                    isCoreRuntimeReady: true,
+                                    isStartupInProgress: false,
+                                    failure: nil,
+                                    lastCaptureHadNoSamples: true),
+            equals: SetupChecklistRowState(
+                detail: "No microphone samples reached Presspeech. Choose another input, then try again; use System Settings → Sound → Input to check its level.",
+                status: "Check input",
+                buttonTitle: "Choose…"),
+            "an empty capture should turn setup into an actionable microphone check"
         )
         try expect(
             hotkeySetupRowState(isReady: false,
@@ -18189,6 +18332,15 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.noSpeechDetected.hudTitle,
                    equals: "No speech detected — try again",
                    "empty recognition should not look like a successful dictation")
+        try expect(DictationNotice.noAudioCaptured.statusTitle,
+                   equals: "No microphone audio — choose Check Microphone",
+                   "an empty capture should point to microphone recovery")
+        try expect(DictationNotice.noAudioCaptured.accessibilityValue,
+                   equals: "No microphone audio was captured. Choose Check Microphone in the Presspeech menu, select an input, then try again.",
+                   "microphone recovery should give VoiceOver the complete action")
+        try expect(DictationNotice.recordingTooShort.accessibilityValue,
+                   equals: "The recording was too short. Try again and speak a little longer.",
+                   "short-capture recovery should be explicit to VoiceOver")
         try expect(DictationNotice.copiedToClipboard.accessibilityValue,
                    equals: "Transcript copied. Press Command V to paste.",
                    "clipboard recovery should be explicit without relying on the Command glyph")

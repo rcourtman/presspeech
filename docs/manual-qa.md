@@ -337,6 +337,22 @@ cd swift
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.
+- Tap the hotkey too briefly to reach the short-clip cutoff and confirm the HUD,
+  menu, error cue, and VoiceOver report that the recording was too short instead
+  of returning silently to Ready. Retry immediately and confirm the old notice
+  cannot hide the new recording state.
+- In Setup Checklist, confirm **Audio input** names the saved microphone (or
+  system default) and that **Choose…** opens the same current, keyboard-navigable
+  device list as Settings → Dictation → Microphone. Disconnect a selected
+  removable microphone while idle and confirm Setup reports the saved device as
+  unavailable and the system-default fallback, without silently selecting a
+  different explicit device.
+- With a native test input that starts successfully but returns no tap samples,
+  confirm the HUD identifies missing microphone audio and the menu says **No
+  microphone audio — choose Check Microphone**. The direct **Check Microphone…**
+  action must open Setup, whose Audio input row changes to **Check input** and
+  exposes **Choose…**; VoiceOver must announce the same recovery instruction.
+  Selecting an input must clear the stale notice before audio restarts.
 - The following manual-restore checks target upcoming 0.3.8 / builds that
   contain **Keep Previous Clipboard for Manual Restore**. They are not controls
   available in the published macOS 0.3.7 build.
