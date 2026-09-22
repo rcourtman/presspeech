@@ -23,6 +23,8 @@
 #   - notary credentials stored (keychain profile "presspeech-notary")
 #   - gh CLI authenticated for github.com
 #   - brew CLI installed for post-release Cask verification
+#   - clean sibling Homebrew tap on main with canonical fetch/push origin;
+#     clean behind checkouts are fast-forwarded; ahead/diverged work is refused
 #   - sibling Homebrew tap at ../homebrew-presspeech (override with
 #     PRESSPEECH_HOMEBREW_TAP=/path/to/tap)
 #
@@ -442,19 +444,85 @@ if checksum_path.read_text(encoding="ascii") != expected_checksum:
 PY
 }
 
-# Shared by the full release flow and --cask-only. Sets $tap_branch.
+# Only the canonical tap is a release destination. Check Git's effective URLs
+# (including insteadOf/pushInsteadOf), every configured push URL, and mirror
+# mode; a locally plausible fetch remote must not hide a different push target.
+validate_cask_origin() {
+    local url urls count direction mirror mirror_status
+    # Some Git versions parse this boolean even during remote get-url. Check
+    # it first and suppress raw configuration values in every refusal path.
+    mirror_status=0
+    mirror="$(git -C "$CASK_TAP" config --bool --get remote.origin.mirror 2>/dev/null)" || mirror_status=$?
+    [[ "$mirror_status" -le 1 ]] || die "Homebrew tap origin has invalid mirror configuration"
+    [[ "$mirror" != "true" ]] || die "Homebrew tap origin must not use mirror pushes"
+    for direction in fetch push; do
+        if [[ "$direction" == "push" ]]; then
+            urls="$(git -C "$CASK_TAP" remote get-url --push --all origin 2>/dev/null)" \
+                || die "cannot read Homebrew tap push remote"
+        else
+            urls="$(git -C "$CASK_TAP" remote get-url --all origin 2>/dev/null)" \
+                || die "cannot read Homebrew tap fetch remote"
+        fi
+        count=0
+        while IFS= read -r url; do
+            count=$((count + 1))
+            case "$url" in
+                https://github.com/rcourtman/homebrew-presspeech|https://github.com/rcourtman/homebrew-presspeech.git|git@github.com:rcourtman/homebrew-presspeech|git@github.com:rcourtman/homebrew-presspeech.git|ssh://git@github.com/rcourtman/homebrew-presspeech|ssh://git@github.com/rcourtman/homebrew-presspeech.git) ;;
+                *) die "Homebrew tap $direction remote is not the canonical rcourtman/homebrew-presspeech repository; inspect origin without discarding local work" ;;
+            esac
+        done <<<"$urls"
+        [[ "$count" -eq 1 ]] || die "Homebrew tap must have exactly one $direction destination"
+    done
+}
+
+# Kept separate from URL validation so real temporary Git remotes can exercise
+# the state transitions without a GitHub connection or a transport override.
+synchronize_cask_main() {
+    local top state marker local_head remote_head
+    top="$(git -C "$CASK_TAP" rev-parse --show-toplevel)" \
+        || die "Homebrew tap is not a Git checkout"
+    [[ "$top" == "$(cd "$CASK_TAP" && pwd -P)" ]] \
+        || die "Homebrew tap path must name the checkout root"
+    tap_branch="$(git -C "$CASK_TAP" symbolic-ref --quiet --short HEAD)" \
+        || die "Homebrew tap must be on main, not detached HEAD"
+    [[ "$tap_branch" == "main" ]] || die "Homebrew tap must be on main"
+    state="$(git -C "$CASK_TAP" status --porcelain --untracked-files=all)" \
+        || die "cannot inspect Homebrew tap worktree"
+    [[ -z "$state" ]] \
+        || die "Homebrew tap has local changes or untracked files; preserve and reconcile them before shipping or --cask-only recovery"
+    for marker in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do
+        [[ ! -e "$(git -C "$CASK_TAP" rev-parse --path-format=absolute --git-path "$marker")" ]] \
+            || die "Homebrew tap has an unfinished Git operation; resolve it before shipping"
+    done
+    say "Synchronizing Homebrew tap main before publication"
+    git -C "$CASK_TAP" fetch --no-tags origin refs/heads/main:refs/remotes/origin/main \
+        || die "cannot fetch Homebrew tap main; no publication should proceed"
+    local_head="$(git -C "$CASK_TAP" rev-parse HEAD)"
+    remote_head="$(git -C "$CASK_TAP" rev-parse --verify refs/remotes/origin/main)" \
+        || die "Homebrew tap origin/main is missing"
+    if [[ "$local_head" != "$remote_head" ]]; then
+        if git -C "$CASK_TAP" merge-base --is-ancestor "$local_head" "$remote_head"; then
+            git -C "$CASK_TAP" merge --ff-only --no-edit "$remote_head" \
+                || die "cannot fast-forward Homebrew tap; local work was not reset"
+        else
+            die "Homebrew tap main is ahead of or diverged from origin/main; inspect and reconcile local commits before shipping or --cask-only recovery (no commits were discarded or pushed)"
+        fi
+    fi
+    [[ "$(git -C "$CASK_TAP" rev-parse HEAD)" == "$remote_head" && \
+       -z "$(git -C "$CASK_TAP" status --porcelain --untracked-files=all)" ]] \
+        || die "Homebrew tap changed during synchronization"
+}
+
+# Shared by the full release flow and --cask-only. Runs before expensive
+# signing/notarization and before any GitHub release publication.
 cask_preflight() {
     command -v brew >/dev/null || die "'brew' CLI not installed (needed to verify the published Cask)"
-    [[ -f "$CASK_FILE" ]] \
-        || die "cask not found at $CASK_FILE — set PRESSPEECH_HOMEBREW_TAP or use --no-cask"
-    tap_branch="$(git -C "$CASK_TAP" rev-parse --abbrev-ref HEAD)"
-    git -C "$CASK_TAP" update-index --refresh >/dev/null 2>&1 || true
-    if ! git -C "$CASK_TAP" diff-index --quiet HEAD --; then
-        die "Homebrew tap has uncommitted changes at $CASK_TAP
-   A previous cask stage may have died mid-rewrite. Inspect the tap, then
-   discard the half-applied rewrite (git -C \"$CASK_TAP\" checkout -- .)
-   before re-running ./ship-swift.sh --cask-only <version>."
-    fi
+    validate_cask_origin
+    synchronize_cask_main
+    [[ -f "$CASK_FILE" && ! -L "$CASK_FILE" ]] \
+        || die "Homebrew cask must be a regular file in the synchronized tap"
+    git -C "$CASK_TAP" ls-files --error-unmatch Casks/presspeech.rb >/dev/null \
+        || die "Homebrew cask must be tracked in the synchronized tap"
 }
 
 # Cask update + verification against an already-published GitHub release.
@@ -679,6 +747,7 @@ EOF
     assert_self_test_fails "accepted malformed cask sha256" \
         rewrite_cask_file "$cask_file" "4.5.6" "not-a-sha"
 
+    /usr/bin/python3 "$PROJECT_DIR/scripts/test-cask-preflight.py"
     rm -rf "$tmpdir"
     say "Release script self-test passed"
 }
