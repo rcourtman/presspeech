@@ -12,6 +12,9 @@ https://rcourtman.github.io/presspeech/getting-started.html
 Troubleshooting:
 https://rcourtman.github.io/presspeech/troubleshooting.html
 
+Target-app compatibility check:
+https://rcourtman.github.io/presspeech/app-compatibility.html
+
 Source:
 https://github.com/rcourtman/presspeech
 

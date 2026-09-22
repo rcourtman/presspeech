@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Test Presspeech with a Target App</title>
+    <meta name="description" content="Run a privacy-safe repeated check of Presspeech automatic paste and focus-change recovery in one macOS or Windows app, then share aggregate results.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/app-compatibility.html">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Test Presspeech with a Target App">
+    <meta property="og:description" content="Eight disposable-field checks separate automatic paste compatibility from safe clipboard recovery without publishing dictated text.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/app-compatibility.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="./"><span class="brand-mark">P</span><span>Presspeech</span></a>
+        <div class="nav-links">
+          <a href="getting-started.html">Get started</a>
+          <a href="install.html">macOS</a>
+          <a href="windows.html">Windows</a>
+          <a href="privacy.html">Privacy</a>
+          <a href="benchmarks.html">Benchmarks</a>
+          <a href="faq.html">FAQ</a>
+          <a href="troubleshooting.html" aria-current="page">Help</a>
+          <a href="compare/">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Target-app check</span>
+        <h1>Test Presspeech with one app</h1>
+        <p>Automatic paste depends on the destination and its focus behavior. Use blank disposable fields to check one exact app and version before relying on it for real work. The check records outcomes, never your words.</p>
+        <div class="actions">
+          <a class="button" href="#before-testing">Run the eight checks</a>
+          <a class="button secondary" href="#share-result">Share aggregate results</a>
+        </div>
+      </div>
+
+      <section id="what-this-checks">
+        <div class="wrap">
+          <span class="section-eyebrow">Scope</span>
+          <h2>Separate insertion from recognition</h2>
+          <p>Presspeech binds each recording to the window where it began. It should paste only when it can still verify that destination; otherwise it should leave the complete transcript on the clipboard and explain how to paste it manually.</p>
+          <p>This is a delivery check, not a transcription-quality test. The recognized wording can differ from what was spoken and still pass: the question is whether the same finished transcript reaches the intended field once, or is recovered safely without reaching another field.</p>
+          <div class="facts">
+            <div class="fact"><strong>5 attempts</strong><span>Keep one target field focused.</span></div>
+            <div class="fact"><strong>3 attempts</strong><span>Move focus before dictation finishes.</span></div>
+            <div class="fact"><strong>Counts only</strong><span>Never publish the test phrases or transcripts.</span></div>
+            <div class="fact"><strong>Version-specific</strong><span>One app, operating system, and Presspeech build.</span></div>
+          </div>
+          <div class="note"><p><strong>No universal result:</strong> a pass in one app version and field type does not promise that every field, browser page, remote session, or later version behaves the same way.</p></div>
+        </div>
+      </section>
+
+      <section id="before-testing">
+        <div class="wrap">
+          <span class="section-eyebrow">Prepare safely</span>
+          <h2>Before testing</h2>
+          <ol class="steps">
+            <li>
+              <strong>Finish Presspeech setup</strong>
+              <p>Use the current official build. Confirm the model is ready, the microphone and hotkey checks pass, and <strong>Try Dictation</strong> works first.</p>
+            </li>
+            <li>
+              <strong>Open two disposable fields</strong>
+              <p>Use one blank field in the target app and one blank field in a local scratch app. Never use a production message, document, terminal, remote session, form that can submit, or account.</p>
+            </li>
+            <li>
+              <strong>Use harmless, distinct phrases</strong>
+              <p>Create a different phrase for every attempt so stale or duplicate delivery is visible. Do not use names, credentials, commands, customer data, or text from real work.</p>
+            </li>
+            <li>
+              <strong>Make clipboard behavior comparable</strong>
+              <p>On macOS, turn <strong>Settings → Behavior → Restore clipboard after paste</strong> off; it is off by default. Windows always leaves the finished transcript on the clipboard. If macOS Clipboard History in Spotlight is enabled on macOS 26 or later, clear it after the check if you do not want the harmless text retained there. Also disable macOS Universal Clipboard through Handoff, Windows clipboard history or cross-device sync, and third-party clipboard managers if you do not want the test text retained elsewhere.</p>
+            </li>
+            <li>
+              <strong>Record versions, not private context</strong>
+              <p>Note the Presspeech, operating-system, and target-app versions. Classify the target as native, browser/web editor, Electron/Chromium, terminal, remote desktop/virtual machine, or elevated Windows app. Omit account, server, document, tab, and window names.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="steady-focus">
+        <div class="wrap">
+          <span class="section-eyebrow">Checks 1–5</span>
+          <h2>Keep the target focused</h2>
+          <p>Run five attempts with a different harmless phrase each time.</p>
+          <ol class="steps">
+            <li>
+              <strong>Start in the blank target field</strong>
+              <p>Keep its window focused from the start of recording until Presspeech finishes.</p>
+            </li>
+            <li>
+              <strong>Dictate once, then inspect the target</strong>
+              <p>Note whether one copy appeared and whether Presspeech showed a copied/manual-paste recovery notice.</p>
+            </li>
+            <li>
+              <strong>Inspect the clipboard before copying anything else</strong>
+              <p>Paste into the separate local scratch field. With clipboard restoration off, this is the finished transcript used for comparison.</p>
+            </li>
+            <li>
+              <strong>Classify one outcome</strong>
+              <p>Use the definitions below, then clear both disposable fields before the next attempt.</p>
+            </li>
+          </ol>
+          <div class="grid">
+            <article class="card">
+              <h3>Pasted once</h3>
+              <p>The target received one copy, no recovery notice appeared, and its text matches the scratch copy, including the configured space or newline suffix.</p>
+            </article>
+            <article class="card">
+              <h3>Recovered safely</h3>
+              <p>The target received nothing, Presspeech showed its copied/manual-paste notice, and the scratch paste recovered the complete finished transcript.</p>
+            </article>
+            <article class="card">
+              <h3>Incorrect or unsafe</h3>
+              <p>Text was stale, partial, duplicated, unavailable, delivered elsewhere, or paste failed without a recovery notice. Stop before trying a real document.</p>
+            </article>
+          </div>
+          <div class="note"><p><strong>Keep recovery separate from automatic paste.</strong> Manual-paste recovery is safe behavior, but counting it as an automatic-paste pass would hide app classes where insertion is consistently unavailable. The three aggregate outcome counts should total five.</p></div>
+        </div>
+      </section>
+
+      <section id="focus-safety">
+        <div class="wrap">
+          <span class="section-eyebrow">Checks 6–8</span>
+          <h2>Move focus before dictation finishes</h2>
+          <p>Use blank disposable fields in two separate windows. Start dictation in the first window, move focus to the second, then finish. In hold mode, move before releasing the hotkey; in toggle mode, move before the stop press.</p>
+          <div class="grid two">
+            <article class="card">
+              <h3>The safe result</h3>
+              <ul>
+                <li>No text is inserted into either field.</li>
+                <li>Presspeech shows the copied/manual-paste notice.</li>
+                <li>The complete transcript is available for deliberate manual paste.</li>
+              </ul>
+            </article>
+            <article class="card">
+              <h3>Repeat three times</h3>
+              <p>For an Electron/Chromium app, use two separate windows of that same app for at least one attempt. Same-process windows are a distinct identity check; tabs or fields in one window are not a substitute.</p>
+            </article>
+          </div>
+          <p>Classify each attempt as <strong>copied for manual paste without inserting anywhere</strong>, <strong>inserted into a field</strong>, or <strong>other/not completed</strong>. The three counts should total three.</p>
+          <div class="note warn"><p><strong>Stop on unexpected insertion.</strong> Text reaching either test window or any unrelated destination is a safety failure. Do not retry in a real document. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private reporting route</a> if the behavior could expose or execute sensitive content.</p></div>
+        </div>
+      </section>
+
+      <section id="boundaries">
+        <div class="wrap">
+          <span class="section-eyebrow">Interpret the result</span>
+          <h2>Keep platform boundaries separate</h2>
+          <div class="grid two">
+            <article class="card">
+              <h3>Clipboard behavior</h3>
+              <p>Leave optional macOS clipboard restoration off for this baseline. On macOS 26 or later, enabled macOS Clipboard History in Spotlight can make earlier copies searchable; Universal Clipboard can make them available on nearby Apple devices. Windows clipboard history, cross-device sync, and third-party managers can also retain or sync the harmless text independently of Presspeech. Review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a>.</p>
+            </article>
+            <article class="card">
+              <h3>Elevated Windows apps</h3>
+              <p><a href="https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-sendinput">Windows restricts synthetic input</a> to targets at an equal or lower integrity level. A normally running app therefore cannot send the paste shortcut into a target running as administrator. A copied/manual-paste notice is the expected security boundary. Do not elevate Presspeech as a workaround.</p>
+            </article>
+            <article class="card">
+              <h3>Remote and specialist targets</h3>
+              <p>Remote desktop, virtual machine, terminal, browser editor, and assistive-technology paths are useful reports. Identify the class without sharing host names, commands, account names, document titles, or private paths.</p>
+            </article>
+            <article class="card">
+              <h3>Clipboard restoration regression</h3>
+              <p>If previous clipboard content is inserted, turn restoration off, remove the unintended text, and follow the <a href="troubleshooting.html#macos-clipboard-restore">recovery guide</a>. Report that as a bug rather than a compatibility pass.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="share-result">
+        <div class="wrap">
+          <span class="section-eyebrow">Community evidence</span>
+          <h2>Share counts, not content</h2>
+          <ol class="steps">
+            <li>
+              <strong>Search for the same app and version</strong>
+              <p>Search the <a href="https://github.com/rcourtman/presspeech/issues">existing public issues</a> for the target app and version. Add aggregate counts to a matching report instead of opening a duplicate.</p>
+            </li>
+            <li>
+              <strong>Submit one target-app report</strong>
+              <p>Open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
+            </li>
+            <li>
+              <strong>Review diagnostics before pasting</strong>
+              <p><strong>Copy Diagnostics</strong> produces a privacy-safe summary if you choose to include it. Never add dictated or recognized text, clipboard contents, audio, dictionary or shortcut contents, screenshots with user data, credentials, titles, names, or private paths.</p>
+            </li>
+          </ol>
+          <div class="actions">
+            <a class="button" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Open the compatibility form</a>
+            <a class="button secondary" href="troubleshooting.html">Troubleshoot first</a>
+          </div>
+          <p class="quiet">Community reports are exploratory evidence for the exact versions and conditions recorded. They do not replace native release qualification or promise universal support.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Privacy-safe target-app checks for Presspeech.</span>
+        <span><a href="getting-started.html">Get started</a> · <a href="troubleshooting.html">Help</a> · <a href="privacy.html">Privacy</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

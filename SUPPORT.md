@@ -11,7 +11,7 @@ matches the problem:
 If the problem remains, search the [existing issues](https://github.com/rcourtman/presspeech/issues), then choose the closest route:
 
 - [Report a bug](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml). In Presspeech, choose **Copy Diagnostics** first and paste that privacy-safe summary into the form.
-- [Share a target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml) after running the [short privacy-safe protocol](docs/app-compatibility.md). Passing reports are useful as well as failures because they show how often automatic paste and focus-change recovery worked across repeated attempts.
+- [Share a target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml) after running the [short privacy-safe protocol](https://rcourtman.github.io/presspeech/app-compatibility.html). Passing reports are useful as well as failures because they show how often automatic paste and focus-change recovery worked across repeated attempts.
 - [Suggest an improvement](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml). Describe the recurring problem and a measurable result.
 - [Ask a usage question](https://github.com/rcourtman/presspeech/issues/new/choose) by selecting **Open a blank issue**. Include the platform, Presspeech version, and what you already tried.
 

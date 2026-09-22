@@ -93,7 +93,7 @@
             <article class="card" id="macos-paste">
               <h3>Try Dictation works, but text is not inserted</h3>
               <p>Confirm Accessibility is granted, click the destination text field, then hold the hotkey without changing apps until transcription finishes. If the HUD or menu says <strong>Copied — press ⌘V to paste</strong>, the finished transcript is already on the clipboard: return to the intended field and paste it manually instead of dictating it again.</p>
-              <p>Presspeech also uses this safe fallback when it cannot verify the same destination. Some Electron/Chromium-based apps do not consistently expose the focused-window information the current Mac app checks, so the notice can appear even when the window looks unchanged. If Presspeech instead says <strong>Couldn't paste — use Copy Last Transcript</strong>, choose that menu action before trying again.</p>
+              <p>Presspeech also uses this safe fallback when it cannot verify the same destination. Some Electron/Chromium-based apps do not consistently expose the focused-window information the current Mac app checks, so the notice can appear even when the window looks unchanged. If Presspeech instead says <strong>Couldn't paste — use Copy Last Transcript</strong>, choose that menu action before trying again. Use the <a href="app-compatibility.html">target-app check</a> to classify repeatable behavior safely.</p>
             </article>
             <article class="card" id="macos-clipboard-restore">
               <h3>The previous clipboard content is pasted</h3>
@@ -134,7 +134,7 @@
             </article>
             <article class="card" id="windows-paste">
               <h3>Try Dictation works, but text is not inserted</h3>
-              <p>Click the destination text field before pressing the hotkey and keep that window focused until transcription finishes. If the notification says <strong>Transcript copied, not pasted</strong>, the finished transcript is already on the clipboard: return to the intended field and press <strong>Ctrl+V</strong> instead of dictating it again. This fallback is used when focus changed, the original window could not be identified, or the target is running as administrator. Reopen an elevated target normally when possible; do not run Presspeech as administrator as a workaround.</p>
+              <p>Click the destination text field before pressing the hotkey and keep that window focused until transcription finishes. If the notification says <strong>Transcript copied, not pasted</strong>, the finished transcript is already on the clipboard: return to the intended field and press <strong>Ctrl+V</strong> instead of dictating it again. This fallback is used when focus changed, the original window could not be identified, or the target is running as administrator. Reopen an elevated target normally when possible; do not run Presspeech as administrator as a workaround. Use the <a href="app-compatibility.html">target-app check</a> to classify repeatable behavior safely.</p>
             </article>
             <article class="card" id="windows-muted">
               <h3>Playback stays muted</h3>
@@ -167,6 +167,7 @@
             </li>
           </ol>
           <div class="note warn"><p><strong>GitHub issues are public.</strong> Diagnostics omit transcript text, audio, and dictionary contents. Do not add dictated text, audio, references, dictionary or shortcut contents, credentials, or other private data yourself.</p></div>
+          <p>If the problem is specific to automatic paste in one app and can be repeated safely, follow the <a href="app-compatibility.html">eight-attempt target-app protocol</a> and share only aggregate outcomes. Use the general bug form when repeating the behavior would be unsafe.</p>
           <p class="quiet">Prefer plain text? The repository also keeps a concise <a href="troubleshooting.md">Markdown recovery reference</a>.</p>
         </div>
       </section>

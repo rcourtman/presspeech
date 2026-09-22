@@ -44,8 +44,10 @@ Links:
 > **Show HN: Presspeech – an 8.4 MB local dictation app for Apple Silicon**
 
 Presspeech is a macOS menu-bar app: hold Right Option, speak, release,
-and the transcript pastes at the cursor. On the documented M4 benchmark
-clips, the local model call takes about 100 ms.
+and the transcript normally pastes after Presspeech confirms that the same
+window is still focused. If it cannot verify that destination, it keeps the
+transcript on the clipboard for manual paste instead. On the documented M4
+benchmark clips, the local model call takes about 100 ms.
 There is also a separate unsigned Windows prerelease; the footprint and
 latency numbers below describe the released Mac app only.
 
@@ -60,9 +62,10 @@ transcription.
 
 How it works: audio is captured in memory and decoded once on key
 release with the local Parakeet TDT v3 CoreML model through FluidAudio on the
-Apple Neural Engine, then pasted at the cursor. The published latency
-benchmark times that model call only; it does not measure clipboard or paste
-work.
+Apple Neural Engine, then pasted after confirming the same window is still
+focused or kept on the clipboard for manual paste when that destination cannot
+be verified. The published latency benchmark times the model call only; it
+does not measure clipboard or paste work.
 Benchmarks and methodology:
 https://rcourtman.github.io/presspeech/benchmarks.html
 
@@ -91,8 +94,9 @@ Or install with Homebrew:
 > **[Free & open source] Presspeech – fast, fully local push-to-talk dictation for Apple Silicon**
 
 I’ve released Presspeech 0.3, a small native Mac menu-bar app for one
-workflow: hold a key, speak, release, and the text appears wherever your
-cursor already is.
+workflow: hold a key, speak, release, and the text normally pastes after
+Presspeech confirms that the same window is still focused. If that destination
+cannot be verified, the text stays on the clipboard for manual paste instead.
 
 - speech recognition runs on-device with Parakeet TDT v3 on the Apple
   Neural Engine
@@ -175,8 +179,10 @@ General:
 > I maintain a free MIT-licensed one: Presspeech
 > (https://github.com/rcourtman/presspeech). It has separate local apps for
 > Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release, and it
-> pastes at the cursor. The published Mac benchmark measures about 100 ms for
-> the local model call; the Windows build is still a preview.
+> normally pastes into the window where recording began, with a manual
+> clipboard fallback when that destination cannot be verified. The published
+> Mac benchmark measures about 100 ms for the local model call; the Windows
+> build is still a preview.
 
 Local-AI angle (r/LocalLLaMA and similar):
 
@@ -239,9 +245,11 @@ For directories and "what is this" replies:
 
 > Presspeech is free, MIT-licensed local push-to-talk dictation with separate
 > apps for Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release,
-> and the transcript pastes at the cursor, with no cloud transcription or
-> telemetry. The published Mac benchmark measures about 100 ms for the local
-> model call; it does not include clipboard or paste work.
+> and the transcript normally returns to the window where recording began,
+> with a manual clipboard fallback when that destination cannot be verified.
+> There is no cloud transcription or telemetry. The published Mac benchmark
+> measures about 100 ms for the local model call; it does not include clipboard
+> or paste work.
 
 ## House rules
 

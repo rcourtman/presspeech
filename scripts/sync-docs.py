@@ -180,19 +180,91 @@ WINDOWS_UNSIGNED_GUIDANCE = {
 
 # Presspeech itself has no transcript-sync feature, but normal delivery writes
 # to each platform's general clipboard. Public privacy and retrieval surfaces
-# must preserve the separate operating-system boundary: Handoff/Universal
-# Clipboard and Windows clipboard history can retain or sync those writes.
+# must preserve the separate operating-system boundary: Spotlight Clipboard
+# History, Handoff/Universal Clipboard, and Windows clipboard history can
+# retain or sync those writes.
 CLIPBOARD_SERVICE_GUIDANCE = {
-    ROOT / "README.md": ("macOS Universal Clipboard", "Windows clipboard"),
-    DOCS / "faq.html": ("macOS Universal Clipboard", "Windows clipboard history"),
-    DOCS / "privacy.html": ("macOS Universal Clipboard", "Windows clipboard history"),
+    ROOT / "README.md": (
+        "macOS Clipboard History",
+        "Spotlight on macOS 26",
+        "macOS Universal Clipboard",
+        "Windows clipboard",
+    ),
+    DOCS / "faq.html": (
+        "macOS Clipboard History",
+        "Spotlight on macOS 26",
+        "macOS Universal Clipboard",
+        "Windows clipboard history",
+    ),
+    DOCS / "privacy.html": (
+        "macOS Clipboard History",
+        "On macOS 26 or later, enabled",
+        "macOS Universal Clipboard",
+        "Windows clipboard history",
+    ),
     DOCS / "privacy" / "network-calls.json": (
+        "macOS Clipboard History",
+        "Spotlight on macOS 26",
         "macOS Universal Clipboard",
         "Windows clipboard history",
     ),
     DOCS / "windows.html": ("Windows clipboard", "cross-device sync"),
-    DOCS / "llms.txt": ("macOS Universal Clipboard", "Windows clipboard history"),
-    DOCS / "llms-full.txt": ("macOS Universal Clipboard", "Windows clipboard history"),
+    DOCS / "llms.txt": (
+        "macOS Clipboard History",
+        "Spotlight on macOS 26",
+        "macOS Universal Clipboard",
+        "Windows clipboard history",
+    ),
+    DOCS / "llms-full.txt": (
+        "macOS Clipboard History",
+        "enabled on macOS 26",
+        "macOS Universal Clipboard",
+        "Windows clipboard history",
+    ),
+    DOCS / "app-compatibility.html": (
+        "macOS Clipboard History",
+        "enabled on macOS 26",
+        "macOS Universal Clipboard",
+        "Windows clipboard history",
+    ),
+}
+
+# Discovery and setup surfaces must not collapse focus-safe delivery into an
+# "every app" promise. Automatic insertion is conditional; clipboard recovery
+# is part of the product contract rather than an exceptional implementation
+# detail.
+DELIVERY_BOUNDARY_GUIDANCE = {
+    ROOT / "README.md": ("original destination", "clipboard", "paste manually"),
+    ROOT / "windows" / "README.md": (
+        "cannot verify that destination",
+        "clipboard",
+        "manual paste",
+    ),
+    DOCS / "index.html": ("cannot safely verify the destination", "manual paste"),
+    DOCS / "getting-started.html": ("cannot verify the same destination", "clipboard"),
+    DOCS / "install.html": ("cannot verify that destination", "clipboard"),
+    DOCS / "windows.html": ("cannot verify that destination", "clipboard"),
+    DOCS / "faq.html": ("cannot verify that destination", "clipboard"),
+    DOCS / "llms.txt": ("cannot verify the same destination", "clipboard"),
+    DOCS / "llms-full.txt": ("verify the original destination", "clipboard"),
+    ROOT / "marketing" / "SHARING.md": ("cannot be verified", "clipboard"),
+}
+
+# A newline is not cosmetic in a command shell: it can submit the pasted text.
+# Keep the safe review workflow on the onboarding and retrieval surfaces most
+# likely to be used before someone dictates into Terminal or PowerShell.
+COMMAND_SHELL_GUIDANCE = {
+    ROOT / "README.md": ("command shell", "Append newline", "review the exact result"),
+    ROOT / "windows" / "README.md": ("command shells", "**newline**", "review it"),
+    DOCS / "getting-started.html": (
+        "Command shells can run pasted text",
+        "Append newline",
+        "review the exact text",
+    ),
+    DOCS / "windows.html": ("execution surfaces", "newline", "review it"),
+    DOCS / "faq.html": ("command shell", "Append newline", "review the exact command"),
+    DOCS / "llms.txt": ("Command-shell safety", "Append newline", "reviewing the exact result"),
+    DOCS / "llms-full.txt": ("execution surfaces", "Append newline", "reviewing the exact result"),
 }
 
 # Compare pages quote competitor pricing and claims. Each page must carry a
@@ -220,7 +292,18 @@ STALE_PATTERNS = [
     (re.compile(r"2\.2 MB"), "old release zip size"),
     (re.compile(r'"softwareVersion": "0\.2\.1"'), "old structured-data version"),
     (
-        re.compile(r"dictat(?:e|ion) into any app", re.IGNORECASE),
+        re.compile(
+            r"dictat(?:e|ion)\s+into\s+any(?:\s+[\w-]+){0,2}\s+app",
+            re.IGNORECASE,
+        ),
+        "unsupported universal paste-delivery promise",
+    ),
+    (
+        re.compile(r"(?:text|transcript) appears wherever (?:your|the) cursor", re.IGNORECASE),
+        "unsupported universal paste-delivery promise",
+    ),
+    (
+        re.compile(r"Anywhere you can type", re.IGNORECASE),
         "unsupported universal paste-delivery promise",
     ),
     (re.compile(r"#install-one-liner"), "old README anchor install URL"),
@@ -1036,6 +1119,44 @@ def check_clipboard_service_guidance(
     return errors
 
 
+def check_delivery_boundary_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = DELIVERY_BOUNDARY_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing delivery-boundary guidance")
+            continue
+        contents = " ".join(read_text(path).split())
+        missing = [phrase for phrase in required if phrase not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete focus-safe delivery guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
+def check_command_shell_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = COMMAND_SHELL_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing command-shell safety guidance")
+            continue
+        contents = " ".join(read_text(path).split())
+        missing = [phrase for phrase in required if phrase not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete command-shell safety guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
 def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
     expected: dict[Path, str] = {}
     for path, syncer in SYNCERS.items():
@@ -1327,10 +1448,20 @@ def run_self_test() -> None:
             raise SyncError("self-test: missing current-release checksum asset was not flagged")
         stale_delivery = Path(tmp) / "homepage.html"
         stale_delivery.write_text(
-            "Private push-to-talk dictation into any app.\n", encoding="utf-8"
+            "Private push-to-talk dictation into any Mac app.\n",
+            encoding="utf-8",
         )
         if not stale_copy_errors([stale_delivery]):
-            raise SyncError("self-test: universal paste-delivery promise was not flagged")
+            raise SyncError("self-test: qualified universal paste-delivery promise was not flagged")
+        stale_delivery.write_text(
+            "The text appears wherever your cursor already is.\n",
+            encoding="utf-8",
+        )
+        if not stale_copy_errors([stale_delivery]):
+            raise SyncError("self-test: wherever-cursor delivery promise was not flagged")
+        stale_delivery.write_text("Anywhere you can type\n", encoding="utf-8")
+        if not stale_copy_errors([stale_delivery]):
+            raise SyncError("self-test: anywhere-you-can-type promise was not flagged")
 
         stale_evidence = Path(tmp) / "claims.md"
         stale_evidence.write_text(
@@ -1424,6 +1555,8 @@ def run_self_test() -> None:
         clipboard_guidance = Path(tmp) / "privacy.html"
         required_clipboard_guidance = {
             clipboard_guidance: (
+                "macOS Clipboard History",
+                "macOS 26",
                 "macOS Universal Clipboard",
                 "Windows clipboard history",
             )
@@ -1434,11 +1567,52 @@ def run_self_test() -> None:
         if not check_clipboard_service_guidance(required_clipboard_guidance):
             raise SyncError("self-test: missing clipboard-service boundary was not flagged")
         clipboard_guidance.write_text(
-            "macOS Universal Clipboard and Windows clipboard history are outside Presspeech.\n",
+            "macOS Clipboard History, macOS Universal Clipboard, and "
+            "Windows clipboard history are outside Presspeech.\n",
+            encoding="utf-8",
+        )
+        if not check_clipboard_service_guidance(required_clipboard_guidance):
+            raise SyncError("self-test: unversioned macOS Clipboard History was accepted")
+        clipboard_guidance.write_text(
+            "macOS Clipboard History on macOS 26, "
+            "macOS Universal Clipboard, and "
+            "Windows clipboard history are outside Presspeech.\n",
             encoding="utf-8",
         )
         if check_clipboard_service_guidance(required_clipboard_guidance):
             raise SyncError("self-test: complete clipboard-service boundary was rejected")
+
+        delivery_guidance = Path(tmp) / "getting-started.html"
+        required_delivery_guidance = {
+            delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
+        }
+        delivery_guidance.write_text(
+            "Presspeech normally pastes at the cursor.\n", encoding="utf-8"
+        )
+        if not check_delivery_boundary_guidance(required_delivery_guidance):
+            raise SyncError("self-test: missing delivery boundary was not flagged")
+        delivery_guidance.write_text(
+            "If it cannot verify the destination, use clipboard recovery.\n",
+            encoding="utf-8",
+        )
+        if check_delivery_boundary_guidance(required_delivery_guidance):
+            raise SyncError("self-test: complete delivery boundary was rejected")
+
+        command_guidance = Path(tmp) / "command-safety.html"
+        required_command_guidance = {
+            command_guidance: ("command shell", "Append newline", "review"),
+        }
+        command_guidance.write_text(
+            "Append newline changes the suffix.\n", encoding="utf-8"
+        )
+        if not check_command_shell_guidance(required_command_guidance):
+            raise SyncError("self-test: incomplete command-shell guidance was not flagged")
+        command_guidance.write_text(
+            "A command shell can execute Append newline; review the text first.\n",
+            encoding="utf-8",
+        )
+        if check_command_shell_guidance(required_command_guidance):
+            raise SyncError("self-test: complete command-shell guidance was rejected")
 
 
 def main() -> int:
@@ -1465,6 +1639,8 @@ def main() -> int:
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_clipboard_service_guidance())
+            errors.extend(check_delivery_boundary_guidance())
+            errors.extend(check_command_shell_guidance())
             errors.extend(check_compare_freshness())
             for path, want in expected.items():
                 have = read_text(path) if path.exists() else ""
@@ -1494,6 +1670,8 @@ def main() -> int:
         errors.extend(check_platform_orientation())
         errors.extend(check_windows_unsigned_guidance())
         errors.extend(check_clipboard_service_guidance())
+        errors.extend(check_delivery_boundary_guidance())
+        errors.extend(check_command_shell_guidance())
         errors.extend(check_install_prompt_sync())
         if errors:
             for error in errors:

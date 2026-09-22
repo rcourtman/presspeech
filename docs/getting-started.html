@@ -164,7 +164,9 @@
             <div class="fact"><strong>Escape</strong><span>Cancel an active recording and discard its buffered audio.</span></div>
             <div class="fact"><strong>Clipboard fallback</strong><span>Paste manually whenever Presspeech reports that it copied the transcript.</span></div>
           </div>
+          <div class="note warn"><p><strong>Command shells can run pasted text.</strong> Terminal, PowerShell, Command Prompt, and remote consoles are execution surfaces, not ordinary text fields. The default paste suffix is a space; selecting <strong>Append newline</strong> on macOS or <strong>newline</strong> on Windows can submit a transcript immediately. On macOS, spoken formatting can also add a line break. Dictate command text into Try Dictation or a plain-text editor, review the exact text, then paste and run it deliberately. Do not rely on a paste warning; protections vary by terminal, operating-system version, and settings. See the current <a href="https://support.apple.com/en-gb/127377">Apple Terminal paste guidance</a> and <a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings">Windows Terminal paste-warning guidance</a>.</p></div>
           <div class="note"><p><strong>Clipboard privacy:</strong> Presspeech itself does not sync transcripts, but enabled operating-system clipboard services or third-party clipboard managers can retain or sync copied text. Review the <a href="privacy.html">clipboard privacy boundary</a> before dictating sensitive text.</p></div>
+          <p>Before relying on a browser editor, Electron app, terminal, remote session, or another important target, run the <a href="app-compatibility.html">privacy-safe target-app check</a>. It separates automatic paste from safe clipboard recovery without asking you to publish the test text.</p>
         </div>
       </section>
 

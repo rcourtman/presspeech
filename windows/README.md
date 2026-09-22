@@ -100,7 +100,9 @@ run.bat
 
 1. Hold **Right Alt** (configurable).
 2. Speak.
-3. Release — the punctuated transcript appears at the cursor moments later.
+3. Release — Presspeech normally pastes the punctuated transcript into the
+   window where the recording began. If it cannot verify that destination, it
+   leaves the text on the clipboard for manual paste instead.
 
 The configured key is reserved for Presspeech while it is running, so it does
 not also open a Windows surface or invoke an F8–F12 command in the focused app.
@@ -142,6 +144,14 @@ Presspeech detects that boundary, leaves the transcript on the clipboard, and
 tells you to paste it manually or reopen the target without **Run as
 administrator**. Do not run Presspeech as administrator to work around it.
 
+Treat command shells as execution surfaces, not ordinary text fields.
+PowerShell, Command Prompt, Windows Terminal, and remote consoles can run
+pasted text when it contains a newline. The default After pasting value is
+**space**; selecting **newline** can submit a transcript before you inspect it.
+Dictate command text into **Try Dictation** or a plain-text editor, review it,
+then paste and run it deliberately. Windows Terminal's multiline-paste warning
+depends on its settings; do not rely on it as a Presspeech safety boundary.
+
 The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Dictate** (toggle), **Cancel Dictation (Esc)** while recording,
 **Try Dictation…** (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
@@ -178,7 +188,8 @@ callback details and pressed keys are not included.
 - Microphone: automatic selection or a specific safe Windows input device
 - Engine/model: Parakeet TDT v3 and Nemotron (NVIDIA GPU recommended), or
   Whisper turbo/small/medium/base (base.en is the CPU first-run default)
-- After pasting: space / newline / nothing
+- After pasting: space / newline / nothing (newline can submit text in a command
+  shell; review commands outside the shell first)
 - Remove filler words (um, uh, er, …)
 - British English spelling (color → colour, realize → realise)
 - Audio cues when dictation starts and stops

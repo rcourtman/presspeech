@@ -93,6 +93,16 @@ def app_by_id(apps: list[dict[str, object]], app_id: str) -> dict[str, object] |
     return matches[0] if len(matches) == 1 else None
 
 
+def has_delivery_boundary(description: object) -> bool:
+    if not isinstance(description, str):
+        return False
+    normalized = " ".join(description.lower().split())
+    return all(
+        phrase in normalized
+        for phrase in ("original destination", "clipboard", "manual paste")
+    )
+
+
 def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
     today = today or date.today()
     errors: list[str] = []
@@ -195,9 +205,21 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
                 f"{display}: {app_id} version {app.get('softwareVersion')!r} "
                 f"does not match site metadata {expected_version!r}"
             )
-        for field in ("name", "operatingSystem", "applicationCategory", "downloadUrl", "installUrl"):
+        for field in (
+            "name",
+            "description",
+            "operatingSystem",
+            "applicationCategory",
+            "downloadUrl",
+            "installUrl",
+        ):
             if not isinstance(app.get(field), str) or not app[field]:
                 errors.append(f"{display}: {app_id} is missing {field}")
+        if not has_delivery_boundary(app.get("description")):
+            errors.append(
+                f"{display}: {app_id} description must state the verified original-destination "
+                "and manual clipboard-paste boundary"
+            )
         for field in ("downloadUrl", "installUrl"):
             value = app.get(field)
             if isinstance(value, str) and urlsplit(value).scheme != "https":
@@ -263,6 +285,14 @@ def run_self_test() -> None:
     parser.close()
     if parser.robots != ["noindex, follow"]:
         raise RuntimeError("self-test: robots metadata was not parsed")
+
+    if not has_delivery_boundary(
+        "Pastes after verifying the original destination; otherwise the clipboard "
+        "holds the text for manual paste."
+    ):
+        raise RuntimeError("self-test: valid delivery boundary was rejected")
+    if has_delivery_boundary("Private dictation into any Mac app."):
+        raise RuntimeError("self-test: universal delivery description was accepted")
 
     with tempfile.TemporaryDirectory() as tmp:
         broken = Path(tmp) / "broken.html"

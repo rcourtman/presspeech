@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for testing one target app. Run the short
-        [compatibility protocol](https://github.com/rcourtman/presspeech/blob/main/docs/app-compatibility.md)
+        [compatibility protocol](https://rcourtman.github.io/presspeech/app-compatibility.html)
         before filling this in. Passing reports are useful too. Search existing
         issues first and add to a matching app/version report rather than
         opening a duplicate.

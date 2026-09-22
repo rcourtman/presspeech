@@ -682,6 +682,15 @@ section p:last-child,
   border-left-color: #b8932a;
 }
 
+.facts + .note,
+.grid + .note {
+  margin-top: 18px;
+}
+
+.note + .note {
+  margin-top: 10px;
+}
+
 /* ---------- Code ---------- */
 
 pre {

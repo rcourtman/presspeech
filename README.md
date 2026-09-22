@@ -169,6 +169,14 @@ Presspeech menu until the next dictation. Windows shows a **Transcript copied,
 not pasted** notification. Return to the intended field and paste manually with
 ⌘V on macOS or Ctrl+V on Windows; do not dictate the same text again first.
 
+Treat a command shell as an execution surface, not an ordinary text field.
+Terminal, PowerShell, Command Prompt, and remote consoles may run pasted text
+as soon as it contains a newline. The default paste suffix is a space; if you
+choose **Append newline**, it can submit a transcript before you inspect it.
+On macOS, spoken formatting can also add line breaks. Dictate command text into
+**Try Dictation** or a plain-text editor, review the exact result, then paste
+and run it deliberately.
+
 Both builds provide a private **Try Dictation** scratchpad, hold and toggle
 trigger modes, configurable hotkeys, deterministic dictionary replacements,
 filler removal, paste suffix choices, startup controls, update checks, and
@@ -257,10 +265,10 @@ Presspeech is local-first:
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
 - Completed transcripts pass through the operating-system clipboard. Clipboard
-  services outside Presspeech—macOS Universal Clipboard, Windows clipboard
-  history and cross-device sync, or a third-party clipboard manager—may retain
-  or sync that text when enabled. Review those services before sensitive
-  dictation.
+  services outside Presspeech—macOS Clipboard History in Spotlight on macOS 26
+  or later, macOS Universal Clipboard, Windows clipboard history and
+  cross-device sync, or a third-party clipboard manager—may retain or sync that
+  text when enabled. Review those services before sensitive dictation.
 
 Network calls made by Presspeech are limited to:
 
@@ -336,7 +344,7 @@ and NVIDIA qualification record in [`docs/manual-qa.md`](docs/manual-qa.md).
 ## Links
 
 - [Support and troubleshooting](SUPPORT.md)
-- [Test target-app compatibility](docs/app-compatibility.md)
+- [Test target-app compatibility](https://rcourtman.github.io/presspeech/app-compatibility.html)
 - [Product roadmap](ROADMAP.md)
 - [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)
 - [Latest release](https://github.com/rcourtman/presspeech/releases/latest)

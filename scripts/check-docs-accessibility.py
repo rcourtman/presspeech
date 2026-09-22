@@ -135,6 +135,8 @@ def expected_current_href(path: Path, docs: Path) -> str | None:
         return "./"
     if relative.parts[0] == "compare":
         return "./"
+    if relative == Path("app-compatibility.html"):
+        return "troubleshooting.html"
     return relative.name
 
 
@@ -438,6 +440,20 @@ def run_self_test() -> None:
         if document_errors(index, docs):
             raise RuntimeError("self-test: zero-tabindex skip link was rejected")
         index.write_text(valid_index, encoding="utf-8")
+
+        compatibility = docs / "app-compatibility.html"
+        compatibility.write_text(
+            "<!doctype html><html lang='en'><head><title>Compatibility</title></head><body>"
+            "<a class='skip-link' href='#main-content'>Skip to content</a>"
+            "<nav aria-label='Primary'><a href='./'>Home</a>"
+            "<a href='troubleshooting.html' aria-current='page'>Help</a></nav>"
+            "<main id='main-content'><h1>Compatibility</h1></main>"
+            "</body></html>",
+            encoding="utf-8",
+        )
+        if document_errors(compatibility, docs):
+            raise RuntimeError("self-test: Help subsection navigation was rejected")
+
         index.write_text(
             index.read_text(encoding="utf-8").replace(" aria-current='page'", ""),
             encoding="utf-8",

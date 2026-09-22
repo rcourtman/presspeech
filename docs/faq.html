@@ -49,7 +49,7 @@
           <div class="grid two">
             <article class="card">
               <h3>What is Presspeech?</h3>
-              <p>Free MIT-licensed push-to-talk dictation with separate macOS and Windows apps. Hold a hotkey, speak, release, and text is pasted at the cursor.</p>
+              <p>Free MIT-licensed push-to-talk dictation with separate macOS and Windows apps. Hold a hotkey, speak, and release. Presspeech normally pastes into the window where the recording began; if it cannot verify that destination, it keeps the transcript on the clipboard for manual paste.</p>
             </article>
             <article class="card">
               <h3>Do upgrades preserve settings and permissions?</h3>
@@ -105,12 +105,16 @@
               <p>Use <strong>Try Dictation</strong> after setup reports that the model is ready. The focused private scratchpad lets you test the hotkey and paste flow without switching to another app. See the <a href="getting-started.html#private-test">first-dictation guide</a> for both platforms.</p>
             </article>
             <article class="card">
+              <h3>Can I dictate into a command shell?</h3>
+              <p>Treat Terminal, PowerShell, Command Prompt, and remote consoles as execution surfaces. The default paste suffix is a space; selecting <strong>Append newline</strong> on macOS or <strong>newline</strong> on Windows can submit a transcript before you inspect it. On macOS, spoken formatting can also insert line breaks. Use Try Dictation or a plain-text editor, review the exact command, then paste and run it deliberately. Terminal paste warnings vary by operating system, terminal, and settings; they are not a Presspeech safety boundary.</p>
+            </article>
+            <article class="card">
               <h3>Why was the transcript copied instead of pasted?</h3>
-              <p>Presspeech fails closed when it cannot verify the same destination it captured at the start. If macOS says <strong>Copied — press ⌘V to paste</strong> or Windows says <strong>Transcript copied, not pasted</strong>, return to the intended field and paste manually instead of dictating again. Causes include a focus change, unavailable focused-window information, and—on Windows—a target running as administrator. The <a href="troubleshooting.html#macos-paste">Mac</a> and <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps explain the platform details.</p>
+              <p>Presspeech fails closed when it cannot verify the same destination it captured at the start. If macOS says <strong>Copied — press ⌘V to paste</strong> or Windows says <strong>Transcript copied, not pasted</strong>, return to the intended field and paste manually instead of dictating again. Causes include a focus change, unavailable focused-window information, and—on Windows—a target running as administrator. The <a href="troubleshooting.html#macos-paste">Mac</a> and <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps explain the platform details; the <a href="app-compatibility.html">target-app check</a> records repeatable results without publishing your text.</p>
             </article>
             <article class="card">
               <h3>Can a clipboard service retain transcripts?</h3>
-              <p>Yes. Presspeech does not sync transcripts itself, but its normal delivery writes finished text to the system clipboard. macOS Universal Clipboard, Windows clipboard history and cross-device sync, or a third-party clipboard manager can retain or sync clipboard entries when enabled. Review the <a href="privacy.html">clipboard privacy boundary</a> before sensitive dictation.</p>
+              <p>Yes. Presspeech does not sync transcripts itself, but its normal delivery writes finished text to the system clipboard. macOS Clipboard History in Spotlight on macOS 26 or later, macOS Universal Clipboard, Windows clipboard history and cross-device sync, or a third-party clipboard manager can retain or sync clipboard entries when enabled. Review the <a href="privacy.html">clipboard privacy boundary</a> before sensitive dictation.</p>
             </article>
             <article class="card">
               <h3>Why does first launch take time?</h3>

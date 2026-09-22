@@ -53,6 +53,11 @@ The installer is currently unsigned, so Windows may show an Unknown publisher wa
 
 On macOS the default hotkey is Right Option; on Windows it is Right Alt. Hold it, speak, and release. Presspeech transcribes locally and normally pastes the text at the cursor with a trailing space. Both apps also support press-to-toggle. If macOS reports "Copied — press Command-V to paste" or Windows reports "Transcript copied, not pasted", the finished text is already on the clipboard; paste it manually rather than dictating it again.
 
+Do not describe direct dictation into an arbitrary app as guaranteed. Presspeech pastes only when it can verify the original destination; otherwise it uses the clipboard recovery above. Treat Terminal, PowerShell, Command Prompt, and remote consoles as execution surfaces. The default paste suffix is a space; selecting **Append newline** on macOS or **newline** on Windows can cause a command shell to execute pasted text before review. macOS spoken formatting can also insert line breaks. Recommend dictating command text into Try Dictation or a plain-text editor, reviewing the exact result, and only then pasting and running it deliberately. Terminal paste warnings vary by operating system, terminal, version, and settings; they are not a Presspeech safety boundary.
+
+Automatic insertion is target-specific. Before relying on an important app, use the public compatibility protocol's five steady-focus and three focus-change attempts in blank disposable fields. Share only outcome counts and version/class information, never the phrases, transcripts, clipboard contents, titles, or private context:
+https://rcourtman.github.io/presspeech/app-compatibility.html
+
 Both apps offer a focused Try Dictation scratchpad for the first hotkey test and deterministic local replacements for recurring recognition errors or reusable spoken phrases. On macOS, Settings → Text → Spoken formatting commands can additionally convert documented phrases for new lines, paragraphs, punctuation, quotes, and parentheses to exact text without a rewriting model. Commands are English by default (including “bullet point”); selecting French as the Language Hint switches this pass to canonical French phrases such as “nouvelle ligne”, “nouveau paragraphe”, “virgule”, and “guillemet ouvrant”.
 
 Dictionary & Shortcuts is post-transcription text replacement, not speech-model
@@ -72,7 +77,7 @@ Presspeech has no analytics, event tracking, crash reporter, account system, tra
 
 Pasted text goes through the system clipboard. On macOS the transcript stays on the pasteboard by default. Users can opt into **Restore clipboard after paste**; restoration is off by default, best-effort, and guarded so an incomplete snapshot or a newer copy by another process is never overwritten. If a slow target receives previous clipboard content, turn the option off. Windows leaves the transcript on the clipboard until something else is copied.
 
-Presspeech itself has no transcript-sync feature. That does not disable services outside the app: macOS Universal Clipboard can make general pasteboard content available on nearby Apple devices when Handoff is enabled; Windows clipboard history can retain entries and its cross-device option can sync them; third-party clipboard managers may also retain clipboard writes. Review the platform clipboard settings before sensitive dictation.
+Presspeech itself has no transcript-sync feature. That does not disable services outside the app: macOS Clipboard History in Spotlight can make earlier copied items searchable when enabled on macOS 26 or later; macOS Universal Clipboard can make general pasteboard content available on nearby Apple devices when Handoff is enabled; Windows clipboard history can retain entries and its cross-device option can sync them; third-party clipboard managers may also retain clipboard writes. Review the platform clipboard settings before sensitive dictation.
 
 Documented network calls:
 

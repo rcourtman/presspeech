@@ -1,5 +1,8 @@
 # Test Presspeech with a target app
 
+The public, navigable version of this protocol is at
+<https://rcourtman.github.io/presspeech/app-compatibility.html>.
+
 Presspeech binds each recording to the window where it began. It should paste
 only when it can still verify that destination; otherwise it should leave the
 complete transcript on the clipboard and explain how to paste it manually.
@@ -26,7 +29,9 @@ recovered safely.
    clipboard.
 4. Use only harmless phrases created for the test. Disable clipboard history,
    cross-device clipboard sync, or third-party clipboard managers if you do
-   not want even that test text retained outside Presspeech.
+   not want even that test text retained outside Presspeech. If macOS Clipboard
+   History in Spotlight is enabled on macOS 26 or later, clear it after the
+   check if you do not want the harmless text retained there.
 5. Note the exact Presspeech, operating-system, and target-app versions. Also
    note whether the target is a native app, browser page, Electron/Chromium
    app, terminal, remote desktop, or elevated Windows app.
@@ -60,7 +65,8 @@ For each attempt:
 
 A copied/manual-paste result is a safe recovery, not an automatic-paste pass.
 Keep its count separate so reports do not hide app classes where insertion is
-consistently unavailable.
+consistently unavailable. The three aggregate outcome counts should total
+five.
 
 ## Check focus safety
 
@@ -80,6 +86,10 @@ the same app for at least one attempt because same-process windows are a
 distinct identity check. Do not substitute tabs or fields in one window, and
 do not use a field where Return, Enter, or a paste action can submit or execute
 text.
+
+Classify each attempt as **copied for manual paste without inserting
+anywhere**, **inserted into a field**, or **other/not completed**. The three
+counts should total three.
 
 Text reaching either test window or any unrelated destination is a safety
 failure. Stop testing and report it; do not retry in a real document.
