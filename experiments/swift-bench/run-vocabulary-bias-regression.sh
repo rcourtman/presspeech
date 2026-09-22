@@ -268,11 +268,35 @@ validate_unique_normalized_audio_content() {
 normalize_audio_file() {
     local input="$1"
     local output="$2"
-    # Match presspeech-bench's AVAudioConverter input boundary. Explicit
-    # downmixing matters for duplicate detection: otherwise a stereo source
-    # and an equivalent mono rewrap can retain different channel layouts and
-    # evade the canonical-content comparison below.
-    afconvert -f WAVE -d LEF32@16000 -c 1 --mix "$input" "$output"
+    local channels
+    local convert_args=( -f WAVE -d LEF32@16000 -c 1 )
+    # Request mixing only when channels must actually be combined. Core Audio
+    # rejects --mix for some identity conversions (including mono Float32 WAV).
+    # Parse afinfo's structured output, not its localized human-readable text;
+    # ambiguous or unreadable inputs must not silently bypass downmixing.
+    if ! channels="$(afinfo -x "$input" 2>/dev/null | python3 -c '
+import sys
+import xml.etree.ElementTree as ET
+try:
+    ns = "{http://apple.com/core_audio/audio_info}"
+    root = ET.parse(sys.stdin).getroot()
+    tracks = root.findall(ns + "audio_file/" + ns + "tracks/" + ns + "track")
+    values = tracks[0].findall(ns + "num_channels") if len(tracks) == 1 else []
+    if len(values) != 1:
+        raise ValueError("ambiguous channels")
+    print((values[0].text or "").strip())
+except (ET.ParseError, ValueError):
+    sys.exit(1)
+')" || [[ ! "$channels" =~ ^[1-9][0-9]*$ ]]; then
+        echo "could not determine a single audio channel layout for normalization" >&2
+        return 1
+    fi
+    if [[ "$channels" != 1 ]]; then
+        convert_args+=( --mix )
+    fi
+    # Match presspeech-bench's mono input boundary; multichannel inputs still
+    # require a downmix before canonical-content duplicate comparison.
+    afconvert "${convert_args[@]}" "$input" "$output"
 }
 
 benchmark_inputs_sha256() {
@@ -929,9 +953,13 @@ MOCK_SWIFT
     cat >"$root/bin/afconvert" <<'MOCK_AFCONVERT'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ $# -eq 9 ]]
-cp "$8" "$9"
+[[ $# -eq 8 ]]
+cp "$7" "$8"
 MOCK_AFCONVERT
+    cat >"$root/bin/afinfo" <<'MOCK_AFINFO'
+#!/usr/bin/env bash
+printf '%s\n' '<audio_info xmlns="http://apple.com/core_audio/audio_info"><audio_file><tracks><track><num_channels>1</num_channels></track></tracks></audio_file></audio_info>'
+MOCK_AFINFO
     cat >"$root/bin/sw_vers" <<'MOCK_SW_VERS'
 #!/usr/bin/env bash
 echo 'test-platform'
@@ -995,6 +1023,61 @@ MOCK_BENCH
         assert_not_contains "$report" "$fixture"
         assert_not_contains "$report" 'original target reference'
     done
+}
+
+test_native_audio_normalization() {
+    # Exercise Core Audio itself on macOS; mocks cannot expose its -50 error
+    # when an already-mono Float32 file is converted with redundant --mix.
+    [[ "$(uname -s)" == Darwin ]] || return 0
+    local root="$1"
+    mkdir -p "$root"
+    python3 - "$root" <<'PY_AUDIO_FIXTURES'
+from pathlib import Path
+import struct
+import sys
+
+root = Path(sys.argv[1])
+for name, channels, frame in (("mono & source.wav", 1, (0.25,)),
+                               ("stereo.wav", 2, (0.0, 0.5))):
+    data = struct.pack("<" + "f" * channels, *frame) * 512
+    fmt = struct.pack("<HHIIHH", 3, channels, 16000, 16000 * 4 * channels, 4 * channels, 32)
+    chunks = b"fmt " + struct.pack("<I", len(fmt)) + fmt + b"data" + struct.pack("<I", len(data)) + data
+    (root / name).write_bytes(b"RIFF" + struct.pack("<I", len(chunks) + 4) + b"WAVE" + chunks)
+PY_AUDIO_FIXTURES
+    afconvert -f AIFF -d BEI16@22050 "$root/mono & source.wav" "$root/mono.aiff"
+    normalize_audio_file "$root/mono & source.wav" "$root/normalized-mono.wav"
+    normalize_audio_file "$root/mono.aiff" "$root/normalized-aiff.wav"
+    normalize_audio_file "$root/stereo.wav" "$root/normalized-stereo.wav"
+    normalize_audio_file "$root/normalized-mono.wav" "$root/normalized-again.wav"
+    python3 - "$root" <<'PY_AUDIO_CHECKS'
+from pathlib import Path
+import struct
+import sys
+
+root = Path(sys.argv[1])
+for kind in ("mono", "aiff", "stereo", "again"):
+    data = (root / ("normalized-" + kind + ".wav")).read_bytes()
+    assert data[:4] == b"RIFF" and data[8:12] == b"WAVE", kind
+    chunks = {}
+    offset = 12
+    while offset + 8 <= len(data):
+        size = struct.unpack_from("<I", data, offset + 4)[0]
+        chunks[data[offset:offset+4]] = data[offset+8:offset+8+size]
+        offset += 8 + size + size % 2
+    assert struct.unpack("<HHIIHH", chunks[b"fmt "][:16]) == (3, 1, 16000, 64000, 4, 32), kind
+    samples = struct.unpack("<" + "f" * (len(chunks[b"data"]) // 4), chunks[b"data"])
+    assert len(samples) >= 500, (kind, len(samples))
+    if kind in ("mono", "again"):
+        assert samples == (0.25,) * 512, kind
+    elif kind == "stereo":
+        # Left is silent and right is 0.5: channel selection is not a downmix.
+        assert len(samples) == 512 and all(abs(value - 0.25) < 1e-6 for value in samples), kind
+PY_AUDIO_CHECKS
+    if validate_unique_normalized_audio_content \
+        "$root/normalized-mono.wav" "$root/normalized-again.wav" >/dev/null 2>&1; then
+        echo "self-test failed to reject the same normalized mono recording" >&2
+        exit 1
+    fi
 }
 
 run_self_test() {
@@ -1452,19 +1535,73 @@ MOCK
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" >"$MOCK_AFCONVERT_ARGS"
+if [[ "${MOCK_AFCONVERT_FAIL:-0}" == 1 ]]; then exit 17; fi
 cp "${@: -2:1}" "${@: -1}"
 MOCK_AFCONVERT
-    chmod +x "$mock_bin/afconvert"
+    cat >"$mock_bin/afinfo" <<'MOCK_AFINFO'
+#!/usr/bin/env bash
+printf '%s\n' "${MOCK_AFINFO_XML:-<audio_info xmlns=\"http://apple.com/core_audio/audio_info\"><audio_file><tracks><track><num_channels>${MOCK_AUDIO_CHANNELS:-1}</num_channels></track></tracks></audio_file></audio_info>}"
+if [[ "${MOCK_AFINFO_FAIL:-0}" == 1 ]]; then exit 1; fi
+MOCK_AFINFO
+    chmod +x "$mock_bin/afconvert" "$mock_bin/afinfo"
     local normalized_output="$fixtures/normalized/explicit-mono.wav"
     MOCK_AFCONVERT_ARGS="$tmpdir/afconvert-args" \
         PATH="$mock_bin:$PATH" \
         normalize_audio_file "$fixtures/first.wav" "$normalized_output"
     assert_eq "$(cat "$tmpdir/afconvert-args")" \
-        "$(printf '%s\n' -f WAVE -d LEF32@16000 -c 1 --mix \
+        "$(printf '%s\n' -f WAVE -d LEF32@16000 -c 1 \
             "$fixtures/first.wav" "$normalized_output")" \
-        "canonical audio conversion arguments"
+        "mono conversion does not request a redundant mix"
     assert_eq "$(cat "$normalized_output")" "audio one" \
         "canonical audio conversion output"
+    MOCK_AFCONVERT_ARGS="$tmpdir/afconvert-args" MOCK_AUDIO_CHANNELS=2 \
+        PATH="$mock_bin:$PATH" \
+        normalize_audio_file "$fixtures/first.wav" "$normalized_output"
+    assert_eq "$(cat "$tmpdir/afconvert-args")" \
+        "$(printf '%s\n' -f WAVE -d LEF32@16000 -c 1 --mix \
+            "$fixtures/first.wav" "$normalized_output")" \
+        "multichannel conversion still downmixes"
+    local invalid_channels
+    for invalid_channels in 0 -1 unknown ''; do
+        rm -f "$tmpdir/afconvert-args"
+        if MOCK_AFCONVERT_ARGS="$tmpdir/afconvert-args" \
+            MOCK_AFINFO_XML="<audio_info xmlns=\"http://apple.com/core_audio/audio_info\"><audio_file><tracks><track><num_channels>$invalid_channels</num_channels></track></tracks></audio_file></audio_info>" \
+            PATH="$mock_bin:$PATH" \
+            normalize_audio_file "$fixtures/first.wav" "$normalized_output" \
+            >"$tmpdir/normalize-error.log" 2>&1; then
+            echo "self-test accepted invalid channel metadata" >&2
+            exit 1
+        fi
+        [[ ! -e "$tmpdir/afconvert-args" ]]
+    done
+    local invalid_xml
+    for invalid_xml in '<broken' '<audio_info/>' \
+        '<audio_info xmlns="http://apple.com/core_audio/audio_info"><audio_file><tracks><track><num_channels>1</num_channels></track><track><num_channels>2</num_channels></track></tracks></audio_file></audio_info>'; do
+        if MOCK_AFCONVERT_ARGS="$tmpdir/afconvert-args" MOCK_AFINFO_XML="$invalid_xml" \
+            PATH="$mock_bin:$PATH" \
+            normalize_audio_file "$fixtures/first.wav" "$normalized_output" \
+            >"$tmpdir/normalize-error.log" 2>&1; then
+            echo "self-test accepted unreadable or ambiguous audio metadata" >&2
+            exit 1
+        fi
+        [[ ! -e "$tmpdir/afconvert-args" ]]
+    done
+    if MOCK_AFCONVERT_ARGS="$tmpdir/afconvert-args" MOCK_AFINFO_FAIL=1 \
+        PATH="$mock_bin:$PATH" \
+        normalize_audio_file "$fixtures/first.wav" "$normalized_output" \
+        >"$tmpdir/normalize-error.log" 2>&1; then
+        echo "self-test ignored afinfo failure" >&2
+        exit 1
+    fi
+    [[ ! -e "$tmpdir/afconvert-args" ]]
+    assert_not_contains "$tmpdir/normalize-error.log" "$fixtures"
+    local conversion_status=0
+    MOCK_AFCONVERT_ARGS="$tmpdir/afconvert-args" MOCK_AFCONVERT_FAIL=1 \
+        PATH="$mock_bin:$PATH" \
+        normalize_audio_file "$fixtures/first.wav" "$normalized_output" \
+        >"$tmpdir/normalize-error.log" 2>&1 || conversion_status=$?
+    assert_eq "$conversion_status" 17 "converter failure is not retried or hidden"
+    test_native_audio_normalization "$tmpdir/native-audio"
     local fixture_digest
     fixture_digest="$(fixture_set_sha256 \
         "$fixtures/first.wav" "$fixtures/second.wav")"
@@ -1732,6 +1869,12 @@ if ! command -v afconvert >/dev/null 2>&1; then
     echo "afconvert is required to normalize audio" >&2
     exit 1
 fi
+for tool in afinfo python3; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "$tool is required to inspect audio before normalization" >&2
+        exit 1
+    fi
+done
 if ! command -v git >/dev/null 2>&1; then
     echo "git is required to record benchmark source provenance" >&2
     exit 1
