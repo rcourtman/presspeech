@@ -1,12 +1,14 @@
 name: pages
 
 # Deploy current main only after its latest `check` push run succeeds.
+# Successful Windows publication also refreshes downloads: releases created
+# with GITHUB_TOKEN do not emit a new release-triggered workflow run.
 # A published-release check can retry after downloads become available, but
 # must never roll Pages back to the older release's source commit.
 
 on:
   workflow_run:
-    workflows: [check]
+    workflows: [check, windows-release]
     types: [completed]
     # Release-triggered checks may identify their head branch by tag name.
     # The job gate rejects other events; release ancestry is verified below.
@@ -25,8 +27,12 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_repository.full_name == github.repository &&
-       ((github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') ||
-        github.event.workflow_run.event == 'release'))
+       ((github.event.workflow_run.name == 'check' &&
+         ((github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') ||
+          github.event.workflow_run.event == 'release')) ||
+        (github.event.workflow_run.name == 'windows-release' &&
+         github.event.workflow_run.event == 'workflow_dispatch' &&
+         github.event.workflow_run.head_branch == 'main')))
     permissions:
       contents: read
       actions: read
@@ -46,7 +52,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Verify published release belongs to main
-        if: github.event.workflow_run.event == 'release'
+        if: github.event.workflow_run.event == 'release' || github.event.workflow_run.name == 'windows-release'
         env:
           CHECKED_RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |

@@ -14,6 +14,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 REPOSITORY = "rcourtman/presspeech"
 WORKFLOW = ".github/workflows/check.yml"
@@ -99,6 +100,54 @@ def self_test() -> None:
     rerun.update(status="in_progress", conclusion=None, run_attempt=2)
     rejected(payload(rerun))
     print("Pages deployment check self-test passed (23 admission scenarios).")
+    workflow_event_self_test()
+
+
+def workflow_event_self_test() -> None:
+    """Exercise the actual job expression, including the publication refresh.
+
+    This evaluates trusted repository test input only; production admission is
+    GitHub's expression evaluator. Keep the test independent of a YAML package.
+    """
+    workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/pages.yml").read_text()
+    match = re.search(r"^    if: >-\n(.*?)^    permissions:", workflow, re.M | re.S)
+    assert match, "Pages job expression missing"
+    expression = " ".join(match[1].split()).replace("&&", " and ").replace("||", " or ")
+
+    def admits(**changes):
+        values = dict(name="check", event="push", head_branch="main",
+                      conclusion="success", head_repository=SimpleNamespace(full_name=REPOSITORY))
+        event_name = changes.pop("event_name", "workflow_run")
+        ref = changes.pop("ref", "refs/heads/main")
+        values.update(changes)
+        github = SimpleNamespace(event_name=event_name, ref=ref, repository=REPOSITORY,
+                                 event=SimpleNamespace(workflow_run=SimpleNamespace(**values)))
+        return eval(expression, {"__builtins__": {}}, {"github": github})
+
+    accepted = [{}, {"event": "release", "head_branch": "v0.3.8"},
+                {"event": "release", "head_branch": "windows-v0.1.12"},
+                {"event_name": "workflow_dispatch"},
+                {"name": "windows-release", "event": "workflow_dispatch"}]
+    for case in accepted:
+        assert admits(**case), case
+    rejected_events = [
+        {"event": "pull_request"}, {"head_branch": "feature"},
+        {"event": "workflow_dispatch"}, {"name": "other-workflow"},
+        {"event_name": "workflow_dispatch", "ref": "refs/heads/feature",
+         "event": "workflow_dispatch"},
+        {"name": "windows-release", "event": "push"},
+        {"name": "windows-release", "event": "release"},
+        {"name": "windows-release", "event": "workflow_dispatch", "head_branch": "feature"},
+    ]
+    for source in ({}, {"event": "release"}, {"name": "windows-release", "event": "workflow_dispatch"}):
+        for conclusion in ("failure", "cancelled", "skipped", None):
+            rejected_events.append(dict(source, conclusion=conclusion))
+        rejected_events.append(dict(source, head_repository=SimpleNamespace(full_name="fork/presspeech")))
+    for case in rejected_events:
+        assert not admits(**case), case
+    assert "workflows: [check, windows-release]" in workflow
+    assert "github.event.workflow_run.name == 'windows-release'" in workflow.split("- name: Verify published release belongs to main", 1)[1].split("env:", 1)[0]
+    print(f"Pages workflow event self-test passed ({len(accepted) + len(rejected_events)} scenarios).")
 
 
 def main() -> int:
