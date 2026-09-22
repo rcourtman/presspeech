@@ -17,6 +17,7 @@ the production app.
 | Tag | Stack | Where it runs |
 |---|---|---|
 | **`v3`** | FluidAudio Swift SDK → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
+| **`v3-sdk-default`** | production v3 model + the pinned FluidAudio revision's default chunking policy | Apple Neural Engine |
 | **`v2`** | FluidAudio Swift SDK → English-only Parakeet TDT 0.6 B **v2** → CoreML | Apple Neural Engine |
 | **`v3-int8-v2`** | production `v3` path + candidate linear-int8 `Encoder_v2` | Apple Neural Engine |
 | **`v3-vocab`** | production `v3` + auxiliary CTC custom-vocabulary rescorer | Apple Neural Engine |
@@ -55,6 +56,7 @@ swift build
 
 # 3a. Swift backends.
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3 --trials 5
+./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3-sdk-default --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v2 --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend unified --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --trials 5
@@ -71,8 +73,11 @@ swift build
 The Swift benchmark pins FluidAudio to the same exact revision as the
 production app (currently the released v0.15.6 commit). The default benchmark
 and `run-release-asr-checks.sh` therefore use the app's speech-library revision.
-Both direct-v3 benchmark lanes also explicitly retain the app's released
-mel-context chunking behavior. The remaining qualification limits are below.
+The production app and `v3` benchmark also explicitly retain the released
+mel-context chunking behavior. `v3-sdk-default` is the deliberate exception:
+it exposes the pinned SDK's default so a changed default can be measured as a
+candidate instead of arriving silently with a dependency bump. The remaining
+qualification limits are below.
 
 Candidate-only APIs require a dedicated evaluation branch that moves this
 package's manifest and resolved file together to the reviewed candidate
@@ -111,7 +116,7 @@ FluidAudio `c7246f4dc78d05f75cdfc5a550cd72ced0c658bf`; the app remained on
 `4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b`. Interpret those rows as an unbiased
 benchmark baseline at the recorded dependency, not measured shipped-app results.
 Both direct-v3 benchmark paths explicitly kept `melChunkContext: true`, matching
-the app's older default, and used the original int8 encoder. This controlled
+the app's released setting, and used the original int8 encoder. This controlled
 those settings but did not turn the newer SDK into the production dependency.
 Keep original results intact and qualify their provenance when sharing them.
 
@@ -575,6 +580,47 @@ bound for an explicitly reviewed corpus with
 `--long-public-max-corpus-wer` or
 `--long-public-max-reference-deletion-run`.
 
+## FluidAudio SDK-default chunking regression
+
+Presspeech keeps `melChunkContext: true` explicit in both the app and the
+ordinary `v3` benchmark. FluidAudio changed its v3 SDK default to a no-mel,
+silence-aligned long-form path after demonstrating recovery of quiet speech
+that the older fixed-stride path could drop
+([upstream change #869](https://github.com/FluidInference/FluidAudio/pull/869)).
+That is promising but not a universally safe default for Presspeech without
+corpus evidence: window composition remains model-sensitive, including an
+open upstream v3/CoreML report with different surrounding-context failures
+([issue #760](https://github.com/FluidInference/FluidAudio/issues/760)).
+
+On a candidate branch, move only this benchmark package's manifest and lock to
+the reviewed FluidAudio revision, leave the app pin unchanged, and compare the
+released explicit policy with the candidate dependency's actual default:
+
+```sh
+./run-public-model-comparison.sh \
+  --fixture-dir public-audio/librispeech-dev-clean-long-form \
+  --out-dir public-results/long-form \
+  --candidate-backend v3-sdk-default \
+  --trials 3
+
+./run-real-model-comparison.sh \
+  --input-dir real-audio \
+  --candidate-backend v3-sdk-default \
+  --references-hand-audited \
+  --trials 3
+```
+
+The comparison report records both dependency revisions and labels each row's
+chunking policy. Add `--require-candidate-pass` only on an adequately broad
+corpus; it applies the same conservative worst-candidate-versus-best-baseline
+screen as model candidates. Absolute long-form WER and deletion-run checks
+still matter because both sides of this A/B use the candidate SDK and therefore
+share any unrelated decoder change in that revision. The candidate-dependency
+release wrapper runs this comparison on every available short, private, and
+required long-form corpus automatically, and applies the absolute long-form
+WER and deletion-run limits to `v3-sdk-default` itself. It remains candidate
+evidence, never a production release pass.
+
 ## Parakeet encoder-precision regression
 
 FluidAudio's original v3 `Encoder.mlmodelc` uses 6-bit LUT palettization even
@@ -610,7 +656,7 @@ Presspeech does not promote a model from upstream aggregate results alone. The
 v2 comparison uses an explicit English hint for the production-v3 baseline and
 the same audio for both models.
 
-For a Unified, v2, or encoder product-candidate gate, add
+For a Unified, v2, SDK-default chunking, or encoder product-candidate gate, add
 `--require-candidate-pass`. The gate requires a clean checkout, at least 3
 trials, 25 comparable clips and 1,000 reference words, at least one
 demonstrated error reduction, no per-clip or aggregate word-error increase,
@@ -818,10 +864,11 @@ run the dependency-mismatched suite explicitly with both flags:
   --allow-candidate-dependency
 ```
 
-That mode adds the linear-int8 comparison, labels v3 as a candidate-revision
-baseline, and ends with a candidate evaluation verdict, never a production
-release pass. Restore the benchmark manifest and resolved file to the app's
-exact pin before using the wrapper as release evidence.
+That mode compares the candidate SDK's default chunking with Presspeech's
+released explicit policy, adds the linear-int8 comparison, labels v3 as a
+candidate-revision baseline, and ends with a candidate evaluation verdict,
+never a production release pass. Restore the benchmark manifest and resolved
+file to the app's exact pin before using the wrapper as release evidence.
 
 ## Power measurement
 

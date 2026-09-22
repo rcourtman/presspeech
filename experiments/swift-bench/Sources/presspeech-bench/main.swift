@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v2|v3|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v2|v3|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //   presspeech-bench --reference-metrics --reference-file path/to/reference.txt --critical-terms path/to/terms.txt
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
@@ -148,11 +148,14 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v2|v3|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v2|v3|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
                    presspeech-bench --reference-metrics --reference-file <txt> --critical-terms <txt>
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
+                         v3-sdk-default
+                              v3 with FluidAudio's dependency-defined default
+                              chunking; candidate for SDK-upgrade comparisons
                          v2    FluidAudio Parakeet TDT v2 — English-only candidate
                          v3-int8-v2
                               unbiased v3 path with FluidAudio's candidate
@@ -554,10 +557,29 @@ final class AppleBackend: ASRBackend {
 // is a hybrid TDT-CTC, so the TDT decoder path applies unchanged.
 
 final class FluidBackend: ASRBackend {
+    enum ChunkingPolicy {
+        /// The explicit setting shipped by Presspeech and used by the
+        /// production `v3` benchmark, independent of FluidAudio defaults.
+        case releasedV3
+        /// FluidAudio's default at the exact benchmark revision. This is a
+        /// candidate path because that default can change across SDK pins.
+        case sdkDefault
+
+        var config: ASRConfig {
+            switch self {
+            case .releasedV3:
+                return ASRConfig(melChunkContext: true)
+            case .sdkDefault:
+                return .default
+            }
+        }
+    }
+
     let name: String
     private let version: AsrModelVersion
     private let language: Language?
     private let encoderPrecision: ParakeetEncoderPrecision
+    private let chunkingPolicy: ChunkingPolicy
     private var asr: AsrManager!
 
     var modelCacheComponents: [(label: String, url: URL)] {
@@ -576,11 +598,13 @@ final class FluidBackend: ASRBackend {
     init(name: String,
          version: AsrModelVersion,
          language: Language? = nil,
-         encoderPrecision: ParakeetEncoderPrecision = .int8) {
+         encoderPrecision: ParakeetEncoderPrecision = .int8,
+         chunkingPolicy: ChunkingPolicy = .releasedV3) {
         self.name = name
         self.version = version
         self.language = language
         self.encoderPrecision = encoderPrecision
+        self.chunkingPolicy = chunkingPolicy
     }
 
     func prepare(warmupSamples: [Float]) async throws {
@@ -592,10 +616,11 @@ final class FluidBackend: ASRBackend {
             version: version,
             encoderPrecision: encoderPrecision
         )
-        // Hold chunking constant across encoder-precision comparisons and
-        // match Presspeech's released v3 path. The dependency revision that
-        // introduced int8-v2 also changed FluidAudio's v3 default here.
-        asr = AsrManager(config: ASRConfig(melChunkContext: true), models: models)
+        // Ordinary v3 and encoder-precision comparisons hold the released
+        // chunking path constant. `v3-sdk-default` opts into the exact
+        // dependency's default so an SDK behavior change can be measured
+        // before Presspeech deliberately adopts it.
+        asr = AsrManager(config: chunkingPolicy.config, models: models)
         _ = try await run(samples: warmupSamples)
     }
 
@@ -1736,6 +1761,10 @@ func runBenchSelfTests() throws {
     try expect(positiveTrialCount("-1") == nil, "trial parser should reject negative integers")
     try expect(positiveTrialCount("three") == nil, "trial parser should reject non-integers")
     try expect(
+        FluidBackend.ChunkingPolicy.releasedV3.config.melChunkContext,
+        "released v3 benchmark policy should keep mel-context chunking explicit"
+    )
+    try expect(
         VocabularyPolicy.standard.config == nil,
         "standard vocabulary policy should preserve FluidAudio defaults"
     )
@@ -2307,7 +2336,8 @@ struct PresspeechBench {
             runSummary += ", nemotron-multilingual-language=\(args.nemotronMultilingualLanguage)"
             runSummary += ", nemotron-multilingual-chunk-ms=\(args.nemotronMultilingualChunkMs)"
         }
-        if args.backend == "v3" || args.backend == "v3-int8-v2" ||
+        if args.backend == "v3" || args.backend == "v3-sdk-default" ||
+            args.backend == "v3-int8-v2" ||
             args.backend == "sliding-v3" || vocabularyBackends.contains(args.backend) {
             runSummary += ", language=\(args.language?.rawValue ?? "auto")"
         }
@@ -2389,7 +2419,7 @@ struct PresspeechBench {
         let warmup = samples
 
         let known = [
-            "apple", "v2", "v3", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
+            "apple", "v2", "v3", "v3-sdk-default", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
             "v3-vocab-exact-similarity",
             "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
             "sliding-vocab-no-rescue", "unified",
@@ -2421,6 +2451,16 @@ struct PresspeechBench {
                     name: "fluid-ParakeetTDTv3",
                     version: .v3,
                     language: args.language
+                )
+            )
+        }
+        if args.backend == "v3-sdk-default" {
+            backends.append(
+                FluidBackend(
+                    name: "fluid-ParakeetTDTv3-SDKDefault",
+                    version: .v3,
+                    language: args.language,
+                    chunkingPolicy: .sdkDefault
                 )
             )
         }

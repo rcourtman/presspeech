@@ -44,7 +44,8 @@ Options:
   --out-dir <path>         report directory (default: real-results)
   --trials <n>             measured trials per clip/backend (default: 3)
   --candidate-backend <name>
-                           comparison backend: unified, v2, or v3-int8-v2
+                           comparison backend: unified, v2, v3-sdk-default,
+                           or v3-int8-v2
                            (default: unified)
   --language <auto|code>   Parakeet language/script hint (default: auto)
   --unified-trailing-silence-ms <n>
@@ -229,6 +230,22 @@ validate_metrics() {
     fi
 }
 
+backend_setting() {
+    local backend="$1"
+    local candidate="$2"
+    if [[ "$backend" == "unified" ]]; then
+        printf 'trailing-silence=%sms' "$UNIFIED_TRAILING_SILENCE_MS"
+    elif [[ "$candidate" == "v3-int8-v2" ]]; then
+        [[ "$backend" == "v3" ]] && printf 'encoder=int8-original' || printf 'encoder=int8-v2'
+    elif [[ "$candidate" == "v3-sdk-default" ]]; then
+        [[ "$backend" == "v3" ]] && printf 'chunking=released-mel-context' || printf 'chunking=sdk-default'
+    elif [[ "$candidate" == "v2" ]]; then
+        [[ "$backend" == "v3" ]] && printf 'multilingual-v3' || printf 'english-v2'
+    else
+        printf 'na'
+    fi
+}
+
 publish_report_artifacts() {
     local stage_dir="$1"
     local staged_report="$2"
@@ -351,8 +368,9 @@ candidate_screen() {
         improved regressed latency_ratio <<<"$assessment"
 
     local blockers=()
-    [[ "$candidate" == "unified" || "$candidate" == "v2" || "$candidate" == "v3-int8-v2" ]] || \
-        blockers+=("screen is defined only for unified, v2, or v3-int8-v2")
+    [[ "$candidate" == "unified" || "$candidate" == "v2" || \
+       "$candidate" == "v3-sdk-default" || "$candidate" == "v3-int8-v2" ]] || \
+        blockers+=("screen is defined only for unified, v2, v3-sdk-default, or v3-int8-v2")
     if [[ "$candidate" == "unified" && \
             "$UNIFIED_TRAILING_SILENCE_MS" != "$REQUIRED_UNIFIED_TRAILING_SILENCE_MS" ]]; then
         blockers+=("Unified trailing silence must be ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms")
@@ -425,6 +443,10 @@ run_self_test() {
     assert_eq "$(extract_p50_ms "$log")" "123.4" "latency parser"
     assert_eq "$(extract_worst_wer_metrics /dev/null)" $'unknown\tunknown\tunknown' "missing WER parser"
     validate_metrics max-WER 16.7 word-errors 1 reference-words 6 final-word-retained false p50 123.4
+    assert_eq "$(backend_setting v3 v3-sdk-default)" \
+        "chunking=released-mel-context" "released chunking setting label"
+    assert_eq "$(backend_setting v3-sdk-default v3-sdk-default)" \
+        "chunking=sdk-default" "SDK-default chunking setting label"
 
     local rounded_wer_log="$tmpdir/rounded-wer.log"
     {
@@ -520,6 +542,8 @@ run_self_test() {
     LANGUAGE=en
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v3-int8-v2)" \
         $'passes\t' "passing encoder candidate screen"
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v3-sdk-default)" \
+        $'passes\t' "passing SDK-default chunking candidate screen"
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean v2)" \
         $'passes\t' "passing English model candidate screen"
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t1.100' clean unified)" \
@@ -697,9 +721,9 @@ if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
 fi
 
 case "$CANDIDATE_BACKEND" in
-    unified|v2|v3-int8-v2) ;;
+    unified|v2|v3-sdk-default|v3-int8-v2) ;;
     *)
-        echo "--candidate-backend must be unified, v2, or v3-int8-v2" >&2
+        echo "--candidate-backend must be unified, v2, v3-sdk-default, or v3-int8-v2" >&2
         exit 2
         ;;
 esac
@@ -920,18 +944,7 @@ for clip in "${clips[@]}"; do
             echo "invalid benchmark output for clip $clip_id backend=$backend" >&2
             exit 1
         fi
-        setting="na"
-        if [[ "$backend" == "unified" ]]; then
-            setting="trailing-silence=${UNIFIED_TRAILING_SILENCE_MS}ms"
-        elif [[ "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
-            if [[ "$backend" == "v3" ]]; then
-                setting="encoder=int8-original"
-            else
-                setting="encoder=int8-v2"
-            fi
-        elif [[ "$CANDIDATE_BACKEND" == "v2" ]]; then
-            setting="$([[ "$backend" == "v3" ]] && echo multilingual-v3 || echo english-v2)"
-        fi
+        setting="$(backend_setting "$backend" "$CANDIDATE_BACKEND")"
 
         if [[ "$best_reference_words" != "$reference_words" ]]; then
             echo "inconsistent reference metrics for clip $clip_id backend=$backend" >&2
@@ -975,7 +988,8 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
     echo "|---|---:|---:|---:|---:|---:|"
     backend_summary_row "$tsv" "v3"
     backend_summary_row "$tsv" "$CANDIDATE_BACKEND"
-    if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" || "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
+    if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" || \
+          "$CANDIDATE_BACKEND" == "v3-sdk-default" || "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
         echo
         echo "## Model Candidate Evidence Screen"
         echo

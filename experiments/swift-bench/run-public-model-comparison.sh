@@ -36,7 +36,8 @@ Options:
   --out-dir <path>        report directory (default: public-results)
   --trials <n>            measured trials per clip/backend (default: 3)
   --candidate-backend <name>
-                          comparison backend: unified, v2, or v3-int8-v2
+                          comparison backend: unified, v2, v3-sdk-default,
+                          or v3-int8-v2
                           (default: unified)
   --unified-trailing-silence-ms <n>
                           Unified-only trailing silence in ms (default: 250)
@@ -158,6 +159,13 @@ run_self_test() {
     assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 2]}" "en" "English language forwarding"
     assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--require-candidate-pass" "candidate gate forwarding"
 
+    CANDIDATE_BACKEND="v3-sdk-default"
+    REQUIRE_CANDIDATE_PASS=0
+    build_compare_args
+    assert_eq "${COMPARE_ARGS[8]}" "v3-sdk-default" "SDK-default candidate forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--show-paths" \
+        "SDK-default comparison should not receive an English-only hint"
+
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
         echo "self-test expected --trials without a value to fail" >&2
@@ -266,9 +274,9 @@ if ! is_positive_integer "$TRIALS"; then
 fi
 
 case "$CANDIDATE_BACKEND" in
-    unified|v2|v3-int8-v2) ;;
+    unified|v2|v3-sdk-default|v3-int8-v2) ;;
     *)
-        echo "--candidate-backend must be unified, v2, or v3-int8-v2" >&2
+        echo "--candidate-backend must be unified, v2, v3-sdk-default, or v3-int8-v2" >&2
         exit 2
         ;;
 esac

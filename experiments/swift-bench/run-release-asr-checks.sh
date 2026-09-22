@@ -54,7 +54,8 @@ Options:
   --include-candidate-models
                             also run Parakeet v2, Unified, and current Nemotron
                             candidate checks; a candidate dependency run also
-                            includes the opt-in linear-int8 v3 encoder
+                            compares its SDK-default v3 chunking and includes
+                            the opt-in linear-int8 v3 encoder
   --allow-candidate-dependency
                             permit the benchmark package to differ from the
                             production app pin; requires --include-candidate-models
@@ -548,6 +549,15 @@ else
     echo "running private $(v3_baseline_label) ASR regression on $real_count clip(s)..."
     ./run-real-dictation-regression.sh --input-dir "$REAL_AUDIO_DIR" --backend v3 --trials "$TRIALS"
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        if [[ "$DEPENDENCY_MODE" == "candidate" ]]; then
+            echo
+            echo "running private released-v3 vs candidate SDK-default chunking comparison on $real_count clip(s)..."
+            ./run-real-model-comparison.sh \
+                --input-dir "$REAL_AUDIO_DIR" \
+                --candidate-backend v3-sdk-default \
+                --trials "$TRIALS"
+        fi
+
         echo
         echo "running private v3-vs-Unified candidate comparison on $real_count clip(s)..."
         ./run-real-model-comparison.sh \
@@ -607,6 +617,15 @@ else
         --show-paths
 
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        if [[ "$DEPENDENCY_MODE" == "candidate" ]]; then
+            echo
+            echo "running public released-v3 vs candidate SDK-default chunking comparison on $public_count clip(s)..."
+            ./run-public-model-comparison.sh \
+                --fixture-dir "$PUBLIC_AUDIO_DIR" \
+                --candidate-backend v3-sdk-default \
+                --trials "$TRIALS"
+        fi
+
         echo
         echo "running public v3-vs-Unified candidate comparison on $public_count clip(s)..."
         ./run-public-model-comparison.sh --fixture-dir "$PUBLIC_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
@@ -674,6 +693,27 @@ else
         --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
 
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 && "$DEPENDENCY_MODE" == "candidate" ]]; then
+        echo
+        echo "running long-form public candidate SDK-default absolute ASR regression..."
+        ./run-real-dictation-regression.sh \
+            --input-dir "$LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/long-form \
+            --backend v3-sdk-default \
+            --trials "$TRIALS" \
+            --public-corpus \
+            --show-transcripts \
+            --show-paths \
+            --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
+            --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
+
+        echo
+        echo "running long-form public released-v3 vs candidate SDK-default chunking comparison..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/long-form \
+            --candidate-backend v3-sdk-default \
+            --trials "$TRIALS"
+
         echo
         echo "running long-form public v3 linear-int8 encoder candidate comparison..."
         ./run-public-model-comparison.sh \

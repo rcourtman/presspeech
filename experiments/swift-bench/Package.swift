@@ -30,9 +30,10 @@
 // app by default so `run-release-asr-checks.sh` validates the dependency used
 // by the release. The opt-in `int8-v2` encoder needs the later candidate
 // revision documented in README.md plus the PRESSPEECH_ENCODER_INT8_V2 compile
-// condition; the benchmark explicitly preserves the app's prior chunking
-// config so that A/B changes one control. Do not move the app pin until that
-// candidate clears the corpus gates.
+// condition; ordinary v3 comparisons explicitly preserve the app's released
+// chunking config so that A/B changes one control. The `v3-sdk-default`
+// backend is the opt-in exception used to qualify a dependency-default change.
+// Do not move the app pin until the candidate clears the corpus gates.
 import PackageDescription
 
 let package = Package(

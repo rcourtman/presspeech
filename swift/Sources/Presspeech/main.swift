@@ -4200,6 +4200,12 @@ private enum LoadedSpeechEngine {
     case parakeetV3(AsrManager)
 }
 
+private func productionParakeetASRConfig() -> ASRConfig {
+    // This is intentionally not `.default`: dependency updates must not
+    // silently select a different long-form chunking policy.
+    ASRConfig(melChunkContext: true)
+}
+
 actor TranscriptionWorker {
     private var engine: LoadedSpeechEngine?
     private var loadedProfile: SpeechModelProfile?
@@ -4250,7 +4256,16 @@ actor TranscriptionWorker {
         let models = try await AsrModels.load(from: modelDirectory,
                                               version: .v3,
                                               progressHandler: progressHandler)
-        return AsrManager(config: .default, models: models)
+        // Keep the released v3 chunking path explicit. FluidAudio's SDK
+        // default is dependency-defined and newer revisions switch v3 to a
+        // no-mel, silence-aligned long-form path. That candidate fixes known
+        // dropped spans but also changes window composition, so adopt it only
+        // after the release ASR corpus compares `v3` with
+        // `v3-sdk-default`; an SDK pin bump alone must not change recognition.
+        return AsrManager(
+            config: productionParakeetASRConfig(),
+            models: models
+        )
     }
 
     func transcribe(samples: [Float], language: Language? = nil) async throws -> String {
@@ -16683,6 +16698,11 @@ private enum PresspeechSelfTest {
     }
 
     private static func testSpeechModelStartupStatus() throws {
+        try expect(
+            productionParakeetASRConfig().melChunkContext,
+            equals: true,
+            "production ASR config should preserve released mel-context chunking"
+        )
         try expect(
             speechModelStartupStatusTitle(.init(fractionCompleted: 0,
                                                 phase: .listing)),
