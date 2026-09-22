@@ -72,6 +72,60 @@ class MetricTests(unittest.TestCase):
                     benchmark.run_benchmark(path)
                 constructor.assert_not_called()
 
+    def test_invalid_language_is_rejected_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            for invalid in (None, True, "", "EN", "english", "../pl"):
+                with self.subTest(language=invalid):
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump({"language": invalid}, handle)
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, "language"):
+                            benchmark.run_benchmark(path)
+                        constructor.assert_not_called()
+
+    def test_auto_language_reaches_backend_and_records_detected_code(self):
+        manifest = {
+            "model": "turbo",
+            "language": "auto",
+            "runs": 1,
+            "samples": [{"id": "polish", "audio": "ignored.wav"}],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+
+        def transcribe(*_args, **_kwargs):
+            transcriber.last_timing = {
+                "backend": "whisper",
+                "speech_seconds": 0.8,
+                "detected_language": "pl",
+            }
+            return "Dzie\u0144 dobry"
+
+        transcriber.transcribe.side_effect = transcribe
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                result = benchmark.run_benchmark(path)
+
+        transcriber.transcribe.assert_called_once_with(
+            mock.sentinel.audio, language=None)
+        self.assertEqual(result["requested_language"], "auto")
+        self.assertEqual(
+            result["samples"][0]["detected_languages"], {"pl": 1})
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn("Language: automatic detection", output.getvalue())
+        self.assertIn("Detected language trials: pl 1", output.getvalue())
+
     def test_unscoreable_and_unreviewed_references_do_not_pollute_trial_wer(self):
         manifest = {"runs": 1, "samples": [
             {"id": "punctuation", "audio": "ignored.wav", "reference": "...",
@@ -166,6 +220,20 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(benchmark.speech_detection_metrics(
             1.0, [{"generate": 0.1}, mock.sentinel.timing]))
 
+    def test_detected_language_metrics_reject_malformed_backend_values(self):
+        self.assertEqual(
+            benchmark.detected_language_metrics([
+                {"detected_language": "pl"},
+                {"detected_language": "en"},
+                {"detected_language": "pl"},
+                {"detected_language": "EN"},
+                {"detected_language": "private free text"},
+                mock.sentinel.timing,
+            ]),
+            {"pl": 2, "en": 1},
+        )
+        self.assertIsNone(benchmark.detected_language_metrics([{}]))
+
     def test_backend_stage_metrics_report_each_observed_stage(self):
         metrics = benchmark.backend_stage_metrics([
             {
@@ -198,6 +266,26 @@ class MetricTests(unittest.TestCase):
             mock.sentinel.timing,
         ]))
 
+    def test_parakeet_window_metrics_expose_bounded_long_form_trials(self):
+        metrics = benchmark.parakeet_window_metrics([
+            {"chunk_count": 3, "max_chunk_seconds": 59.5},
+            {"chunk_count": 3, "max_chunk_seconds": 59.75},
+            {"backend": "whisper"},
+        ])
+
+        self.assertEqual(metrics, {
+            "trials": 2,
+            "windowed_trials": 2,
+            "min_chunk_count": 3,
+            "max_chunk_count": 3,
+            "max_chunk_seconds": 59.75,
+            "all_chunk_counts": [3, 3],
+        })
+        self.assertIsNone(benchmark.parakeet_window_metrics([
+            {"chunk_count": True, "max_chunk_seconds": 60},
+            {"chunk_count": 1, "max_chunk_seconds": float("nan")},
+        ]))
+
     def test_benchmark_enables_and_persists_synchronized_stages(self):
         manifest = {
             "model": "parakeet-tdt-0.6b-v3",
@@ -218,6 +306,8 @@ class MetricTests(unittest.TestCase):
                 "transfer": 0.01,
                 "generate": 0.20,
                 "decode": 0.02,
+                "chunk_count": 2,
+                "max_chunk_seconds": 59.75,
             }
             return "latency sample"
 
@@ -243,7 +333,22 @@ class MetricTests(unittest.TestCase):
             result["samples"][0]["backend_stages"]["generate"]["median"],
             0.20,
         )
-        self.assertEqual(result["benchmark_version"], 2)
+        self.assertEqual(result["samples"][0]["parakeet_windowing"], {
+            "trials": 1,
+            "windowed_trials": 1,
+            "min_chunk_count": 2,
+            "max_chunk_count": 2,
+            "max_chunk_seconds": 59.75,
+            "all_chunk_counts": [2],
+        })
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn(
+            "Parakeet windows: 2-2 per trial; longest input 59.750s",
+            output.getvalue(),
+        )
+        self.assertEqual(result["benchmark_version"], 3)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,

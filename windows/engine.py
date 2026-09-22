@@ -12,6 +12,8 @@ Backends:
 
 import gc
 from contextlib import ExitStack
+from dataclasses import dataclass
+import math
 import threading
 import time
 
@@ -123,6 +125,148 @@ def whisper_vad_parameters():
 # audio is ignored, so this does not change the decoded speech.
 PARAKEET_BUCKET_SECONDS = (15, 30, 60)
 
+# The Transformers Parakeet encoder uses full relative-position attention. Its
+# memory use grows quadratically with recording length, so sending Presspeech's
+# selectable five- or ten-minute captures through one tensor can exhaust a
+# consumer GPU. Keep ordinary dictations on the exact existing single-pass
+# path, but give longer recordings bounded overlapping windows. Each interior
+# window owns at most 56 seconds and receives two seconds of acoustic context
+# on either side, so the model never sees more than the already-warmed 60-second
+# shape. TDT token timestamps decide which window owns overlap text; no words
+# are guessed away with string de-duplication.
+PARAKEET_SAMPLE_RATE = 16000
+PARAKEET_MAX_WINDOW_SECONDS = 60
+PARAKEET_OWNED_WINDOW_SECONDS = 56
+PARAKEET_CONTEXT_SECONDS = 2
+
+
+@dataclass(frozen=True)
+class _ParakeetWindow:
+    audio_start: int
+    audio_end: int
+    owned_start: int
+    owned_end: int
+
+
+def _parakeet_chunk_windows(
+        sample_count, sample_rate=PARAKEET_SAMPLE_RATE,
+        max_window_seconds=PARAKEET_MAX_WINDOW_SECONDS,
+        owned_window_seconds=PARAKEET_OWNED_WINDOW_SECONDS,
+        context_seconds=PARAKEET_CONTEXT_SECONDS):
+    """Plan contiguous ownership with bounded overlapping model inputs."""
+    if (isinstance(sample_count, bool) or not isinstance(sample_count, int)
+            or sample_count < 0):
+        raise ValueError("sample_count must be a non-negative integer")
+    if (isinstance(sample_rate, bool) or not isinstance(sample_rate, int)
+            or sample_rate <= 0):
+        raise ValueError("sample_rate must be a positive integer")
+    if not (0 <= context_seconds
+            and owned_window_seconds > 0
+            and owned_window_seconds + (2 * context_seconds)
+            <= max_window_seconds):
+        raise ValueError("invalid Parakeet window policy")
+
+    maximum_samples = int(max_window_seconds * sample_rate)
+    if sample_count <= maximum_samples:
+        return [_ParakeetWindow(0, sample_count, 0, sample_count)]
+
+    owned_samples = int(owned_window_seconds * sample_rate)
+    context_samples = int(context_seconds * sample_rate)
+    window_count = (sample_count + owned_samples - 1) // owned_samples
+    windows = []
+    # Balance ownership ranges so a clip just over 60 seconds does not produce
+    # one nearly empty trailing inference. Integer division also makes every
+    # input sample belong to exactly one range with no rounding gaps.
+    for index in range(window_count):
+        owned_start = index * sample_count // window_count
+        owned_end = (index + 1) * sample_count // window_count
+        audio_start = max(0, owned_start - context_samples)
+        audio_end = min(sample_count, owned_end + context_samples)
+        if audio_end - audio_start > maximum_samples:
+            raise AssertionError("Parakeet chunk planner exceeded its model bound")
+        windows.append(_ParakeetWindow(
+            audio_start=audio_start,
+            audio_end=audio_end,
+            owned_start=owned_start,
+            owned_end=owned_end,
+        ))
+    return windows
+
+
+def _decoded_parakeet_text(decoded):
+    if isinstance(decoded, (list, tuple)):
+        decoded = "".join(decoded)
+    return decoded.strip()
+
+
+def _owned_parakeet_text(decoded, timestamps, window,
+                         sample_rate=PARAKEET_SAMPLE_RATE):
+    """Return one window's timestamp-owned token text and boundary state."""
+    decoded = _decoded_parakeet_text(decoded)
+    if not isinstance(timestamps, (list, tuple)) or len(timestamps) != 1:
+        raise RuntimeError(
+            "Parakeet did not return token timestamps for bounded long-form transcription")
+    records = timestamps[0]
+    if not isinstance(records, (list, tuple)):
+        raise RuntimeError("Parakeet returned malformed token timestamps")
+    if not records:
+        if decoded:
+            raise RuntimeError(
+                "Parakeet returned text without timestamps for bounded long-form transcription")
+        return "", False
+
+    owned_start = (window.owned_start - window.audio_start) / sample_rate
+    owned_end = (window.owned_end - window.audio_start) / sample_rate
+    selected = []
+    timestamp_text = []
+    for index, record in enumerate(records):
+        if not isinstance(record, dict) or not isinstance(record.get("token"), str):
+            raise RuntimeError("Parakeet returned malformed token timestamps")
+        start = record.get("start")
+        end = record.get("end")
+        if (isinstance(start, bool) or isinstance(end, bool)
+                or not isinstance(start, (int, float))
+                or not isinstance(end, (int, float))
+                or not math.isfinite(start) or not math.isfinite(end)
+                or start < 0 or end < start):
+            raise RuntimeError("Parakeet returned malformed token timestamps")
+        timestamp_text.append(record["token"])
+        midpoint = (float(start) + float(end)) / 2
+        # A token exactly on a seam belongs to the earlier range. This makes
+        # adjacent ownership deterministic even for zero-duration punctuation.
+        after_start = (midpoint >= owned_start if window.owned_start == 0
+                       else midpoint > owned_start)
+        if after_start and midpoint <= owned_end:
+            selected.append((index, record["token"]))
+
+    if "".join(timestamp_text).strip() != decoded:
+        raise RuntimeError(
+            "Parakeet token timestamps do not match the decoded text")
+
+    if not selected:
+        return "", False
+    first_index = selected[0][0]
+    return "".join(token for _index, token in selected), first_index > 0
+
+
+def _join_owned_parakeet_text(parts):
+    """Join timestamp-cropped windows without splitting subword continuations."""
+    result = ""
+    attached_punctuation = "',.;:!?%-/)]}\u00bb\u2019\u201d"
+    for text, continues_previous_word in parts:
+        if not text:
+            continue
+        if not result:
+            result = text.lstrip()
+            continue
+        if (not continues_previous_word
+                and not result[-1].isspace()
+                and not text[0].isspace()
+                and text[0] not in attached_punctuation):
+            result += " "
+        result += text
+    return result.strip()
+
 
 def is_parakeet(model_name):
     return model_name == "parakeet-tdt-0.6b-v3"
@@ -180,10 +324,9 @@ def _parakeet_bucket_seconds(audio_seconds):
     for bucket in PARAKEET_BUCKET_SECONDS:
         if audio_seconds <= bucket:
             return bucket
-    # Very long dictation remains supported in 30-second increments. Its first
-    # uncommon shape may pay a one-time setup cost; normal speech uses a warmed
-    # bucket above.
-    return int((audio_seconds + 29) // 30 * 30)
+    # Long dictation must be split before feature extraction. Failing here
+    # protects the memory bound if a future caller bypasses the planner.
+    raise ValueError("Parakeet model input exceeds the 60-second bound")
 
 
 def _parakeet_max_new_tokens(model, input_features, torch_module):
@@ -361,7 +504,14 @@ class Transcriber:
                 except Exception:
                     pass
 
-    def transcribe(self, audio, language="en", _filter_silence=True):
+    def transcribe(self, audio, language=None, _filter_silence=True):
+        """Transcribe one independent clip, detecting language when unspecified.
+
+        faster-whisper resolves ``None`` to English without running language
+        detection for an English-only model.  Its multilingual models instead
+        detect the clip language before decoding.  Keep warm-up and controlled
+        benchmarks free to pass an explicit language.
+        """
         requested_at = time.perf_counter()
         with self.inference_lock:
             acquired_at = time.perf_counter()
@@ -392,7 +542,17 @@ class Transcriber:
                     **whisper_options,
                 )
                 speech_seconds = getattr(info, "duration_after_vad", None)
-                self._backend_timing = {"speech_seconds": speech_seconds}
+                detected_language = (
+                    getattr(info, "language", None)
+                    if speech_seconds is None or speech_seconds > 0 else None
+                )
+                self._backend_timing = {
+                    "speech_seconds": speech_seconds,
+                    # Kept out of product logs, but available to the local
+                    # benchmark so an automatic-language run is auditable.
+                    # A code inferred from VAD-rejected silence is meaningless.
+                    "detected_language": detected_language,
+                }
                 # Whisper can decode plausible text from silence. faster-whisper's
                 # standard API still returns a lazy segment generator when Silero
                 # VAD found no speech, so do not consume that generator at all.
@@ -432,16 +592,45 @@ class Transcriber:
         self.transcribe(silence, language="en")
 
     def _transcribe_parakeet(self, model, processor, audio):
+        windows = _parakeet_chunk_windows(len(audio))
+        results = []
+        timings = []
+        for window in windows:
+            chunk = audio[window.audio_start:window.audio_end]
+            decoded, timestamps, timing = self._transcribe_parakeet_chunk(
+                model, processor, chunk)
+            timings.append(timing)
+            if len(windows) == 1:
+                results.append((_decoded_parakeet_text(decoded), False))
+            else:
+                results.append(_owned_parakeet_text(
+                    decoded, timestamps, window))
+
+        self._backend_timing = {
+            "bucket_seconds": max(timing["bucket_seconds"] for timing in timings),
+            "chunk_count": len(windows),
+            "max_chunk_seconds": max(
+                window.audio_end - window.audio_start for window in windows
+            ) / PARAKEET_SAMPLE_RATE,
+            **{
+                stage: sum(timing[stage] for timing in timings)
+                for stage in ("prepare", "transfer", "generate", "decode")
+            },
+        }
+        return _join_owned_parakeet_text(results)
+
+    def _transcribe_parakeet_chunk(self, model, processor, audio):
         import torch
-        bucket_seconds = _parakeet_bucket_seconds(len(audio) / 16000.0)
+        bucket_seconds = _parakeet_bucket_seconds(
+            len(audio) / float(PARAKEET_SAMPLE_RATE))
         self._parakeet_stage_barrier(torch, model.device)
         started = time.perf_counter()
         inputs = processor(
             audio,
-            sampling_rate=16000,
+            sampling_rate=PARAKEET_SAMPLE_RATE,
             return_tensors="pt",
             padding="max_length",
-            max_length=bucket_seconds * 16000,
+            max_length=bucket_seconds * PARAKEET_SAMPLE_RATE,
             truncation=True,
             return_attention_mask=True,
         )
@@ -464,20 +653,18 @@ class Transcriber:
             )
         self._parakeet_stage_barrier(torch, model.device)
         generated = time.perf_counter()
-        decoded, _timestamps = processor.decode(
+        decoded, timestamps = processor.decode(
             output.sequences, durations=output.durations, skip_special_tokens=True)
         self._parakeet_stage_barrier(torch, model.device)
         decoded_at = time.perf_counter()
-        self._backend_timing = {
+        timing = {
             "bucket_seconds": bucket_seconds,
             "prepare": processed - started,
             "transfer": transferred - processed,
             "generate": generated - transferred,
             "decode": decoded_at - generated,
         }
-        if isinstance(decoded, (list, tuple)):
-            decoded = "".join(decoded)
-        return decoded.strip()
+        return decoded, timestamps, timing
 
     def _parakeet_stage_barrier(self, torch_module, device):
         """Synchronize CUDA only for explicit benchmark stage measurement."""

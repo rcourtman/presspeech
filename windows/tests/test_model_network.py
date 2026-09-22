@@ -69,9 +69,11 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         transformers_hub = types.SimpleNamespace(SESSION_ID="random-launch-id")
         transformers_hub.http_user_agent = lambda: (
             "transformers/test; session_id/%s" % transformers_hub.SESSION_ID)
+        hub_utils = self._hub_utils()
 
         model_network.harden_loaded_runtime({
             "huggingface_hub.constants": constants,
+            "huggingface_hub.utils": hub_utils,
             "transformers.utils.hub": transformers_hub,
         }, require_loaded=True)
 
@@ -79,6 +81,34 @@ class ModelNetworkPolicyTests(unittest.TestCase):
             transformers_hub.SESSION_ID,
             model_network.TRANSFORMERS_SESSION_ID,
         )
+        hub_utils.build_hf_headers.assert_called_once_with(token=False)
+
+    def test_loaded_runtime_rejects_account_or_inherited_request_metadata(self):
+        for headers, message in (
+                ({"user-agent": "hf_hub/test", "Authorization": "Bearer fixture"},
+                 "authentication"),
+                ({"user-agent": "hf_hub/test; agent/codex"}, "identifiers"),
+                ({"user-agent": "hf_hub/test; origin/private-host"}, "identifiers"),
+                ({"user-agent": "hf_hub/test; session_id/random"}, "identifiers")):
+            with self.subTest(headers=headers), self.assertRaisesRegex(
+                    model_network.ModelNetworkPolicyError, message):
+                model_network.harden_loaded_runtime({
+                    "huggingface_hub.utils": self._hub_utils(headers),
+                })
+
+    def test_required_runtime_rejects_missing_or_unusable_header_builder(self):
+        with self.assertRaisesRegex(
+                model_network.ModelNetworkPolicyError, "headers"):
+            model_network.harden_loaded_runtime({
+                "huggingface_hub.constants": self._constants(),
+                "transformers.utils.hub": self._transformers_hub(),
+            }, require_loaded=True)
+        with self.assertRaisesRegex(
+                model_network.ModelNetworkPolicyError, "headers"):
+            model_network.harden_loaded_runtime({
+                "huggingface_hub.utils": types.SimpleNamespace(
+                    build_hf_headers=lambda **_kwargs: {"x-test": "missing user agent"}),
+            })
 
     def test_loaded_runtime_rejects_noncanonical_endpoint(self):
         constants = types.SimpleNamespace(
@@ -157,6 +187,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
                     HF_HUB_USER_AGENT_ORIGIN=None,
                     HF_DEBUG=False,
                 ),
+                "huggingface_hub.utils": self._hub_utils(),
                 "transformers.utils.hub": types.SimpleNamespace(
                     SESSION_ID="random",
                     http_user_agent=lambda: "session_id/still-random",
@@ -197,17 +228,21 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         # A fresh interpreter avoids a preceding test masking an import-order
         # error. Only synthetic credentials are supplied; none are transmitted.
         code = """import engine, model_network
-from huggingface_hub import constants
+from huggingface_hub import constants, utils
 assert constants.ENDPOINT == 'https://huggingface.co'
 assert constants.HF_DEBUG is False
 assert constants.HF_HUB_DISABLE_TELEMETRY is True
 assert constants.HF_HUB_DISABLE_IMPLICIT_TOKEN is True
 assert constants.HF_HUB_USER_AGENT_ORIGIN is None
 model_network.harden_loaded_runtime()
+headers = {str(name).lower(): str(value) for name, value in utils.build_hf_headers(token=False).items()}
+assert 'authorization' not in headers
+assert all(marker not in headers['user-agent'].lower() for marker in ('agent/', 'origin/', 'session_id/'))
 """
         environment = dict(os.environ, HF_DEBUG="1", HF_ENDPOINT="https://invalid.example",
                            HF_TOKEN="synthetic-fixture", HF_HUB_USER_AGENT_ORIGIN="synthetic-origin",
-                           HF_HUB_DISABLE_TELEMETRY="0", HF_HUB_DISABLE_IMPLICIT_TOKEN="0")
+                           HF_HUB_DISABLE_TELEMETRY="0", HF_HUB_DISABLE_IMPLICIT_TOKEN="0",
+                           AI_AGENT="synthetic-agent")
         result = subprocess.run([sys.executable, "-c", code],
                                 cwd=Path(__file__).resolve().parents[1], env=environment,
                                 capture_output=True, text=True, timeout=30)
@@ -219,6 +254,23 @@ model_network.harden_loaded_runtime()
         module.http_user_agent = lambda: (
             "transformers/test; session_id/%s" % module.SESSION_ID)
         return module
+
+    @staticmethod
+    def _constants():
+        return types.SimpleNamespace(
+            ENDPOINT="https://huggingface.co",
+            HF_HUB_DISABLE_TELEMETRY=True,
+            HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
+            HF_HUB_USER_AGENT_ORIGIN=None,
+            HF_DEBUG=False,
+        )
+
+    @staticmethod
+    def _hub_utils(headers=None):
+        return types.SimpleNamespace(build_hf_headers=mock.Mock(return_value=(
+            {"user-agent": "unknown/None; hf_hub/test; python/test"}
+            if headers is None else headers
+        )))
 
 
 if __name__ == "__main__":

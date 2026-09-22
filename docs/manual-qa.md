@@ -22,10 +22,12 @@ Record enough context to make each result reproducible:
 - target application name and version for insertion checks.
 
 Complete the full **Windows First Run** checklist across these configurations
-and identify which configuration supplied every result. Repeat the install,
-model, microphone, hotkey, core delivery, and sleep/resume paths on both. A run
-may cover only one row; do not combine partial results from different artifacts
-or machines into a claimed end-to-end pass.
+and identify which configuration supplied every result. For a 0.1.13 candidate
+or later build containing retained-dictation recovery, also complete the full
+**Windows delivery recovery** checklist on both configurations. Repeat the
+install, model, microphone, hotkey, core delivery, recovery, and sleep/resume
+paths on both. A run may cover only one row; do not combine partial results from
+different artifacts or machines into a claimed end-to-end pass.
 
 | Required configuration | Install state | Inference path | Result |
 | --- | --- | --- | --- |
@@ -42,6 +44,10 @@ For each configuration, also record this release-gate matrix:
 | Dictation into a current Chromium browser text field | |
 | Dictation into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
+| Locked/replaced clipboard recovery with notifications disabled and tray icon in overflow | |
+| Explicit recovery Copy, Discard, Leave Waiting, and Exit behavior | |
+| Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
+| Microphone disconnect/reconnect rescan and in-flight selection change | |
 | Microsoft Remote Desktop and Moonlight insertion routes | |
 | Sleep/resume, then microphone, hotkey, and dictation recovery | |
 | In-place candidate install over the preceding public Windows release | |
@@ -56,6 +62,14 @@ request to bypass SmartScreen or managed security policy. Microsoft
 [notes that unsigned apps may be blocked entirely](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
 by policy or Smart App Control; pursue trusted signing rather than treating an
 override as a successful install path.
+
+For the recovery rows, record the checklist step and aggregate outcome, not the
+synthetic phrase or clipboard contents. A unit-test pass is not a result for
+these rows: Windows must exercise the candidate's real clipboard ownership,
+registered exclusion format, input injection, notification settings, and
+packaged UI. If Cloud Clipboard cannot be tested safely with a disposable
+paired device, mark only that sub-check **Not applicable** with the reason; do
+not use it to waive local Clipboard History exclusion.
 
 Before the interaction checks, run
 [Accessibility Insights for Windows](https://learn.microsoft.com/en-us/windows/win32/winauto/accessibility-testingtools)
@@ -165,11 +179,23 @@ keyboard access testing in addition to assistive-technology testing.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm
   capture stops, muted playback is restored, and no transcription is pasted or
   copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.
+- Start recording with **Try Dictation** focused, then close that window with
+  its title-bar close control. Confirm capture is cancelled, muted playback is
+  restored, the listening indicator disappears, and no hidden recording or
+  transcription continues. Repeat while Try Dictation is open but a recording
+  belongs to Notepad; closing the scratchpad must not cancel that recording.
 - In hold mode, release directly on the final consonant of several short
   phrases; in toggle mode, press the hotkey at the same boundary. Confirm the
   final word is retained. Repeat with quiet room tone and steady background
   noise: quiet input should begin transcription promptly, and ongoing sound
   must never hold capture more than about 0.4 seconds after the stop gesture.
+- On the NVIDIA Parakeet path, dictate a human-reviewed passage longer than 60
+  seconds with no long pause at the internal boundaries. Confirm the complete
+  passage arrives once, without joined/split words or duplicated phrases, and
+  that the privacy-safe log reports `backend=parakeet`, multiple chunks, and
+  `max_chunk` no greater than 60 seconds. Repeat at the 10-minute recording
+  limit while monitoring GPU memory; transcription must stay on Parakeet and
+  complete without an out-of-memory error.
 - Tap the hotkey too briefly to produce a usable recording, then make a longer
   silent recording. Confirm both leave **No speech detected — try again** on
   the indicator briefly and issue a Windows notification with microphone-check
@@ -197,12 +223,82 @@ keyboard access testing in addition to assistive-technology testing.
   does not attempt to launch the removed executable. Preferences, diagnostics,
   and shared Hugging Face model files are expected to remain.
 
-## Signed App Smoke
+## macOS Release Qualification
+
+Qualify the notarised candidate archive, not a locally rebuilt substitute.
+Record enough context to make each result reproducible:
+
+- candidate version and commit; archive filename, byte size, and SHA-256;
+- `codesign --verify --deep --strict`, `spctl --assess --type execute`, and
+  `xcrun stapler validate` results for the installed candidate;
+- Mac model and Apple silicon generation; macOS version and build; clean/new
+  profile or upgrade state; keyboard layout; selected microphone; and whether
+  VoiceOver, Full Keyboard Access, or Voice Control was enabled;
+- target application name, version, app class (native, browser, Electron,
+  remote desktop), generic field type, and whether one or two windows were
+  used. Do not record window, document, account, or server names.
+
+Cover both the oldest supported macOS release and the newest public macOS
+release supported by the candidate. Use a clean or independently reset TCC
+profile for at least one run. A single run may satisfy more than one row, but
+do not combine partial results from different candidate archives into an
+end-to-end pass.
+
+| Required configuration | Install state | Result |
+| --- | --- | --- |
+| Apple silicon on macOS 14 | clean profile or independently reset TCC grants | |
+| Apple silicon on the newest supported public macOS | clean profile or independently reset TCC grants | |
+| Either configuration | upgrade from the preceding public Presspeech release | |
+
+Record this release-gate matrix against the exact installed candidate:
+
+| Required path | Result |
+| --- | --- |
+| Verify signature, notarisation, staple, version, archive size, and SHA-256 | |
+| First launch through model, microphone, Accessibility, Input Monitoring, and keyboard-event-posting readiness | |
+| Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
+| Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
+| Steady-focus and same-process two-window Electron checks for issue #33 | |
+| Ten TextEdit and ten slow Electron manual-restore trials for issue #36 | |
+| Custom hotkey in hold and toggle modes on two keyboard layouts | |
+| Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
+| Focus-change recovery between native-app windows and between applications | |
+| Sleep/resume, microphone route change, and first dictation afterward | |
+| In-place upgrade with preferences, hotkey, and TCC grants retained | |
+| Setup, Try Dictation, menu-bar/Dock access, and recovery with VoiceOver and keyboard-only navigation | |
+
+For the two ten-trial clipboard rows, use distinct harmless markers and record
+only aggregate pass/fail counts. Observe that the intended field consumed each
+transcript before explicitly restoring the old clipboard; posting Command-V or
+waiting a fixed interval is not evidence of consumption. A stale, partial,
+duplicate, misdirected, or unrecoverable result is a failure, not a retry to
+exclude from the denominator.
+
+Run the opt-in debug fixture in
+[`native-interaction-qa.md`](native-interaction-qa.md) from the candidate commit
+and retain its fixed PASS/FAIL lines. The fixture establishes production event
+tap and controlled AppKit-window behavior, but its debug executable is not the
+candidate artifact and cannot replace the external Electron, physical keyboard,
+assistive-technology, microphone, or packaged-app rows above.
+
+A **Fail**, **Blocked**, or **Not run** result prevents claiming the affected
+delivery, clipboard, hotkey, or accessibility gate as qualified. Preserve that
+status until the same artifact passes or the supported scope is explicitly
+narrowed; publication or a passing source fixture does not turn missing native
+evidence into a pass.
+
+## macOS App Checklist
+
+For source-level iteration only, build and launch the development wrapper:
 
 ```sh
 cd swift
 ./dev-run.sh
 ```
+
+This command does not qualify a release archive. For release qualification,
+install the exact candidate recorded above and start with the first checklist
+item after the development-wrapper launch check.
 
 - Confirm `/tmp/Presspeech-dev.app` launches and the menu-bar item appears.
 - Open **Support -> Setup Checklist...** and confirm model, permissions,
@@ -359,11 +455,24 @@ cd swift
 - With **Keep Previous Clipboard for Manual Restore** off, dictate distinct
   non-sensitive markers into TextEdit and an Electron/Chromium target. Confirm
   the exact transcript lands and remains available for immediate manual paste.
+- In builds containing local-only transcript clipboard writes, repeat automatic
+  paste, focus-change recovery, **Copy Last Transcript**, and the Try Dictation
+  scratchpad's **Copy** action. Also select part of the scratchpad and exercise
+  standard Command-C and Command-X. Confirm every result remains available to
+  local Command-V and that Cut removes only the selected text. With Handoff and
+  Universal Clipboard enabled on a second test Apple device, confirm none of
+  those unique markers appears there. If a cooperating
+  clipboard manager exposes whether it skipped a transient item, confirm it does;
+  do not treat that community marker as protection from arbitrary local readers
+  or macOS Clipboard History.
 - Enable **Keep Previous Clipboard for Manual Restore**, seed an old harmless
   marker, and perform ten dictations each in TextEdit and a slow
   Electron/Chromium target, mixing short and multi-sentence transcripts. Verify
   each new transcript arrived before choosing **Restore Previous Clipboard…**
   and confirming. Only then should manual paste yield the original marker.
+  In builds containing local-only clipboard protection, confirm the restored
+  marker remains available to local Command-V but does not appear through
+  Universal Clipboard on the second test device.
   No fixed delay is a substitute for observing consumption. This is the manual
   qualification boundary for [issue #36](https://github.com/rcourtman/presspeech/issues/36).
 - Open the confirmation and cancel it. The clipboard and offer must remain
@@ -553,10 +662,13 @@ or input behavior. Do not run these steps against a user's active clipboard.
   doubled unit tests only qualify write ordering and fail-closed control flow.
 - Choose Discard and Exit separately. Both forget private recovery; Discard must
   leave a newer external clipboard untouched. No late worker may retain after Exit.
-- Inject key-down and key-up errors, including an error after an event may have
-  reached Windows. Release attempts must run; review the field before retrying.
-  A successful shortcut is not evidence of target consumption.
+- Force `SendInput` to return zero for modifier-down, V-down, V-up and
+  modifier-up separately, and inject an exception after an event may have
+  reached Windows. Every case must retain recovery and run applicable release
+  attempts; review the field before retrying. A fully accepted shortcut is not
+  evidence of target consumption.
 - Repeat ordinary local, elevated-window, RDP and Moonlight dictation checks;
-  use non-ASCII text and emoji to qualify the Unicode clipboard path. Verify the
-  non-delayed clipboard data survives its private owner window being destroyed,
-  and that the exclusion marker does not regress either remote delivery route.
+  repeat local delivery with a non-US active keyboard layout, and use non-ASCII
+  text and emoji to qualify the Unicode clipboard path. Verify the non-delayed
+  clipboard data survives its private owner window being destroyed, and that
+  the exclusion marker does not regress either remote delivery route.

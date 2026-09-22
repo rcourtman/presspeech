@@ -25,6 +25,7 @@ STYLES = DOCS / "styles.css"
 MIN_TEXT_CONTRAST = 4.5
 MIN_FOCUS_CONTRAST = 3.0
 MIN_FOCUS_THICKNESS = 2
+MIN_NAV_TARGET = 24
 MIN_MOBILE_NAV_TARGET = 44
 MIN_STICKY_HEADER_OFFSET = 64
 ERROR_PAGE = Path("404.html")
@@ -40,8 +41,9 @@ class DocumentParser(HTMLParser):
         self.title_count = 0
         self.missing_alt_count = 0
         self.primary_nav_count = 0
-        self.primary_nav_links: list[str] = []
+        self.primary_nav_items: list[tuple[str, str]] = []
         self._in_primary_nav = False
+        self._primary_nav_link: tuple[str, list[str]] | None = None
         self.brand_link_count = 0
         self.brand_link_names: list[str] = []
         self.brand_link_issues: list[str] = []
@@ -131,7 +133,8 @@ class DocumentParser(HTMLParser):
                 if attributes.get("role", "link") != "link":
                     self.brand_link_issues.append("brand link must retain link semantics")
             if self._in_primary_nav and attributes.get("href") is not None:
-                self.primary_nav_links.append(attributes["href"])
+                if "brand" not in classes:
+                    self._primary_nav_link = (attributes["href"], [])
             if attributes.get("aria-current") is not None:
                 self.current_links.append(
                     (attributes.get("href"), attributes["aria-current"] or "")
@@ -163,6 +166,8 @@ class DocumentParser(HTMLParser):
                 )
 
     def handle_data(self, data: str) -> None:
+        if self._primary_nav_link is not None:
+            self._primary_nav_link[1].append(data)
         if self._skip_link_text is not None:
             self._skip_link_text.append(data)
         if self._brand_link_text is not None and not self._in_brand_mark:
@@ -183,6 +188,10 @@ class DocumentParser(HTMLParser):
                 " ".join("".join(self._brand_link_text).split())
             )
             self._brand_link_text = None
+        if tag == "a" and self._primary_nav_link is not None:
+            href, parts = self._primary_nav_link
+            self.primary_nav_items.append((href, " ".join("".join(parts).split())))
+            self._primary_nav_link = None
 
 
 def expected_current_href(path: Path, docs: Path) -> str | None:
@@ -196,6 +205,31 @@ def expected_current_href(path: Path, docs: Path) -> str | None:
     if relative == Path("app-compatibility.html"):
         return "troubleshooting.html"
     return relative.name
+
+
+def expected_primary_nav(path: Path, docs: Path) -> list[tuple[str, str]]:
+    """Return the complete shared navigation for a page's directory depth."""
+    relative = path.relative_to(docs)
+    if relative == ERROR_PAGE:
+        prefix = "/presspeech/"
+        compare_href = "/presspeech/compare/"
+    elif relative.parts[0] == "compare":
+        prefix = "../"
+        compare_href = "./"
+    else:
+        prefix = ""
+        compare_href = "compare/"
+    return [
+        (f"{prefix}getting-started.html", "Get started"),
+        (f"{prefix}install.html", "macOS"),
+        (f"{prefix}windows.html", "Windows"),
+        (f"{prefix}privacy.html", "Privacy"),
+        (f"{prefix}benchmarks.html", "Benchmarks"),
+        (f"{prefix}faq.html", "FAQ"),
+        (f"{prefix}troubleshooting.html", "Help"),
+        (compare_href, "Compare"),
+        ("https://github.com/rcourtman/presspeech", "GitHub"),
+    ]
 
 
 def document_errors(path: Path, docs: Path) -> list[str]:
@@ -250,17 +284,12 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         )
     errors.extend(dict.fromkeys(parser.brand_link_issues + parser.brand_mark_issues))
     relative = path.relative_to(docs)
-    if relative != ERROR_PAGE:
-        expected_help_href = (
-            "../troubleshooting.html"
-            if relative.parts[0] == "compare"
-            else "troubleshooting.html"
+    expected_nav = expected_primary_nav(path, docs)
+    if parser.primary_nav_items != expected_nav:
+        errors.append(
+            "primary navigation links and visible names must match the shared order; "
+            f"expected {expected_nav!r}, found {parser.primary_nav_items!r}"
         )
-        if parser.primary_nav_links.count(expected_help_href) != 1:
-            errors.append(
-                "primary navigation must contain one consistent Help link to "
-                f"{expected_help_href!r}, found {parser.primary_nav_links!r}"
-            )
     current_href = expected_current_href(path, docs)
     expected_current = [] if current_href is None else [(current_href, "page")]
     if parser.current_links != expected_current:
@@ -368,8 +397,19 @@ def pixel_value(value: str | None) -> float | None:
 
 
 def navigation_target_errors(css: str) -> list[str]:
-    """Enforce the site's comfortable narrow-screen navigation baseline."""
+    """Enforce WCAG-sized desktop and comfortable narrow-screen navigation."""
     errors: list[str] = []
+    desktop_link = css_declarations(css, ".nav-links a")
+    if desktop_link is None:
+        errors.append("missing shared navigation link rules")
+    else:
+        for dimension in ("min-width", "min-height"):
+            target_size = pixel_value(desktop_link.get(dimension))
+            if target_size is None or target_size < MIN_NAV_TARGET:
+                errors.append(
+                    f"navigation links must have at least a {MIN_NAV_TARGET}px {dimension}"
+                )
+
     media = css_block(css, "@media (max-width: 720px)")
     if media is None:
         return ["missing the max-width: 720px mobile navigation rules"]
@@ -521,15 +561,33 @@ def accessibility_errors(docs: Path = DOCS, styles: Path = STYLES) -> list[str]:
 def run_self_test() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         docs = Path(tmp)
+
+        def primary_nav(
+            path: Path, *, current_href: str | None = None, brand_current: bool = False
+        ) -> str:
+            relative = path.relative_to(docs)
+            brand_href = "/presspeech/" if relative == ERROR_PAGE else "./"
+            brand_state = " aria-current='page'" if brand_current else ""
+            links = "".join(
+                f"<a href='{href}'"
+                f"{' aria-current=\"page\"' if href == current_href else ''}>"
+                f"{label}</a>"
+                for href, label in expected_primary_nav(path, docs)
+            )
+            return (
+                "<nav aria-label='Primary'>"
+                f"<a class='brand' href='{brand_href}'{brand_state}>"
+                "<span class='brand-mark' aria-hidden='true'>P</span>"
+                "<span>Presspeech</span></a>"
+                f"{links}</nav>"
+            )
+
         index = docs / "index.html"
         index.write_text(
             "<!doctype html><html lang='en'><head><title>Test</title></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
-            "<nav aria-label='Primary'><a class='brand' href='./' aria-current='page'>"
-            "<span class='brand-mark' aria-hidden='true'>P</span>"
-            "<span>Presspeech</span></a>"
-            "<a href='troubleshooting.html'>Help</a></nav>"
-            "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''>"
+            + primary_nav(index, brand_current=True)
+            + "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''>"
             "<figure><video aria-describedby='video-description'></video>"
             "<figcaption id='video-description'>Silent demo description.</figcaption>"
             "</figure></main>"
@@ -590,11 +648,8 @@ def run_self_test() -> None:
         compatibility.write_text(
             "<!doctype html><html lang='en'><head><title>Compatibility</title></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
-            "<nav aria-label='Primary'><a class='brand' href='./'>"
-            "<span class='brand-mark' aria-hidden='true'>P</span>"
-            "<span>Presspeech</span></a>"
-            "<a href='troubleshooting.html' aria-current='page'>Help</a></nav>"
-            "<main id='main-content'><h1>Compatibility</h1></main>"
+            + primary_nav(compatibility, current_href="troubleshooting.html")
+            + "<main id='main-content'><h1>Compatibility</h1></main>"
             "</body></html>",
             encoding="utf-8",
         )
@@ -615,17 +670,23 @@ def run_self_test() -> None:
             encoding="utf-8",
         )
         errors = document_errors(index, docs)
-        if not any("consistent Help link" in error for error in errors):
-            raise RuntimeError("self-test: missing Help navigation was accepted")
+        if not any("shared order" in error for error in errors):
+            raise RuntimeError("self-test: incomplete shared navigation was accepted")
+
+        index.write_text(
+            valid_index.replace(">Benchmarks</a>", ">Performance</a>"),
+            encoding="utf-8",
+        )
+        errors = document_errors(index, docs)
+        if not any("visible names" in error for error in errors):
+            raise RuntimeError("self-test: inconsistent navigation name was accepted")
 
         error_page = docs / ERROR_PAGE
         error_page.write_text(
             "<!doctype html><html lang='en'><head><title>Missing</title></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
-            "<nav aria-label='Primary'><a class='brand' href='./'>"
-            "<span class='brand-mark' aria-hidden='true'>P</span>"
-            "<span>Presspeech</span></a></nav>"
-            "<main id='main-content'><h1>Not found</h1></main></body></html>",
+            + primary_nav(error_page)
+            + "<main id='main-content'><h1>Not found</h1></main></body></html>",
             encoding="utf-8",
         )
         if document_errors(error_page, docs):
@@ -637,6 +698,10 @@ def run_self_test() -> None:
         raise RuntimeError("self-test: low-contrast fixture was accepted")
 
     mobile_css = """
+    .nav-links a {
+      min-width: 24px;
+      min-height: 36px;
+    }
     @media (max-width: 720px) {
       .brand { min-height: 44px; }
       .nav-links { width: 100%; }
@@ -649,6 +714,10 @@ def run_self_test() -> None:
     """
     if navigation_target_errors(mobile_css):
         raise RuntimeError("self-test: valid mobile navigation targets were rejected")
+    undersized_desktop_css = mobile_css.replace("min-height: 36px;", "min-height: 23px;")
+    errors = navigation_target_errors(undersized_desktop_css)
+    if not any("at least a 24px min-height" in error for error in errors):
+        raise RuntimeError("self-test: undersized desktop navigation target was accepted")
     undersized_css = mobile_css.replace("min-height: 44px;", "min-height: 23px;", 1)
     errors = navigation_target_errors(undersized_css)
     if not any("brand target" in error for error in errors):

@@ -7,6 +7,12 @@ free tool exists" should travel in postures that aren't marketing:
 a note where engineers look up notes, and answers where people are
 already asking.
 
+**Current gate:** do not use the prepared launch posts while the roadmap's
+text-delivery qualification is incomplete. First collect native, browser, and
+Electron/Chromium results from the published build using the privacy-safe
+[target-app protocol](../docs/app-compatibility.md). Community reports help
+find target-specific behavior, but do not replace the native release checks.
+
 Every number below comes from `docs/site-metadata.json` and the
 benchmarks page — run `python3 scripts/sync-docs.py --check` and
 `python3 scripts/check-public-assets.py` before posting so both claims and
@@ -62,9 +68,11 @@ benchmark clips, the local model call takes about 100 ms.
 There is also a separate unsigned Windows prerelease; the footprint and
 latency numbers below describe the released Mac app only.
 
-The 0.3 release adds deterministic voice shortcuts, spoken formatting,
-and a focused first-run dictation test while keeping the core interaction
-as small as possible.
+The current macOS release strengthens microphone recovery, binds delivery to
+the exact window where recording began, replaces timer-based clipboard
+restoration with an explicit manual restore, and adds configurable hotkey
+combinations. Target-app qualification is still in progress, so safe manual
+recovery is part of the product contract rather than a universal-paste claim.
 
 I built it because I wanted dictation that feels like a keyboard
 shortcut rather than a mode you enter and leave. It is free and MIT
@@ -86,10 +94,10 @@ dictations. Transcription makes no network calls, and the full
 network surface (model download, optional update check) is
 documented on the privacy page.
 
-New in 0.3: deterministic voice shortcuts (a spoken phrase maps to
+The app also includes deterministic voice shortcuts (a spoken phrase maps to
 exact reusable text), opt-in spoken formatting commands such as “new
-paragraph” and “bullet point”, and a focused Try Dictation scratchpad
-for first-run setup. None of these features uses a rewriting model.
+paragraph” and “bullet point”, and a focused Try Dictation scratchpad for
+first-run setup. None of these features uses a rewriting model.
 
 Limitations: Apple Silicon and macOS 14+ only; 25 European languages with
 selectable language hints for 18; no streaming mode.
@@ -104,7 +112,7 @@ Or install with Homebrew:
 
 > **[Free & open source] Presspeech – fast, fully local push-to-talk dictation for Apple Silicon**
 
-I’ve released Presspeech 0.3, a small native Mac menu-bar app for one
+I’ve released Presspeech, a small native Mac menu-bar app for one
 workflow: hold a key, speak, release, and the text normally pastes after
 Presspeech confirms that the same window is still focused. If that destination
 cannot be verified, the text stays on the clipboard for manual paste instead.
@@ -132,8 +140,11 @@ https://rcourtman.github.io/presspeech/
 Source:
 https://github.com/rcourtman/presspeech
 
-I’d especially value feedback on the first-run flow and which exact,
-non-rewriting voice commands would be useful next.
+If you use it in a native, browser, or Electron/Chromium app, I’d especially
+value the aggregate result from the privacy-safe eight-check target-app
+protocol. Passing reports matter as well as failures; the protocol never asks
+you to publish dictated text:
+https://rcourtman.github.io/presspeech/app-compatibility.html
 
 ### Show HN posting notes
 
@@ -209,6 +220,17 @@ Privacy angle:
 > network surface (model download + optional update check, nothing
 > else): https://rcourtman.github.io/presspeech/privacy.html. I maintain
 > it; it's free and MIT.
+
+Current-user qualification:
+
+> If you already use the current Presspeech release on macOS, the most useful
+> feedback now is one privacy-safe target-app result, especially for a browser
+> or Electron/Chromium app. The protocol runs five steady-focus and three
+> focus-change attempts in blank disposable fields, then reports counts only—
+> never the phrases or transcripts:
+> https://rcourtman.github.io/presspeech/app-compatibility.html. Passing
+> results are useful too. Community reports supplement rather than replace
+> native release testing.
 
 Comparison ("how is this different from Superwhisper / Wispr Flow /
 VoiceInk / FluidVoice?"):

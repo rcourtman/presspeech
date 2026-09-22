@@ -153,6 +153,17 @@ def speech_detection_metrics(audio_seconds, backend_timings):
     }
 
 
+def detected_language_metrics(backend_timings):
+    """Count privacy-safe faster-whisper language results across trials."""
+    values = []
+    for timing in backend_timings:
+        value = (timing.get("detected_language")
+                 if isinstance(timing, dict) else None)
+        if isinstance(value, str) and re.fullmatch(r"[a-z]{2,3}", value):
+            values.append(value)
+    return dict(collections.Counter(values)) if values else None
+
+
 BACKEND_STAGE_NAMES = ("prepare", "transfer", "generate", "decode")
 
 
@@ -175,6 +186,34 @@ def backend_stage_metrics(backend_timings):
             "all": values,
         }
     return result or None
+
+
+def parakeet_window_metrics(backend_timings):
+    """Summarise bounded long-form execution without exposing audio or text."""
+    plans = []
+    for timing in backend_timings:
+        if not isinstance(timing, dict):
+            continue
+        chunk_count = timing.get("chunk_count")
+        max_chunk_seconds = timing.get("max_chunk_seconds")
+        if (isinstance(chunk_count, bool) or not isinstance(chunk_count, int)
+                or chunk_count < 1
+                or isinstance(max_chunk_seconds, bool)
+                or not isinstance(max_chunk_seconds, (int, float))
+                or not math.isfinite(max_chunk_seconds)
+                or max_chunk_seconds < 0):
+            continue
+        plans.append((chunk_count, float(max_chunk_seconds)))
+    if not plans:
+        return None
+    return {
+        "trials": len(plans),
+        "windowed_trials": sum(chunk_count > 1 for chunk_count, _seconds in plans),
+        "min_chunk_count": min(chunk_count for chunk_count, _seconds in plans),
+        "max_chunk_count": max(chunk_count for chunk_count, _seconds in plans),
+        "max_chunk_seconds": max(seconds for _chunk_count, seconds in plans),
+        "all_chunk_counts": [chunk_count for chunk_count, _seconds in plans],
+    }
 
 
 def load_audio(path):
@@ -236,7 +275,18 @@ def _apply_precision(transcriber, precision):
     transcriber.model.to(dtype=dtype)
 
 
-def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
+def _benchmark_language(manifest, override):
+    """Return the report label and backend hint for one controlled run."""
+    value = manifest.get("language", "en") if override is None else override
+    if not isinstance(value, str) or not (
+            value == "auto" or re.fullmatch(r"[a-z]{2,3}", value)):
+        raise ValueError(
+            "language must be 'auto' or a lowercase two/three-letter code")
+    return value, None if value == "auto" else value
+
+
+def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
+                  language=None):
     manifest_path = os.path.abspath(manifest_path)
     manifest_dir = os.path.dirname(manifest_path)
     with open(manifest_path, "r", encoding="utf-8") as handle:
@@ -245,6 +295,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     runs = manifest.get("runs", 3) if runs is None else runs
     if isinstance(runs, bool) or not isinstance(runs, int) or runs < 1:
         raise ValueError("runs must be a positive integer")
+    requested_language, language_hint = _benchmark_language(manifest, language)
     # Validate and freeze report provenance before loading any model. This
     # describes the requested pinned source, not a fresh integrity attestation.
     snapshot = engine.model_snapshot(model_name)
@@ -278,7 +329,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
         for _run in range(runs):
             _sync_cuda()
             started = time.perf_counter()
-            transcript = transcriber.transcribe(audio, language="en")
+            transcript = transcriber.transcribe(audio, language=language_hint)
             _sync_cuda()
             timings.append(time.perf_counter() - started)
             transcripts.append(transcript)
@@ -312,7 +363,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
             "reference_reviewed": bool(sample.get("reference_reviewed", False)),
             "speech_detection": speech_detection_metrics(
                 audio_seconds, backend_timings),
+            "detected_languages": detected_language_metrics(backend_timings),
             "backend_stages": backend_stage_metrics(backend_timings),
+            "parakeet_windowing": parakeet_window_metrics(backend_timings),
         }
         result["silence"] = silence_metrics(
             bool(sample.get("expected_silence", False)),
@@ -378,10 +431,13 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
     except Exception:
         pass
     return {
-        "benchmark_version": 2,
+        "benchmark_version": 3,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
         "model_snapshot": snapshot,
+        # "auto" means faster-whisper received no language hint. The detected
+        # codes, when available, are retained per sample above.
+        "requested_language": requested_language,
         # Keep reports interpretable across faster-whisper updates. The
         # boundary policy can affect both WER and silence false positives.
         "whisper_vad_policy": (
@@ -442,6 +498,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto"):
 def _print_summary(result):
     print("Model: %s | precision: %s (%s)" %
           (result["model"], result["precision"], result["model_dtype"]))
+    print("Language: %s" % (
+        "automatic detection" if result.get("requested_language") == "auto"
+        else result.get("requested_language", "en")))
     snapshot = result["model_snapshot"]
     print("Snapshot: %s@%s" %
           (snapshot["repository"], snapshot["revision"]))
@@ -483,11 +542,23 @@ def _print_summary(result):
                 "%s %.3fs" % (name, stages[name]["median"])
                 for name in BACKEND_STAGE_NAMES if name in stages
             ))
+        windowing = sample.get("parakeet_windowing")
+        if windowing is not None:
+            print("  Parakeet windows: %d-%d per trial; longest input %.3fs" % (
+                windowing["min_chunk_count"],
+                windowing["max_chunk_count"],
+                windowing["max_chunk_seconds"],
+            ))
         detection = sample["speech_detection"]
         if detection is not None:
             print("  VAD speech: %.3fs median of %.3fs; rejected %d/%d trials" % (
                 detection["median_seconds"], sample["audio_seconds"],
                 detection["rejected_trials"], detection["trials"],
+            ))
+        detected_languages = sample.get("detected_languages")
+        if detected_languages is not None:
+            print("  Detected language trials: %s" % " | ".join(
+                "%s %d" % item for item in sorted(detected_languages.items())
             ))
         if sample["silence"] is not None:
             if sample["silence"]["evaluated"]:
@@ -528,10 +599,14 @@ def main():
     parser.add_argument("--runs", type=int)
     parser.add_argument(
         "--precision", choices=("auto", "tf32", "fp16", "bf16"), default="auto")
+    parser.add_argument(
+        "--language",
+        help="lowercase language code, or 'auto' for multilingual Whisper detection")
     parser.add_argument("--output", help="JSON output path")
     args = parser.parse_args()
     result = run_benchmark(
-        args.manifest, model_name=args.model, runs=args.runs, precision=args.precision)
+        args.manifest, model_name=args.model, runs=args.runs,
+        precision=args.precision, language=args.language)
     _print_summary(result)
     if args.output:
         output_path = os.path.abspath(args.output)

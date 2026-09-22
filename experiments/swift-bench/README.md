@@ -182,8 +182,13 @@ counts, so longer clips contribute proportionally; worst-trial selection also
 uses those exact counts rather than the rounded display percentage. Transcript
 text, fixture filenames, and local paths are
 redacted by default while WER, latency, and retention numbers remain
-visible. Pass `--show-transcripts` and `--show-paths` only for local
-reports you do not intend to share.
+visible. Before building or running a model, the script freezes every
+normalized clip and reference and rejects byte-identical source audio as well
+as clips that become byte-identical after 16 kHz mono normalization. Renaming,
+rewrapping, or losslessly converting one recording therefore cannot inflate a
+candidate's independent clip and word counts; use `--trials` for repeated
+inference on one clip. Pass `--show-transcripts` and `--show-paths` only for
+local reports you do not intend to share.
 
 To add a local recording and reference sidecar without hand-copying files:
 

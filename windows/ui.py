@@ -763,6 +763,7 @@ class SetupWindow:
         self.progress = ttk.Progressbar(frame, mode="indeterminate", length=260)
         self.progress.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(5, 13))
         self.progress.start(12)
+        self._progress_active = True
 
         microphone_label = ttk.Label(frame, text="Microphone")
         microphone_label.grid(row=4, column=0, sticky="w")
@@ -921,8 +922,18 @@ class SetupWindow:
             state=("normal" if status == "ready" and
                    hotkey_state == "ready" else "disabled"))
         if status in ("ready", "error"):
-            self.progress.stop()
+            if getattr(self, "_progress_active", False):
+                self.progress.stop()
+                self._progress_active = False
             self.progress.config(mode="determinate", value=100 if status == "ready" else 0)
+        else:
+            self.progress.config(mode="indeterminate")
+            if not getattr(self, "_progress_active", False):
+                # A failed load stops the animation above. Retry publishes
+                # loading before its worker runs, so visibly resume preparation
+                # as soon as the next poll observes that transition.
+                self.progress.start(12)
+                self._progress_active = True
         self.root.after(300, self._poll_model)
 
     def _microphone_changed(self, _event=None):
@@ -1779,11 +1790,20 @@ class DeliveryRecoveryWindow:
         self._refresh_waiting_state(status)
 
     def _discard(self):
-        self.app.discard_undelivered_dictation()
+        discarded = self.app.discard_undelivered_dictation()
         if self.app.has_undelivered_dictation():
-            status = "Another undelivered dictation is still waiting."
-        else:
+            status = (
+                "Another undelivered dictation is still waiting."
+                if discarded else
+                "Discard did not complete. The dictation is still kept in memory."
+            )
+        elif discarded:
             status = "Dictation discarded. You can record again."
+        else:
+            # A tray command or worker may have resolved the same entry before
+            # this queued button command ran. Never claim that this command
+            # discarded text when there was no recovery item left to change.
+            status = "No undelivered dictation remains. You can record again."
         self._refresh_waiting_state(status)
 
     def _poll(self):
@@ -1819,13 +1839,19 @@ class ScratchpadWindow:
         root.geometry("480x280")
         self.text = tk.Text(root, wrap="word", font=("Segoe UI", 12))
         self.text.pack(fill="both", expand=True, padx=8, pady=8)
+        self.status = ttk.Label(
+            root, text="", justify="left", wraplength=450)
+        self.status.pack(fill="x", padx=8, pady=(0, 6))
         self.btn = ttk.Button(root, text="Dictate (or use the hotkey)", command=self.toggle)
         self.btn.pack(pady=(0, 8))
         root.protocol("WM_DELETE_WINDOW", self._close)
         _add_access_key(root, self.btn, "d")
         _bind_window_command(root, "<Escape>", self._close)
         root.update_idletasks()
+        self._refresh_controls()
+        _mark_live_region(self.status)
         root.after_idle(self.text.focus_set)
+        root.after(100, self._poll_controls)
         user32 = ctypes.windll.user32
         user32.GetParent.argtypes = [ctypes.c_void_p]
         user32.GetParent.restype = ctypes.c_void_p
@@ -1835,10 +1861,69 @@ class ScratchpadWindow:
     def toggle(self):
         if self.app.recording:
             self.app.stop_recording()
-            _set_accessible_text(self.btn, "Dictate (or use the hotkey)")
         else:
-            if self.app.start_recording():
-                _set_accessible_text(self.btn, "Stop Dictation")
+            self.app.start_recording()
+        self._refresh_controls()
+
+    def _control_state(self):
+        """Return a truthful command and status for the app lifecycle."""
+        if getattr(self.app, "recording", False):
+            return (
+                "Stop Dictation", "normal",
+                "Recording… Speak, then stop dictation or press Escape to cancel.",
+            )
+        if getattr(self.app, "transcribing", False):
+            return (
+                "Dictate (or use the hotkey)", "disabled",
+                "Transcribing… Dictation will be available when this finishes.",
+            )
+        if getattr(self.app, "_canceling_recording", False):
+            return (
+                "Dictate (or use the hotkey)", "disabled",
+                "Canceling dictation… Dictation will be available when cleanup finishes.",
+            )
+        has_undelivered = getattr(
+            self.app, "has_undelivered_dictation", None)
+        if callable(has_undelivered) and has_undelivered():
+            return (
+                "Dictate (or use the hotkey)", "disabled",
+                "An undelivered dictation needs review before recording again.",
+            )
+        model_status = getattr(self.app, "model_status", "pending")
+        if model_status == "error":
+            return (
+                "Dictate (or use the hotkey)", "disabled",
+                "Speech model needs attention. Open Setup or Settings to retry.",
+            )
+        if model_status != "ready":
+            return (
+                "Dictate (or use the hotkey)", "disabled",
+                "Preparing speech model… Dictation will be available when it is ready.",
+            )
+        return (
+            "Dictate (or use the hotkey)", "normal",
+            "Ready. Dictation appears in this private scratchpad.",
+        )
+
+    def _refresh_controls(self):
+        label, state, status = self._control_state()
+        # Do not leave keyboard focus on a control as it becomes disabled.
+        # The editor remains a useful, non-destructive focus destination while
+        # transcription, cancellation, or recovery blocks another recording.
+        try:
+            if state == "disabled" and self.root.focus_get() is self.btn:
+                self.text.focus_set()
+        except (AttributeError, tk.TclError):
+            pass
+        self.btn.config(state=state)
+        _set_accessible_text(self.btn, label, announce=False)
+        _set_accessible_text(self.status, status)
+
+    def _poll_controls(self):
+        if self.root is None:
+            return
+        self._refresh_controls()
+        self.root.after(100, self._poll_controls)
 
     def append_text(self, text):
         def do():
@@ -1850,8 +1935,19 @@ class ScratchpadWindow:
             pass
 
     def _close(self):
+        # A recording started in Try Dictation has no safe destination after
+        # this window disappears. Cancel that capture rather than leaving the
+        # microphone active behind a closed private scratchpad and discarding
+        # its eventual transcript. A recording owned by another application
+        # must remain independent of this utility window.
+        if (getattr(self.app, "recording", False) and
+                getattr(self.app, "_recording_scratchpad", None) is self):
+            self.app.cancel_recording()
+        root = self.root
+        self.root = None
         try:
-            self.root.destroy()
+            if root is not None:
+                root.destroy()
         except Exception:
             pass
         self.window_handle = 0

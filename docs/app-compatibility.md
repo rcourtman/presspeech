@@ -38,8 +38,12 @@ recovered safely.
    Clipboard; published 0.1.12 does not.
 4. Use only harmless phrases created for the test. On Windows 0.1.12, disable
    clipboard history and cross-device clipboard sync. On every platform,
-   disable third-party clipboard managers if you do not want even that test
-   text retained outside Presspeech. If macOS Clipboard
+   macOS 0.3.8 can expose transcript entries to Universal Clipboard;
+   disable Handoff if that test text must stay on the Mac. Builds containing
+   local-only transcript clipboard writes prevent Universal Clipboard transfer
+   while preserving local Command-V. On every platform, disable third-party
+   clipboard managers if you do not want even that test text retained outside
+   Presspeech. If macOS Clipboard
    History in Spotlight is enabled on macOS 26 or later, clear it after the
    check if you do not want the harmless text retained there.
 5. Note the exact Presspeech, operating-system, and target-app versions. Also

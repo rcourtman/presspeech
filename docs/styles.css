@@ -144,6 +144,10 @@ a:focus-visible {
 }
 
 .nav-links a {
+  display: inline-flex;
+  min-width: 24px;
+  min-height: 36px;
+  align-items: center;
   color: var(--muted);
   text-decoration: none;
   padding: 6px 10px;

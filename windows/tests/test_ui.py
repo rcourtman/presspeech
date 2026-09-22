@@ -514,6 +514,17 @@ class SetupWindowTests(unittest.TestCase):
             mode="determinate", value=100)
         window.root.after.assert_called_once_with(300, window._poll_model)
 
+    def test_retry_resumes_progress_animation_after_an_error(self):
+        window = self.make_window("loading", "Downloading model")
+        window._progress_active = False
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+
+        window.progress.config.assert_called_once_with(mode="indeterminate")
+        window.progress.start.assert_called_once_with(12)
+        self.assertTrue(window._progress_active)
+
     def test_stopped_global_hotkey_exposes_repair_and_blocks_finish(self):
         window = self.make_window("ready", "base.en on cpu")
         window.app.hotkey_listener_status.return_value = (
@@ -808,6 +819,83 @@ class SetupWindowTests(unittest.TestCase):
         window.device.set.assert_not_called()
 
 
+class ScratchpadWindowTests(unittest.TestCase):
+    def make_window(self, *, recording=False, transcribing=False,
+                    canceling=False, model_status="ready", waiting=False):
+        window = ui.ScratchpadWindow.__new__(ui.ScratchpadWindow)
+        window.app = mock.Mock()
+        window.app.recording = recording
+        window.app.transcribing = transcribing
+        window.app._canceling_recording = canceling
+        window.app.model_status = model_status
+        window.app.has_undelivered_dictation.return_value = waiting
+        window.root = mock.Mock()
+        window.btn = mock.Mock()
+        window.status = mock.Mock()
+        window.text = mock.Mock()
+        return window
+
+    def test_external_stop_restores_truthful_dictate_command(self):
+        window = self.make_window(recording=True)
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_controls()
+            window.app.recording = False
+            window._refresh_controls()
+
+        self.assertIn(
+            mock.call(window.btn, "Stop Dictation", announce=False),
+            set_text.call_args_list,
+        )
+        self.assertIn(
+            mock.call(
+                window.btn, "Dictate (or use the hotkey)", announce=False),
+            set_text.call_args_list,
+        )
+        self.assertEqual(
+            window.btn.config.call_args_list[-1], mock.call(state="normal"))
+
+    def test_transcribing_moves_focus_before_disabling_command(self):
+        window = self.make_window(transcribing=True)
+        window.root.focus_get.return_value = window.btn
+        order = []
+        window.text.focus_set.side_effect = lambda: order.append("focus")
+        window.btn.config.side_effect = lambda **_values: order.append("disable")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_controls()
+
+        self.assertEqual(order[:2], ["focus", "disable"])
+        window.btn.config.assert_called_once_with(state="disabled")
+        self.assertIn(
+            mock.call(
+                window.status,
+                "Transcribing… Dictation will be available when this finishes."),
+            set_text.call_args_list,
+        )
+
+    def test_model_failure_exposes_recovery_in_live_status(self):
+        window = self.make_window(model_status="error")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_controls()
+
+        window.btn.config.assert_called_once_with(state="disabled")
+        set_text.assert_any_call(
+            window.status,
+            "Speech model needs attention. Open Setup or Settings to retry.",
+        )
+
+    def test_control_poll_keeps_observing_external_lifecycle_changes(self):
+        window = self.make_window()
+        window._refresh_controls = mock.Mock()
+
+        window._poll_controls()
+
+        window._refresh_controls.assert_called_once_with()
+        window.root.after.assert_called_once_with(100, window._poll_controls)
+
+
 class DeliveryRecoveryWindowTests(unittest.TestCase):
     def make_window(self, waiting=True):
         window = ui.DeliveryRecoveryWindow.__new__(ui.DeliveryRecoveryWindow)
@@ -878,6 +966,7 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
 
     def test_discard_never_requests_a_copy_and_reports_completion(self):
         window = self.make_window()
+        window.app.discard_undelivered_dictation.return_value = True
         window.app.has_undelivered_dictation.return_value = False
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
@@ -888,6 +977,30 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
         self.assertEqual(
             set_text.call_args.args[1],
             "Dictation discarded. You can record again.")
+
+    def test_stale_discard_does_not_claim_completion(self):
+        window = self.make_window()
+        window.app.discard_undelivered_dictation.return_value = False
+        window.app.has_undelivered_dictation.return_value = False
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._discard()
+
+        self.assertEqual(
+            set_text.call_args.args[1],
+            "No undelivered dictation remains. You can record again.")
+
+    def test_failed_discard_preserves_waiting_state(self):
+        window = self.make_window()
+        window.app.discard_undelivered_dictation.return_value = False
+        window.app.has_undelivered_dictation.return_value = True
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._discard()
+
+        window.copy_button.config.assert_called_once_with(state="normal")
+        window.discard_button.config.assert_called_once_with(state="normal")
+        self.assertIn("still kept in memory", set_text.call_args.args[1])
 
     def test_external_tray_action_updates_the_open_window(self):
         window = self.make_window(waiting=True)
@@ -926,6 +1039,44 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
         self.assertIsNone(window.root)
         self.assertIs(window.app.delivery_recovery_window, newer)
         window.app.discard_undelivered_dictation.assert_not_called()
+
+
+class ScratchpadCloseTests(unittest.TestCase):
+    def make_window(self, *, recording, owns_recording):
+        window = ui.ScratchpadWindow.__new__(ui.ScratchpadWindow)
+        window.app = mock.Mock()
+        window.app.recording = recording
+        window.app._recording_scratchpad = window if owns_recording else None
+        window.app.scratchpad = window
+        window.root = mock.Mock()
+        window.window_handle = 1234
+        return window
+
+    def test_close_cancels_recording_owned_by_private_scratchpad(self):
+        window = self.make_window(recording=True, owns_recording=True)
+        root = window.root
+
+        window._close()
+
+        window.app.cancel_recording.assert_called_once_with()
+        root.destroy.assert_called_once_with()
+        self.assertIsNone(window.root)
+        self.assertEqual(window.window_handle, 0)
+        self.assertIsNone(window.app.scratchpad)
+
+    def test_close_does_not_cancel_another_app_destination(self):
+        window = self.make_window(recording=True, owns_recording=False)
+
+        window._close()
+
+        window.app.cancel_recording.assert_not_called()
+
+    def test_close_after_capture_stopped_does_not_cancel_transcription(self):
+        window = self.make_window(recording=False, owns_recording=True)
+
+        window._close()
+
+        window.app.cancel_recording.assert_not_called()
 
 
 class DictionarySettingsTests(unittest.TestCase):

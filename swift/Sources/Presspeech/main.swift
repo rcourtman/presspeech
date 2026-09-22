@@ -5344,7 +5344,7 @@ enum TextInserter {
 
     static func copyWithoutPasting(_ text: String) -> TextInsertionOutcome {
         ClipboardPasteInserter.discardPendingRestore(on: .general)
-        return ClipboardPasteInserter.write(text, to: .general)
+        return ClipboardPasteInserter.writeTranscript(text, to: .general)
             ? .copiedWithoutPasting
             : .failed
     }
@@ -5562,8 +5562,11 @@ private enum ClipboardPasteInserter {
     }
 
     /// Writes the snapshot back onto the pasteboard, but only if
-    /// `expectedChangeCount` still matches — otherwise something else
-    /// owns the clipboard now and we leave it untouched.
+    /// `expectedChangeCount` still matches — otherwise something else owns the
+    /// clipboard now and we leave it untouched. AppKit does not expose the
+    /// previous pasteboard's host scope, so republish a restored snapshot for
+    /// this Mac only rather than risk broadening private content to Universal
+    /// Clipboard. Its original items and representations remain unchanged.
     @discardableResult
     static func restore(_ snapshot: Snapshot, to pb: NSPasteboard, expectedChangeCount: Int) -> Bool {
         guard pasteboardChangeCountAllowsRestore(current: pb.changeCount,
@@ -5574,14 +5577,14 @@ private enum ClipboardPasteInserter {
         if pb.name == NSPasteboard.general.name {
             guard NativeInteractionHooks.permitClipboardWrite?() ?? true else { return false }
         }
-        let ownedChangeCount = pb.clearContents()
+        let ownedChangeCount = pb.prepareForNewContents(with: restoreContentsOptions())
         defer {
             if pb.name == NSPasteboard.general.name {
                 NativeInteractionHooks.didWriteClipboard?(ownedChangeCount)
             }
         }
         #else
-        pb.clearContents()
+        _ = pb.prepareForNewContents(with: restoreContentsOptions())
         #endif
         guard !snapshot.items.isEmpty else { return true }
         return pb.writeObjects(snapshot.items)
@@ -5729,8 +5732,28 @@ private enum ClipboardPasteInserter {
         transient ? .currentHostOnly : []
     }
 
+    static func restoreContentsOptions() -> NSPasteboard.ContentsOptions {
+        .currentHostOnly
+    }
+
+    /// Low-level fixture helper. Product paths that expose dictated or
+    /// scratchpad text must use `writeTranscript` instead.
     static func write(_ text: String, to pb: NSPasteboard, transient: Bool = false) -> Bool {
         writeWithReceipt(text, to: pb, transient: transient) != nil
+    }
+
+    /// Every transcript-derived value that enters a pasteboard remains
+    /// available to local Command-V, but stays on this Mac and asks cooperating
+    /// clipboard managers not to archive it. Keep this separate from generic
+    /// fixture and diagnostics writes so a new delivery path cannot silently
+    /// omit either privacy marker or `currentHostOnly`.
+    static func writeTranscript(_ text: String, to pb: NSPasteboard) -> Bool {
+        writeTranscriptWithReceipt(text, to: pb) != nil
+    }
+
+    static func writeTranscriptWithReceipt(_ text: String,
+                                           to pb: NSPasteboard) -> WriteReceipt? {
+        writeWithReceipt(text, to: pb, transient: true)
     }
 
     static func writeWithReceipt(_ text: String,
@@ -5745,8 +5768,9 @@ private enum ClipboardPasteInserter {
             // These community-standard markers keep cooperating clipboard
             // managers from recording the transcript used for Cmd+V.
             // currentHostOnly likewise keeps it out of Universal Clipboard
-            // while it remains available for deliberate manual paste; the restored
-            // snapshot retains its original behavior.
+            // while it remains available for deliberate manual paste. Restored
+            // snapshots use the same host boundary without acquiring these
+            // Presspeech-specific item markers.
             guard item.setData(Data(), forType: TRANSIENT_PASTEBOARD_TYPE),
                   item.setData(Data(), forType: AUTO_GENERATED_PASTEBOARD_TYPE),
                   item.setString(SETTINGS_SUITE, forType: PASTEBOARD_SOURCE_TYPE) else {
@@ -5838,7 +5862,7 @@ private enum ClipboardPasteInserter {
             return .clipboardChanged
         }
 
-        guard let receipt = writeWithReceipt(text, to: pb, transient: previous != nil) else {
+        guard let receipt = writeTranscriptWithReceipt(text, to: pb) else {
             log("pasteboard write failed")
             return .failed
         }
@@ -5846,9 +5870,9 @@ private enum ClipboardPasteInserter {
 
         // A lazy pasteboard provider can make the optional snapshot above
         // block long enough for the user to focus another window. Recheck at
-        // the last possible point before posting Command+V. Rewrite the
-        // transcript without temporary-paste markers so a focus change
-        // degrades to an ordinary manual paste instead of losing the words.
+        // the last possible point before posting Command+V. A focus change
+        // degrades to a protected, local manual paste instead of losing the
+        // words.
         let targetStillFocused = dictationPasteTargetMatches(expectedTarget,
                                                              currentDictationPasteTarget())
         guard receipt.stillOwns(pb) else {
@@ -5943,6 +5967,38 @@ private enum ClipboardPasteInserter {
             event.post(tap: .cghidEventTap)
             return true
         }
+    }
+}
+
+/// The private scratchpad is plain text, so its standard Copy and Cut commands
+/// can use the same local-only pasteboard policy as its explicit Copy button.
+/// Without this responder override, Command-C would bypass Presspeech's
+/// transcript writer and re-enable Universal Clipboard for the same words.
+@MainActor
+private final class LocalOnlyTranscriptTextView: NSTextView {
+    private func copySelectionToProtectedPasteboard() -> Bool {
+        let range = selectedRange()
+        guard range.location != NSNotFound, range.length > 0 else { return false }
+        let selected = (string as NSString).substring(with: range)
+        ClipboardPasteInserter.discardPendingRestore(on: .general)
+        return ClipboardPasteInserter.writeTranscript(selected, to: .general)
+    }
+
+    override func copy(_ sender: Any?) {
+        guard selectedRange().length > 0 else { return }
+        if !copySelectionToProtectedPasteboard() { NSBeep() }
+    }
+
+    override func cut(_ sender: Any?) {
+        let range = selectedRange()
+        guard isEditable, range.location != NSNotFound, range.length > 0 else { return }
+        guard shouldChangeText(in: range, replacementString: "") else { return }
+        guard copySelectionToProtectedPasteboard() else {
+            NSBeep()
+            return
+        }
+        replaceCharacters(in: range, with: "")
+        didChangeText()
     }
 }
 
@@ -9497,8 +9553,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard let s = sender.representedObject as? String else { return }
         let pb = NSPasteboard.general
         ClipboardPasteInserter.discardPendingRestore(on: pb)
-        pb.clearContents()
-        pb.setString(s, forType: .string)
+        guard ClipboardPasteInserter.writeTranscript(s, to: pb) else {
+            log("history clipboard write failed")
+            NSBeep()
+            return
+        }
         log("history copied to clipboard (\(s.count) chars)")
         clearDictationNotice()
         if isReady, !isRecording, !isBusy, !isTerminating {
@@ -10880,7 +10939,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         scroll.autohidesScrollers = true
         scroll.translatesAutoresizingMaskIntoConstraints = false
 
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 632, height: 240))
+        let textView = LocalOnlyTranscriptTextView(
+            frame: NSRect(x: 0, y: 0, width: 632, height: 240)
+        )
         textView.font = .systemFont(ofSize: 18)
         textView.string = ""
         textView.isRichText = false
@@ -10960,8 +11021,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     @objc private func copyDictationScratchpadClicked(_ sender: NSButton) {
         guard let text = dictationScratchpadTextView?.string, !text.isEmpty else { return }
         ClipboardPasteInserter.discardPendingRestore(on: .general)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        if !ClipboardPasteInserter.writeTranscript(text, to: .general) {
+            log("scratchpad clipboard write failed")
+            NSBeep()
+        }
     }
 
     @objc private func retryStartupFromSetupClicked(_ sender: NSButton) {
@@ -15700,7 +15763,7 @@ private enum PresspeechSelfTest {
             }
             _ = ClipboardPasteInserter.write("original private clipboard", to: pb)
             let original = ClipboardPasteInserter.snapshot(of: pb)!
-            let receipt = ClipboardPasteInserter.writeWithReceipt("first transcript", to: pb, transient: true)!
+            let receipt = ClipboardPasteInserter.writeTranscriptWithReceipt("first transcript", to: pb)!
             ClipboardPasteInserter.stageManualRestore(original, to: pb, expectedChangeCount: receipt.changeCount)
             let firstToken = ClipboardPasteInserter.pendingRestoreToken(on: pb)!
             let offeredCount = pb.changeCount
@@ -15710,7 +15773,7 @@ private enum PresspeechSelfTest {
                 && pb.changeCount == offeredCount && pb.string(forType: .string) == offeredText
             let inherited = ClipboardPasteInserter.pendingSnapshotForReplacement(on: pb)!
             let originalDeadline = inherited.expiresAt == original.expiresAt
-            let nextReceipt = ClipboardPasteInserter.writeWithReceipt("second transcript", to: pb, transient: true)!
+            let nextReceipt = ClipboardPasteInserter.writeTranscriptWithReceipt("second transcript", to: pb)!
             ClipboardPasteInserter.stageManualRestore(inherited, to: pb, expectedChangeCount: nextReceipt.changeCount)
             let secondToken = ClipboardPasteInserter.pendingRestoreToken(on: pb)!
             let staleConfirmation = ClipboardPasteInserter.performPendingRestore(on: pb, token: firstToken)
@@ -15724,7 +15787,7 @@ private enum PresspeechSelfTest {
                 && pb.changeCount == restoredCount
 
             let expirySnapshot = ClipboardPasteInserter.snapshot(of: pb)!
-            let expiryReceipt = ClipboardPasteInserter.writeWithReceipt("transcript remains after expiry", to: pb, transient: true)!
+            let expiryReceipt = ClipboardPasteInserter.writeTranscriptWithReceipt("transcript remains after expiry", to: pb)!
             ClipboardPasteInserter.stageManualRestore(expirySnapshot, to: pb, expectedChangeCount: expiryReceipt.changeCount)
             let beforeExpiry = pb.changeCount
             let expired = ClipboardPasteInserter.pendingRestoreToken(on: pb, now: expirySnapshot.expiresAt) == nil
@@ -15733,7 +15796,7 @@ private enum PresspeechSelfTest {
                 && ClipboardPasteInserter.pendingSnapshotForReplacement(on: pb) == nil
 
             let failureSnapshot = ClipboardPasteInserter.snapshot(of: pb)!
-            let failureReceipt = ClipboardPasteInserter.writeWithReceipt("transcript before failed restore", to: pb, transient: true)!
+            let failureReceipt = ClipboardPasteInserter.writeTranscriptWithReceipt("transcript before failed restore", to: pb)!
             ClipboardPasteInserter.stageManualRestore(failureSnapshot, to: pb, expectedChangeCount: failureReceipt.changeCount)
             let failureToken = ClipboardPasteInserter.pendingRestoreToken(on: pb)!
             var attempts = 0
@@ -15748,14 +15811,14 @@ private enum PresspeechSelfTest {
                 && ClipboardPasteInserter.pendingRestoreToken(on: pb) == nil
 
             let copySnapshot = ClipboardPasteInserter.snapshot(of: pb)!
-            let copyReceipt = ClipboardPasteInserter.writeWithReceipt("transcript before deliberate copy", to: pb, transient: true)!
+            let copyReceipt = ClipboardPasteInserter.writeTranscriptWithReceipt("transcript before deliberate copy", to: pb)!
             ClipboardPasteInserter.stageManualRestore(copySnapshot, to: pb, expectedChangeCount: copyReceipt.changeCount)
             _ = ClipboardPasteInserter.write("deliberate manual copy", to: pb)
             let copyDiscards = ClipboardPasteInserter.pendingRestoreToken(on: pb) == nil
                 && pb.string(forType: .string) == "deliberate manual copy"
 
             let discardSnapshot = ClipboardPasteInserter.snapshot(of: pb)!
-            let discardReceipt = ClipboardPasteInserter.writeWithReceipt("last transcript", to: pb, transient: true)!
+            let discardReceipt = ClipboardPasteInserter.writeTranscriptWithReceipt("last transcript", to: pb)!
             ClipboardPasteInserter.stageManualRestore(discardSnapshot, to: pb, expectedChangeCount: discardReceipt.changeCount)
             let beforeDiscard = pb.changeCount
             ClipboardPasteInserter.discardPendingRestore(on: pb)
@@ -15833,8 +15896,8 @@ private enum PresspeechSelfTest {
                 completeSnapshot = false
             }
 
-            let receipt = ClipboardPasteInserter.writeWithReceipt(
-                "transcript after oversized clipboard", to: pb, transient: true
+            let receipt = ClipboardPasteInserter.writeTranscriptWithReceipt(
+                "transcript after oversized clipboard", to: pb
             )!
             let originalFailureExpiry = ContinuousClock().now.advanced(by: .seconds(60))
             ClipboardPasteInserter.stageManualRestoreUnavailability(
@@ -15846,8 +15909,8 @@ private enum PresspeechSelfTest {
             let visibleFailure = ClipboardPasteInserter.pendingRestoreUnavailableReason(on: pb)
             let inheritedFailure = ClipboardPasteInserter
                 .pendingRestoreUnavailabilityForReplacement(on: pb)
-            let replacementReceipt = ClipboardPasteInserter.writeWithReceipt(
-                "second transcript after oversized clipboard", to: pb, transient: false
+            let replacementReceipt = ClipboardPasteInserter.writeTranscriptWithReceipt(
+                "second transcript after oversized clipboard", to: pb
             )!
             if let inheritedFailure {
                 ClipboardPasteInserter.stageManualRestoreUnavailability(
@@ -15872,8 +15935,8 @@ private enum PresspeechSelfTest {
             let staleFailure = ClipboardPasteInserter.pendingRestoreUnavailableReason(on: pb)
             let externalSurvived = pb.string(forType: .string) == "new external clipboard"
 
-            let expiryReceipt = ClipboardPasteInserter.writeWithReceipt(
-                "transcript before unavailable-state expiry", to: pb, transient: true
+            let expiryReceipt = ClipboardPasteInserter.writeTranscriptWithReceipt(
+                "transcript before unavailable-state expiry", to: pb
             )!
             let expiry = ContinuousClock().now.advanced(by: .seconds(1))
             ClipboardPasteInserter.stageManualRestoreUnavailability(
@@ -16194,32 +16257,37 @@ private enum PresspeechSelfTest {
         try expect(
             pasteboardProbe.markedTransient || pasteboardProbe.markedAutoGenerated,
             equals: false,
-            "clipboard content that will remain available should not be marked transient"
+            "generic non-transcript clipboard writes should remain unmarked"
         )
         let contentsOptionsProbe = MainActor.assumeIsolated {
             (
                 persistent: ClipboardPasteInserter.contentsOptions(transient: false),
-                transient: ClipboardPasteInserter.contentsOptions(transient: true)
+                transient: ClipboardPasteInserter.contentsOptions(transient: true),
+                restoredSnapshot: ClipboardPasteInserter.restoreContentsOptions()
             )
         }
         try expect(
             contentsOptionsProbe.persistent,
             equals: NSPasteboard.ContentsOptions(),
-            "persistent clipboard writes should retain normal Universal Clipboard behavior"
+            "generic persistent writes should retain normal Universal Clipboard behavior"
         )
         try expect(
             contentsOptionsProbe.transient,
             equals: .currentHostOnly,
-            "temporary transcript clipboard writes should stay on the current Mac"
+            "transcript clipboard writes should stay on the current Mac"
+        )
+        try expect(
+            contentsOptionsProbe.restoredSnapshot,
+            equals: .currentHostOnly,
+            "restored clipboard snapshots should not broaden content to another device"
         )
 
         let transientPasteboardProbe = MainActor.assumeIsolated {
             let pasteboardName = NSPasteboard.Name("com.local.presspeech.self-test.\(UUID().uuidString)")
             let pasteboard = NSPasteboard(name: pasteboardName)
-            let wrote = ClipboardPasteInserter.write(
-                "temporary transcript",
-                to: pasteboard,
-                transient: true
+            let wrote = ClipboardPasteInserter.writeTranscript(
+                "protected transcript",
+                to: pasteboard
             )
             return (
                 wrote: wrote,
@@ -16236,18 +16304,18 @@ private enum PresspeechSelfTest {
         )
         try expect(
             transientPasteboardProbe.stored,
-            equals: "temporary transcript",
-            "temporary pasteboard metadata should not interfere with the transcript string"
+            equals: "protected transcript",
+            "protected pasteboard metadata should not interfere with the transcript string"
         )
         try expect(
             transientPasteboardProbe.markedTransient && transientPasteboardProbe.markedAutoGenerated,
             equals: true,
-            "temporary transcript clipboard writes should carry standard transient markers"
+            "every transcript clipboard write should carry standard transient markers"
         )
         try expect(
             transientPasteboardProbe.source,
             equals: SETTINGS_SUITE,
-            "temporary transcript clipboard writes should identify Presspeech as their source"
+            "every transcript clipboard write should identify Presspeech as its source"
         )
 
         try expect(
@@ -16274,7 +16342,7 @@ private enum PresspeechSelfTest {
             let wroteOriginal = pasteboard.writeObjects([firstItem, secondItem])
             let snapshot = ClipboardPasteInserter.snapshot(of: pasteboard)
 
-            _ = ClipboardPasteInserter.write("dictated text", to: pasteboard, transient: true)
+            _ = ClipboardPasteInserter.writeTranscript("dictated text", to: pasteboard)
             let afterWrite = pasteboard.string(forType: .string)
             let writeChangeCount = pasteboard.changeCount
 
@@ -16366,9 +16434,7 @@ private enum PresspeechSelfTest {
             _ = ClipboardPasteInserter.write("original clipboard", to: pasteboard)
             let original = ClipboardPasteInserter.snapshot(of: pasteboard)
 
-            _ = ClipboardPasteInserter.write("first transcript",
-                                               to: pasteboard,
-                                               transient: true)
+            _ = ClipboardPasteInserter.writeTranscript("first transcript", to: pasteboard)
             if let original {
                 ClipboardPasteInserter.stageManualRestore(
                     original,
@@ -16382,9 +16448,7 @@ private enum PresspeechSelfTest {
             let inherited = ClipboardPasteInserter.pendingSnapshotForReplacement(on: pasteboard)
             let inheritedText = inherited?.items.first?.string(forType: .string)
             let inheritedIsCurrent = inherited?.sourceChangeCount == pasteboard.changeCount
-            _ = ClipboardPasteInserter.write("second transcript",
-                                               to: pasteboard,
-                                               transient: true)
+            _ = ClipboardPasteInserter.writeTranscript("second transcript", to: pasteboard)
             if let inherited {
                 ClipboardPasteInserter.stageManualRestore(
                     inherited,
@@ -16396,9 +16460,7 @@ private enum PresspeechSelfTest {
             let restoredMarkedTransient = pasteboard.types?
                 .contains(TRANSIENT_PASTEBOARD_TYPE) == true
             let originalAgain = ClipboardPasteInserter.snapshot(of: pasteboard)
-            _ = ClipboardPasteInserter.write("third transcript",
-                                               to: pasteboard,
-                                               transient: true)
+            _ = ClipboardPasteInserter.writeTranscript("third transcript", to: pasteboard)
             if let originalAgain {
                 ClipboardPasteInserter.stageManualRestore(
                     originalAgain,
@@ -16472,8 +16534,8 @@ private enum PresspeechSelfTest {
             defer { pasteboard.releaseGlobally() }
             _ = ClipboardPasteInserter.write("original receipt fixture", to: pasteboard)
             let original = ClipboardPasteInserter.snapshot(of: pasteboard)
-            let receipt = ClipboardPasteInserter.writeWithReceipt(
-                "temporary receipt fixture", to: pasteboard, transient: true
+            let receipt = ClipboardPasteInserter.writeTranscriptWithReceipt(
+                "temporary receipt fixture", to: pasteboard
             )
             let initiallyOwned = receipt?.stillOwns(pasteboard) == true
             // Deterministically place an external copy between write return

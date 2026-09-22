@@ -1335,7 +1335,8 @@ class TextRegressionTests(unittest.TestCase):
         )
         self.assertEqual(set(loaded), {
             "comtypes", "ctranslate2", "faster_whisper", "librosa",
-            "hf_xet", "huggingface_hub.constants", "onnxruntime",
+            "hf_xet", "huggingface_hub.constants", "huggingface_hub.utils",
+            "onnxruntime",
             "pycaw.constants", "pycaw.pycaw", "safetensors", "sentencepiece",
             "soundfile", "soxr", "tokenizers", "torch", "tk_uia",
             "transformers", "transformers.utils.hub",
@@ -1617,7 +1618,8 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(
                     app, "_foreground_paste_target",
                     return_value=app.PasteTarget("calculator.exe", 5678)), \
-                mock.patch.object(app.pkb, "Controller") as controller:
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
 
         copy.assert_called_once_with("private transcript")
@@ -1635,7 +1637,8 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(app.time, "sleep") as sleep, \
                 mock.patch.object(
                     app, "_foreground_paste_target") as foreground, \
-                mock.patch.object(app.pkb, "Controller") as controller:
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", app.PasteTarget("", 0))
 
         copy.assert_called_once_with("private transcript")
@@ -1658,7 +1661,8 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(
                     app, "_foreground_paste_target",
                     return_value=replacement), \
-                mock.patch.object(app.pkb, "Controller") as controller:
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
 
         copy.assert_called_once_with("private transcript")
@@ -1682,25 +1686,28 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(
                     app, "_foreground_paste_target",
                     side_effect=[target, replacement]), \
-                mock.patch.object(app.pkb, "Controller") as controller:
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
 
         keyboard = controller.return_value
         copy.assert_called_once_with("private transcript")
         keyboard.press.assert_has_calls([
-            mock.call(app.pkb.Key.ctrl_l),
-            mock.call(app.pkb.Key.alt_l),
-            mock.call(app.pkb.Key.shift_l),
+            mock.call(app.keyboard_delivery.VK_LCONTROL),
+            mock.call(app.keyboard_delivery.VK_LMENU),
+            mock.call(app.keyboard_delivery.VK_LSHIFT),
         ])
         self.assertEqual(keyboard.press.call_count, 3)
         keyboard.release.assert_has_calls([
-            mock.call(app.pkb.Key.shift_l),
-            mock.call(app.pkb.Key.alt_l),
-            mock.call(app.pkb.Key.ctrl_l),
+            mock.call(app.keyboard_delivery.VK_LSHIFT),
+            mock.call(app.keyboard_delivery.VK_LMENU),
+            mock.call(app.keyboard_delivery.VK_LCONTROL),
         ])
         self.assertEqual(keyboard.release.call_count, 3)
-        self.assertNotIn(mock.call("v"), keyboard.press.call_args_list)
-        self.assertNotIn(mock.call("v"), keyboard.release.call_args_list)
+        self.assertNotIn(
+            mock.call(app.keyboard_delivery.VK_V), keyboard.press.call_args_list)
+        self.assertNotIn(
+            mock.call(app.keyboard_delivery.VK_V), keyboard.release.call_args_list)
         self.assertFalse(instance._injecting_keys)
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
@@ -1716,14 +1723,17 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
-                mock.patch.object(app.pkb, "Controller") as controller:
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
             instance._paste("transcript", target)
 
         keyboard = controller.return_value
         keyboard.press.assert_has_calls(
-            [mock.call(app.pkb.Key.ctrl_l), mock.call("v")])
+            [mock.call(app.keyboard_delivery.VK_LCONTROL),
+             mock.call(app.keyboard_delivery.VK_V)])
         keyboard.release.assert_has_calls(
-            [mock.call("v"), mock.call(app.pkb.Key.ctrl_l)])
+            [mock.call(app.keyboard_delivery.VK_V),
+             mock.call(app.keyboard_delivery.VK_LCONTROL)])
 
     def test_higher_integrity_target_copies_without_claiming_to_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1738,7 +1748,8 @@ class TextRegressionTests(unittest.TestCase):
                     app, "_foreground_paste_target", return_value=target), \
                 mock.patch.object(
                     app, "_process_integrity_level", return_value=0x2000), \
-                mock.patch.object(app.pkb, "Controller") as controller:
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
 
         copy.assert_called_once_with("private transcript")
@@ -1759,12 +1770,14 @@ class TextRegressionTests(unittest.TestCase):
                     app, "_foreground_paste_target", return_value=target), \
                 mock.patch.object(
                     app, "_process_integrity_level", return_value=0x2000), \
-                mock.patch.object(app.pkb, "Controller") as controller:
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
             instance._paste("transcript", target)
 
         keyboard = controller.return_value
         keyboard.press.assert_has_calls(
-            [mock.call(app.pkb.Key.ctrl_l), mock.call("v")])
+            [mock.call(app.keyboard_delivery.VK_LCONTROL),
+             mock.call(app.keyboard_delivery.VK_V)])
 
     def test_unknown_integrity_fails_open_for_existing_paste_behavior(self):
         unknown_target = app.PasteTarget("notepad.exe", 1234, 41)
@@ -2755,6 +2768,17 @@ class ModelIdleTests(unittest.TestCase):
         self.assertIn("speech=0.000s", summary)
         self.assertIn("generate=0.200s", summary)
 
+    def test_model_timing_summary_exposes_bounded_parakeet_chunks(self):
+        summary = app._model_timing_summary({
+            "backend": "parakeet",
+            "chunk_count": 2,
+            "max_chunk_seconds": 60.0,
+        })
+
+        self.assertIn("backend=parakeet", summary)
+        self.assertIn("chunks=2", summary)
+        self.assertIn("max_chunk=60.000s", summary)
+
     def test_idle_timer_queues_unload_on_permanent_model_executor(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"gpu_idle_unload_sec": 30}
@@ -2837,6 +2861,24 @@ class ModelIdleTests(unittest.TestCase):
         self.assertTrue(any(
             "transcription returned empty" in call.args[0]
             for call in instance._log.call_args_list))
+        instance.transcriber.transcribe.assert_called_once_with([])
+
+    def test_multilingual_model_is_not_forced_to_english(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "turbo"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.return_value = "Dzie\u0144 dobry"
+        instance.transcriber.last_timing = {"backend": "whisper"}
+        instance._apply_text = mock.Mock(return_value="Dzie\u0144 dobry")
+        instance._deliver_text = mock.Mock()
+        instance._log = mock.Mock()
+
+        instance._transcribe_worker_inner(mock.sentinel.audio)
+
+        instance.transcriber.transcribe.assert_called_once_with(
+            mock.sentinel.audio)
+        instance._deliver_text.assert_called_once()
 
 
 class StartupTests(unittest.TestCase):
@@ -2995,7 +3037,8 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.copy = patch(app.clipboard_delivery, "write_text",
                           return_value=app.clipboard_delivery.WriteReceipt(101))
         self.owned = patch(app.clipboard_delivery, "is_current", return_value=True)
-        self.controller = patch(app.pkb, "Controller")
+        self.checked_controller = app.keyboard_delivery.Controller
+        self.controller = patch(app.keyboard_delivery, "Controller")
         self.keyboard = self.controller.return_value
         self.sleep = patch(app.time, "sleep")
         patch(app, "_foreground_paste_target", return_value=self.target)
@@ -3033,8 +3076,10 @@ class DeliveryRecoveryTests(unittest.TestCase):
     def test_external_copy_after_modifiers_releases_keys_without_v(self):
         self.owned.side_effect = [True, True, False]
         self.assertFalse(self.paste())
-        self.keyboard.press.assert_called_once_with(app.pkb.Key.ctrl_l)
-        self.keyboard.release.assert_called_once_with(app.pkb.Key.ctrl_l)
+        self.keyboard.press.assert_called_once_with(
+            app.keyboard_delivery.VK_LCONTROL)
+        self.keyboard.release.assert_called_once_with(
+            app.keyboard_delivery.VK_LCONTROL)
         self.assertFalse(self.instance._injecting_keys)
         self.assert_retained_without_content_logs()
 
@@ -3048,7 +3093,20 @@ class DeliveryRecoveryTests(unittest.TestCase):
     def test_ambiguous_key_down_failure_still_attempts_release(self):
         self.keyboard.press.side_effect = RuntimeError("side effect then failure")
         self.assertFalse(self.paste())
-        self.keyboard.release.assert_called_once_with(app.pkb.Key.ctrl_l)
+        self.keyboard.release.assert_called_once_with(
+            app.keyboard_delivery.VK_LCONTROL)
+        self.assertFalse(self.instance._injecting_keys)
+        self.assert_retained_without_content_logs()
+
+    def test_rejected_native_key_down_retains_and_attempts_release(self):
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.SendInput.side_effect = [0, 1]
+        self.controller.return_value = self.checked_controller(api=api)
+
+        self.assertFalse(self.paste())
+
+        self.assertEqual(api.SendInput.call_count, 2)
         self.assertFalse(self.instance._injecting_keys)
         self.assert_retained_without_content_logs()
 
@@ -3056,7 +3114,9 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.keyboard.release.side_effect = [RuntimeError("uncertain"), None, None]
         self.assertFalse(self.paste())
         self.assertEqual(self.keyboard.release.call_args_list, [
-            mock.call("v"), mock.call("v"), mock.call(app.pkb.Key.ctrl_l)])
+            mock.call(app.keyboard_delivery.VK_V),
+            mock.call(app.keyboard_delivery.VK_V),
+            mock.call(app.keyboard_delivery.VK_LCONTROL)])
         self.assertFalse(self.instance._injecting_keys)
         self.assert_retained_without_content_logs()
 
@@ -3083,12 +3143,30 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertEqual(self.instance._undelivered_dictations, ["next transcript"])
         self.controller.assert_not_called()
 
-    def test_discard_does_not_write_clipboard_and_unblocks_capture(self):
-        self.instance._undelivered_dictations = ["private transcript"]
-        self.instance.discard_undelivered_dictation()
-        self.assertFalse(self.instance.has_undelivered_dictation())
+    def test_discard_does_not_write_clipboard_and_preserves_later_recovery(self):
+        self.instance._undelivered_dictations = [
+            "private transcript", "next transcript"]
+        self.assertTrue(self.instance.discard_undelivered_dictation())
+        self.assertEqual(
+            self.instance._undelivered_dictations, ["next transcript"])
+        self.assertIn(
+            "Another dictation is waiting", str(self.instance.notify.mock_calls))
         self.copy.assert_not_called()
         self.controller.assert_not_called()
+
+    def test_discard_last_recovery_unblocks_capture(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.assertTrue(self.instance.discard_undelivered_dictation())
+        self.assertFalse(self.instance.has_undelivered_dictation())
+        self.assertIn("You can record again", str(self.instance.notify.mock_calls))
+        self.copy.assert_not_called()
+
+    def test_stale_discard_does_not_claim_that_text_was_discarded(self):
+        self.assertFalse(self.instance.discard_undelivered_dictation())
+        self.assertEqual(
+            self.instance.notify.call_args.args,
+            ("No undelivered dictation", "There is nothing waiting to discard."))
+        self.copy.assert_not_called()
 
     def test_repeated_launch_opens_recovery_without_copying_retained_text(self):
         self.instance._undelivered_dictations = ["private transcript"]

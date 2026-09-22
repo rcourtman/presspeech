@@ -256,6 +256,48 @@ validate_metrics() {
     fi
 }
 
+file_sha256() {
+    shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
+}
+
+duplicate_content_digest() {
+    local clip digest
+    {
+        for clip in "$@"; do
+            if ! digest="$(file_sha256 "$clip")" || [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+                return 1
+            fi
+            printf '%s\n' "$digest"
+        done
+    } | sort | uniq -d
+}
+
+validate_unique_source_audio_content() {
+    local duplicate_digest
+    if ! duplicate_digest="$(duplicate_content_digest "$@")"; then
+        echo "could not inspect model-comparison source audio" >&2
+        return 1
+    fi
+    if [[ -n "$duplicate_digest" ]]; then
+        echo "model comparison contains byte-identical source audio files" >&2
+        echo "each clip must be an independent recording or segment" >&2
+        return 1
+    fi
+}
+
+validate_unique_normalized_audio_content() {
+    local duplicate_digest
+    if ! duplicate_digest="$(duplicate_content_digest "$@")"; then
+        echo "could not inspect normalized model-comparison audio" >&2
+        return 1
+    fi
+    if [[ -n "$duplicate_digest" ]]; then
+        echo "model comparison contains audio files that normalize to byte-identical 16 kHz mono WAV" >&2
+        echo "rewrapping or losslessly converting one recording does not make an independent clip" >&2
+        return 1
+    fi
+}
+
 backend_setting() {
     local backend="$1"
     local candidate="$2"
@@ -505,6 +547,36 @@ run_self_test() {
         >"$tag_spoof_log"
     assert_eq "$(extract_final_word_retained "$tag_spoof_log")" "true" \
         "transcript text cannot spoof final-word metric"
+
+    local fixtures="$tmpdir/fixtures"
+    mkdir "$fixtures"
+    printf 'normalized audio one\n' >"$fixtures/first.wav"
+    printf 'normalized audio two\n' >"$fixtures/second.wav"
+    validate_unique_source_audio_content "$fixtures/first.wav" "$fixtures/second.wav"
+    validate_unique_normalized_audio_content "$fixtures/first.wav" "$fixtures/second.wav"
+    cp "$fixtures/first.wav" "$fixtures/renamed.wav"
+    local duplicate_log="$tmpdir/duplicate.log"
+    if validate_unique_source_audio_content \
+        "$fixtures/first.wav" "$fixtures/renamed.wav" >"$duplicate_log" 2>&1; then
+        echo "self-test expected identical source recordings to be rejected" >&2
+        exit 1
+    fi
+    assert_contains "$duplicate_log" "byte-identical source audio files"
+    if validate_unique_normalized_audio_content \
+        "$fixtures/first.wav" "$fixtures/renamed.wav" >"$duplicate_log" 2>&1; then
+        echo "self-test expected identical normalized recordings to be rejected" >&2
+        exit 1
+    fi
+    assert_contains "$duplicate_log" "normalize to byte-identical 16 kHz mono WAV"
+    assert_not_contains "$duplicate_log" "$fixtures"
+    local secret_missing="$fixtures/private-missing.wav"
+    if validate_unique_source_audio_content \
+        "$fixtures/first.wav" "$secret_missing" >"$duplicate_log" 2>&1; then
+        echo "self-test expected unreadable source audio to be rejected" >&2
+        exit 1
+    fi
+    assert_contains "$duplicate_log" "could not inspect model-comparison source audio"
+    assert_not_contains "$duplicate_log" "$secret_missing"
 
     local validation_log="$tmpdir/validation.log"
     if validate_metrics max-WER unknown final-word-retained "" >"$validation_log" 2>&1; then
@@ -876,6 +948,10 @@ if [[ "${#missing_refs[@]}" -gt 0 ]]; then
     exit 1
 fi
 
+if ! validate_unique_source_audio_content "${clips[@]}"; then
+    exit 1
+fi
+
 mkdir -p "$OUTDIR"
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-compare.XXXXXX")"
 stage_dir=""
@@ -913,6 +989,32 @@ for index in "${!clips[@]}"; do
     extension="${clips[$index]##*.}"
     clips[index]="$tmpdir/benchmark-inputs/$(printf '%06d' "$((index + 1))")/audio.$extension"
 done
+
+# Normalize the complete immutable snapshot before building or loading a model,
+# then reject rewrapped or losslessly converted copies. This keeps clip and word
+# floors tied to independent audio evidence without exposing private paths.
+clip_ids=()
+normalized_clips=()
+frozen_refs=()
+for index in "${!clips[@]}"; do
+    clip_index=$((index + 1))
+    display_clip="${display_clips[$index]}"
+    stem="$(basename "$display_clip")"
+    stem="${stem%.*}"
+    clip_id="$(clip_id_for "$clip_index" "$stem")"
+    normalized="$tmpdir/$clip_id.wav"
+    frozen_ref="$tmpdir/$clip_id.txt"
+    echo "normalizing clip $clip_id..."
+    afconvert -f WAVE -d LEF32@16000 "${clips[$index]}" "$normalized"
+    python3 ./audio-input-evidence.py --audio "$normalized" >/dev/null
+    cp "${clips[$index]%.*}.txt" "$frozen_ref"
+    clip_ids+=( "$clip_id" )
+    normalized_clips+=( "$normalized" )
+    frozen_refs+=( "$frozen_ref" )
+done
+if ! validate_unique_normalized_audio_content "${normalized_clips[@]}"; then
+    exit 1
+fi
 
 echo "building presspeech-bench..."
 swift_build_args=( -c release )
@@ -987,20 +1089,9 @@ mkdir -p "$raw_dir"
 } >"$report"
 
 EXPERIMENT_ENVIRONMENT_STATE="pending"
-clip_index=0
-for clip in "${clips[@]}"; do
-    clip_index=$((clip_index + 1))
-    display_clip="${display_clips[$((clip_index - 1))]}"
-    stem="$(basename "$display_clip")"
-    stem="${stem%.*}"
-    clip_id="$(clip_id_for "$clip_index" "$stem")"
-    normalized="$tmpdir/$clip_id.wav"
-    ref="${clip%.*}.txt"
-
-    echo "normalizing clip $clip_id..."
-    afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
-    python3 ./audio-input-evidence.py --audio "$normalized" >/dev/null
-    cp "$ref" "$tmpdir/$clip_id.txt"
+for index in "${!normalized_clips[@]}"; do
+    clip_id="${clip_ids[$index]}"
+    normalized="${normalized_clips[$index]}"
 
     for backend in v3 "$CANDIDATE_BACKEND"; do
         log_file="$raw_dir/$(redacted_log_name "$clip_id" "$backend")"

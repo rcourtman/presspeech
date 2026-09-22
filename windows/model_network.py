@@ -61,7 +61,7 @@ def enforce_environment(environ=None):
 
 
 def harden_loaded_runtime(modules=None, require_loaded=False):
-    """Verify import-time settings and remove Transformers' random session ID.
+    """Verify import-time settings and request metadata at the runtime boundary.
 
     Hugging Face's documented telemetry opt-out suppresses telemetry calls and
     extra host metadata, but Transformers 5.16.1 still puts a random process
@@ -82,14 +82,12 @@ def harden_loaded_runtime(modules=None, require_loaded=False):
             "speech-model request metadata changed after startup")
 
     constants = loaded.get("huggingface_hub.constants")
+    hub_utils = loaded.get("huggingface_hub.utils")
     transformers_hub = loaded.get("transformers.utils.hub")
 
     if require_loaded and constants is None:
         raise ModelNetworkPolicyError(
             "Hugging Face privacy policy could not be verified")
-    if require_loaded and transformers_hub is None:
-        raise ModelNetworkPolicyError(
-            "Transformers privacy policy could not be verified")
 
     if constants is not None:
         endpoint = str(getattr(constants, "ENDPOINT", "")).rstrip("/")
@@ -109,6 +107,45 @@ def harden_loaded_runtime(modules=None, require_loaded=False):
             raise ModelNetworkPolicyError(
                 "inherited Hugging Face request origin is not disabled")
 
+    if require_loaded and hub_utils is None:
+        raise ModelNetworkPolicyError(
+            "Hugging Face request headers could not be verified")
+    if hub_utils is not None:
+        build_headers = getattr(hub_utils, "build_hf_headers", None)
+        if require_loaded and not callable(build_headers):
+            raise ModelNetworkPolicyError(
+                "Hugging Face request headers could not be verified")
+        if callable(build_headers):
+            # This is the same explicit account-token boundary used by every
+            # snapshot_download call. Inspect the bundled client's rendered
+            # result as well as its cached constants so a dependency change
+            # cannot silently reintroduce credentials or environment-derived
+            # identifiers while leaving the opt-out booleans unchanged.
+            try:
+                headers = build_headers(token=False)
+            except Exception as exc:
+                raise ModelNetworkPolicyError(
+                    "Hugging Face request headers could not be verified") from exc
+            if not isinstance(headers, dict):
+                raise ModelNetworkPolicyError(
+                    "Hugging Face request headers could not be verified")
+            normalized = {str(name).lower(): str(value)
+                          for name, value in headers.items()}
+            if "authorization" in normalized:
+                raise ModelNetworkPolicyError(
+                    "Hugging Face account authentication is not disabled")
+            user_agent = normalized.get("user-agent", "")
+            if not user_agent:
+                raise ModelNetworkPolicyError(
+                    "Hugging Face request headers could not be verified")
+            forbidden_metadata = ("agent/", "origin/", "session_id/")
+            if any(marker in user_agent.lower() for marker in forbidden_metadata):
+                raise ModelNetworkPolicyError(
+                    "inherited Hugging Face request identifiers are not disabled")
+
+    if require_loaded and transformers_hub is None:
+        raise ModelNetworkPolicyError(
+            "Transformers privacy policy could not be verified")
     if transformers_hub is not None:
         if not hasattr(transformers_hub, "SESSION_ID"):
             raise ModelNetworkPolicyError(

@@ -36,8 +36,10 @@ macOS 0.3.8 shipped on 22 September 2026 with automated, optimized-build, and
 packaged-app checks complete. The current priority is to qualify its behavior
 in the physical and target-app conditions those checks cannot simulate, not to
 add another layer of settings. Open validation issues remain open until their
-named evidence gates are met; publication alone is not evidence that every
-target or input path passed.
+named evidence gates in the
+[macOS release qualification](docs/manual-qa.md#macos-release-qualification)
+are met; publication alone is not evidence that every target or input path
+passed.
 
 - Qualify paste-target capture in representative native, browser, and
   Electron/Chromium apps. macOS 0.3.8 gets frontmost-process identity

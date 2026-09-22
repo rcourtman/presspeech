@@ -61,7 +61,138 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.assertEqual(engine._parakeet_bucket_seconds(15.0), 15)
         self.assertEqual(engine._parakeet_bucket_seconds(15.01), 30)
         self.assertEqual(engine._parakeet_bucket_seconds(30.01), 60)
-        self.assertEqual(engine._parakeet_bucket_seconds(61.0), 90)
+        with self.assertRaisesRegex(ValueError, "60-second bound"):
+            engine._parakeet_bucket_seconds(60.01)
+
+    def test_parakeet_long_audio_windows_are_bounded_balanced_and_complete(self):
+        sample_rate = 10
+        sample_count = 6001
+        windows = engine._parakeet_chunk_windows(
+            sample_count, sample_rate=sample_rate)
+
+        self.assertEqual(len(windows), 11)
+        self.assertEqual(windows[0].owned_start, 0)
+        self.assertEqual(windows[-1].owned_end, sample_count)
+        self.assertLessEqual(
+            max(window.audio_end - window.audio_start for window in windows),
+            engine.PARAKEET_MAX_WINDOW_SECONDS * sample_rate,
+        )
+        for previous, current in zip(windows, windows[1:]):
+            self.assertEqual(previous.owned_end, current.owned_start)
+            self.assertLessEqual(
+                abs((previous.owned_end - previous.owned_start)
+                    - (current.owned_end - current.owned_start)),
+                1,
+            )
+            self.assertLess(current.audio_start, previous.audio_end)
+        self.assertEqual(
+            engine._parakeet_chunk_windows(600, sample_rate=sample_rate),
+            [engine._ParakeetWindow(0, 600, 0, 600)],
+        )
+
+    def test_parakeet_overlap_ownership_reassembles_split_subwords_once(self):
+        first = engine._ParakeetWindow(
+            audio_start=0, audio_end=60, owned_start=0, owned_end=40)
+        second = engine._ParakeetWindow(
+            audio_start=20, audio_end=80, owned_start=40, owned_end=80)
+        first_text = engine._owned_parakeet_text(
+            "Hello international",
+            [[
+                # These chunks mirror DecodeStream with the pinned model's
+                # Metaspace BPE tokenizer; a token is not necessarily a word.
+                {"token": "H", "start": 0.5, "end": 0.6},
+                {"token": "ello", "start": 0.6, "end": 1.0},
+                {"token": " intern", "start": 3.8, "end": 4.0},
+                {"token": "ational", "start": 4.2, "end": 4.4},
+            ]],
+            first,
+            sample_rate=10,
+        )
+        second_text = engine._owned_parakeet_text(
+            "international work",
+            [[
+                {"token": "intern", "start": 1.8, "end": 2.0},
+                {"token": "ational", "start": 2.2, "end": 2.4},
+                {"token": " work", "start": 3.0, "end": 3.4},
+            ]],
+            second,
+            sample_rate=10,
+        )
+
+        self.assertEqual(first_text, ("Hello intern", False))
+        self.assertEqual(second_text, ("ational work", True))
+        self.assertEqual(
+            engine._join_owned_parakeet_text([first_text, second_text]),
+            "Hello international work",
+        )
+        self.assertEqual(
+            engine._join_owned_parakeet_text([
+                ("forty", False), ("-two", False),
+            ]),
+            "forty-two",
+        )
+
+    def test_parakeet_overlap_fails_closed_when_text_has_no_timestamps(self):
+        window = engine._ParakeetWindow(
+            audio_start=0, audio_end=60, owned_start=0, owned_end=40)
+        with self.assertRaisesRegex(RuntimeError, "without timestamps"):
+            engine._owned_parakeet_text(
+                "private words", [[]], window, sample_rate=10)
+        with self.assertRaisesRegex(RuntimeError, "do not match"):
+            engine._owned_parakeet_text(
+                "private words",
+                [[{"token": "private", "start": 0.1, "end": 0.5}]],
+                window,
+                sample_rate=10,
+            )
+
+    def test_parakeet_long_transcription_aggregates_bounded_chunk_work(self):
+        transcriber = engine.Transcriber()
+        audio = list(range(8))
+        windows = [
+            engine._ParakeetWindow(0, 5, 0, 3),
+            engine._ParakeetWindow(1, 8, 3, 8),
+        ]
+        chunk_results = [
+            ("First", mock.sentinel.first_timestamps, {
+                "bucket_seconds": 15,
+                "prepare": 0.1, "transfer": 0.2,
+                "generate": 0.3, "decode": 0.4,
+            }),
+            (" second", mock.sentinel.second_timestamps, {
+                "bucket_seconds": 30,
+                "prepare": 1.0, "transfer": 2.0,
+                "generate": 3.0, "decode": 4.0,
+            }),
+        ]
+
+        with mock.patch.object(
+                engine, "_parakeet_chunk_windows", return_value=windows), \
+                mock.patch.object(
+                    engine, "PARAKEET_SAMPLE_RATE", 1), \
+                mock.patch.object(
+                    transcriber, "_transcribe_parakeet_chunk",
+                    side_effect=chunk_results) as transcribe_chunk, \
+                mock.patch.object(
+                    engine, "_owned_parakeet_text",
+                    side_effect=[("First", False), (" second", False)]):
+            text = transcriber._transcribe_parakeet(
+                mock.sentinel.model, mock.sentinel.processor, audio)
+
+        self.assertEqual(text, "First second")
+        self.assertEqual(transcribe_chunk.call_args_list, [
+            mock.call(mock.sentinel.model, mock.sentinel.processor, audio[0:5]),
+            mock.call(mock.sentinel.model, mock.sentinel.processor, audio[1:8]),
+        ])
+        self.assertEqual(transcriber._backend_timing, {
+            "bucket_seconds": 30,
+            "chunk_count": 2,
+            "max_chunk_seconds": 7.0,
+            "prepare": 1.1,
+            "transfer": 2.2,
+            "generate": 3.3,
+            "decode": 4.4,
+        })
 
     def test_parakeet_generation_limit_follows_encoder_capacity(self):
         torch = mock.Mock()
@@ -144,6 +275,8 @@ class ParakeetConfigurationTests(unittest.TestCase):
             truncation=True,
             return_attention_mask=True,
         )
+        self.assertEqual(transcriber._backend_timing["chunk_count"], 1)
+        self.assertEqual(transcriber._backend_timing["max_chunk_seconds"], 1.0)
 
     def test_transformers_models_use_reviewed_immutable_revisions(self):
         torch = types.ModuleType("torch")
@@ -279,6 +412,30 @@ class ParakeetConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(transcriber.last_timing["speech_seconds"], 1.25)
 
+    def test_multilingual_whisper_detects_language_when_unspecified(self):
+        model = mock.Mock()
+        model.transcribe.return_value = (
+            iter([types.SimpleNamespace(text=" Dzie\u0144 dobry ")]),
+            types.SimpleNamespace(duration_after_vad=0.8, language="pl"),
+        )
+        transcriber = engine.Transcriber()
+        transcriber.model = model
+        transcriber.backend = "whisper"
+
+        text = transcriber.transcribe(mock.sentinel.audio)
+
+        self.assertEqual(text, "Dzie\u0144 dobry")
+        model.transcribe.assert_called_once_with(
+            mock.sentinel.audio,
+            language=None,
+            beam_size=1,
+            vad_filter=True,
+            without_timestamps=True,
+            condition_on_previous_text=False,
+            vad_parameters=engine.WHISPER_VAD_POLICY,
+        )
+        self.assertEqual(transcriber.last_timing["detected_language"], "pl")
+
     def test_whisper_vad_policy_is_complete_and_copied_per_request(self):
         first = engine.whisper_vad_parameters()
         second = engine.whisper_vad_parameters()
@@ -299,17 +456,20 @@ class ParakeetConfigurationTests(unittest.TestCase):
         model = mock.Mock()
         model.transcribe.return_value = (
             segments,
-            types.SimpleNamespace(duration_after_vad=0.0),
+            # Automatic detection on an empty feature window can still return
+            # a code; it must not become benchmark evidence for silence.
+            types.SimpleNamespace(duration_after_vad=0.0, language="pl"),
         )
         transcriber = engine.Transcriber()
         transcriber.model = model
         transcriber.backend = "whisper"
 
-        text = transcriber.transcribe(mock.sentinel.audio, language="en")
+        text = transcriber.transcribe(mock.sentinel.audio)
 
         self.assertEqual(text, "")
         segments.__iter__.assert_not_called()
         self.assertEqual(transcriber.last_timing["speech_seconds"], 0.0)
+        self.assertIsNone(transcriber.last_timing["detected_language"])
 
     def test_whisper_silence_warmup_exercises_vad_and_decode_kernels(self):
         numpy = types.ModuleType("numpy")

@@ -3,10 +3,12 @@
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER/CER,
 final-word retention, silence false positives, and Whisper VAD speech retention.
-Version 2 reports identify the loader's pinned model repository/revision and
-retain historical consensus WER alongside all-trial WER and a per-clip best/worst
-error envelope. Source metadata records what the loader requests; it does not
-independently attest the local model files.
+Version 3 reports identify the loader's pinned model repository/revision,
+retain historical consensus WER alongside all-trial WER and a per-clip
+best/worst error envelope, record the bounded Parakeet window count and longest
+model input for each clip, and add the requested language policy plus detected
+language counts for Whisper. Source metadata records what the loader requests;
+it does not independently attest the local model files.
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -29,10 +31,19 @@ but canonical fixtures make runs easier to compare.
   `"reference_reviewed": true`, with no reference text. Every non-empty trial
   then counts as a silence false positive.
 - Include short commands, quiet speech, fast speech, natural pauses, meaningful
-  final words, and representative microphone/background conditions.
+  final words, and representative microphone/background conditions. A Parakeet
+  release corpus should also include human-reviewed speech longer than 60
+  seconds, with words spoken continuously across several likely window seams;
+  inspect both WER and the reported window plan for duplication or loss.
 - Keep the same clips, references, run count, model precision, and hardware when
   comparing a decoding or VAD change. Reports record the effective Whisper VAD
   policy and per-trial VAD-retained duration.
+- The manifest defaults to the historical `"language": "en"` policy. Use
+  `"language": "auto"` (or `--language auto`) to exercise multilingual
+  Whisper's per-dictation detection, matching Presspeech's Whisper turbo path.
+  Reports preserve the requested policy and count each speech-bearing trial's
+  returned language code; compare accuracy and latency because detection itself
+  is measured work. Codes inferred from VAD-rejected silence are discarded.
 - Inspect `aggregate_worst_trial_wer` as well as consensus `aggregate_wer` when
   screening regressions: it sums each clip's worst observed word-error count,
   exposing intermittent internal substitutions that a modal transcript can hide.
@@ -46,7 +57,9 @@ but canonical fixtures make runs easier to compare.
   silence uses the separate false-positive counters.
 - Compare Parakeet optimizations using both total inference latency and the
   synchronized per-stage medians. Stage barriers are benchmark-only and are
-  deliberately disabled during interactive dictation.
+  deliberately disabled during interactive dictation. For clips longer than
+  60 seconds, confirm every trial reports more than one window and a longest
+  input no greater than 60 seconds.
 - Do not commit audio, reference text, manifests, hypotheses, or result files.
 
 The manifest's `runs` value must be a positive JSON integer and is the number

@@ -191,7 +191,11 @@ final words intact without always paying the full delay.
 
 Recordings stop and transcribe automatically at the maximum length selected in
 Settings: 1, 2 (the default), 5, or 10 minutes. This bounds in-memory audio and
-restores muted playback if Windows misses a hotkey release.
+restores muted playback if Windows misses a hotkey release. Parakeet recordings
+longer than 60 seconds are transcribed through overlapping inputs of at most 60
+seconds rather than one quadratic full-attention tensor. Model token timestamps
+crop each result to its owned interval, preserving boundary context without
+guessing at repeated transcript strings.
 Press **Escape** during an active recording to cancel it immediately. The
 buffered audio is discarded without transcription or clipboard changes; the
 same action is available from **Cancel Dictation (Esc)** in the notification
@@ -240,6 +244,11 @@ important asynchronous status changes such as model readiness, microphone check
 results, update completion or failure, and settings save results without moving
 keyboard focus. Download byte counters remain visual rather than repeatedly
 interrupting speech.
+The Try Dictation scratchpad also keeps its Dictate command and live status in
+sync when recording is stopped by the hotkey, Escape, the recording limit, or
+an input failure. While a model is preparing, transcription is finishing, or
+delivery recovery is required, it explains why another recording is not yet
+available instead of leaving a stale actionable label.
 Windows may place the icon in the notification-area overflow. If the icon is
 hard to find, launch Presspeech again from the Start Menu: the running app
 restores its existing window, opens Setup during first run, or opens Settings
@@ -263,7 +272,9 @@ callback details and pressed keys are not included.
 - Microphone: automatic selection or a specific safe Windows input device
 - Engine/model: multilingual Parakeet TDT v3 or Whisper turbo (NVIDIA GPU
   recommended), or English-only Nemotron and Whisper small.en, medium.en, and
-  base.en (base.en is the CPU first-run default)
+  base.en (base.en is the CPU first-run default). Whisper turbo detects the
+  language of each dictation; the English-only Whisper models stay fixed to
+  English.
 - After pasting: space / newline / nothing (newline can submit text in a command
   shell; review commands outside the shell first)
 - Remove filler words (um, uh, er, …)
@@ -312,9 +323,11 @@ Use **Open Startup Settings** to review Presspeech under Windows
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
   Whisper reports include the exact Silero VAD boundary policy so WER, quiet
   speech rejection, and silence false positives remain comparable across
-  dependency updates;
-  see `benchmarks/README.md` for the reviewed-reference workflow. A manifest
-  sample marked with both `"expected_silence": true` and
+  dependency updates. Reports also preserve the requested language policy and
+  each speech-bearing Whisper trial's language result, so multilingual accuracy
+  and detection cost can be checked with `--language auto`. See the
+  reviewed-reference workflow in `benchmarks/README.md`. A manifest sample
+  marked with both `"expected_silence": true` and
   `"reference_reviewed": true` is scored as a non-speech fixture; reports count
   any non-empty transcript as a silence false positive. Whisper reports also
   record the VAD-retained speech duration for every trial and count reviewed

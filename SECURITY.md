@@ -1,7 +1,15 @@
 # Security
 
-Presspeech is a local-only dictation tool. It does not transmit audio,
-transcripts, or telemetry to any network service.
+Presspeech is a local-only dictation tool. The app does not send audio,
+transcripts, or telemetry to a network service. Finished text does enter the
+shared system clipboard for paste and recovery. macOS 0.3.8 can make
+those entries available through Universal Clipboard; builds containing the
+0.3.9 clipboard protection use AppKit's current-device-only option for every
+Presspeech-created transcript entry. In those builds, a restored previous
+clipboard is likewise republished for the current device only because its
+original cross-device scope cannot be recovered from the snapshot. macOS
+Clipboard History and arbitrary local clipboard readers remain separate
+boundaries.
 
 ## Reporting a vulnerability
 

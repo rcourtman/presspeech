@@ -1,5 +1,6 @@
 {
   "model": "base.en",
+  "language": "en",
   "runs": 3,
   "samples": [
     {

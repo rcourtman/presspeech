@@ -251,6 +251,10 @@ each platform rather than identical.
   ownership remains stable, and the restore row explains why the previous
   clipboard is unavailable. Newer macOS versions may ask before Presspeech can
   read another app's clipboard for this opt-in feature.
+  Builds containing the local-only clipboard protection restore the original
+  items and representations on the current Mac only. The snapshot cannot retain
+  the previous cross-device scope, so Presspeech does not risk making restored
+  content newly available through Universal Clipboard.
   The automatic-restore option and delay presets from macOS 0.3.7 are retired;
   existing users must opt in again because manual recovery retains bytes
   longer.
@@ -305,14 +309,17 @@ Presspeech is local-first:
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
-- Completed transcripts pass through the operating-system clipboard. Clipboard
-  services outside Presspeech—macOS Clipboard History in Spotlight on macOS 26
-  or later, macOS Universal Clipboard, Windows clipboard history and
-  cross-device sync, or a third-party clipboard manager—may retain or sync that
-  text when enabled. Upcoming Windows 0.1.13 asks Windows to exclude every
-  dictation write from Clipboard History and Cloud Clipboard; the current
-  clipboard and third-party readers remain separate boundaries. Review those
-  services before sensitive dictation.
+- Completed transcripts pass through the operating-system clipboard. macOS
+  0.3.8 can expose those entries to macOS Universal Clipboard. Builds containing
+  local-only transcript clipboard writes keep every Presspeech transcript on
+  the current Mac and add standard transient markers for cooperating clipboard
+  managers while preserving local Command-V. They also republish a restored
+  previous clipboard on the current Mac only. macOS Clipboard History in
+  Spotlight on macOS 26 or later and other local clipboard readers remain
+  separate boundaries. Published Windows 0.1.12 Windows clipboard writes can be
+  retained or synced; Upcoming Windows 0.1.13 asks Windows to exclude every
+  dictation write from Clipboard History and Cloud Clipboard while preserving
+  local Ctrl-V.
 
 Network calls made by Presspeech are limited to:
 
