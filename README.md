@@ -195,6 +195,9 @@ each platform rather than identical.
 - **Setup Checklist…** — model, permissions, and hotkey readiness
 - **Support → Try Dictation…** — a private scratchpad for verifying the
   hotkey and first transcription without switching apps
+- **Upcoming 0.3.8 / builds containing Support → Test App Compatibility…** —
+  open the privacy-safe repeated test for automatic paste and focus-change
+  recovery in one exact target app
 - **Support → Report a Problem… / Suggest an Improvement…** — open the
   focused GitHub forms; copy the privacy-safe diagnostics first for a bug, and
   never post dictated text, audio, or dictionary contents
@@ -264,8 +267,9 @@ each platform rather than identical.
 - **Repair Global Hotkey** — replace the keyboard listener if menu-based
   Dictate still works but the configured key does not
 - **Copy Diagnostics / Report a Problem… / Suggest an Improvement…** — copy a
-  privacy-safe support report, then open the focused GitHub form; never post
-  dictated text, audio, or dictionary contents
+  privacy-safe support report or open a focused GitHub form; upcoming 0.1.13 /
+  builds containing **Test App Compatibility…** also open the repeated
+  target-app test. Never post dictated text, audio, or dictionary contents
 
 See the [Windows guide](https://rcourtman.github.io/presspeech/windows.html#first-launch)
 for model readiness, AltGr-safe hotkey selection, and every Windows setting.
@@ -311,8 +315,10 @@ Network calls made by Presspeech are limited to:
 
 - speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming Windows 0.1.13 disables the Hub libraries' telemetry and implicit authentication before import,
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
-- user-triggered bug-report and feature-request links, which open fixed GitHub
-  forms in the default browser without adding app or user data to the URL,
+- user-triggered bug-report and feature-request links, plus the compatibility
+  guide link in upcoming 0.3.8 / Windows 0.1.13 or builds containing that
+  action; these open fixed public pages in the default browser without adding
+  app or user data to the URL,
 - user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows accepts only release metadata marked immutable and verifies the release asset's size and SHA-256 before offering to run it and again immediately before launch.
 
 ## How It Works

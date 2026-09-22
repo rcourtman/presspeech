@@ -216,8 +216,10 @@ The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Dictate** (toggle), **Cancel Dictation (Esc)** while recording,
 **Try Dictation…** (scratchpad that doesn't paste anywhere), **Setup…**, **Settings…**,
 **Check for Updates…**, **Copy Diagnostics**, **Report a Problem…**, **Suggest an
-Improvement…**, **Repair Global Hotkey**, and **Exit**. The feedback actions open the focused public
-GitHub forms without adding app or user data to the URL. The icon turns red
+Improvement…**, **Repair Global Hotkey**, and **Exit**. Upcoming 0.1.13 / builds
+containing **Test App Compatibility…** also open the privacy-safe repeated
+target-app guide. The feedback actions open focused public GitHub forms. None
+adds app or user data to the URL. The icon turns red
 while recording. Setup, settings, update, and scratchpad controls expose names,
 roles, values, and actions through Windows UI Automation for screen readers.
 Each window starts focus on its main working control. Use **Left Alt** plus a

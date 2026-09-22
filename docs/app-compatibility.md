@@ -136,7 +136,7 @@ failure. Stop testing and report it; do not retry in a real document.
 ## Share the result
 
 First [browse existing compatibility
-reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22),
+reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22),
 then submit one
 [target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml)
 per platform, target app, version, and generic field type. Reports in which

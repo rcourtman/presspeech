@@ -88,6 +88,7 @@ let GITHUB_REPOSITORY_PAGE = URL(string: "https://github.com/rcourtman/presspeec
 let GITHUB_RELEASES_PAGE = URL(string: "https://github.com/rcourtman/presspeech/releases/latest")!
 let GITHUB_BUG_REPORT_PAGE = URL(string: "https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml")!
 let GITHUB_FEATURE_REQUEST_PAGE = URL(string: "https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml")!
+let APP_COMPATIBILITY_GUIDE_PAGE = URL(string: "https://rcourtman.github.io/presspeech/app-compatibility.html")!
 let HOMEBREW_CASK_TAP = "rcourtman/presspeech"
 let HOMEBREW_CASK_TOKEN = "rcourtman/presspeech/presspeech"
 let HOMEBREW_CASK_INSTALLED_TOKEN = "presspeech"
@@ -9373,6 +9374,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         NSWorkspace.shared.open(GITHUB_BUG_REPORT_PAGE)
     }
 
+    @objc private func testAppCompatibilityClicked(_ sender: NSMenuItem) {
+        NSWorkspace.shared.open(APP_COMPATIBILITY_GUIDE_PAGE)
+    }
+
     @objc private func suggestImprovementClicked(_ sender: NSMenuItem) {
         NSWorkspace.shared.open(GITHUB_FEATURE_REQUEST_PAGE)
     }
@@ -9914,6 +9919,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                          keyEquivalent: "")
         saveDiagnostics.target = self
         sub.addItem(saveDiagnostics)
+
+        let testCompatibility = NSMenuItem(title: "Test App Compatibility…",
+                                           action: #selector(testAppCompatibilityClicked(_:)),
+                                           keyEquivalent: "")
+        testCompatibility.target = self
+        testCompatibility.toolTip = "Open the privacy-safe target-app test guide."
+        sub.addItem(testCompatibility)
 
         let reportProblem = NSMenuItem(title: "Report a Problem…",
                                        action: #selector(reportProblemClicked(_:)),

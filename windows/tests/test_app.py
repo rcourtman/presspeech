@@ -133,7 +133,7 @@ class SingleInstanceActivationTests(unittest.TestCase):
         instance._update_lock.acquire.assert_not_called()
 
 
-class FeedbackLinkTests(unittest.TestCase):
+class SupportLinkTests(unittest.TestCase):
     def make_app(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
@@ -155,7 +155,14 @@ class FeedbackLinkTests(unittest.TestCase):
 
         startfile.assert_called_once_with(app.FEATURE_REQUEST_URL)
 
-    def test_feedback_link_failure_has_manual_recovery_without_url_details(self):
+    def test_app_compatibility_opens_fixed_privacy_safe_guide(self):
+        instance = self.make_app()
+        with mock.patch.object(app.os, "startfile", create=True) as startfile:
+            self.assertTrue(instance.test_app_compatibility())
+
+        startfile.assert_called_once_with(app.APP_COMPATIBILITY_GUIDE_URL)
+
+    def test_support_link_failure_has_manual_recovery_without_url_details(self):
         instance = self.make_app()
         with mock.patch.object(
                 app.os, "startfile", side_effect=OSError("private browser detail"),
@@ -163,10 +170,11 @@ class FeedbackLinkTests(unittest.TestCase):
             self.assertFalse(instance.report_problem())
 
         instance._log.assert_called_once_with(
-            "could not open feedback form: OSError")
+            "could not open support page: OSError")
         instance.notify.assert_called_once_with(
-            "Could not open GitHub",
-            "Open github.com/rcourtman/presspeech/issues in your browser.")
+            "Could not open browser",
+            "Open rcourtman.github.io/presspeech or "
+            "github.com/rcourtman/presspeech in your browser.")
 
 
 class UpdateWindowTests(unittest.TestCase):

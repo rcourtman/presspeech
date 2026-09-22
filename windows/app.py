@@ -139,6 +139,9 @@ BUG_REPORT_URL = (
 FEATURE_REQUEST_URL = (
     "https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml"
 )
+APP_COMPATIBILITY_GUIDE_URL = (
+    "https://rcourtman.github.io/presspeech/app-compatibility.html"
+)
 INPUT_DEVICE_SKIP_WORDS = (
     "stereo mix", "steam", "stream", "virtual", "loopback", "aux", "line in",
     "hyperx",
@@ -720,6 +723,8 @@ class PresspeechApp:
                          self.discard_undelivered_dictation),
                 MenuItem("Check for Updates\u2026", self.check_for_updates),
                 MenuItem("Copy Diagnostics", self.copy_diagnostics),
+                MenuItem(
+                    "Test App Compatibility\u2026", self.test_app_compatibility),
                 MenuItem("Report a Problem\u2026", self.report_problem),
                 MenuItem("Suggest an Improvement\u2026", self.suggest_improvement),
                 Menu.SEPARATOR,
@@ -2347,23 +2352,27 @@ class PresspeechApp:
         pyperclip.copy(self.diagnostics_text())
         self.notify("Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
 
-    def _open_feedback_page(self, url):
-        """Open one fixed public feedback form without adding app or user data."""
+    def _open_support_page(self, url):
+        """Open one fixed public support page without adding app or user data."""
         try:
             os.startfile(url)
         except (OSError, AttributeError) as exc:
-            self._log("could not open feedback form: %s" % type(exc).__name__)
+            self._log("could not open support page: %s" % type(exc).__name__)
             self.notify(
-                "Could not open GitHub",
-                "Open github.com/rcourtman/presspeech/issues in your browser.")
+                "Could not open browser",
+                "Open rcourtman.github.io/presspeech or "
+                "github.com/rcourtman/presspeech in your browser.")
             return False
         return True
 
+    def test_app_compatibility(self, icon=None, item=None):
+        return self._open_support_page(APP_COMPATIBILITY_GUIDE_URL)
+
     def report_problem(self, icon=None, item=None):
-        return self._open_feedback_page(BUG_REPORT_URL)
+        return self._open_support_page(BUG_REPORT_URL)
 
     def suggest_improvement(self, icon=None, item=None):
-        return self._open_feedback_page(FEATURE_REQUEST_URL)
+        return self._open_support_page(FEATURE_REQUEST_URL)
 
     # ---------------- helpers ----------------
 

@@ -8,7 +8,7 @@ body:
         Thanks for testing one target app. Run the short
         [compatibility protocol](https://rcourtman.github.io/presspeech/app-compatibility.html)
         before filling this in. Passing reports are useful too. [Browse existing
-        compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
+        compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22)
         first and add to a report only when its platform, app version, and
         generic field type match yours.
 
