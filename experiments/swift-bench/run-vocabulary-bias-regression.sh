@@ -56,6 +56,7 @@ BENCHMARK_SOURCE_PATHS=(
     "experiments/swift-bench/Sources/presspeech-bench"
     "experiments/swift-bench/run-vocabulary-bias-regression.sh"
     "experiments/swift-bench/dependency-provenance.py"
+    "experiments/swift-bench/rescoring-evidence.py"
     "swift/Package.swift"
     "swift/Package.resolved"
 )
@@ -760,6 +761,7 @@ candidate_assessment() {
     local tsv="$1"
     local baseline="$2"
     local candidate="$3"
+    local rescoring_blockers="${4-rescoring evidence unavailable}"
     awk -F '\t' \
         -v baseline="$baseline" \
         -v candidate="$candidate" \
@@ -779,6 +781,7 @@ candidate_assessment() {
         -v trials="$TRIALS" \
         -v min_candidate_trials="$MIN_CANDIDATE_TRIALS" \
         -v source_state="$BENCHMARK_SOURCE_STATE" \
+        -v rescoring_blockers="$rescoring_blockers" \
         -v dependency_mode="$BASELINE_DEPENDENCY" '
         function add_blocker(message) {
             blockers = blockers (blockers == "" ? "" : "; ") message
@@ -845,6 +848,7 @@ candidate_assessment() {
             wer_delta = total_reference_words ? total_error_delta / total_reference_words * 100 : 0
             latency_ratio = comparable ? candidate_latency_sum / baseline_latency_sum : 0
 
+            if (rescoring_blockers != "") add_blocker(rescoring_blockers)
             if (!complete) add_blocker("incomplete comparable clips")
             if (references_hand_audited != 1) add_blocker("references not declared hand-audited")
             if (trials < min_candidate_trials) add_blocker("measured trials below " min_candidate_trials)
@@ -928,7 +932,7 @@ test_frozen_input_run() {
     local bench="$root/repo/experiments/swift-bench"
     mkdir -p "$fixture/targets" "$fixture/controls" "$root/bin" "$bench"
     cp "$SCRIPT_PATH" "$bench/run-vocabulary-bias-regression.sh"
-    cp Package.swift Package.resolved dependency-provenance.py "$bench/"
+    cp Package.swift Package.resolved dependency-provenance.py rescoring-evidence.py "$bench/"
     mkdir -p "$root/repo/swift"
     cp "$REPO_ROOT/swift/Package.swift" "$REPO_ROOT/swift/Package.resolved" "$root/repo/swift/"
     printf 'original target audio\n' >"$fixture/targets/sample.wav"
@@ -1355,7 +1359,7 @@ MOCK
     TRIALS=3
     BENCHMARK_SOURCE_STATE="clean"
     local blocked_assessment
-    blocked_assessment="$(candidate_assessment "$tsv" sliding-v3 sliding-vocab)"
+    blocked_assessment="$(candidate_assessment "$tsv" sliding-v3 sliding-vocab "")"
     assert_contains <(printf '%s\n' "$blocked_assessment") $'sliding-vocab\t4\t4\t3\t35\t5\t1\t2000\t+2\t+2\t+0.15\t0\t2\t3\t1.00\tblocked\ttarget clips below 25; target reference words below 1000; target critical-term occurrences below 50; same-language negative-control clips below 10; unexpected insertions increased; corpus WER regressed; per-clip unexpected insertions increased; per-clip WER regressions present'
 
     {
@@ -1385,14 +1389,23 @@ MOCK
         done
     } >"$tmpdir/passing.tsv"
     local passing_assessment
-    passing_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    passing_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_eq "$passing_assessment" $'sliding-vocab-no-rescue\t35\t35\t25\t1135\t50\t10\t2000\t+2\t+0\t-0.13\t0\t0\t0\t1.50\tpasses\t' "passing candidate assessment"
     candidate_assessment_row "$passing_assessment" >"$summary"
     assert_contains "$summary" '| `sliding-vocab-no-rescue` | 35/35 | 25 / 1135 / 50 | 10 / 2000 | +2 | +0 | -0.13 | 0 | 0 | 0 | 1.50x | **passes** | -- |'
 
+    local stage_failure
+    for stage_failure in "rescoring evidence unavailable" "1 failed rescoring outcomes" "1 skipped rescoring outcomes" "1 unobservable rescoring outcomes"; do
+        local refused_stage
+        refused_stage="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "$stage_failure")"
+        assert_contains <(printf '%s\n' "$refused_stage") "blocked"
+        assert_contains <(printf '%s\n' "$refused_stage") "$stage_failure"
+    done
+    python3 ./rescoring-evidence.py --self-test
+
     BASELINE_DEPENDENCY="candidate-dependency"
     local candidate_dependency_assessment
-    candidate_dependency_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    candidate_dependency_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_contains <(printf '%s\n' "$candidate_dependency_assessment") \
         $'blocked\tbaseline dependency differs from app'
     BASELINE_DEPENDENCY="production-dependency"
@@ -1403,21 +1416,21 @@ MOCK
     REQUIRE_CANDIDATE_PASS=0
     REFERENCES_HAND_AUDITED=0
     local unaudited_assessment
-    unaudited_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    unaudited_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_contains <(printf '%s\n' "$unaudited_assessment") \
         $'blocked\treferences not declared hand-audited'
     REFERENCES_HAND_AUDITED=1
 
     TRIALS=1
     local single_trial_assessment
-    single_trial_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    single_trial_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_contains <(printf '%s\n' "$single_trial_assessment") \
         $'blocked\tmeasured trials below 3'
     TRIALS=3
 
     BENCHMARK_SOURCE_STATE="modified"
     local modified_source_assessment
-    modified_source_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    modified_source_assessment="$(candidate_assessment "$tmpdir/passing.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_contains <(printf '%s\n' "$modified_source_assessment") \
         $'blocked\tbenchmark source is not clean'
     BENCHMARK_SOURCE_STATE="clean"
@@ -1425,18 +1438,18 @@ MOCK
 
     sed 's/^n/0/' "$tmpdir/passing.tsv" >"$tmpdir/no-negative-controls.tsv"
     local no_negative_assessment
-    no_negative_assessment="$(candidate_assessment "$tmpdir/no-negative-controls.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    no_negative_assessment="$(candidate_assessment "$tmpdir/no-negative-controls.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_contains <(printf '%s\n' "$no_negative_assessment") $'blocked\tsame-language negative-control clips below 10; same-language negative-control reference words below 1000'
 
     sed 's/^n/x/' "$tmpdir/passing.tsv" >"$tmpdir/cross-language-only.tsv"
     local cross_language_only_assessment
-    cross_language_only_assessment="$(candidate_assessment "$tmpdir/cross-language-only.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    cross_language_only_assessment="$(candidate_assessment "$tmpdir/cross-language-only.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_contains <(printf '%s\n' "$cross_language_only_assessment") $'blocked\tsame-language negative-control clips below 10; same-language negative-control reference words below 1000'
 
     sed $'s/\t2000\t100.0$/\t999\t100.0/' \
         "$tmpdir/passing.tsv" >"$tmpdir/insufficient-negative-words.tsv"
     local insufficient_negative_words_assessment
-    insufficient_negative_words_assessment="$(candidate_assessment "$tmpdir/insufficient-negative-words.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    insufficient_negative_words_assessment="$(candidate_assessment "$tmpdir/insufficient-negative-words.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_contains <(printf '%s\n' "$insufficient_negative_words_assessment") \
         $'blocked\tsame-language negative-control reference words below 1000'
 
@@ -1446,7 +1459,7 @@ MOCK
         -e $'s/^p002\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t1\t150.0\t40.0\t700.0\t1000.0\t0\t5\t66.7$/p002\tsliding-vocab-no-rescue\t0.0\t2\t2\t100.0\t0\t150.0\t40.0\t700.0\t1000.0\t0\t5\t100.0/' \
         "$tmpdir/passing.tsv" >"$tmpdir/masked-regressions.tsv"
     local masked_assessment
-    masked_assessment="$(candidate_assessment "$tmpdir/masked-regressions.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    masked_assessment="$(candidate_assessment "$tmpdir/masked-regressions.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_eq "$masked_assessment" $'sliding-vocab-no-rescue\t35\t35\t25\t1135\t50\t10\t2000\t+2\t+0\t-0.06\t0\t1\t1\t1.50\tblocked\tper-clip unexpected insertions increased; per-clip WER regressions present' "masked per-clip regressions"
 
     # Net recall gains must not hide a vocabulary term lost on another clip.
@@ -1454,7 +1467,7 @@ MOCK
         -e $'s/^p003\tsliding-v3\t5.0\t1\t1\t100.0/p003\tsliding-v3\t5.0\t0\t1\t0.0/' \
         "$tmpdir/passing.tsv" >"$tmpdir/masked-critical-regression.tsv"
     local masked_critical_assessment
-    masked_critical_assessment="$(candidate_assessment "$tmpdir/masked-critical-regression.tsv" sliding-v3 sliding-vocab-no-rescue)"
+    masked_critical_assessment="$(candidate_assessment "$tmpdir/masked-critical-regression.tsv" sliding-v3 sliding-vocab-no-rescue "")"
     assert_eq "$masked_critical_assessment" $'sliding-vocab-no-rescue\t35\t35\t25\t1135\t50\t10\t2000\t+1\t+0\t-0.13\t1\t0\t0\t1.50\tblocked\tper-clip critical-term recall regressed' "masked per-clip critical-term regression"
 
     # Repeated-trial instability in production must not make a vocabulary
@@ -1466,7 +1479,7 @@ MOCK
         printf 'p001\tv3-vocab\t10.0\t1\t1\t100.0\t1\t150.0\t40.0\t700.0\t1000.0\t1\t10\t50.0\t0\t1\t0\n'
     } >"$tmpdir/unstable-baseline.tsv"
     local unstable_baseline_assessment
-    unstable_baseline_assessment="$(candidate_assessment "$tmpdir/unstable-baseline.tsv" v3 v3-vocab)"
+    unstable_baseline_assessment="$(candidate_assessment "$tmpdir/unstable-baseline.tsv" v3 v3-vocab "")"
     assert_contains <(printf '%s\n' "$unstable_baseline_assessment") \
         $'critical-hit gain below +1; unexpected insertions increased; corpus WER regressed; per-clip unexpected insertions increased; per-clip WER regressions present'
 
@@ -2338,6 +2351,12 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
     done
 done
 
+# Keep the established metric TSV schema intact. The versioned outcome
+# sidecar travels atomically with the existing raw-log artifact directory.
+rescoring_evidence="$raw_dir/rescoring-evidence.json"
+python3 ./rescoring-evidence.py --tsv "$tsv" --logs "$raw_dir" --trials "$TRIALS" >"$rescoring_evidence"
+python3 ./rescoring-evidence.py --evidence "$rescoring_evidence" --markdown >>"$report"
+
 {
     echo
     echo "## Summary"
@@ -2356,7 +2375,7 @@ done
     echo
     echo "## Vocabulary Policy Deltas"
     echo
-    echo "Direct-v3 policies are compared with production \`v3\`; sliding-window policies are compared with unbiased \`sliding-v3\`. All rows use per-clip conservative envelopes; lower WER and fewer unexpected insertions are better."
+    echo "Direct-v3 policies are compared with unbiased \`v3\`; sliding-window policies are compared with unbiased \`sliding-v3\`. All rows use per-clip conservative envelopes; lower WER and fewer unexpected insertions are better."
     echo
     echo "| Candidate | Comparable clips | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clean wins | Costly wins | Pure losses | Other |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
@@ -2372,7 +2391,7 @@ done
     echo
     echo "## Product Candidate Screen"
     echo
-    echo "Compared directly with unbiased \`v3\`. Repeated-trial safety compares each candidate's adverse extrema with baseline's favorable extrema, so a bad baseline trial cannot hide a candidate regression. A policy passes only with matching declared/locked app and benchmark dependencies, human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x baseline. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
+    echo "Compared directly with unbiased \`v3\`. Repeated-trial safety compares each candidate's adverse extrema with baseline's favorable extrema, so a bad baseline trial cannot hide a candidate regression. A policy passes only with complete observable successful rescoring on every measured trial, matching declared/locked app and benchmark dependencies, human-audited references, at least ${MIN_CANDIDATE_TRIALS} measured trials per clip/variant, complete comparable clips, at least ${MIN_TARGET_CLIPS} target clips containing at least ${MIN_TARGET_REFERENCE_WORDS} reference words and ${MIN_TARGET_CRITICAL_OCCURRENCES} critical-term occurrences, at least +${MIN_CRITICAL_HIT_GAIN} net critical hit, at least ${MIN_NEGATIVE_CONTROL_CLIPS} same-language negative-control clips containing at least ${MIN_NEGATIVE_CONTROL_REFERENCE_WORDS} reference words, no per-clip critical-hit loss, no aggregate or per-clip increase in unexpected insertions or WER, and average p50 latency <= ${MAX_PRODUCTION_LATENCY_RATIO}x baseline. Cross-language controls are additional evidence and never satisfy the same-language requirement. This is a necessary evidence screen, not approval to ship."
     echo
     echo "| Candidate | Comparable clips | Target evidence (clips / words / critical occurrences) | Same-language controls (clips / words) | Critical-hit delta | Unexpected-insertion delta | Corpus WER delta (points) | Clips with fewer critical hits | Clips with more insertions | Clips with worse WER | p50 / baseline | Verdict | Blockers |"
     echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
@@ -2381,7 +2400,8 @@ done
 candidate_passes=0
 candidate_blockers=()
 for candidate in v3-vocab v3-vocab-conservative v3-vocab-no-rescue v3-vocab-exact-similarity; do
-    assessment="$(candidate_assessment "$tsv" v3 "$candidate")"
+    rescoring_blockers="$(python3 ./rescoring-evidence.py --evidence "$rescoring_evidence" --blockers "$candidate")"
+    assessment="$(candidate_assessment "$tsv" v3 "$candidate" "$rescoring_blockers")"
     candidate_assessment_row "$assessment" >>"$report"
     IFS=$'\t' read -r assessed_candidate assessed_comparable assessed_baseline_count \
         assessed_target_clips assessed_target_words assessed_target_occurrences \

@@ -301,9 +301,47 @@ func load16kMono(url: URL) throws -> [Float] {
     return Array(UnsafeBufferPointer(start: chPtr, count: Int(dstBuf.frameLength)))
 }
 
+// Rescoring API completion is not the same as making a replacement. The SDK's
+// optional result conflates unchanged output and swallowed failures; retain that
+// uncertainty instead of crediting it as a successful evaluation.
+enum RescoringObservation {
+    case succeeded
+    case failed
+    case skipped
+    case unobservable(attempted: Bool?)
+
+    var fields: String {
+        switch self {
+        case .succeeded:
+            return "attempted=1 succeeded=1 failed=0 skipped=0 unobservable=0"
+        case .failed:
+            return "attempted=1 succeeded=0 failed=1 skipped=0 unobservable=0"
+        case .skipped:
+            return "attempted=0 succeeded=0 failed=0 skipped=1 unobservable=0"
+        case .unobservable(let attempted):
+            let attempt = attempted.map { $0 ? "1" : "0" } ?? "unknown"
+            return "attempted=\(attempt) succeeded=0 failed=0 skipped=0 unobservable=1"
+        }
+    }
+
+    static func sdkOptionalResult(hasOutput: Bool) -> Self {
+        hasOutput ? .succeeded : .unobservable(attempted: true)
+    }
+}
+
+func completeObservedRescoring(
+    _ result: Result<String, Error>, fallback: String
+) -> (text: String, observation: RescoringObservation) {
+    switch result {
+    case .success(let text): return (text, .succeeded)
+    case .failure: return (fallback, .failed)
+    }
+}
+
 // MARK: - Backends
 
 protocol ASRBackend {
+    var rescoringObservation: RescoringObservation? { get }
     var name: String { get }
     /// On-disk model caches used by this backend. Reported after prepare so
     /// candidate download/storage cost is visible beside latency and memory.
@@ -316,6 +354,7 @@ protocol ASRBackend {
 }
 
 extension ASRBackend {
+    var rescoringObservation: RescoringObservation? { nil }
     var modelCacheComponents: [(label: String, url: URL)] { [] }
 }
 
@@ -620,6 +659,7 @@ func exactSimilarityVocabularyText(
 
 final class DirectVocabularyBackend: ASRBackend {
     let name: String
+    private(set) var rescoringObservation: RescoringObservation?
     private let language: Language?
     private let customVocabularyURL: URL
     private let criticalTerms: [String]?
@@ -705,6 +745,7 @@ final class DirectVocabularyBackend: ASRBackend {
     }
 
     func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
+        rescoringObservation = .skipped
         var state = try TdtDecoderState()
         let t0 = Date()
         let result = try await asr.transcribe(samples, decoderState: &state, language: language)
@@ -718,10 +759,11 @@ final class DirectVocabularyBackend: ASRBackend {
                 tokenTimings: timings,
                 audioSamples: samples
             )
+            rescoringObservation = .sdkOptionalResult(hasOutput: rescored != nil)
             return (rescored?.text ?? result.text, Date().timeIntervalSince(t0))
         }
 
-        let text: String
+        let evaluated: Result<String, Error>
         do {
             let spotResult = try await spotter.spotKeywordsWithLogProbs(
                 audioSamples: samples,
@@ -738,13 +780,15 @@ final class DirectVocabularyBackend: ASRBackend {
                 marginSeconds: 0.5,
                 minSimilarity: minSimilarity
             )
-            text = exactSimilarityVocabularyText(from: evidence)
+            evaluated = .success(exactSimilarityVocabularyText(from: evidence))
         } catch {
             // Match FluidAudio's fail-open VocabularyBoostingSession contract:
             // optional vocabulary scoring must never break base transcription.
-            text = result.text
+            evaluated = .failure(error)
         }
-        return (text, Date().timeIntervalSince(t0))
+        let completed = completeObservedRescoring(evaluated, fallback: result.text)
+        rescoringObservation = completed.observation
+        return (completed.text, Date().timeIntervalSince(t0))
     }
 }
 
@@ -756,6 +800,11 @@ final class DirectVocabularyBackend: ASRBackend {
 // the engine path are not mistaken for vocabulary gains.
 
 final class SlidingWindowBackend: ASRBackend {
+    // This SDK exposes no per-window rescoring outcome. Do not infer an
+    // attempted/successful rescore from a returned final transcript.
+    var rescoringObservation: RescoringObservation? {
+        customVocabularyURL == nil ? nil : .unobservable(attempted: nil)
+    }
     let name: String
     private let language: Language?
     private let customVocabularyURL: URL?
@@ -1705,6 +1754,17 @@ func runBenchSelfTests() throws {
         "explicit transcript/path output should retain benchmark error details"
     )
 
+    let failedRescore = completeObservedRescoring(.failure(privateFailure), fallback: "unchanged")
+    try expect(failedRescore.text == "unchanged", "rescoring error must preserve the base transcript")
+    try expect(failedRescore.observation.fields.contains("failed=1"), "fallback must retain explicit failed evidence")
+    try expect(!failedRescore.observation.fields.contains("Private"), "outcome evidence must not serialize error details")
+    let unchangedRescore = completeObservedRescoring(.success("unchanged"), fallback: "unchanged")
+    try expect(unchangedRescore.observation.fields.contains("succeeded=1"), "an observed successful no-change evaluation differs from failure")
+    try expect(RescoringObservation.sdkOptionalResult(hasOutput: false).fields.contains("unobservable=1"), "SDK nil must not imply successful no-change evaluation")
+    try expect(RescoringObservation.sdkOptionalResult(hasOutput: true).fields.contains("succeeded=1"), "SDK nonnil is an observed completed rescore")
+    try expect(RescoringObservation.unobservable(attempted: nil).fields.contains("attempted=unknown"), "sliding API cannot claim an observed attempt")
+    try expect(RescoringObservation.skipped.fields.contains("attempted=0"), "missing timings skip rescoring without claiming an attempt")
+
     print("presspeech-bench self-test passed")
 }
 
@@ -1756,6 +1816,9 @@ func runBackend(_ backend: ASRBackend, samples: [Float], trials: Int) async thro
     for i in 0..<trials {
         let (text, t) = try await backend.run(samples: samples)
         out.append(TrialResult(elapsed: t, text: text))
+        if let observation = backend.rescoringObservation {
+            print("    rescoring trial=\(i + 1)/\(trials) \(observation.fields)")
+        }
         peak = max(peak, footprintBytes())
         FileHandle.standardError.write(Data("    \(backend.name) trial \(i+1)/\(trials): \(fmtMs(t))\n".utf8))
     }

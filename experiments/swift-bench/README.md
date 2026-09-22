@@ -105,6 +105,30 @@ the app's older default, and used the original int8 encoder. This controlled
 those settings but did not turn the newer SDK into the production dependency.
 Keep original results intact and qualify their provenance when sharing them.
 
+### Rescoring execution evidence
+
+Vocabulary reports preserve the existing metric TSV columns and add a
+`rescoring-evidence.json` file (schema version 1) inside their raw-log directory.
+Each measured inference records whether rescoring was attempted and whether its
+observed outcome succeeded, failed, was skipped, or was unobservable. Warmup is
+excluded. Success means a completed evaluation, even if the transcript did not
+change; it does not mean that a vocabulary replacement was correct.
+
+FluidAudio's optional session result combines unchanged output, skipped scoring
+and swallowed errors into `nil`. These results are explicitly unobservable;
+they are not counted as successful no-change evaluations. The sliding API does
+not expose whether each internal window attempted rescoring, so its attempt
+count is also unknown. The direct exact-similarity benchmark can observe its
+own scoring operation's success or failure. No SDK scoring logic is copied to
+infer missing information.
+
+The product-candidate screen rejects missing, failed, skipped or unobservable
+rescoring evidence with separate reasons. `--no-threshold` still retains the
+exploratory metrics and diagnostics, while keeping that screen blocked.
+Historical logs without outcome records remain readable but cannot establish
+rescoring execution. Validate the sidecar/parser with
+`python3 rescoring-evidence.py --self-test`.
+
 ## Private real-dictation regression
 
 TTS is useful for latency and smoke testing, but it is not a substitute
