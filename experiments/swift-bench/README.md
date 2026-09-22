@@ -419,6 +419,54 @@ vocabulary term, an unrelated critical term, or duplicate/empty normalized
 canonical terms. This prevents the candidate screen from hiding a configured
 term's false insertions or attributing unrelated transcript changes to boosting.
 
+## Evaluation-only terms for held-out forms
+
+The CLI accepts `--evaluation-only-terms` to score forms that were deliberately
+withheld from the custom vocabulary. Keep `--critical-terms` equal to every
+canonical vocabulary entry; its existing coverage contract still applies.
+For example, a lemma-only list containing `Hongkong` can be evaluated against
+references containing `Hongkongu` without giving that answer to the recognizer:
+
+```bash
+.build/release/presspeech-bench --file corpus/clip.wav --backend v3-vocab \
+  --custom-vocabulary lemmas.txt --critical-terms lemmas.txt \
+  --evaluation-only-terms inflected-forms.txt --language pl --trials 3 \
+  --redact-transcripts
+```
+
+A reference and nonempty canonical scoring list are required. Before loading
+ASR models, the CLI rejects evaluation answers present in parsed canonical
+entries or aliases, including embedded phrases and folded/ASCII spellings.
+It uses the SDK's vocabulary parsers and freezes the original vocabulary bytes
+in a private temporary directory. Backends receive only that frozen vocabulary
+path and the canonical scoring terms. Evaluation-only answers are kept outside
+backend construction and scored after inference. Later edits to the original
+vocabulary or evaluation file cannot change either frozen input.
+
+The CLI reports vocabulary/evaluation-file SHA-256 values and one
+`evaluation-only schema=1 trial=N/T` record per measured trial, excluding warmup.
+Records contain separate canonical and evaluation matched/total/unexpected
+counts plus word-error counts, without answer or transcript text. Pair these
+records with the existing rescoring outcome records by trial number; unchanged
+output with an unobservable rescoring outcome does not establish efficacy.
+The existing summary format and canonical-only wrapper's 17-column TSV remain
+unchanged. This option is currently a CLI facility; the canonical regression
+wrapper does not accept a held-out corpus option.
+
+For an explicit-form positive control, use the inflected forms as the canonical
+vocabulary/scoring list and the lemmas as the evaluation-only list. Compare
+scores by term-set identity, rather than bypassing leakage validation. Keep
+vocabulary size, weights and policy settings matched. The SDK's simple-text
+format assigns weight 10.0 to each term, an aggressive default; record any
+intentional alternative. Report pure held-out targets, mixed-form examples,
+seen-lemma calibration and negative controls separately, with distinct prompt
+counts. These measurements do not by themselves prove generalization to all
+inflections or qualify a production release.
+
+As with other direct CLI calls, SDK diagnostics can contain vocabulary text;
+apply the existing wrapper's upstream-diagnostic redaction before sharing logs.
+`--redact-transcripts` redacts the benchmark's reference/hypothesis output.
+
 ## Public speech regression
 
 Private clips are the best product signal, but they cannot be shared or

@@ -13,6 +13,7 @@
 // AVAudioFile + AVAudioPCMBuffer handles the conversion).
 
 import Foundation
+import CryptoKit
 import AVFoundation
 import Speech
 import FluidAudio
@@ -57,6 +58,7 @@ struct CLIArgs {
     // Plain-text canonical terms whose exact surface-form recall is reported
     // without printing term or transcript content.
     var criticalTerms: URL? = nil
+    var evaluationOnlyTerms: URL? = nil
 }
 
 func positiveTrialCount(_ value: String) -> Int? {
@@ -77,6 +79,7 @@ func parseArgs() -> CLIArgs {
     var language: Language? = nil
     var customVocabulary: URL? = nil
     var criticalTerms: URL? = nil
+    var evaluationOnlyTerms: URL? = nil
     while let arg = iter.next() {
         switch arg {
         case "--file":
@@ -118,6 +121,12 @@ func parseArgs() -> CLIArgs {
                 exit(2)
             }
             criticalTerms = URL(fileURLWithPath: v)
+        case "--evaluation-only-terms":
+            guard let v = iter.next(), !v.isEmpty else {
+                FileHandle.standardError.write(Data("--evaluation-only-terms requires a file path\n".utf8))
+                exit(2)
+            }
+            evaluationOnlyTerms = URL(fileURLWithPath: v)
         case "--unified-trailing-silence-ms":
             guard let v = iter.next(), let n = Int(v), n >= 0 else {
                 FileHandle.standardError.write(Data("--unified-trailing-silence-ms requires a non-negative integer\n".utf8))
@@ -191,6 +200,10 @@ func parseArgs() -> CLIArgs {
               --custom-vocabulary <path>
                          simple text or FluidAudio JSON vocabulary file; valid only
                          with a v3-vocab* or sliding-vocab* backend
+              --evaluation-only-terms <path>
+                         Additional post-inference scoring terms. Requires --critical-terms;
+                         rejects terms present in vocabulary canonical forms or aliases,
+                         including folded spellings. Never supplied to ASR or rescoring.
               --critical-terms <path>
                          plain text, one canonical word or phrase per line; report
                          exact surface-form recall without printing term content
@@ -229,7 +242,8 @@ func parseArgs() -> CLIArgs {
                    nemotronMultilingualChunkMs: nemotronMultilingualChunkMs,
                    language: language,
                    customVocabulary: customVocabulary,
-                   criticalTerms: criticalTerms)
+                   criticalTerms: criticalTerms,
+                   evaluationOnlyTerms: evaluationOnlyTerms)
 }
 
 // MARK: - Audio loading
@@ -240,65 +254,80 @@ func parseArgs() -> CLIArgs {
 
 enum AudioLoadError: Error { case openFailed, convertFailed, emptyBuffer }
 
-private final class SingleBufferConverterInputProvider: @unchecked Sendable {
-    private let buffer: AVAudioPCMBuffer
+private final class AudioFileConverterInputProvider: @unchecked Sendable {
+    private let file: AVAudioFile
     private let lock = NSLock()
-    private var didProvideBuffer = false
+    private var currentBuffer: AVAudioPCMBuffer?
+    private var failure: Error?
 
-    init(buffer: AVAudioPCMBuffer) {
-        self.buffer = buffer
-    }
+    init(file: AVAudioFile) { self.file = file }
 
-    func provide(outStatus: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? {
+    var error: Error? {
         lock.lock()
         defer { lock.unlock() }
+        return failure
+    }
 
-        if didProvideBuffer {
+    // AVAudioFile may return a short nonempty read before EOF (including
+    // Float32 WAV files). Continue from framePosition on the next request.
+    func provide(_ requestedFrames: AVAudioPacketCount,
+                 outStatus: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard failure == nil, file.framePosition < file.length else {
             outStatus.pointee = .endOfStream
             return nil
         }
-
-        didProvideBuffer = true
-        outStatus.pointee = .haveData
-        return buffer
+        let remaining = file.length - file.framePosition
+        let capacity = AVAudioFrameCount(min(AVAudioFramePosition(requestedFrames), remaining))
+        guard capacity > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: capacity) else {
+            failure = AudioLoadError.openFailed
+            outStatus.pointee = .endOfStream
+            return nil
+        }
+        do {
+            try file.read(into: buffer, frameCount: capacity)
+            guard buffer.frameLength > 0 else { throw AudioLoadError.emptyBuffer }
+            currentBuffer = buffer
+            outStatus.pointee = .haveData
+            return buffer
+        } catch {
+            failure = error
+            outStatus.pointee = .endOfStream
+            return nil
+        }
     }
 }
 
 func load16kMono(url: URL) throws -> [Float] {
     let file = try AVAudioFile(forReading: url)
-    let srcFormat = file.processingFormat
-
-    // Target: 16 kHz mono Float32.
-    guard let dstFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32,
-        sampleRate: 16_000,
-        channels: 1,
-        interleaved: false
-    ) else { throw AudioLoadError.openFailed }
-
-    // Read the whole file into a buffer at the file's native rate.
-    guard let srcBuf = AVAudioPCMBuffer(
-        pcmFormat: srcFormat,
-        frameCapacity: AVAudioFrameCount(file.length)
-    ) else { throw AudioLoadError.openFailed }
-    try file.read(into: srcBuf)
-
-    // Convert in one shot. Worst-case output length = src * (dst/src).
-    let ratio = dstFormat.sampleRate / srcFormat.sampleRate
-    let dstCap = AVAudioFrameCount(Double(srcBuf.frameLength) * ratio + 1024)
-    guard let dstBuf = AVAudioPCMBuffer(pcmFormat: dstFormat, frameCapacity: dstCap),
-          let converter = AVAudioConverter(from: srcFormat, to: dstFormat)
-    else { throw AudioLoadError.convertFailed }
-
-    var error: NSError?
-    let inputProvider = SingleBufferConverterInputProvider(buffer: srcBuf)
-    let status = converter.convert(to: dstBuf, error: &error) { _, outStatus in
-        inputProvider.provide(outStatus: outStatus)
+    guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                    sampleRate: 16_000, channels: 1, interleaved: false),
+          let converter = AVAudioConverter(from: file.processingFormat, to: format),
+          let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096)
+    else { throw AudioLoadError.openFailed }
+    // Core Audio otherwise selects the first channel when reducing channels.
+    // Leave mono conversion alone; redundant mixing can fail on mono Float32.
+    converter.downmix = file.processingFormat.channelCount > 1
+    let provider = AudioFileConverterInputProvider(file: file)
+    var samples: [Float] = []
+    // Drain conversion through EOF so the final partial output is retained.
+    while true {
+        var error: NSError?
+        let status = converter.convert(to: buffer, error: &error) { requestedFrames, outStatus in
+            provider.provide(requestedFrames, outStatus: outStatus)
+        }
+        if let inputError = provider.error { throw inputError }
+        if status == .error { throw error ?? AudioLoadError.convertFailed }
+        if let channel = buffer.floatChannelData?[0] {
+            samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+        } else { throw AudioLoadError.emptyBuffer }
+        if status == .endOfStream { return samples }
+        // The input provider supplies data synchronously until EOF. A conversion
+        // that makes no progress cannot safely be treated as a complete file.
+        if buffer.frameLength == 0 { throw AudioLoadError.convertFailed }
     }
-    if status == .error { throw error ?? AudioLoadError.convertFailed }
-
-    guard let chPtr = dstBuf.floatChannelData?[0] else { throw AudioLoadError.emptyBuffer }
-    return Array(UnsafeBufferPointer(start: chPtr, count: Int(dstBuf.frameLength)))
 }
 
 // Rescoring API completion is not the same as making a replacement. The SDK's
@@ -1460,8 +1489,241 @@ func validateVocabularyEvaluationContract(
     }
 }
 
+// Evaluation answers have a separate type and never enter backend initializers.
+// The optional frozen vocabulary contains only caller-supplied vocabulary bytes.
+struct EvaluationOnlyInputs {
+    let terms: [String]
+    let termsSHA256: String
+    let vocabularyURL: URL?
+    let vocabularySHA256: String?
+    private let directoryURL: URL?
+
+    init(terms: [String], termsSHA256: String, vocabularyURL: URL?,
+         vocabularySHA256: String?, directoryURL: URL?) {
+        self.terms = terms
+        self.termsSHA256 = termsSHA256
+        self.vocabularyURL = vocabularyURL
+        self.vocabularySHA256 = vocabularySHA256
+        self.directoryURL = directoryURL
+    }
+
+    func cleanup() {
+        if let directoryURL { try? FileManager.default.removeItem(at: directoryURL) }
+    }
+}
+
+enum EvaluationOnlyInputError: LocalizedError {
+    case requiresCanonicalTerms
+    case invalidEvaluationTerms
+    case invalidVocabulary
+    case freezeFailed
+    case leakedAnswer(entry: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .requiresCanonicalTerms: return "evaluation-only terms require nonempty --critical-terms"
+        case .invalidEvaluationTerms: return "evaluation-only terms must be a readable, nonempty, valid term list"
+        case .invalidVocabulary: return "evaluation-only vocabulary could not be parsed"
+        case .freezeFailed: return "could not freeze the evaluation vocabulary"
+        case .leakedAnswer(let entry):
+            return "evaluation-only entry \(entry) occurs in canonical vocabulary or an alias after normalization"
+        }
+    }
+}
+
+func evaluationTermTokens(_ text: String, folded: Bool) -> [String] {
+    guard folded else { return werTokens(text) }
+    // ICU Latin-ASCII also covers non-decomposing Polish letters such as ł.
+    // This conservative screen may reject distinct transliterated spellings;
+    // it must never admit an answer merely because an alias drops its accents.
+    let latin = text.applyingTransform(StringTransform("Any-Latin; Latin-ASCII"), reverse: false)
+        ?? text.folding(options: [.diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    return werTokens(latin)
+}
+
+func validateEvaluationOnlyTerms(_ terms: [String], vocabulary: CustomVocabularyContext?,
+                                 canonicalTerms: [String]) throws {
+    guard !canonicalTerms.isEmpty else { throw EvaluationOnlyInputError.requiresCanonicalTerms }
+    guard !terms.isEmpty else { throw EvaluationOnlyInputError.invalidEvaluationTerms }
+    if let vocabulary {
+        try validateVocabularyEvaluationContract(vocabulary: vocabulary, criticalTerms: canonicalTerms)
+    }
+    let supplied = vocabulary.map { context in
+        context.terms.flatMap { [$0.text] + ($0.aliases ?? []) }
+    } ?? canonicalTerms
+    for (offset, term) in terms.enumerated() {
+        for folded in [false, true] {
+            let answer = evaluationTermTokens(term, folded: folded)
+            if !answer.isEmpty && supplied.contains(where: {
+                !phraseOccurrenceStarts(answer, in: evaluationTermTokens($0, folded: folded)).isEmpty
+            }) {
+                throw EvaluationOnlyInputError.leakedAnswer(entry: offset + 1)
+            }
+        }
+    }
+}
+
+func evaluationInputDigest(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+}
+
+func prepareEvaluationOnlyInputs(termsURL: URL, vocabularyURL: URL?,
+                                 canonicalTerms: [String]) throws -> EvaluationOnlyInputs {
+    let termData: Data
+    let terms: [String]
+    do {
+        termData = try Data(contentsOf: termsURL)
+        guard let contents = String(data: termData, encoding: .utf8) else {
+            throw EvaluationOnlyInputError.invalidEvaluationTerms
+        }
+        terms = try parseCriticalTerms(contents)
+        guard !terms.isEmpty else { throw EvaluationOnlyInputError.invalidEvaluationTerms }
+    } catch { throw EvaluationOnlyInputError.invalidEvaluationTerms }
+
+    var directory: URL?
+    do {
+        var frozenURL: URL?
+        var digest: String?
+        var vocabulary: CustomVocabularyContext?
+        if let vocabularyURL {
+            let data: Data
+            do { data = try Data(contentsOf: vocabularyURL) }
+            catch { throw EvaluationOnlyInputError.invalidVocabulary }
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("presspeech-evaluation-\(UUID().uuidString)", isDirectory: true)
+            let frozen = folder.appendingPathComponent("vocabulary")
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false,
+                    attributes: [.posixPermissions: 0o700])
+                directory = folder
+                try data.write(to: frozen, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o400], ofItemAtPath: frozen.path)
+            } catch { throw EvaluationOnlyInputError.freezeFailed }
+            do {
+                // Dispatch to the SDK's public parsers, matching its content-based
+                // format detection without duplicating sanitization/tokenization.
+                let whitespace: Set<UInt8> = [0x20, 0x09, 0x0a, 0x0d]
+                let firstMeaningfulByte = data.first { !whitespace.contains($0) }
+                vocabulary = firstMeaningfulByte == UInt8(ascii: "{")
+                    ? try CustomVocabularyContext.load(from: frozen)
+                    : try CustomVocabularyContext.loadFromSimpleFormat(from: frozen)
+            } catch { throw EvaluationOnlyInputError.invalidVocabulary }
+            frozenURL = frozen
+            digest = evaluationInputDigest(data)
+        }
+        try validateEvaluationOnlyTerms(terms, vocabulary: vocabulary, canonicalTerms: canonicalTerms)
+        return EvaluationOnlyInputs(terms: terms, termsSHA256: evaluationInputDigest(termData),
+            vocabularyURL: frozenURL, vocabularySHA256: digest, directoryURL: directory)
+    } catch {
+        if let directory { try? FileManager.default.removeItem(at: directory) }
+        throw error
+    }
+}
+
+func evaluationOnlyRecord(trial: Int, total: Int, reference: String, hypothesis: String,
+                          canonicalTerms: [String], evaluationTerms: [String]) -> String {
+    let canonical = criticalTermScore(reference: reference, hypothesis: hypothesis, terms: canonicalTerms)
+    let heldOut = criticalTermScore(reference: reference, hypothesis: hypothesis, terms: evaluationTerms)
+    let words = wordErrorScore(reference: reference, hypothesis: hypothesis)
+    return "evaluation-only schema=1 trial=\(trial)/\(total) "
+        + "canonical-matched=\(canonical.matched) canonical-total=\(canonical.total) canonical-unexpected=\(canonical.unexpected) "
+        + "evaluation-matched=\(heldOut.matched) evaluation-total=\(heldOut.total) evaluation-unexpected=\(heldOut.unexpected) "
+        + "word-errors=\(words.errors) reference-words=\(words.referenceWords)"
+}
+
 enum BenchSelfTestError: Error {
     case failed(String)
+}
+
+func runAudioLoadingSelfTests() throws {
+    let temporary = FileManager.default.temporaryDirectory
+        .appendingPathComponent("presspeech-audio-self-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+
+    func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+        guard condition() else { throw BenchSelfTestError.failed(message) }
+    }
+    func appendLittleEndian<T: FixedWidthInteger>(_ value: T, to data: inout Data) {
+        var little = value.littleEndian
+        withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
+    }
+    func fixture(_ name: String, rate: Int, frames: Int,
+                 channels: Int = 1, floating: Bool = true) throws -> URL {
+        let bytesPerSample = floating ? 4 : 2
+        let payloadSize = frames * channels * bytesPerSample
+        var data = Data("RIFF".utf8)
+        appendLittleEndian(UInt32(36 + payloadSize), to: &data)
+        data.append(contentsOf: "WAVEfmt ".utf8)
+        appendLittleEndian(UInt32(16), to: &data)
+        appendLittleEndian(UInt16(floating ? 3 : 1), to: &data)
+        appendLittleEndian(UInt16(channels), to: &data)
+        appendLittleEndian(UInt32(rate), to: &data)
+        appendLittleEndian(UInt32(rate * channels * bytesPerSample), to: &data)
+        appendLittleEndian(UInt16(channels * bytesPerSample), to: &data)
+        appendLittleEndian(UInt16(bytesPerSample * 8), to: &data)
+        data.append(contentsOf: "data".utf8)
+        appendLittleEndian(UInt32(payloadSize), to: &data)
+        for frame in 0..<frames {
+            let impulse: Float = frame == frames - 1 ? 0.75 : (frame == 0 ? 0.25 : 0)
+            for channel in 0..<channels {
+                // A silent left channel makes stereo channel selection fail.
+                let value: Float = channels == 1 ? impulse : (channel == 1 ? impulse * 2 / 3 : 0)
+                if floating {
+                    appendLittleEndian(value.bitPattern, to: &data)
+                } else {
+                    appendLittleEndian(Int16((value * 32768).rounded()), to: &data)
+                }
+            }
+        }
+        let url = temporary.appendingPathComponent(name + ".wav")
+        try data.write(to: url)
+        return url
+    }
+
+    // Float32 WAV reads may return a short, nonempty buffer before EOF. Both
+    // sample encodings must preserve every frame and the final single sample.
+    for floating in [false, true] {
+        for frames in [1, 63, 1023, 1024, 1025, 16037, 173760] {
+            let name = "mono-\(frames)-\(floating)"
+            let url = try fixture(name, rate: 16000, frames: frames, floating: floating)
+            let actual = try load16kMono(url: url)
+            try expect(actual.count == frames, "audio loader dropped frames in \(name)")
+            try expect(actual.last == 0.75, "audio loader dropped the final impulse in \(name)")
+            if frames > 1 {
+                try expect(actual.first == 0.25, "audio loader shifted the first impulse in \(name)")
+                try expect(actual.dropFirst().dropLast().allSatisfy { $0 == 0 },
+                           "audio loader repeated or altered mono frames in \(name)")
+            }
+        }
+    }
+    for frames in [1023, 1024, 1025, 16037] {
+        let url = try fixture("stereo-\(frames)", rate: 16000, frames: frames, channels: 2)
+        let actual = try load16kMono(url: url)
+        try expect(actual.count == frames, "audio loader changed stereo duration")
+        try expect(abs((actual.last ?? 0) - 0.25) < 0.000001,
+                   "audio loader must include the right channel in a mono downmix")
+        try expect(actual.dropFirst().dropLast().allSatisfy { abs($0) < 0.000001 },
+                   "audio loader repeated stereo samples")
+    }
+    // Off-block source lengths exercise partial reads and the converter's
+    // final output after its input provider signals EOF. Resampling need not
+    // preserve impulse amplitude, but must preserve its timing and energy.
+    for rate in [8000, 22050, 44100, 48000] {
+        for channels in [1, 2] {
+            let frames = rate + 37
+            let name = "resampled-\(rate)-\(channels)"
+            let url = try fixture(name, rate: rate, frames: frames, channels: channels)
+            let actual = try load16kMono(url: url)
+            let expectedFrames = Int((Double(frames) * 16000 / Double(rate)).rounded())
+            try expect(actual.count == expectedFrames, "audio loader truncated resampling in \(name)")
+            try expect(actual.allSatisfy { $0.isFinite }, "audio loader produced nonfinite samples")
+            try expect(actual.suffix(128).map { abs($0) }.max() ?? 0 > 0.001,
+                       "audio loader lost the resampled final impulse in \(name)")
+            try expect(actual.dropFirst(128).dropLast(128).allSatisfy { abs($0) < 0.000001 },
+                       "audio loader repeated or shifted resampled impulses in \(name)")
+        }
+    }
 }
 
 func runBenchSelfTests() throws {
@@ -1609,6 +1871,103 @@ func runBenchSelfTests() throws {
         rejectedEmpty = entry == 1
     }
     try expect(rejectedEmpty, "critical-term parser should reject punctuation-only entries")
+    let lemmaVocabulary = CustomVocabularyContext(terms: [CustomVocabularyTerm(text: "Hongkong")])
+    try validateEvaluationOnlyTerms(["Hongkongu"], vocabulary: lemmaVocabulary, canonicalTerms: ["Hongkong"])
+    try expect(evaluationTermTokens("Łódź", folded: true) == ["lodz"],
+        "folded answer leakage must include Polish non-decomposing letters")
+    let leakingCases: [(CustomVocabularyContext, [String], [String])] = [
+        (.init(terms: [.init(text: "Hongkongu")]), ["Hongkongu"], ["Hongkongu"]),
+        (.init(terms: [.init(text: "Hongkong", aliases: ["Hongkongu"])]), ["Hongkong"], ["Hongkongu"]),
+        (.init(terms: [.init(text: "City", aliases: ["Lodz"])]), ["City"], ["Łódź"]),
+        (.init(terms: [.init(text: "Nowy Sącz", aliases: ["Nowego Sacza"])]), ["Nowy Sącz"], ["Nowego Sącza"]),
+        (.init(terms: [.init(text: "Port in Hongkongu")]), ["Port in Hongkongu"], ["Hongkongu"]),
+    ]
+    for (vocabulary, canonical, answers) in leakingCases {
+        var rejected = false
+        do { try validateEvaluationOnlyTerms(answers, vocabulary: vocabulary, canonicalTerms: canonical) }
+        catch EvaluationOnlyInputError.leakedAnswer(let entry) { rejected = entry == 1 }
+        try expect(rejected, "evaluation answers must not occur in canonical terms or exact/folded aliases")
+    }
+    var heldOutCoverageRejected = false
+    do { try validateEvaluationOnlyTerms(["Hongkongu"], vocabulary: lemmaVocabulary, canonicalTerms: ["Unrelated"]) }
+    catch VocabularyEvaluationContractError.coverageMismatch { heldOutCoverageRejected = true }
+    try expect(heldOutCoverageRejected, "evaluation-only scoring must not weaken canonical coverage")
+
+    let wrongInflection = evaluationOnlyRecord(trial: 2, total: 3, reference: "W Hongkongu",
+        hypothesis: "W Hongkong", canonicalTerms: ["Hongkong"], evaluationTerms: ["Hongkongu"])
+    try expect(wrongInflection.contains("schema=1 trial=2/3") &&
+        wrongInflection.contains("canonical-matched=0 canonical-total=0 canonical-unexpected=1") &&
+        wrongInflection.contains("evaluation-matched=0 evaluation-total=1 evaluation-unexpected=0") &&
+        !wrongInflection.contains("Hongkong"),
+        "wrong canonical replacement must be measured without serializing answer text")
+    let mixedInflection = evaluationOnlyRecord(trial: 1, total: 3, reference: "Hongkong i Hongkongu",
+        hypothesis: "Hongkong i Hongkongu", canonicalTerms: ["Hongkong"], evaluationTerms: ["Hongkongu"])
+    try expect(mixedInflection.contains("canonical-matched=1 canonical-total=1 canonical-unexpected=0") &&
+        mixedInflection.contains("evaluation-matched=1 evaluation-total=1 evaluation-unexpected=0"),
+        "a genuine listed lemma in a mixed reference must not be counted as a wrong inflection")
+    // Positive controls exchange the two term-set roles; no leakage bypass is needed.
+    try validateEvaluationOnlyTerms(["Hongkong"], vocabulary: .init(terms: [.init(text: "Hongkongu")]),
+        canonicalTerms: ["Hongkongu"])
+
+    let evaluationFixture = FileManager.default.temporaryDirectory.appendingPathComponent("evaluation-selftest-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: evaluationFixture, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: evaluationFixture) }
+    let fixtureVocabulary = evaluationFixture.appendingPathComponent("vocabulary.txt")
+    let fixtureAnswers = evaluationFixture.appendingPathComponent("answers.txt")
+    let originalVocabularyBytes = Data("Hongkong\n".utf8)
+    try originalVocabularyBytes.write(to: fixtureVocabulary)
+    try Data("Hongkongu\n".utf8).write(to: fixtureAnswers)
+    let frozen = try prepareEvaluationOnlyInputs(termsURL: fixtureAnswers, vocabularyURL: fixtureVocabulary,
+        canonicalTerms: ["Hongkong"])
+    defer { frozen.cleanup() }
+    try Data("Hongkong: Hongkongu\n".utf8).write(to: fixtureVocabulary)
+    try Data("ChangedAnswer\n".utf8).write(to: fixtureAnswers)
+    let frozenBytes = try Data(contentsOf: frozen.vocabularyURL!)
+    let parsedFrozen = try CustomVocabularyContext.loadFromSimpleFormat(from: frozen.vocabularyURL!)
+    try expect(frozenBytes == originalVocabularyBytes && parsedFrozen.terms.count == 1 &&
+        parsedFrozen.terms[0].text == "Hongkong" && parsedFrozen.terms[0].aliases == nil &&
+        frozen.terms == ["Hongkongu"] && frozen.vocabularySHA256 == evaluationInputDigest(originalVocabularyBytes),
+        "later caller edits must not inject held-out answers into the vocabulary actually read by the backend")
+    frozen.cleanup()
+    try expect(!FileManager.default.fileExists(atPath: frozen.vocabularyURL!.path),
+        "evaluation vocabulary snapshot must be removable after use")
+    try Data("Hongkongu\n".utf8).write(to: fixtureAnswers)
+    try Data(#"{"terms":[{"text":"Hongkong","aliases":["Hongkongu"]}]}"#.utf8).write(to: fixtureVocabulary)
+    var rejectedJSONAlias = false
+    do { _ = try prepareEvaluationOnlyInputs(termsURL: fixtureAnswers, vocabularyURL: fixtureVocabulary,
+        canonicalTerms: ["Hongkong"]) }
+    catch EvaluationOnlyInputError.leakedAnswer { rejectedJSONAlias = true }
+    try expect(rejectedJSONAlias, "actual SDK JSON parsing must expose aliases to leakage validation")
+
+    // The SDK skips only four ASCII bytes for JSON detection. Unicode whitespace
+    // before JSON therefore selects its simple-text parser, and must fail coverage
+    // here before loading a model rather than disagreeing with backend parsing.
+    let plainJSON = #"{"terms":[{"text":"Hongkong"}]}"#
+    try Data((" \t\r\n" + plainJSON).utf8).write(to: fixtureVocabulary)
+    let asciiJSON = try prepareEvaluationOnlyInputs(termsURL: fixtureAnswers,
+        vocabularyURL: fixtureVocabulary, canonicalTerms: ["Hongkong"])
+    asciiJSON.cleanup()
+    for prefix in ["\u{00a0}", "\u{2003}", "\u{0085}"] {
+        try Data((prefix + plainJSON).utf8).write(to: fixtureVocabulary)
+        let actualSimple = try CustomVocabularyContext.loadFromSimpleFormat(from: fixtureVocabulary)
+        try expect(actualSimple.terms.map(\.text) != ["Hongkong"],
+            "Unicode-leading JSON must use the SDK simple-text interpretation")
+        var rejectedUnicodeJSON = false
+        do {
+            let unexpected = try prepareEvaluationOnlyInputs(termsURL: fixtureAnswers,
+                vocabularyURL: fixtureVocabulary, canonicalTerms: ["Hongkong"])
+            unexpected.cleanup()
+        } catch VocabularyEvaluationContractError.coverageMismatch { rejectedUnicodeJSON = true }
+        try expect(rejectedUnicodeJSON, "Unicode-leading JSON must reject before model preparation")
+        try Data((prefix + "Hongkong\n").utf8).write(to: fixtureVocabulary)
+        let simple = try CustomVocabularyContext.loadFromSimpleFormat(from: fixtureVocabulary)
+        let accepted = try prepareEvaluationOnlyInputs(termsURL: fixtureAnswers,
+            vocabularyURL: fixtureVocabulary, canonicalTerms: simple.terms.map(\.text))
+        accepted.cleanup()
+        try expect(simple.terms.map(\.text) == ["Hongkong"],
+            "Unicode-leading plain vocabulary must retain actual SDK normalization")
+    }
+
     let coveredVocabulary = CustomVocabularyContext(terms: [
         CustomVocabularyTerm(text: "Szypański"),
         CustomVocabularyTerm(text: "Nowy Sącz", aliases: ["Nowego Sącza"]),
@@ -1765,6 +2124,8 @@ func runBenchSelfTests() throws {
     try expect(RescoringObservation.unobservable(attempted: nil).fields.contains("attempted=unknown"), "sliding API cannot claim an observed attempt")
     try expect(RescoringObservation.skipped.fields.contains("attempted=0"), "missing timings skip rescoring without claiming an attempt")
 
+    try runAudioLoadingSelfTests()
+
     print("presspeech-bench self-test passed")
 }
 
@@ -1835,7 +2196,15 @@ func summarize(_ name: String,
                baseline: UInt64,
                peak: UInt64,
                redactTranscripts: Bool,
-               criticalTerms: [String]) {
+               criticalTerms: [String],
+               evaluationOnly: EvaluationOnlyInputs? = nil) {
+    if let evaluationOnly, let reference {
+        for (index, result) in results.enumerated() {
+            print("    " + evaluationOnlyRecord(trial: index + 1, total: results.count,
+                reference: reference, hypothesis: result.text, canonicalTerms: criticalTerms,
+                evaluationTerms: evaluationOnly.terms))
+        }
+    }
     let times = results.map(\.elapsed)
     let p50 = percentile(times, 0.5)
     let mn = times.min() ?? 0
@@ -1987,6 +2356,34 @@ struct PresspeechBench {
             criticalTerms = []
         }
 
+        let evaluationOnly: EvaluationOnlyInputs?
+        if let termsURL = args.evaluationOnlyTerms {
+            guard reference != nil else {
+                log("evaluation-only scoring requires a reference transcript")
+                exit(2)
+            }
+            do {
+                evaluationOnly = try prepareEvaluationOnlyInputs(termsURL: termsURL,
+                    vocabularyURL: args.customVocabulary, canonicalTerms: criticalTerms)
+            } catch {
+                // Our validation errors expose positions/counts, never term or path contents.
+                let detail = (error as? EvaluationOnlyInputError)?.errorDescription
+                    ?? (error as? VocabularyEvaluationContractError)?.errorDescription
+                    ?? "invalid evaluation-only inputs"
+                log("evaluation-only input validation failed: \(detail)")
+                exit(2)
+            }
+            if let evaluationOnly {
+                log("evaluation-only inputs: terms=\(evaluationOnly.terms.count) "
+                    + "terms-sha256=\(evaluationOnly.termsSHA256) "
+                    + "vocabulary-sha256=\(evaluationOnly.vocabularySHA256 ?? "none")")
+            }
+        } else {
+            evaluationOnly = nil
+        }
+        defer { evaluationOnly?.cleanup() }
+        let inferenceVocabularyURL = evaluationOnly?.vocabularyURL ?? args.customVocabulary
+
         // Use the same audio for warmup — it's the most representative
         // "first inference" for the same shape we'll measure.
         let warmup = samples
@@ -2071,7 +2468,7 @@ struct PresspeechBench {
             backends.append(
                 DirectVocabularyBackend(
                     language: args.language,
-                    customVocabularyURL: args.customVocabulary!,
+                    customVocabularyURL: inferenceVocabularyURL!,
                     criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms,
                     vocabularyPolicy: policy
                 )
@@ -2086,7 +2483,7 @@ struct PresspeechBench {
             backends.append(
                 SlidingWindowBackend(
                     language: args.language,
-                    customVocabularyURL: args.customVocabulary,
+                    customVocabularyURL: inferenceVocabularyURL,
                     criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms
                 )
             )
@@ -2095,7 +2492,7 @@ struct PresspeechBench {
             backends.append(
                 SlidingWindowBackend(
                     language: args.language,
-                    customVocabularyURL: args.customVocabulary,
+                    customVocabularyURL: inferenceVocabularyURL,
                     criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms,
                     vocabularyPolicy: .conservative
                 )
@@ -2105,7 +2502,7 @@ struct PresspeechBench {
             backends.append(
                 SlidingWindowBackend(
                     language: args.language,
-                    customVocabularyURL: args.customVocabulary,
+                    customVocabularyURL: inferenceVocabularyURL,
                     criticalTerms: criticalTerms.isEmpty ? nil : criticalTerms,
                     vocabularyPolicy: .noSpotterRescue
                 )
@@ -2179,7 +2576,8 @@ struct PresspeechBench {
                           baseline: baseline,
                           peak: peak,
                           redactTranscripts: args.redactTranscripts,
-                          criticalTerms: criticalTerms)
+                          criticalTerms: criticalTerms,
+                          evaluationOnly: evaluationOnly)
             } catch {
                 failedBackends += 1
                 let detail = benchmarkErrorDescription(
@@ -2191,6 +2589,7 @@ struct PresspeechBench {
         }
         if failedBackends > 0 {
             log("presspeech-bench: \(failedBackends) backend(s) failed")
+            evaluationOnly?.cleanup()
             exit(1)
         }
     }
