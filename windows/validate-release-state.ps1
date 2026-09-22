@@ -43,7 +43,7 @@ function Get-PresspeechReleaseDisposition(
     }
     foreach ($property in @(
         "tag_name", "name", "target_commitish", "draft", "prerelease", "assets",
-        "body"
+        "body", "immutable"
     )) {
         if ($property -notin $release.PSObject.Properties.Name) {
             throw "GitHub returned incomplete release metadata"
@@ -57,7 +57,8 @@ function Get-PresspeechReleaseDisposition(
         throw "Existing $ReleaseTag release does not match approved metadata"
     }
     if ($release.draft -isnot [bool] -or
-            $release.prerelease -isnot [bool]) {
+            $release.prerelease -isnot [bool] -or
+            $release.immutable -isnot [bool]) {
         throw "GitHub returned invalid release state metadata"
     }
     if (-not $release.prerelease) {
@@ -80,6 +81,9 @@ function Get-PresspeechReleaseDisposition(
         throw "Existing $ReleaseTag release notes do not match the approved file"
     }
     if (-not $release.draft) {
+        if (-not $release.immutable) {
+            throw "Published $ReleaseTag release is not immutable"
+        }
         return "verify-published"
     }
 
@@ -221,6 +225,7 @@ if ($SelfTest) {
             target_commitish = $approved
             draft = $true
             prerelease = $true
+            immutable = $false
             assets = @()
             body = "Approved notes.`r`n`r`nExact release details.`r`n"
         }
@@ -259,6 +264,7 @@ if ($SelfTest) {
             throw "complete draft self-test returned the wrong disposition"
         }
         $release.draft = $false
+        $release.immutable = $true
         if ((Get-PresspeechReleaseDisposition `
                 ($release | ConvertTo-Json -Depth 4 -Compress) `
                 $tag $version $approved $installerPath $checksumPath `
@@ -267,12 +273,22 @@ if ($SelfTest) {
             throw "published release self-test returned the wrong disposition"
         }
 
+        $mutableRelease = (
+            $release | ConvertTo-Json -Depth 4 -Compress | ConvertFrom-Json)
+        $mutableRelease.immutable = $false
+        Assert-PresspeechRejected {
+            Get-PresspeechReleaseDisposition `
+                ($mutableRelease | ConvertTo-Json -Depth 4 -Compress) `
+                $tag $version $approved $installerPath $checksumPath $notesPath
+        } "Published * release is not immutable"
+
         foreach ($testCase in @(
             @{ Property = "tag_name"; Value = "windows-v1.2.4"; Message = "Existing * does not match*" },
             @{ Property = "name"; Value = "Unexpected"; Message = "Existing * does not match*" },
             @{ Property = "target_commitish"; Value = ("b" * 40); Message = "Existing * does not match*" },
             @{ Property = "prerelease"; Value = $false; Message = "Existing * is not a Windows prerelease" },
-            @{ Property = "draft"; Value = "false"; Message = "GitHub returned invalid release state metadata" }
+            @{ Property = "draft"; Value = "false"; Message = "GitHub returned invalid release state metadata" },
+            @{ Property = "immutable"; Value = "true"; Message = "GitHub returned invalid release state metadata" }
         )) {
             $invalid = $emptyDraftJson | ConvertFrom-Json
             $invalid.($testCase.Property) = $testCase.Value

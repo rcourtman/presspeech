@@ -19,6 +19,7 @@ on:
 
 permissions:
   actions: read
+  attestations: read
   contents: write
 
 concurrency:
@@ -46,6 +47,14 @@ jobs:
       - name: Validate release metadata
         shell: pwsh
         run: |
+          gh release verify --help | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub CLI is too old for immutable release verification"
+          }
+          gh release verify-asset --help | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub CLI is too old for immutable asset verification"
+          }
           $version = $env:PRESSPEECH_RELEASE_VERSION
           if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
             throw "Version must have the canonical form X.Y.Z"
@@ -95,6 +104,25 @@ jobs:
             -CheckWorkflowJson $checkJson `
             -WindowsWorkflowJson $windowsJson `
             -ExpectedSha $sha
+      - name: Require immutable release provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $immutabilityJson = gh api `
+            -H "X-GitHub-Api-Version: 2026-03-10" `
+            "repos/rcourtman/presspeech/immutable-releases"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not read GitHub release immutability settings"
+          }
+          try {
+            $immutability = $immutabilityJson | ConvertFrom-Json
+          } catch {
+            throw "GitHub returned invalid release immutability settings"
+          }
+          if ($immutability.enabled -cne $true) {
+            throw "GitHub release immutability must be enabled before publishing"
+          }
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           # release_requirements.py verifies this exact interpreter version.
@@ -157,11 +185,28 @@ jobs:
               Get-Content -LiteralPath $_.FullName -Tail 200
             }
           }
-      - name: Publish Windows prerelease
+      - name: Publish and verify immutable Windows prerelease
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          function Assert-ImmutableReleasePolicy {
+            $json = gh api `
+              -H "X-GitHub-Api-Version: 2026-03-10" `
+              "repos/rcourtman/presspeech/immutable-releases"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not recheck GitHub release immutability settings"
+            }
+            try {
+              $settings = $json | ConvertFrom-Json
+            } catch {
+              throw "GitHub returned invalid release immutability settings"
+            }
+            if ($settings.enabled -cne $true) {
+              throw "GitHub release immutability was disabled during the build"
+            }
+          }
+
           $version = $env:PRESSPEECH_RELEASE_VERSION
           $tag = "windows-v$version"
           $notes = "windows/release-notes/$version.md"
@@ -177,6 +222,7 @@ jobs:
             -AllowMissing
           $installer = "windows/dist/installer/Presspeech-Setup-$version-x64.exe"
           $releaseJson = gh api `
+            -H "X-GitHub-Api-Version: 2026-03-10" `
             "repos/rcourtman/presspeech/releases/tags/$tag" 2>$null
           if ($LASTEXITCODE -ne 0) {
             $releaseJson = ""
@@ -195,6 +241,7 @@ jobs:
             # uploads succeed. If the CLI exits after creating that draft, do
             # not discard this runner's exact (potentially timestamped) build:
             # inspect and finish the draft through the guarded recovery below.
+            Assert-ImmutableReleasePolicy
             gh release create $tag `
               $installer `
               "$installer.sha256" `
@@ -205,6 +252,7 @@ jobs:
             $createExitCode = $LASTEXITCODE
             if ($createExitCode -ne 0) {
               $releaseJson = gh api `
+                -H "X-GitHub-Api-Version: 2026-03-10" `
                 "repos/rcourtman/presspeech/releases/tags/$tag" 2>$null
               if ($LASTEXITCODE -ne 0) {
                 throw "Could not atomically publish Windows release $tag"
@@ -240,6 +288,7 @@ jobs:
               throw "Could not resume interrupted draft release $tag"
             }
             $releaseJson = gh api `
+              -H "X-GitHub-Api-Version: 2026-03-10" `
               "repos/rcourtman/presspeech/releases/tags/$tag"
             if ($LASTEXITCODE -ne 0) {
               throw "Could not read resumed draft release $tag"
@@ -253,8 +302,10 @@ jobs:
               -Checksum "$installer.sha256" `
               -Notes $notes
             if ($disposition -ceq "publish-draft") {
-              # Asset uploads can take long enough for the remote tag to move.
-              # Recheck at the last possible point before making the draft public.
+              # Asset uploads can take long enough for the remote tag or
+              # repository release policy to change. Recheck both at the last
+              # possible point before making the draft public.
+              Assert-ImmutableReleasePolicy
               .\windows\validate-release-tag.ps1 `
                 -Tag $tag `
                 -ExpectedSha $env:PRESSPEECH_RELEASE_EXPECTED_SHA
@@ -278,9 +329,11 @@ jobs:
           # The updater consumes the REST API's exact names, sizes, hashes, and
           # URLs. Confirm that public metadata contract rather than treating a
           # successful CLI process as sufficient publication proof. On a rerun,
-          # this also makes published assets immutable: they must match the
-          # rebuilt files exactly instead of being deleted and re-uploaded.
+          # require the published assets to match the rebuilt files exactly;
+          # the validators and `gh release verify` below separately enforce
+          # GitHub's immutable-release contract and attestation.
           $publishedJson = gh api `
+            -H "X-GitHub-Api-Version: 2026-03-10" `
             "repos/rcourtman/presspeech/releases/tags/$tag"
           if ($LASTEXITCODE -ne 0) {
             throw "Could not read the published Windows release"
@@ -302,3 +355,15 @@ jobs:
             -Version $version `
             -Installer $installer `
             -Checksum "$installer.sha256"
+          gh release verify $tag --repo rcourtman/presspeech
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub could not verify the immutable Windows release attestation"
+          }
+          gh release verify-asset $tag $installer --repo rcourtman/presspeech
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub could not verify the installer against the release attestation"
+          }
+          gh release verify-asset $tag "$installer.sha256" --repo rcourtman/presspeech
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub could not verify the checksum against the release attestation"
+          }

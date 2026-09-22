@@ -29,10 +29,14 @@ updates the Homebrew Cask. Direct-download users can run
 same archive hash from the tap.
 
 The Windows release workflow builds only an approved main commit with green
-macOS and Windows CI, publishes the installer and checksum together, and
-checks their GitHub digests before the prerelease becomes available. The
-Windows updater checks the published metadata, checksum file, and installer
-again before launch.
+macOS and Windows CI, publishes the installer and checksum together, requires
+the resulting release to be immutable, and verifies GitHub's release
+attestation against both local assets. The Windows updater considers only
+releases that GitHub marks immutable, then checks the published metadata,
+checksum file, and installer again before launch. The Windows build remains
+unsigned until a code-signing certificate is configured; release attestation
+proves which immutable Presspeech release supplied the bytes, but it is not a
+substitute for Authenticode publisher identity.
 
 ## What's in scope
 

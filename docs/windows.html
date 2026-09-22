@@ -119,6 +119,13 @@ if ($actual -ne $parts[0]) {
 "SHA-256 verified: $actual"</code></pre>
             </li>
             <li>
+              <strong>Optionally verify the immutable release attestation</strong>
+              <p>If you already use an authenticated <a href="https://cli.github.com/">GitHub CLI</a>, these commands additionally confirm that GitHub considers the release immutable and that your local installer exactly matches its signed release attestation:</p>
+              <pre><code>gh release verify windows-v0.1.12 --repo rcourtman/presspeech
+gh release verify-asset windows-v0.1.12 $installer --repo rcourtman/presspeech</code></pre>
+              <p>This verifies the asset's Presspeech release identity and integrity. It does not code-sign the installer or override Windows security policy.</p>
+            </li>
+            <li>
               <strong>Run the installer</strong>
               <p>The current build is unsigned. If Microsoft Defender SmartScreen shows <strong>Windows protected your PC</strong>, confirm the filename and verified hash before choosing <strong>More info → Run anyway</strong>. If policy does not offer that choice, do not try to circumvent it.</p>
             </li>
@@ -179,7 +186,7 @@ if ($actual -ne $parts[0]) {
             </article>
             <article class="card">
               <h3>Updates require approval</h3>
-              <p>Optional update checks read public GitHub release metadata. Presspeech downloads an installer only after approval, then verifies its published size and SHA-256 before offering to run it.</p>
+              <p>Optional update checks read public GitHub release metadata and ignore releases that are not marked immutable. Presspeech downloads an installer only after approval, then verifies its published size and SHA-256 before offering to run it.</p>
             </article>
           </div>
         </div>

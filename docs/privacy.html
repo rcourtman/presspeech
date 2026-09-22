@@ -97,7 +97,7 @@
                 <tr>
                   <th scope="row">Periodic update check</th>
                   <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code> (macOS); <code>api.github.com/repos/rcourtman/presspeech/releases?per_page=100</code> (Windows)</td>
-                  <td>macOS checks every six hours; Windows checks at most daily. Both only notify and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no version, device, settings, transcript, or usage identifiers.</td>
+                  <td>macOS checks every six hours; Windows checks at most daily. Both ignore release responses not marked immutable, only notify, and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no version, device, settings, transcript, or usage identifiers.</td>
                   <td>Disable update notifications from Settings.</td>
                 </tr>
                 <tr>
@@ -109,7 +109,7 @@
                 <tr>
                   <th scope="row">User-triggered install/update</th>
                   <td><code>github.com/rcourtman/presspeech/releases/download/...</code>, <code>formulae.brew.sh</code>, <code>github.com/rcourtman/homebrew-presspeech</code>, Homebrew's own update endpoints (github.com / api.github.com)</td>
-                  <td>macOS uses the signed, notarised archive directly or through Homebrew; each immutable GitHub release also publishes a SHA-256 sidecar. Windows downloads an installer only after user approval, then verifies the published size and SHA-256 before offering to launch it.</td>
+                  <td>macOS uses the signed, notarised archive directly or through Homebrew; each immutable GitHub release also publishes a SHA-256 sidecar. Windows downloads from an immutable release only after user approval, then verifies the published size and SHA-256 before offering to launch it. GitHub CLI users can also verify either platform's signed release attestation.</td>
                   <td>Only runs when the user installs or updates.</td>
                 </tr>
               </tbody>

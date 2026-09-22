@@ -26,7 +26,7 @@
       "name": "macos_update_check",
       "when": "Every 6 hours when automatic update checks are enabled, plus one check shortly after launch",
       "destination": "api.github.com/repos/rcourtman/presspeech/releases/latest",
-      "purpose": "Check whether a newer Presspeech release is available and notify the user",
+      "purpose": "Check whether a newer immutable Presspeech release is available and notify the user",
       "user_triggered": false,
       "can_disable": true,
       "data_sent": "GET with a fixed User-Agent header, exactly presspeech-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
@@ -35,7 +35,7 @@
       "name": "windows_update_check",
       "when": "At most once every 24 hours when automatic checks are enabled, plus manual checks from the tray menu",
       "destination": "api.github.com/repos/rcourtman/presspeech/releases?per_page=100",
-      "purpose": "Find a newer complete windows-vX.Y.Z release and offer it to the user",
+      "purpose": "Find a newer complete, immutable windows-vX.Y.Z release and offer it to the user",
       "user_triggered": false,
       "can_disable": true,
       "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; no version, device, or user identifiers, and no transcript, microphone audio, settings, or usage counts"
@@ -61,7 +61,7 @@
         "formulae.brew.sh",
         "Homebrew's own update endpoints (github.com / api.github.com)"
       ],
-      "purpose": "User-triggered install/update flow: direct GitHub release download checked against its published SHA-256, a Homebrew metadata refresh followed by the signed macOS archive, or a Windows installer whose published size and SHA-256 are verified before launch",
+      "purpose": "User-triggered install/update flow: immutable GitHub release download checked against its published SHA-256, a Homebrew metadata refresh followed by the signed macOS archive, or a Windows installer whose immutable release state, published size, and SHA-256 are verified before launch",
       "user_triggered": true,
       "can_disable": true,
       "data_sent": "Browser or Homebrew request metadata; no dictation audio"

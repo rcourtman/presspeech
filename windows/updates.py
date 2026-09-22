@@ -79,12 +79,13 @@ def _canonical_asset_url(tag, name):
 
 
 def select_update(releases, current_version):
-    """Select the newest complete Windows release newer than current."""
+    """Select the newest complete, immutable Windows release newer than current."""
     current = parse_version(current_version)
     candidates = []
     for release in releases:
         if (not isinstance(release, dict) or release.get("draft") or
-                release.get("prerelease") is not True):
+                release.get("prerelease") is not True or
+                release.get("immutable") is not True):
             continue
         try:
             version = parse_version(release.get("tag_name", ""))

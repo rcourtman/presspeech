@@ -65,6 +65,7 @@ def release(version, complete=True, draft=False):
         "tag_name": "windows-v" + version,
         "draft": draft,
         "prerelease": True,
+        "immutable": not draft,
         "html_url": "https://github.com/release/" + version,
         "assets": assets,
     }
@@ -115,6 +116,14 @@ class UpdateSelectionTests(unittest.TestCase):
 
     def test_returns_none_when_current_is_newest(self):
         self.assertIsNone(updates.select_update([release("0.1.0")], "0.1.0"))
+
+    def test_ignores_mutable_or_unreported_release(self):
+        mutable = release("0.1.1")
+        mutable["immutable"] = False
+        unreported = release("0.1.2")
+        del unreported["immutable"]
+        self.assertIsNone(
+            updates.select_update([mutable, unreported], "0.1.0"))
 
     def test_ignores_release_assets_on_untrusted_hosts(self):
         candidate = release("0.1.1")
@@ -167,6 +176,7 @@ class UpdateSelectionTests(unittest.TestCase):
         headers = {key.lower(): value for key, value in
                    seen["request"].header_items()}
         self.assertEqual(headers["user-agent"], updates.USER_AGENT)
+        self.assertEqual(headers["x-github-api-version"], updates.API_VERSION)
         self.assertNotIn("x-presspeech-version", headers)
 
     def test_update_check_rejects_every_redirect(self):

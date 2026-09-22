@@ -27,7 +27,7 @@ and appears in **Settings → Apps → Installed apps** for normal uninstallatio
 
 The current prerelease is not code-signed. Windows SmartScreen may report
 **Unknown publisher**. Follow the public guide's
-[download and PowerShell verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run),
+[download, checksum, and optional release-attestation verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run),
 then choose **More info → Run anyway** only if Windows offers that choice and
 the guide reports that SHA-256 verification succeeded. Windows 11 Smart App
 Control or managed policy may block an unsigned app without offering an
@@ -186,8 +186,8 @@ callback details and pressed keys are not included.
   device's previous mute state afterwards
 - A click-through **Listening… / Transcribing…** indicator on the active display
 - Optional daily GitHub update checks; downloads and installation require
-  approval, and the installer is verified by size and SHA-256 after download
-  and again immediately before launch
+  approval, mutable releases are ignored, and the installer is verified by
+  size and SHA-256 after download and again immediately before launch
 - Dictionary: map a misheard phrase or spoken shortcut to exact text
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)
@@ -294,7 +294,10 @@ publication. Existing published assets are never replaced: a rerun must
 reproduce them exactly. The workflow compares GitHub's published asset names,
 sizes,
 SHA-256 digests, and download URLs with the local installer and checksum before
-reporting a successful release.
+reporting a successful release. It also requires GitHub to report the release
+as immutable and uses `gh release verify` plus `gh release verify-asset` for
+both files, so a successful run has checked the generated release attestation
+as well as REST metadata.
 
 Before publication, the hosted Windows runner installs the finished installer
 into a temporary directory, checks its version and uninstall registration,

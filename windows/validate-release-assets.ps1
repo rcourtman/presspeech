@@ -24,6 +24,9 @@ function Assert-PresspeechPublishedAssets(
             -not $Release.prerelease) {
         throw "Published release metadata does not describe $ReleaseTag prerelease"
     }
+    if ($Release.immutable -isnot [bool] -or -not $Release.immutable) {
+        throw "$ReleaseTag is not an immutable release"
+    }
 
     $assets = @($Release.assets)
     if ($assets.Count -ne 2) {
@@ -160,6 +163,7 @@ if ($SelfTest) {
             tag_name = $tag
             draft = $false
             prerelease = $true
+            immutable = $true
             assets = @(
                 [pscustomobject]@{
                     name = $installerName
@@ -214,6 +218,20 @@ if ($SelfTest) {
                 ($extraAsset | ConvertTo-Json -Depth 4 -Compress) `
                 $tag $version $installerPath $checksumPath
         } "*exactly the installer and checksum assets"
+
+        $mutableRelease = $validJson | ConvertFrom-Json
+        $mutableRelease.immutable = $false
+        Assert-PresspeechRejected {
+            Test-PresspeechPublishedAssets `
+                ($mutableRelease | ConvertTo-Json -Depth 4 -Compress) `
+                $tag $version $installerPath $checksumPath
+        } "*is not an immutable release"
+        $mutableRelease.immutable = "true"
+        Assert-PresspeechRejected {
+            Test-PresspeechPublishedAssets `
+                ($mutableRelease | ConvertTo-Json -Depth 4 -Compress) `
+                $tag $version $installerPath $checksumPath
+        } "*is not an immutable release"
 
         [IO.File]::WriteAllText(
             $checksumPath,

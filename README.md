@@ -51,8 +51,8 @@ Download the self-contained installer—Python is not required:
 
 - [Download Presspeech for Windows 0.1.12](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe)
 - Use the [Windows install guide](https://rcourtman.github.io/presspeech/windows.html#download-verify-run)
-  to download the matching checksum and have PowerShell verify it before you
-  run the installer.
+  to download the matching checksum, have PowerShell verify it, and optionally
+  verify GitHub's immutable release attestation before you run the installer.
 - After verification, run the installer and launch Presspeech from the Start
   Menu.
 - On first launch, wait for **Preparing speech model…** to disappear before
@@ -265,10 +265,10 @@ Presspeech is local-first:
 Network calls made by Presspeech are limited to:
 
 - speech model download from Hugging Face (first launch, integrity-failure re-download, or user-triggered cache reset),
-- optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers),
+- optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, which open fixed GitHub
   forms in the default browser without adding app or user data to the URL,
-- user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows verifies the release asset's size and SHA-256 before offering to run it and again immediately before launch.
+- user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows accepts only release metadata marked immutable and verifies the release asset's size and SHA-256 before offering to run it and again immediately before launch.
 
 ## How It Works
 

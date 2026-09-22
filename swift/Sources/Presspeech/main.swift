@@ -6047,10 +6047,12 @@ enum TCC {
 // MARK: - Update check
 //
 // Hits the GitHub Releases API once at boot + every 6 h. Users can
-// also force the same lookup from the menu. When a newer version is
-// found AND it's not in the user's skipped list, a submenu inserts
-// itself at the top of the menu: What's new / Update now / Remind me
-// in 24 hours / Skip vX.Y.Z.
+// also force the same lookup from the menu. Mutable responses fail
+// closed: only a release protected by GitHub's immutable-release
+// contract can become an update. When a newer version is found AND
+// it's not in the user's skipped list, a submenu inserts itself at the
+// top of the menu: What's new / Update now / Remind me in 24 hours /
+// Skip vX.Y.Z.
 
 struct GitHubRelease: Sendable, Equatable {
     let tagName: String      // 'v0.1.7'
@@ -6063,11 +6065,13 @@ private struct GitHubReleaseResponse: Decodable {
     let tagName: String
     let body: String?
     let htmlURL: String?
+    let immutable: Bool
 
     enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
         case body
         case htmlURL = "html_url"
+        case immutable
     }
 }
 
@@ -6109,6 +6113,7 @@ enum UpdateCheck {
     static func fetchLatest() async -> Result<GitHubRelease, UpdateCheckFailure> {
         var req = URLRequest(url: GITHUB_LATEST_RELEASE_URL)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("2026-03-10", forHTTPHeaderField: "X-GitHub-Api-Version")
         // The privacy docs promise exactly this fixed token — no
         // version, device, or user identifiers. Must stay in sync with
         // docs/privacy/network-calls.json.
@@ -6138,7 +6143,8 @@ enum UpdateCheck {
             return .failure(.httpStatus(http.statusCode))
         }
         guard data.count <= maxReleaseResponseBytes,
-              let payload = try? JSONDecoder().decode(GitHubReleaseResponse.self, from: data) else {
+              let payload = try? JSONDecoder().decode(GitHubReleaseResponse.self, from: data),
+              payload.immutable else {
             return .failure(.unexpectedResponse)
         }
 
@@ -16665,7 +16671,7 @@ private enum PresspeechSelfTest {
                                        httpVersion: nil,
                                        headerFields: nil)!
         let releaseData = Data(
-            #"{"tag_name":"v9.8.7","body":"Notes","html_url":"https://github.com/rcourtman/presspeech/releases/tag/v9.8.7"}"#.utf8
+            #"{"tag_name":"v9.8.7","body":"Notes","html_url":"https://github.com/rcourtman/presspeech/releases/tag/v9.8.7","immutable":true}"#.utf8
         )
 
         try expect(
@@ -16692,7 +16698,7 @@ private enum PresspeechSelfTest {
         )
         let oversizedReleaseData = Data(
             """
-            {"tag_name":"v9.8.7","body":"\(String(repeating: "x", count: UpdateCheck.maxReleaseResponseBytes))","html_url":"https://github.com/rcourtman/presspeech/releases/tag/v9.8.7"}
+            {"tag_name":"v9.8.7","body":"\(String(repeating: "x", count: UpdateCheck.maxReleaseResponseBytes))","html_url":"https://github.com/rcourtman/presspeech/releases/tag/v9.8.7","immutable":true}
             """.utf8
         )
         try expect(
@@ -16706,23 +16712,23 @@ private enum PresspeechSelfTest {
             "update parsing should reject oversized release responses before decoding"
         )
         try expect(
-            UpdateCheck.parseLatest(data: Data(#"{"tag_name":""}"#.utf8), response: ok),
+            UpdateCheck.parseLatest(data: Data(#"{"tag_name":"","immutable":true}"#.utf8), response: ok),
             equals: .failure(.unexpectedResponse),
             "update parsing should reject empty release tags"
         )
         try expect(
-            UpdateCheck.parseLatest(data: Data(#"{"tag_name":"latest"}"#.utf8), response: ok),
+            UpdateCheck.parseLatest(data: Data(#"{"tag_name":"latest","immutable":true}"#.utf8), response: ok),
             equals: .failure(.unexpectedResponse),
             "update parsing should reject non-version release tags"
         )
         try expect(
-            UpdateCheck.parseLatest(data: Data(#"{"tag_name":"v01.2.3"}"#.utf8), response: ok),
+            UpdateCheck.parseLatest(data: Data(#"{"tag_name":"v01.2.3","immutable":true}"#.utf8), response: ok),
             equals: .failure(.unexpectedResponse),
             "update parsing should reject non-normal semver tags"
         )
         try expect(
             UpdateCheck.parseLatest(
-                data: Data(#"{"tag_name":"v999999999999999999999999.2.3"}"#.utf8),
+                data: Data(#"{"tag_name":"v999999999999999999999999.2.3","immutable":true}"#.utf8),
                 response: ok
             ),
             equals: .failure(.unexpectedResponse),
@@ -16752,7 +16758,7 @@ private enum PresspeechSelfTest {
         )
         try expect(
             UpdateCheck.parseLatest(
-                data: Data(#"{"tag_name":"9.8.7","html_url":"https://example.test/v9.8.7"}"#.utf8),
+                data: Data(#"{"tag_name":"9.8.7","html_url":"https://example.test/v9.8.7","immutable":true}"#.utf8),
                 response: ok
             ),
             equals: .success(GitHubRelease(tagName: "9.8.7",
@@ -16763,7 +16769,7 @@ private enum PresspeechSelfTest {
         )
         try expect(
             UpdateCheck.parseLatest(
-                data: Data(#"{"tag_name":"v9.8.7","html_url":"https://github.com/rcourtman/presspeech/releases/tag/v9.8.8"}"#.utf8),
+                data: Data(#"{"tag_name":"v9.8.7","html_url":"https://github.com/rcourtman/presspeech/releases/tag/v9.8.8","immutable":true}"#.utf8),
                 response: ok
             ),
             equals: .success(GitHubRelease(tagName: "v9.8.7",
@@ -16771,6 +16777,22 @@ private enum PresspeechSelfTest {
                                            body: "",
                                            htmlURL: GITHUB_RELEASES_PAGE.absoluteString)),
             "update parsing should fall back when release URL tag does not match the payload tag"
+        )
+        try expect(
+            UpdateCheck.parseLatest(
+                data: Data(#"{"tag_name":"v9.8.7","immutable":false}"#.utf8),
+                response: ok
+            ),
+            equals: .failure(.unexpectedResponse),
+            "update parsing should reject mutable releases"
+        )
+        try expect(
+            UpdateCheck.parseLatest(
+                data: Data(#"{"tag_name":"v9.8.7"}"#.utf8),
+                response: ok
+            ),
+            equals: .failure(.unexpectedResponse),
+            "update parsing should reject responses without immutable release state"
         )
         // Manual-check alert copy: each failure kind gets its own
         // explanation instead of blaming the network for everything.
