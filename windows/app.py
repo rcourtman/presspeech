@@ -2309,16 +2309,11 @@ class PresspeechApp:
                     window = ui.DeliveryRecoveryWindow(self)
                     if getattr(window, "_build_failed", False) is True:
                         return False
-                    # The production window registers itself before its
-                    # asynchronous build so a UI-thread failure can clear the
-                    # exact object safely. Test doubles do not necessarily do
-                    # that, so adopt one only while the slot is still empty;
-                    # never reassign a failed window after its callback clears
-                    # the slot.
-                    if getattr(self, "delivery_recovery_window", None) is None:
-                        if getattr(window, "_build_failed", False) is True:
-                            return False
-                        self.delivery_recovery_window = window
+                    # Construction registers before queueing the UI build.
+                    # Closing or failing on the UI thread clears that exact
+                    # object. Never re-adopt it after the constructor returns.
+                    if getattr(self, "delivery_recovery_window", None) is not window:
+                        return False
                 else:
                     ui.present_window(window)
         except Exception as exc:

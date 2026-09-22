@@ -2923,14 +2923,52 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.instance._delivery_recovery_window_lock = threading.Lock()
         self.instance.delivery_recovery_window = None
         window = mock.Mock()
+        def create_window(owner):
+            owner.delivery_recovery_window = window
+            return window
         with mock.patch.object(
-                app.ui, "DeliveryRecoveryWindow", return_value=window) as create, \
+                app.ui, "DeliveryRecoveryWindow", side_effect=create_window) as create, \
                 mock.patch.object(app.ui, "present_window") as present:
             self.assertTrue(app.PresspeechApp.open_delivery_recovery(self.instance))
             self.assertTrue(app.PresspeechApp.open_delivery_recovery(self.instance))
 
         create.assert_called_once_with(self.instance)
         present.assert_called_once_with(window)
+        self.copy.assert_not_called()
+
+    def test_ui_close_before_constructor_returns_does_not_restore_dead_window(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance._delivery_recovery_window_lock = threading.Lock()
+        self.instance.delivery_recovery_window = None
+        host = mock.Mock()
+        roots = []
+
+        def build_window(window):
+            window.root = mock.Mock()
+            roots.append(window.root)
+
+        def build_then_close(command):
+            # The UI thread completes the queued build and handles Close
+            # before the calling worker resumes after submit().
+            command()
+            command.__self__._close()
+
+        host.submit.side_effect = build_then_close
+        with mock.patch.object(app.ui, "_window_host", return_value=host), \
+                mock.patch.object(app.ui.DeliveryRecoveryWindow,
+                                  "_build_window", build_window), \
+                mock.patch.object(app.ui, "present_window") as present:
+            self.assertFalse(app.PresspeechApp.open_delivery_recovery(self.instance))
+            self.assertIsNone(self.instance.delivery_recovery_window)
+            roots[0].destroy.assert_called_once_with()
+            # A later request must construct a new usable surface.
+            host.submit.side_effect = lambda command: command()
+            self.assertTrue(app.PresspeechApp.open_delivery_recovery(self.instance))
+            reopened = self.instance.delivery_recovery_window
+            self.assertIs(reopened.root, roots[1])
+            self.assertTrue(app.PresspeechApp.open_delivery_recovery(self.instance))
+            present.assert_called_once_with(reopened)
+        self.assertEqual(self.instance._undelivered_dictations, ["private transcript"])
         self.copy.assert_not_called()
 
     def test_recovery_window_failure_keeps_text_and_redacts_details(self):

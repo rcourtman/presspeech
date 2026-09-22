@@ -1659,8 +1659,9 @@ class DeliveryRecoveryWindow:
                 "Presspeech is running. Exiting Presspeech discards it. "
                 "Discard forgets only the recovery copy; it does not change "
                 "the current clipboard or text already in a field. "
-                "A manual copy may be retained by Windows clipboard history "
-                "or another clipboard manager."
+                "Windows is asked to exclude this copy from Clipboard History "
+                "and Cloud Clipboard. Other software with clipboard access "
+                "may still read or retain it."
             ),
             justify="left",
             wraplength=560,
@@ -1742,8 +1743,11 @@ class DeliveryRecoveryWindow:
         self.root.after(250, self._poll)
 
     def _close(self):
+        root = self.root
+        self.root = None
         try:
-            self.root.destroy()
+            if root is not None:
+                root.destroy()
         except Exception:
             pass
         if getattr(self.app, "delivery_recovery_window", None) is self:

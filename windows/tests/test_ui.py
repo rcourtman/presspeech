@@ -763,11 +763,29 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
     def test_close_keeps_text_owned_by_app_for_later_review(self):
         window = self.make_window()
         window.app.delivery_recovery_window = window
+        root = window.root
 
         window._close()
 
-        window.root.destroy.assert_called_once_with()
+        root.destroy.assert_called_once_with()
+        self.assertIsNone(window.root)
         self.assertIsNone(window.app.delivery_recovery_window)
+        window.app.discard_undelivered_dictation.assert_not_called()
+        # A stale queued poll or repeated close must not touch destroyed Tk.
+        window._poll()
+        window._close()
+        root.after.assert_not_called()
+        root.destroy.assert_called_once_with()
+
+    def test_old_close_does_not_clear_a_newer_recovery_window(self):
+        window = self.make_window()
+        newer = object()
+        window.app.delivery_recovery_window = newer
+
+        window._close()
+
+        self.assertIsNone(window.root)
+        self.assertIs(window.app.delivery_recovery_window, newer)
         window.app.discard_undelivered_dictation.assert_not_called()
 
 
