@@ -115,7 +115,7 @@ body:
     id: conditions
     attributes:
       label: Relevant conditions
-      description: Note trigger mode, suffix, field type, clipboard manager/history, assistive technology, or a minimal repro. Omit private document, account, server, and window names.
+      description: Note trigger mode, suffix, field type, clipboard manager/history, assistive technology, or a minimal repro. Separately count known clipboard-change interruptions excluded from completed attempts; do not exclude unexplained failures. Omit private document, account, server, and window names.
       placeholder: e.g. Hold mode; plain-text editor field; append-space suffix; no clipboard manager
   - type: textarea
     id: diagnostics

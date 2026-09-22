@@ -50,7 +50,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Scope</span>
           <h2>Separate insertion from recognition</h2>
-          <p>Presspeech binds each recording to the window where it began. It should paste only when it can still verify that destination; otherwise it should leave the complete transcript on the clipboard and explain how to paste it manually.</p>
+          <p>Presspeech binds each recording to the window where it began. It should paste only when it can still verify that destination. A focus change normally leaves the transcript available for manual paste. On macOS, if Presspeech detects another copy replacing the clipboard during delivery, it stops and preserves that newer copy; it shows a <strong>Couldn't paste</strong> notice instead of overwriting it with the transcript.</p>
           <p>This is a delivery check, not a transcription-quality test. The recognized wording can differ from what was spoken and still pass: the question is whether the same finished transcript reaches the intended field once, or is recovered safely without reaching another field.</p>
           <div class="facts">
             <div class="fact"><strong>5 attempts</strong><span>Keep one target field focused.</span></div>
@@ -95,11 +95,11 @@
         <div class="wrap">
           <span class="section-eyebrow">Checks 1–5</span>
           <h2>Keep the target focused</h2>
-          <p>Run five attempts with a different harmless phrase each time.</p>
+          <p>Run five completed attempts with a different harmless phrase each time.</p>
           <ol class="steps">
             <li>
               <strong>Start in the blank target field</strong>
-              <p>Keep its window focused from the start of recording until Presspeech finishes.</p>
+              <p>Keep its window focused from the start of recording until Presspeech finishes. Do not copy anything or allow a clipboard tool to replace its contents during delivery.</p>
             </li>
             <li>
               <strong>Dictate once, then inspect the target</strong>
@@ -107,7 +107,7 @@
             </li>
             <li>
               <strong>Inspect the clipboard before copying anything else</strong>
-              <p>Paste into the separate local scratch field. With clipboard restoration off, this is the finished transcript used for comparison.</p>
+              <p>If delivery succeeded or Presspeech showed its copied/manual-paste notice, paste into the separate local scratch field before copying anything else. With restoration off and no intervening clipboard change, this should be the finished transcript. After a <strong>Couldn't paste</strong> notice on macOS, do not assume the clipboard contains it: use <strong>Copy Last Transcript</strong> if offered, or dictate again if Recent Transcripts is off. Record the failed delivery; deliberate recovery afterward does not turn it into a successful attempt.</p>
             </li>
             <li>
               <strong>Classify one outcome</strong>
@@ -128,6 +128,7 @@
               <p>Text was stale, partial, duplicated, unavailable, delivered elsewhere, or paste failed without a recovery notice. Stop before trying a real document.</p>
             </article>
           </div>
+          <p>If you know another copy changed the clipboard during delivery, record that attempt as an interruption under <strong>Relevant conditions</strong> and repeat with a fresh harmless phrase. Exclude known interruptions from the five completed-attempt counts. Do not use this exclusion for unexplained failures; report those as <strong>Incorrect or unsafe</strong> above.</p>
           <div class="note"><p><strong>Keep recovery separate from automatic paste.</strong> Manual-paste recovery is safe behavior, but counting it as an automatic-paste pass would hide app classes where insertion is consistently unavailable. The three aggregate outcome counts should total five.</p></div>
         </div>
       </section>
@@ -139,7 +140,7 @@
           <p>Use blank disposable fields in two separate windows. Start dictation in the first window, move focus to the second, then finish. In hold mode, move before releasing the hotkey; in toggle mode, move before the stop press.</p>
           <div class="grid two">
             <article class="card">
-              <h3>The safe result</h3>
+              <h3>With no intervening clipboard change</h3>
               <ul>
                 <li>No text is inserted into either field.</li>
                 <li>Presspeech shows the copied/manual-paste notice.</li>
@@ -147,8 +148,8 @@
               </ul>
             </article>
             <article class="card">
-              <h3>Repeat three times</h3>
-              <p>For an Electron/Chromium app, use two separate windows of that same app for at least one attempt. Same-process windows are a distinct identity check; tabs or fields in one window are not a substitute.</p>
+              <h3>Repeat three completed attempts</h3>
+              <p>Record known clipboard-change interruptions separately as above. For an Electron/Chromium app, use two separate windows of that same app for at least one attempt. Same-process windows are a distinct identity check; tabs or fields in one window are not a substitute.</p>
             </article>
           </div>
           <p>Classify each attempt as <strong>copied for manual paste without inserting anywhere</strong>, <strong>inserted into a field</strong>, or <strong>other/not completed</strong>. The three counts should total three.</p>

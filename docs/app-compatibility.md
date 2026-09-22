@@ -4,8 +4,10 @@ The public, navigable version of this protocol is at
 <https://rcourtman.github.io/presspeech/app-compatibility.html>.
 
 Presspeech binds each recording to the window where it began. It should paste
-only when it can still verify that destination; otherwise it should leave the
-complete transcript on the clipboard and explain how to paste it manually.
+only when it can still verify that destination. A focus change normally leaves
+the transcript available for manual paste. On macOS, if Presspeech detects another copy replacing
+the clipboard during delivery, it stops and preserves that newer copy;
+it shows a **Couldn't paste** notice instead of overwriting it with the transcript.
 
 Target apps expose focus and paste behavior differently. A result from one app
 version, operating-system version, and Presspeech build is therefore evidence
@@ -38,20 +40,25 @@ recovered safely.
 
 ## Check steady-focus delivery
 
-Run five attempts. Use a different harmless phrase each time so stale or
+Run five completed attempts. Use a different harmless phrase each time so stale or
 duplicated delivery is visible; for example, say a colour, an animal, and the
 attempt number.
 
 For each attempt:
 
 1. Put the cursor in the blank target field and keep that window focused from
-   the start of recording until Presspeech finishes.
+   the start of recording until Presspeech finishes. Do not copy anything or
+   allow a clipboard tool to replace its contents during delivery.
 2. Dictate the harmless phrase once.
 3. Note what appeared in the target and whether Presspeech showed a recovery
    notice.
-4. Before copying anything else, paste the clipboard into the separate local
-   scratch field. With clipboard restoration off, this is the finished
-   transcript.
+4. If delivery succeeded or Presspeech showed its copied/manual-paste notice,
+   paste into the separate local scratch field before copying anything else.
+   With restoration off and no intervening clipboard change, this should be
+   the finished transcript. After a **Couldn't paste** notice on macOS, do not
+   assume the clipboard contains it: use **Copy Last Transcript** if offered,
+   or dictate again if Recent Transcripts is off. Record the failed delivery;
+   deliberate recovery afterward does not turn it into a successful attempt.
 5. Record one outcome:
    - **Pasted once:** the target received one copy and no recovery notice
      appeared. Its text matches the scratch copy, including the configured
@@ -62,6 +69,12 @@ For each attempt:
    - **Incorrect or unsafe:** text was stale, partial, duplicated, unavailable,
      or delivered to another field, or paste failed without a recovery notice.
 6. Clear both disposable fields before the next attempt.
+
+If you know another copy changed the clipboard during delivery, record that
+attempt as an interruption under **Relevant conditions** and repeat with a fresh
+harmless phrase. Exclude known interruptions from the five completed-attempt
+counts. Do not use this exclusion for unexplained failures; report those as
+**Incorrect or unsafe** above.
 
 A copied/manual-paste result is a safe recovery, not an automatic-paste pass.
 Keep its count separate so reports do not hide app classes where insertion is
@@ -75,13 +88,14 @@ first window, move focus to the second before stopping the recording, then
 finish. In hold mode, move focus before releasing the hotkey; in toggle mode,
 move it before the stop press.
 
-The safe result is:
+With no intervening clipboard change, the safe result is:
 
 - no text is inserted into either field;
 - Presspeech shows the copied/manual-paste notice; and
 - the complete transcript is available for deliberate manual paste.
 
-Repeat three times. For an Electron/Chromium app, use two separate windows of
+Repeat three completed attempts, recording known clipboard-change interruptions
+separately as above. For an Electron/Chromium app, use two separate windows of
 the same app for at least one attempt because same-process windows are a
 distinct identity check. Do not substitute tabs or fields in one window, and
 do not use a field where Return, Enter, or a paste action can submit or execute
