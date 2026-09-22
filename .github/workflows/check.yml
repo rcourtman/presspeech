@@ -66,6 +66,8 @@ jobs:
           python3 scripts/sync-docs.py --self-test
           python3 scripts/check-public-releases.py --self-test
           python3 scripts/test-public-releases-gh.py
+      - name: Pages deployment gate self-test
+        run: python3 scripts/check-pages-deployment.py --self-test
       - name: Log privacy guard
         run: |
           python3 scripts/check-log-privacy.py --self-test

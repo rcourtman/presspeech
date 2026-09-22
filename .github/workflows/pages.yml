@@ -1,9 +1,8 @@
 name: pages
 
-# Deploys docs/ to GitHub Pages only after the `check` workflow has
-# succeeded for the same main or published-release commit (workflow_run gate). The
-# manual workflow_dispatch path stays available and deploys the
-# current tip of the default branch.
+# Deploy current main only after its latest `check` push run succeeds.
+# A published-release check can retry after downloads become available, but
+# must never roll Pages back to the older release's source commit.
 
 on:
   workflow_run:
@@ -30,6 +29,7 @@ jobs:
         github.event.workflow_run.event == 'release'))
     permissions:
       contents: read
+      actions: read
       pages: write
       id-token: write
     environment:
@@ -39,15 +39,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Only trusted main pushes or published-release checks reach this job.
-          # Keep the successful check's exact commit. Manual dispatch always
-          # checks out main, even when another dispatch ref was selected.
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || 'main' }}
+          # Resolve main for every admitted event, including an older release.
+          # The final boundary verifies this exact SHA has green main push CI
+          # and is still main before deploying its validated artifact.
+          ref: main
           fetch-depth: 0
           persist-credentials: false
       - name: Verify published release belongs to main
         if: github.event.workflow_run.event == 'release'
-        run: git merge-base --is-ancestor HEAD origin/main
+        env:
+          CHECKED_RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          [[ "$CHECKED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$CHECKED_RELEASE_SHA" HEAD
       - name: Docs freshness
         run: python3 scripts/sync-docs.py --check
       # workflow_dispatch does not pass through the upstream check workflow.
@@ -68,5 +72,25 @@ jobs:
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: docs
+      - name: Require green current main before deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          # One bounded response; the validator rejects truncated pagination.
+          timeout 30s gh api \
+            "repos/rcourtman/presspeech/actions/workflows/check.yml/runs?branch=main&event=push&head_sha=$sha&per_page=100" \
+            > "$RUNNER_TEMP/pages-check-runs.json"
+          python3 scripts/check-pages-deployment.py \
+            --expected-sha "$sha" --runs-json "$RUNNER_TEMP/pages-check-runs.json"
+          # Catch a main update while validators or artifact upload were running.
+          # The public remote needs no persisted checkout credentials.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [[ "$sha" != "$(git rev-parse refs/remotes/origin/main)" ]]; then
+            echo "Pages deployment refused: main advanced after checkout" >&2
+            exit 1
+          fi
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
