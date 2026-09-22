@@ -53,6 +53,56 @@ function Assert-NoExistingInstall([string[]]$Evidence) {
     }
 }
 
+function Get-PackagedStartupCommand([string]$Executable) {
+    # Matches app._autostart_command(..., frozen=True): quote the absolute
+    # executable only, including when the hosted runner path contains spaces.
+    if (-not $Executable -or $Executable.IndexOfAny([char[]]@('"', "`r", "`n")) -ge 0) {
+        throw "Invalid installed executable path for startup qualification"
+    }
+    return '"' + [IO.Path]::GetFullPath($Executable) + '"'
+}
+
+function Set-OwnedStartupEntry($Key, [string]$Command) {
+    # Recheck immediately before writing; never overwrite even an empty value.
+    if ($null -eq $Key) { throw "Current-user Run key is unavailable" }
+    if ($Key.GetValueNames() -contains "Presspeech") {
+        throw "Startup qualification refused to overwrite an existing Presspeech entry"
+    }
+    $Key.SetValue("Presspeech", $Command, [Microsoft.Win32.RegistryValueKind]::String)
+    if ($Key.GetValueNames() -notcontains "Presspeech" -or
+            $Key.GetValueKind("Presspeech") -ne [Microsoft.Win32.RegistryValueKind]::String -or
+            $Key.GetValue("Presspeech") -cne $Command) {
+        throw "Startup qualification entry did not round-trip exactly"
+    }
+}
+
+function Assert-StartupEntryRemoved($Key) {
+    if ($null -ne $Key -and $Key.GetValueNames() -contains "Presspeech") {
+        throw "Uninstaller left the Presspeech startup entry behind"
+    }
+}
+
+function Open-RunSubKey($Registry, [bool]$Writable) {
+    $path = "Software\Microsoft\Windows\CurrentVersion\Run"
+    $key = $Registry.OpenSubKey($path, $Writable)
+    if ($null -eq $key -and $Writable) {
+        # A fresh disposable image may not have this parent yet. The sole
+        # write caller runs only after all host/install/package guards pass.
+        $key = $Registry.CreateSubKey($path)
+    }
+    return $key
+}
+
+function Open-CurrentUserRunKey([bool]$Writable) {
+    # The packaged executable and installer are x64. Match the app's default
+    # HKCU view. Read-only inspection never creates the parent key.
+    $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+        [Microsoft.Win32.RegistryHive]::CurrentUser, [Microsoft.Win32.RegistryView]::Registry64)
+    try {
+        return Open-RunSubKey $registry $Writable
+    } finally { $registry.Dispose() }
+}
+
 function Invoke-CheckedProcess(
         [string]$FilePath,
         [string[]]$Arguments,
@@ -108,6 +158,80 @@ function Invoke-SelfTest {
     foreach ($evidence in @("existing uninstall registration", "existing startup entry", "running Presspeech process", "existing default installation directory")) {
         Assert-Rejected { Assert-NoExistingInstall @($evidence) } "Installer qualification refused*"
     }
+    # An in-memory registry double checks ownership and failed-write behavior
+    # without ever opening the registry, including on Windows -SelfTest runs.
+    function New-TestRunKey {
+        $key = [pscustomobject]@{ Values = @{}; Kinds = @{}; Writes = 0; DropWrite = $false; WrongKind = $false; WrongValue = $false }
+        $key | Add-Member ScriptMethod GetValueNames { return @($this.Values.Keys) }
+        $key | Add-Member ScriptMethod GetValue { param($Name) return $this.Values[$Name] }
+        $key | Add-Member ScriptMethod GetValueKind { param($Name) return $this.Kinds[$Name] }
+        $key | Add-Member ScriptMethod SetValue {
+            param($Name, $Value, $Kind)
+            $this.Writes++
+            if ($this.DropWrite) { return }
+            $this.Values[$Name] = if ($this.WrongValue) { "unexpected" } else { $Value }
+            $this.Kinds[$Name] = if ($this.WrongKind) { [Microsoft.Win32.RegistryValueKind]::ExpandString } else { $Kind }
+        }
+        return $key
+    }
+    $registry = [pscustomobject]@{ Key = $null; Creates = 0; LastWritable = $null }
+    $registry | Add-Member ScriptMethod OpenSubKey {
+        param($Path, $Writable)
+        if ($Path -cne "Software\Microsoft\Windows\CurrentVersion\Run") { throw "Unexpected registry parent" }
+        $this.LastWritable = $Writable
+        return $this.Key
+    }
+    $registry | Add-Member ScriptMethod CreateSubKey {
+        param($Path)
+        if ($Path -cne "Software\Microsoft\Windows\CurrentVersion\Run") { throw "Unexpected registry parent" }
+        $this.Creates++
+        $this.Key = New-TestRunKey
+        return $this.Key
+    }
+    if ($null -ne (Open-RunSubKey $registry $false) -or $registry.Creates -ne 0 -or $registry.LastWritable) {
+        throw "Read-only inspection created or opened a writable registry key"
+    }
+    $createdRunKey = Open-RunSubKey $registry $true
+    if ($null -eq $createdRunKey -or $registry.Creates -ne 1 -or -not $registry.LastWritable) {
+        throw "Writable startup qualification did not create the missing parent"
+    }
+    if (-not [object]::ReferenceEquals($createdRunKey, (Open-RunSubKey $registry $true)) -or $registry.Creates -ne 1) {
+        throw "Writable startup qualification recreated an existing parent"
+    }
+    if (-not [object]::ReferenceEquals($createdRunKey, (Open-RunSubKey $registry $false)) -or $registry.Creates -ne 1 -or $registry.LastWritable) {
+        throw "Read-only inspection changed an existing parent"
+    }
+    $command = Get-PackagedStartupCommand (Join-Path ([IO.Path]::GetTempPath()) "run with spaces/Presspeech.exe")
+    if ($command -cne ('"' + [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) "run with spaces/Presspeech.exe")) + '"')) {
+        throw "Packaged startup command was not quoted exactly"
+    }
+    foreach ($invalidPath in @("", 'bad"path', "bad`npath", "bad`rpath")) {
+        Assert-Rejected { Get-PackagedStartupCommand $invalidPath } "Invalid installed executable path*"
+    }
+    $runKey = New-TestRunKey
+    $runKey.Values["Unrelated"] = "preserve me"
+    Set-OwnedStartupEntry $runKey $command
+    if ($runKey.Writes -ne 1 -or $runKey.Values["Unrelated"] -cne "preserve me") {
+        throw "Startup qualification wrote beyond its owned value"
+    }
+    Assert-Rejected { Assert-StartupEntryRemoved $runKey } "Uninstaller left the Presspeech startup entry behind"
+    $runKey.Values.Remove("Presspeech")
+    Assert-StartupEntryRemoved $runKey
+    Assert-StartupEntryRemoved $null
+    Assert-Rejected { Set-OwnedStartupEntry $null $command } "Current-user Run key is unavailable"
+    foreach ($existing in @("", "other command")) {
+        $runKey = New-TestRunKey
+        $runKey.Values["pReSsPeEcH"] = $existing
+        Assert-Rejected { Set-OwnedStartupEntry $runKey $command } "Startup qualification refused to overwrite*"
+        if ($runKey.Writes -ne 0 -or $runKey.Values["pReSsPeEcH"] -cne $existing) {
+            throw "Startup qualification overwrote an existing value"
+        }
+    }
+    foreach ($fault in @("DropWrite", "WrongKind", "WrongValue")) {
+        $runKey = New-TestRunKey
+        $runKey.$fault = $true
+        Assert-Rejected { Set-OwnedStartupEntry $runKey $command } "Startup qualification entry did not round-trip exactly"
+    }
     $shell = (Get-Process -Id $PID).Path
     Invoke-CheckedProcess $shell @("-NoProfile", "-NonInteractive", "-Command", "exit 0") 10 "Child success"
     Assert-Rejected {
@@ -153,6 +277,9 @@ $uninstallLog = Join-Path $smokeRoot "uninstall.log"
 $cleanupLog = Join-Path $smokeRoot "cleanup-uninstall.log"
 $resultPath = Join-Path $smokeRoot "package-selftest.txt"
 $uninstaller = $null
+$startupEntryAttempted = $false
+$startupEntrySeeded = $false
+$startupRemovalVerified = $false
 
 try {
     New-Item -ItemType Directory -Path $smokeRoot -Force | Out-Null
@@ -205,6 +332,17 @@ try {
         throw "Installed executable returned an invalid self-test result"
     }
 
+    # Simulate only the startup value that the installed frozen app would
+    # create after user opt-in. No GUI or settings file needs to be touched.
+    # Every disposable-runner/install/package refusal above precedes this write.
+    $startupCommand = Get-PackagedStartupCommand $appExecutable
+    $runKey = Open-CurrentUserRunKey $true
+    try {
+        $startupEntryAttempted = $true
+        Set-OwnedStartupEntry $runKey $startupCommand
+        $startupEntrySeeded = $true
+    } finally { if ($null -ne $runKey) { $runKey.Dispose() } }
+
     Invoke-CheckedProcess `
         -FilePath $uninstaller `
         -Arguments @(
@@ -221,6 +359,10 @@ try {
     if (Test-Path -LiteralPath $installDir) {
         throw "Uninstaller left the installation directory behind"
     }
+    $runKey = Open-CurrentUserRunKey $false
+    try { Assert-StartupEntryRemoved $runKey }
+    finally { if ($null -ne $runKey) { $runKey.Dispose() } }
+    $startupRemovalVerified = $true
     $uninstaller = $null
     Assert-NoExistingInstall @(Get-ExistingInstallEvidence)
     if ((Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash -cne $installerDigest) {
@@ -231,6 +373,8 @@ try {
         version = $ExpectedVersion
         installer_sha256 = $installerDigest.ToLowerInvariant()
         installed_package_selftest = "passed"
+        startup_entry_roundtrip = "passed"
+        startup_entry_uninstall_cleanup = "passed"
         uninstall = "passed"
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $smokeRoot "qualification.json")
     Write-Output "Qualified installer SHA-256: $installerDigest"
@@ -246,6 +390,24 @@ try {
         } catch {
             Write-Warning "Installer smoke cleanup could not run the uninstaller."
         }
+    }
+    if ($startupEntryAttempted) {
+        $startupState = "inspection-failed"
+        try {
+            $runKey = Open-CurrentUserRunKey $false
+            try {
+                $startupState = if ($null -ne $runKey -and $runKey.GetValueNames() -contains "Presspeech") { "present" } else { "absent" }
+            } finally { if ($null -ne $runKey) { $runKey.Dispose() } }
+        } catch { Write-Warning "Could not inspect startup entry after cleanup." }
+        try {
+            @{
+                startup_entry_seeded = $startupEntrySeeded
+                primary_uninstall_cleanup_verified = $startupRemovalVerified
+                after_finally_cleanup = $startupState
+            } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $smokeRoot "startup-cleanup.json")
+        } catch { Write-Warning "Could not write startup cleanup evidence." }
+        # Never manually remove the entry: that would conceal an uninstaller
+        # regression. A failed run retains evidence on this disposable runner.
     }
     # Keep logs and any failed installation for inspection on this disposable
     # runner. Never delete failure evidence or hide an unsuccessful uninstall.

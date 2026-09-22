@@ -312,7 +312,8 @@ as well as REST metadata.
 
 Before publication, the hosted Windows runner installs the finished installer
 into a temporary directory, checks its version and uninstall registration,
-runs the installed executable's model-free package test, and uninstalls it.
+runs the installed executable's model-free package test, creates the startup
+entry the installed app would use, and confirms uninstall removes it.
 Any failure blocks publication; install/uninstall logs are retained and printed
 in the workflow diagnostics. This checks the packaged installation lifecycle,
 not microphone capture, first dictation, upgrades, or interaction with target apps.
