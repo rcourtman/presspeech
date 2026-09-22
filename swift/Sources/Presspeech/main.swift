@@ -1149,7 +1149,7 @@ func shouldStopCorrectionSync(afterPathValidationError error: Error) -> Bool {
     error is TranscriptCorrectionsSyncPathError
 }
 
-// MARK: - Model registry hardening
+// MARK: - Model download environment hardening
 //
 // FluidAudio reads REGISTRY_URL and MODEL_REGISTRY_URL from the process
 // environment to override the speech-model download base URL. Presspeech
@@ -1162,19 +1162,144 @@ func shouldStopCorrectionSync(afterPathValidationError error: Error) -> Bool {
 // any value as adversarial: log it, present a blocking alert, refuse
 // to start. The user fixes the env source and relaunches.
 //
-// We do not block HF_TOKEN etc. — those are auth headers FluidAudio
-// sends to the (unchanged) huggingface.co host; a user with HF_TOKEN
-// set for unrelated tooling shouldn't be punished.
+// FluidAudio also reads three Hugging Face token spellings on every request
+// and turns an inherited value into an Authorization header. Presspeech uses
+// only public, pinned model files and has no authenticated model path, so it
+// removes those variables from its own process before Foundation or FluidAudio
+// can snapshot the environment. This does not alter the user's shell, token
+// store, or any other process.
 
 let HOSTILE_REGISTRY_ENV_VARS = ["REGISTRY_URL", "MODEL_REGISTRY_URL"]
+let HUGGING_FACE_TOKEN_ENV_VARS = [
+    "HF_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
+    "HUGGINGFACEHUB_API_TOKEN",
+]
+
+struct ModelDownloadEnvironmentPreparation: Equatable, Sendable {
+    let hostileRegistryVariables: [String]
+    let removedCredentialVariables: [String]
+    let failedCredentialVariables: [String]
+}
 
 func detectedHostileRegistryEnvVars(in env: [String: String]) -> [String] {
-    HOSTILE_REGISTRY_ENV_VARS.filter { env[$0] != nil }.sorted()
+    detectedHostileRegistryEnvVars(inVariableNames: Set(env.keys))
+}
+
+func detectedHostileRegistryEnvVars(inVariableNames names: Set<String>) -> [String] {
+    HOSTILE_REGISTRY_ENV_VARS.filter { names.contains($0) }.sorted()
+}
+
+func detectedHuggingFaceTokenEnvVars(in env: [String: String]) -> [String] {
+    detectedHuggingFaceTokenEnvVars(inVariableNames: Set(env.keys))
+}
+
+func detectedHuggingFaceTokenEnvVars(inVariableNames names: Set<String>) -> [String] {
+    HUGGING_FACE_TOKEN_ENV_VARS.filter { names.contains($0) }.sorted()
+}
+
+/// Read only model-download environment variable names. Never copy credential
+/// values into Swift strings, diagnostics, or logs.
+func modelDownloadEnvironmentVariableNames() -> Set<String> {
+    let names = HOSTILE_REGISTRY_ENV_VARS + HUGGING_FACE_TOKEN_ENV_VARS
+    return Set(names.filter { name in
+        name.withCString { getenv($0) != nil }
+    })
+}
+
+func prepareModelDownloadEnvironment(
+    presentVariableNames: Set<String>,
+    removeCredential: (String) -> Bool
+) -> ModelDownloadEnvironmentPreparation {
+    let hostile = detectedHostileRegistryEnvVars(inVariableNames: presentVariableNames)
+    let credentials = detectedHuggingFaceTokenEnvVars(inVariableNames: presentVariableNames)
+    var removed: [String] = []
+    var failed: [String] = []
+    for name in credentials {
+        if removeCredential(name) {
+            removed.append(name)
+        } else {
+            failed.append(name)
+        }
+    }
+    return ModelDownloadEnvironmentPreparation(
+        hostileRegistryVariables: hostile,
+        removedCredentialVariables: removed,
+        failedCredentialVariables: failed
+    )
+}
+
+func verifyModelDownloadEnvironmentPreparation(
+    _ preparation: ModelDownloadEnvironmentPreparation,
+    variableNamesVisibleToFluidAudio visibleVariableNames: Set<String>
+) -> ModelDownloadEnvironmentPreparation {
+    // FluidAudio reads ProcessInfo.environment, not getenv directly. Preserve
+    // every registry redirect visible in that view, and treat a credential
+    // that remains there as a removal failure even if unsetenv succeeded (for
+    // example, if Foundation cached an earlier view).
+    let visibleHostileRegistryVariables = Set(
+        detectedHostileRegistryEnvVars(inVariableNames: visibleVariableNames)
+    )
+    let visibleCredentials = Set(
+        detectedHuggingFaceTokenEnvVars(inVariableNames: visibleVariableNames)
+    )
+    let failed = Set(preparation.failedCredentialVariables).union(visibleCredentials)
+    return ModelDownloadEnvironmentPreparation(
+        hostileRegistryVariables: Set(preparation.hostileRegistryVariables)
+            .union(visibleHostileRegistryVariables)
+            .sorted(),
+        removedCredentialVariables: preparation.removedCredentialVariables.filter {
+            !visibleCredentials.contains($0)
+        },
+        failedCredentialVariables: failed.sorted()
+    )
+}
+
+/// Must run on the initial thread before NSApplication.shared, PresspeechApp,
+/// or any FluidAudio loader can capture ProcessInfo.environment.
+func prepareProcessModelDownloadEnvironment() -> ModelDownloadEnvironmentPreparation {
+    let preparation = prepareModelDownloadEnvironment(
+        presentVariableNames: modelDownloadEnvironmentVariableNames()
+    ) { name in
+        name.withCString { unsetenv($0) == 0 }
+    }
+    // Force Foundation's environment view only after removal, then retain just
+    // its names. FluidAudio will consume this same view when it builds a
+    // request. If Foundation somehow captured an earlier credential-bearing
+    // view, verification below fails closed before a model loader is created.
+    let foundationEnvironmentVariableNames = Set(ProcessInfo.processInfo.environment.keys)
+    return verifyModelDownloadEnvironmentPreparation(
+        preparation,
+        variableNamesVisibleToFluidAudio: foundationEnvironmentVariableNames
+    )
 }
 
 @MainActor
-func refuseHostileRegistryEnvironmentAndExit() {
-    let detected = detectedHostileRegistryEnvVars(in: ProcessInfo.processInfo.environment)
+func enforcePreparedModelDownloadEnvironmentAndExit(
+    _ preparation: ModelDownloadEnvironmentPreparation
+) {
+    if !preparation.removedCredentialVariables.isEmpty {
+        let names = preparation.removedCredentialVariables.joined(separator: ", ")
+        log("ignored inherited Hugging Face credential env var(s): \(names)")
+    }
+
+    if !preparation.failedCredentialVariables.isEmpty {
+        let names = preparation.failedCredentialVariables.joined(separator: ", ")
+        log("refusing to start: could not remove credential env var(s): \(names)")
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Presspeech refused to start"
+        alert.informativeText = """
+            Presspeech could not remove these inherited Hugging Face credential variable(s) from its process: \(names).
+
+            Presspeech downloads only public speech-model files and never needs an account token. Remove the variables from the app's launch environment, then launch Presspeech again.
+            """
+        alert.addButton(withTitle: "Quit")
+        alert.runModal()
+        exit(EXIT_FAILURE)
+    }
+
+    let detected = preparation.hostileRegistryVariables
     guard !detected.isEmpty else { return }
     let names = detected.joined(separator: ", ")
     log("refusing to start: registry override env var(s) set: \(names)")
@@ -2707,6 +2832,52 @@ enum Permission: String, CaseIterable, Equatable {
     case inputMonitoring = "Input Monitoring"
 }
 
+/// Automatic delivery needs two independently queryable capabilities: AX can
+/// identify the exact focused window, while Quartz PostEvent authorization lets
+/// the synthesized Command+V reach it. `CGEvent.post` has no failure result, so
+/// treating AX trust alone as sufficient can report a successful insertion
+/// after macOS silently drops every event.
+private func accessibilityDeliveryIsAuthorized(axTrusted: Bool,
+                                                postEventAuthorized: Bool) -> Bool {
+    axTrusted && postEventAuthorized
+}
+
+private enum AccessibilityAuthorizationRequest: Equatable {
+    case accessibility
+    case postEvent
+    case none
+}
+
+/// Ask for one missing capability at a time. On a normal interactive grant,
+/// the Accessibility choice commonly satisfies both checks. If PostEvent is a
+/// separately stale or managed TCC record, a later explicit retry reaches its
+/// dedicated request API without stacking two system prompts on first setup.
+private func nextAccessibilityAuthorizationRequest(axTrusted: Bool,
+                                                    postEventAuthorized: Bool) -> AccessibilityAuthorizationRequest {
+    if !axTrusted { return .accessibility }
+    if !postEventAuthorized { return .postEvent }
+    return .none
+}
+
+private func accessibilityDiagnosticLine(axTrusted: Bool,
+                                         postEventAuthorized: Bool) -> String {
+    let overall = accessibilityDeliveryIsAuthorized(
+        axTrusted: axTrusted,
+        postEventAuthorized: postEventAuthorized
+    ) ? "granted" : "missing"
+    let focusedWindow = axTrusted ? "granted" : "missing"
+    let eventPosting = postEventAuthorized ? "granted" : "missing"
+    return "Accessibility: \(overall) (focused-window access: \(focusedWindow); keyboard event posting: \(eventPosting))"
+}
+
+private func missingAccessibilityTCCServices(axTrusted: Bool,
+                                             postEventAuthorized: Bool) -> [String] {
+    var services: [String] = []
+    if !axTrusted { services.append("Accessibility") }
+    if !postEventAuthorized { services.append("PostEvent") }
+    return services
+}
+
 private enum ReadinessTransition: Equatable {
     case rebuildMenuOnly
     case blockForPermissions([Permission])
@@ -3152,7 +3323,10 @@ final class Permissions {
         case .microphone:
             return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         case .accessibility:
-            return AXIsProcessTrusted()
+            return accessibilityDeliveryIsAuthorized(
+                axTrusted: AXIsProcessTrusted(),
+                postEventAuthorized: CGPreflightPostEventAccess()
+            )
         case .inputMonitoring:
             return CGPreflightListenEventAccess()
         }
@@ -3173,16 +3347,27 @@ final class Permissions {
                 }
             }
         case .accessibility:
-            // The AX-trust-with-prompt API shows a native dialog
-            // when status is undetermined, falls through silently if
-            // already granted. We also open Settings as a fallback
-            // for the previously-denied case.
-            // kAXTrustedCheckOptionPrompt is an Apple-defined CFStringRef.
-            // Swift 6 strict concurrency complains about referencing the
-            // global directly from an @MainActor method; bridge via a
-            // string literal that matches its documented value.
-            let key = "AXTrustedCheckOptionPrompt"
-            _ = AXIsProcessTrustedWithOptions([key: kCFBooleanTrue!] as CFDictionary)
+            switch nextAccessibilityAuthorizationRequest(
+                axTrusted: AXIsProcessTrusted(),
+                postEventAuthorized: CGPreflightPostEventAccess()
+            ) {
+            case .accessibility:
+                // The AX-trust-with-prompt API shows a native dialog when
+                // status is undetermined. kAXTrustedCheckOptionPrompt is an
+                // Apple-defined CFStringRef. Swift 6 strict concurrency
+                // complains about referencing the global directly from an
+                // @MainActor method; bridge via its documented string value.
+                let key = "AXTrustedCheckOptionPrompt"
+                _ = AXIsProcessTrustedWithOptions([key: kCFBooleanTrue!] as CFDictionary)
+            case .postEvent:
+                // AX and PostEvent are separate TCC checks even though macOS
+                // normally presents them through Accessibility settings.
+                // This is the supported request path for the capability that
+                // gates CGEvent.post.
+                _ = CGRequestPostEventAccess()
+            case .none:
+                break
+            }
             openSettingsPane("Privacy_Accessibility")
         case .inputMonitoring:
             // CGRequestListenEventAccess is the canonical request
@@ -6331,8 +6516,8 @@ func isNewer(_ candidate: String, than current: String) -> Bool {
 // previous denial is still cached). On a fresh launch after an
 // upgrade (CFBundleShortVersionString differs from
 // settings.lastSeenVersion), we proactively `tccutil reset` any
-// DENIED entry for `com.local.presspeech`. GRANTED entries stay
-// intact — we never reset away permissions the user gave us.
+// DENIED entry for `com.local.presspeech`. Each independently granted
+// service stays intact during that automatic recovery.
 //
 // The companion to this is the click-twice-to-reset retry in the
 // permission rows: if the user clicks a ⚠ row, sees the OS dialog
@@ -6340,13 +6525,14 @@ func isNewer(_ candidate: String, than current: String) -> Bool {
 // click runs `tccutil reset` to clear stuck state and re-request.
 
 enum TCC {
-    /// Maps the human-readable permission name we use in the menu to
-    /// the TCC service identifier `tccutil reset` accepts. Input
-    /// Monitoring is "ListenEvent" internally.
-    static let serviceName: [Permission: String] = [
-        .microphone: "Microphone",
-        .accessibility: "Accessibility",
-        .inputMonitoring: "ListenEvent",
+    /// Maps each setup row to every TCC service it represents. Accessibility
+    /// is one user-facing row, but exact-window queries and synthetic paste
+    /// events are stored as Accessibility and PostEvent respectively. Input
+    /// Monitoring is ListenEvent internally.
+    static let serviceNames: [Permission: [String]] = [
+        .microphone: ["Microphone"],
+        .accessibility: ["Accessibility", "PostEvent"],
+        .inputMonitoring: ["ListenEvent"],
     ]
 
     /// Serial so multiple resets (e.g. the upgrade-recovery loop)
@@ -6363,23 +6549,39 @@ enum TCC {
     static func reset(_ p: Permission,
                       bundleID: String,
                       completion: (@MainActor @Sendable () -> Void)? = nil) {
-        guard let service = serviceName[p] else {
+        guard let services = serviceNames[p], !services.isEmpty else {
+            if let completion { Task { @MainActor in completion() } }
+            return
+        }
+        reset(services: services, bundleID: bundleID, completion: completion)
+    }
+
+    /// Upgrade and permission-row recovery can target only a missing
+    /// sub-capability. Resetting a valid AX grant whenever PostEvent alone is
+    /// denied would make the next request start over at AX and never reach the
+    /// independently missing service.
+    static func reset(services: [String],
+                      bundleID: String,
+                      completion: (@MainActor @Sendable () -> Void)? = nil) {
+        guard !services.isEmpty else {
             if let completion { Task { @MainActor in completion() } }
             return
         }
         queue.async {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-            proc.arguments = ["reset", service, bundleID]
-            proc.environment = systemToolProcessEnvironment()
-            proc.standardOutput = Pipe()
-            proc.standardError = Pipe()
-            do {
-                try proc.run()
-                proc.waitUntilExit()
-                log("  tccutil reset \(service) \(bundleID) → exit \(proc.terminationStatus)")
-            } catch {
-                log("  tccutil reset \(service) failed: \(error)")
+            for service in services {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+                proc.arguments = ["reset", service, bundleID]
+                proc.environment = systemToolProcessEnvironment()
+                proc.standardOutput = Pipe()
+                proc.standardError = Pipe()
+                do {
+                    try proc.run()
+                    proc.waitUntilExit()
+                    log("  tccutil reset \(service) \(bundleID) → exit \(proc.terminationStatus)")
+                } catch {
+                    log("  tccutil reset \(service) failed: \(error)")
+                }
             }
             if let completion { Task { @MainActor in completion() } }
         }
@@ -10091,8 +10293,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             coreRuntimeReady: isCoreRuntimeReady
         )
 
-        let permissionLines = Permission.allCases
-            .map { "\($0.rawValue): \(Permissions.isGranted($0) ? "granted" : "missing")" }
+        let permissionLines = Permission.allCases.map { permission in
+            if permission == .accessibility {
+                return accessibilityDiagnosticLine(
+                    axTrusted: AXIsProcessTrusted(),
+                    postEventAuthorized: CGPreflightPostEventAccess()
+                )
+            }
+            return "\(permission.rawValue): \(Permissions.isGranted(permission) ? "granted" : "missing")"
+        }
         let pendingUpdateText = pendingUpdate.map { "v\($0.version)" } ?? "none"
         let lastUpdateCheckText = updateCheckDiagnosticText(
             checkedAt: settings.lastUpdateCheckAt,
@@ -10538,7 +10747,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         case .microphone:
             return "Captures your voice while dictating. Click 'Grant', then click 'OK' in the macOS prompt."
         case .accessibility:
-            return "Pastes the transcript at your cursor. Click 'Grant' to open System Settings → Privacy & Security → Accessibility, then enable the toggle next to 'Presspeech'."
+            return "Verifies the focused window and sends the paste shortcut. Click 'Grant' to open System Settings → Privacy & Security → Accessibility, then enable Presspeech. If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
         case .inputMonitoring:
             return "Lets Presspeech detect the dictation hotkey. Click 'Grant' to open System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to 'Presspeech'."
         }
@@ -10820,12 +11029,25 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             // it before tccutil finished would race the scrub it
             // depends on.
             log("  resetting TCC for \(p.rawValue) before retry")
-            TCC.reset(p, bundleID: Bundle.main.bundleIdentifier ?? "com.local.presspeech") { [weak self] in
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.local.presspeech"
+            let retry: @MainActor @Sendable () -> Void = { [weak self] in
                 guard let self, !self.isTerminating else { return }
                 Permissions.request(p)
                 self.startPermissionReadinessMonitor(reason: "permission grant")
                 self.updateSetupChecklist()
                 self.rebuildMenu()
+            }
+            if p == .accessibility {
+                TCC.reset(
+                    services: missingAccessibilityTCCServices(
+                        axTrusted: AXIsProcessTrusted(),
+                        postEventAuthorized: CGPreflightPostEventAccess()
+                    ),
+                    bundleID: bundleID,
+                    completion: retry
+                )
+            } else {
+                TCC.reset(p, bundleID: bundleID, completion: retry)
             }
             rebuildMenu()
             return
@@ -13524,6 +13746,19 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         log("upgrade detected: \(last) → \(current); checking for stale TCC state")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.local.presspeech"
         for p in Permission.allCases {
+            if p == .accessibility {
+                // Keep either independently valid grant. In particular, adding
+                // the PostEvent preflight must not silently remove existing AX
+                // trust on the first upgraded launch.
+                TCC.reset(
+                    services: missingAccessibilityTCCServices(
+                        axTrusted: AXIsProcessTrusted(),
+                        postEventAuthorized: CGPreflightPostEventAccess()
+                    ),
+                    bundleID: bundleID
+                )
+                continue
+            }
             if Permissions.isGranted(p) { continue }
             // Fire-and-forget on TCC's serial queue: these resets are
             // best-effort scrubbing of stale DENIED entries, nothing
@@ -15094,6 +15329,72 @@ private enum PresspeechSelfTest {
     }
 
     private static func testReadiness() throws {
+        try expect(
+            accessibilityDeliveryIsAuthorized(axTrusted: true,
+                                               postEventAuthorized: true),
+            equals: true,
+            "AX trust and PostEvent access together should authorize automatic delivery"
+        )
+        try expect(
+            accessibilityDeliveryIsAuthorized(axTrusted: true,
+                                               postEventAuthorized: false),
+            equals: false,
+            "AX trust alone must not claim synthetic paste is authorized"
+        )
+        try expect(
+            accessibilityDeliveryIsAuthorized(axTrusted: false,
+                                               postEventAuthorized: true),
+            equals: false,
+            "PostEvent access alone must not claim focused-window lookup is authorized"
+        )
+        try expect(
+            nextAccessibilityAuthorizationRequest(axTrusted: false,
+                                                  postEventAuthorized: false),
+            equals: .accessibility,
+            "first setup should request focused-window Accessibility before PostEvent"
+        )
+        try expect(
+            nextAccessibilityAuthorizationRequest(axTrusted: true,
+                                                  postEventAuthorized: false),
+            equals: .postEvent,
+            "a separately missing PostEvent grant should use its dedicated request API"
+        )
+        try expect(
+            nextAccessibilityAuthorizationRequest(axTrusted: true,
+                                                  postEventAuthorized: true),
+            equals: .none,
+            "complete Accessibility authorization should not request again"
+        )
+        try expect(
+            accessibilityDiagnosticLine(axTrusted: true,
+                                        postEventAuthorized: false),
+            equals: "Accessibility: missing (focused-window access: granted; keyboard event posting: missing)",
+            "diagnostics should distinguish a silent PostEvent denial from AX trust"
+        )
+        try expect(
+            TCC.serviceNames[.accessibility],
+            equals: Optional(["Accessibility", "PostEvent"]),
+            "Accessibility recovery should reset both represented TCC services"
+        )
+        try expect(
+            missingAccessibilityTCCServices(axTrusted: true,
+                                            postEventAuthorized: false),
+            equals: ["PostEvent"],
+            "automatic upgrade recovery should preserve an existing AX grant"
+        )
+        try expect(
+            missingAccessibilityTCCServices(axTrusted: false,
+                                            postEventAuthorized: true),
+            equals: ["Accessibility"],
+            "automatic upgrade recovery should preserve an existing PostEvent grant"
+        )
+        try expect(
+            missingAccessibilityTCCServices(axTrusted: true,
+                                            postEventAuthorized: true),
+            equals: [],
+            "automatic upgrade recovery should leave complete grants untouched"
+        )
+
         try expect(
             readinessTransition(isReady: false,
                                 isCoreRuntimeReady: false,
@@ -18287,7 +18588,13 @@ private enum PresspeechSelfTest {
             detectedHostileRegistryEnvVars(in: ["HF_TOKEN": "redacted",
                                                 "PATH": "/usr/bin"]),
             equals: [],
-            "unrelated env vars (incl. HF_TOKEN) must not flag as hostile"
+            "Hugging Face credentials must not be mistaken for registry redirects"
+        )
+        try expect(
+            detectedHuggingFaceTokenEnvVars(in: ["HF_TOKEN": "redacted",
+                                                  "PATH": "/usr/bin"]),
+            equals: ["HF_TOKEN"],
+            "inherited Hugging Face credentials must be detected without their values"
         )
         try expect(
             detectedHostileRegistryEnvVars(in: ["REGISTRY_URL": "https://evil.example/"]),
@@ -18304,6 +18611,46 @@ private enum PresspeechSelfTest {
                                                 "MODEL_REGISTRY_URL": ""]),
             equals: ["MODEL_REGISTRY_URL", "REGISTRY_URL"],
             "an empty-string value still represents a tampered launch env"
+        )
+
+        var attempted: [String] = []
+        let preparation = prepareModelDownloadEnvironment(
+            presentVariableNames: [
+                "HF_TOKEN",
+                "HUGGING_FACE_HUB_TOKEN",
+                "HUGGINGFACEHUB_API_TOKEN",
+                "REGISTRY_URL",
+            ],
+            removeCredential: { name in
+                attempted.append(name)
+                return name != "HUGGINGFACEHUB_API_TOKEN"
+            }
+        )
+        try expect(
+            attempted,
+            equals: ["HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN", "HUGGING_FACE_HUB_TOKEN"],
+            "every inherited Hugging Face credential spelling must be removed deterministically"
+        )
+        try expect(
+            preparation,
+            equals: ModelDownloadEnvironmentPreparation(
+                hostileRegistryVariables: ["REGISTRY_URL"],
+                removedCredentialVariables: ["HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"],
+                failedCredentialVariables: ["HUGGINGFACEHUB_API_TOKEN"]
+            ),
+            "model download preparation must preserve redirects and fail closed on credential removal"
+        )
+        try expect(
+            verifyModelDownloadEnvironmentPreparation(
+                preparation,
+                variableNamesVisibleToFluidAudio: ["HF_TOKEN", "MODEL_REGISTRY_URL"]
+            ),
+            equals: ModelDownloadEnvironmentPreparation(
+                hostileRegistryVariables: ["MODEL_REGISTRY_URL", "REGISTRY_URL"],
+                removedCredentialVariables: ["HUGGING_FACE_HUB_TOKEN"],
+                failedCredentialVariables: ["HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN"]
+            ),
+            "Foundation-visible redirects and credentials must both fail closed"
         )
     }
 
@@ -19181,18 +19528,20 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
 }
 #endif
 
+// Sanitize model-download credentials before NSApplication.shared or the app
+// delegate can initialize Foundation/FluidAudio state. This changes only this
+// process; it never edits the user's shell or Hugging Face token store.
+let modelDownloadEnvironmentPreparation = prepareProcessModelDownloadEnvironment()
 let app = NSApplication.shared
 if let launch = UpdateProgressLaunch(arguments: Array(CommandLine.arguments.dropFirst())) {
     let delegate = UpdateProgressAppDelegate(launch: launch)
     app.delegate = delegate
     app.run()
 } else {
+    // Runs after NSApplication.shared so blocking NSAlert.runModal has its
+    // event loop, but before PresspeechApp can initialize any model loader.
+    enforcePreparedModelDownloadEnvironmentAndExit(modelDownloadEnvironmentPreparation)
     let delegate = PresspeechApp()
     app.delegate = delegate
-    // Refuse to start under a tampered launch environment that would
-    // redirect FluidAudio's model download to an attacker-controlled host.
-    // Runs after NSApplication.shared is initialised so NSAlert.runModal
-    // has its event loop.
-    refuseHostileRegistryEnvironmentAndExit()
     app.run()
 }

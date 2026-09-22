@@ -103,6 +103,14 @@ What that means for trust:
   a feature. If you see Presspeech refuse with this error, audit your
   LaunchAgents, shell rc files, and any parent process for an
   injected value before relaunching.
+- FluidAudio also reads `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, and
+  `HUGGINGFACEHUB_API_TOKEN` and would attach an inherited credential to
+  public model requests. Presspeech has no authenticated model path. The
+  macOS 0.3.9 candidate removes those variables from its own process before
+  Foundation or FluidAudio can capture the launch environment; this does not
+  change the user's shell, token store, or other processes. It logs variable
+  names only, never credential values, and fails closed if a variable cannot
+  be removed.
 
 If model integrity is a hard requirement for your environment, keep
 Presspeech updated so the pinned manifest stays aligned with the

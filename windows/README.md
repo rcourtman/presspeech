@@ -18,10 +18,11 @@ multilingual choices; both are intended for a supported NVIDIA GPU.
 
 ## Install
 
-Download the self-contained Windows x64 installer:
-
-- [Presspeech-Setup-0.1.12-x64.exe](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe)
-- [Release notes and SHA-256 checksum](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12)
+Use the public [Windows download and verification
+guide](https://rcourtman.github.io/presspeech/windows.html#download-verify-run)
+for the current self-contained x64 installer and its matching SHA-256. The
+source tree can be ahead of the published prerelease; the deployed guide stays
+on a version whose installer and checksum are both available.
 
 No Python installation or command-line setup is required. Presspeech installs
 per-user under `%LOCALAPPDATA%\Programs\Presspeech`, adds a Start Menu shortcut,
@@ -248,6 +249,9 @@ If the configured key stops responding while menu-based **Dictate** still
 works, choose **Repair Global Hotkey** from the notification-area menu, Setup,
 or Settings. Presspeech replaces the Windows keyboard listener even when its
 thread still appears healthy, then reports whether the new listener started.
+Upcoming 0.1.13 also dispatches ordered press/release actions to a dedicated
+worker so target discovery, recording setup, logging and recovery UI never run
+inside Windows' time-limited low-level keyboard-hook callback.
 Listener failures are also announced and included in privacy-safe diagnostics;
 callback details and pressed keys are not included.
 

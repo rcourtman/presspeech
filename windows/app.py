@@ -9,6 +9,7 @@ import importlib
 import math
 import os
 import platform
+import queue
 import re
 import subprocess
 import struct
@@ -672,6 +673,23 @@ class PresspeechApp:
         self._passthrough_hotkey_vks = set()
         self._suppressed_hotkey_vks = {}
         self._injecting_keys = False
+        # WH_KEYBOARD_LL callbacks have a hard Windows timeout and are
+        # silently removed when they exceed it. Keep the hook limited to raw
+        # transaction bookkeeping, a non-blocking enqueue, and suppression;
+        # target discovery, logging, UI work, and recording control run here.
+        self._hotkey_action_lock = threading.Lock()
+        # Listener replacement clears the raw-hook transaction atomically.
+        # Keep this separate from _hotkey_action_lock: a slow recording action
+        # must never make the time-limited native hook wait behind the worker.
+        self._hotkey_transaction_lock = threading.Lock()
+        self._hotkey_action_queue = queue.SimpleQueue()
+        self._hotkey_action_generation = 0
+        self._hotkey_action_thread = threading.Thread(
+            target=self._run_hotkey_actions,
+            name="presspeech-hotkey-actions",
+            daemon=True,
+        )
+        self._hotkey_action_thread.start()
         # Clipboard and input failures can leave delivery uncertain. Keep the
         # transcript in process memory until an explicit Copy, Discard or Exit.
         # Never write this recovery queue to configuration, diagnostics, or the log.
@@ -899,14 +917,24 @@ class PresspeechApp:
 
     def _reset_hotkey_transaction(self):
         """Discard physical-key bookkeeping owned by a stopped listener."""
-        self._key_held = False
-        self._pressed_keys.clear()
-        self._held_hotkey_keys = frozenset()
-        self._held_hotkey_trigger = None
-        self._suppress_escape_keyup = False
-        self._filter_pressed_vks.clear()
-        self._passthrough_hotkey_vks.clear()
-        self._suppressed_hotkey_vks.clear()
+        action_lock = getattr(self, "_hotkey_action_lock", None)
+        with action_lock if action_lock is not None else nullcontext():
+            transaction_lock = getattr(self, "_hotkey_transaction_lock", None)
+            with transaction_lock if transaction_lock is not None else nullcontext():
+                # A callback queued by the previous native hook must not start
+                # or stop a recording after Repair has replaced that hook.
+                # Serializing this generation change with the raw filter also
+                # prevents a stale callback from repopulating cleared state.
+                self._hotkey_action_generation = (
+                    getattr(self, "_hotkey_action_generation", 0) + 1)
+                self._key_held = False
+                self._pressed_keys.clear()
+                self._held_hotkey_keys = frozenset()
+                self._held_hotkey_trigger = None
+                self._suppress_escape_keyup = False
+                self._filter_pressed_vks.clear()
+                self._passthrough_hotkey_vks.clear()
+                self._suppressed_hotkey_vks.clear()
 
     def _start_hotkey_listener(self, force=False):
         """Create a fresh listener after startup failure or listener exit."""
@@ -937,11 +965,19 @@ class PresspeechApp:
             self._hotkey_status = "starting"
             self._hotkey_status_detail = "Starting global hotkey\u2026"
             self._reset_hotkey_transaction()
+            listener_generation = self._hotkey_action_generation
             try:
+                listener = None
+
+                def event_filter(message, data):
+                    return self._win32_event_filter(
+                        message, data, listener=listener,
+                        generation=listener_generation)
+
                 listener = pkb.Listener(
                     on_press=self._on_press,
                     on_release=self._on_release,
-                    win32_event_filter=self._win32_event_filter,
+                    win32_event_filter=event_filter,
                 )
                 self.listener = listener
                 listener.start()
@@ -989,11 +1025,28 @@ class PresspeechApp:
             "Open the Presspeech notification-area menu and choose Repair "
             "Global Hotkey. Dictate remains available from the menu.")
 
+    def _retire_queued_hotkey_actions_for_repair(self):
+        """Make an idle repair atomic with respect to queued hook actions."""
+        action_lock = getattr(self, "_hotkey_action_lock", None)
+        with action_lock if action_lock is not None else nullcontext():
+            # A press may be queued while start_recording has not yet published
+            # recording=True. Either the worker wins this lock and publishes
+            # that state, or Repair wins and retires the queued press. Without
+            # this boundary, Repair could clear the held-key transaction just
+            # after the worker starts recording, leaving no release to stop it.
+            if (getattr(self, "recording", False) or
+                    getattr(self, "_canceling_recording", False) or
+                    getattr(self, "transcribing", False)):
+                return False
+            transaction_lock = getattr(self, "_hotkey_transaction_lock", None)
+            with transaction_lock if transaction_lock is not None else nullcontext():
+                self._hotkey_action_generation = (
+                    getattr(self, "_hotkey_action_generation", 0) + 1)
+            return True
+
     def repair_hotkey(self, icon=None, item=None):
         """Attempt user-requested recovery with a new pynput listener."""
-        if (getattr(self, "recording", False) or
-                getattr(self, "_canceling_recording", False) or
-                getattr(self, "transcribing", False)):
+        if not self._retire_queued_hotkey_actions_for_repair():
             self.notify(
                 "Finish the active dictation first",
                 "Stop or cancel dictation, then choose Repair Global Hotkey.")
@@ -1011,32 +1064,83 @@ class PresspeechApp:
     def _is_hotkey(self, key):
         return key in KEY_MAP.get(self.settings["hotkey"], set())
 
-    def _dispatch_and_suppress_win32_event(self, callback=None, key=None):
-        """Run an internal key callback and always reserve the system event."""
+    def _perform_hotkey_action(self, callback, key):
+        """Run one serialized hook action outside Windows' hook callback."""
         try:
-            if callback is not None:
-                callback(key)
+            callback(key)
         except Exception as exc:
-            # Never leak a configured key into an arbitrary focused app merely
-            # because starting or stopping dictation hit an unexpected error.
             # Exception type is enough for diagnostics and cannot contain a
             # transcript or device name.
-            self._log("reserved hotkey action failed: %s" % type(exc).__name__)
+            try:
+                self._log(
+                    "reserved hotkey action failed: %s" % type(exc).__name__)
+            except Exception:
+                pass
+
+    def _run_hotkey_actions(self):
+        """Preserve physical event order without doing work on the hook."""
+        while True:
+            generation, callback, key = self._hotkey_action_queue.get()
+            with self._hotkey_action_lock:
+                if (getattr(self, "_exiting", False) or
+                        generation != self._hotkey_action_generation):
+                    continue
+                self._perform_hotkey_action(callback, key)
+
+    def _queue_hotkey_action(self, callback, key, generation):
+        """Enqueue a reserved key action without waiting for its work."""
+        self._hotkey_action_queue.put((generation, callback, key))
+
+    def _dispatch_and_suppress_win32_event(
+            self, callback=None, key=None, *, listener=None, generation=None):
+        """Queue an internal action and always reserve the physical event."""
+        try:
+            if callback is not None:
+                self._queue_hotkey_action(
+                    callback, key,
+                    (getattr(self, "_hotkey_action_generation", 0)
+                     if generation is None else generation),
+                )
+        except Exception:
+            # Queue allocation is the only expected failure surface here. Do
+            # not log from the time-limited hook or expose internal details,
+            # but make the listener's degraded state visible for repair.
+            self._hotkey_status = "error"
+            self._hotkey_status_detail = (
+                "Global hotkey action failed. Choose Repair Global Hotkey.")
         finally:
             # pynput implements selective system-wide suppression by raising
-            # an internal exception from this call. Keep it in the finally so
-            # callback failures cannot fall through to CallNextHookEx.
-            self.listener.suppress_event()
+            # an internal exception from this call. Enqueue first, then return
+            # from the native hook immediately; action failures can never leak
+            # the reserved key to the focused app.
+            (listener if listener is not None else self.listener).suppress_event()
         return False
 
-    def _win32_event_filter(self, message, data):
+    def _win32_event_filter(
+            self, message, data, *, listener=None, generation=None):
         """Dispatch and consume physical PTT or recording-cancel transactions.
 
         pynput's selective Windows suppression prevents the corresponding
-        on_press/on_release callback from being queued. Dispatch before calling
-        suppress_event so Presspeech still observes the key while Windows and
-        the focused app do not.
+        on_press/on_release callback from being queued. Queue the internal
+        action before calling suppress_event so Presspeech still observes the
+        key while Windows and the focused app do not.
         """
+        transaction_lock = getattr(self, "_hotkey_transaction_lock", None)
+        with transaction_lock if transaction_lock is not None else nullcontext():
+            return self._win32_event_filter_transaction(
+                message, data, listener=listener, generation=generation)
+
+    def _win32_event_filter_transaction(
+            self, message, data, *, listener=None, generation=None):
+        """Handle one raw event while listener transaction state is locked."""
+        current_generation = getattr(self, "_hotkey_action_generation", 0)
+        if generation is not None and generation != current_generation:
+            # A stopped listener can finish a callback while its replacement
+            # starts. Never let that stale native hook mutate the replacement's
+            # transaction state or enqueue an action in its generation.
+            return
+        dispatch_generation = (
+            current_generation if generation is None else generation)
         try:
             flags = int(getattr(data, "flags", 0))
         except (TypeError, ValueError):
@@ -1075,19 +1179,23 @@ class PresspeechApp:
                 if not self._suppress_escape_keyup:
                     self._suppress_escape_keyup = True
                     return self._dispatch_and_suppress_win32_event(
-                        self._on_press, pkb.Key.esc)
+                        self._on_press, pkb.Key.esc, listener=listener,
+                        generation=dispatch_generation)
             else:
                 if not self._suppress_escape_keyup:
                     return
                 self._suppress_escape_keyup = False
                 return self._dispatch_and_suppress_win32_event(
-                    self._on_release, pkb.Key.esc)
-            return self._dispatch_and_suppress_win32_event()
+                    self._on_release, pkb.Key.esc, listener=listener,
+                    generation=dispatch_generation)
+            return self._dispatch_and_suppress_win32_event(
+                listener=listener, generation=dispatch_generation)
 
         if is_release and vk_code in self._suppressed_hotkey_vks:
             key = self._suppressed_hotkey_vks.pop(vk_code)
             return self._dispatch_and_suppress_win32_event(
-                self._on_release, key)
+                self._on_release, key, listener=listener,
+                generation=dispatch_generation)
 
         configured = HOTKEY_VIRTUAL_KEYS.get(self.settings.get("hotkey"))
         if not is_press or configured is None or vk_code != configured[0]:
@@ -1106,11 +1214,13 @@ class PresspeechApp:
             key = configured[1]
             self._suppressed_hotkey_vks[vk_code] = key
             return self._dispatch_and_suppress_win32_event(
-                self._on_press, key)
+                self._on_press, key, listener=listener,
+                generation=dispatch_generation)
         # Consume key-down autorepeats as part of the same reserved PTT
         # transaction. The matched key-up remains reserved even if Settings is
         # changed while the key is physically held.
-        return self._dispatch_and_suppress_win32_event()
+        return self._dispatch_and_suppress_win32_event(
+            listener=listener, generation=dispatch_generation)
 
     def _on_press(self, key):
         if self._injecting_keys:

@@ -727,7 +727,24 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.request_stop = mock.Mock()
         instance.cancel_recording = mock.Mock()
         instance._log = mock.Mock()
+        instance._hotkey_action_generation = 0
+        instance._hotkey_action_queue = mock.Mock()
+        instance._hotkey_action_queue.put.side_effect = (
+            lambda action: instance._perform_hotkey_action(
+                action[1], action[2]))
         return instance
+
+    @staticmethod
+    def enable_async_hotkey_actions(instance, generation=1):
+        instance._hotkey_action_lock = threading.Lock()
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_queue = app.queue.SimpleQueue()
+        instance._hotkey_action_generation = generation
+        instance._exiting = False
+        worker = threading.Thread(
+            target=instance._run_hotkey_actions, daemon=True)
+        worker.start()
+        return worker
 
     def test_left_alt_does_not_treat_altgr_as_the_hotkey(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -797,7 +814,7 @@ class HotkeyRegressionTests(unittest.TestCase):
         event = mock.Mock(vkCode=app.VK_ESCAPE)
 
         instance._win32_event_filter(app.WM_KEYDOWN, event)
-        # The on-press callback cancels recording before key repeat and key-up.
+        # Model the action worker completing cancellation before repeat/key-up.
         instance.recording = False
         instance._win32_event_filter(app.WM_KEYDOWN, event)
         instance._win32_event_filter(app.WM_KEYUP, event)
@@ -829,6 +846,167 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertEqual(instance.listener.suppress_event.call_count, 2)
         self.assertEqual(instance._suppressed_hotkey_vks, {})
 
+    def test_native_hook_returns_while_slow_hotkey_action_runs_on_worker(self):
+        instance = self.make_app(hotkey="f8")
+        self.enable_async_hotkey_actions(instance)
+        action_entered = threading.Event()
+        release_action = threading.Event()
+        filter_returned = threading.Event()
+
+        def slow_start():
+            action_entered.set()
+            release_action.wait(2)
+
+        instance.start_recording.side_effect = slow_start
+        event = mock.Mock(vkCode=0x77, flags=0)
+
+        def invoke_filter():
+            instance._win32_event_filter(app.WM_KEYDOWN, event)
+            filter_returned.set()
+
+        caller = threading.Thread(target=invoke_filter)
+        caller.start()
+        try:
+            self.assertTrue(filter_returned.wait(1))
+            self.assertTrue(action_entered.wait(1))
+            self.assertFalse(release_action.is_set())
+            instance.listener.suppress_event.assert_called_once_with()
+        finally:
+            release_action.set()
+            caller.join(2)
+
+    def test_worker_preserves_press_release_order(self):
+        instance = self.make_app(hotkey="f8")
+        self.enable_async_hotkey_actions(instance)
+        actions = []
+        released = threading.Event()
+        instance.start_recording.side_effect = lambda: actions.append("press")
+
+        def stop():
+            actions.append("release")
+            released.set()
+
+        instance.request_stop.side_effect = stop
+        event = mock.Mock(vkCode=0x77, flags=0)
+
+        instance._win32_event_filter(app.WM_KEYDOWN, event)
+        instance._win32_event_filter(app.WM_KEYUP, event)
+
+        self.assertTrue(released.wait(1))
+        self.assertEqual(actions, ["press", "release"])
+
+    def test_listener_reset_retires_queued_actions_from_old_generation(self):
+        instance = self.make_app(hotkey="f8")
+        instance._hotkey_action_lock = threading.Lock()
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_queue = app.queue.SimpleQueue()
+        instance._hotkey_action_generation = 4
+        instance._exiting = False
+        instance._hotkey_action_queue.put(
+            (4, instance._on_press, app.pkb.Key.f8))
+
+        instance._reset_hotkey_transaction()
+        current_action = threading.Event()
+        instance._hotkey_action_queue.put(
+            (5, lambda _key: current_action.set(), None))
+        threading.Thread(
+            target=instance._run_hotkey_actions, daemon=True).start()
+
+        self.assertTrue(current_action.wait(1))
+        instance.start_recording.assert_not_called()
+
+    def test_repair_retires_a_queued_press_before_replacing_listener(self):
+        instance = self.make_app(hotkey="f8")
+        instance._hotkey_action_lock = threading.Lock()
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_queue = app.queue.SimpleQueue()
+        instance._hotkey_action_generation = 4
+        instance._exiting = False
+        instance._hotkey_action_queue.put(
+            (4, instance._on_press, app.pkb.Key.f8))
+        instance._start_hotkey_listener = mock.Mock(return_value=True)
+        instance.notify = mock.Mock()
+
+        self.assertTrue(instance.repair_hotkey())
+        current_action = threading.Event()
+        instance._hotkey_action_queue.put(
+            (5, lambda _key: current_action.set(), None))
+        threading.Thread(
+            target=instance._run_hotkey_actions, daemon=True).start()
+
+        self.assertTrue(current_action.wait(1))
+        self.assertEqual(instance._hotkey_action_generation, 5)
+        instance.start_recording.assert_not_called()
+        instance._start_hotkey_listener.assert_called_once_with(force=True)
+
+    def test_repair_does_not_retire_actions_during_active_dictation(self):
+        instance = self.make_app(hotkey="f8")
+        instance._hotkey_action_lock = threading.Lock()
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_generation = 4
+        instance.recording = True
+        instance._start_hotkey_listener = mock.Mock()
+        instance.notify = mock.Mock()
+
+        self.assertFalse(instance.repair_hotkey())
+
+        self.assertEqual(instance._hotkey_action_generation, 4)
+        instance._start_hotkey_listener.assert_not_called()
+        instance.notify.assert_called_once()
+
+    def test_listener_reset_cannot_race_a_raw_filter_transaction(self):
+        instance = self.make_app(hotkey="f8")
+        instance._hotkey_action_lock = threading.Lock()
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_generation = 4
+        queue_entered = threading.Event()
+        release_queue = threading.Event()
+        reset_finished = threading.Event()
+
+        def blocked_enqueue(_callback, _key, _generation):
+            queue_entered.set()
+            release_queue.wait(2)
+
+        instance._queue_hotkey_action = blocked_enqueue
+        event = mock.Mock(vkCode=0x77, flags=0)
+        filter_thread = threading.Thread(
+            target=instance._win32_event_filter,
+            args=(app.WM_KEYDOWN, event),
+        )
+        filter_thread.start()
+        self.assertTrue(queue_entered.wait(1))
+
+        reset_thread = threading.Thread(
+            target=lambda: (
+                instance._reset_hotkey_transaction(), reset_finished.set()))
+        reset_thread.start()
+        try:
+            self.assertFalse(reset_finished.wait(0.05))
+        finally:
+            release_queue.set()
+            filter_thread.join(2)
+            reset_thread.join(2)
+
+        self.assertTrue(reset_finished.is_set())
+        self.assertEqual(instance._hotkey_action_generation, 5)
+        self.assertEqual(instance._suppressed_hotkey_vks, {})
+        self.assertEqual(instance._filter_pressed_vks, set())
+
+    def test_stale_listener_filter_does_not_touch_replacement_state(self):
+        instance = self.make_app(hotkey="f8")
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_generation = 5
+        stale_listener = mock.Mock()
+        event = mock.Mock(vkCode=0x77, flags=0)
+
+        instance._win32_event_filter(
+            app.WM_KEYDOWN, event, listener=stale_listener, generation=4)
+
+        stale_listener.suppress_event.assert_not_called()
+        instance.start_recording.assert_not_called()
+        self.assertEqual(instance._suppressed_hotkey_vks, {})
+        self.assertEqual(instance._filter_pressed_vks, set())
+
     def test_hotkey_action_failure_still_withholds_reserved_key(self):
         instance = self.make_app(hotkey="f8")
         instance.start_recording.side_effect = RuntimeError("test failure")
@@ -840,6 +1018,20 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertEqual(
             instance._log.call_args_list[-1],
             mock.call("reserved hotkey action failed: RuntimeError"))
+
+    def test_hotkey_queue_failure_still_withholds_reserved_key(self):
+        instance = self.make_app(hotkey="f8")
+        instance._hotkey_action_generation = 2
+        instance._hotkey_action_queue = mock.Mock()
+        instance._hotkey_action_queue.put.side_effect = MemoryError("private")
+        event = mock.Mock(vkCode=0x77, flags=0)
+
+        self.assertFalse(instance._win32_event_filter(app.WM_KEYDOWN, event))
+
+        instance.listener.suppress_event.assert_called_once_with()
+        instance.start_recording.assert_not_called()
+        self.assertEqual(instance._hotkey_status, "error")
+        self.assertNotIn("private", instance._hotkey_status_detail)
 
     def test_suppressed_keyup_completes_original_transaction_after_setting_change(self):
         instance = self.make_app(hotkey="left win")

@@ -26,6 +26,7 @@ def load_module(name, filename):
 
 composer = load_module("context_composer", "compose-public-context-fixtures.py")
 analyzer = load_module("context_analyzer", "analyze-context-variation.py")
+benchmark_inputs = load_module("benchmark_inputs", "benchmark-inputs.py")
 
 
 def files_digest(directory):
@@ -162,7 +163,8 @@ class ContextInputTests(unittest.TestCase):
         bench = self.root / "repo/experiments/swift-bench"
         bench.mkdir(parents=True)
         for name in ("run-real-model-comparison.sh", "compose-public-context-fixtures.py",
-                     "dependency-provenance.py", "audio-input-evidence.py", "experiment-environment.py", "Package.swift", "Package.resolved"):
+                     "dependency-provenance.py", "audio-input-evidence.py", "experiment-environment.py",
+                     "benchmark-inputs.py", "Package.swift", "Package.resolved"):
             shutil.copyfile(ROOT / name, bench / name)
         production = self.root / "repo/swift"
         production.mkdir()
@@ -176,6 +178,14 @@ class ContextInputTests(unittest.TestCase):
         fake_bin.mkdir()
         expected = {hashlib.sha256(p.read_bytes()).hexdigest(): p.with_suffix(".txt").read_text()
                     for p in self.output.glob("*.wav")}
+        expected_input_digest = benchmark_inputs.corpus_digest([
+            {
+                "audio_suffix": path.suffix.casefold(),
+                "audio_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "reference_sha256": hashlib.sha256(path.with_suffix(".txt").read_bytes()).hexdigest(),
+            }
+            for path in sorted(self.output.glob("*.wav"))
+        ])
         mock_bench = self.root / "mock-bench"
         mock_bench.write_text("#!" + sys.executable + '\n' + '''
 import hashlib,json,os,sys,wave
@@ -227,6 +237,7 @@ Path('.build/release/presspeech-bench').chmod(0o755)
         self.assertNotIn(str(self.output), report)
         self.assertNotIn("private utterance", report)
         self.assertIn(self.digest, report)
+        self.assertIn(f"Benchmark inputs SHA-256: {expected_input_digest}", report)
         self.assertIn("App FluidAudio revision:", report)
         self.assertIn("Baseline dependency: production-dependency", report)
 

@@ -7,7 +7,10 @@ body:
       value: |
         Thanks for testing one target app. Run the short
         [compatibility protocol](https://rcourtman.github.io/presspeech/app-compatibility.html)
-        before filling this in. Passing reports are useful too. [Browse existing
+        before filling this in. Its optional local worksheet prepares the six
+        outcome counts below without writing selections to browser storage or
+        sending them.
+        Passing reports are useful too. [Browse existing
         compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22)
         first and add to a report only when its platform, app version, and
         generic field type match yours.
@@ -72,7 +75,7 @@ body:
     attributes:
       label: Presspeech version
       description: Copy Diagnostics includes this value.
-      placeholder: e.g. 0.3.7 or 0.1.11
+      placeholder: Copy the exact x.y.z value from Diagnostics.
     validations:
       required: true
   - type: input
@@ -92,7 +95,10 @@ body:
     id: restore-state
     attributes:
       label: Clipboard preservation during the steady-focus check
-      description: On macOS, leave either 0.3.7's automatic restore or a newer build's Keep Previous Clipboard for Manual Restore off. Windows does not offer either option.
+      description: >-
+        On macOS 0.3.8 or later, leave Keep Previous Clipboard for Manual
+        Restore off. Update legacy 0.3.7 before running this baseline. Windows
+        does not offer either option.
       options:
         - Off on macOS — required baseline
         - Not applicable on Windows
@@ -100,22 +106,23 @@ body:
     validations:
       required: true
   - type: textarea
-    id: steady-results
+    id: outcome-counts
     attributes:
-      label: Five steady-focus results
-      description: Enter counts only. They should total five; do not quote any transcript or clipboard content.
+      label: Eight-check outcome counts
+      description: |
+        Paste the count block from the protocol's local worksheet, or enter the
+        six counts manually. The first three must total five and the final
+        three must total three. Use counts only; do not quote any transcript or
+        clipboard content. If a focus-change check could not be completed
+        safely, include it under Other or not completed and explain why under
+        Relevant conditions.
       placeholder: |
+        Five steady-focus results
         Pasted once: 5
         Recovered safely: 0
         Incorrect or unsafe: 0
-    validations:
-      required: true
-  - type: textarea
-    id: focus-results
-    attributes:
-      label: Three focus-change results
-      description: Enter counts only. If this could not be tested safely, explain why without private context.
-      placeholder: |
+
+        Three focus-change results
         Copied for manual paste without inserting anywhere: 3
         Inserted into any field: 0
         Other or not completed: 0

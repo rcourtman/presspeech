@@ -13,7 +13,7 @@
       "approximate_size": "500-600 MB",
       "user_triggered": false,
       "can_disable": false,
-      "data_sent": "Standard HTTPS request metadata; no dictation audio. If HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN is set in the environment, FluidAudio attaches it as an Authorization header to huggingface.co; most users do not have these set"
+      "data_sent": "Standard HTTPS request metadata; no dictation audio. macOS 0.3.8 can attach an inherited HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN as an Authorization header. Upcoming 0.3.9 removes those credentials from its own process before FluidAudio can read them, so its public model download carries no account credential; this does not alter the user's shell or token store"
     },
     {
       "name": "windows_first_launch_model_download",
@@ -60,7 +60,7 @@
     },
     {
       "name": "user_triggered_compatibility_guide",
-      "when": "Only in upcoming macOS 0.3.8, Windows 0.1.13, or builds containing the new action, and only when the user chooses Test App Compatibility",
+      "when": "In macOS 0.3.8, upcoming Windows 0.1.13, or builds containing the new action, and only when the user chooses Test App Compatibility",
       "destination": "rcourtman.github.io/presspeech/app-compatibility.html",
       "purpose": "Open the public privacy-safe repeated target-app test guide in the default browser",
       "user_triggered": true,

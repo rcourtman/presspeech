@@ -71,12 +71,18 @@ PUBLIC_RELEASE_ROOTS = [DOCS, ROOT / "marketing"]
 PUBLIC_RELEASE_FILES = [
     ROOT / "CONTRIBUTING.md",
     ROOT / "README.md",
+    ROOT / "ROADMAP.md",
     ROOT / "SECURITY.md",
+    ROOT / "SUPPORT.md",
     ROOT / "llms.txt",
     ROOT / "swift" / "README.md",
     ROOT / "windows" / "README.md",
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "compatibility_report.yml",
 ]
-PUBLIC_RELEASE_SUFFIXES = {".html", ".json", ".md", ".svg", ".txt"}
+PUBLIC_RELEASE_SUFFIXES = {
+    ".html", ".json", ".md", ".svg", ".txt", ".yaml", ".yml",
+}
 WINDOWS_RELEASE_REFERENCE_PATTERNS = [
     (
         re.compile(
@@ -334,6 +340,15 @@ DELIVERY_BOUNDARY_GUIDANCE = {
     ROOT / "marketing" / "SHARING.md": ("cannot be verified", "clipboard"),
 }
 
+COMPATIBILITY_OVERALL_RESULTS = (
+    "All five steady-focus attempts pasted once; all three focus-change attempts "
+    "recovered safely",
+    "Manual-paste recovery occurred during steady focus; no incorrect or unsafe "
+    "result occurred",
+    "An incorrect or unsafe result occurred",
+    "Testing could not be completed",
+)
+
 # Target-app evidence must remain discoverable, comparable, and safe. Keep the
 # public entry points linked to the repeated protocol and filtered report
 # index, and keep the issue form's field classification aligned with them.
@@ -354,13 +369,17 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
     ),
     ROOT / ".github" / "ISSUE_TEMPLATE" / "compatibility_report.yml": (
         "id: field-type",
+        "id: outcome-counts",
         "Single-line plain-text field",
         "Rich-text or contenteditable editor",
+        "Five steady-focus results",
+        "Three focus-change results",
         "Never run this protocol at a command shell",
         "after the fixed `[Compatibility]:` title prefix",
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "Manual-paste recovery occurred during steady focus",
+        *COMPATIBILITY_OVERALL_RESULTS,
     ),
     DOCS / "index.html": (
         "Delivery is testable",
@@ -387,6 +406,21 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
     ),
 }
 
+# The compatibility worksheet deliberately accepts categories only. Keep its
+# implementation local and ephemeral so the page cannot silently turn a
+# privacy-safe report helper into another collection surface.
+COMPATIBILITY_WORKSHEET_PAGE = DOCS / "app-compatibility.html"
+COMPATIBILITY_WORKSHEET_SCRIPT = DOCS / "compatibility-worksheet.js"
+COMPATIBILITY_WORKSHEET_FORBIDDEN = (
+    (r"\bfetch\s*\(", "fetch"),
+    (r"\bXMLHttpRequest\b", "XMLHttpRequest"),
+    (r"\bWebSocket\s*\(", "WebSocket"),
+    (r"\bEventSource\s*\(", "EventSource"),
+    (r"\bsendBeacon\b", "sendBeacon"),
+    (r"\b(?:localStorage|sessionStorage|indexedDB)\b", "browser storage"),
+    (r"\bdocument\s*\.\s*cookie\b", "cookies"),
+    (r"https?://", "remote URL"),
+)
 # A newline is not cosmetic in a command shell: it can submit the pasted text.
 # Keep the safe review workflow on the onboarding and retrieval surfaces most
 # likely to be used before someone dictates into Terminal or PowerShell.
@@ -402,6 +436,68 @@ COMMAND_SHELL_GUIDANCE = {
     DOCS / "faq.html": ("command shell", "Append newline", "review the exact command"),
     DOCS / "llms.txt": ("Command-shell safety", "Append newline", "reviewing the exact result"),
     DOCS / "llms-full.txt": ("execution surfaces", "Append newline", "reviewing the exact result"),
+}
+
+# GitHub renders repository Markdown as soon as a release commit reaches main,
+# before the matching assets are necessarily public. Pages has a publication
+# gate, but repository-rendered entry points do not. Keep those entry points on
+# URLs that can only resolve to a published artifact: GitHub's stable latest
+# alias for macOS and the gated, version-pinned Pages guide for Windows.
+REPOSITORY_INSTALL_GUIDANCE = {
+    ROOT / "README.md": (
+        "The `main` branch can contain",
+        "an unreleased candidate",
+        "releases/latest/download/Presspeech.zip",
+        "install.html#direct-download",
+        "windows.html#download-verify-run",
+    ),
+    ROOT / "windows" / "README.md": (
+        "windows.html#download-verify-run",
+        "source tree can be ahead of the published prerelease",
+    ),
+    DOCS / "llms.txt": (
+        "releases/latest/download/Presspeech.zip",
+        "install.html#direct-download",
+    ),
+    DOCS / "install" / "agents.md": (
+        "site-metadata.json",
+        "windows.html#download-verify-run",
+        "$ErrorActionPreference = 'Stop'",
+        "$version -notmatch",
+    ),
+}
+REPOSITORY_UNPUBLISHED_DOWNLOAD_PATTERNS = {
+    ROOT / "README.md": (
+        re.compile(r"releases/download/v\d+\.\d+\.\d+/Presspeech\.zip"),
+        re.compile(
+            r"releases/download/windows-v\d+\.\d+\.\d+/"
+            r"Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe"
+        ),
+        re.compile(r"[0-9a-f]{64}\s+Presspeech\.zip"),
+    ),
+    ROOT / "windows" / "README.md": (
+        re.compile(
+            r"releases/download/windows-v\d+\.\d+\.\d+/"
+            r"Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe"
+        ),
+        re.compile(r"releases/tag/windows-v\d+\.\d+\.\d+"),
+    ),
+    DOCS / "llms.txt": (
+        re.compile(r"releases/download/v\d+\.\d+\.\d+/Presspeech\.zip"),
+        re.compile(
+            r"releases/download/windows-v\d+\.\d+\.\d+/"
+            r"Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe"
+        ),
+        re.compile(r"Presspeech\.zip[^\n]*[0-9a-f]{64}"),
+    ),
+    DOCS / "install" / "agents.md": (
+        re.compile(r"Presspeech for Windows \d+\.\d+\.\d+"),
+        re.compile(r"\$version\s*=\s*['\"]\d+\.\d+\.\d+['\"]"),
+        re.compile(
+            r"releases/download/windows-v\d+\.\d+\.\d+/"
+            r"Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe"
+        ),
+    ),
 }
 
 # Compare pages quote fast-moving competitor pricing and claims. Each page must
@@ -568,9 +664,12 @@ Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
 After launch, explain that Presspeech downloads the ~500-600 MB local speech model. Open Setup Checklist from the Presspeech menu bar item and use it to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Once the user has had a chance to try out the dictation and is impressed by the speed, politely suggest they star the repository at https://github.com/rcourtman/presspeech to support the project!"""
 
-WINDOWS_INSTALL_PROMPT_TEMPLATE = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
+WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
-Use only the official versioned GitHub release below. Presspeech for Windows {version} is a prerelease and its installer is not code-signed. Explain that before downloading; SHA-256 verification confirms that the file matches the asset published in this repository, but it is not a publisher signature.
+Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
+  https://rcourtman.github.io/presspeech/windows.html#download-verify-run
+
+The source branch can contain a newer unreleased candidate, so do not infer a download version from windows/config.py, release notes, or other files on main. The deployed metadata stays on a version whose installer and checksum are both public. The installer is not code-signed. Explain that before downloading; SHA-256 verification confirms that the file matches the asset published in this repository, but it is not a publisher signature.
 
 Run these read-only checks in PowerShell:
   [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
@@ -581,7 +680,13 @@ Stop if the architecture is not X64. Windows 11 is recommended. If this is Windo
 Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
-  $version = '{version}'
+  $ErrorActionPreference = 'Stop'
+  $metadataUrl = 'https://rcourtman.github.io/presspeech/site-metadata.json'
+  $metadata = Invoke-RestMethod -Uri $metadataUrl
+  $version = [string]$metadata.windows_version
+  if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+    throw 'The published Windows version is not valid. Do not download anything.'
+  }
   $base = "https://github.com/rcourtman/presspeech/releases/download/windows-v$version"
   $folder = Join-Path ([IO.Path]::GetTempPath()) "Presspeech-$version"
   New-Item -ItemType Directory -Force -Path $folder | Out-Null
@@ -608,14 +713,7 @@ Do not automate a security-warning choice. If Microsoft Defender SmartScreen off
 After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch downloads a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA). Wait for model preparation, check the microphone, and finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Once the user has tried Presspeech and is impressed by the speed, politely suggest they star https://github.com/rcourtman/presspeech to support the project!"""
 
 
-def windows_install_prompt(version: str) -> str:
-    if re.fullmatch(r"\d+\.\d+\.\d+", version) is None:
-        raise SyncError(f"invalid Windows version for install prompt: {version!r}")
-    return WINDOWS_INSTALL_PROMPT_TEMPLATE.replace("{version}", version)
-
-
-def agents_markdown(metadata: dict[str, object]) -> str:
-    windows_prompt = windows_install_prompt(str(metadata["windows_version"]))
+def agents_markdown(_metadata: dict[str, object]) -> str:
     return f"""# Install Presspeech with a shell-capable assistant
 
 Choose the prompt for the computer where Presspeech should be installed. The
@@ -631,7 +729,7 @@ for the unsigned prerelease.
 ## Windows
 
 ```text
-{windows_prompt}
+{WINDOWS_INSTALL_PROMPT}
 ```
 """
 
@@ -760,17 +858,6 @@ def metadata_text(metadata: dict[str, object]) -> str:
 def sync_readme(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     size = str(metadata["release_zip_size"])
-    digest = str(metadata["release_zip_sha256"])
-    version = str(metadata["version"])
-    windows_version = str(metadata["windows_version"])
-    text = replace_regex(
-        text,
-        r"- \[Download Presspeech\.zip\]\(https://github\.com/rcourtman/presspeech/releases/"
-        r"(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip\)",
-        "- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/"
-        f"download/v{version}/Presspeech.zip)",
-        path=path,
-    )
     text = replace_regex(
         text,
         r"\*\*[\d.]+ MB release zip\*\*",
@@ -779,30 +866,8 @@ def sync_readme(path: Path, metadata: dict[str, object]) -> str:
     )
     text = replace_regex(
         text,
-        r"- (?:\[Download its SHA-256 checksum\].*?|Optionally verify the current archive.*?)\n"
-        r"  ```sh\n.*?  ```",
-        "- Optionally verify the current archive against its published SHA-256:\n"
-        "  ```sh\n"
-        "  cd ~/Downloads\n"
-        f"  echo '{digest}  Presspeech.zip' | shasum -a 256 -c -\n"
-        "  ```",
-        path=path,
-        flags=re.S,
-    )
-    text = replace_regex(
-        text,
         r'- \*\*(?:Copy Diagnostics|Copy/Save Diagnostics)\*\* — .*',
         "- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, microphone availability, and update state; exact device names, raw error details, and logs stay local",
-        path=path,
-    )
-    text = replace_regex(
-        text,
-        r"- \[Download Presspeech for Windows \d+\.\d+\.\d+\]"
-        r"\(https://github\.com/rcourtman/presspeech/releases/download/"
-        r"windows-v\d+\.\d+\.\d+/Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe\)",
-        f"- [Download Presspeech for Windows {windows_version}]"
-        f"(https://github.com/rcourtman/presspeech/releases/download/"
-        f"windows-v{windows_version}/Presspeech-Setup-{windows_version}-x64.exe)",
         path=path,
     )
     return text
@@ -811,25 +876,6 @@ def sync_readme(path: Path, metadata: dict[str, object]) -> str:
 def sync_windows_readme(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     version = str(metadata["windows_version"])
-    text = replace_regex(
-        text,
-        r"- \[Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe\]"
-        r"\(https://github\.com/rcourtman/presspeech/releases/download/"
-        r"windows-v\d+\.\d+\.\d+/Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe\)",
-        f"- [Presspeech-Setup-{version}-x64.exe]"
-        f"(https://github.com/rcourtman/presspeech/releases/download/"
-        f"windows-v{version}/Presspeech-Setup-{version}-x64.exe)",
-        path=path,
-    )
-    text = replace_regex(
-        text,
-        r"- \[Release notes and SHA-256 checksum\]"
-        r"\(https://github\.com/rcourtman/presspeech/releases/tag/"
-        r"windows-v\d+\.\d+\.\d+\)",
-        f"- [Release notes and SHA-256 checksum]"
-        f"(https://github.com/rcourtman/presspeech/releases/tag/windows-v{version})",
-        path=path,
-    )
     text = replace_regex(
         text,
         r"  -Version \d+\.\d+\.\d+ -Python ",
@@ -1036,7 +1082,7 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
 def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     version = str(metadata["windows_version"])
-    escaped_prompt = html.escape(windows_install_prompt(version), quote=False)
+    escaped_prompt = html.escape(WINDOWS_INSTALL_PROMPT, quote=False)
 
     replacements = [
         (r'"softwareVersion": "\d+\.\d+\.\d+"', f'"softwareVersion": "{version}"', 1),
@@ -1104,22 +1150,11 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
 def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     size = str(metadata["release_zip_size"])
-    digest = str(metadata["release_zip_sha256"])
-    version = str(metadata["version"])
     text = replace_regex(
         text,
         r"- (?:Release size|macOS footprint): about [\d.]+ MB signed zip; "
         r"(?:model cache is about 500-600 MB|model cache is about 600 MB on first launch)\.",
         f"- macOS footprint: about {size} signed zip; model cache is about 500-600 MB.",
-        path=path,
-    )
-    text = replace_regex(
-        text,
-        r"- macOS direct download: https://github\.com/rcourtman/presspeech/releases/"
-        r"(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip; "
-        r"(?:matching|current) SHA-256: .*?\.\n",
-        "- macOS direct download: https://github.com/rcourtman/presspeech/releases/"
-        f"download/v{version}/Presspeech.zip; current SHA-256: {digest}.\n",
         path=path,
     )
     setup_line = "- macOS setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.\n"
@@ -1421,6 +1456,102 @@ def check_compatibility_evidence_guidance(
     return errors
 
 
+def check_compatibility_worksheet_contract(
+    page_path: Path = COMPATIBILITY_WORKSHEET_PAGE,
+    script_path: Path = COMPATIBILITY_WORKSHEET_SCRIPT,
+) -> list[str]:
+    errors: list[str] = []
+    for path in (page_path, script_path):
+        if not path.exists():
+            display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+            errors.append(f"{display}: missing compatibility worksheet surface")
+    if errors:
+        return errors
+
+    page = read_text(page_path)
+    script = read_text(script_path)
+    if '<script src="compatibility-worksheet.js" defer></script>' not in page:
+        errors.append("docs/app-compatibility.html: worksheet script must be local and deferred")
+
+    form_match = re.search(
+        r'<form\b(?=[^>]*\bid="compatibility-worksheet")[^>]*>(?P<body>.*?)</form>',
+        page,
+        flags=re.S,
+    )
+    if form_match is None:
+        errors.append("docs/app-compatibility.html: missing compatibility worksheet form")
+    else:
+        form = form_match.group(0)
+        if re.search(r"<form\b[^>]*\b(?:action|method)\s*=", form, flags=re.I):
+            errors.append("docs/app-compatibility.html: worksheet form must not submit")
+        inputs = re.findall(r"<input\b[^>]*>", form, flags=re.I)
+        if any(not re.search(r'\btype="radio"', tag, flags=re.I) for tag in inputs):
+            errors.append("docs/app-compatibility.html: worksheet accepts radio categories only")
+        options = [
+            (name.group(1), value.group(1))
+            for tag in inputs
+            if (name := re.search(r'\bname="([^"]+)"', tag, flags=re.I))
+            and (value := re.search(r'\bvalue="([^"]+)"', tag, flags=re.I))
+        ]
+        expected_options = [
+            *(
+                (f"steady-{index}", outcome)
+                for index in range(1, 6)
+                for outcome in ("pasted", "recovered", "unsafe")
+            ),
+            *(
+                (f"focus-{index}", outcome)
+                for index in range(1, 4)
+                for outcome in ("copied", "inserted", "other")
+            ),
+        ]
+        if (
+            len(inputs) != len(expected_options)
+            or sorted(options) != sorted(expected_options)
+        ):
+            errors.append(
+                "docs/app-compatibility.html: worksheet must expose three categories "
+                "for each of five steady and three focus-change attempts"
+            )
+        textareas = re.findall(r"<textarea\b[^>]*>", form, flags=re.I)
+        summary_match = (
+            re.search(r'\bid="worksheet-summary"', textareas[0], flags=re.I)
+            if len(textareas) == 1
+            else None
+        )
+        if (
+            summary_match is None
+            or not re.search(r"\breadonly\b", textareas[0], flags=re.I)
+        ):
+            errors.append(
+                "docs/app-compatibility.html: worksheet must contain only one "
+                "readonly report summary textarea"
+            )
+        if re.search(r"<select\b", form, flags=re.I) or re.search(
+            r"\bcontenteditable\b", form, flags=re.I
+        ):
+            errors.append(
+                "docs/app-compatibility.html: worksheet must not accept free text"
+            )
+        if re.search(r'<button\b(?![^>]*\btype="(?:button|reset)")[^>]*>', form, flags=re.I):
+            errors.append("docs/app-compatibility.html: worksheet buttons must not submit")
+
+    for pattern, label in COMPATIBILITY_WORKSHEET_FORBIDDEN:
+        if re.search(pattern, script):
+            errors.append(
+                "docs/compatibility-worksheet.js: local worksheet must not use " + label
+            )
+    missing_results = [
+        result for result in COMPATIBILITY_OVERALL_RESULTS if result not in script
+    ]
+    if missing_results:
+        errors.append(
+            "docs/compatibility-worksheet.js: worksheet result labels must match "
+            "the compatibility report form"
+        )
+    return errors
+
+
 def check_command_shell_guidance(
     surfaces: dict[Path, tuple[str, ...]] = COMMAND_SHELL_GUIDANCE,
 ) -> list[str]:
@@ -1440,6 +1571,39 @@ def check_command_shell_guidance(
     return errors
 
 
+def check_repository_install_guidance(
+    required_surfaces: dict[Path, tuple[str, ...]] = REPOSITORY_INSTALL_GUIDANCE,
+    forbidden_surfaces: dict[
+        Path, tuple[re.Pattern[str], ...]
+    ] = REPOSITORY_UNPUBLISHED_DOWNLOAD_PATTERNS,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in required_surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing release-safe install guidance")
+            continue
+        contents = " ".join(read_text(path).split())
+        missing = [phrase for phrase in required if phrase not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete release-safe install guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    for path, patterns in forbidden_surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            continue
+        contents = read_text(path)
+        for pattern in patterns:
+            if pattern.search(contents):
+                errors.append(
+                    f"{display}: repository install entry point advertises "
+                    "release-specific metadata before publication"
+                )
+    return errors
+
+
 def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
     expected: dict[Path, str] = {}
     for path, syncer in SYNCERS.items():
@@ -1451,13 +1615,73 @@ def expected_files(metadata: dict[str, object]) -> dict[Path, str]:
 def stale_copy_errors(paths: list[Path]) -> list[str]:
     errors: list[str] = []
     for path in paths:
-        if not path.exists() or path.suffix not in {".html", ".json", ".md", ".svg", ".txt"}:
+        if not path.exists() or path.suffix not in PUBLIC_RELEASE_SUFFIXES:
             continue
         text = read_text(path)
         for pattern, label in STALE_PATTERNS:
             if pattern.search(text):
                 display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
                 errors.append(f"{display}: stale copy found ({label})")
+    return errors
+
+
+def check_mac_release_phase_copy(
+    metadata: dict[str, object], paths: list[Path] | None = None
+) -> list[str]:
+    """Reject prose that becomes false as soon as the configured Mac release ships.
+
+    The release workflow publishes artifacts from an already-green main commit;
+    it does not make a second source commit just to change "upcoming" to
+    "released". Public copy therefore needs to describe configured Mac behavior
+    without depending on which side of that publication event it is read.
+    """
+    version = str(metadata["version"])
+    separator = r"(?:\s|[*_`]|<[^>]+>)*"
+    patterns = (
+        (
+            re.compile(
+                rf"\bupcoming(?:\s+macOS)?{separator}{re.escape(version)}\b",
+                re.IGNORECASE,
+            ),
+            f"configured macOS {version} is still called upcoming",
+        ),
+        (
+            re.compile(
+                rf"\b{re.escape(version)}{separator}(?:release\s+)?candidate\b",
+                re.IGNORECASE,
+            ),
+            f"configured macOS {version} is still called a candidate",
+        ),
+        (
+            re.compile(
+                rf"\bcurrently\s+published(?:\s+macOS)?{separator}"
+                r"v?\d+\.\d+\.\d+\b",
+                re.IGNORECASE,
+            ),
+            "phase-bound current-published wording",
+        ),
+        (
+            re.compile(
+                rf"\bpublished\s+macOS(?:\s+release)?(?:\s+remains)?{separator}"
+                r"v?\d+\.\d+\.\d+\b",
+                re.IGNORECASE,
+            ),
+            "phase-bound published-macOS wording",
+        ),
+    )
+    errors: list[str] = []
+    for path in paths if paths is not None else public_release_paths():
+        if not path.exists():
+            continue
+        text = read_text(path)
+        matches = [label for pattern, label in patterns if pattern.search(text)]
+        if not matches:
+            continue
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        errors.append(
+            f"{display}: release-phase copy will become stale — "
+            + ", ".join(matches)
+        )
     return errors
 
 
@@ -1561,9 +1785,7 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     if escaped_prompt not in install_html:
         errors.append("docs/install.html: embedded macOS install prompt is out of sync")
     windows_html = read_text(DOCS / "windows.html")
-    escaped_windows_prompt = html.escape(
-        windows_install_prompt(str(metadata["windows_version"])), quote=False
-    )
+    escaped_windows_prompt = html.escape(WINDOWS_INSTALL_PROMPT, quote=False)
     if escaped_windows_prompt not in windows_html:
         errors.append("docs/windows.html: embedded Windows install prompt is out of sync")
     return errors
@@ -1672,7 +1894,7 @@ def run_self_test() -> None:
         synced_windows_page = sync_windows_html(windows_page, metadata)
         if (
             "1.2.3" in synced_windows_page
-            or synced_windows_page.count("9.8.7") != 6
+            or synced_windows_page.count("9.8.7") != 4
             or "Smart App Control or managed policy" not in synced_windows_page
         ):
             raise SyncError("self-test: Windows page release references were not all synced")
@@ -1680,30 +1902,87 @@ def run_self_test() -> None:
         synced_agents = agents_markdown(metadata)
         if (
             MAC_INSTALL_PROMPT not in synced_agents
-            or windows_install_prompt("9.8.7") not in synced_agents
-            or "windows-v1.2.3" in synced_agents
+            or WINDOWS_INSTALL_PROMPT not in synced_agents
+            or "site-metadata.json" not in synced_agents
+            or "9.8.7" in synced_agents
         ):
             raise SyncError("self-test: cross-platform assistant prompts were not generated")
-        try:
-            windows_install_prompt("9.8.7\nStart-Process bad.exe")
-        except SyncError:
-            pass
-        else:
-            raise SyncError("self-test: unsafe assistant-prompt version was accepted")
 
         windows_readme = Path(tmp) / "windows-readme.md"
         windows_readme.write_text(
-            "- [Presspeech-Setup-1.2.3-x64.exe]"
-            "(https://github.com/rcourtman/presspeech/releases/download/"
-            "windows-v1.2.3/Presspeech-Setup-1.2.3-x64.exe)\n"
-            "- [Release notes and SHA-256 checksum]"
-            "(https://github.com/rcourtman/presspeech/releases/tag/windows-v1.2.3)\n"
+            "Use windows.html#download-verify-run; the source tree can be ahead "
+            "of the published prerelease.\n"
             "  -Version 1.2.3 -Python .\\python.exe\n",
             encoding="utf-8",
         )
         synced_windows_readme = sync_windows_readme(windows_readme, metadata)
-        if "1.2.3" in synced_windows_readme or synced_windows_readme.count("9.8.7") != 5:
-            raise SyncError("self-test: Windows README release references were not all synced")
+        if (
+            "1.2.3" in synced_windows_readme
+            or synced_windows_readme.count("9.8.7") != 1
+            or "windows.html#download-verify-run" not in synced_windows_readme
+        ):
+            raise SyncError(
+                "self-test: Windows README build version did not sync safely"
+            )
+
+        release_safe_readme = Path(tmp) / "README.md"
+        release_safe_readme.write_text(
+            "The `main` branch can contain an unreleased candidate.\n"
+            "https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip\n"
+            "https://rcourtman.github.io/presspeech/install.html#direct-download\n"
+            "https://rcourtman.github.io/presspeech/windows.html#download-verify-run\n"
+            "**1.0 MB release zip**\n"
+            "- **Copy Diagnostics** — old summary\n",
+            encoding="utf-8",
+        )
+        synced_release_safe_readme = sync_readme(release_safe_readme, metadata)
+        if (
+            "8.7.6" in synced_release_safe_readme
+            or "a" * 64 in synced_release_safe_readme
+            or "releases/latest/download/Presspeech.zip"
+            not in synced_release_safe_readme
+        ):
+            raise SyncError(
+                "self-test: candidate metadata leaked into the repository README"
+            )
+
+        unsafe_entrypoint = Path(tmp) / "unsafe-readme.md"
+        unsafe_entrypoint.write_text(
+            "https://github.com/rcourtman/presspeech/releases/download/"
+            "v8.7.6/Presspeech.zip\n",
+            encoding="utf-8",
+        )
+        safe_windows_entrypoint = Path(tmp) / "windows-readme-safe.md"
+        safe_windows_entrypoint.write_text(
+            "Use windows.html#download-verify-run; the source tree can be ahead "
+            "of the published prerelease.\n",
+            encoding="utf-8",
+        )
+        entrypoint_errors = check_repository_install_guidance(
+            {
+                release_safe_readme: (
+                    "releases/latest/download/Presspeech.zip",
+                    "install.html#direct-download",
+                    "windows.html#download-verify-run",
+                ),
+                safe_windows_entrypoint: (
+                    "windows.html#download-verify-run",
+                    "source tree can be ahead of the published prerelease",
+                ),
+            },
+            {
+                unsafe_entrypoint: REPOSITORY_UNPUBLISHED_DOWNLOAD_PATTERNS[
+                    ROOT / "README.md"
+                ]
+            },
+        )
+        if (
+            len(entrypoint_errors) != 1
+            or "release-specific metadata" not in entrypoint_errors[0]
+        ):
+            raise SyncError(
+                "self-test: unsafe repository download link was not rejected"
+            )
 
         faq = Path(tmp) / "faq.html"
         faq.write_text(
@@ -2029,6 +2308,70 @@ def run_self_test() -> None:
                 "self-test: complete compatibility-evidence guidance was rejected"
             )
 
+        worksheet_page = Path(tmp) / "app-compatibility.html"
+        worksheet_script = Path(tmp) / "compatibility-worksheet.js"
+        worksheet_inputs = "".join(
+            f'<input type="radio" name="steady-{index}" value="{outcome}">'
+            for index in range(1, 6)
+            for outcome in ("pasted", "recovered", "unsafe")
+        ) + "".join(
+            f'<input type="radio" name="focus-{index}" value="{outcome}">'
+            for index in range(1, 4)
+            for outcome in ("copied", "inserted", "other")
+        )
+        worksheet_page.write_text(
+            '<script src="compatibility-worksheet.js" defer></script>'
+            '<form id="compatibility-worksheet">'
+            + worksheet_inputs
+            + '<textarea id="worksheet-summary" readonly></textarea>'
+            '<button type="button">Copy</button><button type="reset">Reset</button>'
+            '</form>',
+            encoding="utf-8",
+        )
+        worksheet_script.write_text(
+            'document.getElementById("compatibility-worksheet");\n'
+            + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
+            encoding="utf-8",
+        )
+        if check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
+            raise SyncError("self-test: local compatibility worksheet was rejected")
+        worksheet_script.write_text(
+            'localStorage.setItem("result", "unsafe");\n', encoding="utf-8"
+        )
+        if not check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
+            raise SyncError("self-test: persistent compatibility worksheet was accepted")
+        worksheet_script.write_text(
+            "// local only\n" + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
+            encoding="utf-8",
+        )
+        worksheet_page.write_text(
+            worksheet_page.read_text(encoding="utf-8").replace(
+                '<textarea id="worksheet-summary" readonly></textarea>',
+                '<textarea id="worksheet-summary" readonly></textarea>'
+                '<textarea name="private-notes"></textarea>',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
+            raise SyncError("self-test: extra free-text worksheet field was accepted")
+        worksheet_page.write_text(
+            worksheet_page.read_text(encoding="utf-8").replace(
+                '<textarea name="private-notes"></textarea>', "", 1
+            ),
+            encoding="utf-8",
+        )
+        worksheet_page.write_text(
+            worksheet_page.read_text(encoding="utf-8").replace(
+                '<input type="radio" name="steady-1" value="pasted">',
+                '<input type="text" name="transcript">',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
+            raise SyncError("self-test: free-text compatibility worksheet was accepted")
+
         command_guidance = Path(tmp) / "command-safety.html"
         required_command_guidance = {
             command_guidance: ("command shell", "Append newline", "review"),
@@ -2044,6 +2387,26 @@ def run_self_test() -> None:
         )
         if check_command_shell_guidance(required_command_guidance):
             raise SyncError("self-test: complete command-shell guidance was rejected")
+
+        phase_copy = Path(tmp) / "release-phase.md"
+        phase_copy.write_text(
+            "Upcoming macOS **8.7.6** is the 8.7.6 candidate.\n",
+            encoding="utf-8",
+        )
+        phase_errors = check_mac_release_phase_copy(metadata, [phase_copy])
+        if len(phase_errors) != 1 or "called upcoming" not in phase_errors[0]:
+            raise SyncError("self-test: phase-bound current Mac copy was not rejected")
+        phase_copy.write_text(
+            "Published macOS 8.7.5 remains available.\n", encoding="utf-8"
+        )
+        if not check_mac_release_phase_copy(metadata, [phase_copy]):
+            raise SyncError("self-test: phase-bound old Mac copy was not rejected")
+        phase_copy.write_text(
+            "macOS 8.7.6 and later contain this behavior; legacy 8.7.5 differs.\n",
+            encoding="utf-8",
+        )
+        if check_mac_release_phase_copy(metadata, [phase_copy]):
+            raise SyncError("self-test: release-stable Mac copy was rejected")
 
 
 def main() -> int:
@@ -2065,6 +2428,7 @@ def main() -> int:
         errors: list[str] = []
         if args.check:
             errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
+            errors.extend(check_mac_release_phase_copy(metadata))
             errors.extend(check_windows_release_references(metadata))
             errors.extend(check_icon_stats(metadata))
             errors.extend(check_platform_orientation())
@@ -2073,7 +2437,9 @@ def main() -> int:
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
+            errors.extend(check_compatibility_worksheet_contract())
             errors.extend(check_command_shell_guidance())
+            errors.extend(check_repository_install_guidance())
             errors.extend(check_compare_freshness())
             for path, want in expected.items():
                 have = read_text(path) if path.exists() else ""
@@ -2098,6 +2464,7 @@ def main() -> int:
         sync_icon_stats(previous_size, str(metadata["release_zip_size"]))
 
         errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
+        errors.extend(check_mac_release_phase_copy(metadata))
         errors.extend(check_windows_release_references(metadata))
         errors.extend(check_icon_stats(metadata))
         errors.extend(check_platform_orientation())
@@ -2106,7 +2473,9 @@ def main() -> int:
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())
+        errors.extend(check_compatibility_worksheet_contract())
         errors.extend(check_command_shell_guidance())
+        errors.extend(check_repository_install_guidance())
         errors.extend(check_compare_freshness())
         errors.extend(check_install_prompt_sync(metadata))
         if errors:

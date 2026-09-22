@@ -30,7 +30,10 @@ After launch, explain that Presspeech downloads the ~500-600 MB local speech mod
 ```text
 Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
-Use only the official versioned GitHub release below. Presspeech for Windows 0.1.12 is a prerelease and its installer is not code-signed. Explain that before downloading; SHA-256 verification confirms that the file matches the asset published in this repository, but it is not a publisher signature.
+Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
+  https://rcourtman.github.io/presspeech/windows.html#download-verify-run
+
+The source branch can contain a newer unreleased candidate, so do not infer a download version from windows/config.py, release notes, or other files on main. The deployed metadata stays on a version whose installer and checksum are both public. The installer is not code-signed. Explain that before downloading; SHA-256 verification confirms that the file matches the asset published in this repository, but it is not a publisher signature.
 
 Run these read-only checks in PowerShell:
   [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
@@ -41,7 +44,13 @@ Stop if the architecture is not X64. Windows 11 is recommended. If this is Windo
 Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
-  $version = '0.1.12'
+  $ErrorActionPreference = 'Stop'
+  $metadataUrl = 'https://rcourtman.github.io/presspeech/site-metadata.json'
+  $metadata = Invoke-RestMethod -Uri $metadataUrl
+  $version = [string]$metadata.windows_version
+  if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+    throw 'The published Windows version is not valid. Do not download anything.'
+  }
   $base = "https://github.com/rcourtman/presspeech/releases/download/windows-v$version"
   $folder = Join-Path ([IO.Path]::GetTempPath()) "Presspeech-$version"
   New-Item -ItemType Directory -Force -Path $folder | Out-Null

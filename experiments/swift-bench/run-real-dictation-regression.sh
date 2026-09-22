@@ -38,6 +38,7 @@ SELF_TEST=0
 EXPERIMENT_ENVIRONMENT_STATE="unreported"
 MAX_REFERENCE_DELETION_RUN=""
 MAX_CORPUS_WER=""
+BENCHMARK_INPUT_SHA256="unreported"
 
 usage() {
     cat <<'USAGE'
@@ -430,6 +431,7 @@ write_report_header() {
         echo "- FluidAudio revision: $FLUID_REVISION"
         echo "- App FluidAudio revision: $PRODUCTION_FLUID_REVISION"
         echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
+        echo "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
         echo "- Trials per clip: $TRIALS"
         if backend_uses_unified; then
             echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
@@ -459,6 +461,7 @@ write_clip_section_header() {
     local stem="$4"
     local clip="$5"
     local ref="$6"
+    local reference_available="$7"
 
     {
         echo
@@ -470,7 +473,7 @@ write_clip_section_header() {
         echo
         echo "- Clip name: $([[ "$REDACT_PATHS" -eq 1 ]] && echo '<redacted>' || echo "$stem")"
         echo "- Source: $(path_label "$clip")"
-        if [[ -f "$ref" ]]; then
+        if [[ "$reference_available" -eq 1 ]]; then
             echo "- Reference: $(path_label "$ref") (WER enabled)"
         else
             echo "- Reference: missing (WER skipped)"
@@ -509,6 +512,7 @@ assert_not_contains() {
 }
 
 run_self_test() {
+    python3 ./benchmark-inputs.py --self-test
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -527,6 +531,7 @@ run_self_test() {
     UNIFIED_TRAILING_SILENCE_MS="250"
     NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
     NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
+    BENCHMARK_INPUT_SHA256="$(printf 'a%.0s' {1..64})"
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
     MAX_REFERENCE_DELETION_RUN=""
@@ -538,6 +543,7 @@ run_self_test() {
     clip_id="$(clip_id_for 1 "$secret_stem")"
     write_report_header "$report" "20260101T000000Z" 1
     assert_contains "$report" "- FluidAudio revision: $FLUID_REVISION"
+    assert_contains "$report" "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
     assert_not_contains "$report" "Unified trailing silence"
 
     BACKEND="unified"
@@ -550,7 +556,7 @@ run_self_test() {
     BACKEND="v3"
     write_report_header "$report" "20260101T000000Z" 1
 
-    write_clip_section_header "$report" "$clip_number" "$clip_id" "$secret_stem" "$secret_dir/$secret_stem.wav" "$secret_dir/$secret_stem.txt"
+    write_clip_section_header "$report" "$clip_number" "$clip_id" "$secret_stem" "$secret_dir/$secret_stem.wav" "$secret_dir/$secret_stem.txt" 1
     {
         echo "presspeech-bench: $clip_id.wav, 1 trials, backend=v3"
         echo "reference: <redacted ${#secret_transcript} chars>"
@@ -903,6 +909,25 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Freeze audio and references before the build or any model work. Production
+# and candidate SDK revisions require separate builds, so this folded digest
+# is what lets their reports prove that they consumed the same private corpus.
+original_clips=( "${clips[@]}" )
+snapshot_args=( snapshot --output-dir "$tmpdir/inputs" )
+if [[ "$ALLOW_MISSING_REF" -eq 1 ]]; then
+    snapshot_args+=( --allow-missing-reference )
+fi
+if ! BENCHMARK_INPUT_SHA256="$(
+    python3 ./benchmark-inputs.py "${snapshot_args[@]}" -- "${clips[@]}"
+)" || ! [[ "$BENCHMARK_INPUT_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "could not freeze and fingerprint real-dictation inputs" >&2
+    exit 1
+fi
+for index in "${!clips[@]}"; do
+    extension="${clips[$index]##*.}"
+    clips[index]="$tmpdir/inputs/$(printf '%06d' "$((index + 1))")/audio.$extension"
+done
+
 echo "building presspeech-bench..."
 swift_build_args=( -c release )
 if [[ "$BACKEND" == "v3-int8-v2" ]]; then
@@ -941,11 +966,13 @@ clip_index=0
 for clip in "${clips[@]}"; do
     clip_index=$((clip_index + 1))
     clip_number="$(printf '%03d' "$clip_index")"
-    stem="$(basename "$clip")"
+    source_clip="${original_clips[$((clip_index - 1))]}"
+    stem="$(basename "$source_clip")"
     stem="${stem%.*}"
     clip_id="$(clip_id_for "$clip_index" "$stem")"
     normalized="$tmpdir/$clip_id.wav"
     ref="${clip%.*}.txt"
+    source_ref="${source_clip%.*}.txt"
 
     echo "normalizing clip $clip_number..."
     afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
@@ -967,7 +994,11 @@ for clip in "${clips[@]}"; do
         bench_args+=( "--redact-transcripts" )
     fi
 
-    write_clip_section_header "$report" "$clip_number" "$clip_id" "$stem" "$clip" "$ref"
+    reference_available=0
+    if [[ -f "$ref" ]]; then
+        reference_available=1
+    fi
+    write_clip_section_header "$report" "$clip_number" "$clip_id" "$stem" "$source_clip" "$source_ref" "$reference_available"
 
     echo "benchmarking clip $clip_number..."
     log_file="$tmpdir/$clip_id.log"
@@ -992,6 +1023,12 @@ for clip in "${clips[@]}"; do
 
     echo '```' >>"$report"
 done
+
+observed_input_sha256="$(python3 ./benchmark-inputs.py verify --snapshot-dir "$tmpdir/inputs")"
+if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" ]]; then
+    echo "frozen real-dictation inputs changed during the benchmark" >&2
+    exit 1
+fi
 
 append_single_backend_summary "$report"
 

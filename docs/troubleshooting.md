@@ -30,8 +30,11 @@ icon to open dictation controls, Settings, Support, or Quit.
 Presspeech needs Microphone, Accessibility, and Input Monitoring. Open
 **Support -> Setup Checklist...** and choose the affected row. If the grant
 still does not appear, quit and reopen the copy in Applications, return to Setup
-Checklist, and choose **Try Again**. Presspeech resets only that stuck TCC entry
-and asks macOS again.
+Checklist, and choose **Try Again**. Presspeech resets only the TCC service or
+services represented by that row and asks macOS again. The Accessibility row
+checks both focused-window access and permission to send the paste shortcut;
+**Copy Diagnostics** reports those two checks separately when the visible
+Accessibility toggle and actual keyboard delivery disagree.
 
 ### Speech Model Fails To Load
 
@@ -55,8 +58,11 @@ and dictionary rules remain intact.
 
 ### Try Dictation Works But Text Is Not Inserted
 
-Confirm Accessibility is granted, click the destination text field, then dictate
-without changing apps before transcription finishes. If the HUD or menu says
+Confirm Accessibility is granted in Setup Checklist, click the destination text
+field, then dictate without changing apps before transcription finishes. The
+row remains Missing if either focused-window access or keyboard-event posting
+is unavailable, even when System Settings already shows Presspeech enabled; use
+**Try Again** in that case. If the HUD or menu says
 **Copied — press Command-V to paste**, the finished transcript is already on
 the clipboard. Return to the intended field and paste it manually instead of
 dictating it again.
@@ -69,26 +75,26 @@ Last Transcript**, choose that menu action before trying again.
 
 ### Previous Clipboard Content Is Pasted
 
-On the currently published macOS **0.3.7**, turn off **Settings -> Behavior ->
-Restore clipboard after paste** and retry with non-sensitive text. This leaves
-the transcript in place instead of letting an automatic restore race a slow
-target. Remove unintended text first, use **Copy Last Transcript** if available,
-and include the target app's name with privacy-safe diagnostics in a bug report.
-No fixed delay proves that another app consumed the paste.
+Update to macOS **0.3.8 or later** first. Legacy 0.3.7 used an automatic
+restore timer that could race a slow target; turn **Restore clipboard after
+paste** off while you update. No fixed delay proves that another app consumed
+the paste.
 
-**Upcoming 0.3.8 / builds containing Keep Previous Clipboard for Manual Restore:**
-automatic restoration and delay presets are retired. The new manual option is
-off by default, including when the old automatic setting was enabled. Enable it
-only if you want an eligible complete previous clipboard snapshot kept in
-memory for up to five minutes. The snapshot is limited to 64 MB and 256
-representations; Presspeech never offers a partial restore if either limit is
-exceeded or a representation is unavailable. The disabled restore row explains
+In 0.3.8, automatic restoration and delay presets are retired. **Keep Previous
+Clipboard for Manual Restore** is a fresh opt-in and is off by default, even
+when the old automatic setting was enabled. It can retain an eligible complete
+previous clipboard in memory for up to five minutes, limited to 64 MB and 256
+representations. Presspeech never offers a partial restore if either limit is
+exceeded or a representation is unavailable; the disabled restore row explains
 why nothing was kept. After verifying the latest dictated text arrived, choose
 **Restore Previous Clipboard…** and confirm. Cancel if the target is still
-waiting to read the clipboard. macOS provides no consumption acknowledgement.
-Expiry, copying something else, disabling the option or quitting discards the
-saved snapshot without an automatic clipboard rewrite. These controls are not
-available in the currently published 0.3.7 release.
+waiting to read the clipboard. Expiry, copying something else, disabling the
+option or quitting discards the snapshot without an automatic rewrite.
+
+If previous content still arrives on 0.3.8, remove it, leave the manual option
+off, recover with **Copy Last Transcript** if available, and retry only with
+non-sensitive text. Report the target app and attempt count with privacy-safe
+diagnostics; do not include either clipboard value or the dictated text.
 
 ### System Audio Stays Muted
 

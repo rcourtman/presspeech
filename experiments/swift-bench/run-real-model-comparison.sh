@@ -29,6 +29,7 @@ REFERENCES_HAND_AUDITED=0
 REQUIRE_CANDIDATE_PASS=0
 SELF_TEST=0
 EXPERIMENT_ENVIRONMENT_STATE="unreported"
+BENCHMARK_INPUT_SHA256="unreported"
 
 MIN_CANDIDATE_TRIALS=3
 MIN_CANDIDATE_CLIPS=25
@@ -466,6 +467,7 @@ assert_not_contains() {
 run_self_test() {
     EXPERIMENT_ENVIRONMENT_STATE="default"
     python3 ./test-experiment-environment.py
+    python3 ./benchmark-inputs.py --self-test
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-compare-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -885,6 +887,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Keep the caller-facing names for optional public/path-visible reports. The
+# benchmark itself will consume only the immutable generic-name snapshot.
+display_clips=( "${clips[@]}" )
+
 if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then
     CONTEXT_MANIFEST_SHA256="$(python3 ./compose-public-context-fixtures.py \
         --output-dir "$INPUT_DIR" --snapshot-output-dir "$tmpdir/context-inputs")"
@@ -895,6 +901,18 @@ if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then
     done
     clips=( "${frozen_clips[@]}" )
 fi
+
+snapshot_args=( snapshot --output-dir "$tmpdir/benchmark-inputs" )
+if ! BENCHMARK_INPUT_SHA256="$(
+    python3 ./benchmark-inputs.py "${snapshot_args[@]}" -- "${clips[@]}"
+)" || ! [[ "$BENCHMARK_INPUT_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "could not freeze and fingerprint model-comparison inputs" >&2
+    exit 1
+fi
+for index in "${!clips[@]}"; do
+    extension="${clips[$index]##*.}"
+    clips[index]="$tmpdir/benchmark-inputs/$(printf '%06d' "$((index + 1))")/audio.$extension"
+done
 
 echo "building presspeech-bench..."
 swift_build_args=( -c release )
@@ -946,6 +964,7 @@ mkdir -p "$raw_dir"
     echo "- FluidAudio revision: $FLUID_REVISION"
     echo "- App FluidAudio revision: $PRODUCTION_FLUID_REVISION"
     echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
+    echo "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
     echo "- Parakeet language hint: $LANGUAGE"
     if [[ "$CANDIDATE_BACKEND" == "unified" ]]; then
         echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
@@ -971,7 +990,8 @@ EXPERIMENT_ENVIRONMENT_STATE="pending"
 clip_index=0
 for clip in "${clips[@]}"; do
     clip_index=$((clip_index + 1))
-    stem="$(basename "$clip")"
+    display_clip="${display_clips[$((clip_index - 1))]}"
+    stem="$(basename "$display_clip")"
     stem="${stem%.*}"
     clip_id="$(clip_id_for "$clip_index" "$stem")"
     normalized="$tmpdir/$clip_id.wav"
@@ -1039,6 +1059,12 @@ for clip in "${clips[@]}"; do
             "$clip_id" "$backend" "$setting" "$wer" "$retained" "$p50" >>"$report"
     done
 done
+
+observed_input_sha256="$(python3 ./benchmark-inputs.py verify --snapshot-dir "$tmpdir/benchmark-inputs")"
+if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" ]]; then
+    echo "frozen model-comparison inputs changed during the benchmark" >&2
+    exit 1
+fi
 
 if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then
     python3 ./compose-public-context-fixtures.py \

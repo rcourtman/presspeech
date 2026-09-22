@@ -77,13 +77,13 @@ body:
       label: Delivery conditions and frequency
       description: |
         For a delivery problem, say whether focus stayed in the same field,
-        moved within the same app, or moved to another app. On macOS 0.3.7,
-        say whether **Restore clipboard after paste** was on. On a newer build,
-        say whether **Keep Previous Clipboard for Manual Restore** was on and
-        whether you chose its Restore action. Also say whether manual paste
-        recovered the expected complete text and how many attempts failed out
-        of how many. Do not quote any transcript, clipboard content, document,
-        or window title. Leave blank for other problems.
+        moved within the same app, or moved to another app. On macOS 0.3.8 or
+        later, say whether **Keep Previous Clipboard for Manual Restore** was
+        on and whether you chose its Restore action. On legacy macOS 0.3.7,
+        say whether **Restore clipboard after paste** was on. Also say whether
+        manual paste recovered the expected complete text and how many attempts
+        failed out of how many. Do not quote any transcript, clipboard content,
+        document, or window title. Leave blank for other problems.
       placeholder: e.g. Same field; clipboard restore off; manual paste recovered the complete test phrase; 4 of 5 attempts
   - type: dropdown
     id: platform

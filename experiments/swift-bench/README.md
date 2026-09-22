@@ -101,6 +101,16 @@ post-processing, hardware or end-to-end latency match the installed app.
 product-candidate gates reject that mismatch; `--no-threshold` still permits
 exploration, records the mismatch and keeps the product screen blocked.
 
+The real-dictation regression and model-comparison runners freeze every audio
+file and reference sidecar before building, then report one rename-independent
+`Benchmark inputs SHA-256` over the complete paired corpus. Compare that digest
+when production and candidate SDK revisions have to be measured in separate
+builds: matching clip counts or redacted report rows are not enough to show
+that the inputs stayed fixed. The snapshot manifest uses generic names, and
+the reported digest exposes neither individual file hashes nor reference text.
+The folded digest establishes input identity only; it does not attest reference
+quality, speaker diversity, language coverage, normalization, or native hardware.
+
 After building, the vocabulary, real-dictation and model-comparison runners also
 inspect SwiftPM's selected checkout, its actual Git revision and every source
 file against that revision. Edited dependencies, changed bytes, missing files
@@ -201,6 +211,7 @@ For a quick non-ASR check of argument parsing and report redaction:
 ./run-real-model-comparison.sh --self-test
 ./run-real-dictation-regression.sh --self-test
 ./run-vocabulary-bias-regression.sh --self-test
+python3 ./benchmark-inputs.py --self-test
 python3 ./compose-public-context-fixtures.py --self-test
 python3 ./analyze-context-variation.py --self-test
 ./.build/debug/presspeech-bench --self-test

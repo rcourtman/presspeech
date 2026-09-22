@@ -22,16 +22,18 @@ recovered safely.
 
 ## Before testing
 
-1. Use the current official Presspeech build and finish its setup checks.
+1. Use the current official Presspeech build and finish its setup checks. On
+   macOS, this baseline requires 0.3.8 or later; update before testing if the
+   About window shows 0.3.7.
 2. Open a blank, disposable field in the target app and a second blank field in
    a local scratch app. Never test in a production message, document, account,
    command shell, or field where pasted text can submit, send, or execute. Test
    a remote/virtual environment or terminal-based editor only when it is
    isolated, disposable, and non-executing; otherwise skip that target.
-3. On published macOS 0.3.7, turn **Settings -> Behavior -> Restore clipboard
-   after paste** off. In upcoming 0.3.8 / builds with **Keep Previous Clipboard
-   for Manual Restore**, leave that option off instead. Both options default
-   off. Windows leaves the transcript on the current clipboard. Upcoming
+3. On macOS 0.3.8 or later, leave **Settings -> Behavior -> Keep Previous
+   Clipboard for Manual Restore** off. The automatic timer in legacy 0.3.7 is
+   not a comparable baseline. Windows leaves the transcript on the current
+   clipboard. Upcoming
    Windows 0.1.13 asks Windows to exclude it from Clipboard History and Cloud
    Clipboard; published 0.1.12 does not.
 4. Use only harmless phrases created for the test. On Windows 0.1.12, disable
@@ -115,6 +117,38 @@ counts should total three.
 Text reaching either test window or any unrelated destination is a safety
 failure. Stop testing and report it; do not retry in a real document.
 
+## Record categories without recording words
+
+The [public protocol page](https://rcourtman.github.io/presspeech/app-compatibility.html#worksheet)
+includes an optional in-page worksheet for the eight outcome categories. It
+calculates the two aggregate count sets and prepares a report-ready count block.
+Selections stay only in the page controls: the worksheet does not send
+selections, write them to browser storage, or provide a field for a phrase or
+transcript. Use **Reset worksheet** to clear them. **Copy aggregate counts**
+places only the labelled six-count block on the clipboard; the user decides
+what to paste into GitHub.
+
+Without the worksheet, tally the same six categories manually:
+
+```text
+Five steady-focus results
+Pasted once: [0-5]
+Recovered safely: [0-5]
+Incorrect or unsafe: [0-5]
+
+Three focus-change results
+Copied for manual paste without inserting anywhere: [0-3]
+Inserted into any field: [0-3]
+Other or not completed: [0-3]
+```
+
+The first three values must total five and the final three must total three.
+Record known clipboard-change interruptions separately under relevant
+conditions; do not turn them into a seventh category or include their text.
+If unexpected insertion stops the focus-safety check early, count that attempt
+as **Inserted into a field** and each unrun remainder as **Other or not
+completed**.
+
 ## Keep separate boundaries separate
 
 - The optional macOS clipboard-restoration path has a stricter repeated-trial
@@ -143,7 +177,9 @@ per platform, target app, version, and generic field type. Reports in which
 every attempt passed are useful: they provide the denominator that failure-only
 bug reports cannot. For a new report, put the platform, public app name/version,
 and generic field type after the fixed `[Compatibility]:` title prefix; include
-no private document, tab, account, server, form, or window name.
+no private document, tab, account, server, form, or window name. Paste the
+worksheet output into **Eight-check outcome counts** and select the overall
+result it shows, or enter the same counts manually.
 
 If the same platform, app version, and field type already has a compatibility
 report, add only your aggregate counts and environment there instead of opening

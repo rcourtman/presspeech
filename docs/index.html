@@ -215,11 +215,12 @@
           <h2>Hold. Speak. Release.</h2>
           <p>The video below shows the macOS build with its default <strong>Right Option</strong> hotkey. On Windows, use the same hold–speak–release gesture with <strong>Right Alt</strong> by default; if that key acts as AltGr for your keyboard layout, Setup lets you choose F8 or another available key.</p>
           <figure class="demo-figure">
-            <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — Presspeech checks the original destination before pasting.">
+            <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — Presspeech checks the original destination before pasting." aria-describedby="demo-video-description">
               <source src="demo-video.webm" type="video/webm">
               <source src="demo-video.mp4" type="video/mp4">
               <p>Your browser cannot play the demo video. The workflow is: hold Right Option, speak, and release; Presspeech pastes only after checking the original destination, otherwise it leaves the transcript available for manual paste.</p>
             </video>
+            <figcaption class="demo-figure__caption" id="demo-video-description"><strong>Silent visual walkthrough:</strong> Right Option is held while Presspeech shows that it is listening, then released. After local transcription, the complete sentence appears in the same TextEdit document. If Presspeech cannot verify the original destination, it keeps the finished transcript available for manual paste instead.</figcaption>
           </figure>
           <div class="note">
             <p><strong>Check an app before relying on automatic paste.</strong> Target apps, including browser editors, Electron/Chromium apps, terminal-based editors, and remote sessions, expose focus and paste behavior differently. Run the <a href="app-compatibility.html">privacy-safe target-app check</a> to separate automatic paste from clipboard recovery; it records outcomes, never your words.</p>

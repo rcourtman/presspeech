@@ -206,6 +206,7 @@ assert_not_contains() {
 }
 
 run_self_test() {
+    python3 ./benchmark-inputs.py --self-test
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-release-asr-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -518,6 +519,7 @@ validate_fluid_dependency_alignment \
     "$ALLOW_CANDIDATE_DEPENDENCY" "$INCLUDE_CANDIDATE_MODELS"
 
 echo "running helper self-tests..."
+python3 ./benchmark-inputs.py --self-test
 ./run-tail-word-regression.sh --self-test
 ./add-real-dictation-fixture.sh --self-test
 ./fetch-public-speech-fixtures.sh --self-test

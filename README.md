@@ -29,6 +29,10 @@ Choose the build that matches your computer:
 | **First model download** | About 500–600 MB | About 141 MiB on CPU or 2.5 GB with CUDA |
 | **Start** | [Install on macOS](https://rcourtman.github.io/presspeech/install.html) | [Verify and install the Windows prerelease](https://rcourtman.github.io/presspeech/windows.html) |
 
+> **Published downloads and source can differ.** The `main` branch can contain
+> an unreleased candidate. The install links below resolve only to published
+> artifacts; features labelled **Upcoming** are not in those downloads yet.
+
 > Presspeech now uses the `com.local.presspeech` identity throughout.
 > When upgrading from an earlier identity, saved preferences and local
 > dictionary rules migrate automatically. macOS privacy permissions must
@@ -50,10 +54,9 @@ and the Apple Neural Engine. The default model is multilingual
 
 Download the self-contained installer—Python is not required:
 
-- [Download Presspeech for Windows 0.1.12](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe)
-- Use the [Windows install guide](https://rcourtman.github.io/presspeech/windows.html#download-verify-run)
-  to download the matching checksum, have PowerShell verify it, and optionally
-  verify GitHub's immutable release attestation before you run the installer.
+- Open the [current Windows download and verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run).
+  The deployed guide keeps the versioned installer, matching checksum, and
+  guarded PowerShell commands together while the next prerelease is prepared.
 - After verification, run the installer and launch Presspeech from the Start
   Menu.
 - On first launch, wait for **Preparing speech model…** to disappear before
@@ -82,12 +85,9 @@ source-build details.
 
 Download the notarised app:
 
-- [Download Presspeech.zip](https://github.com/rcourtman/presspeech/releases/download/v0.3.8/Presspeech.zip)
-- Optionally verify the current archive against its published SHA-256:
-  ```sh
-  cd ~/Downloads
-  echo '7edc7987d2bf6a47db10381f5b39bb740ae331c2a2a5b9780b1e57898baf291f  Presspeech.zip' | shasum -a 256 -c -
-  ```
+- [Download the latest published Presspeech.zip](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip).
+- For a version-pinned archive and its matching SHA-256, use the
+  [current macOS install guide](https://rcourtman.github.io/presspeech/install.html#direct-download).
 - Unzip it, move **Presspeech.app** to **Applications**, then open it.
 
 Or install with Homebrew, which is the easiest path for updates:
@@ -199,7 +199,7 @@ each platform rather than identical.
 - **Setup Checklist…** — model, permissions, and hotkey readiness
 - **Support → Try Dictation…** — a private scratchpad for verifying the
   hotkey and first transcription without switching apps
-- **Upcoming 0.3.8 / builds containing Support → Test App Compatibility…** —
+- **Support → Test App Compatibility… (macOS 0.3.8 and later)** —
   open the privacy-safe repeated test for automatic paste and focus-change
   recovery in one exact target app
 - **Support → Report a Problem… / Suggest an Improvement…** — open the
@@ -236,15 +236,13 @@ each platform rather than identical.
   “virgule”, and “guillemet ouvrant”
 - **Settings → Text → Remove filler words** — opt-in deterministic strip of
   "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
-- **Published macOS 0.3.7: Settings → Behavior → Restore clipboard after paste** —
-  keep this off if a slow app pastes older clipboard contents. A timer cannot
-  prove that the destination consumed the transcript.
-- **Upcoming 0.3.8 / builds containing Settings → Behavior → Keep Previous
-  Clipboard for Manual Restore** — off by default. Keeps a complete copy of the previous macOS clipboard in
-  memory for up to five minutes. After checking that your latest dictated text
-  arrived, choose **Restore Previous Clipboard…** from the main or Dock menu
-  and confirm. Expiry only discards the saved copy; it never rewrites the
-  clipboard. Another copy, disabling the option, or quitting retires the offer.
+- **Settings → Behavior → Keep Previous Clipboard for Manual Restore
+  (macOS 0.3.8 and later)** — off by default. Keeps a complete copy of the
+  previous macOS clipboard in memory for up to five minutes. After checking
+  that your latest dictated text arrived, choose **Restore Previous
+  Clipboard…** from the main or Dock menu and confirm. Expiry only discards the
+  saved copy; it never rewrites the clipboard. Another copy, disabling the
+  option, or quitting retires the offer.
   Consecutive dictations preserve the original copy and original deadline.
   A complete snapshot is limited to 64 MB and 256 representations so an
   unusually large or complex clipboard cannot be retained without bound. If
@@ -253,8 +251,9 @@ each platform rather than identical.
   ownership remains stable, and the restore row explains why the previous
   clipboard is unavailable. Newer macOS versions may ask before Presspeech can
   read another app's clipboard for this opt-in feature.
-  The old automatic-restore option and delay presets are retired; existing
-  users must opt in again because manual recovery retains bytes longer.
+  The automatic-restore option and delay presets from macOS 0.3.7 are retired;
+  existing users must opt in again because manual recovery retains bytes
+  longer.
   Confirmation is your decision, not proof that macOS acknowledged consumption
 - **Settings → Behavior → Launch at Login** — keep dictation available after
   sign-in; if macOS needs approval, selecting the marked setting opens Login
@@ -317,10 +316,10 @@ Presspeech is local-first:
 
 Network calls made by Presspeech are limited to:
 
-- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming Windows 0.1.13 disables the Hub libraries' telemetry and implicit authentication before import,
+- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 removes inherited Hugging Face account tokens from its own model-download process, and upcoming Windows 0.1.13 disables the Hub libraries' telemetry and implicit authentication before import,
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, plus the compatibility
-  guide link in upcoming 0.3.8 / Windows 0.1.13 or builds containing that
+  guide link in macOS 0.3.8 / upcoming Windows 0.1.13 or builds containing that
   action; these open fixed public pages in the default browser without adding
   app or user data to the URL,
 - user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows accepts only release metadata marked immutable and verifies the release asset's size and SHA-256 before offering to run it and again immediately before launch.

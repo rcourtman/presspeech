@@ -63,8 +63,8 @@ The fixture checks:
   hold after modifiers have been released, and passes an extra-modifier mismatch.
 - Toggle mode rejects an unavailable start without changing its toggle state,
   starts/stops on subsequent presses, and suppresses Escape while cancelling.
-- In the 0.3.8 fixture and later builds containing the manual-restore option,
-  production Command+V inserts a fixed marker into the owned text view. After
+- In macOS 0.3.8 and later, the manual-restore fixture uses production
+  Command+V to insert a fixed marker into the owned text view. After
   observing that exact field consume it, the fixture leaves the transcript on
   the clipboard beyond the retired setting's maximum three-second timer window,
   then explicitly requests the guarded manual restoration. Posting alone never

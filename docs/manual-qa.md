@@ -353,9 +353,9 @@ cd swift
   action must open Setup, whose Audio input row changes to **Check input** and
   exposes **Choose…**; VoiceOver must announce the same recovery instruction.
   Selecting an input must clear the stale notice before audio restarts.
-- The following manual-restore checks target upcoming 0.3.8 / builds that
-  contain **Keep Previous Clipboard for Manual Restore**. They are not controls
-  available in the published macOS 0.3.7 build.
+- The following manual-restore checks apply to macOS 0.3.8 and later, which
+  contain **Keep Previous Clipboard for Manual Restore**. They do not apply to
+  legacy macOS 0.3.7's automatic restore timer.
 - With **Keep Previous Clipboard for Manual Restore** off, dictate distinct
   non-sensitive markers into TextEdit and an Electron/Chromium target. Confirm
   the exact transcript lands and remains available for immediate manual paste.
@@ -473,6 +473,13 @@ cd swift
   to request Microphone, Accessibility, and Input Monitoring.
 - Confirm each granted permission removes or updates its setup row after the
   app is reopened if macOS requires it.
+- On a disposable test account, independently reset the Presspeech `PostEvent`
+  TCC service while leaving focused-window Accessibility available. Confirm the
+  Accessibility row returns to **Missing**, dictation cannot start, and **Copy
+  Diagnostics** reports focused-window access as granted but keyboard-event
+  posting as missing. Choose **Grant** (or **Try Again** after a stale denial),
+  re-enable the requested access, and confirm both diagnostic subchecks and the
+  setup row return to granted before repeating a TextEdit paste.
 - Confirm the app handles a missing permission by staying not-ready instead
   of recording.
 

@@ -30,32 +30,35 @@ request status remains authoritative for individual changes.
    Presspeech should preserve the complete transcript and tell the user how to
    continue.
 
-## Now: qualify dependable text delivery
+## Now: qualify shipped text delivery
 
-The current priority is native qualification of the release candidates already
-on `main`, not another layer of settings. The published macOS release remains
-0.3.7 until the 0.3.8 behavior below clears the platform checks.
+macOS 0.3.8 shipped on 22 September 2026 with automated, optimized-build, and
+packaged-app checks complete. The current priority is to qualify its behavior
+in the physical and target-app conditions those checks cannot simulate, not to
+add another layer of settings. Open validation issues remain open until their
+named evidence gates are met; publication alone is not evidence that every
+target or input path passed.
 
 - Qualify paste-target capture in representative native, browser, and
-  Electron/Chromium apps. The 0.3.8 candidate gets frontmost-process identity
+  Electron/Chromium apps. macOS 0.3.8 gets frontmost-process identity
   from the window server but still requires the exact Accessibility-focused
   window before automatic paste. [Issue
   #33](https://github.com/rcourtman/presspeech/issues/33) stays open until a
   steady-focus Electron target can paste automatically while a switch between
   two windows of that same process still recovers to the clipboard. Process
   identity alone is not an acceptable substitute for the same-window check.
-- Qualify the 0.3.8 manual clipboard-recovery replacement against both fast
-  native and slow Electron targets. It retires automatic timer restoration
+- Qualify the macOS 0.3.8 manual clipboard-recovery replacement against both
+  fast native and slow Electron targets. It retires automatic timer restoration
   rather than choosing another delay: no timeout proves that another app has
   consumed a paste. Close [issue
   #36](https://github.com/rcourtman/presspeech/issues/36) only after the
   repeated native checks show that old clipboard content cannot race the new
   transcript.
-- Exercise the 0.3.8 configurable-hotkey candidate across keyboard layouts,
+- Exercise the macOS 0.3.8 configurable hotkey across keyboard layouts,
   hold and toggle modes, conflict cases, and keyboard/VoiceOver navigation.
   That is the remaining evidence gate for [issue
   #34](https://github.com/rcourtman/presspeech/issues/34), not a reason to
-  widen the binding grammar further before release.
+  widen the binding grammar further.
 - Qualify the Windows 0.1.13 retained-dictation recovery and audio-device
   rescan on clean CPU and NVIDIA installations. A failed or uncertain delivery
   must keep reviewable text in process memory without silently replacing a

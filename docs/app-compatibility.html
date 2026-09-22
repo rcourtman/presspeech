@@ -21,6 +21,7 @@
     <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
     <link rel="stylesheet" href="styles.css">
+    <script src="compatibility-worksheet.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -48,6 +49,7 @@
         <p>Automatic paste depends on the destination and its focus behavior. Use blank disposable fields to check one exact app and version before relying on it for real work. The check records outcomes, never your words.</p>
         <div class="actions">
           <a class="button" href="#before-testing">Run the eight checks</a>
+          <a class="button secondary" href="#worksheet">Record outcomes locally</a>
           <a class="button secondary" href="#share-result">Share aggregate results</a>
         </div>
       </div>
@@ -75,7 +77,7 @@
           <ol class="steps">
             <li>
               <strong>Finish Presspeech setup</strong>
-              <p>Use the current official build. Confirm the model is ready, the microphone and hotkey checks pass, and <strong>Try Dictation</strong> works first.</p>
+              <p>Use the current official build. On macOS, this baseline requires 0.3.8 or later; update before testing if the About window shows 0.3.7. Confirm the model is ready, the microphone and hotkey checks pass, and <strong>Try Dictation</strong> works first.</p>
             </li>
             <li>
               <strong>Open two disposable fields</strong>
@@ -87,7 +89,7 @@
             </li>
             <li>
               <strong>Make clipboard behavior comparable</strong>
-              <p>On published macOS 0.3.7, turn <strong>Settings → Behavior → Restore clipboard after paste</strong> off. In upcoming 0.3.8 / builds with <strong>Keep Previous Clipboard for Manual Restore</strong>, leave that option off instead. Both options default off. Published Windows 0.1.12 leaves the finished transcript on the current clipboard. Upcoming Windows 0.1.13 marks that item for exclusion from Windows Clipboard History and Cloud Clipboard; published 0.1.12 does not. If macOS Clipboard History in Spotlight is enabled on macOS 26 or later, clear it after the check if you do not want the harmless text retained there. Also disable macOS Universal Clipboard through Handoff and third-party clipboard managers if you do not want the test text retained elsewhere.</p>
+              <p>On macOS 0.3.8 or later, leave <strong>Settings → Behavior → Keep Previous Clipboard for Manual Restore</strong> off. The automatic timer in legacy 0.3.7 is not a comparable baseline. Published Windows 0.1.12 leaves the finished transcript on the current clipboard. Upcoming Windows 0.1.13 marks that item for exclusion from Windows Clipboard History and Cloud Clipboard; published 0.1.12 does not. If macOS Clipboard History in Spotlight is enabled on macOS 26 or later, clear it after the check if you do not want the harmless text retained there. Also disable macOS Universal Clipboard through Handoff and third-party clipboard managers if you do not want the test text retained elsewhere.</p>
             </li>
             <li>
               <strong>Record versions, not private context</strong>
@@ -163,6 +165,110 @@
         </div>
       </section>
 
+      <section id="worksheet">
+        <div class="wrap">
+          <span class="section-eyebrow">Local worksheet</span>
+          <h2>Record categories, not words</h2>
+          <p>Use this optional worksheet as you complete the checks above. It records only the outcome category selected for each attempt, calculates the two sets of aggregate counts, and prepares the exact count block used by the compatibility report. There is nowhere to enter a phrase or transcript.</p>
+          <div class="note" id="worksheet-privacy"><p><strong>Local and temporary:</strong> selections stay in this page's controls. The worksheet does not send selections or write them to browser storage. Choose <strong>Reset worksheet</strong> to clear them. <strong>Copy aggregate counts</strong> puts only the labelled six-count block on your clipboard; you decide what to paste into GitHub.</p></div>
+
+          <form class="compatibility-worksheet" id="compatibility-worksheet" autocomplete="off" hidden>
+            <div class="worksheet-group" aria-labelledby="steady-worksheet-heading">
+              <h3 id="steady-worksheet-heading">Five steady-focus attempts</h3>
+              <p>Choose one category after each completed attempt. Repeat known clipboard-change interruptions rather than recording them here.</p>
+              <div class="worksheet-attempts">
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 1</legend>
+                  <label><input type="radio" name="steady-1" value="pasted"><span>Pasted once</span></label>
+                  <label><input type="radio" name="steady-1" value="recovered"><span>Recovered safely</span></label>
+                  <label><input type="radio" name="steady-1" value="unsafe"><span>Incorrect or unsafe</span></label>
+                </fieldset>
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 2</legend>
+                  <label><input type="radio" name="steady-2" value="pasted"><span>Pasted once</span></label>
+                  <label><input type="radio" name="steady-2" value="recovered"><span>Recovered safely</span></label>
+                  <label><input type="radio" name="steady-2" value="unsafe"><span>Incorrect or unsafe</span></label>
+                </fieldset>
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 3</legend>
+                  <label><input type="radio" name="steady-3" value="pasted"><span>Pasted once</span></label>
+                  <label><input type="radio" name="steady-3" value="recovered"><span>Recovered safely</span></label>
+                  <label><input type="radio" name="steady-3" value="unsafe"><span>Incorrect or unsafe</span></label>
+                </fieldset>
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 4</legend>
+                  <label><input type="radio" name="steady-4" value="pasted"><span>Pasted once</span></label>
+                  <label><input type="radio" name="steady-4" value="recovered"><span>Recovered safely</span></label>
+                  <label><input type="radio" name="steady-4" value="unsafe"><span>Incorrect or unsafe</span></label>
+                </fieldset>
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 5</legend>
+                  <label><input type="radio" name="steady-5" value="pasted"><span>Pasted once</span></label>
+                  <label><input type="radio" name="steady-5" value="recovered"><span>Recovered safely</span></label>
+                  <label><input type="radio" name="steady-5" value="unsafe"><span>Incorrect or unsafe</span></label>
+                </fieldset>
+              </div>
+            </div>
+
+            <div class="worksheet-group" aria-labelledby="focus-worksheet-heading">
+              <h3 id="focus-worksheet-heading">Three focus-change attempts</h3>
+              <p>Choose what happened after focus moved and the dictation finished. If unexpected insertion makes you stop early, classify that attempt as <strong>Inserted into a field</strong> and each unrun remainder as <strong>Other or not completed</strong>.</p>
+              <div class="worksheet-attempts worksheet-attempts--three">
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 1</legend>
+                  <label><input type="radio" name="focus-1" value="copied"><span>Copied; inserted nowhere</span></label>
+                  <label><input type="radio" name="focus-1" value="inserted"><span>Inserted into a field</span></label>
+                  <label><input type="radio" name="focus-1" value="other"><span>Other or not completed</span></label>
+                </fieldset>
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 2</legend>
+                  <label><input type="radio" name="focus-2" value="copied"><span>Copied; inserted nowhere</span></label>
+                  <label><input type="radio" name="focus-2" value="inserted"><span>Inserted into a field</span></label>
+                  <label><input type="radio" name="focus-2" value="other"><span>Other or not completed</span></label>
+                </fieldset>
+                <fieldset class="worksheet-attempt">
+                  <legend>Attempt 3</legend>
+                  <label><input type="radio" name="focus-3" value="copied"><span>Copied; inserted nowhere</span></label>
+                  <label><input type="radio" name="focus-3" value="inserted"><span>Inserted into a field</span></label>
+                  <label><input type="radio" name="focus-3" value="other"><span>Other or not completed</span></label>
+                </fieldset>
+              </div>
+            </div>
+
+            <div class="worksheet-results">
+              <h3>Aggregate result</h3>
+              <p id="worksheet-status" role="status" aria-live="polite">Choose an outcome for each of the eight attempts.</p>
+              <div class="table-scroll">
+                <table>
+                  <caption>Counts calculated from the selected attempt categories</caption>
+                  <thead>
+                    <tr><th scope="col">Check</th><th scope="col">Outcome</th><th scope="col">Count</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><th scope="row" rowspan="3">Steady focus</th><td>Pasted once</td><td><output id="steady-pasted-count">0</output></td></tr>
+                    <tr><td>Recovered safely</td><td><output id="steady-recovered-count">0</output></td></tr>
+                    <tr><td>Incorrect or unsafe</td><td><output id="steady-unsafe-count">0</output></td></tr>
+                    <tr><th scope="row" rowspan="3">Focus change</th><td>Copied for manual paste without inserting anywhere</td><td><output id="focus-copied-count">0</output></td></tr>
+                    <tr><td>Inserted into any field</td><td><output id="focus-inserted-count">0</output></td></tr>
+                    <tr><td>Other or not completed</td><td><output id="focus-other-count">0</output></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <label class="worksheet-summary-label" for="worksheet-summary">Report-ready count block</label>
+              <textarea class="worksheet-summary" id="worksheet-summary" rows="11" readonly aria-describedby="worksheet-privacy worksheet-status" placeholder="Complete all eight category selections to generate the aggregate count block."></textarea>
+              <div class="actions">
+                <button class="button" id="copy-worksheet-summary" type="button" disabled>Copy aggregate counts</button>
+                <button class="button secondary" type="reset">Reset worksheet</button>
+              </div>
+            </div>
+          </form>
+
+          <noscript>
+            <div class="note warn"><p>This optional calculator needs JavaScript. The protocol itself does not: tally the three steady-focus categories to five and the three focus-change categories to three, then use the report form below.</p></div>
+          </noscript>
+        </div>
+      </section>
+
       <section id="boundaries">
         <div class="wrap">
           <span class="section-eyebrow">Interpret the result</span>
@@ -199,7 +305,7 @@
             </li>
             <li>
               <strong>Submit one target-app report</strong>
-              <p>Open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
+              <p>Open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and choose the overall result shown above it, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
               <p>For <strong>Overall result</strong>, a complete automatic-paste pass means all five steady-focus attempts pasted once and all three focus-change attempts recovered safely. Focus-change recovery is expected; choose the manual-recovery option only when it occurred while the original target stayed focused. Any incorrect or unsafe result takes precedence.</p>
             </li>
             <li>

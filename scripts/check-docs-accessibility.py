@@ -60,6 +60,8 @@ class DocumentParser(HTMLParser):
         self._element_order = 0
         self.first_body_element: int | None = None
         self.tabindex_issues: list[str] = []
+        self.video_descriptions: list[str | None] = []
+        self.hidden_ids: set[str] = set()
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
@@ -92,8 +94,16 @@ class DocumentParser(HTMLParser):
             self.heading_levels.append(int(tag[1]))
         if "id" in attributes and attributes["id"] is not None:
             self.ids.append(attributes["id"])
+            if (
+                "hidden" in attributes
+                or "inert" in attributes
+                or (attributes.get("aria-hidden") or "").lower() == "true"
+            ):
+                self.hidden_ids.add(attributes["id"])
         if tag == "img" and "alt" not in attributes:
             self.missing_alt_count += 1
+        if tag == "video":
+            self.video_descriptions.append(attributes.get("aria-describedby"))
         if tag == "nav" and attributes.get("aria-label") == "Primary":
             self.primary_nav_count += 1
             self._in_primary_nav = True
@@ -212,6 +222,21 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         errors.append(f"duplicate ids: {', '.join(duplicate_ids)}")
     if parser.missing_alt_count:
         errors.append(f"{parser.missing_alt_count} img element(s) lack alt")
+    for description in parser.video_descriptions:
+        references = description.split() if description is not None else []
+        if not references:
+            errors.append("video must reference a visible description with aria-describedby")
+            continue
+        missing = [reference for reference in references if reference not in parser.ids]
+        if missing:
+            errors.append(
+                "video aria-describedby targets missing id(s): " + ", ".join(missing)
+            )
+        hidden = [reference for reference in references if reference in parser.hidden_ids]
+        if hidden:
+            errors.append(
+                "video aria-describedby targets hidden id(s): " + ", ".join(hidden)
+            )
     if parser.primary_nav_count != 1:
         errors.append(f"expected one primary navigation, found {parser.primary_nav_count}")
     if parser.brand_link_count != 1:
@@ -504,7 +529,10 @@ def run_self_test() -> None:
             "<span class='brand-mark' aria-hidden='true'>P</span>"
             "<span>Presspeech</span></a>"
             "<a href='troubleshooting.html'>Help</a></nav>"
-            "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''></main>"
+            "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''>"
+            "<figure><video aria-describedby='video-description'></video>"
+            "<figcaption id='video-description'>Silent demo description.</figcaption>"
+            "</figure></main>"
             "</body></html>",
             encoding="utf-8",
         )
@@ -530,6 +558,23 @@ def run_self_test() -> None:
             (valid_index.replace("<span>Presspeech</span>", "<span>Other</span>"), "brand link accessible name"),
             (valid_index.replace("class='brand'", "class='brand' aria-label='Home'"), "visible text"),
             (valid_index.replace("class='brand'", "class='brand' aria-hidden='true'"), "assistive technology"),
+            (
+                valid_index.replace(" aria-describedby='video-description'", ""),
+                "video must reference",
+            ),
+            (
+                valid_index.replace(
+                    "aria-describedby='video-description'",
+                    "aria-describedby='missing-video-description'",
+                ),
+                "missing id",
+            ),
+            (
+                valid_index.replace(
+                    "id='video-description'", "id='video-description' hidden"
+                ),
+                "hidden id",
+            ),
         ]
         for markup, expected_error in cases:
             index.write_text(markup, encoding="utf-8")
