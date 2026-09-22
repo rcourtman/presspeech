@@ -49,7 +49,7 @@ and the Apple Neural Engine. The default model is multilingual
 
 Download the self-contained installer—Python is not required:
 
-- [Download Presspeech for Windows 0.1.11](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.11/Presspeech-Setup-0.1.11-x64.exe)
+- [Download Presspeech for Windows 0.1.12](https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe)
 - Use the [Windows install guide](https://rcourtman.github.io/presspeech/windows.html#download-verify-run)
   to download the matching checksum and have PowerShell verify it before you
   run the installer.
