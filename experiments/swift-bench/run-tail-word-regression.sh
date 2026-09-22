@@ -545,6 +545,7 @@ for entry in "${CLIPS[@]}"; do
             effective_cut="$(effective_cut_ms "$cut_ms" "$grace_ms")"
             case_wav="$tmpdir/$phrase-cut${cut_ms}-grace${grace_ms}.wav"
             write_wav_variant "$trimmed_wav" "$case_wav" "$effective_cut" "notrim"
+            python3 ./audio-input-evidence.py --audio "$case_wav" >/dev/null
 
             backends=()
             if [[ "$INCLUDE_V3_BASELINE" -eq 1 ]]; then
@@ -569,6 +570,8 @@ for entry in "${CLIPS[@]}"; do
                     echo "benchmark failed for $phrase cut=$cut_ms grace=$grace_ms backend=$backend trailing=$trailing_ms" >&2
                     exit 1
                 fi
+
+                python3 ./audio-input-evidence.py --audio "$case_wav" --log "$log_file" >>"$log_file"
 
                 wer="$(extract_max_wer_percent "$log_file")"
                 retained="$(extract_final_word_retained "$log_file")"

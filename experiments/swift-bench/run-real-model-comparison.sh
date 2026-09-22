@@ -965,6 +965,7 @@ for clip in "${clips[@]}"; do
 
     echo "normalizing clip $clip_id..."
     afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
+    python3 ./audio-input-evidence.py --audio "$normalized" >/dev/null
     cp "$ref" "$tmpdir/$clip_id.txt"
 
     for backend in v3 "$CANDIDATE_BACKEND"; do
@@ -984,6 +985,8 @@ for clip in "${clips[@]}"; do
             echo "benchmark failed for clip $clip_id backend=$backend" >&2
             exit 1
         fi
+
+        python3 ./audio-input-evidence.py --audio "$normalized" --log "$log_file" >>"$log_file"
 
         wer_metrics="$(extract_worst_wer_metrics "$log_file")"
         IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"

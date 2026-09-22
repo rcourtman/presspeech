@@ -1055,3 +1055,13 @@ sanity check. Re-run it whenever:
   to evaluate it against the current numbers.
 - A latency-equivalent change might still affect battery life; use
   `bench-power.sh` to compare power on the same machine.
+
+### Complete normalized audio
+
+The vocabulary, real-model, real-dictation and tail-word runners validate each
+normalized WAV before inference, then require the benchmark's decoded sample
+count to equal its complete 16 kHz frame count before accepting a result.
+Missing, duplicate or shortened audio records fail the run. Successful logs
+include a numeric `audio-input-check` receipt without source paths or content.
+This checks input duration, including partial final buffers; it does not prove
+that a recognition backend used every sample or retained the last spoken word.

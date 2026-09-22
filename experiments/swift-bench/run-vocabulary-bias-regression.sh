@@ -57,6 +57,7 @@ BENCHMARK_SOURCE_PATHS=(
     "experiments/swift-bench/run-vocabulary-bias-regression.sh"
     "experiments/swift-bench/dependency-provenance.py"
     "experiments/swift-bench/rescoring-evidence.py"
+    "experiments/swift-bench/audio-input-evidence.py"
     "swift/Package.swift"
     "swift/Package.resolved"
 )
@@ -932,19 +933,30 @@ test_frozen_input_run() {
     local bench="$root/repo/experiments/swift-bench"
     mkdir -p "$fixture/targets" "$fixture/controls" "$root/bin" "$bench"
     cp "$SCRIPT_PATH" "$bench/run-vocabulary-bias-regression.sh"
-    cp Package.swift Package.resolved dependency-provenance.py rescoring-evidence.py "$bench/"
+    cp Package.swift Package.resolved dependency-provenance.py rescoring-evidence.py audio-input-evidence.py "$bench/"
     mkdir -p "$root/repo/swift"
     cp "$REPO_ROOT/swift/Package.swift" "$REPO_ROOT/swift/Package.resolved" "$root/repo/swift/"
     # Exercise the real provenance gate even though compilation itself is a
     # frozen-input test double. The minimal SDK has genuine committed objects,
     # matching manifests/locks and a canonical SwiftPM checkout selection.
     python3 ./test-dependency-provenance.py --prepare-fixture "$bench" "$root/repo/swift"
-    printf 'original target audio\n' >"$fixture/targets/sample.wav"
+    python3 - "$fixture/targets/sample.wav" <<'FIXTURE_WAV'
+import sys, wave
+with wave.open(sys.argv[1], 'wb') as output:
+    output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+    output.writeframes(bytes(16037 * 2))
+FIXTURE_WAV
     printf 'original target reference\n' >"$fixture/targets/sample.txt"
-    printf 'original control audio\n' >"$fixture/controls/sample.wav"
+    python3 - "$fixture/controls/sample.wav" <<'FIXTURE_WAV'
+import sys, wave
+with wave.open(sys.argv[1], 'wb') as output:
+    output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+    output.writeframes(bytes(16039 * 2))
+FIXTURE_WAV
     printf 'original control reference\n' >"$fixture/controls/sample.txt"
     printf 'private canonical term\n' >"$fixture/vocabulary.txt"
     printf 'private canonical term\n' >"$fixture/critical-terms.txt"
+    cp -R "$fixture" "$root/original-fixtures"
     local expected_digest
     expected_digest="$(benchmark_inputs_sha256 \
         "$(fixture_set_sha256 "$fixture/targets/sample.wav")" \
@@ -1007,7 +1019,15 @@ if [[ -z "$file" ]]; then
     echo "reference-metrics reference-words=3 critical-occurrences=$hits"
     exit 0
 fi
-[[ "$(cat "$file")" == "original $group audio" ]]
+frames="$(python3 - "$file" <<'READ_WAV'
+import sys, wave
+with wave.open(sys.argv[1], 'rb') as source: print(source.getnframes())
+READ_WAV
+)"
+if [[ "$group" == target ]]; then [[ "$frames" == 16037 ]]; else [[ "$frames" == 16039 ]]; fi
+observed="$frames"
+if [[ "${FREEZE_TEST_SHORT_AUDIO:-0}" == 1 ]]; then observed=$((frames - 704)); fi
+echo "audio: $observed samples (~1.00 s @ 16 kHz mono)"
 printf '%s %s\n' "$group" "$variant" >>"$FREEZE_TEST_CALLS"
 echo 'ready in 10.0 ms'
 echo 'model-cache: total=10.0 MB'
@@ -1044,9 +1064,19 @@ MOCK_BENCH
     # any benchmark invocation or a successful report can be produced.
     # The first mock build deliberately replaced both originals with identical
     # bytes. Restore independent synthetic clips before the second invocation.
-    printf 'original target audio\n' >"$fixture/targets/sample.wav"
+    python3 - "$fixture/targets/sample.wav" <<'FIXTURE_WAV'
+import sys, wave
+with wave.open(sys.argv[1], 'wb') as output:
+    output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+    output.writeframes(bytes(16037 * 2))
+FIXTURE_WAV
     printf 'original target reference\n' >"$fixture/targets/sample.txt"
-    printf 'original control audio\n' >"$fixture/controls/sample.wav"
+    python3 - "$fixture/controls/sample.wav" <<'FIXTURE_WAV'
+import sys, wave
+with wave.open(sys.argv[1], 'wb') as output:
+    output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+    output.writeframes(bytes(16039 * 2))
+FIXTURE_WAV
     printf 'original control reference\n' >"$fixture/controls/sample.txt"
     printf 'private canonical term\n' >"$fixture/vocabulary.txt"
     printf 'private canonical term\n' >"$fixture/critical-terms.txt"
@@ -1070,6 +1100,30 @@ MOCK_BENCH
     fi
     if [[ -e "$root/refused-calls" ]]; then
         echo 'self-test ran benchmark after SDK provenance refusal' >&2
+        exit 1
+    fi
+
+    # A successful recognizer process with shortened input must not publish
+    # even an exploratory report. Reproduce the historical 704-frame loss.
+    cp -R "$root/original-fixtures/." "$fixture/"
+    rm -f "$bench/.build/checkouts/FluidAudio/Sources/FluidAudio/Injected.swift"
+    local short_log="$root/short-audio.log"
+    if PATH="$root/bin:$PATH" \
+        FREEZE_TEST_FIXTURES="$fixture" \
+        FREEZE_TEST_BENCH="$root/mock-bench" \
+        FREEZE_TEST_CALLS="$root/short-calls" \
+        FREEZE_TEST_SHORT_AUDIO=1 \
+        bash "$bench/run-vocabulary-bias-regression.sh" \
+        --input-dir "$fixture/targets" --negative-control-dir "$fixture/controls" \
+        --vocabulary "$fixture/vocabulary.txt" --critical-terms "$fixture/critical-terms.txt" \
+        --out-dir "$root/short-results" --no-threshold >"$short_log" 2>&1; then
+        echo 'self-test accepted incomplete decoded audio' >&2
+        exit 1
+    fi
+    assert_contains "$short_log" 'decoded audio length mismatch: expected 16037 frames, got 15333 samples'
+    assert_eq "$(wc -l <"$root/short-calls" | tr -d ' ')" 1 'short input stops subsequent policy measurements'
+    if find "$root/short-results" -type f | grep -q .; then
+        echo 'self-test published artifacts for incomplete decoded audio' >&2
         exit 1
     fi
 }
@@ -1780,6 +1834,7 @@ MOCK_AFINFO
     assert_contains "$failed_freeze_log" 'could not freeze benchmark input'
     assert_not_contains "$failed_freeze_log" 'changing-private-input'
     assert_not_contains "$failed_freeze_log" "$fixtures"
+    python3 ./test-audio-input-evidence.py
     test_frozen_input_run "$tmpdir"
 
     local original_repo_root="$REPO_ROOT"
@@ -2183,6 +2238,7 @@ for clip in "${clips[@]}"; do
 
     echo "normalizing clip $clip_id..."
     normalize_audio_file "$clip" "$normalized"
+    python3 ./audio-input-evidence.py --audio "$normalized" >/dev/null
     cp "$ref" "$tmpdir/$clip_id.txt"
     normalized_clips+=( "$normalized" )
     clip_ids+=( "$clip_id" )
@@ -2325,6 +2381,8 @@ for ((clip_offset = 0; clip_offset < ${#normalized_clips[@]}; clip_offset += 1))
             echo "benchmark failed for clip $clip_id variant=$variant; see $log_file" >&2
             exit 1
         fi
+
+        python3 ./audio-input-evidence.py --audio "$normalized" --log "$log_file" >>"$log_file"
 
         wer_metrics="$(extract_worst_wer_metrics "$log_file")"
         IFS=$'\t' read -r wer word_errors reference_words <<<"$wer_metrics"

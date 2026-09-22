@@ -162,7 +162,7 @@ class ContextInputTests(unittest.TestCase):
         bench = self.root / "repo/experiments/swift-bench"
         bench.mkdir(parents=True)
         for name in ("run-real-model-comparison.sh", "compose-public-context-fixtures.py",
-                     "dependency-provenance.py", "Package.swift", "Package.resolved"):
+                     "dependency-provenance.py", "audio-input-evidence.py", "Package.swift", "Package.resolved"):
             shutil.copyfile(ROOT / name, bench / name)
         production = self.root / "repo/swift"
         production.mkdir()
@@ -178,12 +178,14 @@ class ContextInputTests(unittest.TestCase):
                     for p in self.output.glob("*.wav")}
         mock_bench = self.root / "mock-bench"
         mock_bench.write_text("#!" + sys.executable + '\n' + '''
-import hashlib,json,os,sys
+import hashlib,json,os,sys,wave
 from pathlib import Path
 args=sys.argv[1:]; audio=Path(args[args.index('--file')+1])
 reference=audio.with_suffix('.txt').read_text()
 assert json.loads(os.environ['EXPECTED'])[hashlib.sha256(audio.read_bytes()).hexdigest()]==reference
 assert '--redact-transcripts' in args
+with wave.open(str(audio), 'rb') as source: frames = source.getnframes()
+print(f'audio: {frames} samples (~1.00 s @ 16 kHz mono)')
 print('latency: p50=1.0 ms')
 print(f'transcript: [WER 0.0%] [final-word retained=true] [word-errors=0 reference-words={len(reference.split())}] <redacted>')
 ''')

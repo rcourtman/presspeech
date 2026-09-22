@@ -902,6 +902,7 @@ for clip in "${clips[@]}"; do
 
     echo "normalizing clip $clip_number..."
     afconvert -f WAVE -d LEF32@16000 "$clip" "$normalized"
+    python3 ./audio-input-evidence.py --audio "$normalized" >/dev/null
     if [[ -f "$ref" ]]; then
         cp "$ref" "$tmpdir/$clip_id.txt"
     fi
@@ -928,6 +929,7 @@ for clip in "${clips[@]}"; do
         echo "benchmark failed for clip $clip_number" >&2
         exit 1
     fi
+    python3 ./audio-input-evidence.py --audio "$normalized" --log "$log_file" >>"$log_file"
     cat "$log_file" >>"$report"
 
     require_reference=0
