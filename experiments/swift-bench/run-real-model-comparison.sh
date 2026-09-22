@@ -603,6 +603,7 @@ run_self_test() {
 
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
+    python3 ./test-context-inputs.py
     echo "real model comparison self-test passed"
 }
 
@@ -721,10 +722,13 @@ MSG
     exit 2
 fi
 
+CONTEXT_CORPUS=0
+CONTEXT_MANIFEST_SHA256=""
 if [[ -e "$INPUT_DIR/.presspeech-public-context-fixtures" || \
       -L "$INPUT_DIR/.presspeech-public-context-fixtures" ]]; then
+    CONTEXT_CORPUS=1
     python3 ./compose-public-context-fixtures.py \
-        --output-dir "$INPUT_DIR" --validate-output-dir
+        --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
 fi
 
 BENCHMARK_SOURCE_STATE="clean"
@@ -776,6 +780,17 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then
+    CONTEXT_MANIFEST_SHA256="$(python3 ./compose-public-context-fixtures.py \
+        --output-dir "$INPUT_DIR" --snapshot-output-dir "$tmpdir/context-inputs")"
+    [[ "$CONTEXT_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 1
+    frozen_clips=()
+    for clip in "${clips[@]}"; do
+        frozen_clips+=( "$tmpdir/context-inputs/$(basename "$clip")" )
+    done
+    clips=( "${frozen_clips[@]}" )
+fi
+
 echo "building presspeech-bench..."
 swift build -c release >/dev/null
 
@@ -798,7 +813,11 @@ tsv="$stage_dir/results.tsv"
 raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
-printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors\n' >"$tsv"
+{
+    printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors'
+    if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then printf '\tcontext_manifest_sha256'; fi
+    printf '\n'
+} >"$tsv"
 
 {
     echo "# $(report_title)"
@@ -815,6 +834,9 @@ printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\
     echo "- Fixture paths: $([[ "$REDACT_PATHS" -eq 1 ]] && echo redacted || echo included)"
     echo "- Clips: ${#clips[@]}"
     echo "- Benchmark source: $BENCHMARK_SOURCE_STATE"
+    if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then
+        echo "- Context manifest SHA-256: $CONTEXT_MANIFEST_SHA256"
+    fi
     echo "- Private references declared hand-audited: $([[ "$REFERENCES_HAND_AUDITED" -eq 1 ]] && echo yes || echo no)"
     echo
     report_note
@@ -890,13 +912,28 @@ for clip in "${clips[@]}"; do
             exit 1
         fi
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$clip_id" "$backend" "$setting" "$wer" "$retained" "$p50" \
-            "$word_errors" "$reference_words" "$best_word_errors" >>"$tsv"
+        {
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+                "$clip_id" "$backend" "$setting" "$wer" "$retained" "$p50" \
+                "$word_errors" "$reference_words" "$best_word_errors"
+            if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then printf '\t%s' "$CONTEXT_MANIFEST_SHA256"; fi
+            printf '\n'
+        } >>"$tsv"
         printf '| `%s` | `%s` | %s | %s | %s | %s |\n' \
             "$clip_id" "$backend" "$setting" "$wer" "$retained" "$p50" >>"$report"
     done
 done
+
+if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then
+    python3 ./compose-public-context-fixtures.py \
+        --output-dir "$tmpdir/context-inputs" --validate-output-dir >/dev/null
+    observed_context_digest="$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' \
+        "$tmpdir/context-inputs/manifest.tsv")"
+    if [[ "$observed_context_digest" != "$CONTEXT_MANIFEST_SHA256" ]]; then
+        echo "context snapshot changed during comparison" >&2
+        exit 1
+    fi
+fi
 
 assessment="$(candidate_assessment "$tsv" "$CANDIDATE_BACKEND")"
 IFS=$'\t' read -r comparable reference_words baseline_errors candidate_errors \

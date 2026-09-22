@@ -581,8 +581,12 @@ trailing context alone, and their byte-exact sample-payload concatenation.
 Combined audio is strictly shorter than the model's 15-second encoder window
 and includes at least four seconds of trailing speech by default, isolating
 within-window context from long-form merge behavior. The comparison helper
-validates the generated inventory, payload digests, references, and manifest
-before building. The analyser reports positive composition excess: combined
+validates and snapshots the generated inventory, payload digests, references,
+and manifest before building, then measures only that frozen corpus. Each
+context TSV row includes its manifest SHA-256; the analyser rejects a different
+manifest or older results without that binding, which must be rerun. A failed
+`--force` corpus rebuild preserves the previous generated corpus. The analyser
+reports positive composition excess: combined
 word errors beyond the sum of both standalone clips. As elsewhere,
 production's best trial is compared with the candidate's worst trial. Replace
 the timestamp in `RESULTS_TSV` with the path printed by the comparison command.

@@ -56,6 +56,7 @@ RESULT_FIELDS = [
     "worst_word_errors",
     "reference_words",
     "best_word_errors",
+    "context_manifest_sha256",
 ]
 
 ROLES = ("probe", "context", "combined")
@@ -227,6 +228,7 @@ def load_results(
     pairs: list[PairDefinition],
     baseline_backend: str,
     candidate_backend: str,
+    manifest_sha256: str,
 ) -> dict[tuple[str, str], BackendMetric]:
     if path.is_symlink() or not path.is_file():
         raise AnalysisError(f"model-comparison TSV is missing or unsafe: {path}")
@@ -240,8 +242,10 @@ def load_results(
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         if reader.fieldnames != RESULT_FIELDS:
-            raise AnalysisError("model-comparison TSV has an unexpected schema")
+            raise AnalysisError("model-comparison TSV lacks the context corpus binding or has an unexpected schema; rerun the context comparison")
         for row in reader:
+            if row["context_manifest_sha256"] != manifest_sha256:
+                raise AnalysisError("model-comparison results belong to a different context corpus")
             backend = row["backend"]
             if backend not in expected_backends:
                 raise AnalysisError(f"unexpected backend in model-comparison TSV: {backend}")
@@ -502,6 +506,7 @@ def write_test_results(
                             "worst_word_errors": str(worst_errors),
                             "reference_words": str(words),
                             "best_word_errors": str(best_errors),
+                            "context_manifest_sha256": hashlib.sha256((path.parent / "manifest.tsv").read_bytes()).hexdigest(),
                         }
                     )
 
@@ -539,6 +544,7 @@ def run_self_test() -> None:
             },
         )
         pairs = load_manifest(manifest)
+        manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
         fixture_ids = {
             fixture for pair in pairs for fixture in pair.fixtures.values()
         }
@@ -547,7 +553,7 @@ def run_self_test() -> None:
             raise AssertionError("redacted first clip id did not resolve by fixture order")
         if resolve_fixture_id("006", fixture_ids) != ordered_fixtures[5]:
             raise AssertionError("redacted final clip id did not resolve by fixture order")
-        metrics = load_results(results, pairs, "v3", "v3-int8-v2")
+        metrics = load_results(results, pairs, "v3", "v3-int8-v2", manifest_digest)
         assessments = assess_pairs(pairs, metrics, "v3", "v3-int8-v2")
         redacted_results = root / "redacted-results.tsv"
         write_test_results(
@@ -561,7 +567,7 @@ def run_self_test() -> None:
             redacted_ids=True,
         )
         redacted_metrics = load_results(
-            redacted_results, pairs, "v3", "v3-int8-v2"
+            redacted_results, pairs, "v3", "v3-int8-v2", manifest_digest
         )
         if assess_pairs(
             pairs, redacted_metrics, "v3", "v3-int8-v2"
@@ -599,7 +605,7 @@ def run_self_test() -> None:
         text = mismatch.read_text(encoding="utf-8")
         mismatch.write_text(text.replace("\t10\t", "\t11\t", 1), encoding="utf-8")
         try:
-            mismatched_metrics = load_results(mismatch, pairs, "v3", "v3-int8-v2")
+            mismatched_metrics = load_results(mismatch, pairs, "v3", "v3-int8-v2", manifest_digest)
             assess_pairs(pairs, mismatched_metrics, "v3", "v3-int8-v2")
         except AnalysisError as exc:
             if "reference-word mismatch" not in str(exc):
@@ -618,7 +624,7 @@ def run_self_test() -> None:
             writer.writeheader()
             writer.writerows(invalid_rows)
         try:
-            load_results(invalid_order, pairs, "v3", "v3-int8-v2")
+            load_results(invalid_order, pairs, "v3", "v3-int8-v2", manifest_digest)
         except AnalysisError as exc:
             if "best errors exceed worst errors" not in str(exc):
                 raise
@@ -663,19 +669,24 @@ def main() -> int:
     if baseline_backend == candidate_backend:
         raise AnalysisError("baseline and candidate backends must differ")
 
+    manifest_digest = hashlib.sha256(Path(args.manifest).read_bytes()).hexdigest()
+    results_digest = hashlib.sha256(Path(args.results).read_bytes()).hexdigest()
     pairs = load_manifest(Path(args.manifest))
     metrics = load_results(
-        Path(args.results), pairs, baseline_backend, candidate_backend
+        Path(args.results), pairs, baseline_backend, candidate_backend, manifest_digest
     )
     assessments = assess_pairs(
         pairs, metrics, baseline_backend, candidate_backend
     )
+    if (hashlib.sha256(Path(args.manifest).read_bytes()).hexdigest() != manifest_digest
+            or hashlib.sha256(Path(args.results).read_bytes()).hexdigest() != results_digest):
+        raise AnalysisError("context analysis inputs changed while being read")
     report, regressions = render_report(
         assessments,
         baseline_backend,
         candidate_backend,
-        hashlib.sha256(Path(args.manifest).read_bytes()).hexdigest(),
-        hashlib.sha256(Path(args.results).read_bytes()).hexdigest(),
+        manifest_digest,
+        results_digest,
     )
     if args.output:
         write_report(Path(args.output), report, args.force)

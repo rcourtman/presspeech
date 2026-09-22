@@ -258,7 +258,7 @@ def select_pairs(
     return pairs
 
 
-def safe_remove_output(output_dir: Path) -> None:
+def validate_owned_output(output_dir: Path) -> None:
     if output_dir.is_symlink() or not output_dir.is_dir():
         raise FixtureError(f"refusing to replace unsafe output directory: {output_dir}")
     marker = output_dir / MARKER_NAME
@@ -271,7 +271,35 @@ def safe_remove_output(output_dir: Path) -> None:
     resolved = output_dir.resolve()
     if resolved == Path(resolved.anchor) or resolved == Path.cwd().resolve():
         raise FixtureError(f"refusing to remove unsafe output directory: {output_dir}")
-    shutil.rmtree(output_dir)
+
+
+
+def publish_output(stage: Path, output_dir: Path, force: bool) -> None:
+    """Keep the previous corpus until the complete replacement is ready."""
+    if not output_dir.exists() and not output_dir.is_symlink():
+        os.rename(stage, output_dir)
+        return
+    if not force:
+        raise FixtureError(f"output directory already exists: {output_dir}")
+    validate_owned_output(output_dir)
+    backup = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.previous-", dir=output_dir.parent))
+    previous = backup / "corpus"
+    try:
+        os.rename(output_dir, previous)
+    except BaseException:
+        backup.rmdir()
+        raise
+    try:
+        os.rename(stage, output_dir)
+    except BaseException:
+        # A second failure must leave the old corpus recoverable on disk.
+        try:
+            os.rename(previous, output_dir)
+        except OSError as exc:
+            raise FixtureError(f"replacement failed; previous corpus retained at {previous}") from exc
+        backup.rmdir()
+        raise
+    shutil.rmtree(backup)
 
 
 def fixture_digests(audio_path: Path, reference: str) -> tuple[str, str]:
@@ -291,12 +319,13 @@ def compose(
 ) -> list[Path]:
     if not input_dir.is_dir() or input_dir.is_symlink():
         raise FixtureError(f"input directory is missing or unsafe: {input_dir}")
-    if input_dir.resolve() == output_dir.resolve():
-        raise FixtureError("input and output directories must differ")
+    if (input_dir.resolve() == output_dir.resolve()
+            or output_dir.resolve() in input_dir.resolve().parents):
+        raise FixtureError("output must not contain the input directory")
     if output_dir.exists() or output_dir.is_symlink():
         if not force:
             raise FixtureError(f"output directory already exists: {output_dir}")
-        safe_remove_output(output_dir)
+        validate_owned_output(output_dir)
 
     sources = load_sources(input_dir)
     pairs = select_pairs(sources, pair_count, min_context_seconds, max_combined_seconds)
@@ -395,7 +424,8 @@ def compose(
             source_metadata = input_dir / source_name
             if source_metadata.is_file() and not source_metadata.is_symlink():
                 shutil.copyfile(source_metadata, stage / output_name)
-        os.replace(stage, output_dir)
+        validate_output(stage)
+        publish_output(stage, output_dir, force)
     except Exception:
         shutil.rmtree(stage, ignore_errors=True)
         raise
@@ -567,6 +597,30 @@ def validate_output(output_dir: Path) -> list[Path]:
     return sorted(audio_paths)
 
 
+
+def snapshot_output(source: Path, destination: Path) -> str:
+    """Freeze verified inputs before a long model build, without copying paths."""
+    audio_paths = validate_output(source)
+    manifest = (source / MANIFEST_NAME).read_bytes()
+    destination.mkdir(mode=0o700)
+    try:
+        (destination / MARKER_NAME).write_text(MARKER_TEXT, encoding="utf-8")
+        (destination / MANIFEST_NAME).write_bytes(manifest)
+        for audio in audio_paths:
+            (destination / audio.name).write_bytes(audio.read_bytes())
+            # The manifest binds normalized references; benchmark exactly that
+            # canonical representation rather than later mutable sidecars.
+            reference = normalized_reference(audio.with_suffix(".txt"))
+            (destination / audio.with_suffix(".txt").name).write_text(reference + "\n", encoding="utf-8")
+        validate_output(destination)
+        for path in destination.iterdir():
+            path.chmod(0o400)
+    except BaseException:
+        shutil.rmtree(destination)
+        raise
+    return sha256_bytes(manifest)
+
+
 def write_pcm16_fixture(path: Path, seconds: int, sample_rate: int, value: int) -> None:
     fmt = struct.pack("<HHIIHH", 1, 1, sample_rate, sample_rate * 2, 2, 16)
     data = struct.pack("<h", value) * (seconds * sample_rate)
@@ -730,6 +784,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="validate an existing generated context corpus",
     )
+    parser.add_argument("--snapshot-output-dir", help="freeze a validated --output-dir corpus here and print its manifest digest")
     parser.add_argument("--self-test", action="store_true", help="run local composition tests")
     return parser.parse_args()
 
@@ -754,6 +809,9 @@ def main() -> int:
     args = parse_args()
     if args.self_test:
         run_self_test()
+        return 0
+    if args.snapshot_output_dir:
+        print(snapshot_output(Path(args.output_dir), Path(args.snapshot_output_dir)))
         return 0
     if args.validate_output_dir:
         outputs = validate_output(Path(args.output_dir))
