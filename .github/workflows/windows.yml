@@ -30,6 +30,7 @@ jobs:
           cache-dependency-path: |
             windows/requirements-release.txt
             windows/requirements-cuda.txt
+            windows/requirements-cuda-release.txt
       - name: Install and verify the locked release environment
         working-directory: windows
         run: |
@@ -37,7 +38,7 @@ jobs:
           $env:PIP_CONFIG_FILE = 'NUL'
           python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt
           if ($LASTEXITCODE -ne 0) { throw 'Hash-locked PyPI installation failed' }
-          python -m pip install --isolated --no-deps --only-binary=:all: -r requirements-cuda.txt
+          python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes -r requirements-cuda-release.txt
           if ($LASTEXITCODE -ne 0) { throw 'Pinned CUDA installation failed' }
           python -m pip check
           if ($LASTEXITCODE -ne 0) { throw 'Release dependency graph is inconsistent' }

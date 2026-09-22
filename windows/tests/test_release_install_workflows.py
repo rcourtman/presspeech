@@ -71,9 +71,9 @@ WORKFLOW_BODY
                 self.assertEqual(len(result["calls"]), count, result)
                 self.assertIn("--require-hashes", result["calls"][0])
                 self.assertIn("--index-url https://pypi.org/simple", result["calls"][0])
-                self.assertIn("-r requirements-cuda.txt", result["calls"][1])
+                self.assertIn("-r requirements-cuda-release.txt", result["calls"][1])
                 for command in result["calls"][:2]:
-                    for option in ("--isolated", "--no-deps", "--only-binary=:all:"):
+                    for option in ("--isolated", "--no-deps", "--only-binary=:all:", "--require-hashes"):
                         self.assertIn(option, command)
                 self.assertEqual(result["calls"][2], "python -m pip check")
                 self.assertEqual(result["calls"][3], "python release_requirements.py --verify-environment")

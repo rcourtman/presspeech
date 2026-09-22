@@ -113,13 +113,13 @@ jobs:
         working-directory: windows
         shell: pwsh
         run: |
-          # Install only reviewed wheel hashes and the separately pinned CUDA
+          # Install only reviewed wheel hashes, including the separate CUDA
           # runtime. Disable all pip configuration files, including global/site
           # files that --isolated alone would still read.
           $env:PIP_CONFIG_FILE = 'NUL'
           python -m pip install --isolated --no-cache-dir --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt
           if ($LASTEXITCODE -ne 0) { throw 'Hash-locked PyPI installation failed' }
-          python -m pip install --isolated --no-cache-dir --no-deps --only-binary=:all: -r requirements-cuda.txt
+          python -m pip install --isolated --no-cache-dir --no-deps --only-binary=:all: --require-hashes -r requirements-cuda-release.txt
           if ($LASTEXITCODE -ne 0) { throw 'Pinned CUDA installation failed' }
           python -m pip check
           if ($LASTEXITCODE -ne 0) { throw 'Release dependency graph is inconsistent' }

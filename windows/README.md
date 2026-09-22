@@ -377,7 +377,7 @@ winget install --id JRSoftware.InnoSetup --exact
 py -3.12 -m venv .release-venv
 $env:PIP_CONFIG_FILE = 'NUL'
 .\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt
-.\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: -r requirements-cuda.txt
+.\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes -r requirements-cuda-release.txt
 .\.release-venv\Scripts\python -m pip check
 powershell -ExecutionPolicy Bypass -File .\build-release.ps1 `
   -Version 0.1.12 -Python .\.release-venv\Scripts\python.exe
@@ -387,9 +387,14 @@ For source builds containing this hash lock, `requirements-release.txt` lists
 reviewed SHA-256 artifact hashes for every PyPI package. The committed lock
 currently selects one Windows-compatible wheel per package; regeneration with
 `uv pip compile --generate-hashes` can list additional artifacts of the same pinned version.
-Review that hash set with the dependency update. Installation permits only
+Review that hash set with the dependency update. The same compiler derives the
+CUDA release lock from the source Torch pin and the official index checksum for
+the Windows CPython 3.12 wheel. Source development keeps using the separate
+version/index requirement without imposing that release artifact on other interpreters.
+Installation permits only
 compatible wheels, never source archives or dependency resolution. Both CI and
-release builds install the separate CUDA pin and verify the complete runtime;
+release builds install the separate `requirements-cuda-release.txt` artifact lock
+for the CPython 3.12 Windows x86-64 Torch wheel and verify the complete runtime;
 `pip check` alone cannot detect an omitted optional Torch dependency.
 Pip runs in isolated mode and `PIP_CONFIG_FILE=NUL` disables all configuration
 files, including global and environment-specific settings. This does not

@@ -1,6 +1,11 @@
 import sys
+import io
+from email.message import Message
+import urllib.request
+from urllib.response import addinfourl
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -111,6 +116,98 @@ class ReleaseRequirementTests(unittest.TestCase):
             release_requirements.environment_errors(pins, (3, 12, 10)),
             ["torch is not installed; expected " + release_requirements.torch_version()],
         )
+
+    def test_cuda_release_artifact_matches_source_pin(self):
+        text = (release_requirements.ROOT / release_requirements.INPUTS[3]).read_text()
+        digest = release_requirements.validate_cuda_lock(text)
+        self.assertEqual(len(digest), 64)
+        self.assertEqual(release_requirements.pin_map("\n".join(text.splitlines()[4:]) + "\n"),
+                         {"torch": release_requirements.torch_version()})
+
+    def test_cuda_source_keeps_its_general_version_and_index_requirement(self):
+        text = (release_requirements.ROOT / release_requirements.INPUTS[2]).read_text()
+        self.assertIn("torch==" + release_requirements.torch_version() + "\n", text)
+        self.assertNotIn("--hash", text)
+        self.assertNotIn("cp312", text)
+
+    def test_cuda_lock_rejects_stale_pin_source_and_extra_arguments(self):
+        good = release_requirements.cuda_lock_text("a" * 64)
+        bad = [good.replace("2.14.0", "2.13.0"), good.replace("Source SHA-256: ", "Source SHA-256: 0"),
+               good.replace("sha256:", "sha512:"), good.replace("a" * 64, "a" * 63),
+               good.replace("download.pytorch.org", "evil.example"), good + "--no-deps\n",
+               good + "    --hash=sha256:" + "b" * 64 + "\n", good.replace("torch==", "torch>=")]
+        for text in bad:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                release_requirements.validate_cuda_lock(text)
+
+    def test_cuda_hash_is_part_of_base_lock_input_fingerprint(self):
+        original = release_requirements.LOCK.read_text()
+        altered = {release_requirements.INPUTS[3]: release_requirements.cuda_lock_text("b" * 64)}
+        with self.assertRaisesRegex(ValueError, "fingerprint"):
+            release_requirements.validate(original, altered)
+        body = "".join(original.splitlines(keepends=True)[5:])
+        release_requirements.validate(release_requirements.header(body, altered) + body, altered)
+
+    def test_cuda_index_selects_only_target_artifact(self):
+        index, version = "https://download.pytorch.org/whl/cu126", "2.14.0+cu126"
+        url = "https://download-r2.pytorch.org/whl/cu126/torch-2.14.0%2Bcu126-cp312-cp312-win_amd64.whl"
+        link = lambda value: '<a href="' + value + '">wheel</a>'
+        right = link(url + "#sha256=" + "a" * 64)
+        others = (right.replace("cp312", "cp313") + right.replace("win_amd64", "manylinux_2_28_x86_64")
+                  + right.replace("download-r2.pytorch.org", "evil.example") + right.replace("2.14.0", "2.13.0"))
+        self.assertEqual(release_requirements.cuda_artifact_digest(others + right, index, version), "a" * 64)
+        for text in [others, link(url), right + right.replace("a" * 64, "b" * 64),
+                     right.replace("#sha256=", "?injected=yes#sha256=")]:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                release_requirements.cuda_artifact_digest(text, index, version)
+
+    def test_cuda_metadata_generation_is_bounded_and_rejects_redirects(self):
+        for url, data in [("https://evil.example/torch/", b""),
+                          ("https://download.pytorch.org/whl/cu126/torch/", b"x" * 2_000_001)]:
+            response = mock.MagicMock(url=url)
+            response.__enter__.return_value = response
+            response.read.return_value = data
+            opener = mock.Mock()
+            opener.open.return_value = response
+            with self.subTest(url=url), mock.patch.object(release_requirements, "build_opener", return_value=opener), \
+                    self.assertRaises(ValueError):
+                release_requirements.resolved_cuda_lock()
+
+    def test_cuda_metadata_redirect_is_rejected_before_target_request(self):
+        initial = "https://download.pytorch.org/whl/cu126/torch/"
+        target = "https://redirect-target.invalid/metadata"
+        for status in [301, 302, 303, 307, 308]:
+            requests = []
+            responses = []
+            class RecordingHTTPS(urllib.request.HTTPSHandler):
+                def https_open(self, request):
+                    requests.append(request.full_url)
+                    headers = Message()
+                    code = status if request.full_url == initial else 200
+                    if code != 200:
+                        headers["Location"] = target
+                    response = addinfourl(io.BytesIO(b""), headers, request.full_url, code)
+                    response.msg = "Redirect" if code != 200 else "OK"
+                    responses.append(response)
+                    return response
+            def opener(*handlers):
+                # Keep the production redirect handler and real urllib redirect
+                # machinery; replace only the HTTPS transport with a recorder.
+                return urllib.request.build_opener(RecordingHTTPS(), *handlers)
+            with self.subTest(status=status), \
+                    mock.patch.object(release_requirements, "build_opener", side_effect=opener), \
+                    mock.patch("socket.create_connection", side_effect=AssertionError("network forbidden")), \
+                    self.assertRaisesRegex(ValueError, "redirects are not permitted"):
+                release_requirements.resolved_cuda_lock()
+            self.assertEqual(requests, [initial], "the redirect target must never be requested")
+            self.assertTrue(all(response.closed for response in responses))
+
+    def test_release_install_commands_require_both_artifact_locks(self):
+        for relative in [".github/workflows/windows.yml", ".github/workflows/windows-release.yml", "windows/README.md"]:
+            text = (release_requirements.ROOT / relative).read_text()
+            command = next(line for line in text.splitlines() if "pip install" in line and "-r requirements-cuda-release.txt" in line)
+            for flag in ["--require-hashes", "--no-deps", "--only-binary=:all:"]:
+                self.assertIn(flag, command)
 
 
 if __name__ == "__main__":
