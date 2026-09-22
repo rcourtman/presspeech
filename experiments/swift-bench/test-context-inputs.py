@@ -128,7 +128,8 @@ class ContextInputTests(unittest.TestCase):
                         writer.writerow(dict(clip_id=fixture, backend=backend, backend_setting="test",
                             max_wer_percent="0", final_word_retained="true", p50_ms="1",
                             worst_word_errors="0", reference_words=pair.reference_words[role],
-                            best_word_errors="0", context_manifest_sha256=self.digest))
+                            best_word_errors="0", best_final_word_retained="true",
+                            context_manifest_sha256=self.digest))
 
     def analyze(self, results):
         return subprocess.run([sys.executable, str(ROOT / "analyze-context-variation.py"),

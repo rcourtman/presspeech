@@ -56,6 +56,7 @@ RESULT_FIELDS = [
     "worst_word_errors",
     "reference_words",
     "best_word_errors",
+    "best_final_word_retained",
     "context_manifest_sha256",
 ]
 
@@ -506,6 +507,7 @@ def write_test_results(
                             "worst_word_errors": str(worst_errors),
                             "reference_words": str(words),
                             "best_word_errors": str(best_errors),
+                            "best_final_word_retained": "true",
                             "context_manifest_sha256": hashlib.sha256((path.parent / "manifest.tsv").read_bytes()).hexdigest(),
                         }
                     )

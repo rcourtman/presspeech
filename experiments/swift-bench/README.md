@@ -660,7 +660,11 @@ For a Unified, v2, SDK-default chunking, or encoder product-candidate gate, add
 `--require-candidate-pass`. The gate requires a clean checkout, at least 3
 trials, 25 comparable clips and 1,000 reference words, at least one
 demonstrated error reduction, no per-clip or aggregate word-error increase,
-and average p50 latency no more than 1.25× production.
+no new final-word retention failure on any clip, and average p50 latency no
+more than 1.25× production. Final-word retention is evaluated conservatively
+and independently of total WER: the candidate's worst observed retention is
+compared with production's best, so an equal-error substitution or one
+unstable production trial cannot mask a new utterance-tail failure.
 The public comparison wrapper accepts and forwards the gate, for example:
 
 ```sh
