@@ -37,6 +37,13 @@ editor version when public, and generic field type; omit account, tab,
 document, and form names. For Electron/Chromium, use two separate windows of
 the same app for at least one focus-change attempt. Tabs are not a substitute.
 
+**Especially useful now:** if you use an Electron/Chromium app on macOS, include
+both the steady-focus checks and a focus change between two windows of that
+same app. The open [paste-target validation issue](https://github.com/rcourtman/presspeech/issues/33)
+needs evidence that steady focus can paste while a same-process window change
+still recovers safely. A community report helps describe that exact app/build;
+it does not replace native release qualification.
+
 Comparable means the same platform, app version, and generic field type. Add
 another observation to a matching report even when the outcome differs. Open
 a separate report when any of those boundaries differs. The class links search

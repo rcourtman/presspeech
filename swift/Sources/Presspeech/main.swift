@@ -3309,7 +3309,13 @@ private func speechModelSetupRowState(profile: SpeechModelProfile,
                                       buttonTitle: nil)
     }
     if isStartupInProgress {
-        return SetupChecklistRowState(detail: startupStatusTitle,
+        let detail: String
+        if startupStatusTitle.hasPrefix("Downloading speech model") {
+            detail = "\(startupStatusTitle) This model download is about 500–600 MB; voice audio stays on your Mac."
+        } else {
+            detail = startupStatusTitle
+        }
+        return SetupChecklistRowState(detail: detail,
                                       status: "Loading",
                                       buttonTitle: nil)
     }
@@ -16137,10 +16143,21 @@ private enum PresspeechSelfTest {
                                      isStartupInProgress: true,
                                      startupStatusTitle: "Downloading speech model… 50%",
                                      failure: nil),
-            equals: SetupChecklistRowState(detail: "Downloading speech model… 50%",
+            equals: SetupChecklistRowState(detail: "Downloading speech model… 50% This model download is about 500–600 MB; voice audio stays on your Mac.",
                                            status: "Loading",
                                            buttonTitle: nil),
-            "setup checklist should show speech model progress"
+            "setup checklist should explain model-download size and local audio while showing progress"
+        )
+        try expect(
+            speechModelSetupRowState(profile: .multilingualV3,
+                                     isSpeechModelReady: false,
+                                     isStartupInProgress: true,
+                                     startupStatusTitle: "Loading cached speech model…",
+                                     failure: nil),
+            equals: SetupChecklistRowState(detail: "Loading cached speech model…",
+                                           status: "Loading",
+                                           buttonTitle: nil),
+            "cached model loading should not be described as a first download"
         )
         try expect(
             speechModelSetupRowState(profile: .multilingualV3,

@@ -245,6 +245,11 @@ extract_p50_ms() {
     sed -nE 's/.*latency:[[:space:]]+p50=[[:space:]]*([0-9.]+) ms.*/\1/p' "$log_file" | head -n 1
 }
 
+extract_max_ms() {
+    local log_file="$1"
+    sed -nE 's/.*latency:[[:space:]]+p50=[[:space:]]*[0-9.]+ ms[[:space:]]+min=[[:space:]]*[0-9.]+ ms[[:space:]]+max=[[:space:]]*([0-9.]+) ms.*/\1/p' "$log_file" | head -n 1
+}
+
 extract_output_trial_metrics() {
     local log_file="$1"
     # These benchmark-owned lines contain only bounded counts, never transcript
@@ -417,6 +422,10 @@ backend_summary_row() {
                 p50_sum += $6
                 p50_seen += 1
             }
+            if ($13 ~ /^[0-9]+([.][0-9]+)?$/) {
+                max_sum += $13
+                max_seen += 1
+            }
             if ($8 == 0 && $11 != "unknown" && $12 != "unknown") {
                 silence_clips += 1
                 silence_nonempty += $11
@@ -425,14 +434,15 @@ backend_summary_row() {
         }
         END {
             if (count == 0) {
-                printf("| `%s` | 0 | unknown | unknown | unknown | unknown | unknown |\n", backend)
+                printf("| `%s` | 0 | unknown | unknown | unknown | unknown | unknown | unknown |\n", backend)
                 exit
             }
             corpus_wer = reference_words > 0 ? sprintf("%.2f", word_errors / reference_words * 100) : "unknown"
             worst = wer_seen > 0 ? sprintf("%.1f", worst_wer) : "unknown"
             avg_p50 = p50_seen > 0 ? sprintf("%.1f", p50_sum / p50_seen) : "unknown"
+            avg_max = max_seen > 0 ? sprintf("%.1f", max_sum / max_seen) : "unknown"
             silence = silence_clips > 0 ? sprintf("%d/%d", silence_nonempty, silence_trials) : "missing"
-            printf("| `%s` | %d | %s | %s | %d | %s | %s |\n", backend, count, corpus_wer, worst, final_fail, avg_p50, silence)
+            printf("| `%s` | %d | %s | %s | %d | %s | %s | %s |\n", backend, count, corpus_wer, worst, final_fail, avg_p50, avg_max, silence)
         }
     ' "$tsv"
 }
@@ -597,6 +607,8 @@ run_self_test() {
     assert_eq "$(extract_best_final_word_retained "$log")" "false" "best final-word parser"
     assert_eq "$(extract_worst_wer_metrics "$log")" $'16.7\t1\t6' "WER parser"
     assert_eq "$(extract_p50_ms "$log")" "123.4" "latency parser"
+    assert_eq "$(extract_max_ms "$log")" "130.0" "maximum latency parser"
+    assert_eq "$(extract_max_ms /dev/null)" "" "missing maximum latency parser"
     assert_eq "$(extract_output_trial_metrics "$log")" $'1\t2' "per-trial output parser"
     assert_eq "$(extract_worst_wer_metrics /dev/null)" $'unknown\tunknown\tunknown' "missing WER parser"
     validate_metrics max-WER 16.7 word-errors 1 reference-words 6 final-word-retained false p50 123.4
@@ -725,17 +737,25 @@ run_self_test() {
 
     local tsv="$tmpdir/results.tsv"
     {
-        printf 'clip_id\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\tword_errors\treference_words\n'
-        printf '001\tv3\tna\t100.0\ttrue\t50.0\t1\t1\n'
-        printf '002\tv3\tna\t1.0\tfalse\t70.0\t1\t100\n'
-        printf '001\tunified\t250\t5.0\ttrue\t40.0\t1\t20\n'
+        printf 'clip_id\tbackend\tsetting\twer\tfinal\tp50\tword-errors\twords\tbest-errors\tbest-final\tnonempty\ttrials\tmax_ms\n'
+        printf '001\tv3\tna\t100.0\ttrue\t50.0\t1\t1\t1\ttrue\t0\t1\t80.0\n'
+        printf '002\tv3\tna\t1.0\tfalse\t70.0\t1\t100\t1\ttrue\t0\t1\t100.0\n'
+        printf '001\tunified\t250\t5.0\ttrue\t40.0\t1\t20\t1\ttrue\t0\t1\t60.0\n'
     } >"$tsv"
     local summary="$tmpdir/summary.md"
     backend_summary_row "$tsv" "v3" >"$summary"
     # Exact corpus weighting is 2/101 (1.98%), not the misleading 50.5%
     # produced by averaging the two displayed clip percentages.
-    assert_contains "$summary" '| `v3` | 2 | 1.98 | 100.0 | 1 | 60.0 |'
+    assert_contains "$summary" '| `v3` | 2 | 1.98 | 100.0 | 1 | 60.0 | 90.0 |'
     assert_not_contains "$summary" '\n'
+
+    local legacy_tsv="$tmpdir/legacy-results.tsv"
+    {
+        printf 'clip_id\tbackend\tsetting\twer\tfinal\tp50\tword-errors\twords\tbest-errors\tbest-final\tnonempty\ttrials\n'
+        printf '001\tv3\tna\t5.0\ttrue\t50.0\t1\t20\t1\ttrue\t0\t1\n'
+    } >"$legacy_tsv"
+    backend_summary_row "$legacy_tsv" "v3" >"$summary"
+    assert_contains "$summary" '| `v3` | 1 | 5.00 | 5.0 | 0 | 50.0 | unknown |'
 
     local precision_tsv="$tmpdir/precision.tsv"
     {
@@ -1182,7 +1202,7 @@ raw_dir="$stage_dir/logs"
 mkdir -p "$raw_dir"
 
 {
-    printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors\tbest_final_word_retained\tnonempty_trials\toutput_trials'
+    printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors\tbest_final_word_retained\tnonempty_trials\toutput_trials\tmax_ms'
     if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then printf '\tcontext_manifest_sha256'; fi
     printf '\n'
 } >"$tsv"
@@ -1217,8 +1237,8 @@ mkdir -p "$raw_dir"
     echo
     echo "## Per-Clip Results"
     echo
-    echo "| Clip | Backend | Backend setting | Max WER % | Final word retained | Non-empty trials | p50 ms |"
-    echo "|---|---|---:|---:|---|---:|---:|"
+    echo "| Clip | Backend | Backend setting | Max WER % | Final word retained | Non-empty trials | p50 ms | Max observed trial ms |"
+    echo "|---|---|---:|---:|---|---:|---:|---:|"
 } >"$report"
 
 EXPERIMENT_ENVIRONMENT_STATE="pending"
@@ -1266,6 +1286,8 @@ for index in "${!normalized_clips[@]}"; do
         IFS=$'\t' read -r nonempty_trials output_trials <<<"$output_metrics"
         p50="$(extract_p50_ms "$log_file")"
         [[ -n "$p50" ]] || p50="unknown"
+        max_ms="$(extract_max_ms "$log_file")"
+        [[ -n "$max_ms" ]] || max_ms="unknown"
         if ! validate_metrics \
             max-WER "$wer" word-errors "$word_errors" reference-words "$reference_words" \
             best-WER "$best_wer" best-word-errors "$best_word_errors" \
@@ -1288,16 +1310,16 @@ for index in "${!normalized_clips[@]}"; do
         fi
 
         {
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' \
                 "$clip_id" "$backend" "$setting" "$wer" "$retained" "$p50" \
                 "$word_errors" "$reference_words" "$best_word_errors" "$best_retained" \
-                "$nonempty_trials" "$output_trials"
+                "$nonempty_trials" "$output_trials" "$max_ms"
             if [[ "$CONTEXT_CORPUS" -eq 1 ]]; then printf '\t%s' "$CONTEXT_MANIFEST_SHA256"; fi
             printf '\n'
         } >>"$tsv"
-        printf '| `%s` | `%s` | %s | %s | %s | %s/%s | %s |\n' \
+        printf '| `%s` | `%s` | %s | %s | %s | %s/%s | %s | %s |\n' \
             "$clip_id" "$backend" "$setting" "$wer" "$retained" \
-            "$nonempty_trials" "$output_trials" "$p50" >>"$report"
+            "$nonempty_trials" "$output_trials" "$p50" "$max_ms" >>"$report"
     done
 done
 
@@ -1332,8 +1354,8 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
     echo
     echo "## Summary"
     echo
-    echo "| Backend | Clip rows | Corpus WER % | Worst WER % | Final-word failures | Average p50 ms | Non-speech false-positive trials |"
-    echo "|---|---:|---:|---:|---:|---:|---:|"
+    echo "| Backend | Clip rows | Corpus WER % | Worst WER % | Final-word failures | Average p50 ms | Average per-clip max trial ms | Non-speech false-positive trials |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---:|"
     backend_summary_row "$tsv" "v3"
     backend_summary_row "$tsv" "$CANDIDATE_BACKEND"
     if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" || \
