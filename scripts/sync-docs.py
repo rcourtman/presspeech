@@ -950,6 +950,18 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
         f'<div class="stat"><strong>{size}</strong><span>signed release zip</span></div>',
         path=path,
     )
+    text = replace_regex(
+        text,
+        r"<strong>macOS(?: \d+\.\d+\.\d+)?:</strong>",
+        f"<strong>macOS {version}:</strong>",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"<strong>Windows(?: \d+\.\d+\.\d+)?:</strong>",
+        f"<strong>Windows {windows_version}:</strong>",
+        path=path,
+    )
 
     settings_row = """              <div class="menu-mock__row menu-mock__row--hover">
                 <span>Settings</span>
@@ -993,11 +1005,40 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
     return text
 
 
+def sync_getting_started(path: Path, metadata: dict[str, object]) -> str:
+    text = read_text(path)
+    version = str(metadata["version"])
+    windows_version = str(metadata["windows_version"])
+    text = replace_regex(
+        text,
+        r"<h3>macOS(?: \d+\.\d+\.\d+)?</h3>",
+        f"<h3>macOS {version}</h3>",
+        path=path,
+    )
+    text = replace_regex(
+        text,
+        r"<h3>Windows(?: \d+\.\d+\.\d+)? prerelease</h3>",
+        f"<h3>Windows {windows_version} prerelease</h3>",
+        path=path,
+    )
+    return text
+
+
 def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     digest = str(metadata["release_zip_sha256"])
     version = str(metadata["version"])
     escaped_prompt = html.escape(MAC_INSTALL_PROMPT, quote=False)
+
+    text = replace_regex(
+        text,
+        r'(<a class="button" href="https://github\.com/rcourtman/presspeech/'
+        r'releases/latest/download/Presspeech\.zip">)'
+        r'(?:Download Presspeech\.zip|Download macOS \d+\.\d+\.\d+ \(\.zip\))'
+        r'(</a>)',
+        rf'\1Download macOS {version} (.zip)\2',
+        path=path,
+    )
 
     text = replace_regex(
         text,
@@ -1033,9 +1074,10 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         text,
         r'<p><a href="https://github\.com/rcourtman/presspeech/releases/'
         r'(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip">'
-        r"Download Presspeech\.zip</a> from the (?:latest|current) GitHub release\.</p>",
+        r"Download Presspeech(?: \d+\.\d+\.\d+ \(\.zip\)|\.zip)</a> "
+        r"from the (?:latest|current) GitHub release\.</p>",
         '<p><a href="https://github.com/rcourtman/presspeech/releases/'
-        f'download/v{version}/Presspeech.zip">Download Presspeech.zip</a> '
+        f'download/v{version}/Presspeech.zip">Download Presspeech {version} (.zip)</a> '
         "from the current GitHub release.</p>",
         path=path,
     )
@@ -1331,6 +1373,7 @@ SYNCERS = {
     ROOT / "README.md": sync_readme,
     ROOT / "windows" / "README.md": sync_windows_readme,
     DOCS / "index.html": sync_index,
+    DOCS / "getting-started.html": sync_getting_started,
     DOCS / "install.html": sync_install_html,
     DOCS / "windows.html": sync_windows_html,
     DOCS / "install" / "agents.md": sync_agents_md,
@@ -1914,6 +1957,8 @@ def run_self_test() -> None:
             '"releaseNotes": "https://example.com/old-windows-notes"\n'
             '"downloadUrl": "https://example.com/old-windows-installer"\n'
             '<div class="stat"><strong>1.0 MB</strong><span>signed release zip</span></div>\n'
+            '<p class="quiet"><strong>macOS:</strong> released. '
+            '<strong>Windows:</strong> prerelease.</p>\n'
             f"{SETUP_CHECKLIST} Copy Diagnostics Save Diagnostics\n",
             encoding="utf-8",
         )
@@ -1923,9 +1968,23 @@ def run_self_test() -> None:
             '"softwareVersion": "9.8.7"',
             "windows-v9.8.7/Presspeech-Setup-9.8.7-x64.exe",
             "<strong>7.6 MB</strong>",
+            "<strong>macOS 8.7.6:</strong>",
+            "<strong>Windows 9.8.7:</strong>",
         ):
             if expected not in synced_index:
                 raise SyncError(f"self-test: homepage metadata did not sync {expected!r}")
+
+        getting_started = Path(tmp) / "getting-started.html"
+        getting_started.write_text(
+            "<h3>macOS</h3>\n<h3>Windows prerelease</h3>\n",
+            encoding="utf-8",
+        )
+        synced_getting_started = sync_getting_started(getting_started, metadata)
+        if (
+            "<h3>macOS 8.7.6</h3>" not in synced_getting_started
+            or "<h3>Windows 9.8.7 prerelease</h3>" not in synced_getting_started
+        ):
+            raise SyncError("self-test: getting-started release versions did not sync")
 
         sitemap = Path(tmp) / "sitemap.xml"
         sitemap.write_text(
