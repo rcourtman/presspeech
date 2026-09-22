@@ -169,10 +169,14 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    the release candidate. Do not spend the launch post while any incorrect or
    unsafe result remains, and describe recurring safe recovery rather than
    turning it into a universal paste claim.
-3. Confirm `main` is deployed to GitHub Pages and the README shows the direct
-   download above Homebrew. Apply the exact two-platform GitHub About
-   description and missing discovery topics above; a Mac-only profile hides a
-   shipped platform.
+3. Complete the [public release and support
+   qualification](../docs/manual-qa.md#public-release-and-support-qualification).
+   Confirm `main` is deployed to GitHub Pages and the README shows the direct
+   download above Homebrew. From a signed-in non-collaborator account, confirm
+   all three public issue templates are available before asking users for bug,
+   improvement, or compatibility reports. Apply the exact two-platform GitHub
+   About description and missing discovery topics above; a Mac-only profile
+   hides a shipped platform.
 4. Record a baseline: latest release downloads, total release
    downloads, repo stars, repo views, unique views, clones, and top
    referrers.

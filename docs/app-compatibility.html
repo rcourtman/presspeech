@@ -21,6 +21,7 @@
     <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
     <link rel="stylesheet" href="styles.css">
+    <script src="site-navigation.js" defer></script>
     <script src="compatibility-worksheet.js" defer></script>
   </head>
   <body>
@@ -28,7 +29,8 @@
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>
-        <div class="nav-links">
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>
+        <div class="nav-links" id="primary-navigation-links">
           <a href="getting-started.html">Get started</a>
           <a href="install.html">macOS</a>
           <a href="windows.html">Windows</a>
@@ -169,8 +171,8 @@
         <div class="wrap">
           <span class="section-eyebrow">Local worksheet</span>
           <h2>Record categories, not words</h2>
-          <p>Use this optional worksheet as you complete the checks above. It records only the outcome category selected for each attempt, calculates the two sets of aggregate counts, and prepares the exact count block used by the compatibility report. There is nowhere to enter a phrase or transcript.</p>
-          <div class="note" id="worksheet-privacy"><p><strong>Local and temporary:</strong> selections stay in this page's controls. The worksheet does not send selections or write them to browser storage. Choose <strong>Reset worksheet</strong> to clear them. <strong>Copy aggregate counts</strong> puts only the labelled six-count block on your clipboard; you decide what to paste into GitHub.</p></div>
+          <p>Use this optional worksheet as you complete the checks above. It records only the outcome category selected for each attempt, calculates the two sets of aggregate counts, and prepares the exact count and overall-result block used by the compatibility report. There is nowhere to enter a phrase or transcript.</p>
+          <div class="note" id="worksheet-privacy"><p><strong>Local and temporary:</strong> selections stay in this page's controls. The worksheet does not send selections or write them to browser storage. Choose <strong>Reset worksheet</strong> to clear them. <strong>Copy report block</strong> puts only the labelled six counts and overall classification on your clipboard; you decide what to paste into GitHub.</p></div>
 
           <form class="compatibility-worksheet" id="compatibility-worksheet" autocomplete="off" hidden>
             <div class="worksheet-group" aria-labelledby="steady-worksheet-heading">
@@ -254,10 +256,10 @@
                   </tbody>
                 </table>
               </div>
-              <label class="worksheet-summary-label" for="worksheet-summary">Report-ready count block</label>
-              <textarea class="worksheet-summary" id="worksheet-summary" rows="11" readonly aria-describedby="worksheet-privacy worksheet-status" placeholder="Complete all eight category selections to generate the aggregate count block."></textarea>
+              <label class="worksheet-summary-label" for="worksheet-summary">Report-ready result block</label>
+              <textarea class="worksheet-summary" id="worksheet-summary" rows="11" readonly aria-describedby="worksheet-privacy worksheet-status" placeholder="Complete all eight category selections to generate the report block."></textarea>
               <div class="actions">
-                <button class="button" id="copy-worksheet-summary" type="button" disabled>Copy aggregate counts</button>
+                <button class="button" id="copy-worksheet-summary" type="button" disabled>Copy report block</button>
                 <button class="button secondary" type="reset">Reset worksheet</button>
               </div>
             </div>
@@ -301,11 +303,22 @@
           <ol class="steps">
             <li>
               <strong>Find the same platform, app, version, and field type</strong>
-              <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22">Browse existing compatibility reports</a>. Add aggregate counts when the platform, app version, and generic field type match, even if your outcome differs; variation under comparable conditions is important evidence. Open a separate report for a different platform or field type.</p>
+              <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22">Browse existing compatibility reports</a>. When the platform, app version, and generic field type match, add a comment there instead of opening a duplicate—even if your outcome differs. Paste the worksheet block, then add the Presspeech and operating-system versions, generic hardware if useful, and relevant conditions, because variation under comparable conditions is important evidence. Open a separate report for a different platform or field type.</p>
+              <details>
+                <summary>Comment shape for another observation</summary>
+                <pre><code>Presspeech version: [x.y.z]
+Operating-system version: [version]
+Hardware (optional, no serial or device names): [generic model/chip]
+
+[paste the worksheet's six counts and Overall result]
+
+Relevant conditions: [trigger mode, suffix, clipboard manager/history,
+assistive technology, or a minimal reproduction; omit private context]</code></pre>
+              </details>
             </li>
             <li>
               <strong>Submit one target-app report</strong>
-              <p>Open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and choose the overall result shown above it, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
+              <p>If no matching report exists, open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and select the same overall result in the form, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
               <p>For <strong>Overall result</strong>, a complete automatic-paste pass means all five steady-focus attempts pasted once and all three focus-change attempts recovered safely. Focus-change recovery is expected; choose the manual-recovery option only when it occurred while the original target stayed focused. Any incorrect or unsafe result takes precedence.</p>
             </li>
             <li>

@@ -9,13 +9,15 @@
     <link rel="icon" href="/presspeech/favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
     <link rel="stylesheet" href="/presspeech/styles.css">
+    <script src="/presspeech/site-navigation.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="/presspeech/"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>
-        <div class="nav-links">
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>
+        <div class="nav-links" id="primary-navigation-links">
           <a href="/presspeech/getting-started.html">Get started</a>
           <a href="/presspeech/install.html">macOS</a>
           <a href="/presspeech/windows.html">Windows</a>

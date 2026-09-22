@@ -5393,6 +5393,7 @@ private enum ClipboardPasteInserter {
     }
 
     enum SnapshotFailure: Equatable {
+        case accessDenied
         case unavailableRepresentation
         case sizeLimitExceeded
         case representationLimitExceeded
@@ -5400,6 +5401,8 @@ private enum ClipboardPasteInserter {
 
         var logDescription: String {
             switch self {
+            case .accessDenied:
+                return "pasteboard access is denied in System Settings"
             case .unavailableRepresentation:
                 return "one or more representations were unavailable"
             case .sizeLimitExceeded:
@@ -5413,6 +5416,8 @@ private enum ClipboardPasteInserter {
 
         var menuTitle: String {
             switch self {
+            case .accessDenied:
+                return "Previous Clipboard Access Denied"
             case .sizeLimitExceeded:
                 return "Previous Clipboard Too Large to Keep"
             case .representationLimitExceeded:
@@ -5424,6 +5429,8 @@ private enum ClipboardPasteInserter {
 
         var menuHelp: String {
             switch self {
+            case .accessDenied:
+                return "macOS denied Presspeech access to read the previous clipboard. The transcript remains available on the clipboard. To use manual restore, allow Presspeech pasteboard access in System Settings before the next dictation."
             case .sizeLimitExceeded:
                 return "The previous clipboard exceeded Presspeech’s \(MAX_MANUAL_CLIPBOARD_SNAPSHOT_BYTES / 1024 / 1024) MB in-memory safety limit. The transcript remains available on the clipboard."
             case .representationLimitExceeded:
@@ -5434,6 +5441,13 @@ private enum ClipboardPasteInserter {
                 return "Another app changed the clipboard while Presspeech was reading it, so Presspeech left the newer contents alone."
             }
         }
+    }
+
+    @available(macOS 15.4, *)
+    static func snapshotAccessFailure(
+        for accessBehavior: NSPasteboard.AccessBehavior
+    ) -> SnapshotFailure? {
+        accessBehavior == .alwaysDeny ? .accessDenied : nil
     }
 
     enum SnapshotCaptureResult {
@@ -5485,6 +5499,17 @@ private enum ClipboardPasteInserter {
                 ? reason
                 : .clipboardChanged
             return .unavailable(currentReason, sourceChangeCount: sourceChangeCount)
+        }
+
+        // macOS 15.4 and later exposes the person's per-app pasteboard
+        // decision without reading any clipboard bytes. Respect an explicit
+        // denial before asking the pasteboard server to materialize items;
+        // delivery can still replace the clipboard with the transcript, but
+        // the optional previous-content snapshot cannot be offered.
+        if #available(macOS 15.4, *),
+           pb.name == NSPasteboard.general.name,
+           let accessFailure = snapshotAccessFailure(for: pb.accessBehavior) {
+            return unavailable(accessFailure)
         }
 
         guard maxBytes >= 0, maxRepresentations >= 0 else {
@@ -7649,6 +7674,15 @@ private final class UpdateProgressAppDelegate: NSObject, NSApplicationDelegate, 
             scheduleClose(after: 0.5)
         default:
             detailLabel.stringValue = "Presspeech will reopen automatically when the update finishes."
+        }
+
+        // Failure and completion reveal controls that were hidden when the
+        // window's initial key-view loop was calculated. AppKit documents
+        // automatic recalculation for views being added, not for isHidden
+        // transitions, so explicitly dirty the loop before a keyboard user
+        // tries to reach Open Release Page or Close.
+        if let window {
+            enableAutomaticKeyboardNavigation(in: window)
         }
     }
 
@@ -15755,6 +15789,40 @@ private enum PresspeechSelfTest {
     }
 
     private static func testManualClipboardRestoreLifecycle() throws {
+        if #available(macOS 15.4, *) {
+            try expect(
+                ClipboardPasteInserter.snapshotAccessFailure(for: .alwaysDeny),
+                equals: .accessDenied,
+                "an explicit macOS pasteboard denial should be identified before reading contents"
+            )
+            try expect(
+                ClipboardPasteInserter.SnapshotFailure.accessDenied.menuTitle,
+                equals: "Previous Clipboard Access Denied",
+                "pasteboard denial should have a specific manual-restore status"
+            )
+            try expect(
+                ClipboardPasteInserter.SnapshotFailure.accessDenied.menuHelp
+                    .contains("transcript remains available"),
+                equals: true,
+                "pasteboard denial guidance should distinguish delivery from optional restoration"
+            )
+            try expect(
+                ClipboardPasteInserter.snapshotAccessFailure(for: .alwaysAllow),
+                equals: nil,
+                "allowed macOS pasteboard access should not block a manual-restore snapshot"
+            )
+            try expect(
+                ClipboardPasteInserter.snapshotAccessFailure(for: .ask),
+                equals: nil,
+                "ask-mode pasteboard access should remain available to the system consent flow"
+            )
+            try expect(
+                ClipboardPasteInserter.snapshotAccessFailure(for: .default),
+                equals: nil,
+                "default pasteboard access should remain available to the system consent flow"
+            )
+        }
+
         let probe = MainActor.assumeIsolated {
             let pb = NSPasteboard(name: NSPasteboard.Name("com.local.presspeech.self-test.manual-restore.\(UUID().uuidString)"))
             defer {

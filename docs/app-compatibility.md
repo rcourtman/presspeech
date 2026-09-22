@@ -125,12 +125,13 @@ failure. Stop testing and report it; do not retry in a real document.
 
 The [public protocol page](https://rcourtman.github.io/presspeech/app-compatibility.html#worksheet)
 includes an optional in-page worksheet for the eight outcome categories. It
-calculates the two aggregate count sets and prepares a report-ready count block.
+calculates the two aggregate count sets and prepares a report-ready block with
+the canonical overall classification.
 Selections stay only in the page controls: the worksheet does not send
 selections, write them to browser storage, or provide a field for a phrase or
-transcript. Use **Reset worksheet** to clear them. **Copy aggregate counts**
-places only the labelled six-count block on the clipboard; the user decides
-what to paste into GitHub.
+transcript. Use **Reset worksheet** to clear them. **Copy report block**
+places only the labelled six counts and overall classification on the
+clipboard; the user decides what to paste into GitHub.
 
 Without the worksheet, tally the same six categories manually:
 
@@ -144,6 +145,8 @@ Three focus-change results
 Copied for manual paste without inserting anywhere: [0-3]
 Inserted into any field: [0-3]
 Other or not completed: [0-3]
+
+Overall result: [classification from the definitions below]
 ```
 
 The first three values must total five and the final three must total three.
@@ -186,10 +189,26 @@ worksheet output into **Eight-check outcome counts** and select the overall
 result it shows, or enter the same counts manually.
 
 If the same platform, app version, and field type already has a compatibility
-report, add only your aggregate counts and environment there instead of opening
-a duplicate. Add your counts even when the outcome differs: variation under
-comparable conditions is important evidence. Use a separate report for a
-different platform or field type.
+report, add a comment there instead of opening a duplicate. Paste the
+worksheet block, then add the Presspeech and operating-system versions,
+generic hardware if useful, and relevant conditions. Do not repeat the target
+app or field type unless the existing report is ambiguous. Add your counts
+even when the outcome differs: variation under comparable conditions is
+important evidence. Use a separate report for a different platform or field
+type.
+
+Use this shape for an observation added to an existing report:
+
+```text
+Presspeech version: [x.y.z]
+Operating-system version: [version]
+Hardware (optional, no serial or device names): [generic model/chip]
+
+[paste the worksheet's six counts and Overall result]
+
+Relevant conditions: [trigger mode, suffix, clipboard manager/history,
+assistive technology, or a minimal reproduction; omit private context]
+```
 
 For the form's **Overall result**, a complete automatic-paste pass means all
 five steady-focus attempts pasted once and all three focus-change attempts

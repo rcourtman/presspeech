@@ -21,13 +21,15 @@
     <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
     <link rel="stylesheet" href="styles.css">
+    <script src="site-navigation.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
         <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>
-        <div class="nav-links">
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>
+        <div class="nav-links" id="primary-navigation-links">
           <a href="getting-started.html" aria-current="page">Get started</a>
           <a href="install.html">macOS</a>
           <a href="windows.html">Windows</a>

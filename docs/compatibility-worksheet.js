@@ -69,6 +69,8 @@
       `Copied for manual paste without inserting anywhere: ${result.focus.copied}`,
       `Inserted into any field: ${result.focus.inserted}`,
       `Other or not completed: ${result.focus.other}`,
+      "",
+      `Overall result: ${result.overall}`,
     ].join("\n");
   }
 
@@ -128,8 +130,8 @@
         }
       }
       status.textContent = copied
-        ? "Aggregate counts copied. Review them before adding them to GitHub."
-        : "Automatic copy was unavailable. The aggregate count block is selected for manual copy.";
+        ? "Aggregate counts and overall result copied. Review them before adding them to GitHub."
+        : "Automatic copy was unavailable. The count and overall-result block is selected for manual copy.";
     }
 
     form.hidden = false;

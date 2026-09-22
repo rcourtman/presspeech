@@ -379,6 +379,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "Manual-paste recovery occurred during steady focus",
+        "including its six counts and Overall result",
         *COMPATIBILITY_OVERALL_RESULTS,
     ),
     DOCS / "index.html": (
@@ -394,6 +395,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "manual-paste recovery occurred while the original target stayed focused",
+        "worksheet's six counts and Overall result",
     ),
     DOCS / "app-compatibility.html": (
         "generic field type",
@@ -403,6 +405,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "manual-recovery option only when it occurred while the original target stayed focused",
+        "worksheet's six counts and Overall result",
     ),
 }
 
@@ -1549,6 +1552,11 @@ def check_compatibility_worksheet_contract(
             "docs/compatibility-worksheet.js: worksheet result labels must match "
             "the compatibility report form"
         )
+    if "`Overall result: ${result.overall}`" not in script:
+        errors.append(
+            "docs/compatibility-worksheet.js: copied worksheet summary must include "
+            "the canonical overall result"
+        )
     return errors
 
 
@@ -2330,6 +2338,7 @@ def run_self_test() -> None:
         )
         worksheet_script.write_text(
             'document.getElementById("compatibility-worksheet");\n'
+            '`Overall result: ${result.overall}`\n'
             + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
             encoding="utf-8",
         )
@@ -2341,7 +2350,8 @@ def run_self_test() -> None:
         if not check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
             raise SyncError("self-test: persistent compatibility worksheet was accepted")
         worksheet_script.write_text(
-            "// local only\n" + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
+            "// local only\n`Overall result: ${result.overall}`\n"
+            + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
             encoding="utf-8",
         )
         worksheet_page.write_text(

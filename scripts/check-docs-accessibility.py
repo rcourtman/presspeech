@@ -44,6 +44,11 @@ class DocumentParser(HTMLParser):
         self.primary_nav_items: list[tuple[str, str]] = []
         self._in_primary_nav = False
         self._primary_nav_link: tuple[str, list[str]] | None = None
+        self.nav_toggle_count = 0
+        self.nav_toggle_names: list[str] = []
+        self.nav_toggle_issues: list[str] = []
+        self._nav_toggle_text: list[str] | None = None
+        self.navigation_scripts: list[str] = []
         self.brand_link_count = 0
         self.brand_link_names: list[str] = []
         self.brand_link_issues: list[str] = []
@@ -106,9 +111,40 @@ class DocumentParser(HTMLParser):
             self.missing_alt_count += 1
         if tag == "video":
             self.video_descriptions.append(attributes.get("aria-describedby"))
+        if tag == "script" and (attributes.get("src") or "").endswith(
+            "site-navigation.js"
+        ):
+            self.navigation_scripts.append(attributes["src"] or "")
         if tag == "nav" and attributes.get("aria-label") == "Primary":
             self.primary_nav_count += 1
             self._in_primary_nav = True
+        if tag == "button" and "nav-toggle" in (attributes.get("class") or "").split():
+            self.nav_toggle_count += 1
+            self._nav_toggle_text = []
+            if not self._in_primary_nav:
+                self.nav_toggle_issues.append(
+                    "navigation toggle must be inside the primary navigation"
+                )
+            if attributes.get("type") != "button":
+                self.nav_toggle_issues.append("navigation toggle must use type='button'")
+            if attributes.get("aria-controls") != "primary-navigation-links":
+                self.nav_toggle_issues.append(
+                    "navigation toggle must control #primary-navigation-links"
+                )
+            if attributes.get("aria-expanded") != "false":
+                self.nav_toggle_issues.append(
+                    "navigation toggle must start with aria-expanded='false'"
+                )
+            if "data-navigation-toggle" not in attributes:
+                self.nav_toggle_issues.append(
+                    "navigation toggle must expose the shared script hook"
+                )
+            if any(name in attributes for name in ("hidden", "inert", "aria-label")) or (
+                attributes.get("aria-hidden") or ""
+            ).lower() == "true":
+                self.nav_toggle_issues.append(
+                    "navigation toggle must take its accessible name from visible text"
+                )
         if tag == "a":
             classes = (attributes.get("class") or "").split()
             if "brand" in classes:
@@ -172,6 +208,8 @@ class DocumentParser(HTMLParser):
             self._skip_link_text.append(data)
         if self._brand_link_text is not None and not self._in_brand_mark:
             self._brand_link_text.append(data)
+        if self._nav_toggle_text is not None:
+            self._nav_toggle_text.append(data)
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "nav" and self._in_primary_nav:
@@ -192,6 +230,11 @@ class DocumentParser(HTMLParser):
             href, parts = self._primary_nav_link
             self.primary_nav_items.append((href, " ".join("".join(parts).split())))
             self._primary_nav_link = None
+        if tag == "button" and self._nav_toggle_text is not None:
+            self.nav_toggle_names.append(
+                " ".join("".join(self._nav_toggle_text).split())
+            )
+            self._nav_toggle_text = None
 
 
 def expected_current_href(path: Path, docs: Path) -> str | None:
@@ -273,6 +316,16 @@ def document_errors(path: Path, docs: Path) -> list[str]:
             )
     if parser.primary_nav_count != 1:
         errors.append(f"expected one primary navigation, found {parser.primary_nav_count}")
+    if parser.nav_toggle_count != 1:
+        errors.append(f"expected one navigation toggle, found {parser.nav_toggle_count}")
+    if parser.nav_toggle_names != ["Menu"]:
+        errors.append(
+            "navigation toggle accessible name must come from its visible 'Menu' text; "
+            f"found {parser.nav_toggle_names!r}"
+        )
+    if parser.ids.count("primary-navigation-links") != 1:
+        errors.append("navigation toggle target #primary-navigation-links must exist once")
+    errors.extend(dict.fromkeys(parser.nav_toggle_issues))
     if parser.brand_link_count != 1:
         errors.append(f"expected one brand link, found {parser.brand_link_count}")
     if parser.brand_mark_count != 1:
@@ -289,6 +342,18 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         errors.append(
             "primary navigation links and visible names must match the shared order; "
             f"expected {expected_nav!r}, found {parser.primary_nav_items!r}"
+        )
+    expected_navigation_script = (
+        "/presspeech/site-navigation.js"
+        if relative == ERROR_PAGE
+        else "../site-navigation.js"
+        if relative.parts[0] == "compare"
+        else "site-navigation.js"
+    )
+    if parser.navigation_scripts != [expected_navigation_script]:
+        errors.append(
+            "expected one shared navigation script at "
+            f"{expected_navigation_script!r}, found {parser.navigation_scripts!r}"
         )
     current_href = expected_current_href(path, docs)
     expected_current = [] if current_href is None else [(current_href, "page")]
@@ -415,6 +480,7 @@ def navigation_target_errors(css: str) -> list[str]:
         return ["missing the max-width: 720px mobile navigation rules"]
 
     brand = css_declarations(media, ".brand")
+    toggle = css_declarations(media, "html.navigation-ready .nav-toggle")
     links = css_declarations(media, ".nav-links")
     link = css_declarations(media, ".nav-links a")
     brand_height = pixel_value(brand.get("min-height")) if brand is not None else None
@@ -422,6 +488,16 @@ def navigation_target_errors(css: str) -> list[str]:
         errors.append(
             f"mobile brand target must have a {MIN_MOBILE_NAV_TARGET}px minimum height"
         )
+    if toggle is None or toggle.get("display", "").strip() != "inline-flex":
+        errors.append("enhanced mobile navigation must expose its menu button")
+    else:
+        for dimension in ("min-width", "min-height"):
+            target_size = pixel_value(toggle.get(dimension))
+            if target_size is None or target_size < MIN_MOBILE_NAV_TARGET:
+                errors.append(
+                    "mobile navigation toggle must have a "
+                    f"{MIN_MOBILE_NAV_TARGET}px {dimension}"
+                )
     if links is None or links.get("width", "").strip() != "100%":
         errors.append("mobile navigation links must occupy the full row")
     if link is None:
@@ -579,12 +655,16 @@ def run_self_test() -> None:
                 f"<a class='brand' href='{brand_href}'{brand_state}>"
                 "<span class='brand-mark' aria-hidden='true'>P</span>"
                 "<span>Presspeech</span></a>"
-                f"{links}</nav>"
+                "<button class='nav-toggle' type='button' aria-expanded='false' "
+                "aria-controls='primary-navigation-links' data-navigation-toggle>Menu</button>"
+                "<div class='nav-links' id='primary-navigation-links'>"
+                f"{links}</div></nav>"
             )
 
         index = docs / "index.html"
         index.write_text(
-            "<!doctype html><html lang='en'><head><title>Test</title></head><body>"
+            "<!doctype html><html lang='en'><head><title>Test</title>"
+            "<script src='site-navigation.js' defer></script></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
             + primary_nav(index, brand_current=True)
             + "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''>"
@@ -616,6 +696,13 @@ def run_self_test() -> None:
             (valid_index.replace("<span>Presspeech</span>", "<span>Other</span>"), "brand link accessible name"),
             (valid_index.replace("class='brand'", "class='brand' aria-label='Home'"), "visible text"),
             (valid_index.replace("class='brand'", "class='brand' aria-hidden='true'"), "assistive technology"),
+            (valid_index.replace("type='button'", "type='submit'"), "type='button'"),
+            (valid_index.replace("aria-controls='primary-navigation-links'", "aria-controls='other'"), "must control"),
+            (valid_index.replace("aria-expanded='false'", "aria-expanded='true'"), "must start"),
+            (valid_index.replace(" data-navigation-toggle", ""), "script hook"),
+            (valid_index.replace(">Menu</button>", ">Navigate</button>"), "visible 'Menu' text"),
+            (valid_index.replace("id='primary-navigation-links'", "id='other-links'"), "target #primary-navigation-links"),
+            (valid_index.replace("<script src='site-navigation.js' defer></script>", ""), "shared navigation script"),
             (
                 valid_index.replace(" aria-describedby='video-description'", ""),
                 "video must reference",
@@ -646,7 +733,8 @@ def run_self_test() -> None:
 
         compatibility = docs / "app-compatibility.html"
         compatibility.write_text(
-            "<!doctype html><html lang='en'><head><title>Compatibility</title></head><body>"
+            "<!doctype html><html lang='en'><head><title>Compatibility</title>"
+            "<script src='site-navigation.js' defer></script></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
             + primary_nav(compatibility, current_href="troubleshooting.html")
             + "<main id='main-content'><h1>Compatibility</h1></main>"
@@ -683,7 +771,8 @@ def run_self_test() -> None:
 
         error_page = docs / ERROR_PAGE
         error_page.write_text(
-            "<!doctype html><html lang='en'><head><title>Missing</title></head><body>"
+            "<!doctype html><html lang='en'><head><title>Missing</title>"
+            "<script src='/presspeech/site-navigation.js' defer></script></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
             + primary_nav(error_page)
             + "<main id='main-content'><h1>Not found</h1></main></body></html>",
@@ -704,6 +793,11 @@ def run_self_test() -> None:
     }
     @media (max-width: 720px) {
       .brand { min-height: 44px; }
+      html.navigation-ready .nav-toggle {
+        display: inline-flex;
+        min-width: 44px;
+        min-height: 44px;
+      }
       .nav-links { width: 100%; }
       .nav-links a {
         display: inline-flex;

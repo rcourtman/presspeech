@@ -10,6 +10,42 @@ and add a concise observation for failures, blocked checks, and exclusions. Do
 not put transcript text, audio, dictionary contents, user or computer names,
 private paths, or credentials in the record.
 
+## Public Release and Support Qualification
+
+The repository, GitHub Pages site, release assets, and GitHub repository
+settings form one onboarding path. Source checks cannot prove that the public
+release or support controls are usable. Record these checks for both platform
+releases, using a signed-in GitHub account that is **not** a repository
+collaborator where noted:
+
+- Before publication, confirm the deployed install guides and published
+  pointers (including `releases/latest` for macOS) still resolve to the
+  preceding published release. A source candidate may be ahead, but Pages must
+  not expose its pinned URL, checksum, version, or structured data yet.
+- After publication, run
+  `python3 scripts/check-public-releases.py --require-published` with read-only
+  GitHub API access. Confirm the deployed platform guide names the new version
+  and that its pinned package and checksum downloads succeed in a clean browser.
+- From the non-collaborator account, open the Bug report, Feature request, and
+  Target-app compatibility report templates. Confirm each form renders and can
+  be filled without an “issue creation is restricted” message; do not submit a
+  test report. Also confirm the private vulnerability-reporting route reaches
+  its private form rather than a public issue composer.
+- Activate **Report a Problem…**, **Suggest an Improvement…**, and, when the
+  build contains it, **Test App Compatibility…** from the installed candidate.
+  Confirm each opens the documented fixed destination without app, version,
+  diagnostics, or user data in the URL.
+- In a signed-out browser, confirm the repository About description and topics
+  expose both the released macOS app and Windows prerelease instead of
+  presenting a Mac-only project. Confirm the Pages home page, Get started,
+  macOS, Windows, Help, and Privacy routes are reachable from the primary
+  navigation at desktop width, 360 CSS pixels, and 200% zoom.
+
+A restricted public issue form is a failed support path, even when existing
+issues remain readable and the templates in source are valid. A candidate is
+not publicly qualified while install metadata is ahead of its assets or every
+documented feedback route is unavailable to the users it asks to report.
+
 ## Windows Release Qualification
 
 Record enough context to make each result reproducible:
@@ -475,6 +511,13 @@ item after the development-wrapper launch check.
   Universal Clipboard on the second test device.
   No fixed delay is a substitute for observing consumption. This is the manual
   qualification boundary for [issue #36](https://github.com/rcourtman/presspeech/issues/36).
+- On macOS 15.4 or later, first trigger the system pasteboard-access prompt,
+  then configure Presspeech as **Always Deny** in the corresponding System
+  Settings privacy pane. With previous-clipboard preservation still enabled,
+  dictate once and confirm the transcript is delivered normally, the system
+  does not prompt again, and the disabled restore row says **Previous Clipboard
+  Access Denied**. Confirm its help text explains that only the previous
+  clipboard snapshot was skipped. Restore the system setting after this check.
 - Open the confirmation and cancel it. The clipboard and offer must remain
   unchanged. Return must activate Cancel, not restoration. Confirm that a
   later explicit restore works once; repeating an old action cannot write again.

@@ -30,7 +30,10 @@ Use the compatibility form rather than the general bug form when you can run
 the complete repeated protocol, including when every check passes. Use the bug
 form for a problem you cannot safely repeat or that is outside text delivery.
 Match an existing report only when the platform, target app version, and
-generic field type are comparable; otherwise open a separate report.
+generic field type are comparable. When they match, comment with the
+worksheet's six counts and overall result, your Presspeech and operating-system
+versions, generic hardware if useful, and relevant conditions; otherwise open
+a separate report. Add the observation even when its outcome differs.
 
 Before proposing a larger capability, read the [product roadmap](ROADMAP.md).
 It describes current priorities, evidence gates, and workflows that are

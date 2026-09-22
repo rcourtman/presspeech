@@ -58,6 +58,12 @@ limitation from a one-machine failure. These community reports are exploratory
 evidence and do not replace the native release checks in
 [`docs/manual-qa.md`](docs/manual-qa.md).
 
+When a matching platform/app-version/field-type report already exists, add the
+worksheet's six counts and overall result there with the Presspeech and
+operating-system versions, generic hardware if useful, and relevant conditions.
+Do not open a duplicate or omit a differing outcome; variation under comparable
+conditions is evidence.
+
 If Presspeech cannot open, include only the relevant last ~30 lines from
 `~/Library/Logs/Presspeech.log` on macOS or
 `%APPDATA%\Presspeech\log.txt` on Windows. Review logs before posting. Issues

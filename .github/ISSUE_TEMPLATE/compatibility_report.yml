@@ -12,8 +12,11 @@ body:
         sending them.
         Passing reports are useful too. [Browse existing
         compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22)
-        first and add to a report only when its platform, app version, and
-        generic field type match yours.
+        first. When its platform, app version, and generic field type match
+        yours, comment there with the worksheet block, Presspeech and OS
+        versions, generic hardware if useful, and relevant conditions instead
+        of opening a duplicate. Add the observation even when its outcome
+        differs.
 
         For a new report, put the platform, public app name/version, and field
         type after the fixed `[Compatibility]:` title prefix. Include no
@@ -110,10 +113,11 @@ body:
     attributes:
       label: Eight-check outcome counts
       description: |
-        Paste the count block from the protocol's local worksheet, or enter the
-        six counts manually. The first three must total five and the final
-        three must total three. Use counts only; do not quote any transcript or
-        clipboard content. If a focus-change check could not be completed
+        Paste the block from the protocol's local worksheet, including its six
+        counts and Overall result, or enter the same values manually. The first
+        three counts must total five and the final three must total three. Use
+        counts and the fixed classification only; do not quote any transcript
+        or clipboard content. If a focus-change check could not be completed
         safely, include it under Other or not completed and explain why under
         Relevant conditions.
       placeholder: |
@@ -126,6 +130,8 @@ body:
         Copied for manual paste without inserting anywhere: 3
         Inserted into any field: 0
         Other or not completed: 0
+
+        Overall result: All five steady-focus attempts pasted once; all three focus-change attempts recovered safely
     validations:
       required: true
   - type: dropdown

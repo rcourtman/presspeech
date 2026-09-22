@@ -143,6 +143,10 @@ a:focus-visible {
   font-size: 0.94rem;
 }
 
+.nav-links[hidden] {
+  display: none;
+}
+
 .nav-links a {
   display: inline-flex;
   min-width: 24px;
@@ -157,6 +161,32 @@ a:focus-visible {
 .nav-links a:hover {
   color: var(--text);
   background: color-mix(in srgb, var(--soft) 55%, transparent);
+}
+
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-weight: 640;
+  cursor: pointer;
+}
+
+.nav-toggle:hover {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+
+.nav-toggle:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
 }
 
 .nav a[aria-current="page"] {
@@ -1212,6 +1242,12 @@ td strong {
   }
 
   .brand {
+    min-height: 44px;
+  }
+
+  html.navigation-ready .nav-toggle {
+    display: inline-flex;
+    min-width: 44px;
     min-height: 44px;
   }
 
