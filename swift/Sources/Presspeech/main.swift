@@ -5986,7 +5986,7 @@ private final class LocalOnlyTranscriptTextView: NSTextView {
 
     override func copy(_ sender: Any?) {
         guard selectedRange().length > 0 else { return }
-        if !copySelectionToProtectedPasteboard() { NSBeep() }
+        if !copySelectionToProtectedPasteboard() { NSSound.beep() }
     }
 
     override func cut(_ sender: Any?) {
@@ -5994,7 +5994,7 @@ private final class LocalOnlyTranscriptTextView: NSTextView {
         guard isEditable, range.location != NSNotFound, range.length > 0 else { return }
         guard shouldChangeText(in: range, replacementString: "") else { return }
         guard copySelectionToProtectedPasteboard() else {
-            NSBeep()
+            NSSound.beep()
             return
         }
         replaceCharacters(in: range, with: "")
@@ -9555,7 +9555,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         ClipboardPasteInserter.discardPendingRestore(on: pb)
         guard ClipboardPasteInserter.writeTranscript(s, to: pb) else {
             log("history clipboard write failed")
-            NSBeep()
+            NSSound.beep()
             return
         }
         log("history copied to clipboard (\(s.count) chars)")
@@ -11023,7 +11023,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         ClipboardPasteInserter.discardPendingRestore(on: .general)
         if !ClipboardPasteInserter.writeTranscript(text, to: .general) {
             log("scratchpad clipboard write failed")
-            NSBeep()
+            NSSound.beep()
         }
     }
 
