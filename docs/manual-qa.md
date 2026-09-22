@@ -165,6 +165,11 @@ keyboard access testing in addition to assistive-technology testing.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm
   capture stops, muted playback is restored, and no transcription is pasted or
   copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.
+- In hold mode, release directly on the final consonant of several short
+  phrases; in toggle mode, press the hotkey at the same boundary. Confirm the
+  final word is retained. Repeat with quiet room tone and steady background
+  noise: quiet input should begin transcription promptly, and ongoing sound
+  must never hold capture more than about 0.4 seconds after the stop gesture.
 - Tap the hotkey too briefly to produce a usable recording, then make a longer
   silent recording. Confirm both leave **No speech detected — try again** on
   the indicator briefly and issue a Windows notification with microphone-check

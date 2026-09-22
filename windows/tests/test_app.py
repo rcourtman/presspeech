@@ -1263,6 +1263,8 @@ class TextRegressionTests(unittest.TestCase):
         instance.recording = False
         instance.buffer = []
         instance._rec_epoch = 0
+        instance._audio_sequence = 9
+        instance._last_audio_callback_started_at = 9.0
         instance._model_idle_epoch = 0
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
         instance.model_status = "ready"
@@ -1278,6 +1280,8 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(app.PresspeechApp, "_log"):
             instance.start_recording()
         self.assertEqual(instance._recording_paste_target, target)
+        self.assertEqual(instance._audio_sequence, 0)
+        self.assertEqual(instance._last_audio_callback_started_at, 0.0)
         instance._schedule_recording_limit.assert_called_once_with(1)
 
     def test_recording_owns_the_current_scratchpad_destination(self):
@@ -1993,12 +1997,17 @@ class TextRegressionTests(unittest.TestCase):
         instance._rec_epoch = 5
         instance.buffer = []
         instance._peak_rms = 0.0
+        instance._audio_sequence = 0
+        instance._last_audio_callback_started_at = 0.0
         chunk = __import__("numpy").ones((8, 1), dtype="float32")
 
         instance._audio_cb(chunk, 8, None, None, 4)
         self.assertEqual(instance.buffer, [])
+        self.assertEqual(instance._audio_sequence, 0)
         instance._audio_cb(chunk, 8, None, None, 5)
         self.assertEqual(len(instance.buffer), 1)
+        self.assertEqual(instance._audio_sequence, 1)
+        self.assertGreater(instance._last_audio_callback_started_at, 0.0)
 
     def test_microphone_open_error_invalidates_cached_device_for_retry(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2396,17 +2405,25 @@ class PostRollTests(unittest.TestCase):
         instance.input_device = (0, rate)
         instance._recording_input_device = (0, rate)
         instance._peak_rms = peak
+        instance._audio_sequence = 3
+        instance._last_audio_callback_started_at = 9.9
         return instance
 
     def test_quiet_tail_is_silence(self):
         instance = self.make_app(0.001)
-        rms, threshold = instance._post_roll_tail()
+        rms, threshold, sequence, callback_started_at = (
+            instance._post_roll_tail())
         self.assertLessEqual(rms, threshold)
+        self.assertEqual(sequence, 3)
+        self.assertEqual(callback_started_at, 9.9)
 
     def test_voiced_tail_keeps_recording(self):
         instance = self.make_app(0.03)
-        rms, threshold = instance._post_roll_tail()
+        rms, threshold, sequence, callback_started_at = (
+            instance._post_roll_tail())
         self.assertGreater(rms, threshold)
+        self.assertEqual(sequence, 3)
+        self.assertEqual(callback_started_at, 9.9)
 
     def test_cache_invalidation_does_not_shorten_a_48khz_tail(self):
         numpy = __import__("numpy")
@@ -2419,7 +2436,8 @@ class PostRollTests(unittest.TestCase):
         ))]
         instance.input_device = None
 
-        rms, threshold = instance._post_roll_tail()
+        rms, threshold, _sequence, _callback_started_at = (
+            instance._post_roll_tail())
 
         self.assertGreater(rms, threshold)
 
@@ -2432,7 +2450,62 @@ class PostRollTests(unittest.TestCase):
             instance.request_stop()
         self.assertEqual(instance._rec_epoch, 7)
         instance._schedule_post_roll.assert_called_once_with(
-            app.POST_ROLL_MIN_SEC, 7, 10.0)
+            app.POST_ROLL_MIN_SEC, 7, 10.0, 3)
+
+    def test_post_roll_timer_keeps_the_release_audio_sequence(self):
+        instance = self.make_app(0.03)
+        with mock.patch.object(app.threading, "Timer") as timer:
+            instance._schedule_post_roll(0.08, 7, 10.0, 3)
+
+        timer.assert_called_once_with(
+            0.08, instance._finish_after_roll, (7, 10.0, 3))
+        self.assertTrue(timer.return_value.daemon)
+        timer.return_value.start.assert_called_once_with()
+
+    def test_quiet_pre_release_tail_waits_for_a_new_audio_callback(self):
+        instance = self.make_app(0.001)
+        instance._rec_epoch = 7
+        instance.stop_recording = mock.Mock()
+        instance._schedule_post_roll = mock.Mock()
+
+        with mock.patch.object(app.time, "perf_counter", return_value=10.08):
+            instance._finish_after_roll(7, 10.0, 3)
+
+        instance.stop_recording.assert_not_called()
+        instance._schedule_post_roll.assert_called_once_with(
+            app.POST_ROLL_CHECK_SEC, 7, 10.0, 3)
+
+    def test_quiet_tail_stops_after_a_new_audio_callback(self):
+        instance = self.make_app(0.001)
+        instance._rec_epoch = 7
+        instance._audio_sequence = 4
+        instance._last_audio_callback_started_at = 10.01
+        instance.stop_recording = mock.Mock()
+        instance._schedule_post_roll = mock.Mock()
+
+        with mock.patch.object(app.time, "perf_counter", return_value=10.08), \
+                mock.patch.object(app.PresspeechApp, "_log"):
+            instance._finish_after_roll(7, 10.0, 3)
+
+        instance.stop_recording.assert_called_once_with(expected_epoch=7)
+        instance._schedule_post_roll.assert_not_called()
+
+    def test_inflight_pre_release_callback_does_not_satisfy_boundary(self):
+        instance = self.make_app(0.001)
+        instance._rec_epoch = 7
+        # The callback was accepted after the release sequence snapshot, but
+        # it began copying its input block before the stop gesture.
+        instance._audio_sequence = 4
+        instance._last_audio_callback_started_at = 9.99
+        instance.stop_recording = mock.Mock()
+        instance._schedule_post_roll = mock.Mock()
+
+        with mock.patch.object(app.time, "perf_counter", return_value=10.08):
+            instance._finish_after_roll(7, 10.0, 3)
+
+        instance.stop_recording.assert_not_called()
+        instance._schedule_post_roll.assert_called_once_with(
+            app.POST_ROLL_CHECK_SEC, 7, 10.0, 3)
 
     def test_maximum_window_stops_even_with_voiced_tail(self):
         instance = self.make_app(0.03)
@@ -2440,7 +2513,7 @@ class PostRollTests(unittest.TestCase):
         instance.stop_recording = mock.Mock()
         with mock.patch.object(app.time, "perf_counter", return_value=10.5), \
                 mock.patch.object(app.PresspeechApp, "_log"):
-            instance._finish_after_roll(7, 10.0)
+            instance._finish_after_roll(7, 10.0, 3)
         instance.stop_recording.assert_called_once_with(expected_epoch=7)
 
 

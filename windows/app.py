@@ -660,6 +660,12 @@ class PresspeechApp:
         self._rec_epoch = 0
         self._recording_limit_timer = None
         self._peak_rms = 0.0
+        # Monotonic within one recording. The post-roll timer snapshots this
+        # at the hold/toggle stop gesture and also checks when the newest
+        # accepted callback began. The timestamp prevents a callback that was
+        # already copying pre-release audio from satisfying the boundary gate.
+        self._audio_sequence = 0
+        self._last_audio_callback_started_at = 0.0
         self._last_model_use = 0.0
         self._wake_in_progress = False
         self._wake_lock = threading.Lock()
@@ -1240,6 +1246,8 @@ class PresspeechApp:
             self.buffer = []
             self._peak_rms = 0.0
             self._recording_input_device = None
+            self._audio_sequence = 0
+            self._last_audio_callback_started_at = 0.0
             self._model_idle_epoch += 1
             self._recording_paste_target = paste_target
             # Delivery belongs to this recording. Model work is serialized and
@@ -1402,21 +1410,27 @@ class PresspeechApp:
             self.icon.icon = self.rec_icon
 
     def _audio_cb(self, indata, frames, time_info, status, epoch):
+        callback_started_at = time.perf_counter()
         chunk = indata.copy()
         chunk_rms = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
         with self.lock:
             if self.recording and epoch == self._rec_epoch:
                 self.buffer.append(chunk)
                 self._peak_rms = max(self._peak_rms, chunk_rms)
+                self._audio_sequence = getattr(self, "_audio_sequence", 0) + 1
+                self._last_audio_callback_started_at = callback_started_at
 
     def request_stop(self):
         """Stop after silence, retaining the full safety window for ongoing speech."""
+        released_at = time.perf_counter()
         with self.lock:
             if not self.recording:
                 return
             epoch = self._rec_epoch
+            release_audio_sequence = getattr(self, "_audio_sequence", 0)
         self._schedule_post_roll(
-            POST_ROLL_MIN_SEC, epoch, time.perf_counter())
+            POST_ROLL_MIN_SEC, epoch, released_at,
+            release_audio_sequence)
 
     def cancel_recording(self, icon=None, item=None):
         """Discard the active capture without transcribing or changing clipboard."""
@@ -1499,8 +1513,11 @@ class PresspeechApp:
         if timer is not None:
             timer.cancel()
 
-    def _schedule_post_roll(self, delay, epoch, released_at):
-        timer = threading.Timer(delay, self._finish_after_roll, (epoch, released_at))
+    def _schedule_post_roll(
+            self, delay, epoch, released_at, release_audio_sequence):
+        timer = threading.Timer(
+            delay, self._finish_after_roll,
+            (epoch, released_at, release_audio_sequence))
         timer.daemon = True
         timer.start()
 
@@ -1520,6 +1537,9 @@ class PresspeechApp:
                 if remaining == 0:
                     break
             peak_rms = self._peak_rms
+            audio_sequence = getattr(self, "_audio_sequence", 0)
+            callback_started_at = getattr(
+                self, "_last_audio_callback_started_at", 0.0)
         if not parts:
             tail_rms = 0.0
         else:
@@ -1530,23 +1550,35 @@ class PresspeechApp:
             max(POST_ROLL_ABS_SILENCE_RMS,
                 peak_rms * POST_ROLL_RELATIVE_SILENCE),
         )
-        return tail_rms, threshold
+        return tail_rms, threshold, audio_sequence, callback_started_at
 
-    def _finish_after_roll(self, epoch, released_at):
+    def _finish_after_roll(
+            self, epoch, released_at, release_audio_sequence):
         if epoch != self._rec_epoch:
             return
         elapsed = time.perf_counter() - released_at
-        tail_rms, threshold = self._post_roll_tail()
+        tail_rms, threshold, audio_sequence, callback_started_at = (
+            self._post_roll_tail())
         silent = tail_rms <= threshold
-        if silent or elapsed >= POST_ROLL_MAX_SEC:
-            reason = "silence" if silent else "maximum"
+        reached_maximum = elapsed >= POST_ROLL_MAX_SEC
+        # InputStream leaves blocksize unspecified, so PortAudio may choose a
+        # host-dependent (and varying) callback size.  Elapsed wall time alone
+        # cannot prove that a new boundary buffer reached _audio_cb. Sequence
+        # advancement alone is insufficient because a callback may have begun
+        # copying pre-release audio before request_stop acquired the lock.
+        received_post_release_audio = (
+            audio_sequence != release_audio_sequence
+            and callback_started_at >= released_at)
+        if reached_maximum or (received_post_release_audio and silent):
+            reason = "maximum" if reached_maximum else "silence"
             self._log("post-roll %.3fs (%s; rms %.4f, threshold %.4f)" %
                       (elapsed, reason, tail_rms, threshold))
             self.stop_recording(expected_epoch=epoch)
             return
         remaining = POST_ROLL_MAX_SEC - elapsed
         self._schedule_post_roll(
-            min(POST_ROLL_CHECK_SEC, max(0.0, remaining)), epoch, released_at)
+            min(POST_ROLL_CHECK_SEC, max(0.0, remaining)), epoch, released_at,
+            release_audio_sequence)
 
     def stop_recording(self, expected_epoch=None):
         with self.lock:
