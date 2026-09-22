@@ -101,6 +101,7 @@ class AccessibleWindowTests(unittest.TestCase):
                 ui.SetupWindow(app),
                 ui.UpdateWindow(app, {"version": "1.2.3"}),
                 ui.SettingsWindow(app),
+                ui.DeliveryRecoveryWindow(app),
                 ui.ScratchpadWindow(app),
             )
 
@@ -131,7 +132,9 @@ class AccessibleWindowTests(unittest.TestCase):
         root.attributes.assert_called_with("-topmost", False)
 
     def test_structured_dialogs_are_scrollable_and_resizable(self):
-        for window in (ui.SetupWindow, ui.UpdateWindow, ui.SettingsWindow):
+        for window in (
+                ui.SetupWindow, ui.UpdateWindow, ui.SettingsWindow,
+                ui.DeliveryRecoveryWindow):
             body = inspect.getsource(window)
             self.assertIn("root.resizable(True, True)", body)
             self.assertIn("_ScrollableDialogBody(root", body)
@@ -278,6 +281,7 @@ class AccessibleWindowTests(unittest.TestCase):
             ui.SetupWindow: "self._defer",
             ui.UpdateWindow: "self._close",
             ui.SettingsWindow: "self._close",
+            ui.DeliveryRecoveryWindow: "self._close",
             ui.ScratchpadWindow: "self._close",
         }
         for window, command in commands.items():
@@ -285,6 +289,16 @@ class AccessibleWindowTests(unittest.TestCase):
                 f'_bind_window_command(root, "<Escape>", {command})',
                 inspect.getsource(window),
             )
+
+    def test_delivery_recovery_opens_on_a_non_destructive_command(self):
+        source = inspect.getsource(ui.DeliveryRecoveryWindow)
+        self.assertIn(
+            "root.after_idle(self.leave_button.focus_set)", source)
+        self.assertNotIn('default="active"', source)
+        self.assertLess(
+            source.index("self.copy_button ="),
+            source.index("self.discard_button ="),
+        )
 
     def test_diagnostics_do_not_start_the_window_host(self):
         with mock.patch.object(ui, "_WINDOW_HOST", None):
@@ -653,6 +667,108 @@ class SetupWindowTests(unittest.TestCase):
         self.assertEqual(window.device_values, {"Headset microphone": selected})
         window.device.config.assert_not_called()
         window.device.set.assert_not_called()
+
+
+class DeliveryRecoveryWindowTests(unittest.TestCase):
+    def make_window(self, waiting=True):
+        window = ui.DeliveryRecoveryWindow.__new__(ui.DeliveryRecoveryWindow)
+        window.app = mock.Mock()
+        window.app.has_undelivered_dictation.return_value = waiting
+        window.root = mock.Mock()
+        window.status = mock.Mock()
+        window.copy_button = mock.Mock()
+        window.discard_button = mock.Mock()
+        window.leave_button = mock.Mock()
+        window._waiting = waiting
+        return window
+
+    def test_async_build_failure_restores_tray_fallback(self):
+        window = self.make_window()
+        window._build_failed = False
+        window.root = None
+        failure = OSError(r"C:\private\desktop unavailable")
+        failed_root = mock.Mock()
+
+        def fail_after_root_creation():
+            window.root = failed_root
+            raise failure
+
+        window._build_window = mock.Mock(side_effect=fail_after_root_creation)
+
+        with self.assertRaises(OSError) as caught:
+            window._build()
+
+        self.assertIs(caught.exception, failure)
+        self.assertTrue(window._build_failed)
+        self.assertIsNone(window.root)
+        failed_root.destroy.assert_called_once_with()
+        window.app._report_delivery_recovery_window_failure.assert_called_once_with(
+            failure, window)
+
+    def test_failed_copy_stays_visible_and_retains_recovery_actions(self):
+        window = self.make_window()
+        window.app.copy_undelivered_dictation.return_value = False
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._copy()
+
+        window.copy_button.config.assert_called_once_with(state="normal")
+        window.discard_button.config.assert_called_once_with(state="normal")
+        self.assertIn("still kept in memory", set_text.call_args.args[1])
+        window.leave_button.focus_set.assert_not_called()
+
+    def test_verified_copy_disables_destructive_actions_and_restores_focus(self):
+        window = self.make_window()
+        window.app.copy_undelivered_dictation.return_value = True
+        window.app.has_undelivered_dictation.return_value = False
+        order = []
+        window.leave_button.focus_set.side_effect = lambda: order.append("focus")
+        window.copy_button.config.side_effect = (
+            lambda **_options: order.append("disable-copy"))
+        window.discard_button.config.side_effect = (
+            lambda **_options: order.append("disable-discard"))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._copy()
+
+        window.copy_button.config.assert_called_once_with(state="disabled")
+        window.discard_button.config.assert_called_once_with(state="disabled")
+        self.assertIn("You can record again", set_text.call_args.args[1])
+        window.leave_button.focus_set.assert_called_once_with()
+        self.assertEqual(order[0], "focus")
+
+    def test_discard_never_requests_a_copy_and_reports_completion(self):
+        window = self.make_window()
+        window.app.has_undelivered_dictation.return_value = False
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._discard()
+
+        window.app.discard_undelivered_dictation.assert_called_once_with()
+        window.app.copy_undelivered_dictation.assert_not_called()
+        self.assertEqual(
+            set_text.call_args.args[1],
+            "Dictation discarded. You can record again.")
+
+    def test_external_tray_action_updates_the_open_window(self):
+        window = self.make_window(waiting=True)
+        window.app.has_undelivered_dictation.return_value = False
+
+        with mock.patch.object(window, "_refresh_waiting_state") as refresh:
+            window._poll()
+
+        refresh.assert_called_once_with()
+        window.root.after.assert_called_once_with(250, window._poll)
+
+    def test_close_keeps_text_owned_by_app_for_later_review(self):
+        window = self.make_window()
+        window.app.delivery_recovery_window = window
+
+        window._close()
+
+        window.root.destroy.assert_called_once_with()
+        self.assertIsNone(window.app.delivery_recovery_window)
+        window.app.discard_undelivered_dictation.assert_not_called()
 
 
 class DictionarySettingsTests(unittest.TestCase):

@@ -646,6 +646,8 @@ class PresspeechApp:
         self.settings_window = None
         self.setup_window = None
         self.update_window = None
+        self.delivery_recovery_window = None
+        self._delivery_recovery_window_lock = threading.Lock()
         self.pending_update = None
         self.model_status = "pending"
         self.model_status_detail = "Waiting to load"
@@ -733,6 +735,10 @@ class PresspeechApp:
                 MenuItem("Settings\u2026", self.open_settings),
                 MenuItem("Repair Global Hotkey", self.repair_hotkey),
                 Menu.SEPARATOR,
+                MenuItem(
+                    "Review Undelivered Dictation\u2026",
+                    self.open_delivery_recovery,
+                    enabled=lambda _item: self.has_undelivered_dictation()),
                 MenuItem(
                     "Copy Undelivered Dictation",
                     self.copy_undelivered_dictation),
@@ -831,9 +837,13 @@ class PresspeechApp:
         # clipboard with retained private text. Keep existing controls reachable.
         if self.has_undelivered_dictation():
             self._notify_undelivered_dictation()
+            if self.open_delivery_recovery():
+                self._log("repeat launch opened delivery recovery")
+                return
         # Preserve the user's current task when a window already exists,
         # including a minimized or covered update/setup/settings window.
         for window in (
+                getattr(self, "delivery_recovery_window", None),
                 self.update_window, self.setup_window,
                 self.settings_window, self.scratchpad):
             if window is not None:
@@ -859,7 +869,8 @@ class PresspeechApp:
             # hand updater cleanup off before terminating daemon threads.
             self.update_window.cancel_and_cleanup()
         for win in (self.scratchpad, self.settings_window,
-                    self.setup_window, self.update_window):
+                    self.setup_window, self.update_window,
+                    getattr(self, "delivery_recovery_window", None)):
             if win is not None and win.root is not None:
                 try:
                     win.root.after(0, win.root.destroy)
@@ -1251,6 +1262,7 @@ class PresspeechApp:
         if self.has_undelivered_dictation():
             self._log("dictation deferred; an undelivered transcript is waiting")
             self._notify_undelivered_dictation()
+            self.open_delivery_recovery()
             return False
         if not self._dictation_model_ready():
             return False
@@ -2108,9 +2120,9 @@ class PresspeechApp:
     def _notify_undelivered_dictation(self):
         self.notify(
             "Dictation waiting for review",
-            "Presspeech is keeping a dictation in memory only. "
-            "Check the intended field first. Use Copy Undelivered Dictation "
-            "or Discard Undelivered Dictation in the tray menu before "
+            "Presspeech is keeping a recovery copy in process memory. "
+            "Check the intended field first, then use the Delivery Recovery "
+            "window or the notification-area Copy and Discard commands before "
             "recording again. Exiting discards this text.")
 
     def _remember_undelivered_dictation(self, text, reason):
@@ -2135,10 +2147,12 @@ class PresspeechApp:
             "shortcut-uncertain": "The paste shortcut may have partly completed. ",
         }[reason]
         self.notify("Dictation needs review", prefix +
-                    "Check the intended field before trying again. The dictation is "
-                    "kept in memory only: use Copy Undelivered Dictation or Discard "
-                    "Undelivered Dictation in the tray menu to resume recording. "
+                    "Check the intended field before trying again. A recovery copy "
+                    "is kept in process memory: use the Delivery Recovery window "
+                    "or the notification-area Copy and Discard commands before "
+                    "recording again. "
                     "Exiting discards it.")
+        self.open_delivery_recovery()
 
     def _clear_undelivered_dictations(self):
         lock = getattr(self, "_undelivered_lock", None)
@@ -2262,6 +2276,55 @@ class PresspeechApp:
         return False
 
     # ---------------- windows ----------------
+
+    def _report_delivery_recovery_window_failure(self, exc, window=None):
+        """Keep tray recovery usable when the richer window cannot be built."""
+        if (window is None or
+                getattr(self, "delivery_recovery_window", None) is window):
+            self.delivery_recovery_window = None
+        self._log(
+            "delivery recovery window unavailable: %s" % type(exc).__name__)
+        self.notify(
+            "Delivery Recovery unavailable",
+            "Use Copy Undelivered Dictation or Discard Undelivered "
+            "Dictation in the notification-area menu.")
+
+    def open_delivery_recovery(self, icon=None, item=None):
+        """Show explicit recovery controls without copying private text."""
+        if not self.has_undelivered_dictation():
+            self.notify(
+                "No undelivered dictation",
+                "There is nothing waiting to copy or discard.")
+            return False
+        lock = getattr(self, "_delivery_recovery_window_lock", None)
+        if lock is None:
+            # Lightweight test embedders may construct the app without running
+            # __init__. The production instance always owns this lock.
+            lock = threading.Lock()
+            self._delivery_recovery_window_lock = lock
+        try:
+            with lock:
+                window = getattr(self, "delivery_recovery_window", None)
+                if window is None:
+                    window = ui.DeliveryRecoveryWindow(self)
+                    if getattr(window, "_build_failed", False) is True:
+                        return False
+                    # The production window registers itself before its
+                    # asynchronous build so a UI-thread failure can clear the
+                    # exact object safely. Test doubles do not necessarily do
+                    # that, so adopt one only while the slot is still empty;
+                    # never reassign a failed window after its callback clears
+                    # the slot.
+                    if getattr(self, "delivery_recovery_window", None) is None:
+                        if getattr(window, "_build_failed", False) is True:
+                            return False
+                        self.delivery_recovery_window = window
+                else:
+                    ui.present_window(window)
+        except Exception as exc:
+            self._report_delivery_recovery_window_failure(exc)
+            return False
+        return True
 
     def open_scratchpad(self, icon=None, item=None):
         if self.scratchpad is None:

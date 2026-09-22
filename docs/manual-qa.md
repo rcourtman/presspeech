@@ -500,22 +500,33 @@ qualification. The unit suite uses doubles and does not qualify real clipboard
 or input behavior. Do not run these steps against a user's active clipboard.
 
 - Hold the clipboard from a separate process during delivery. Confirm retained
-  text is recoverable, recording is paused, and no transcript enters logs/files.
+  text is recoverable, recording is paused, the Delivery Recovery window opens
+  above ordinary apps, and no transcript appears in the window, logs or files.
+- Disable Presspeech notifications and move its notification-area icon into
+  overflow. Trigger recovery and confirm the window still exposes Copy,
+  Discard and Leave Waiting. Navigate and invoke each action using only Tab,
+  Shift-Tab, Enter, Escape and its underlined access key; repeat with Narrator
+  and confirm status changes are announced once without exposing the words.
+  Initial focus must be on Leave Waiting, so an Enter already in flight cannot
+  copy or discard text when the asynchronous window first appears.
 - Replace the clipboard after its write, during the route delay, and between
   modifier-down and V. Confirm detected changes skip V, release attempted keys,
   and retain text without replacing the newer copy automatically.
-- Reopen the app with pending recovery. Existing controls remain reachable and
-  a notice appears, without copying or clearing private recovery.
+- Choose Leave Waiting and close with Escape separately. Confirm both retain
+  recovery and keep recording paused. Press the dictation hotkey and launch
+  Presspeech from Start separately; each must bring the existing recovery
+  window back without copying, clearing, or duplicating it.
 - Choose Copy while the clipboard is locked, then after it is released. Failure
-  retains text; successful owned Copy clears that entry and permits recording.
-  Test an external copy immediately after write and confirm it is not adopted
-  as the recovery write's receipt.
+  leaves the window open with inline recovery guidance; successful owned Copy
+  disables Copy/Discard, reports that recording is available, and clears that
+  entry. Test an external copy immediately after write and confirm it is not
+  adopted as the recovery write's receipt.
 - Enable Windows Clipboard History, deliver a unique harmless phrase, overwrite
   the current clipboard, and open Win+V. Confirm the Presspeech phrase is absent.
   When a disposable paired test device is available, enable Cloud Clipboard and
   confirm the phrase is not offered there. While the Presspeech item is current,
   confirm ordinary Ctrl+V and explicit recovery still work. These native checks
-  qualify Windows' `ExcludeClipboardContentFromMonitorProcessing` behavior; the
+  qualify Windows' ExcludeClipboardContentFromMonitorProcessing behavior; the
   doubled unit tests only qualify write ordering and fail-closed control flow.
 - Choose Discard and Exit separately. Both forget private recovery; Discard must
   leave a newer external clipboard untouched. No late worker may retain after Exit.

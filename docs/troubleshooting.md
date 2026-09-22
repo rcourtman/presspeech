@@ -190,13 +190,20 @@ original target, or uncertain keyboard delivery keeps the finished dictation in
 memory and pauses new recording. Check the intended field before retrying: a
 shortcut error does not prove that nothing was pasted.
 
-Choose **Copy Undelivered Dictation** from the tray menu to copy explicitly and
-paste manually, or **Discard Undelivered Dictation** to forget it and resume
-recording. Discard leaves the clipboard unchanged. Exit forgets retained text.
-Reopening Presspeech shows controls and a notice; it does not copy automatically.
-If another writer changes the clipboard during recovery, the text stays available
-for another deliberate Copy or Discard. These checks cannot acknowledge target
-consumption or remove the final clipboard-check/input race.
+The **Delivery Recovery** window opens without showing or copying the dictated
+words. Choose **Copy for Manual Paste** to copy explicitly, **Discard
+Dictation** to forget the recovery copy and resume recording, or **Leave
+Waiting** to close the window while recording remains paused. Discard leaves
+the clipboard unchanged. A blocked hotkey or reopening Presspeech brings the
+window back; neither action copies automatically. Equivalent **Review
+Undelivered Dictation…**, **Copy Undelivered Dictation**, and **Discard
+Undelivered Dictation** commands remain in the notification-area menu.
+
+Depending on where delivery became uncertain, some or all text may already be
+in the intended field or on the clipboard. If another writer changes the
+clipboard during recovery, the recovery copy stays in process memory for
+another deliberate Copy or Discard. Exit forgets it. These checks cannot
+acknowledge target consumption or remove the final clipboard-check/input race.
 
 Every 0.1.13 dictation clipboard item is marked for exclusion from Windows
 Clipboard History and Cloud Clipboard before transcript text is published. This

@@ -127,23 +127,30 @@ fails, a newer copy replaces it before the paste shortcut, the original target
 cannot be used, or keyboard delivery becomes uncertain. Check the intended field
 first: an input error can happen after part or all of the paste has completed.
 
-Use **Copy Undelivered Dictation** in the tray menu to copy the retained text
-explicitly, then paste manually. A verified copy clears that retained entry.
-Use **Discard Undelivered Dictation** to forget retained text without changing
-the clipboard. New recording waits for Copy or Discard; exiting also discards
-retained text. Reopening Presspeech only shows controls and a recovery notice;
-it never silently copies retained text over your current clipboard.
+The keyboard-accessible **Delivery Recovery** window opens without displaying
+or copying the dictated words. Check the intended field first, then choose
+**Copy for Manual Paste** to copy explicitly or **Discard Dictation** to forget
+the recovery copy without changing the clipboard. **Leave Waiting** closes the
+window while Presspeech keeps the recovery copy and pauses new recording. A
+blocked hotkey or a second launch reopens the window. Equivalent **Review
+Undelivered Dictation…**, **Copy Undelivered Dictation**, and **Discard
+Undelivered Dictation** commands remain in the notification-area menu; exiting
+discards the recovery copy. None of these navigation actions silently
+overwrites the current clipboard.
 
-Retention stays in process memory, without transcript logs, settings storage or
-a recovery file. Every dictation clipboard write, including explicit recovery,
-carries Microsoft's
-[`ExcludeClipboardContentFromMonitorProcessing`](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats)
-format before the transcript is published. Windows therefore keeps it out of
-Clipboard History and Cloud Clipboard while leaving it on the current clipboard for Ctrl+V. This
-operating-system control does not prevent another local process or a third-party
-clipboard manager from reading the current item. Clipboard sequence checks reduce
-replacement races; they do not make Ctrl+V atomic or acknowledge that the target
-application consumed the text. Another copy after the final check remains possible.
+Presspeech's recovery copy stays in process memory, without transcript logs,
+settings storage or a recovery file. Depending on where delivery became
+uncertain, the attempted paste may already have placed some or all text in the
+field or on the clipboard. Every dictation clipboard write, including explicit
+recovery, carries Microsoft's
+[ExcludeClipboardContentFromMonitorProcessing](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats)
+format before the transcript is published. Windows is therefore instructed not
+to retain it in Clipboard History or Cloud Clipboard while leaving it on the
+current clipboard for Ctrl+V. This operating-system control does not prevent
+another local process or third-party clipboard manager from reading the current
+item. Clipboard sequence checks reduce replacement races; they do not make
+Ctrl+V atomic or acknowledge that the target application consumed the text.
+Another copy after the final check remains possible.
 
 ## Install from source
 

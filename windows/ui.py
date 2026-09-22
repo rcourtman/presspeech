@@ -1,4 +1,4 @@
-"""Tkinter windows: settings, scratchpad, and a focus-safe status overlay."""
+"""Tkinter windows: setup, settings, delivery recovery, and status UI."""
 
 import ctypes
 import os
@@ -1574,6 +1574,180 @@ class SettingsWindow:
         except Exception:
             pass
         self.app.settings_window = None
+
+
+class DeliveryRecoveryWindow:
+    """Visible controls for private text whose delivery was not confirmed."""
+
+    def __init__(self, app):
+        self.app = app
+        self.root = None
+        self._waiting = None
+        self._build_failed = False
+        # Register before queueing the asynchronous build. If Tk rejects the
+        # window immediately, the UI-thread failure path can clear this exact
+        # object without racing a later assignment from the caller.
+        self.app.delivery_recovery_window = self
+        _window_host().submit(self._build)
+
+    def _build(self):
+        try:
+            self._build_window()
+        except Exception as exc:
+            self._build_failed = True
+            failed_root = self.root
+            self.root = None
+            if failed_root is not None:
+                try:
+                    failed_root.destroy()
+                except Exception:
+                    pass
+            self.app._report_delivery_recovery_window_failure(exc, self)
+            raise
+
+    def _build_window(self):
+        root = _interactive_window("Presspeech - Delivery Recovery")
+        self.root = root
+        root.resizable(True, True)
+        root.lift()
+        root.attributes("-topmost", True)
+        root.after(500, lambda: root.attributes("-topmost", False))
+        self.scrollable_body = _ScrollableDialogBody(root, padding=18)
+        frame = self.scrollable_body.content
+
+        ttk.Label(
+            frame, text="Dictation needs review",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=(
+                "Presspeech could not confirm that the last dictation reached "
+                "its original field. Check that field first: some or all of "
+                "the text may already be there or on the clipboard.\n\n"
+                "Presspeech keeps its recovery copy in process memory; its "
+                "words are not shown in this window or written to a recovery "
+                "file. Copy it for deliberate manual paste, or discard it. "
+                "Recording remains paused while it is waiting."
+            ),
+            justify="left",
+            wraplength=560,
+        ).pack(anchor="w", pady=(6, 12))
+        self.status = ttk.Label(
+            frame, text="", justify="left", wraplength=560)
+        self.status.pack(anchor="w", pady=(0, 12))
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x")
+        self.leave_button = ttk.Button(
+            buttons, text="Leave Waiting", command=self._close)
+        self.leave_button.pack(side="left")
+        self.copy_button = ttk.Button(
+            buttons, text="Copy for Manual Paste", command=self._copy)
+        self.copy_button.pack(side="right")
+        # Construct Copy before Discard so keyboard traversal reaches the
+        # recoverable action before the destructive one. Packing from the
+        # right keeps Copy in the conventional primary-command position.
+        self.discard_button = ttk.Button(
+            buttons, text="Discard Dictation", command=self._discard)
+        self.discard_button.pack(side="right", padx=(0, 8))
+
+        ttk.Label(
+            frame,
+            text=(
+                "Leaving this window keeps the dictation only while "
+                "Presspeech is running. Exiting Presspeech discards it. "
+                "Discard forgets only the recovery copy; it does not change "
+                "the current clipboard or text already in a field. "
+                "A manual copy may be retained by Windows clipboard history "
+                "or another clipboard manager."
+            ),
+            justify="left",
+            wraplength=560,
+        ).pack(anchor="w", pady=(12, 0))
+
+        root.protocol("WM_DELETE_WINDOW", self._close)
+        _add_access_key(root, self.leave_button, "l")
+        _add_access_key(root, self.discard_button, "d")
+        _add_access_key(root, self.copy_button, "c")
+        _bind_window_command(root, "<Escape>", self._close)
+        root.update_idletasks()
+        _mark_live_region(self.status)
+        self._refresh_waiting_state(
+            "A dictation is waiting. Check its original field before copying.")
+        self.scrollable_body.fit_to_screen()
+        # Delivery completes asynchronously, so the window can appear while a
+        # user is already pressing Enter in the target. Put focus on the
+        # non-destructive command and require deliberate navigation to Copy or
+        # Discard; neither privacy-affecting action is the default button.
+        root.after_idle(self.leave_button.focus_set)
+        root.after(250, self._poll)
+
+    def _refresh_waiting_state(self, status=None):
+        waiting = bool(self.app.has_undelivered_dictation())
+        if not waiting:
+            # Windows keyboard guidance warns against disabling the control
+            # that owns focus. Move to the remaining safe command first; this
+            # also gives Narrator a stable destination for the status update.
+            self.leave_button.focus_set()
+        state = "normal" if waiting else "disabled"
+        self.copy_button.config(state=state)
+        self.discard_button.config(state=state)
+        if status is None:
+            status = (
+                "A dictation is waiting. Check its original field before copying."
+                if waiting else
+                "No undelivered dictation remains. You can record again."
+            )
+        _set_accessible_text(self.status, status)
+        self._waiting = waiting
+
+    def _copy(self):
+        if not self.app.copy_undelivered_dictation():
+            if self.app.has_undelivered_dictation():
+                status = (
+                    "Copy did not complete. The dictation is still kept in "
+                    "memory; try again or discard it."
+                )
+            else:
+                status = "No undelivered dictation remains. You can record again."
+            self._refresh_waiting_state(status)
+            return
+        if self.app.has_undelivered_dictation():
+            status = (
+                "Dictation copied. Check the intended field before pasting "
+                "manually. Another dictation is still waiting."
+            )
+        else:
+            status = (
+                "Dictation copied. Check the intended field before pasting "
+                "manually. You can record again."
+            )
+        self._refresh_waiting_state(status)
+
+    def _discard(self):
+        self.app.discard_undelivered_dictation()
+        if self.app.has_undelivered_dictation():
+            status = "Another undelivered dictation is still waiting."
+        else:
+            status = "Dictation discarded. You can record again."
+        self._refresh_waiting_state(status)
+
+    def _poll(self):
+        if self.root is None:
+            return
+        waiting = bool(self.app.has_undelivered_dictation())
+        if waiting != self._waiting:
+            self._refresh_waiting_state()
+        self.root.after(250, self._poll)
+
+    def _close(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+        if getattr(self.app, "delivery_recovery_window", None) is self:
+            self.app.delivery_recovery_window = None
 
 
 class ScratchpadWindow:

@@ -1112,6 +1112,14 @@ class AudioResamplingTests(unittest.TestCase):
 
 
 class TextRegressionTests(unittest.TestCase):
+    def setUp(self):
+        # Delivery failures now open a real Tk recovery surface. Keep these
+        # lower-level text/target tests headless while still exercising the
+        # app's open-or-present control flow around a test double.
+        patcher = mock.patch.object(app.ui, "DeliveryRecoveryWindow")
+        self.delivery_recovery_window = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_packaged_selftest_loads_every_lazy_runtime_dependency(self):
         loaded = {}
 
@@ -2782,6 +2790,7 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.instance.notify = mock.Mock()
         self.instance._undelivered_dictations = []
         self.instance._undelivered_lock = __import__("threading").Lock()
+        self.instance.open_delivery_recovery = mock.Mock(return_value=True)
         self.instance._injecting_keys = False
         self.target = app.PasteTarget("notepad.exe", 1234, 41)
         def patch(*args, **kwargs):
@@ -2887,7 +2896,7 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.copy.assert_not_called()
         self.controller.assert_not_called()
 
-    def test_repeated_launch_opens_controls_without_copying_retained_text(self):
+    def test_repeated_launch_opens_recovery_without_copying_retained_text(self):
         self.instance._undelivered_dictations = ["private transcript"]
         self.instance.settings = {"setup_complete": True}
         self.instance.update_window = None
@@ -2896,15 +2905,87 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.instance.scratchpad = None
         self.instance.open_settings = mock.Mock()
         self.instance._activate_from_launch()
-        self.instance.open_settings.assert_called_once()
+        self.instance.open_delivery_recovery.assert_called_once_with()
+        self.instance.open_settings.assert_not_called()
         self.copy.assert_not_called()
         self.assert_retained_without_content_logs()
+
+    def test_retention_opens_recovery_surface_after_private_text_is_secured(self):
+        self.instance._remember_undelivered_dictation(
+            "private transcript", "clipboard-unavailable")
+
+        self.assert_retained_without_content_logs()
+        self.instance.open_delivery_recovery.assert_called_once_with()
+
+    def test_recovery_command_constructs_once_then_restores_existing_window(self):
+        # Exercise the implementation rather than the per-test mock above.
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance._delivery_recovery_window_lock = threading.Lock()
+        self.instance.delivery_recovery_window = None
+        window = mock.Mock()
+        with mock.patch.object(
+                app.ui, "DeliveryRecoveryWindow", return_value=window) as create, \
+                mock.patch.object(app.ui, "present_window") as present:
+            self.assertTrue(app.PresspeechApp.open_delivery_recovery(self.instance))
+            self.assertTrue(app.PresspeechApp.open_delivery_recovery(self.instance))
+
+        create.assert_called_once_with(self.instance)
+        present.assert_called_once_with(window)
+        self.copy.assert_not_called()
+
+    def test_recovery_window_failure_keeps_text_and_redacts_details(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance._delivery_recovery_window_lock = threading.Lock()
+        self.instance.delivery_recovery_window = None
+        with mock.patch.object(
+                app.ui, "DeliveryRecoveryWindow",
+                side_effect=OSError(r"C:\private\desktop unavailable")):
+            self.assertFalse(
+                app.PresspeechApp.open_delivery_recovery(self.instance))
+
+        self.assert_retained_without_content_logs()
+        self.assertNotIn("private", str(self.instance._log.mock_calls))
+        self.assertEqual(
+            self.instance.notify.call_args.args[0],
+            "Delivery Recovery unavailable")
+        self.copy.assert_not_called()
+
+    def test_async_window_failure_cannot_reinstall_the_failed_window(self):
+        self.instance._undelivered_dictations = ["private transcript"]
+        self.instance._delivery_recovery_window_lock = threading.Lock()
+        self.instance.delivery_recovery_window = None
+
+        class FailingBetweenChecks:
+            def __init__(window, owner):
+                window.owner = owner
+                window.checks = 0
+                owner.delivery_recovery_window = window
+
+            @property
+            def _build_failed(window):
+                window.checks += 1
+                if window.checks == 1:
+                    # Model the UI-thread failure callback winning immediately
+                    # after the caller's first state check.
+                    window.owner.delivery_recovery_window = None
+                    return False
+                return True
+
+        with mock.patch.object(
+                app.ui, "DeliveryRecoveryWindow",
+                side_effect=FailingBetweenChecks):
+            self.assertFalse(
+                app.PresspeechApp.open_delivery_recovery(self.instance))
+
+        self.assertIsNone(self.instance.delivery_recovery_window)
+        self.copy.assert_not_called()
 
     def test_pending_recovery_blocks_new_capture_before_device_or_model_work(self):
         self.instance._undelivered_dictations = ["private transcript"]
         self.instance._dictation_model_ready = mock.Mock()
         self.assertFalse(self.instance.start_recording())
         self.instance._dictation_model_ready.assert_not_called()
+        self.instance.open_delivery_recovery.assert_called_once_with()
         self.copy.assert_not_called()
         self.assert_retained_without_content_logs()
 
@@ -2921,7 +3002,8 @@ class DeliveryRecoveryTests(unittest.TestCase):
         with mock.patch.object(app.os, "_exit") as terminate:
             self.instance.exit_app()
         terminate.assert_called_once_with(0)
-        self.instance._remember_undelivered_dictation("private transcript", "clipboard-unavailable")
+        self.instance._remember_undelivered_dictation(
+            "private transcript", "clipboard-unavailable")
         self.assertFalse(self.instance.has_undelivered_dictation())
         self.copy.assert_not_called()
 
