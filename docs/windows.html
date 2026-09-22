@@ -182,7 +182,7 @@ gh release verify-asset windows-v0.1.12 $installer --repo rcourtman/presspeech</
             </article>
             <article class="card">
               <h3>Clipboard history and sync</h3>
-              <p>Presspeech does not sync transcripts, but normal and recovery delivery writes finished text to the Windows clipboard. If <a href="https://support.microsoft.com/en-us/windows/apps/using-the-clipboard">clipboard history or cross-device sync</a> is enabled under <strong>Settings → System → Clipboard</strong>, Windows can retain or sync that text. Third-party clipboard managers may also retain it. Review those settings before sensitive dictation.</p>
+              <p>Presspeech does not sync transcripts, but normal and recovery delivery writes finished text to the Windows clipboard. Published 0.1.12 writes can enter <a href="https://support.microsoft.com/en-us/windows/apps/using-the-clipboard">Clipboard History or cross-device sync</a>. Upcoming 0.1.13 places Microsoft's <a href="https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats"><code>ExcludeClipboardContentFromMonitorProcessing</code> format</a> on every dictation clipboard item before its text, instructing Windows not to retain it in Clipboard History or Cloud Clipboard. The text remains on the current clipboard for Ctrl+V, where another local process or third-party clipboard manager may still read it.</p>
             </article>
             <article class="card">
               <h3>Remote desktop aware</h3>

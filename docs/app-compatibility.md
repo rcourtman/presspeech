@@ -31,10 +31,13 @@ recovered safely.
 3. On published macOS 0.3.7, turn **Settings -> Behavior -> Restore clipboard
    after paste** off. In upcoming 0.3.8 / builds with **Keep Previous Clipboard
    for Manual Restore**, leave that option off instead. Both options default
-   off. Windows leaves the transcript on the clipboard.
-4. Use only harmless phrases created for the test. Disable clipboard history,
-   cross-device clipboard sync, or third-party clipboard managers if you do
-   not want even that test text retained outside Presspeech. If macOS Clipboard
+   off. Windows leaves the transcript on the current clipboard. Upcoming
+   Windows 0.1.13 asks Windows to exclude it from Clipboard History and Cloud
+   Clipboard; published 0.1.12 does not.
+4. Use only harmless phrases created for the test. On Windows 0.1.12, disable
+   clipboard history and cross-device clipboard sync. On every platform,
+   disable third-party clipboard managers if you do not want even that test
+   text retained outside Presspeech. If macOS Clipboard
    History in Spotlight is enabled on macOS 26 or later, clear it after the
    check if you do not want the harmless text retained there.
 5. Note the exact Presspeech, operating-system, and target-app versions. Also

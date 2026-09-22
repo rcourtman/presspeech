@@ -191,3 +191,8 @@ Reopening Presspeech shows controls and a notice; it does not copy automatically
 If another writer changes the clipboard during recovery, the text stays available
 for another deliberate Copy or Discard. These checks cannot acknowledge target
 consumption or remove the final clipboard-check/input race.
+
+Every 0.1.13 dictation clipboard item is marked for exclusion from Windows
+Clipboard History and Cloud Clipboard before transcript text is published. This
+does not remove the current item: deliberate Ctrl+V still works, and other local
+software or a third-party clipboard manager can still read it.

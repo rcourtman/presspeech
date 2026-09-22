@@ -135,8 +135,13 @@ retained text. Reopening Presspeech only shows controls and a recovery notice;
 it never silently copies retained text over your current clipboard.
 
 Retention stays in process memory, without transcript logs, settings storage or
-a recovery file. Explicit Copy can still be retained or synced by Windows
-clipboard history or another clipboard manager. Clipboard sequence checks reduce
+a recovery file. Every dictation clipboard write, including explicit recovery,
+carries Microsoft's
+[`ExcludeClipboardContentFromMonitorProcessing`](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats)
+format before the transcript is published. Windows therefore keeps it out of
+Clipboard History and Cloud Clipboard while leaving it on the current clipboard for Ctrl+V. This
+operating-system control does not prevent another local process or a third-party
+clipboard manager from reading the current item. Clipboard sequence checks reduce
 replacement races; they do not make Ctrl+V atomic or acknowledge that the target
 application consumed the text. Another copy after the final check remains possible.
 

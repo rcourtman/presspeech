@@ -1,13 +1,23 @@
-"""Unicode clipboard writes with a receipt proven under the clipboard lock.
+"""History-excluded Unicode clipboard writes with a receipt proven under the lock.
 
 A matching sequence only proves that Windows has not reported another change.
 It cannot acknowledge consumption or make a later simulated paste atomic.
+Successful writes opt out of Windows Clipboard History and Cloud Clipboard.
 Importing this module does not open the clipboard or create a window.
 """
 import ctypes
 import time
 import secrets
 from typing import NamedTuple
+
+
+_RECEIPT_FORMAT = "Presspeech.WriteReceipt.v1"
+# Windows recognises this registered format and excludes every format in the
+# same clipboard item from Clipboard History, Cloud Clipboard, and clipboard
+# monitor processing.  The transcript remains on the current clipboard for
+# Ctrl+V and explicit recovery; third-party readers are a separate boundary.
+_PRIVATE_CLIPBOARD_FORMAT = "ExcludeClipboardContentFromMonitorProcessing"
+_PRIVATE_CLIPBOARD_MARKER = (0).to_bytes(4, "little")
 
 
 class WriteReceipt(NamedTuple):
@@ -74,9 +84,10 @@ def write_text(text, *, api=None, sleep=time.sleep, monotonic=time.monotonic):
     payload = text.encode("utf-16-le") + b"\0\0"
     nonce = secrets.token_bytes(32)
     api = _WindowsAPI() if api is None else api
-    token_format = api.RegisterClipboardFormatW("Presspeech.WriteReceipt.v1")
-    if not token_format:
-        raise ClipboardError("clipboard receipt format unavailable")
+    token_format = api.RegisterClipboardFormatW(_RECEIPT_FORMAT)
+    private_format = api.RegisterClipboardFormatW(_PRIVATE_CLIPBOARD_FORMAT)
+    if not token_format or not private_format:
+        raise ClipboardError("required clipboard formats unavailable")
     window = api.CreateWindowExW(0, "STATIC", None, 0, 0, 0, 0, 0,
                                  ctypes.c_void_p(-3), None, None, None)
     if not window:
@@ -126,20 +137,28 @@ def write_text(text, *, api=None, sleep=time.sleep, monotonic=time.monotonic):
         opened = False
 
     try:
-        # Allocate both blocks before changing any existing clipboard contents.
+        # Allocate every block before changing any existing clipboard contents.
+        # Publish the privacy marker first: any later partial write may leave a
+        # clipboard item behind, but it must never leave transcript text without
+        # the Windows history/cloud exclusion that this function promises.
+        private_memory = allocate(_PRIVATE_CLIPBOARD_MARKER)
         text_memory = allocate(payload)
         token_memory = allocate(nonce)
         deadline = monotonic() + 0.5
         acquire(deadline)
         if not api.EmptyClipboard():
             raise ClipboardError("clipboard could not be emptied")
-        for format_id, memory in ((13, text_memory), (token_format, token_memory)):
+        for format_id, memory in (
+                (private_format, private_memory),
+                (13, text_memory),
+                (token_format, token_memory)):
             if not api.SetClipboardData(format_id, memory):
                 raise ClipboardError("clipboard write failed")
             allocations.remove(memory)  # Windows owns this block now.
         close()  # Windows finalizes text formats and advances the serial here.
         acquire(deadline)
         if (api.GetClipboardOwner() != window or
+                not matches(private_format, _PRIVATE_CLIPBOARD_MARKER) or
                 not matches(token_format, nonce) or not matches(13, payload)):
             raise ClipboardError("clipboard changed before receipt validation")
         sequence = int(api.GetClipboardSequenceNumber())

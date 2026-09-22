@@ -503,6 +503,13 @@ or input behavior. Do not run these steps against a user's active clipboard.
   retains text; successful owned Copy clears that entry and permits recording.
   Test an external copy immediately after write and confirm it is not adopted
   as the recovery write's receipt.
+- Enable Windows Clipboard History, deliver a unique harmless phrase, overwrite
+  the current clipboard, and open Win+V. Confirm the Presspeech phrase is absent.
+  When a disposable paired test device is available, enable Cloud Clipboard and
+  confirm the phrase is not offered there. While the Presspeech item is current,
+  confirm ordinary Ctrl+V and explicit recovery still work. These native checks
+  qualify Windows' `ExcludeClipboardContentFromMonitorProcessing` behavior; the
+  doubled unit tests only qualify write ordering and fail-closed control flow.
 - Choose Discard and Exit separately. Both forget private recovery; Discard must
   leave a newer external clipboard untouched. No late worker may retain after Exit.
 - Inject key-down and key-up errors, including an error after an event may have
@@ -510,4 +517,5 @@ or input behavior. Do not run these steps against a user's active clipboard.
   A successful shortcut is not evidence of target consumption.
 - Repeat ordinary local, elevated-window, RDP and Moonlight dictation checks;
   use non-ASCII text and emoji to qualify the Unicode clipboard path. Verify the
-  non-delayed clipboard data survives its private owner window being destroyed.
+  non-delayed clipboard data survives its private owner window being destroyed,
+  and that the exclusion marker does not regress either remote delivery route.

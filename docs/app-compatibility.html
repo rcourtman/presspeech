@@ -81,7 +81,7 @@
             </li>
             <li>
               <strong>Make clipboard behavior comparable</strong>
-              <p>On published macOS 0.3.7, turn <strong>Settings → Behavior → Restore clipboard after paste</strong> off. In upcoming 0.3.8 / builds with <strong>Keep Previous Clipboard for Manual Restore</strong>, leave that option off instead. Both options default off. Windows always leaves the finished transcript on the clipboard. If macOS Clipboard History in Spotlight is enabled on macOS 26 or later, clear it after the check if you do not want the harmless text retained there. Also disable macOS Universal Clipboard through Handoff, Windows clipboard history or cross-device sync, and third-party clipboard managers if you do not want the test text retained elsewhere.</p>
+              <p>On published macOS 0.3.7, turn <strong>Settings → Behavior → Restore clipboard after paste</strong> off. In upcoming 0.3.8 / builds with <strong>Keep Previous Clipboard for Manual Restore</strong>, leave that option off instead. Both options default off. Published Windows 0.1.12 leaves the finished transcript on the current clipboard. Upcoming Windows 0.1.13 marks that item for exclusion from Windows Clipboard History and Cloud Clipboard; published 0.1.12 does not. If macOS Clipboard History in Spotlight is enabled on macOS 26 or later, clear it after the check if you do not want the harmless text retained there. Also disable macOS Universal Clipboard through Handoff and third-party clipboard managers if you do not want the test text retained elsewhere.</p>
             </li>
             <li>
               <strong>Record versions, not private context</strong>
@@ -164,7 +164,7 @@
           <div class="grid two">
             <article class="card">
               <h3>Clipboard behavior</h3>
-              <p>Leave optional macOS clipboard restoration off for this baseline. On macOS 26 or later, enabled macOS Clipboard History in Spotlight can make earlier copies searchable; Universal Clipboard can make them available on nearby Apple devices. Windows clipboard history, cross-device sync, and third-party managers can also retain or sync the harmless text independently of Presspeech. Review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a>.</p>
+              <p>Leave optional macOS clipboard restoration off for this baseline. On macOS 26 or later, enabled macOS Clipboard History in Spotlight can make earlier copies searchable; Universal Clipboard can make them available on nearby Apple devices. Published Windows 0.1.12 does not opt out: Windows clipboard history, cross-device sync, and third-party managers can also retain or sync the harmless text independently of Presspeech. Upcoming Windows 0.1.13 opts its writes out of the two Windows services, but not third-party readers. Review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a>.</p>
             </article>
             <article class="card">
               <h3>Elevated Windows apps</h3>

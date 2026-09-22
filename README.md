@@ -291,7 +291,10 @@ Presspeech is local-first:
   services outside Presspeech—macOS Clipboard History in Spotlight on macOS 26
   or later, macOS Universal Clipboard, Windows clipboard history and
   cross-device sync, or a third-party clipboard manager—may retain or sync that
-  text when enabled. Review those services before sensitive dictation.
+  text when enabled. Upcoming Windows 0.1.13 asks Windows to exclude every
+  dictation write from Clipboard History and Cloud Clipboard; the current
+  clipboard and third-party readers remain separate boundaries. Review those
+  services before sensitive dictation.
 
 Network calls made by Presspeech are limited to:
 

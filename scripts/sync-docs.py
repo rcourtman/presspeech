@@ -180,52 +180,68 @@ WINDOWS_UNSIGNED_GUIDANCE = {
 
 # Presspeech itself has no transcript-sync feature, but normal delivery writes
 # to each platform's general clipboard. Public privacy and retrieval surfaces
-# must preserve the separate operating-system boundary: Spotlight Clipboard
-# History, Handoff/Universal Clipboard, and Windows clipboard history can
-# retain or sync those writes.
+# must preserve the separate operating-system boundary, distinguish published
+# Windows behavior from 0.1.13's history/cloud exclusion, and avoid implying
+# that the exclusion constrains third-party clipboard readers.
 CLIPBOARD_SERVICE_GUIDANCE = {
     ROOT / "README.md": (
         "macOS Clipboard History",
         "Spotlight on macOS 26",
         "macOS Universal Clipboard",
         "Windows clipboard",
+        "Upcoming Windows 0.1.13 asks Windows to exclude",
     ),
     DOCS / "faq.html": (
         "macOS Clipboard History",
         "Spotlight on macOS 26",
         "macOS Universal Clipboard",
-        "Windows clipboard history",
+        "Upcoming Windows 0.1.13 asks Windows to exclude",
+        "current clipboard remains readable",
     ),
     DOCS / "privacy.html": (
         "macOS Clipboard History",
         "On macOS 26 or later, enabled",
         "macOS Universal Clipboard",
-        "Windows clipboard history",
+        "Published Windows 0.1.12",
+        "clipboard exclusion format",
+        "Third-party clipboard managers",
     ),
     DOCS / "privacy" / "network-calls.json": (
         "macOS Clipboard History",
         "Spotlight on macOS 26",
         "macOS Universal Clipboard",
-        "Windows clipboard history",
+        "Published Windows 0.1.12",
+        "ExcludeClipboardContentFromMonitorProcessing",
+        "Third-party clipboard managers",
     ),
-    DOCS / "windows.html": ("Windows clipboard", "cross-device sync"),
+    DOCS / "windows.html": (
+        "Published 0.1.12",
+        "ExcludeClipboardContentFromMonitorProcessing",
+        "third-party clipboard manager",
+    ),
     DOCS / "llms.txt": (
         "macOS Clipboard History",
         "Spotlight on macOS 26",
         "macOS Universal Clipboard",
-        "Windows clipboard history",
+        "Published Windows 0.1.12",
+        "upcoming 0.1.13 marks every dictation item",
+        "third-party clipboard managers",
     ),
     DOCS / "llms-full.txt": (
         "macOS Clipboard History",
         "enabled on macOS 26",
         "macOS Universal Clipboard",
-        "Windows clipboard history",
+        "Published Windows 0.1.12",
+        "ExcludeClipboardContentFromMonitorProcessing",
+        "third-party clipboard managers",
     ),
     DOCS / "app-compatibility.html": (
         "macOS Clipboard History",
         "enabled on macOS 26",
         "macOS Universal Clipboard",
-        "Windows clipboard history",
+        "Published Windows 0.1.12",
+        "Upcoming Windows 0.1.13",
+        "third-party managers",
     ),
 }
 
@@ -1680,7 +1696,9 @@ def run_self_test() -> None:
                 "macOS Clipboard History",
                 "macOS 26",
                 "macOS Universal Clipboard",
-                "Windows clipboard history",
+                "Published Windows 0.1.12",
+                "ExcludeClipboardContentFromMonitorProcessing",
+                "third-party clipboard",
             )
         }
         clipboard_guidance.write_text(
@@ -1699,6 +1717,15 @@ def run_self_test() -> None:
             "macOS Clipboard History on macOS 26, "
             "macOS Universal Clipboard, and "
             "Windows clipboard history are outside Presspeech.\n",
+            encoding="utf-8",
+        )
+        if not check_clipboard_service_guidance(required_clipboard_guidance):
+            raise SyncError("self-test: stale Windows clipboard guidance was accepted")
+        clipboard_guidance.write_text(
+            "macOS Clipboard History on macOS 26 and macOS Universal Clipboard "
+            "remain outside Presspeech. Published Windows 0.1.12 can enter "
+            "history; 0.1.13 uses ExcludeClipboardContentFromMonitorProcessing, "
+            "but a third-party clipboard reader remains outside that control.\n",
             encoding="utf-8",
         )
         if check_clipboard_service_guidance(required_clipboard_guidance):
