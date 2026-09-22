@@ -1,0 +1,136 @@
+name: Target-app compatibility report
+description: Share privacy-safe repeated paste and focus-safety results for one app.
+title: "[Compatibility]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing one target app. Run the short
+        [compatibility protocol](https://github.com/rcourtman/presspeech/blob/main/docs/app-compatibility.md)
+        before filling this in. Passing reports are useful too. Search existing
+        issues first and add to a matching app/version report rather than
+        opening a duplicate.
+
+        Issues are public. Report counts and classifications only. Never include
+        dictated or recognized text, audio, clipboard contents, dictionary or
+        shortcut contents, document/window titles, private paths, credentials,
+        or screenshots containing user data.
+  - type: input
+    id: target-app
+    attributes:
+      label: Target app and version
+      description: Name the app and exact version, but not a document, tab, account, server, or window.
+      placeholder: e.g. Visual Studio Code 1.x
+    validations:
+      required: true
+  - type: dropdown
+    id: target-class
+    attributes:
+      label: Target class
+      options:
+        - Native desktop app
+        - Browser page or web editor
+        - Electron/Chromium desktop app
+        - Terminal or console
+        - Remote desktop or virtual machine
+        - Elevated Windows app
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: presspeech-version
+    attributes:
+      label: Presspeech version
+      description: Copy Diagnostics includes this value.
+      placeholder: e.g. 0.3.7 or 0.1.11
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: Operating-system version
+      placeholder: e.g. macOS 26.4.1 or Windows 11 24H2
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware (optional)
+      description: On macOS, give the Mac model/chip. On Windows, give the CPU and optional GPU; omit serial numbers and device names.
+      placeholder: e.g. MacBook Air M2 or Ryzen 7 7700 with RTX 4070
+  - type: dropdown
+    id: restore-state
+    attributes:
+      label: Clipboard restoration during the steady-focus check
+      description: The compatibility protocol requires the macOS option to be off. Windows does not offer it.
+      options:
+        - Off on macOS
+        - Not applicable on Windows
+        - On or unknown — results are not a comparable baseline
+    validations:
+      required: true
+  - type: textarea
+    id: steady-results
+    attributes:
+      label: Five steady-focus results
+      description: Enter counts only. They should total five; do not quote any transcript or clipboard content.
+      placeholder: |
+        Pasted once: 5
+        Recovered safely: 0
+        Incorrect or unsafe: 0
+    validations:
+      required: true
+  - type: textarea
+    id: focus-results
+    attributes:
+      label: Three focus-change results
+      description: Enter counts only. If this could not be tested safely, explain why without private context.
+      placeholder: |
+        Copied for manual paste without inserting anywhere: 3
+        Inserted into any field: 0
+        Other or not completed: 0
+    validations:
+      required: true
+  - type: dropdown
+    id: overall-result
+    attributes:
+      label: Overall result
+      options:
+        - Every completed result matched the protocol
+        - Manual-paste recovery appeared at least once
+        - An incorrect or unsafe result occurred
+        - Testing could not be completed
+    validations:
+      required: true
+  - type: textarea
+    id: conditions
+    attributes:
+      label: Relevant conditions
+      description: Note trigger mode, suffix, field type, clipboard manager/history, assistive technology, or a minimal repro. Omit private document, account, server, and window names.
+      placeholder: e.g. Hold mode; plain-text editor field; append-space suffix; no clipboard manager
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Privacy-safe diagnostics (optional)
+      description: In Presspeech, choose Copy Diagnostics and review the result before pasting. It excludes transcript, audio, and dictionary contents.
+      render: shell
+  - type: checkboxes
+    id: privacy-confirmation
+    attributes:
+      label: Public-report confirmation
+      options:
+        - label: I used only blank disposable fields and harmless test phrases.
+          required: true
+        - label: I removed all dictated/recognized text, clipboard contents, private names, titles, paths, credentials, and sensitive screenshots from this report.
+          required: true
+        - label: I understand this report describes only the versions and conditions above, not universal app support.
+          required: true

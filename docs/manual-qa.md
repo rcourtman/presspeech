@@ -1,9 +1,81 @@
 # Manual QA Checklist
 
-Run this before publishing a release.
+Run this against the exact candidate artifacts before publishing a release.
+Portable unit tests and package-import smoke tests do not establish native
+microphone, keyboard-hook, focus, accessibility, installer, or update behavior.
+
+Copy the applicable section into a dated private qualification record. Mark
+every check **Pass**, **Fail**, **Blocked**, **Not run**, or **Not applicable**,
+and add a concise observation for failures, blocked checks, and exclusions. Do
+not put transcript text, audio, dictionary contents, user or computer names,
+private paths, or credentials in the record.
+
+## Windows Release Qualification
+
+Record enough context to make each result reproducible:
+
+- candidate version and commit; installer filename, byte size, and SHA-256;
+- Authenticode status and publisher (or explicitly **Unsigned**);
+- Windows edition, version, and OS build; x64 CPU; GPU and driver when present;
+- clean/new profile or upgrade state, display scale, text scale, keyboard
+  layout, selected microphone, selected model, and CPU or CUDA inference path;
+- target application name and version for insertion checks.
+
+Complete the full **Windows First Run** checklist across these configurations
+and identify which configuration supplied every result. Repeat the install,
+model, microphone, hotkey, core delivery, and sleep/resume paths on both. A run
+may cover only one row; do not combine partial results from different artifacts
+or machines into a claimed end-to-end pass.
+
+| Required configuration | Install state | Inference path | Result |
+| --- | --- | --- | --- |
+| Windows 11 x64 without usable CUDA | clean profile | `base.en` on CPU | |
+| Windows 11 x64 with a supported NVIDIA GPU | clean profile | default Parakeet model on CUDA | |
+
+For each configuration, also record this release-gate matrix:
+
+| Required path | Result |
+| --- | --- |
+| Verify candidate, install per-user, and launch from Start | |
+| First model preparation through first successful dictation | |
+| Ten consecutive dictations into Notepad | |
+| Dictation into a current Chromium browser text field | |
+| Dictation into a current Electron application text field | |
+| Focus-change clipboard recovery and elevated-target recovery | |
+| Microsoft Remote Desktop and Moonlight insertion routes | |
+| Sleep/resume, then microphone, hotkey, and dictation recovery | |
+| In-place candidate install over the preceding public Windows release | |
+| In-app update, cancelled/failed update recovery, uninstall, and reinstall | |
+| Keyboard-only, Narrator, and Accessibility Insights checks | |
+
+A **Fail**, **Blocked**, or **Not run** result in either table blocks promotion
+from prerelease to stable. An unsigned candidate also remains a prerelease.
+Keep the build a prerelease until the missing native evidence is completed or
+the supported scope is explicitly narrowed. This is an evidence gate, not a
+request to bypass SmartScreen or managed security policy. Microsoft
+[notes that unsigned apps may be blocked entirely](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
+by policy or Smart App Control; pursue trusted signing rather than treating an
+override as a successful install path.
+
+Before the interaction checks, run
+[Accessibility Insights for Windows](https://learn.microsoft.com/en-us/windows/win32/winauto/accessibility-testingtools)
+FastPass on each Presspeech window. Use Live Inspect to verify the UI Automation
+name, role, value, state, and action of every control, then retain only the
+privacy-safe pass/fail summary. Microsoft recommends both programmatic and
+keyboard access testing in addition to assistive-technology testing.
 
 ## Windows First Run
 
+- On each test PC, set `$installer` to the exact candidate path, record
+  `(Get-Item $installer).Length`, run
+  `Get-FileHash $installer -Algorithm SHA256`, and run
+  `Get-AuthenticodeSignature $installer`. Confirm the size and hash match the
+  candidate manifest and the signature result matches the stated signing
+  status. Stop on any mismatch. Do not weaken SmartScreen, Smart App Control,
+  or organisation policy to make the installer run.
+- Install for the current user and confirm Windows **Installed apps** shows the
+  candidate version, the Start Menu shortcut launches that installed copy, and
+  no separate Python installation is needed.
 - On a clean Windows profile, launch the packaged app and confirm the setup
   window automatically checks the selected microphone without blocking model
   preparation.

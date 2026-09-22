@@ -138,17 +138,24 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    release, paste workflow. Do not spend the one-time launch post while such a
    regression is awaiting a fix or native platform QA; resolve it first rather
    than weakening or qualifying the promise only in promotional copy.
-2. Confirm `main` is deployed to GitHub Pages and the README shows the
-   direct download above Homebrew.
-3. Record a baseline: latest release downloads, total release
+2. Complete the [target-app compatibility protocol](../docs/app-compatibility.md)
+   against representative native, browser, and Electron/Chromium targets on
+   the release candidate. Do not spend the launch post while any incorrect or
+   unsafe result remains, and describe recurring safe recovery rather than
+   turning it into a universal paste claim.
+3. Confirm `main` is deployed to GitHub Pages and the README shows the
+   direct download above Homebrew. Also confirm the repository About
+   description reflects both the released macOS app and the Windows prerelease;
+   a Mac-only description now hides a shipped platform.
+4. Record a baseline: latest release downloads, total release
    downloads, repo stars, repo views, unique views, clones, and top
    referrers.
-4. Post the Show HN as written above, linking the repo or site
+5. Post the Show HN as written above, linking the repo or site
    depending on which preview looks cleaner that day.
-5. Stay available for the first few hours and answer only actual
+6. Stay available for the first few hours and answer only actual
    questions. Link the compare table for "why not X?" and the privacy
    page for trust questions.
-6. After 24 hours and 7 days, record the same metrics. Judge the post
+7. After 24 hours and 7 days, record the same metrics. Judge the post
    by qualified installs and questions, not points alone.
 
 If the direct download link materially outperforms the Homebrew command

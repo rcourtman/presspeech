@@ -11,6 +11,7 @@ matches the problem:
 If the problem remains, search the [existing issues](https://github.com/rcourtman/presspeech/issues), then choose the closest route:
 
 - [Report a bug](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml). In Presspeech, choose **Copy Diagnostics** first and paste that privacy-safe summary into the form.
+- [Share a target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml) after running the [short privacy-safe protocol](docs/app-compatibility.md). Passing reports are useful as well as failures because they show how often automatic paste and focus-change recovery worked across repeated attempts.
 - [Suggest an improvement](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml). Describe the recurring problem and a measurable result.
 - [Ask a usage question](https://github.com/rcourtman/presspeech/issues/new/choose) by selecting **Open a blank issue**. Include the platform, Presspeech version, and what you already tried.
 
@@ -24,6 +25,10 @@ focus behavior, clipboard-restore setting, manual-recovery result, and repeat
 count. Reproduce with harmless test text, report only whether the complete text
 was recovered, and omit the text itself plus document, tab, account, server,
 and window names.
+
+Use the compatibility form rather than the general bug form when you can run
+the complete repeated protocol, including when every check passes. Use the bug
+form for a problem you cannot safely repeat or that is outside text delivery.
 
 Before proposing a larger capability, read the [product roadmap](ROADMAP.md).
 It describes current priorities, evidence gates, and workflows that are

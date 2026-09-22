@@ -320,11 +320,14 @@ py -3.12 -m venv .venv
 run.bat
 ```
 
-See [`windows/README.md`](windows/README.md) for hardware, setup, and usage details.
+See [`windows/README.md`](windows/README.md) for hardware, setup, and usage
+details. Before treating a candidate as stable, complete the artifact-bound CPU
+and NVIDIA qualification record in [`docs/manual-qa.md`](docs/manual-qa.md).
 
 ## Links
 
 - [Support and troubleshooting](SUPPORT.md)
+- [Test target-app compatibility](docs/app-compatibility.md)
 - [Product roadmap](ROADMAP.md)
 - [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)
 - [Latest release](https://github.com/rcourtman/presspeech/releases/latest)

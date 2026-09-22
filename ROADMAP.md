@@ -1,6 +1,6 @@
 # Presspeech product roadmap
 
-Last reviewed: 5 September 2026
+Last reviewed: 22 September 2026
 
 Presspeech is the small, private dictation tool: hold or toggle a key, speak,
 and put locally transcribed text into the app you were using. The roadmap
@@ -53,7 +53,10 @@ input hardware, and recovery paths.
 Success means a user can complete repeated dictations into representative
 native, browser, Electron, remote-desktop, and elevated/non-elevated targets;
 the intended text lands once, and every unsafe path leaves an explicit manual
-paste recovery instead.
+paste recovery instead. The
+[target-app compatibility protocol](docs/app-compatibility.md) gives community
+reports the same small, privacy-safe baseline; those reports supplement rather
+than replace native release testing.
 
 ## Next: earn a stable Windows release
 
@@ -69,7 +72,10 @@ repeatable install-to-first-dictation path on supported Windows hardware.
   including first model preparation, microphone selection, hotkey conflicts,
   sleep/resume, and insertion into common app classes.
 - Promote Windows from prerelease only when those native checks are repeatable
-  and support documentation matches the shipped installer.
+  and support documentation matches the shipped installer. Record the exact
+  artifact and coverage in the
+  [Windows release qualification](docs/manual-qa.md#windows-release-qualification)
+  rather than treating portable tests as native evidence.
 
 ## Explore: improve recognition with private evidence
 
