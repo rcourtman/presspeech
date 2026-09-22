@@ -51,6 +51,7 @@
         <p>Automatic paste depends on the destination and its focus behavior. Use blank disposable fields to check one exact app and version before relying on it for real work. The check records outcomes, never your words.</p>
         <div class="actions">
           <a class="button" href="#before-testing">Run the eight checks</a>
+          <a class="button secondary" href="#coverage">Choose a useful target</a>
           <a class="button secondary" href="#worksheet">Record outcomes locally</a>
           <a class="button secondary" href="#share-result">Share aggregate results</a>
         </div>
@@ -69,6 +70,32 @@
             <div class="fact"><strong>Version-specific</strong><span>One app, operating system, and Presspeech build.</span></div>
           </div>
           <div class="note"><p><strong>No universal result:</strong> a pass in one app version and field type does not promise that every field, browser page, remote session, or later version behaves the same way.</p></div>
+        </div>
+      </section>
+
+      <section id="coverage">
+        <div class="wrap">
+          <span class="section-eyebrow">Community coverage</span>
+          <h2>Choose a useful target</h2>
+          <p>If you already depend on one app, test that app. Otherwise, choose a safe disposable field in a target class that does not yet have a comparable report. The live searches below make missing coverage visible without collecting anything on this site.</p>
+          <div class="grid">
+            <article class="card">
+              <h3>Native desktop app</h3>
+              <p>Establish the baseline in a platform-native plain-text or rich-text field.</p>
+              <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Native%20desktop%20app%22">Browse native-app reports &rarr;</a></p>
+            </article>
+            <article class="card">
+              <h3>Browser page or web editor</h3>
+              <p>Record the browser version, web app or editor version when public, and generic field type; omit account, tab, document, and form names.</p>
+              <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Browser%20page%20or%20web%20editor%22">Browse browser reports &rarr;</a></p>
+            </article>
+            <article class="card">
+              <h3>Electron/Chromium desktop app</h3>
+              <p>Use two separate windows of the same app for at least one focus-change attempt. Tabs are not a substitute.</p>
+              <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Electron%2FChromium%20desktop%20app%22">Browse Electron/Chromium reports &rarr;</a></p>
+            </article>
+          </div>
+          <div class="note"><p><strong>Comparable means the same platform, app version, and generic field type.</strong> Add another observation to a matching report even when your outcome differs. Open a separate report when any of those boundaries differs. The class links search standardized compatibility-report bodies; older general bug reports are intentionally not counted as completed protocol evidence.</p></div>
         </div>
       </section>
 
@@ -260,6 +287,7 @@
               <textarea class="worksheet-summary" id="worksheet-summary" rows="11" readonly aria-describedby="worksheet-privacy worksheet-status" placeholder="Complete all eight category selections to generate the report block."></textarea>
               <div class="actions">
                 <button class="button" id="copy-worksheet-summary" type="button" disabled>Copy report block</button>
+                <a class="button secondary" href="#share-result">Continue to reporting steps</a>
                 <button class="button secondary" type="reset">Reset worksheet</button>
               </div>
             </div>

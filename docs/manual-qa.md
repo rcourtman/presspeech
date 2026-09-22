@@ -188,6 +188,12 @@ keyboard access testing in addition to assistive-technology testing.
   instructions update and the key works immediately, choose **Set Up Later**,
   restart, and confirm **F8** remains selected. Repeat the selector with
   Narrator and keyboard-only navigation.
+- Before finishing Setup, select **Press to toggle** and confirm its instructions
+  update immediately. Choose **Set Up Later**, restart, and confirm both the
+  style and instructions remain selected. When the model is ready, use **Try
+  Dictation** and confirm one hotkey press starts and the next stops. Switch to
+  **Hold to talk** in Setup and confirm the next dictation stops on release.
+  Repeat both radio buttons with Narrator and keyboard-only navigation.
 - With a text editor focused, select **Left Win** and dictate in both hold and
   toggle modes; confirm the Start menu never opens and the transcript returns
   to the original editor. Repeat with **F11** in an app that normally assigns
@@ -211,9 +217,10 @@ keyboard access testing in addition to assistive-technology testing.
   **Listening…** from **Transcribing…** without relying on colour.
 - While the model is preparing, confirm **Try Dictation** and **Finish Setup**
   remain disabled. Choose **Set Up Later**, restart, and confirm setup opens
-  again with the selected microphone and Start with Windows choice preserved.
-  Confirm the chosen autostart state is reflected under Task Manager **Startup
-  apps**. After the model reaches Ready, confirm both actions become available.
+  again with the selected microphone, dictation style, and Start with Windows
+  choice preserved. Confirm the chosen autostart state is reflected under Task
+  Manager **Startup apps**. After the model reaches Ready, confirm both actions
+  become available.
 - Confirm **Finish Setup** remains available if the microphone will be connected
   later; microphone readiness is advisory rather than a completion gate.
 - Close every Presspeech window while leaving the notification-area process
@@ -469,6 +476,12 @@ item after the development-wrapper launch check.
 - In each focus-change case, confirm the HUD says **Copied — press ⌘V to
   paste**, the menu keeps the same recovery instruction after the HUD closes,
   and copying the last transcript clears the notice.
+- Stop a long harmless dictation and revoke Input Monitoring while it is still
+  transcribing. Confirm Presspeech does not paste into System Settings or any
+  other newly focused window, leaves the complete transcript on the clipboard,
+  shows **Copied — press ⌘V to paste**, and returns to the missing-permission
+  setup state. Regrant the permission and confirm a fresh dictation can paste
+  automatically; the interrupted dictation must never paste later.
 - In an Electron/Chromium app such as VS Code, open two separate windows with
   editable fields. Dictate without leaving the first window and confirm the
   text is pasted automatically rather than falling back to **Copied — press

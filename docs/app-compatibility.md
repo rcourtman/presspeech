@@ -20,6 +20,29 @@ from what was spoken and still pass this delivery check; the question is
 whether the same finished transcript reaches the intended field once or is
 recovered safely.
 
+## Choose useful coverage
+
+If you already depend on one app, test that app. Otherwise, choose a safe
+disposable field in a target class that does not yet have a comparable report.
+These live searches make missing coverage visible without collecting anything
+on the Presspeech site:
+
+- [Native desktop app reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Native%20desktop%20app%22)
+- [Browser page or web editor reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Browser%20page%20or%20web%20editor%22)
+- [Electron/Chromium desktop app reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Electron%2FChromium%20desktop%20app%22)
+
+For native apps, establish a baseline in a platform-native plain-text or
+rich-text field. For a browser target, record the browser version, web app or
+editor version when public, and generic field type; omit account, tab,
+document, and form names. For Electron/Chromium, use two separate windows of
+the same app for at least one focus-change attempt. Tabs are not a substitute.
+
+Comparable means the same platform, app version, and generic field type. Add
+another observation to a matching report even when the outcome differs. Open
+a separate report when any of those boundaries differs. The class links search
+standardized compatibility-report bodies; older general bug reports are not
+counted as completed protocol evidence.
+
 ## Before testing
 
 1. Use the current official Presspeech build and finish its setup checks. On

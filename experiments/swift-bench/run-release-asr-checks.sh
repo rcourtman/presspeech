@@ -21,6 +21,7 @@ REQUIRE_PUBLIC_AUDIO=0
 # release check to short utterances would miss a distinct quality path.
 REQUIRE_LONG_PUBLIC_AUDIO=1
 INCLUDE_CANDIDATE_MODELS=0
+SDK_UPGRADE_ONLY=0
 ALLOW_CANDIDATE_DEPENDENCY=0
 RUN_TAIL=1
 SELF_TEST=0
@@ -56,10 +57,14 @@ Options:
                             candidate checks; a candidate dependency run also
                             compares its SDK-default v3 chunking and includes
                             the opt-in linear-int8 v3 encoder
+  --sdk-upgrade-only        with a candidate dependency, compare explicit
+                            released v3 chunking with that SDK's v3 default;
+                            skip unrelated model and encoder candidates
   --allow-candidate-dependency
                             permit the benchmark package to differ from the
                             production app pin; requires --include-candidate-models
-                            and produces candidate evidence, not a release pass
+                            or --sdk-upgrade-only and produces candidate
+                            evidence, not a release pass
   --skip-tail               with --include-candidate-models, skip the synthetic tail-word gate
   --self-test               run wrapper parser/detection tests only
   -h, --help                show this help
@@ -71,7 +76,9 @@ The default run performs:
   4. required production v3 multi-window regression over validated composed fixtures.
 
 Candidate models are not shipped by the app. Use --include-candidate-models
-only when evaluating whether a future model is good enough to expose.
+only when evaluating whether a future model is good enough to expose. Use
+--sdk-upgrade-only when the model is unchanged and the candidate is a newer
+FluidAudio revision.
 By default, the benchmark and production app must pin the exact same
 FluidAudio revision. This prevents a candidate API experiment from silently
 turning the production-v3 release gate into a test of different library code.
@@ -116,7 +123,7 @@ validate_fluid_dependency_alignment() {
     local production_package="$1"
     local benchmark_package="$2"
     local allow_candidate="$3"
-    local include_candidates="$4"
+    local candidate_scope="$4"
     local production_revision benchmark_revision
 
     production_revision="$(validated_fluid_revision "$production_package")" || return 1
@@ -143,8 +150,8 @@ candidate-only comparison.
 MSG
         return 1
     fi
-    if [[ "$include_candidates" -ne 1 ]]; then
-        echo "--allow-candidate-dependency requires --include-candidate-models" >&2
+    if [[ "$candidate_scope" -ne 1 ]]; then
+        echo "--allow-candidate-dependency requires --include-candidate-models or --sdk-upgrade-only" >&2
         return 2
     fi
 
@@ -284,7 +291,7 @@ run_self_test() {
         exit 1
     fi
     assert_contains "$unscoped_candidate_log" \
-        "--allow-candidate-dependency requires --include-candidate-models"
+        "--allow-candidate-dependency requires --include-candidate-models or --sdk-upgrade-only"
 
     DEPENDENCY_MODE="unset"
     validate_fluid_dependency_alignment \
@@ -326,6 +333,24 @@ run_self_test() {
     fi
     assert_contains "$missing_wer_value_log" \
         "--long-public-max-corpus-wer requires a value"
+
+    local unapproved_sdk_upgrade_log="$tmpdir/unapproved-sdk-upgrade.log"
+    if bash "$SCRIPT_PATH" --sdk-upgrade-only \
+        >"$unapproved_sdk_upgrade_log" 2>&1; then
+        echo "self-test expected an SDK-only run without candidate dependency approval to fail" >&2
+        exit 1
+    fi
+    assert_contains "$unapproved_sdk_upgrade_log" \
+        "--sdk-upgrade-only requires --allow-candidate-dependency"
+
+    local conflicting_candidate_scope_log="$tmpdir/conflicting-candidate-scope.log"
+    if bash "$SCRIPT_PATH" --include-candidate-models --sdk-upgrade-only \
+        --allow-candidate-dependency >"$conflicting_candidate_scope_log" 2>&1; then
+        echo "self-test expected conflicting candidate scopes to fail" >&2
+        exit 1
+    fi
+    assert_contains "$conflicting_candidate_scope_log" \
+        "--include-candidate-models and --sdk-upgrade-only are mutually exclusive"
 
     local missing_real_log="$tmpdir/missing-real.log"
     if bash "$SCRIPT_PATH" \
@@ -450,6 +475,10 @@ while [[ $# -gt 0 ]]; do
             INCLUDE_CANDIDATE_MODELS=1
             shift
             ;;
+        --sdk-upgrade-only)
+            SDK_UPGRADE_ONLY=1
+            shift
+            ;;
         --allow-candidate-dependency)
             ALLOW_CANDIDATE_DEPENDENCY=1
             shift
@@ -477,6 +506,15 @@ done
 if [[ "$SELF_TEST" -eq 1 ]]; then
     run_self_test
     exit 0
+fi
+
+if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 && "$SDK_UPGRADE_ONLY" -eq 1 ]]; then
+    echo "--include-candidate-models and --sdk-upgrade-only are mutually exclusive" >&2
+    exit 2
+fi
+if [[ "$SDK_UPGRADE_ONLY" -eq 1 && "$ALLOW_CANDIDATE_DEPENDENCY" -ne 1 ]]; then
+    echo "--sdk-upgrade-only requires --allow-candidate-dependency" >&2
+    exit 2
 fi
 
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
@@ -521,7 +559,7 @@ fi
 
 validate_fluid_dependency_alignment \
     "../../swift/Package.swift" "Package.swift" \
-    "$ALLOW_CANDIDATE_DEPENDENCY" "$INCLUDE_CANDIDATE_MODELS"
+    "$ALLOW_CANDIDATE_DEPENDENCY" "$(( INCLUDE_CANDIDATE_MODELS || SDK_UPGRADE_ONLY ))"
 
 echo "running helper self-tests..."
 python3 ./benchmark-inputs.py --self-test
@@ -555,16 +593,17 @@ else
     echo
     echo "running private $(v3_baseline_label) ASR regression on $real_count clip(s)..."
     ./run-real-dictation-regression.sh --input-dir "$REAL_AUDIO_DIR" --backend v3 --trials "$TRIALS"
-    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
-        if [[ "$DEPENDENCY_MODE" == "candidate" ]]; then
-            echo
-            echo "running private released-v3 vs candidate SDK-default chunking comparison on $real_count clip(s)..."
-            ./run-real-model-comparison.sh \
-                --input-dir "$REAL_AUDIO_DIR" \
-                --candidate-backend v3-sdk-default \
-                --trials "$TRIALS"
-        fi
+    if [[ "$DEPENDENCY_MODE" == "candidate" && \
+          ( "$INCLUDE_CANDIDATE_MODELS" -eq 1 || "$SDK_UPGRADE_ONLY" -eq 1 ) ]]; then
+        echo
+        echo "running private released-v3 vs candidate SDK-default chunking comparison on $real_count clip(s)..."
+        ./run-real-model-comparison.sh \
+            --input-dir "$REAL_AUDIO_DIR" \
+            --candidate-backend v3-sdk-default \
+            --trials "$TRIALS"
+    fi
 
+    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
         echo "running private v3-vs-Unified candidate comparison on $real_count clip(s)..."
         ./run-real-model-comparison.sh \
@@ -623,16 +662,17 @@ else
         --show-transcripts \
         --show-paths
 
-    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
-        if [[ "$DEPENDENCY_MODE" == "candidate" ]]; then
-            echo
-            echo "running public released-v3 vs candidate SDK-default chunking comparison on $public_count clip(s)..."
-            ./run-public-model-comparison.sh \
-                --fixture-dir "$PUBLIC_AUDIO_DIR" \
-                --candidate-backend v3-sdk-default \
-                --trials "$TRIALS"
-        fi
+    if [[ "$DEPENDENCY_MODE" == "candidate" && \
+          ( "$INCLUDE_CANDIDATE_MODELS" -eq 1 || "$SDK_UPGRADE_ONLY" -eq 1 ) ]]; then
+        echo
+        echo "running public released-v3 vs candidate SDK-default chunking comparison on $public_count clip(s)..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$PUBLIC_AUDIO_DIR" \
+            --candidate-backend v3-sdk-default \
+            --trials "$TRIALS"
+    fi
 
+    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
         echo "running public v3-vs-Unified candidate comparison on $public_count clip(s)..."
         ./run-public-model-comparison.sh --fixture-dir "$PUBLIC_AUDIO_DIR" --trials "$TRIALS" --unified-trailing-silence-ms 250
@@ -699,7 +739,8 @@ else
         --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
         --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
 
-    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 && "$DEPENDENCY_MODE" == "candidate" ]]; then
+    if [[ ( "$INCLUDE_CANDIDATE_MODELS" -eq 1 || "$SDK_UPGRADE_ONLY" -eq 1 ) && \
+          "$DEPENDENCY_MODE" == "candidate" ]]; then
         echo
         echo "running long-form public candidate SDK-default absolute ASR regression..."
         ./run-real-dictation-regression.sh \
@@ -721,13 +762,15 @@ else
             --candidate-backend v3-sdk-default \
             --trials "$TRIALS"
 
-        echo
-        echo "running long-form public v3 linear-int8 encoder candidate comparison..."
-        ./run-public-model-comparison.sh \
-            --fixture-dir "$LONG_PUBLIC_AUDIO_DIR" \
-            --out-dir public-results/long-form \
-            --candidate-backend v3-int8-v2 \
-            --trials "$TRIALS"
+        if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+            echo
+            echo "running long-form public v3 linear-int8 encoder candidate comparison..."
+            ./run-public-model-comparison.sh \
+                --fixture-dir "$LONG_PUBLIC_AUDIO_DIR" \
+                --out-dir public-results/long-form \
+                --candidate-backend v3-int8-v2 \
+                --trials "$TRIALS"
+        fi
     elif [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
         echo "skipping linear-int8 encoder candidate (not exposed by the production FluidAudio pin)"

@@ -361,6 +361,26 @@ class InputSelectionTests(unittest.TestCase):
         with patches[0], patches[1], patches[2], patches[3], patches[4]:
             self.assertEqual(instance._get_input_device(), (1, 16000))
 
+    def test_successful_input_log_omits_the_device_label(self):
+        private_name = "Alice's Conference Room microphone"
+        devices = [
+            {"name": private_name, "hostapi": 0, "max_input_channels": 1},
+        ]
+        instance = self.make_app()
+        with mock.patch.object(app.sd, "query_devices", return_value=devices), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None), \
+                mock.patch.object(
+                    app.PresspeechApp, "_probe_input", return_value=True):
+            self.assertEqual(instance._get_input_device(), (0, 16000))
+
+        rendered_log = "\n".join(
+            call.args[0] for call in instance._log.call_args_list)
+        self.assertIn("using automatic input", rendered_log)
+        self.assertNotIn(private_name, rendered_log)
+
     def test_picker_excludes_stereo_mix_wdm_ks_and_hyperx(self):
         instance = self.make_app()
         with mock.patch.object(app.sd, "query_devices", return_value=DEVICES), \
@@ -396,11 +416,16 @@ class InputSelectionTests(unittest.TestCase):
         self.assertIn("currently unavailable", options[-1][0])
 
     def test_configured_device_never_falls_back_to_another_microphone(self):
-        instance = self.make_app("MME::Missing microphone")
+        private_name = "Alice's private office microphone"
+        instance = self.make_app("MME::" + private_name)
         patches = self.sounddevice_mocks()
-        with patches[0], patches[1], patches[2], patches[3] as probe, patches[4]:
+        with patches[0], patches[1], patches[2], patches[3] as probe:
             self.assertIsNone(instance._get_input_device())
         probe.assert_not_called()
+        rendered_log = "\n".join(
+            call.args[0] for call in instance._log.call_args_list)
+        self.assertIn("configured input is unavailable", rendered_log)
+        self.assertNotIn(private_name, rendered_log)
 
     def test_reconnected_device_is_recovered_by_rescanning(self):
         instance = self.make_app()
@@ -728,7 +753,8 @@ class InputSelectionTests(unittest.TestCase):
             app.MICROPHONE_CHECK_UNAVAILABLE)
 
         instance._log.assert_called_once_with(
-            "microphone readiness check failed: private device detail")
+            "microphone readiness check failed: OSError")
+        self.assertNotIn("private device detail", instance._log.call_args.args[0])
 
     def test_microphone_recovery_opens_supported_windows_settings_uris(self):
         instance = self.make_app()
@@ -2121,6 +2147,38 @@ class TextRegressionTests(unittest.TestCase):
         ))
         self.assertNotIn("Alice", rendered)
         self.assertNotIn("secret", rendered)
+
+    def test_copy_diagnostics_reports_success_only_after_clipboard_write(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.diagnostics_text = mock.Mock(return_value="safe diagnostics")
+        instance.notify = mock.Mock()
+
+        with mock.patch.object(app.pyperclip, "copy") as copy:
+            self.assertTrue(instance.copy_diagnostics())
+
+        copy.assert_called_once_with("safe diagnostics")
+        instance.notify.assert_called_once_with(
+            "Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
+
+    def test_copy_diagnostics_exposes_locked_clipboard_without_raw_detail(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.diagnostics_text = mock.Mock(return_value="safe diagnostics")
+        instance.notify = mock.Mock()
+        instance._log = mock.Mock()
+
+        with mock.patch.object(
+                app.pyperclip, "copy",
+                side_effect=RuntimeError("private clipboard owner")):
+            self.assertFalse(instance.copy_diagnostics())
+
+        instance._log.assert_called_once_with(
+            "could not copy diagnostics: RuntimeError")
+        instance.notify.assert_called_once_with(
+            "Clipboard unavailable",
+            "Diagnostics were not copied. Close any app using the clipboard, "
+            "then choose Copy Diagnostics again.")
+        self.assertNotIn(
+            "private clipboard owner", str(instance.notify.mock_calls))
 
     def test_visual_indicator_routes_states_without_stealing_app_logic(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

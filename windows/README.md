@@ -86,8 +86,10 @@ crash can leave that private temporary folder behind; no automatic broad cache
 cleanup is performed.
 
 The first-run readiness window shows model loading, microphone selection and a
-live microphone check, a selectable push-to-talk key with its global-listener
-status, and Start with Windows in one place. Speak while the check runs. It briefly opens the selected input,
+live microphone check, a selectable dictation hotkey, hold-to-talk or
+press-to-toggle style, global-listener status, and Start with Windows in one
+place. The hotkey and style apply immediately and remain selected if setup is
+deferred. Speak while the check runs. It briefly opens the selected input,
 discards its samples in memory, and distinguishes an input level from a
 connected-but-silent device or one that cannot be opened. If it is silent,
 unmute it and choose **Check Again**; if it cannot be opened, use the window's
@@ -105,14 +107,14 @@ Setup** requires both the speech model and global hotkey to be ready. If
 preparation fails, use **Retry Speech Model**; the window keeps
 tracking the retry instead of leaving the previous error on screen. Choose
 **Set Up Later** to close the window without marking setup complete; it will
-open again on the next launch. Microphone, hotkey, and Start with Windows
-choices are kept when setup is deferred, and a newly selected microphone is
-used immediately by **Try Dictation**. A microphone can still be connected
-later and does not block **Finish Setup** once the speech model is ready.
-If the push-to-talk key is pressed before readiness, Presspeech keeps showing
-**Preparing speech model…** and does not open the microphone, play recording
-cues, mute playback, or claim to be listening. Release and press again once the
-preparation indicator disappears.
+open again on the next launch. Microphone, hotkey, dictation style, and Start
+with Windows choices are kept when setup is deferred, and a newly selected
+microphone is used immediately by **Try Dictation**. A microphone can still be
+connected later and does not block **Finish Setup** once the speech model is
+ready. If the dictation hotkey is pressed before readiness, Presspeech keeps
+showing **Preparing speech model…** and does not open the microphone, play
+recording cues, mute playback, or claim to be listening. Release and press
+again once the preparation indicator disappears.
 Before recording, open Windows microphone privacy settings and turn on
 **Microphone access** and **Let desktop apps access your microphone**. Presspeech
 is an unpackaged desktop app, so Windows uses that shared desktop-app control
@@ -122,8 +124,7 @@ selected device under **Settings → System → Sound → Input**.
 On keyboard layouts where **Right Alt** enters `@`, `€`, or accented letters,
 Windows treats that key as **AltGr**. Presspeech leaves AltGr available for
 normal typing and does not start dictation from it. Choose **F8** or another
-push-to-talk key in first-run setup; the choice applies immediately and remains
-selected if setup is deferred.
+dictation hotkey in first-run setup.
 
 ### Upcoming 0.1.13: delivery recovery
 

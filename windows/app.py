@@ -350,7 +350,9 @@ def _mute_active_playback():
                     raise RuntimeError("mute state did not change")
                 saved.append((device.id, was_muted))
             except Exception as exc:
-                failures.append("%s: %s" % (device.FriendlyName, exc))
+                # Endpoint labels may identify a person, room, or organisation.
+                # Keep only the failure category in the persistent app log.
+                failures.append(type(exc).__name__)
         if not saved:
             detail = "; ".join(failures) if failures else "no active playback endpoints"
             raise RuntimeError(detail)
@@ -377,13 +379,13 @@ def _restore_playback_mutes(saved_states):
         for endpoint_id, was_muted in saved_states:
             device = devices.get(endpoint_id.lower())
             if device is None:
-                failures.append("%s: endpoint disappeared" % endpoint_id)
+                failures.append("endpoint disappeared")
                 continue
             try:
                 device.EndpointVolume.SetMute(1 if was_muted else 0, None)
                 restored += 1
             except Exception as exc:
-                failures.append("%s: %s" % (device.FriendlyName, exc))
+                failures.append(type(exc).__name__)
         return restored, failures
     finally:
         comtypes.CoUninitialize()
@@ -1454,7 +1456,7 @@ class PresspeechApp:
                     self._log("could not mute some playback endpoints: %s" %
                               "; ".join(failures))
             except Exception as exc:
-                self._log("could not mute playback: %s" % exc)
+                self._log("could not mute playback: %s" % type(exc).__name__)
 
     def _restore_playback_after_recording(self):
         with self._playback_mute_lock:
@@ -1469,7 +1471,8 @@ class PresspeechApp:
                     self._log("could not restore some playback endpoints: %s" %
                               "; ".join(failures))
             except Exception as exc:
-                self._log("could not restore playback mute state: %s" % exc)
+                self._log("could not restore playback mute state: %s" %
+                          type(exc).__name__)
 
     def _open_mic_worker(self, epoch):
         stream = None
@@ -1549,7 +1552,7 @@ class PresspeechApp:
             self._cancel_recording_limit(epoch)
             self._restore_playback_after_recording()
             self._set_indicator(None)
-            self._log("mic error: %s" % exc)
+            self._log("mic error: %s" % type(exc).__name__)
             self.notify(
                 "Microphone error",
                 "Presspeech couldn't open the selected input. Check Settings > "
@@ -1858,7 +1861,7 @@ class PresspeechApp:
                 devices = sd.query_devices()
                 host_apis = sd.query_hostapis()
         except Exception as exc:
-            self._log("could not list input devices: %s" % exc)
+            self._log("could not list input devices: %s" % type(exc).__name__)
         else:
             for i, device in enumerate(devices):
                 host_name = host_apis[device["hostapi"]]["name"]
@@ -1913,7 +1916,7 @@ class PresspeechApp:
             # opened, fail safely instead of silently recording from another mic.
             ranked = [item for item in ranked if item[5] == selected]
             if not ranked:
-                self._log("configured input is unavailable: %s" % selected)
+                self._log("configured input is unavailable (name omitted)")
                 return None
         for _selected_first, _score, i, d, _host_name, selector in ranked:
             for rate in (16000, 48000, 44100):
@@ -1924,8 +1927,8 @@ class PresspeechApp:
                     continue
                 if probe(i, rate):
                     chosen_for = "configured" if selector == selected else "automatic"
-                    self._log("using %s input: %s at %d Hz" %
-                              (chosen_for, d["name"], rate))
+                    self._log("using %s input (name omitted) at %d Hz" %
+                              (chosen_for, rate))
                     return (i, rate)
         return None
 
@@ -1974,7 +1977,8 @@ class PresspeechApp:
             try:
                 chosen = self._find_input_device(selected)
             except Exception as exc:
-                self._log("could not query audio devices: %s" % exc)
+                self._log("could not query audio devices: %s" %
+                          type(exc).__name__)
                 chosen = None
             if chosen is None and self._rescan_audio_devices(
                     epoch=epoch, audio_lease=lease):
@@ -2013,7 +2017,8 @@ class PresspeechApp:
             with scope as lease:
                 return AUDIO_BACKEND.rescan(lease, still_current)
         except Exception as exc:
-            self._log("could not re-scan audio devices: %s" % exc)
+            self._log("could not re-scan audio devices: %s" %
+                      type(exc).__name__)
             return False
 
     def check_input_device(self, selected):
@@ -2059,13 +2064,15 @@ class PresspeechApp:
             if chosen is None:
                 if initial_error is not None:
                     self._log(
-                        "microphone readiness check failed: %s" % initial_error)
+                        "microphone readiness check failed: %s" %
+                        type(initial_error).__name__)
                 return MICROPHONE_CHECK_UNAVAILABLE
             if levels and max(levels) >= MICROPHONE_CHECK_AUDIO_RMS:
                 return MICROPHONE_CHECK_LEVEL
             return MICROPHONE_CHECK_SILENT
         except Exception as exc:
-            self._log("microphone readiness check failed: %s" % exc)
+            self._log("microphone readiness check failed: %s" %
+                      type(exc).__name__)
             return MICROPHONE_CHECK_UNAVAILABLE
 
     def _open_windows_settings(self, uri, manual_recovery=None):
@@ -2607,8 +2614,20 @@ class PresspeechApp:
         return "\r\n".join(lines)
 
     def copy_diagnostics(self, icon=None, item=None):
-        pyperclip.copy(self.diagnostics_text())
+        try:
+            pyperclip.copy(self.diagnostics_text())
+        except Exception as exc:
+            # Another Windows process can temporarily hold the clipboard.
+            # A tray callback must not disappear without telling the user
+            # whether the support report was actually copied.
+            self._log("could not copy diagnostics: %s" % type(exc).__name__)
+            self.notify(
+                "Clipboard unavailable",
+                "Diagnostics were not copied. Close any app using the "
+                "clipboard, then choose Copy Diagnostics again.")
+            return False
         self.notify("Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
+        return True
 
     def _open_support_page(self, url):
         """Open one fixed public support page without adding app or user data."""

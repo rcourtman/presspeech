@@ -12,10 +12,13 @@ import urllib.parse
 import urllib.request
 
 
-# Keep one privacy-auditable request while using GitHub's maximum page size so
-# macOS releases do not quickly push the newest Windows prerelease out of view.
+# Use GitHub's maximum page size and traverse only its canonical release-list
+# pages.  macOS and Windows share the repository, so silently stopping at the
+# first 100 releases would eventually make a supported Windows update invisible.
 RELEASES_API = (
     "https://api.github.com/repos/rcourtman/presspeech/releases?per_page=100")
+RELEASES_API_PATH = "/repos/rcourtman/presspeech/releases"
+MAX_RELEASE_PAGES = 10
 USER_AGENT = "presspeech-windows-update-check"
 API_VERSION = "2026-03-10"
 VERSION_COMPONENT_RE = r"(0|[1-9]\d*)"
@@ -149,6 +152,47 @@ def _request(url):
     )
 
 
+def _checked_releases_page_url(url, expected_page):
+    """Accept only the next canonical page of Presspeech release metadata."""
+    parsed = urllib.parse.urlparse(url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise UpdateError("GitHub returned an invalid release pagination URL") from exc
+    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    if (parsed.scheme != "https" or parsed.hostname != "api.github.com" or
+            port is not None or parsed.username is not None or
+            parsed.password is not None or parsed.path != RELEASES_API_PATH or
+            parsed.params or parsed.fragment or
+            query != {"per_page": ["100"], "page": [str(expected_page)]}):
+        raise UpdateError("GitHub returned an unexpected release pagination URL")
+    # Do not carry an API-supplied spelling or query order into the next request.
+    return "%s&page=%d" % (RELEASES_API, expected_page)
+
+
+def _next_releases_page(link_header, expected_page):
+    """Return a validated rel=next target from GitHub's Link header."""
+    if not link_header:
+        return None
+    next_targets = []
+    for part in str(link_header).split(","):
+        match = re.match(r"^\s*<([^<>]+)>\s*(.*)$", part)
+        if not match:
+            raise UpdateError("GitHub returned an invalid release pagination header")
+        relations = []
+        for parameter in match.group(2).split(";"):
+            name, separator, value = parameter.strip().partition("=")
+            if separator and name.lower() == "rel":
+                relations.extend(value.strip().strip('"').split())
+        if "next" in relations:
+            next_targets.append(match.group(1))
+    if len(next_targets) > 1:
+        raise UpdateError("GitHub returned ambiguous release pagination metadata")
+    if not next_targets:
+        return None
+    return _checked_releases_page_url(next_targets[0], expected_page)
+
+
 def _checked_download_url(url):
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in ALLOWED_DOWNLOAD_HOSTS:
@@ -187,24 +231,36 @@ def _open_update_api(request, opener, timeout):
 
 def fetch_update(current_version, opener=None, timeout=15):
     """Query public GitHub releases without sending app or device identity."""
-    try:
-        with _open_update_api(_request(RELEASES_API), opener, timeout) as response:
-            final_url = getattr(response, "geturl", lambda: RELEASES_API)()
-            if final_url != RELEASES_API:
-                raise UpdateError("GitHub redirected the update check unexpectedly")
-            payload = response.read(2 * 1024 * 1024 + 1)
-    except Exception as exc:
-        if isinstance(exc, UpdateError):
-            raise
-        raise UpdateError("could not check GitHub releases: %s" % exc) from exc
-    if len(payload) > 2 * 1024 * 1024:
-        raise UpdateError("GitHub release response was unexpectedly large")
-    try:
-        releases = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise UpdateError("GitHub returned an invalid release response") from exc
-    if not isinstance(releases, list):
-        raise UpdateError("GitHub release response was not a list")
+    releases = []
+    page_url = RELEASES_API
+    for page in range(1, MAX_RELEASE_PAGES + 1):
+        try:
+            with _open_update_api(_request(page_url), opener, timeout) as response:
+                final_url = getattr(response, "geturl", lambda: page_url)()
+                if final_url != page_url:
+                    raise UpdateError("GitHub redirected the update check unexpectedly")
+                payload = response.read(2 * 1024 * 1024 + 1)
+                headers = getattr(response, "headers", None)
+                link_header = headers.get("Link") if headers is not None else None
+        except Exception as exc:
+            if isinstance(exc, UpdateError):
+                raise
+            raise UpdateError("could not check GitHub releases: %s" % exc) from exc
+        if len(payload) > 2 * 1024 * 1024:
+            raise UpdateError("GitHub release response was unexpectedly large")
+        try:
+            page_releases = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise UpdateError("GitHub returned an invalid release response") from exc
+        if not isinstance(page_releases, list):
+            raise UpdateError("GitHub release response was not a list")
+        releases.extend(page_releases)
+        next_page = _next_releases_page(link_header, page + 1)
+        if next_page is None:
+            break
+        if page == MAX_RELEASE_PAGES:
+            raise UpdateError("GitHub release listing exceeded the safe page limit")
+        page_url = next_page
     return select_update(releases, current_version)
 
 

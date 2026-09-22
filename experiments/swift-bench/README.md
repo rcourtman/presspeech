@@ -86,6 +86,24 @@ explicit backend; an ordinary production-pinned build rejects it. Commit the
 candidate pin before using a clean-checkout product gate, and do not move the
 app pin until the candidate checks below have passed.
 
+For a FluidAudio SDK upgrade that keeps Parakeet v3 unchanged, run the focused
+release wrapper after moving only this benchmark package and lock file to the
+candidate revision:
+
+```sh
+./run-release-asr-checks.sh \
+  --sdk-upgrade-only \
+  --allow-candidate-dependency \
+  --require-real-audio
+```
+
+This runs explicit released-config v3 and the candidate SDK's default v3 on
+the available private, public, and required composed long-form corpora. It does
+not download or evaluate Unified, v2, Nemotron, or the candidate int8 encoder;
+use `--include-candidate-models` instead when those are part of the question.
+The result remains candidate evidence and cannot report a production release
+pass while the app and benchmark dependency pins differ.
+
 `Package.resolved` is committed for the benchmark for the same reason as the
 app: dependency changes should be visible in review. When promoting a
 validated FluidAudio revision to production, update the app and benchmark
@@ -606,8 +624,11 @@ better per-utterance diagnostic corpus.
 
 The release wrapper first validates that this is composer-owned output with a
 matching manifest, paired references, at least two composite clips, and at
-least 30 seconds per clip. It then applies two broad regression screens. The
-conservative corpus WER sums exact word errors from the worst observed
+least 30 seconds per clip. It also rejects byte-identical composites and source
+clip IDs reused within or across composites, so copied audio cannot satisfy the
+coverage count or overweight one utterance. It then applies two broad
+regression screens. The conservative corpus WER sums exact word errors from the
+worst observed
 transcript of each clip and fails above 10%. This deliberately generous bound
 is more than five times the published v0.15.5 production-v3 result of 1.73% on
 the ordinary public corpus, but unlike a deletion-only check it also catches

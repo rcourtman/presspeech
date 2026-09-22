@@ -2228,7 +2228,7 @@ func audioInputDevice(matching preference: String,
 
 /// Keep public support reports useful without copying user-controlled device
 /// labels. Bluetooth and USB input names can contain a person's, room's, or
-/// organisation's name, so exact labels belong only in the local UI and log.
+/// organisation's name, so exact labels belong only in the local UI.
 func diagnosticMicrophoneLines(savedPreference: String,
                                devices: [AudioInputDevice]) -> [String] {
     let selection: String
@@ -2243,6 +2243,15 @@ func diagnosticMicrophoneLines(savedPreference: String,
         "Selected: \(selection)",
         "Available input count: \(devices.count) (names omitted)",
     ]
+}
+
+/// Preserve the useful default/configured distinction in persistent logs
+/// without recording a user-controlled device name or UID.
+func privacySafeInputSelectionLogLabel(_ preference: String) -> String {
+    if normalizedInputDevicePreference(preference) == nil {
+        return "system default"
+    }
+    return "specific input (name omitted)"
 }
 
 private func audioInputSetupReadyDetail(savedPreference: String,
@@ -4495,7 +4504,8 @@ final class AudioCapture: @unchecked Sendable {
             log("AudioCapture: input device switch failed (\(formattedOSStatus(status))), using system default")
             return
         }
-        log("AudioCapture: selected input \(device.name)")
+        let logLabel = privacySafeInputSelectionLogLabel(trimmed)
+        log("AudioCapture: selected \(logLabel)")
     }
 }
 
@@ -5297,6 +5307,18 @@ func dictationPasteTargetMatches(_ expected: DictationPasteTarget,
 func dictationDeliveryRoute(capturedTargetAvailable: Bool,
                             targetStillFocused: Bool) -> TextInsertionOutcome {
     capturedTargetAvailable && targetStillFocused ? .inserted : .copiedWithoutPasting
+}
+
+/// A permission interruption makes the destination unverifiable even if the
+/// grant returns before delivery. Preserve the completed transcript on the
+/// clipboard, but require a fresh recording before automatic paste resumes.
+/// This also keeps a currently missing grant from becoming a silent dropped
+/// Command+V event.
+private func shouldAttemptAutomaticDictationDelivery(
+    permissionInterruptionObserved: Bool,
+    missingPermissions: [Permission]
+) -> Bool {
+    !permissionInterruptionObserved && missingPermissions.isEmpty
 }
 
 func textInsertionStrategyChain(primary: TextInsertionStrategy) -> [TextInsertionStrategy] {
@@ -9410,6 +9432,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         Task { @MainActor in
             var completionNotice: DictationNotice?
+            var permissionInterruptionObserved = false
             defer { recordingPasteTarget = nil }
             do {
                 let t0 = Date()
@@ -9417,13 +9440,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                                     language: dictationLanguage.fluidLanguage)
                 let dt = Date().timeIntervalSince(t0)
                 if !isTerminating {
-                    let missing = missingPermissions()
-                    guard missing.isEmpty else {
-                        isBusy = false
-                        finishBusyHUD()
-                        enterPermissionBlockedState(missing: missing, reason: "transcription complete")
-                        return
-                    }
+                    // Losing a grant must not throw away a transcription that
+                    // has already completed. Remember even a transient loss:
+                    // if the grant returns while text processing runs, this
+                    // dictation still uses clipboard-only recovery rather than
+                    // assuming the original destination remains authorized.
+                    permissionInterruptionObserved = !missingPermissions().isEmpty
                     let processed = processedDictationText(rawTranscript: text,
                                                            corrections: settings.transcriptCorrections,
                                                            spokenFormattingCommands: settings.spokenFormattingCommands,
@@ -9446,16 +9468,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                                                       keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0)
                     } else {
                         let missing = missingPermissions()
-                        guard missing.isEmpty else {
-                            isBusy = false
-                            finishBusyHUD()
-                            enterPermissionBlockedState(missing: missing, reason: "paste")
-                            return
-                        }
+                        permissionInterruptionObserved = permissionInterruptionObserved
+                            || !missing.isEmpty
                         let deliveredText = pastedText(from: cleaned,
                                                        suffix: settings.pasteSuffix)
                         let insertionOutcome: TextInsertionOutcome
-                        if let expectedTarget = recordingPasteTarget {
+                        if shouldAttemptAutomaticDictationDelivery(
+                            permissionInterruptionObserved: permissionInterruptionObserved,
+                            missingPermissions: missing
+                        ), let expectedTarget = recordingPasteTarget {
                             insertionOutcome = TextInserter.insert(
                                 deliveredText,
                                 preserveClipboard: settings.preserveClipboardForManualRestore,
@@ -9473,7 +9494,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                 Sounds.playDone()
                             }
                         case .copiedWithoutPasting:
-                            if recordingPasteTarget == nil {
+                            if permissionInterruptionObserved {
+                                log("paste skipped; permission changed during transcription; transcript copied")
+                            } else if recordingPasteTarget == nil {
                                 log("paste skipped; target unavailable at recording start; transcript copied")
                             } else {
                                 log("paste skipped; focused window changed; transcript copied")
@@ -9498,6 +9521,22 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             }
             isBusy = false
             finishBusyHUD()
+            let currentlyMissingPermissions = permissionInterruptionObserved
+                ? missingPermissions()
+                : []
+            if !currentlyMissingPermissions.isEmpty, !isTerminating {
+                // Enter the blocked runtime only after the completed text has
+                // been copied/retained. Signal its manual-paste notice after
+                // the state transition so the loading menu does not hide the
+                // recovery instruction.
+                enterPermissionBlockedState(missing: currentlyMissingPermissions,
+                                            reason: "transcription complete")
+                if let completionNotice, completionNotice != .noSpeechDetected {
+                    signalDictationFailure(completionNotice)
+                    rebuildMenu()
+                }
+                return
+            }
             if let completionNotice, !isTerminating {
                 signalDictationFailure(completionNotice)
             } else {
@@ -11747,10 +11786,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             clearDictationNotice()
         }
         settings.inputDevice = preference
-        let label = preference.isEmpty
-            ? "system default"
-            : (audioInputDevice(matching: preference)?.name ?? preference)
-        log("input device selected: \(label)")
+        let logLabel = privacySafeInputSelectionLogLabel(preference)
+        log("input device selected: \(logLabel)")
         restartAudioForInputDeviceChange()
     }
 
@@ -15144,6 +15181,12 @@ private enum PresspeechSelfTest {
                    "diagnostics report should not include text correction contents")
         try expect(report.contains(microphoneSecret), equals: false,
                    "diagnostics report should not include user-controlled microphone names")
+        let inputLogLabel = privacySafeInputSelectionLogLabel(microphoneSecret)
+        try expect(inputLogLabel,
+                   equals: "specific input (name omitted)",
+                   "input logs should retain only the configured-device category")
+        try expect(inputLogLabel.contains(microphoneSecret), equals: false,
+                   "input logs should not include user-controlled microphone names or UIDs")
         try expect(report.contains(startupSecret), equals: false,
                    "diagnostics report should not include raw startup errors or paths")
         try expect(report.contains("Speech model failed to load (details omitted; see local log)"), equals: true,
@@ -15837,6 +15880,30 @@ private enum PresspeechSelfTest {
                                 missingPermissions: []),
             equals: .rebuildMenuOnly,
             "ready app with all permissions should remain ready and rebuild only"
+        )
+        try expect(
+            shouldAttemptAutomaticDictationDelivery(
+                permissionInterruptionObserved: false,
+                missingPermissions: []
+            ),
+            equals: true,
+            "an uninterrupted authorized dictation should attempt automatic delivery"
+        )
+        try expect(
+            shouldAttemptAutomaticDictationDelivery(
+                permissionInterruptionObserved: false,
+                missingPermissions: [.accessibility]
+            ),
+            equals: false,
+            "a missing delivery grant should use clipboard-only recovery"
+        )
+        try expect(
+            shouldAttemptAutomaticDictationDelivery(
+                permissionInterruptionObserved: true,
+                missingPermissions: []
+            ),
+            equals: false,
+            "a transient permission interruption should not retarget automatic delivery"
         )
 
         try expect(

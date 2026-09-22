@@ -73,7 +73,7 @@
             </article>
             <article class="card">
               <h3>No transcript logs</h3>
-              <p>Logs include timing and length metadata only. Transcript content is not written to disk.</p>
+              <p>Logs include operational status, error categories, timings, and counts. Presspeech does not write transcript, audio, or dictionary/correction contents to the log. macOS 0.3.8 and Windows 0.1.12 can log exact audio-device labels; builds containing microphone log minimisation omit those labels from app-authored microphone events. Some operating-system or library errors elsewhere in the local log can still contain private names or paths, so review any excerpt before sharing it.</p>
             </article>
           </div>
         </div>
@@ -104,7 +104,7 @@
                 </tr>
                 <tr>
                   <th scope="row">Periodic update check</th>
-                  <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code> (macOS); <code>api.github.com/repos/rcourtman/presspeech/releases?per_page=100</code> (Windows)</td>
+                  <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code> (macOS); <code>api.github.com/repos/rcourtman/presspeech/releases?per_page=100</code> and bounded numbered pages of that same endpoint when needed (Windows)</td>
                   <td>macOS checks every six hours; Windows checks at most daily. Both ignore release responses not marked immutable, only notify, and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no version, device, settings, transcript, or usage identifiers.</td>
                   <td>Disable update notifications from Settings.</td>
                 </tr>

@@ -23,8 +23,13 @@ DefaultDirName={localappdata}\Programs\Presspeech
 DefaultGroupName=Presspeech
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+; Keep Setup's admission checks aligned with the documented support boundary.
+; Inno otherwise defaults to Windows 7 SP1, and x64compatible also accepts
+; Arm64 through emulation even though the packaged runtime is qualified only
+; on native x64 Windows 10 and 11.
+MinVersion=10.0
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
 OutputDir={#InstallerOutputDir}
 OutputBaseFilename=Presspeech-Setup-{#AppVersion}-x64
 SetupIconFile=assets\presspeech.ico

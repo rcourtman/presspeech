@@ -323,6 +323,20 @@ class AccessibleWindowTests(unittest.TestCase):
             body.index('later_button.pack(side="right"'),
         )
 
+    def test_setup_exposes_both_dictation_styles_before_try(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        self.assertIn('text="Hold to talk"', body)
+        self.assertIn('text="Press to toggle"', body)
+        self.assertLess(
+            body.index('text="Hold to talk"'),
+            body.index('text="Try Dictation"'),
+        )
+        self.assertLess(
+            body.index('text="Press to toggle"'),
+            body.index('text="Try Dictation"'),
+        )
+
     def test_scrollable_dialog_routes_wheel_and_shift_wheel(self):
         body = ui._ScrollableDialogBody.__new__(ui._ScrollableDialogBody)
         body.canvas = mock.Mock()
@@ -700,6 +714,38 @@ class SetupWindowTests(unittest.TestCase):
 
         window.hotkey.set.assert_called_once_with("right alt")
         self.assertEqual(window.app.settings["hotkey"], "right alt")
+        save.assert_not_called()
+
+    def test_setup_trigger_change_applies_and_persists_before_try(self):
+        window = self.make_window("pending")
+        window.app.settings = {"hotkey": "f8", "trigger": "hold"}
+        window.trigger = mock.Mock()
+        window.trigger.get.return_value = "toggle"
+        window.instructions = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._trigger_changed()
+
+        self.assertEqual(window.app.settings["trigger"], "toggle")
+        save.assert_called_once_with(window.app.settings)
+        set_text.assert_called_once_with(
+            window.instructions,
+            "Press F8 to start, then press it again to type at the cursor.\n"
+            "Speech stays on this PC; no audio or transcripts are uploaded.",
+        )
+
+    def test_setup_rejects_unknown_trigger_without_saving(self):
+        window = self.make_window("pending")
+        window.app.settings = {"hotkey": "right alt", "trigger": "hold"}
+        window.trigger = mock.Mock()
+        window.trigger.get.return_value = "voice activation"
+
+        with mock.patch.object(ui.cfg, "save") as save:
+            window._trigger_changed()
+
+        window.trigger.set.assert_called_once_with("hold")
+        self.assertEqual(window.app.settings["trigger"], "hold")
         save.assert_not_called()
 
     def test_setup_microphone_change_applies_before_try_and_persists(self):

@@ -14,9 +14,10 @@ import updates
 
 
 class Response(io.BytesIO):
-    def __init__(self, payload, url="https://github.com/file"):
+    def __init__(self, payload, url="https://github.com/file", headers=None):
         super().__init__(payload)
         self.url = url
+        self.headers = headers or {}
 
     def __enter__(self):
         return self
@@ -178,6 +179,87 @@ class UpdateSelectionTests(unittest.TestCase):
         self.assertEqual(headers["user-agent"], updates.USER_AGENT)
         self.assertEqual(headers["x-github-api-version"], updates.API_VERSION)
         self.assertNotIn("x-presspeech-version", headers)
+
+    def test_fetch_traverses_canonical_release_pages(self):
+        first_page = [
+            {
+                "tag_name": "v9.9.%d" % index,
+                "draft": False,
+                "prerelease": False,
+                "assets": [],
+            }
+            for index in range(100)
+        ]
+        second_url = updates.RELEASES_API + "&page=2"
+        seen = []
+
+        def opener(request, timeout):
+            seen.append(request.full_url)
+            if request.full_url == updates.RELEASES_API:
+                return Response(
+                    json.dumps(first_page).encode("utf-8"),
+                    updates.RELEASES_API,
+                    {"Link": (
+                        '<%s>; rel="next", <%s>; rel="last"' %
+                        (second_url, second_url)
+                    )},
+                )
+            return Response(
+                json.dumps([release("0.1.1")]).encode("utf-8"), second_url)
+
+        selected = updates.fetch_update("0.1.0", opener=opener)
+
+        self.assertEqual(selected["version"], "0.1.1")
+        self.assertEqual(seen, [updates.RELEASES_API, second_url])
+
+    def test_fetch_rejects_untrusted_or_skipped_pagination(self):
+        page = json.dumps([release("0.1.1")]).encode("utf-8")
+        bad_targets = (
+            "https://example.com/releases?per_page=100&page=2",
+            updates.RELEASES_API + "&page=3",
+            updates.RELEASES_API + "&page=2&token=secret",
+            "http://api.github.com" + updates.RELEASES_API_PATH +
+            "?per_page=100&page=2",
+        )
+        for target in bad_targets:
+            with self.subTest(target=target):
+                def opener(request, timeout):
+                    return Response(
+                        page, updates.RELEASES_API,
+                        {"Link": '<%s>; rel="next"' % target},
+                    )
+
+                with self.assertRaisesRegex(
+                        updates.UpdateError, "pagination URL"):
+                    updates.fetch_update("0.1.0", opener=opener)
+
+    def test_fetch_rejects_ambiguous_or_unbounded_pagination(self):
+        payload = json.dumps([]).encode("utf-8")
+
+        def ambiguous(request, timeout):
+            target = updates.RELEASES_API + "&page=2"
+            return Response(
+                payload, updates.RELEASES_API,
+                {"Link": '<%s>; rel="next", <%s>; rel="next"' %
+                 (target, target)},
+            )
+
+        with self.assertRaisesRegex(updates.UpdateError, "ambiguous"):
+            updates.fetch_update("0.1.0", opener=ambiguous)
+
+        def unbounded(request, timeout):
+            page = len(seen) + 1
+            seen.append(page)
+            next_url = updates.RELEASES_API + "&page=%d" % (page + 1)
+            return Response(
+                payload, request.full_url,
+                {"Link": '<%s>; rel="next"' % next_url},
+            )
+
+        seen = []
+        with self.assertRaisesRegex(updates.UpdateError, "safe page limit"):
+            updates.fetch_update("0.1.0", opener=unbounded)
+        self.assertEqual(len(seen), updates.MAX_RELEASE_PAGES)
 
     def test_update_check_rejects_every_redirect(self):
         handler = updates._UpdateAPIRedirectHandler()

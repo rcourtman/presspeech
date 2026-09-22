@@ -819,7 +819,7 @@ class SetupWindow:
         )
         sound_button.pack(side="left", padx=(8, 0))
 
-        hotkey_label = ttk.Label(frame, text="Push-to-talk key")
+        hotkey_label = ttk.Label(frame, text="Dictation hotkey")
         hotkey_label.grid(row=8, column=0, sticky="w")
         self.hotkey = ttk.Combobox(
             frame, values=cfg.HOTKEYS, state="readonly", width=18)
@@ -833,10 +833,26 @@ class SetupWindow:
             wraplength=560,
         ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(3, 8))
 
+        trigger_label = ttk.Label(frame, text="Dictation style")
+        trigger_label.grid(row=10, column=0, sticky="w", pady=(0, 6))
+        trigger_options = ttk.Frame(frame)
+        trigger_options.grid(
+            row=10, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
+        self.trigger = tk.StringVar(
+            value=self.app.settings.get("trigger", cfg.DEFAULTS["trigger"]))
+        hold_trigger = ttk.Radiobutton(
+            trigger_options, text="Hold to talk", value="hold",
+            variable=self.trigger, command=self._trigger_changed)
+        hold_trigger.pack(side="left")
+        toggle_trigger = ttk.Radiobutton(
+            trigger_options, text="Press to toggle", value="toggle",
+            variable=self.trigger, command=self._trigger_changed)
+        toggle_trigger.pack(side="left", padx=(12, 0))
+
         hotkey_status_label = ttk.Label(frame, text="Global hotkey status")
-        hotkey_status_label.grid(row=10, column=0, sticky="w", pady=(0, 6))
+        hotkey_status_label.grid(row=11, column=0, sticky="w", pady=(0, 6))
         hotkey_actions = ttk.Frame(frame)
-        hotkey_actions.grid(row=10, column=1, sticky="ew", padx=(12, 0), pady=(0, 6))
+        hotkey_actions.grid(row=11, column=1, sticky="ew", padx=(12, 0), pady=(0, 6))
         self.hotkey_status = ttk.Label(hotkey_actions, text="Starting\u2026")
         self.hotkey_status.pack(side="left")
         self.repair_hotkey_button = ttk.Button(
@@ -848,10 +864,10 @@ class SetupWindow:
             value=self.app.settings.get("autostart", True))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
-                            row=11, column=0, columnspan=2, sticky="w", pady=(2, 6))
+                            row=12, column=0, columnspan=2, sticky="w", pady=(2, 6))
 
         startup_actions = ttk.Frame(frame)
-        startup_actions.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(0, 14))
+        startup_actions.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(0, 14))
         self.autostart_status = ttk.Label(startup_actions, text="")
         self.autostart_status.pack(side="left")
         startup_button = ttk.Button(
@@ -861,7 +877,7 @@ class SetupWindow:
         startup_button.pack(side="right")
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=13, column=0, columnspan=2, sticky="ew")
+        buttons.grid(row=14, column=0, columnspan=2, sticky="ew")
         self.try_button = ttk.Button(
             buttons, text="Try Dictation", command=self.app.open_scratchpad,
             state="disabled")
@@ -900,9 +916,12 @@ class SetupWindow:
         # This status must retain its changing text as its accessible name.
         # label_for would pin the static caption across live-region updates.
         _label_control(hotkey_label, self.hotkey)
+        _label_control(trigger_label, hold_trigger)
+        _name_control(hold_trigger, "Dictation style: Hold to talk")
+        _name_control(toggle_trigger, "Dictation style: Press to toggle")
         _label_control(hotkey_status_label, self.hotkey_status)
         _name_control(
-            self.hotkey, "Push-to-talk key. " + ALTGR_HOTKEY_GUIDANCE)
+            self.hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
         for status in (
                 self.model_label, self.microphone_status,
                 self.hotkey_status, self.autostart_status):
@@ -989,6 +1008,21 @@ class SetupWindow:
         # Persist immediately so Set Up Later, a model download failure, or a
         # restart cannot strand an AltGr-layout user on the unusable default.
         self.app.settings["hotkey"] = selected
+        cfg.save(self.app.settings)
+        _set_accessible_text(self.instructions, self._dictation_instructions())
+
+    def _trigger_changed(self):
+        selected = self.trigger.get()
+        if selected not in ("hold", "toggle"):
+            self.trigger.set(
+                self.app.settings.get("trigger", cfg.DEFAULTS["trigger"]))
+            return
+        if selected == self.app.settings.get("trigger", cfg.DEFAULTS["trigger"]):
+            return
+        # Apply before Try Dictation and persist before Set Up Later. The
+        # listener reads this setting for each new hotkey transaction, while
+        # an already-held key keeps the mode captured when it was pressed.
+        self.app.settings["trigger"] = selected
         cfg.save(self.app.settings)
         _set_accessible_text(self.instructions, self._dictation_instructions())
 

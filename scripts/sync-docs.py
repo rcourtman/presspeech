@@ -358,10 +358,12 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Help qualify target apps",
         "five steady-focus attempts",
         "three focus-change attempts",
+        "live coverage links separate native, browser, and Electron/Chromium",
         "Browse existing compatibility",
     ),
     ROOT / "SUPPORT.md": (
         "Browse existing target-app compatibility reports",
+        "live coverage",
         "generic field type",
     ),
     ROOT / "CONTRIBUTING.md": (
@@ -390,6 +392,10 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
     ),
     DOCS / "app-compatibility.md": (
         "generic field type",
+        "Choose useful coverage",
+        "Native desktop app reports",
+        "Browser page or web editor reports",
+        "Electron/Chromium desktop app reports",
         "Add your counts even when the outcome differs",
         "ordinary command-shell prompt is outside",
         "after the fixed `[Compatibility]:` title prefix",
@@ -400,6 +406,10 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
     ),
     DOCS / "app-compatibility.html": (
         "generic field type",
+        "Choose a useful target",
+        "Browse native-app reports",
+        "Browse browser reports",
+        "Browse Electron/Chromium reports",
         "variation under comparable conditions",
         "ordinary command-shell prompt is outside",
         "fixed <code>[Compatibility]:</code> title prefix",

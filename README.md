@@ -306,7 +306,9 @@ focus-change attempts as aggregate counts: pasted once, recovered safely, or
 incorrect/unsafe. Never publish the phrases or transcripts.
 
 Passing reports matter as much as failures because they provide the denominator
-for platform/app/version/field combinations. [Browse existing compatibility
+for platform/app/version/field combinations. If no app is already in mind, the
+protocol's live coverage links separate native, browser, and Electron/Chromium
+reports so an unrepresented target class is easy to choose. [Browse existing compatibility
 reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
 before opening the focused [compatibility report
 form](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml).

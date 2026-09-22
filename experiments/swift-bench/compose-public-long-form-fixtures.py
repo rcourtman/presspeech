@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -101,6 +102,15 @@ def normalized_reference(path: Path) -> str:
     if not text:
         raise FixtureError(f"reference is empty: {path}")
     return text
+
+
+def wave_payload_digest(fmt: bytes, data: bytes) -> str:
+    """Identify decoded WAVE payloads without trusting container metadata."""
+    digest = hashlib.sha256()
+    digest.update(len(fmt).to_bytes(8, "little"))
+    digest.update(fmt)
+    digest.update(data)
+    return digest.hexdigest()
 
 
 def load_sources(input_dir: Path) -> list[dict[str, object]]:
@@ -290,18 +300,26 @@ def validate_output(output_dir: Path) -> list[Path]:
         )
 
     observed: dict[str, tuple[float, str]] = {}
+    payload_ids: dict[str, str] = {}
     for audio_path in audio_paths:
         if audio_path.is_symlink() or not audio_path.is_file():
             raise FixtureError(f"composite audio must be a regular file: {audio_path}")
         reference_path = audio_path.with_suffix(".txt")
         if reference_path.is_symlink() or not reference_path.is_file():
             raise FixtureError(f"missing regular composite reference: {reference_path}")
-        _fmt, _data, _format_code, _frames, duration = read_wave(audio_path)
+        fmt, data, _format_code, _frames, duration = read_wave(audio_path)
         if duration < MIN_TARGET_SECONDS:
             raise FixtureError(
                 f"composite {audio_path.name} is {duration:.3f}s; release coverage "
                 f"requires at least {MIN_TARGET_SECONDS:.3f}s per clip"
             )
+        payload_id = wave_payload_digest(fmt, data)
+        if payload_id in payload_ids:
+            raise FixtureError(
+                "long-form release coverage contains byte-identical composite "
+                f"audio: {payload_ids[payload_id]} and {audio_path.name}"
+            )
+        payload_ids[payload_id] = audio_path.name
         observed[audio_path.stem] = (duration, normalized_reference(reference_path))
 
     manifest_path = output_dir / "manifest.tsv"
@@ -323,6 +341,7 @@ def validate_output(output_dir: Path) -> list[Path]:
         rows = list(reader)
 
     manifest_ids: set[str] = set()
+    manifest_source_ids: set[str] = set()
     for row in rows:
         composite_id = row["composite_id"]
         if composite_id in manifest_ids:
@@ -346,8 +365,21 @@ def validate_output(output_dir: Path) -> list[Path]:
         except ValueError as exc:
             raise FixtureError(f"invalid numeric manifest data for {composite_id}") from exc
         duration, reference = observed[composite_id]
-        if source_clip_count < 2 or len(row["source_clips"].split(",")) != source_clip_count:
+        source_ids = row["source_clips"].split(",")
+        if (
+            source_clip_count < 2
+            or len(source_ids) != source_clip_count
+            or any(not source_id for source_id in source_ids)
+            or len(set(source_ids)) != len(source_ids)
+        ):
             raise FixtureError(f"invalid source-clip evidence for {composite_id}")
+        duplicate_source_ids = manifest_source_ids.intersection(source_ids)
+        if duplicate_source_ids:
+            raise FixtureError(
+                "long-form manifest reuses source clip: "
+                f"{sorted(duplicate_source_ids)[0]}"
+            )
+        manifest_source_ids.update(source_ids)
         if (
             len(source_boundaries) != source_clip_count - 1
             or any(
@@ -408,6 +440,34 @@ def run_self_test() -> None:
             raise AssertionError("manifest omitted source/nominal boundary evidence")
         if len(validate_output(output)) != 2:
             raise AssertionError("valid long-form corpus did not pass release preflight")
+
+        first_audio = output / "long-form-001.wav"
+        second_audio = output / "long-form-002.wav"
+        second_audio.write_bytes(first_audio.read_bytes())
+        try:
+            validate_output(output)
+        except FixtureError as exc:
+            if "byte-identical composite audio" not in str(exc):
+                raise
+        else:
+            raise AssertionError("duplicate long-form audio passed release preflight")
+        compose(source, output, 30.0, True)
+
+        manifest_path = output / "manifest.tsv"
+        manifest_lines = manifest_path.read_text(encoding="utf-8").splitlines()
+        first_sources = manifest_lines[1].split("\t")[2]
+        second_fields = manifest_lines[2].split("\t")
+        second_fields[2] = first_sources
+        manifest_lines[2] = "\t".join(second_fields)
+        manifest_path.write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
+        try:
+            validate_output(output)
+        except FixtureError as exc:
+            if "reuses source clip" not in str(exc):
+                raise
+        else:
+            raise AssertionError("reused source rows passed release preflight")
+        compose(source, output, 30.0, True)
 
         (output / "long-form-001.txt").write_text("changed reference\n", encoding="utf-8")
         try:
