@@ -189,9 +189,14 @@ cd swift
 - Confirm `/tmp/Presspeech-dev.app` launches and the menu-bar item appears.
 - Open **Support -> Setup Checklist...** and confirm model, permissions,
   audio input, and hotkey rows render.
-- Navigate the checklist using Tab and Shift-Tab. Activate a permission action
-  that remains missing and changes from **Grant** to **Try Again**; confirm
-  keyboard focus remains on that replacement action when the row is redrawn.
+- Enable macOS keyboard navigation for controls (or Full Keyboard Access),
+  then navigate the checklist using Tab and Shift-Tab. Activate a permission
+  action that remains missing and changes from **Grant** to **Try Again**;
+  confirm keyboard focus remains on that replacement action when the row is
+  redrawn.
+  Continue through the complete loop in both directions after each redraw;
+  confirm no removed action retains focus and no current permission, Dock,
+  Try Dictation, or Close/Done control is skipped.
 - With VoiceOver enabled, confirm each permission action includes its context,
   such as **Grant Microphone** and **Grant Accessibility**, rather than being
   announced only as **Grant**.

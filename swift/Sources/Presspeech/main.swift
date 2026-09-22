@@ -144,6 +144,16 @@ func restoredSetupChecklistScrollOriginY(previousOriginY: CGFloat,
     return min(max(0, previousOriginY), maximumOriginY)
 }
 
+/// Keep Full Keyboard Access and ordinary Tab/Shift-Tab navigation complete
+/// as AppKit view trees change. NSWindow only calculates an initial key-view
+/// loop automatically; without this opt-in, clients must maintain the loop
+/// themselves whenever controls are added or replaced.
+@MainActor
+func enableAutomaticKeyboardNavigation(in window: NSWindow) {
+    window.autorecalculatesKeyViewLoop = true
+    window.recalculateKeyViewLoop()
+}
+
 /// A registered login item can still require the user's approval in System
 /// Settings. Treating that state as "enabled" makes a click unregister the
 /// pending request, leaving no path from Presspeech to the approval macOS is
@@ -7000,6 +7010,7 @@ private final class UpdateProgressAppDelegate: NSObject, NSApplicationDelegate, 
         ])
 
         window.contentView = container
+        enableAutomaticKeyboardNavigation(in: window)
         window.center()
         window.makeKeyAndOrderFront(nil)
     }
@@ -9898,6 +9909,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         window.contentView = makeSetupChecklistView(snapshot: snapshot)
         renderedSetupChecklistSnapshot = snapshot
         window.contentView?.layoutSubtreeIfNeeded()
+        // This window replaces its complete control hierarchy as live model,
+        // permission, and hotkey state changes. Explicitly dirty the loop now
+        // as well as opting into future automatic recalculation.
+        enableAutomaticKeyboardNavigation(in: window)
         if let previousScrollOriginY,
            let scroll = setupChecklistView(identifiedBy: scrollIdentifier,
                                            in: window.contentView) as? NSScrollView,
@@ -10329,6 +10344,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         ])
 
         window.contentView = container
+        enableAutomaticKeyboardNavigation(in: window)
         dictationScratchpadWindow = window
         dictationScratchpadTextView = textView
         window.center()
@@ -11224,6 +11240,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         ])
 
         window.contentView = container
+        enableAutomaticKeyboardNavigation(in: window)
         correctionsManagerWindow = window
         correctionsManagerSearchField = search
         correctionsManagerTableView = table
