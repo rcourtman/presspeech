@@ -3197,6 +3197,7 @@ class DeliveryRecoveryTests(unittest.TestCase):
     """Delivery control-flow tests; never touch the clipboard or inject input."""
     def setUp(self):
         self.instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        self.instance.lock = threading.Lock()
         self.instance._log = mock.Mock()
         self.instance.notify = mock.Mock()
         self.instance._undelivered_dictations = []
