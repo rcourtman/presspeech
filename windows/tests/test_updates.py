@@ -196,6 +196,31 @@ class UpdateSelectionTests(unittest.TestCase):
 
 
 class DownloadTests(unittest.TestCase):
+    def wait_for_cleanup_helper(self, helper, timeout=60):
+        # Hosted runners have taken almost 15 seconds for an unlocked cleanup.
+        # Keep a bounded native check, and always reap our PowerShell helper
+        # before its private files are removed, including on assertion failure.
+        try:
+            try:
+                return_code = helper.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                self.fail("update cleanup helper exceeded its %s-second deadline"
+                          % timeout)
+            self.assertEqual(return_code, 0, "update cleanup helper failed")
+        finally:
+            if helper.poll() is None:
+                helper.kill()
+            helper.wait(timeout=10)
+
+    def test_cleanup_fixture_reaps_a_helper_that_exceeds_its_deadline(self):
+        helper = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+        with self.assertRaisesRegex(AssertionError, "exceeded its .* deadline"):
+            self.wait_for_cleanup_helper(helper, timeout=0.1)
+        self.assertIsNotNone(helper.returncode)
+
     def make_update(self, payload, checksum=None):
         name = "Presspeech-Setup-0.1.1-x64.exe"
         digest = checksum or hashlib.sha256(payload).hexdigest()
@@ -500,9 +525,9 @@ class DownloadTests(unittest.TestCase):
                 handle.write(b"partial installer")
 
             helper = updates.schedule_abandoned_download_cleanup(partial)
-            helper.wait(timeout=15)
-            deadline = time.time() + 2
-            while os.path.exists(directory) and time.time() < deadline:
+            self.wait_for_cleanup_helper(helper)
+            deadline = time.monotonic() + 2
+            while os.path.exists(directory) and time.monotonic() < deadline:
                 time.sleep(0.05)
 
             self.assertFalse(os.path.exists(partial))
@@ -526,9 +551,9 @@ class DownloadTests(unittest.TestCase):
                 handle.write(b"verified installer")
 
             helper = updates.schedule_installer_cleanup(path)
-            helper.wait(timeout=15)
-            deadline = time.time() + 2
-            while os.path.exists(directory) and time.time() < deadline:
+            self.wait_for_cleanup_helper(helper)
+            deadline = time.monotonic() + 2
+            while os.path.exists(directory) and time.monotonic() < deadline:
                 time.sleep(0.05)
 
             self.assertFalse(os.path.exists(path))
