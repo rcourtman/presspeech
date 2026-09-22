@@ -3716,6 +3716,32 @@ private func postReleaseCaptureDecision(elapsed: TimeInterval,
                      POST_RELEASE_MAX_CAPTURE_SECONDS - elapsed))
 }
 
+private enum AudioCaptureStartupError: LocalizedError, Equatable {
+    case targetFormatUnavailable
+    case conversionUnavailable(sampleRate: Double, channelCount: AVAudioChannelCount)
+
+    var errorDescription: String? {
+        switch self {
+        case .targetFormatUnavailable:
+            return "Presspeech couldn't create its required 16 kHz mono capture format. Retry audio startup; if this persists, copy diagnostics and report the failure."
+        case .conversionUnavailable(let sampleRate, let channelCount):
+            let rate = sampleRate.isFinite ? String(format: "%.0f", sampleRate) : "unknown"
+            return "Presspeech can't convert the selected microphone's audio format (\(rate) Hz, \(channelCount) ch) to 16 kHz mono. Choose another microphone or change this device's format in Audio MIDI Setup, then retry audio startup."
+        }
+    }
+}
+
+private func requiredAudioConverter(_ converter: AVAudioConverter?,
+                                    inputFormat: AVAudioFormat) throws -> AVAudioConverter {
+    guard let converter else {
+        throw AudioCaptureStartupError.conversionUnavailable(
+            sampleRate: inputFormat.sampleRate,
+            channelCount: inputFormat.channelCount
+        )
+    }
+    return converter
+}
+
 func selectedMonoMixChannelIndices(channelRMS: [Double]) -> [Int] {
     let peak = channelRMS.max() ?? 0
     let active = channelRMS.enumerated()
@@ -3812,11 +3838,18 @@ final class AudioCapture: @unchecked Sendable {
             sampleRate: SAMPLE_RATE,
             channels: 1,
             interleaved: false
-        ) else { throw NSError(domain: "Presspeech", code: -1) }
+        ) else { throw AudioCaptureStartupError.targetFormatUnavailable }
 
         let sourceFormat = converterSourceFormat(for: inputFormat)
         let mixToMono = inputFormat.channelCount > 1 && sourceFormat.channelCount == 1
-        let newConverter = AVAudioConverter(from: sourceFormat, to: targetFormat)
+        // AVAudioConverter's initializer is failable. Publishing nil here
+        // makes engine.start() succeed while every tap callback exits before
+        // appending samples, so setup looks ready and every dictation is
+        // silently empty. Reject the format before installing the tap instead.
+        let newConverter = try requiredAudioConverter(
+            AVAudioConverter(from: sourceFormat, to: targetFormat),
+            inputFormat: inputFormat
+        )
         // Publish the converter trio under the lock — handleTap reads
         // them on the render thread (see the locking-discipline note
         // on the class comment).
@@ -7730,6 +7763,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 stopAudioEngineImmediately()
                 log("audio startup attempt \(attempt)/\(totalAttempts) failed (\(reason)): \(singleLineLogDetail(audioStartupErrorDescription(error)))")
 
+                // A nil converter must fail readiness rather than publish an
+                // engine that silently drops every buffer. Still retain the
+                // existing bounded retries: an input route can be transiently
+                // unsettled while CoreAudio rebuilds the graph.
                 guard let delay = audioStartupRetryDelaySeconds(afterFailedAttempt: attempt) else {
                     throw error
                 }
@@ -15721,6 +15758,31 @@ private enum PresspeechSelfTest {
         guard let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: 320),
               let converter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
             throw SelfTestFailure.failed("could not create audio converter")
+        }
+        try expect(
+            try requiredAudioConverter(converter, inputFormat: monoFormat) === converter,
+            equals: true,
+            "supported audio conversion should retain the created converter"
+        )
+        do {
+            _ = try requiredAudioConverter(nil, inputFormat: stereoFormat)
+            throw SelfTestFailure.failed("missing audio converter should fail startup")
+        } catch let error as AudioCaptureStartupError {
+            try expect(
+                error,
+                equals: .conversionUnavailable(sampleRate: 48_000, channelCount: 2),
+                "unsupported audio conversion should preserve privacy-safe format diagnostics"
+            )
+            try expect(
+                error.errorDescription?.contains("Choose another microphone") ?? false,
+                equals: true,
+                "unsupported audio conversion should give an actionable recovery"
+            )
+            try expect(
+                audioStartupErrorDescription(error).contains("Choose another microphone"),
+                equals: true,
+                "audio startup reporting should preserve the converter recovery message"
+            )
         }
         var error: NSError?
         let inputProvider = AudioConverterInputProvider(buffer: mono)
