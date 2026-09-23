@@ -925,6 +925,7 @@ class SetupWindow:
             frame,
             text=self._dictation_instructions(),
             justify="left",
+            wraplength=560,
         )
         self.instructions.grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(6, 16))
@@ -1244,7 +1245,10 @@ class SetupWindow:
             action = "Hold %s, speak, then release to type at the cursor." % hotkey
         return (action + "\nFirst setup may take time while the speech model "
                 "downloads and loads. Speech stays on this PC; no audio or "
-                "transcripts are uploaded.")
+                "transcripts are uploaded.\nWindows 11 also includes Voice "
+                "Access for on-device, offline voice control and dictation. "
+                "Presspeech focuses on hotkey-driven dictation that inserts "
+                "text at your cursor.")
 
     def _hotkey_changed(self, _event=None):
         selected = self.hotkey.get()

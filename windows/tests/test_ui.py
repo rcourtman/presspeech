@@ -1052,7 +1052,10 @@ class SetupWindowTests(unittest.TestCase):
             window.instructions,
             "Hold F8, speak, then release to type at the cursor.\n"
             "First setup may take time while the speech model downloads and "
-            "loads. Speech stays on this PC; no audio or transcripts are uploaded.",
+            "loads. Speech stays on this PC; no audio or transcripts are uploaded.\n"
+            "Windows 11 also includes Voice Access for on-device, offline voice "
+            "control and dictation. Presspeech focuses on hotkey-driven "
+            "dictation that inserts text at your cursor.",
         )
 
     def test_setup_rejects_unknown_hotkey_without_saving(self):
@@ -1085,7 +1088,10 @@ class SetupWindowTests(unittest.TestCase):
             window.instructions,
             "Press F8 to start, then press it again to type at the cursor.\n"
             "First setup may take time while the speech model downloads and "
-            "loads. Speech stays on this PC; no audio or transcripts are uploaded.",
+            "loads. Speech stays on this PC; no audio or transcripts are uploaded.\n"
+            "Windows 11 also includes Voice Access for on-device, offline voice "
+            "control and dictation. Presspeech focuses on hotkey-driven "
+            "dictation that inserts text at your cursor.",
         )
 
     def test_setup_rejects_unknown_trigger_without_saving(self):
@@ -1185,7 +1191,10 @@ class SetupWindowTests(unittest.TestCase):
             window._dictation_instructions(),
             "Press F9 to start, then press it again to type at the cursor.\n"
             "First setup may take time while the speech model downloads and "
-            "loads. Speech stays on this PC; no audio or transcripts are uploaded.",
+            "loads. Speech stays on this PC; no audio or transcripts are uploaded.\n"
+            "Windows 11 also includes Voice Access for on-device, offline voice "
+            "control and dictation. Presspeech focuses on hotkey-driven "
+            "dictation that inserts text at your cursor.",
         )
 
     def test_microphone_check_runs_off_the_ui_thread(self):
