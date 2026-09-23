@@ -4,8 +4,10 @@
 This is a conservative static guard. It does not prove privacy, but it
 catches the easy mistakes: interpolating or concatenating transcript
 text, correction sources/replacements, whole correction arrays, or audio
-buffers into Swift `log(...)` and Windows Python `_log(...)` calls. Raw
-global keycodes are also forbidden because they can reveal typed characters.
+buffers into Swift `log(...)` and Windows Python `_log(...)` calls. Exact
+microphone/device names and selectors are also private because they can
+contain personal or workplace labels. Raw global keycodes are forbidden
+because they can reveal typed characters.
 Counts and other bounded metadata are allowed.
 
 The whole argument expression of each `log(...)` call is scanned —
@@ -88,7 +90,20 @@ PYTHON_PRIVATE_IDENTIFIERS = {
     "correction",
     "corrections",
     "dictionary",
+    "device_label",
+    "device_name",
+    "device_uid",
     "history",
+    "input_device",
+    "input_device_name",
+    "input_device_uid",
+    "label",
+    "mic_label",
+    "mic_name",
+    "microphone_label",
+    "microphone_name",
+    "microphone_uid",
+    "name",
     "pcm",
     "raw_transcript",
     "raw_text",
@@ -99,9 +114,11 @@ PYTHON_PRIVATE_IDENTIFIERS = {
     "source_field",
     "spoken",
     "stripped",
+    "selector",
     "text",
     "transcript",
     "trimmed",
+    "uid",
 }
 
 # Reading these properties exposes only bounded metadata, not the private value.
@@ -357,6 +374,9 @@ self._log(text.upper())
 self._log(traceback.format_exc())
 self._log("failed: %s" % str(exc))
 self._log("failed: %s" % traceback.format_exception(*sys.exc_info()))
+self._log("microphone: %s" % device["name"])
+self._log("configured input: %s" % selector)
+self._log("input device ID: %s" % input_device_uid)
 """
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
@@ -392,11 +412,14 @@ self._log("failed: %s" % traceback.format_exception(*sys.exc_info()))
         if findings:
             raise SystemExit(f"self-test rejected clean Python log calls: {findings}")
         findings = scan_paths([python_dirty_path])
-        if len(findings) != 9:
+        if len(findings) != 12:
             raise SystemExit(
-                f"self-test expected 9 dirty Python findings, got {len(findings)}: {findings}"
+                f"self-test expected 12 dirty Python findings, got {len(findings)}: {findings}"
             )
-        for identifier in ("audio", "corrected", "dictionary", "text", "transcript"):
+        for identifier in (
+            "audio", "corrected", "dictionary", "text", "transcript",
+            "name", "selector", "input_device_uid",
+        ):
             if not any(identifier in finding for finding in findings):
                 raise SystemExit(
                     f"self-test did not catch Python private identifier {identifier!r}"

@@ -14,6 +14,10 @@ public route is available, keep the privacy-safe aggregate locally and retry
 after issue creation is restored. Security reports must use the private route
 in [SECURITY.md](SECURITY.md).
 
+For a completed target-app compatibility check, the worksheet's **Download
+report block** saves only its six aggregate counts and overall classification
+as a plain-text file. It does not include test phrases or transcripts.
+
 - **First dictation or setup:** follow [Getting started](https://rcourtman.github.io/presspeech/getting-started.html).
 - **macOS install or permissions:** check the [macOS install guide](https://rcourtman.github.io/presspeech/install.html), [FAQ](https://rcourtman.github.io/presspeech/faq.html), and [troubleshooting guide](https://rcourtman.github.io/presspeech/troubleshooting.html).
 - **Windows install or model setup:** check the [Windows install guide](https://rcourtman.github.io/presspeech/windows.html) and [Windows technical guide](windows/README.md).

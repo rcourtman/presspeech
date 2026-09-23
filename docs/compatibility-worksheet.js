@@ -81,6 +81,7 @@
     const summary = doc.getElementById("worksheet-summary");
     const status = doc.getElementById("worksheet-status");
     const copy = doc.getElementById("copy-worksheet-summary");
+    const save = doc.getElementById("save-worksheet-summary");
     const reportActions = doc.getElementById("worksheet-report-actions");
     const countOutputs = {
       "steady-pasted-count": ["steady", "pasted"],
@@ -105,6 +106,7 @@
       }
       summary.value = formatSummary(result);
       copy.disabled = !result.complete;
+      save.disabled = !result.complete;
       reportActions.hidden = !result.complete;
       status.textContent = result.complete
         ? `All eight outcomes recorded. Overall: ${result.overall}.`
@@ -136,10 +138,38 @@
         : "Automatic copy was unavailable. The count and overall-result block is selected for manual copy.";
     }
 
+    function saveSummary() {
+      if (!summary.value) return;
+      let link;
+      let downloadUrl;
+      try {
+        const file = new Blob([`${summary.value}\n`], {
+          type: "text/plain;charset=utf-8",
+        });
+        downloadUrl = URL.createObjectURL(file);
+        link = doc.createElement("a");
+        link.href = downloadUrl;
+        link.download = "presspeech-compatibility-report.txt";
+        link.hidden = true;
+        doc.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+        status.textContent = "Aggregate-only download requested. The file contains no phrases or transcript.";
+      } catch (_error) {
+        if (link && link.parentNode) link.remove();
+        if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+        summary.focus();
+        summary.select();
+        status.textContent = "File download was unavailable. The aggregate-only block is selected for manual copying.";
+      }
+    }
+
     form.hidden = false;
     form.addEventListener("change", render);
     form.addEventListener("reset", () => setTimeout(render, 0));
     copy.addEventListener("click", copySummary);
+    save.addEventListener("click", saveSummary);
     render();
   }
 

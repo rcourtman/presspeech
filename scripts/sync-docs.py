@@ -403,6 +403,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Focus-change recovery is expected",
         "manual-paste recovery occurred while the original target stayed focused",
         "worksheet's six counts and Overall result",
+        "Download report block",
     ),
     DOCS / "app-compatibility.html": (
         "generic field type",
@@ -417,6 +418,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Focus-change recovery is expected",
         "manual-recovery option only when it occurred while the original target stayed focused",
         "worksheet's six counts and Overall result",
+        "Download report block",
     ),
 }
 
@@ -1802,6 +1804,17 @@ def check_compatibility_worksheet_contract(
                     "docs/app-compatibility.html: worksheet handoff must check "
                     "matching reports before opening a new report"
                 )
+        save_button = re.search(
+            r'<button\b(?=[^>]*\bid="save-worksheet-summary")(?=[^>]*\btype="button")'
+            r'(?=[^>]*\bdisabled\b)[^>]*>Download report block</button>',
+            form,
+            flags=re.I,
+        )
+        if save_button is None:
+            errors.append(
+                "docs/app-compatibility.html: aggregate download must be a disabled "
+                "worksheet button"
+            )
 
     for pattern, label in COMPATIBILITY_WORKSHEET_FORBIDDEN:
         if re.search(pattern, script):
@@ -1825,6 +1838,21 @@ def check_compatibility_worksheet_contract(
         errors.append(
             "docs/compatibility-worksheet.js: report actions must remain hidden "
             "until all outcomes are complete"
+        )
+    if "save.disabled = !result.complete" not in script:
+        errors.append(
+            "docs/compatibility-worksheet.js: report download must remain disabled "
+            "until all outcomes are complete"
+        )
+    if (
+        'save.addEventListener("click", saveSummary)' not in script
+        or "new Blob([`${summary.value}\\n`]" not in script
+        or 'link.download = "presspeech-compatibility-report.txt"' not in script
+        or "URL.createObjectURL(file)" not in script
+    ):
+        errors.append(
+            "docs/compatibility-worksheet.js: report download must save only the "
+            "aggregate summary in a named text file"
         )
     return errors
 
@@ -2793,7 +2821,9 @@ def run_self_test() -> None:
             '<form id="compatibility-worksheet">'
             + worksheet_inputs
             + '<textarea id="worksheet-summary" readonly></textarea>'
-            '<button type="button">Copy</button><button type="reset">Reset</button>'
+            '<button type="button">Copy</button>'
+            '<button id="save-worksheet-summary" type="button" disabled>'
+            'Download report block</button><button type="reset">Reset</button>'
             '<div id="worksheet-report-actions" hidden>'
             '<a href="https://github.com/example/issues?q=matching">Browse</a>'
             '<a href="https://github.com/example/issues/new?template=compatibility_report.yml">New</a>'
@@ -2801,13 +2831,18 @@ def run_self_test() -> None:
             '</form>',
             encoding="utf-8",
         )
-        worksheet_script.write_text(
+        worksheet_valid_script = (
             'document.getElementById("compatibility-worksheet");\n'
             'reportActions.hidden = !result.complete;\n'
+            'save.disabled = !result.complete;\n'
+            'save.addEventListener("click", saveSummary);\n'
+            'const file = new Blob([`${summary.value}\\n`]);\n'
+            'link.download = "presspeech-compatibility-report.txt";\n'
+            'URL.createObjectURL(file);\n'
             '`Overall result: ${result.overall}`\n'
-            + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
-            encoding="utf-8",
+            + "\n".join(COMPATIBILITY_OVERALL_RESULTS)
         )
+        worksheet_script.write_text(worksheet_valid_script, encoding="utf-8")
         if check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
             raise SyncError("self-test: local compatibility worksheet was rejected")
         valid_worksheet_page = worksheet_page.read_text(encoding="utf-8")
@@ -2844,14 +2879,23 @@ def run_self_test() -> None:
         ):
             raise SyncError("self-test: always-visible worksheet report handoff was accepted")
         worksheet_script.write_text(
+            valid_worksheet_script.replace("save.disabled = !result.complete;\n", "", 1),
+            encoding="utf-8",
+        )
+        if not any(
+            "report download must remain disabled" in error
+            for error in check_compatibility_worksheet_contract(
+                worksheet_page, worksheet_script
+            )
+        ):
+            raise SyncError("self-test: incomplete worksheet download was accepted")
+        worksheet_script.write_text(
             'localStorage.setItem("result", "unsafe");\n', encoding="utf-8"
         )
         if not check_compatibility_worksheet_contract(worksheet_page, worksheet_script):
             raise SyncError("self-test: persistent compatibility worksheet was accepted")
         worksheet_script.write_text(
-            "// local only\nreportActions.hidden = !result.complete;\n"
-            "`Overall result: ${result.overall}`\n"
-            + "\n".join(COMPATIBILITY_OVERALL_RESULTS),
+            "// local only\n" + worksheet_valid_script,
             encoding="utf-8",
         )
         worksheet_page.write_text(

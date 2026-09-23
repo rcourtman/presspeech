@@ -174,7 +174,10 @@ Selections stay only in the page controls: the worksheet does not send
 selections, write them to browser storage, or provide a field for a phrase or
 transcript. Use **Reset worksheet** to clear them. **Copy report block**
 places only the labelled six counts and overall classification on the
-clipboard; the user decides what to paste into GitHub. Once all eight outcomes
+clipboard; **Download report block** saves only that same aggregate as a
+plain-text file for your own records. Neither action includes phrases or
+transcripts, and the user decides what to share. The download can preserve a
+completed result while no public reporting route is available. Once all eight outcomes
 are selected, the worksheet also reveals the existing-report search and new
 report form beside the result, with duplicate-checking first.
 
