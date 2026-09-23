@@ -91,12 +91,14 @@ MICROPHONE_CHECK_AUDIO_RMS = POST_ROLL_ABS_SILENCE_RMS
 MICROPHONE_CHECK_LEVEL = "level"
 MICROPHONE_CHECK_SILENT = "silent"
 MICROPHONE_CHECK_UNAVAILABLE = "unavailable"
+MICROPHONE_START_TIMEOUT_SEC = 5.0
 MODEL_WARMUP_SEC = 8.0
 MODEL_IDLE_WAKE_SEC = 60.0
 CPU_FIRST_RUN_MODEL = "base.en"
 PASTE_DELAY_SEC = 0.01
 RDP_PASTE_DELAY_SEC = 0.08
 NO_SPEECH_FEEDBACK_SEC = 2.5
+NOT_READY_FEEDBACK_SEC = 2.5
 NO_SPEECH_OUTCOME = "no_speech"
 
 VK_ESCAPE = 0x1B
@@ -723,6 +725,9 @@ class PresspeechApp:
         # already copying pre-release audio from satisfying the boundary gate.
         self._audio_sequence = 0
         self._last_audio_callback_started_at = 0.0
+        self._capture_ready = False
+        self._capture_ready_at = 0.0
+        self._first_audio_callback = None
         self._last_model_use = 0.0
         self._wake_in_progress = False
         self._wake_lock = threading.Lock()
@@ -1471,6 +1476,9 @@ class PresspeechApp:
             self._recording_input_device = None
             self._audio_sequence = 0
             self._last_audio_callback_started_at = 0.0
+            self._capture_ready = False
+            self._capture_ready_at = 0.0
+            self._first_audio_callback = threading.Event()
             self._model_idle_epoch += 1
             self._recording_paste_target = paste_target
             # Delivery belongs to this recording. Model work is serialized and
@@ -1483,8 +1491,10 @@ class PresspeechApp:
                 self._recording_scratchpad = scratchpad
             else:
                 self._recording_scratchpad = None
-        self._log("recording started")
-        self._set_indicator("listening")
+            # A quick release must never let this older start publish a stale
+            # Connecting state after stop has already shown its result.
+            self._set_indicator("connecting")
+        self._log("microphone starting")
         self._wake_model_if_idle()
         self._schedule_recording_limit(epoch)
         threading.Thread(
@@ -1496,17 +1506,87 @@ class PresspeechApp:
             return self.recording and epoch == self._rec_epoch
 
     def _start_audio_worker(self, epoch):
-        # Finish the audible cue before muting, and mute before opening the mic,
-        # so neither the cue nor existing speaker audio is captured.
-        # Device discovery can outlive a quick release and re-press, so every
-        # asynchronous stage remains owned by the recording that started it.
+        # A cue or Listening indicator must not claim that capture has begun
+        # before PortAudio has actually delivered a buffer. Open first, then
+        # wait for that callback; discard all input until the cue has finished
+        # and playback is muted. This also keeps the cue out of transcription.
+        if not self._open_mic_worker(epoch):
+            return
+        with self.lock:
+            first_callback = (self._first_audio_callback
+                              if self.recording and epoch == self._rec_epoch
+                              else None)
+        if first_callback is None:
+            return
+        deadline = time.monotonic() + MICROPHONE_START_TIMEOUT_SEC
+        while not first_callback.is_set():
+            if not self._recording_epoch_active(epoch):
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._abort_unresponsive_microphone(epoch)
+                return
+            first_callback.wait(min(remaining, 0.05))
+        if not self._recording_epoch_active(epoch):
+            return
         if self.settings.get("audio_cues", True):
             self._play_cue_worker("start")
         if not self._recording_epoch_active(epoch):
             return
         self._mute_playback_for_recording(epoch)
-        if self._recording_epoch_active(epoch):
-            self._open_mic_worker(epoch)
+        with self.lock:
+            if not self.recording or epoch != self._rec_epoch:
+                return
+            self._capture_ready_at = time.perf_counter()
+            self._capture_ready = True
+            # Publish readiness while the epoch is still owned. Otherwise a
+            # quick release could hide the overlay and then have this worker
+            # revive the stale Listening state or red tray icon.
+            self._set_indicator("listening")
+            if self.icon is not None:
+                self.icon.icon = self.rec_icon
+        self._log("microphone ready; recording audio")
+
+    def _abort_unresponsive_microphone(self, epoch):
+        with self.lock:
+            if not self.recording or epoch != self._rec_epoch:
+                return
+            self.recording = False
+            self._canceling_recording = True
+            self._capture_ready = False
+            stream = self.stream
+            self.stream = None
+            self._recording_input_device = None
+            self._recording_paste_target = PasteTarget("", 0)
+            self._recording_scratchpad = None
+            self.input_device = None
+            self._cached_input_selector = None
+            self.buffer = []
+            self._peak_rms = 0.0
+        try:
+            self._cancel_recording_limit(epoch)
+            if stream is not None:
+                try:
+                    stream.stop()
+                except Exception:
+                    pass
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            self._restore_playback_after_recording()
+            if self.icon is not None:
+                self.icon.icon = self.idle_icon
+            self._set_indicator(None)
+            self._schedule_model_idle_unload()
+            self._log("microphone started but delivered no audio buffers")
+            self.notify(
+                "Microphone not responding",
+                "Presspeech could not receive audio from the selected input. "
+                "Check the microphone in Setup or reconnect it, then try again.")
+        finally:
+            with self.lock:
+                self._canceling_recording = False
 
     def _mute_playback_for_recording(self, epoch):
         if not self.settings.get("mute_playback_while_recording", True):
@@ -1548,14 +1628,14 @@ class PresspeechApp:
         try:
             with AUDIO_BACKEND.operation() as audio_lease:
                 if not self._recording_epoch_active(epoch):
-                    return
+                    return False
                 chosen = self._get_input_device(epoch=epoch, audio_lease=audio_lease)
                 if not self._recording_epoch_active(epoch):
-                    return
+                    return False
                 if chosen is None:
                     with self.lock:
                         if not self.recording or epoch != self._rec_epoch:
-                            return
+                            return False
                         self.recording = False
                     self._cancel_recording_limit(epoch)
                     self._restore_playback_after_recording()
@@ -1567,10 +1647,10 @@ class PresspeechApp:
                                 "settings and try again. On Windows 11 builds with "
                                 "per-app desktop microphone controls, also allow "
                                 "Presspeech there.")
-                    return
+                    return False
                 with self.lock:
                     if not self.recording or epoch != self._rec_epoch:
-                        return
+                        return False
                     # Capture the rate before starting the stream: native
                     # backends may invoke the audio callback from start(), and
                     # Settings may invalidate the reusable cache at any time.
@@ -1597,7 +1677,7 @@ class PresspeechApp:
                         stream.close()
                     except Exception:
                         pass
-                    return
+                    return False
         except Exception as exc:
             with self.lock:
                 if not self.recording or epoch != self._rec_epoch:
@@ -1619,7 +1699,7 @@ class PresspeechApp:
                 except Exception:
                     pass
             if stale:
-                return
+                return False
             self._cancel_recording_limit(epoch)
             self._restore_playback_after_recording()
             self._set_indicator(None)
@@ -1632,10 +1712,9 @@ class PresspeechApp:
                 "11 builds with per-app desktop microphone controls, also allow "
                 "Presspeech there. Choose Check Microphone in Setup or another "
                 "input in Settings, then try again.")
-            return
+            return False
         self._log("mic open ok: %s" % (chosen,))
-        if self.icon is not None:
-            self.icon.icon = self.rec_icon
+        return True
 
     def _audio_cb(self, indata, frames, time_info, status, epoch):
         callback_started_at = time.perf_counter()
@@ -1643,6 +1722,13 @@ class PresspeechApp:
         chunk_rms = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
         with self.lock:
             if self.recording and epoch == self._rec_epoch:
+                if chunk.size:
+                    self._first_audio_callback.set()
+                # A callback can begin copying cue-era samples before the
+                # gate opens and acquire this lock only afterwards.
+                if (not self._capture_ready or
+                        callback_started_at < self._capture_ready_at):
+                    return
                 self.buffer.append(chunk)
                 self._peak_rms = max(self._peak_rms, chunk_rms)
                 self._audio_sequence = getattr(self, "_audio_sequence", 0) + 1
@@ -1667,6 +1753,8 @@ class PresspeechApp:
                 return False
             self.recording = False
             self._canceling_recording = True
+            self._cancel_stop_cue_pending = getattr(self, "_capture_ready", True)
+            self._capture_ready = False
             stream = self.stream
             self.stream = None
             self.buffer = []
@@ -1704,7 +1792,8 @@ class PresspeechApp:
             # Closing capture before restoring playback keeps returning speaker
             # audio and the cue out of the discarded microphone data.
             self._restore_playback_after_recording()
-            self._play_cue("stop")
+            if getattr(self, "_cancel_stop_cue_pending", True):
+                self._play_cue("stop")
             self._set_indicator(None)
             self._log("recording canceled; audio discarded")
             self._schedule_model_idle_unload()
@@ -1815,6 +1904,8 @@ class PresspeechApp:
                      expected_epoch != self._rec_epoch)):
                 return False
             self.recording = False
+            capture_was_ready = self._capture_ready
+            self._capture_ready = False
             audio = np.concatenate(self.buffer) if self.buffer else np.zeros(0, dtype=np.float32)
             # Claim the delivery lifecycle before releasing the recording lock.
             # This closes the small window in which another hotkey press could
@@ -1847,10 +1938,15 @@ class PresspeechApp:
         # Restore playback only after closing the stream, so returning speaker
         # audio and the stop cue are never captured in the post-roll.
         self._restore_playback_after_recording()
-        self._play_cue("stop")
+        if capture_was_ready:
+            self._play_cue("stop")
         if audio.size == 0:
-            self._show_no_speech_feedback()
-            self._log("recording stopped; no audio captured")
+            if capture_was_ready:
+                self._show_no_speech_feedback()
+                self._log("recording stopped; no audio captured")
+            else:
+                self._show_not_ready_feedback()
+                self._log("recording stopped before microphone was ready")
             self._schedule_model_idle_unload()
             return True
         if audio.ndim > 1:
@@ -2559,11 +2655,9 @@ class PresspeechApp:
         current_target = _foreground_paste_target()
         if _paste_target_matches(paste_target, current_target):
             return True
-        self._log(
-            "paste skipped; focus changed from %s to %s" % (
-                paste_target.process_name or "unknown",
-                current_target.process_name or "unknown",
-            ))
+        # Executable basenames can contain user or workplace names. Window
+        # identity is enough to decide delivery; logs need only the outcome.
+        self._log("paste skipped; focus changed")
         return False
 
     # ---------------- windows ----------------
@@ -2832,6 +2926,13 @@ class PresspeechApp:
     def _show_no_speech_feedback(self):
         self._set_temporary_indicator("no_speech", NO_SPEECH_FEEDBACK_SEC)
         self._notify_no_speech()
+
+    def _show_not_ready_feedback(self):
+        self._set_temporary_indicator("not_ready", NOT_READY_FEEDBACK_SEC)
+        self.notify(
+            "Microphone was not ready",
+            "Try again and wait for the start cue or Listening status before "
+            "speaking. If this keeps happening, check the microphone in Setup.")
 
     def _play_cue(self, name):
         if not self.settings.get("audio_cues", True):

@@ -9,6 +9,11 @@
   }
 
   const setOpen = (open) => {
+    // A viewport change can collapse the links while one has keyboard focus.
+    // Move focus to the now-visible control before hiding its descendants.
+    if (media.matches && !open && links.contains(document.activeElement)) {
+      toggle.focus();
+    }
     toggle.setAttribute("aria-expanded", String(open));
     links.hidden = media.matches && !open;
   };
@@ -23,7 +28,8 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && media.matches && !links.hidden) {
+    if (event.key === "Escape" && media.matches && !links.hidden &&
+        navigation.contains(document.activeElement)) {
       setOpen(false);
       toggle.focus();
     }

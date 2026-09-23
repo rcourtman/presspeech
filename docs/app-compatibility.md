@@ -216,9 +216,9 @@ routes, and advises keeping the file private if no suitable route is available.
 The browser or operating system controls the downloaded file. It can preserve
 a classified result and a reminder of useful context while no public reporting
 route is available. Once all eight check slots are classified, the worksheet reveals
-the existing-report search and a link to check whether GitHub currently accepts
-a new report. Selections are not submitted; if intake is restricted, keep the
-draft locally and retry later.
+the existing-report search and a link to the GitHub issue list, where the
+current issue-creation status is visible. Selections are not submitted; if
+intake is restricted, keep the draft locally and retry later.
 
 Without the worksheet, tally the same seven categories manually:
 

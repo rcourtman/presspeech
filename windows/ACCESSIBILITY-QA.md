@@ -44,6 +44,11 @@ Windows UI, UIA integration, or Tk version.
    announced but byte-count updates do not repeatedly interrupt speech. For
    the on-screen indicator, use a short harmless Try Dictation phrase and
    confirm its state is accessible and does not take focus.
+   On a build with microphone-start readiness gating, confirm the indicator
+   announces **Connecting microphone…** before **Listening…**, and Try
+   Dictation's status does not invite speech until that change. A quick release
+   before readiness should announce **Microphone was not ready — try again**
+   without leaving a stale Listening status.
 
 4. **Text size and contrast.** Test Setup, Settings, Try Dictation, Delivery
    Recovery, and the update window individually at Windows Accessibility

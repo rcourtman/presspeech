@@ -941,7 +941,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Download report draft",
         "blank prompts for public version and generic target context",
         "keyboard layout/input source only if it differs from your",
-        "Check new-report availability",
+        "Check issue-creation status",
     ),
 }
 
@@ -3304,6 +3304,15 @@ def check_compatibility_worksheet_contract(
     script = read_text(script_path)
     if '<script src="compatibility-worksheet.js" defer></script>' not in page:
         errors.append("docs/app-compatibility.html: worksheet script must be local and deferred")
+    noscript = re.search(r"<noscript\b[^>]*>(.*?)</noscript>", page, flags=re.I | re.S)
+    if (
+        noscript is None
+        or "four focus-change categories across three attempts" not in noscript.group(1)
+    ):
+        errors.append(
+            "docs/app-compatibility.html: no-JavaScript guidance must count "
+            "four focus-change categories across three attempts"
+        )
 
     form_match = re.search(
         r'<form\b(?=[^>]*\bid="compatibility-worksheet")[^>]*>(?P<body>.*?)</form>',
@@ -3381,16 +3390,26 @@ def check_compatibility_worksheet_contract(
         else:
             actions = report_actions.group("body")
             browse_position = actions.find("issues?q=")
-            new_position = actions.find("issues/new?template=compatibility_report.yml")
-            if browse_position < 0 or new_position < 0 or browse_position > new_position:
+            status_link = re.search(
+                r'href="https://github\.com/rcourtman/presspeech/issues"', actions
+            )
+            status_position = status_link.start() if status_link else -1
+            if (
+                browse_position < 0
+                or status_position < 0
+                or browse_position > status_position
+            ):
                 errors.append(
                     "docs/app-compatibility.html: worksheet handoff must check "
-                    "matching reports before opening a new report"
+                    "matching reports before issue-creation status"
                 )
-            if "Check new-report availability" not in actions:
+            if (
+                "Check issue-creation status" not in actions
+                or "issues/new?" in actions
+            ):
                 errors.append(
-                    "docs/app-compatibility.html: new-report link must not imply "
-                    "that issue creation is currently available"
+                    "docs/app-compatibility.html: worksheet handoff must use the "
+                    "issue list instead of a restricted new-report form"
                 )
         save_button = re.search(
             r'<button\b(?=[^>]*\bid="save-worksheet-summary")(?=[^>]*\btype="button")'
@@ -5278,6 +5297,7 @@ def run_self_test() -> None:
         )
         worksheet_page.write_text(
             '<script src="compatibility-worksheet.js" defer></script>'
+            '<noscript>four focus-change categories across three attempts</noscript>'
             '<form id="compatibility-worksheet">'
             + worksheet_inputs
             + '<textarea id="worksheet-summary" readonly></textarea>'
@@ -5286,7 +5306,7 @@ def run_self_test() -> None:
             'Download report draft</button><button type="reset">Reset</button>'
             '<div id="worksheet-report-actions" hidden>'
             '<a href="https://github.com/example/issues?q=matching">Check matching reports</a>'
-            '<a href="https://github.com/example/issues/new?template=compatibility_report.yml">Check new-report availability</a>'
+            '<a href="https://github.com/rcourtman/presspeech/issues">Check issue-creation status</a>'
             '</div>'
             '</form>',
             encoding="utf-8",
@@ -5310,6 +5330,38 @@ def run_self_test() -> None:
             raise SyncError("self-test: local compatibility worksheet was rejected")
         valid_worksheet_page = worksheet_page.read_text(encoding="utf-8")
         valid_worksheet_script = worksheet_script.read_text(encoding="utf-8")
+        worksheet_page.write_text(
+            valid_worksheet_page.replace(
+                "four focus-change categories across three attempts",
+                "three focus-change categories across three attempts",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "no-JavaScript guidance" in error
+            for error in check_compatibility_worksheet_contract(
+                worksheet_page, worksheet_script
+            )
+        ):
+            raise SyncError("self-test: stale no-JavaScript category count was accepted")
+        worksheet_page.write_text(valid_worksheet_page, encoding="utf-8")
+        worksheet_page.write_text(
+            valid_worksheet_page.replace(
+                '<a href="https://github.com/rcourtman/presspeech/issues">Check issue-creation status</a>',
+                '<a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Check new-report availability</a>',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "issue list instead of a restricted new-report form" in error
+            for error in check_compatibility_worksheet_contract(
+                worksheet_page, worksheet_script
+            )
+        ):
+            raise SyncError("self-test: blocked form handoff was accepted")
+        worksheet_page.write_text(valid_worksheet_page, encoding="utf-8")
         worksheet_page.write_text(
             valid_worksheet_page.replace(
                 '<input type="radio" name="focus-1" value="failed">',

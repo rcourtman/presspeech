@@ -5,9 +5,9 @@ This is a conservative static guard. It does not prove privacy, but it
 catches the easy mistakes: interpolating or concatenating transcript
 text, correction sources/replacements, whole correction arrays, or audio
 buffers into Swift `log(...)` and Windows Python `_log(...)` calls. Exact
-microphone/device names and selectors are also private because they can
-contain personal or workplace labels. Raw global keycodes are forbidden
-because they can reveal typed characters.
+microphone/device names, selectors, and focused executable names are also
+private because they can contain personal or workplace labels. Raw global
+keycodes are forbidden because they can reveal typed characters.
 Swift error objects and localized descriptions are forbidden because NSError
 domains/userInfo and upstream errors can contain private paths or input. Only
 the reviewed privacySafeErrorLogDetail(error) category wrapper is allowed.
@@ -125,6 +125,7 @@ PYTHON_PRIVATE_IDENTIFIERS = {
     "microphone_uid",
     "name",
     "pcm",
+    "process_name",
     "raw_transcript",
     "raw_text",
     "replacement",
@@ -426,6 +427,7 @@ self._log("failed: %s" % exc)
 self._log(f"failed: {error}")
 self._log("failed: %s" % err)
 self._log("failed: %s" % exception)
+self._log("paste target: %s" % paste_target.process_name)
 """
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
@@ -461,13 +463,14 @@ self._log("failed: %s" % exception)
         if findings:
             raise SystemExit(f"self-test rejected clean Python log calls: {findings}")
         findings = scan_paths([python_dirty_path])
-        if len(findings) != 16:
+        if len(findings) != 17:
             raise SystemExit(
-                f"self-test expected 16 dirty Python findings, got {len(findings)}: {findings}"
+                f"self-test expected 17 dirty Python findings, got {len(findings)}: {findings}"
             )
         for identifier in (
             "audio", "corrected", "dictionary", "text", "transcript",
             "name", "selector", "input_device_uid",
+            "process_name",
             "exc", "error", "err", "exception",
         ):
             if not any(identifier in finding for finding in findings):

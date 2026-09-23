@@ -212,7 +212,7 @@
             <figcaption class="demo-figure__caption" id="demo-video-description"><strong>Silent visual walkthrough:</strong> Right Option is held while Presspeech shows that it is listening, then released. After local transcription, the complete sentence appears in the same TextEdit document. If Presspeech cannot verify the original destination, it keeps the finished transcript available for manual paste instead.</figcaption>
           </figure>
           <div class="note">
-            <p><strong>Check an app before relying on automatic paste.</strong> Target apps, including browser editors, Electron/Chromium apps, terminal-based editors, and remote sessions, expose focus and paste behavior differently. Run the <a href="app-compatibility.html">privacy-safe target-app check</a> to separate automatic paste from clipboard recovery; it records outcomes, never your words.</p>
+            <p><strong>Check an app before relying on automatic paste.</strong> Target apps, including browser editors, Electron/Chromium apps, terminal-based editors, and remote sessions, expose focus and paste behavior differently. On macOS 0.3.8, some Electron/Chromium apps can show the copied/manual-paste notice even when focus looks unchanged; that is recovery, not an automatic-paste pass. Run the <a href="app-compatibility.html">privacy-safe target-app check</a> to separate automatic paste from clipboard recovery; it records outcomes, never your words.</p>
           </div>
         </div>
       </section>

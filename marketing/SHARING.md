@@ -54,7 +54,14 @@ Links:
 - Homebrew: `brew install --cask rcourtman/presspeech/presspeech`
 
 GitHub's repository profile is a manual distribution surface and must match the
-two-platform README. Use this About description:
+two-platform README. **Observed 23 September 2026:** the public
+[repository profile](https://github.com/rcourtman/presspeech)
+still describes only Apple Silicon Macs and says "no cloud or telemetry". That
+does not describe the Windows prerelease or its version-specific model-download
+telemetry caveat. Updating the profile requires a separate manual GitHub change;
+editing this file does not change it.
+
+Use this About description:
 
 > Private local push-to-talk dictation for Apple Silicon Macs, plus an x64
 > Windows preview — no account, subscription, or cloud transcription; bundled-library network behavior is version-specific.

@@ -57,6 +57,11 @@ collaborator where noted:
   presenting a Mac-only project. Confirm the Pages home page, Get started,
   macOS, Windows, Help, and Privacy routes are reachable from the primary
   navigation at desktop width, 360 CSS pixels, and 200% zoom.
+- With keyboard focus on a primary-navigation link, narrow the viewport below
+  720 CSS pixels. The links should collapse and focus should move to the visible
+  Menu button. Open the menu and focus a link; Escape should collapse it and
+  return focus to Menu. Open it again, move focus into page content, then press
+  Escape; the page control should keep focus and the menu should stay open.
 
 A restricted public issue form is a failed support path, even when existing
 issues remain readable and the templates in source are valid. A candidate is
@@ -335,6 +340,16 @@ keyboard access testing in addition to assistive-technology testing.
   default key and, on a layout where Right Alt acts as AltGr, the selected
   alternative key. Record only pass/fail, not dictated content. The model-free
   autorepeat test does not replace this native input check.
+- On the upcoming 0.1.13 candidate, repeat a cold microphone start with cues
+  on and off and with a USB or Bluetooth input after reconnect/resume. Confirm
+  **Connecting microphone…** appears first; neither the high cue nor
+  **Listening…** may appear before the stream delivers input. Once the high cue
+  finishes and playback muting is applied, **Listening…** appears and speech
+  is accepted. Tap and release before readiness: there must be no false
+  **Listening…** or stop cue, and the result must say the microphone was not
+  ready. If an input starts but supplies no buffers, it must close and report
+  **Microphone not responding** rather than leaving a stuck recording. Check
+  the selected input and repeat, without retaining audio or transcripts.
 - On each clean CPU and NVIDIA configuration, use **Try Dictation** to repeat
   one short, harmless phrase ten times, alternating five hold-mode and five
   toggle-mode attempts. Begin speaking immediately after the visible
@@ -1110,6 +1125,10 @@ clipboard.
   before the one-batch shortcut submission. Confirm detected changes skip the
   shortcut and retain text without replacing the newer copy automatically.
   A change during or after SendInput remains an unguarded race.
+- Switch to a different target window before delivery. Confirm the recovery
+  notice appears and the Presspeech-authored focus-change log message is the
+  fixed status `paste skipped; focus changed`, not either executable
+  name, window title, or dictated text. Record only pass/fail, not the raw log.
 - With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt, Windows and V in
   turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
   does not release the physically held key, explains the retained dictation,

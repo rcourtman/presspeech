@@ -25,6 +25,7 @@ class RescanLifecycleRegression(unittest.TestCase):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = threading.Lock()
         instance.recording = True
+        instance._capture_ready = True
         instance._rec_epoch = 4
         instance.input_device = None
         instance.settings = {"input_device": "auto"}
@@ -53,6 +54,7 @@ class RescanLifecycleRegression(unittest.TestCase):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = threading.Lock()
         instance.recording = True
+        instance._capture_ready = True
         instance._rec_epoch = 4
         instance.input_device = None
         instance.settings = {"input_device": "auto"}

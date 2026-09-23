@@ -1606,6 +1606,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.model_status = "ready"
         instance.transcriber = mock.Mock()
         instance.transcriber.loaded.return_value = True
+        instance.indicator = mock.Mock()
         instance._play_cue = mock.Mock()
         instance._wake_model_if_idle = mock.Mock()
         instance._schedule_recording_limit = mock.Mock()
@@ -1618,6 +1619,9 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(instance._recording_paste_target, target)
         self.assertEqual(instance._audio_sequence, 0)
         self.assertEqual(instance._last_audio_callback_started_at, 0.0)
+        self.assertFalse(instance._capture_ready)
+        self.assertFalse(instance._first_audio_callback.is_set())
+        instance.indicator.show.assert_called_once_with("connecting")
         instance._schedule_recording_limit.assert_called_once_with(1)
 
     def test_recording_owns_the_current_scratchpad_destination(self):
@@ -1772,6 +1776,10 @@ class TextRegressionTests(unittest.TestCase):
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
+        logged = str(instance._log.mock_calls)
+        self.assertIn("paste skipped; focus changed", logged)
+        self.assertNotIn("notepad.exe", logged)
+        self.assertNotIn("calculator.exe", logged)
 
     def test_missing_recording_target_copies_without_pasting(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2393,21 +2401,142 @@ class TextRegressionTests(unittest.TestCase):
         restore.assert_called_once_with(saved)
         self.assertIsNone(instance._playback_restore)
 
-    def test_start_cue_finishes_before_playback_mutes_and_mic_opens(self):
+    def test_start_cue_waits_for_microphone_before_playback_mutes_and_capture(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"audio_cues": True}
         instance.lock = __import__("threading").Lock()
         instance.recording = True
         instance._rec_epoch = 4
+        instance._capture_ready = False
+        instance._first_audio_callback = threading.Event()
+        instance._first_audio_callback.set()
+        instance.icon = None
+        instance._log = mock.Mock()
         calls = mock.Mock()
         instance._play_cue_worker = calls.cue
         instance._mute_playback_for_recording = calls.mute
-        instance._open_mic_worker = calls.open_mic
+        instance._open_mic_worker = mock.Mock(side_effect=lambda _epoch: (
+            calls.open_mic(_epoch), True)[1])
+        instance._set_indicator = calls.indicator
+        calls.cue.side_effect = lambda _name: self.assertFalse(instance._capture_ready)
+        calls.mute.side_effect = lambda _epoch: self.assertFalse(instance._capture_ready)
         instance._start_audio_worker(4)
         self.assertEqual(
             calls.mock_calls,
-            [mock.call.cue("start"), mock.call.mute(4), mock.call.open_mic(4)],
+            [mock.call.open_mic(4), mock.call.cue("start"),
+             mock.call.mute(4), mock.call.indicator("listening")],
         )
+        self.assertTrue(instance._capture_ready)
+
+    def test_first_audio_callback_unblocks_readiness_but_is_not_transcribed(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"audio_cues": True}
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._rec_epoch = 4
+        instance._capture_ready = False
+        instance._first_audio_callback = threading.Event()
+        instance.buffer = []
+        instance._peak_rms = 0.0
+        instance._audio_sequence = 0
+        instance._last_audio_callback_started_at = 0.0
+        instance._capture_ready_at = 0.0
+        instance.icon = None
+        instance._log = mock.Mock()
+        instance._open_mic_worker = mock.Mock(return_value=True)
+        instance._play_cue_worker = mock.Mock()
+        instance._mute_playback_for_recording = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        worker = threading.Thread(target=instance._start_audio_worker, args=(4,))
+        worker.start()
+        try:
+            self.assertFalse(instance._first_audio_callback.is_set())
+            instance._play_cue_worker.assert_not_called()
+            chunk = __import__("numpy").ones((8, 1), dtype="float32")
+            instance._audio_cb(chunk, 8, None, None, 4)
+            worker.join(1)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(instance.buffer, [])
+            self.assertEqual(instance._audio_sequence, 0)
+            self.assertTrue(instance._capture_ready)
+            instance._play_cue_worker.assert_called_once_with("start")
+            instance._set_indicator.assert_called_once_with("listening")
+            instance._audio_cb(chunk, 8, None, None, 4)
+            self.assertEqual(len(instance.buffer), 1)
+        finally:
+            instance.recording = False
+            worker.join(1)
+
+    def test_no_audio_callback_aborts_without_claiming_listening(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"audio_cues": True}
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._canceling_recording = False
+        instance._capture_ready = False
+        instance._rec_epoch = 4
+        instance._first_audio_callback = threading.Event()
+        instance._recording_input_device = (2, 16000)
+        instance.input_device = (2, 16000)
+        instance._cached_input_selector = "auto"
+        instance.buffer = []
+        stream = mock.Mock()
+        instance.stream = stream
+        instance._open_mic_worker = mock.Mock(return_value=True)
+        instance._cancel_recording_limit = mock.Mock()
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._play_cue_worker = mock.Mock()
+        instance.icon = mock.Mock()
+        instance.idle_icon = object()
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        with mock.patch.object(app, "MICROPHONE_START_TIMEOUT_SEC", 0.01):
+            instance._start_audio_worker(4)
+
+        self.assertFalse(instance.recording)
+        self.assertFalse(instance._canceling_recording)
+        self.assertFalse(instance._capture_ready)
+        self.assertIsNone(instance._recording_input_device)
+        self.assertIsNone(instance.input_device)
+        self.assertIsNone(instance._cached_input_selector)
+        self.assertIsNone(instance.stream)
+        self.assertEqual(instance._recording_paste_target, app.PasteTarget("", 0))
+        self.assertIs(instance.icon.icon, instance.idle_icon)
+        instance._schedule_model_idle_unload.assert_called_once_with()
+        stream.stop.assert_called_once_with()
+        stream.close.assert_called_once_with()
+        instance._play_cue_worker.assert_not_called()
+        instance._set_indicator.assert_called_once_with(None)
+        instance.notify.assert_called_once_with(
+            "Microphone not responding",
+            "Presspeech could not receive audio from the selected input. "
+            "Check the microphone in Setup or reconnect it, then try again.")
+
+    def test_release_during_start_cue_cannot_revive_listening(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"audio_cues": True}
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._rec_epoch = 4
+        instance._capture_ready = False
+        instance._first_audio_callback = threading.Event()
+        instance._first_audio_callback.set()
+        instance.icon = None
+        instance._log = mock.Mock()
+        instance._open_mic_worker = mock.Mock(return_value=True)
+        instance._play_cue_worker = mock.Mock(
+            side_effect=lambda _name: setattr(instance, "recording", False))
+        instance._mute_playback_for_recording = mock.Mock()
+        instance._set_indicator = mock.Mock()
+
+        instance._start_audio_worker(4)
+
+        instance._mute_playback_for_recording.assert_not_called()
+        instance._set_indicator.assert_not_called()
+        self.assertFalse(instance._capture_ready)
 
     def test_stale_audio_worker_cannot_attach_to_a_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2438,6 +2567,9 @@ class TextRegressionTests(unittest.TestCase):
         instance._peak_rms = 0.0
         instance._audio_sequence = 0
         instance._last_audio_callback_started_at = 0.0
+        instance._capture_ready = True
+        instance._capture_ready_at = 0.0
+        instance._first_audio_callback = threading.Event()
         chunk = __import__("numpy").ones((8, 1), dtype="float32")
 
         instance._audio_cb(chunk, 8, None, None, 4)
@@ -2447,6 +2579,48 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(len(instance.buffer), 1)
         self.assertEqual(instance._audio_sequence, 1)
         self.assertGreater(instance._last_audio_callback_started_at, 0.0)
+
+    def test_pre_ready_callback_delayed_in_copy_cannot_enter_capture(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._rec_epoch = 5
+        instance.buffer = []
+        instance._peak_rms = 0.0
+        instance._audio_sequence = 0
+        instance._last_audio_callback_started_at = 0.0
+        instance._capture_ready = False
+        instance._capture_ready_at = 0.0
+        instance._first_audio_callback = threading.Event()
+        copying = threading.Event()
+        continue_copy = threading.Event()
+        samples = __import__("numpy").ones((8, 1), dtype="float32")
+
+        class DelayedChunk:
+            def copy(self):
+                copying.set()
+                continue_copy.wait(2)
+                return samples
+
+        # Keep the callback waiting before it gets the app lock. Opening the
+        # capture gate must not retroactively accept its cue-era buffer.
+        chunk = DelayedChunk()
+        worker = threading.Thread(
+            target=instance._audio_cb, args=(chunk, 8, None, None, 5))
+        worker.start()
+        try:
+            self.assertTrue(copying.wait(1))
+            with instance.lock:
+                instance._capture_ready_at = app.time.perf_counter()
+                instance._capture_ready = True
+            continue_copy.set()
+            worker.join(1)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(instance.buffer, [])
+            self.assertEqual(instance._audio_sequence, 0)
+        finally:
+            continue_copy.set()
+            worker.join(1)
 
     def test_microphone_open_error_invalidates_cached_device_for_retry(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2617,6 +2791,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.lock = __import__("threading").Lock()
         instance.recording = True
         instance._rec_epoch = 7
+        instance._capture_ready = True
         instance.buffer = []
         instance.stream = None
         instance.icon = None
@@ -2634,12 +2809,38 @@ class TextRegressionTests(unittest.TestCase):
         timer.cancel.assert_called_once_with()
         instance._show_no_speech_feedback.assert_called_once_with()
 
+    def test_releasing_before_microphone_ready_reports_not_ready_not_no_speech(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance._capture_ready = False
+        instance.buffer = []
+        instance.stream = None
+        instance.icon = None
+        instance._recording_input_device = None
+        instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._show_no_speech_feedback = mock.Mock()
+        instance._show_not_ready_feedback = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+
+        self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        instance._play_cue.assert_not_called()
+        instance._show_no_speech_feedback.assert_not_called()
+        instance._show_not_ready_feedback.assert_called_once_with()
+
     def test_too_short_recording_reports_no_speech_without_model_work(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = __import__("threading").Lock()
         instance.recording = True
         instance.transcribing = False
         instance._rec_epoch = 7
+        instance._capture_ready = True
         instance.buffer = [
             __import__("numpy").ones(1600, dtype="float32")]
         instance.stream = None
@@ -2748,6 +2949,31 @@ class TextRegressionTests(unittest.TestCase):
         ])
         self.assertFalse(instance._canceling_recording)
 
+    def test_cancel_before_microphone_ready_has_no_stop_cue(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._capture_ready = False
+        instance._canceling_recording = False
+        instance.stream = None
+        instance.buffer = []
+        instance._peak_rms = 0.0
+        instance._recording_paste_target = app.PasteTarget("", 0)
+        instance._recording_scratchpad = None
+        instance._recording_input_device = None
+        instance._recording_limit_timer = None
+        instance.icon = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        with mock.patch.object(app.threading, "Thread"):
+            self.assertTrue(instance.cancel_recording())
+        instance._cancel_recording_worker(None, None)
+        instance._play_cue.assert_not_called()
+        instance._set_indicator.assert_called_once_with(None)
+
     def test_cancel_attempts_stream_close_when_stop_fails(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = __import__("threading").Lock()
@@ -2774,6 +3000,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.recording = True
         instance.transcribing = False
         instance._rec_epoch = 7
+        instance._capture_ready = True
         audio = __import__("numpy").ones(4800, dtype="float32")
         instance.buffer = [audio]
         instance.stream = None
@@ -2807,6 +3034,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.recording = True
         instance.transcribing = False
         instance._rec_epoch = 7
+        instance._capture_ready = True
         raw_audio = __import__("numpy").ones(14400, dtype="float32")
         instance.buffer = [raw_audio]
         instance.stream = None

@@ -734,9 +734,11 @@ class DictationIndicator:
 
     _STATES = {
         "loading": ("Preparing speech model\u2026", "#6aa9ff"),
+        "connecting": ("Connecting microphone\u2026", "#6aa9ff"),
         "listening": ("Listening\u2026", "#ff5a5f"),
         "transcribing": ("Transcribing\u2026", "#ffb340"),
         "no_speech": ("No speech detected \u2014 try again", "#ffb340"),
+        "not_ready": ("Microphone was not ready \u2014 try again", "#ffb340"),
     }
 
     def __init__(self):
@@ -1461,13 +1463,16 @@ class SetupWindow:
 
     def _dictation_instructions(self):
         hotkey = self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]).title()
+        ready = ("wait for the start cue (if enabled) to finish and the "
+                 "Listening… status (if shown)")
         if self.app.settings.get("trigger", cfg.DEFAULTS["trigger"]) == "toggle":
             action = (
-                "Press %s to start, then press it again to type at the cursor."
-                % hotkey
+                "Press %s to start, %s, speak, then press it again to type "
+                "at the cursor." % (hotkey, ready)
             )
         else:
-            action = "Hold %s, speak, then release to type at the cursor." % hotkey
+            action = ("Hold %s, %s, speak, then release to type at the cursor."
+                      % (hotkey, ready))
         return (action + "\nFirst setup may take time while the speech model "
                 "downloads and loads. Speech stays on this PC; no audio or "
                 "transcripts are uploaded.\nWindows 11 also includes Voice "
@@ -2576,6 +2581,12 @@ class ScratchpadWindow:
     def _control_state(self):
         """Return a truthful command and status for the app lifecycle."""
         if getattr(self.app, "recording", False):
+            if not getattr(self.app, "_capture_ready", True):
+                return (
+                    "Stop Dictation", "normal",
+                    "Connecting microphone… Wait for the start cue or "
+                    "Listening status before speaking. Press Escape to cancel.",
+                )
             return (
                 "Stop Dictation", "normal",
                 "Recording… Speak, then stop dictation or press Escape to cancel.",

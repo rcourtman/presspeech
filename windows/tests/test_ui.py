@@ -1347,7 +1347,9 @@ class SetupWindowTests(unittest.TestCase):
         save.assert_called_once_with(window.app.settings)
         set_text.assert_called_once_with(
             window.instructions,
-            "Hold F8, speak, then release to type at the cursor.\n"
+            "Hold F8, wait for the start cue (if enabled) to finish and the "
+            "Listening… status (if shown), speak, then release to type at "
+            "the cursor.\n"
             "First setup may take time while the speech model downloads and "
             "loads. Speech stays on this PC; no audio or transcripts are uploaded.\n"
             "Windows 11 also includes Voice Access for on-device, offline voice "
@@ -1383,7 +1385,9 @@ class SetupWindowTests(unittest.TestCase):
         save.assert_called_once_with(window.app.settings)
         set_text.assert_called_once_with(
             window.instructions,
-            "Press F8 to start, then press it again to type at the cursor.\n"
+            "Press F8 to start, wait for the start cue (if enabled) to finish "
+            "and the Listening… status (if shown), speak, then press it again "
+            "to type at the cursor.\n"
             "First setup may take time while the speech model downloads and "
             "loads. Speech stays on this PC; no audio or transcripts are uploaded.\n"
             "Windows 11 also includes Voice Access for on-device, offline voice "
@@ -1486,13 +1490,23 @@ class SetupWindowTests(unittest.TestCase):
 
         self.assertEqual(
             window._dictation_instructions(),
-            "Press F9 to start, then press it again to type at the cursor.\n"
+            "Press F9 to start, wait for the start cue (if enabled) to finish "
+            "and the Listening… status (if shown), speak, then press it again to "
+            "type at the cursor.\n"
             "First setup may take time while the speech model downloads and "
             "loads. Speech stays on this PC; no audio or transcripts are uploaded.\n"
             "Windows 11 also includes Voice Access for on-device, offline voice "
             "control and dictation. Presspeech focuses on hotkey-driven "
             "dictation that inserts text at your cursor.",
         )
+
+    def test_setup_hold_instructions_wait_for_readiness(self):
+        window = self.make_window("ready")
+        window.app.settings = {"hotkey": "f8", "trigger": "hold"}
+
+        self.assertTrue(window._dictation_instructions().startswith(
+            "Hold F8, wait for the start cue (if enabled) to finish and the "
+            "Listening… status (if shown), speak, then release"))
 
     def test_microphone_check_runs_off_the_ui_thread(self):
         window = self.make_window("ready")
@@ -1733,10 +1747,12 @@ class UpdateWindowTests(unittest.TestCase):
 
 class ScratchpadWindowTests(unittest.TestCase):
     def make_window(self, *, recording=False, transcribing=False,
-                    canceling=False, model_status="ready", waiting=False):
+                    canceling=False, model_status="ready", waiting=False,
+                    capture_ready=True):
         window = ui.ScratchpadWindow.__new__(ui.ScratchpadWindow)
         window.app = mock.Mock()
         window.app.recording = recording
+        window.app._capture_ready = capture_ready
         window.app.transcribing = transcribing
         window.app._canceling_recording = canceling
         window.app.model_status = model_status
@@ -1746,6 +1762,24 @@ class ScratchpadWindowTests(unittest.TestCase):
         window.status = mock.Mock()
         window.text = mock.Mock()
         return window
+
+    def test_connecting_microphone_does_not_invite_speech_before_ready(self):
+        window = self.make_window(recording=True, capture_ready=False)
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_controls()
+            window.app._capture_ready = True
+            window._refresh_controls()
+
+        set_text.assert_any_call(
+            window.status,
+            "Connecting microphone… Wait for the start cue or Listening status "
+            "before speaking. Press Escape to cancel.",
+        )
+        set_text.assert_any_call(
+            window.status,
+            "Recording… Speak, then stop dictation or press Escape to cancel.",
+        )
 
     def test_external_stop_restores_truthful_dictate_command(self):
         window = self.make_window(recording=True)

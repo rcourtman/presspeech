@@ -6101,11 +6101,13 @@ enum TextInserter {
     }
 
     static func copyWithoutPasting(_ text: String,
-                                   preserveClipboard: Bool = false) -> TextInsertionOutcome {
+                                   preserveClipboard: Bool = false,
+                                   expectedSourceChangeCount: Int? = nil) -> TextInsertionOutcome {
         ClipboardPasteInserter.copyWithoutPasting(
             text,
             to: .general,
-            preserveClipboard: preserveClipboard
+            preserveClipboard: preserveClipboard,
+            expectedSourceChangeCount: expectedSourceChangeCount
         )
     }
 }
@@ -6697,13 +6699,23 @@ private enum ClipboardPasteInserter {
     static func copyWithoutPasting(
         _ text: String,
         to pb: NSPasteboard,
-        preserveClipboard: Bool = false
+        preserveClipboard: Bool = false,
+        expectedSourceChangeCount: Int? = nil
     ) -> TextInsertionOutcome {
+        if let expectedSourceChangeCount,
+           pb.changeCount != expectedSourceChangeCount {
+            return .clipboardChanged
+        }
         let context: ReplacementContext
         switch prepareReplacement(on: pb, preserveClipboard: preserveClipboard) {
         case .ready(let prepared):
             context = prepared
         case .clipboardChanged:
+            return .clipboardChanged
+        }
+        // Snapshotting can block while another app replaces the clipboard.
+        if let expectedSourceChangeCount,
+           pb.changeCount != expectedSourceChangeCount {
             return .clipboardChanged
         }
 
@@ -6952,6 +6964,7 @@ private enum DirectUnicodeInserter {
     static func insert(_ text: String,
                        preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
+        let clipboardAtStart = NSPasteboard.general.changeCount
         let source = CGEventSource(stateID: .combinedSessionState)
         let chunks = unicodeInsertionChunks(
             for: text,
@@ -6967,7 +6980,8 @@ private enum DirectUnicodeInserter {
             copyWithoutPasting: {
                 TextInserter.copyWithoutPasting(
                     text,
-                    preserveClipboard: preserveClipboard
+                    preserveClipboard: preserveClipboard,
+                    expectedSourceChangeCount: clipboardAtStart
                 )
             }
         )
@@ -18677,6 +18691,36 @@ private enum PresspeechSelfTest {
         }
         try expect(changedLaterUnicodeRecovery, equals: .clipboardChanged,
                    "partial Unicode recovery must not conceal newer clipboard ownership")
+        let guardedUnicodeRecoveryCopy = MainActor.assumeIsolated {
+            let pb = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.unicode-recovery.\(UUID().uuidString)"
+            ))
+            defer { pb.releaseGlobally() }
+            _ = ClipboardPasteInserter.write("previous fixture", to: pb)
+            let originalCount = pb.changeCount
+            pb.clearContents()
+            _ = pb.setString("newer external fixture", forType: .string)
+            let rejected = ClipboardPasteInserter.copyWithoutPasting(
+                "recovery fixture", to: pb,
+                expectedSourceChangeCount: originalCount
+            )
+            let preserved = pb.string(forType: .string)
+            let currentCount = pb.changeCount
+            let copied = ClipboardPasteInserter.copyWithoutPasting(
+                "recovery fixture", to: pb,
+                expectedSourceChangeCount: currentCount
+            )
+            return (rejected: rejected, preserved: preserved,
+                    copied: copied, recovered: pb.string(forType: .string))
+        }
+        try expect(guardedUnicodeRecoveryCopy.rejected, equals: .clipboardChanged,
+                   "Unicode recovery must refuse an intervening clipboard copy")
+        try expect(guardedUnicodeRecoveryCopy.preserved, equals: "newer external fixture",
+                   "a refused recovery copy must preserve the newer item")
+        try expect(guardedUnicodeRecoveryCopy.copied, equals: .copiedWithoutPasting,
+                   "an unchanged clipboard may receive a deliberate recovery copy")
+        try expect(guardedUnicodeRecoveryCopy.recovered, equals: "recovery fixture",
+                   "the guarded recovery copy should retain the complete transcript")
         try expect(
             clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
             equals: [

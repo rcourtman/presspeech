@@ -281,8 +281,16 @@ The configured key is reserved for Presspeech while it is running, so it does
 not also open a Windows surface or invoke an F8–F12 command in the focused app.
 Other keys and AltGr layout input continue to pass through normally.
 
-A short high tone confirms recording has started and a lower tone confirms it has
-stopped. Audio cues are enabled by default and can be disabled in Settings.
+In published 0.1.12, the short high tone plays before the microphone opens;
+allow the device time to start before speaking. The upcoming 0.1.13 build
+instead shows **Connecting microphone…** until the input delivers its first
+audio buffer. Its high tone then confirms the microphone is delivering input,
+and **Listening…** confirms Presspeech is accepting speech after the tone and
+playback-muting step. If the input never supplies a buffer, Presspeech closes
+it and reports a microphone error instead of claiming to listen. Releasing
+before readiness reports that the microphone was not ready. A lower tone
+confirms an active recording has stopped. Audio cues are enabled by default
+and can be disabled in Settings.
 If a press captures too little audio or the local recognizer detects no speech,
 the indicator briefly says **No speech detected — try again** and a Windows
 notification points back to Setup's microphone check instead of failing
@@ -408,7 +416,8 @@ again; unsaved edits remain in place while it waits.
 - Audio cues when dictation starts and stops
 - Mute every active Windows playback endpoint while recording, restoring each
   device's previous mute state afterwards
-- A click-through **Listening… / Transcribing…** indicator on the active display
+- A click-through **Connecting microphone… / Listening… / Transcribing…**
+  indicator on the active display in the upcoming 0.1.13 build
 - Optional daily GitHub update checks; downloads and installation require
   approval, mutable releases are ignored, and the installer is verified by
   size and SHA-256 after download and again immediately before launch
