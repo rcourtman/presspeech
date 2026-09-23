@@ -153,6 +153,17 @@ def workflow_event_self_test() -> None:
         assert not admits(**case), case
     assert "workflows: [check, windows-release]" in workflow
     assert "github.event.workflow_run.name == 'windows-release'" in workflow.split("- name: Verify published release belongs to main", 1)[1].split("env:", 1)[0]
+    # Main moves often: a green check for a commit main already moved past, or
+    # a main update during validation, ends without deploying, not as a failure.
+    superseded = workflow.split("- name: Skip checks superseded by newer main", 1)[1].split("\n      - ", 1)[0]
+    assert 'TRIGGER_NAME" == check && "$TRIGGER_EVENT" == push' in superseded
+    assert 'TRIGGER_SHA" != "$(git rev-parse HEAD)"' in superseded
+    later = workflow.split("- name: Verify published release belongs to main", 1)[1]
+    for step in later.split("\n      - ")[1:-1]:
+        assert "if: steps.current.outputs.deploy == 'true'" in step, step.splitlines()[0]
+    deployment = later.split("- id: deployment", 1)[1]
+    assert deployment.startswith("\n        if: steps.gate.outputs.deploy == 'true'\n")
+    assert 'echo "Pages deployment refused: main advanced after checkout" >&2' in later
     print(f"Pages workflow event self-test passed ({len(accepted) + len(rejected_events)} scenarios).")
 
 

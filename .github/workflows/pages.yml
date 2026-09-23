@@ -51,6 +51,25 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: false
+      # Main moves often. A green check for a commit main has already moved
+      # past has nothing current to deploy; that newer commit's own check
+      # triggers Pages when it passes. End without deploying, not as a failure.
+      - name: Skip checks superseded by newer main
+        id: current
+        env:
+          TRIGGER_NAME: ${{ github.event.workflow_run.name }}
+          TRIGGER_EVENT: ${{ github.event.workflow_run.event }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$TRIGGER_NAME" == check && "$TRIGGER_EVENT" == push &&
+                "$TRIGGER_SHA" != "$(git rev-parse HEAD)" ]]; then
+            echo "Main advanced past ${TRIGGER_SHA:0:12}; its newer check run deploys Pages." |
+              tee -a "$GITHUB_STEP_SUMMARY"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Verify published release belongs to main
         if: github.event.workflow_run.event == 'release' || github.event.workflow_run.name == 'windows-release'
         env:
@@ -59,10 +78,12 @@ jobs:
           [[ "$CHECKED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           git merge-base --is-ancestor "$CHECKED_RELEASE_SHA" HEAD
       - name: Docs freshness
+        if: steps.current.outputs.deploy == 'true'
         run: python3 scripts/sync-docs.py --check
       # workflow_dispatch does not pass through the upstream check workflow.
       # Keep the cheap site validators at the deployment boundary as well.
       - name: Public site integrity
+        if: steps.current.outputs.deploy == 'true'
         run: |
           python3 scripts/check-docs-links.py --self-test
           python3 scripts/check-docs-links.py
@@ -72,16 +93,23 @@ jobs:
           python3 scripts/check-docs-metadata.py
           python3 scripts/check-public-assets.py
       - name: Public release contract
+        if: steps.current.outputs.deploy == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/check-public-releases.py --require-published
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        if: steps.current.outputs.deploy == 'true'
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: steps.current.outputs.deploy == 'true'
         with:
           path: docs
       - name: Require green current main before deployment
+        id: gate
+        if: steps.current.outputs.deploy == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          TRIGGER_NAME: ${{ github.event.workflow_run.name }}
+          TRIGGER_EVENT: ${{ github.event.workflow_run.event }}
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
@@ -96,8 +124,16 @@ jobs:
           # The public remote needs no persisted checkout credentials.
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           if [[ "$sha" != "$(git rev-parse refs/remotes/origin/main)" ]]; then
+            if [[ "$TRIGGER_NAME" == check && "$TRIGGER_EVENT" == push ]]; then
+              echo "Main advanced during validation; its newer check run deploys Pages." |
+                tee -a "$GITHUB_STEP_SUMMARY"
+              echo "deploy=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "Pages deployment refused: main advanced after checkout" >&2
             exit 1
           fi
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
       - id: deployment
+        if: steps.gate.outputs.deploy == 'true'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
