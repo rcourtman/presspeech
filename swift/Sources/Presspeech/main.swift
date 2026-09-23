@@ -2356,7 +2356,7 @@ final class Logger: @unchecked Sendable {
             do {
                 try appendPrivateLogData(data, to: url)
             } catch {
-                let fallback = "Logger: file write failed: \(error.localizedDescription)\n"
+                let fallback = "Logger: file write failed: \(privacySafeErrorLogDetail(error))\n"
                 FileHandle.standardError.write(Data(fallback.utf8))
             }
         }
@@ -2364,6 +2364,23 @@ final class Logger: @unchecked Sendable {
 }
 
 func log(_ msg: String) { Logger.shared.log(msg) }
+
+/// Error descriptions, domains, and userInfo can contain selected file paths,
+/// microphone labels, or upstream text. Persistent logs keep only a static
+/// type name, recognized domain category, and numeric code. User-facing
+/// alerts can explain the original failure locally without logging it.
+func privacySafeErrorLogDetail(_ error: Error) -> String {
+    let nsError = error as NSError
+    let domainCategory: String
+    switch nsError.domain {
+    case NSCocoaErrorDomain: domainCategory = "Cocoa"
+    case NSPOSIXErrorDomain: domainCategory = "POSIX"
+    case NSOSStatusErrorDomain: domainCategory = "OSStatus"
+    case NSURLErrorDomain: domainCategory = "URL"
+    default: domainCategory = "Other"
+    }
+    return "\(String(reflecting: type(of: error))) (\(domainCategory) code \(nsError.code))"
+}
 
 func privacySafeLogPath(_ path: String) -> String {
     privacySafeLogPath(URL(fileURLWithPath: path))
@@ -2823,7 +2840,7 @@ final class Settings: @unchecked Sendable {
             do {
                 return try TranscriptCorrectionsTransfer.decode(data)
             } catch {
-                log("settings: transcript correction decode failed: \(error)")
+                log("settings: transcript correction decode failed: \(privacySafeErrorLogDetail(error))")
                 return []
             }
         }
@@ -2850,7 +2867,7 @@ final class Settings: @unchecked Sendable {
             defaults.set(data, forKey: Self.keyTranscriptCorrections)
             return nil
         } catch {
-            log("settings: transcript correction encode failed: \(error)")
+            log("settings: transcript correction encode failed: \(privacySafeErrorLogDetail(error))")
             return error
         }
     }
@@ -3289,13 +3306,6 @@ private func audioStartupErrorDescription(_ error: Error) -> String {
     return lines.joined(separator: "\n")
 }
 
-private func singleLineLogDetail(_ text: String) -> String {
-    text.components(separatedBy: .newlines)
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-        .joined(separator: " | ")
-}
-
 private func audioInputFailureDetail(errorDescription: String) -> String {
     let lower = errorDescription.lowercased()
     let looksLikeCoreAudioFailure = lower.contains("coreaudio")
@@ -3327,13 +3337,6 @@ private func startupFailureDetail(stage: StartupFailureStage, error: Error) -> S
         ? audioStartupErrorDescription(error)
         : error.localizedDescription
     return startupFailureDetail(stage: stage, errorDescription: errorDescription)
-}
-
-private func startupFailureLogDetail(stage: StartupFailureStage, error: Error) -> String {
-    let detail = stage == .audioInput
-        ? audioStartupErrorDescription(error)
-        : String(describing: error)
-    return singleLineLogDetail(detail)
 }
 
 private func audioStartupRetryDelaySeconds(afterFailedAttempt failedAttempt: Int,
@@ -4894,7 +4897,8 @@ final class AudioCapture: @unchecked Sendable {
             inputProvider.provide(outStatus: outStatus)
         }
         if status == .error {
-            log("AudioCapture: convert error: \(error?.localizedDescription ?? "?")")
+            let safeErrorCategory = error.map { privacySafeErrorLogDetail($0) } ?? "unknown"
+            log("AudioCapture: convert error: \(safeErrorCategory)")
             return
         }
         guard let ch = out.floatChannelData?[0] else { return }
@@ -5100,7 +5104,7 @@ actor TranscriptionWorker {
         do {
             try ModelIntegrity.verifyParakeetV3Model(at: modelDirectory)
         } catch {
-            log("ASR: model integrity check failed; redownloading once: \(error.localizedDescription)")
+            log("ASR: model integrity check failed; redownloading once: \(privacySafeErrorLogDetail(error))")
             try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
             modelDirectory = try await AsrModels.download(force: true,
                                                           version: .v3,
@@ -5907,27 +5911,34 @@ private func keyboardLayoutVirtualKey(for character: UniChar,
     return nil
 }
 
-private func resolvedCommandVPasteVirtualKey(layoutKey: CGKeyCode?) -> CGKeyCode {
-    layoutKey ?? ANSI_PASTE_VIRTUAL_KEY
+private enum ClipboardPasteKeyResolution: Equatable {
+    case virtualKey(CGKeyCode)
+    case unavailable
+}
+
+private func clipboardPasteKeyResolution(layoutKey: CGKeyCode?) -> ClipboardPasteKeyResolution {
+    guard let layoutKey else { return .unavailable }
+    return .virtualKey(layoutKey)
 }
 
 /// Read the active Unicode keyboard layout on the main thread and resolve
 /// Command-V using the Command modifier state. Layouts such as Dvorak can map
 /// Command shortcuts differently from the ANSI physical V position. If macOS
-/// exposes no usable layout data, retain the prior ANSI behavior.
+/// exposes no usable layout data, do not guess a physical key: the caller must
+/// leave the transcript on the clipboard for the user's own Command-V.
 @MainActor
-private func currentCommandVPasteVirtualKey() -> CGKeyCode {
+private func currentCommandVPasteKeyResolution() -> ClipboardPasteKeyResolution {
     guard let copiedSource = TISCopyCurrentKeyboardLayoutInputSource() else {
-        return ANSI_PASTE_VIRTUAL_KEY
+        return .unavailable
     }
     let source = copiedSource.takeRetainedValue()
     guard let layoutPointer = TISGetInputSourceProperty(source,
                                                         kTISPropertyUnicodeKeyLayoutData) else {
-        return ANSI_PASTE_VIRTUAL_KEY
+        return .unavailable
     }
     let data = Unmanaged<CFData>.fromOpaque(layoutPointer).takeUnretainedValue()
     guard let layoutBytes = CFDataGetBytePtr(data) else {
-        return ANSI_PASTE_VIRTUAL_KEY
+        return .unavailable
     }
     let layout = UnsafeRawPointer(layoutBytes).assumingMemoryBound(to: UCKeyboardLayout.self)
     let commandModifierState: UInt32 = 1 // Carbon cmdKey shifted right by 8.
@@ -5948,7 +5959,7 @@ private func currentCommandVPasteVirtualKey() -> CGKeyCode {
         guard status == noErr, length == 1 else { return nil }
         return characters[0]
     }
-    return resolvedCommandVPasteVirtualKey(layoutKey: keycode)
+    return clipboardPasteKeyResolution(layoutKey: keycode)
 }
 
 private func clipboardPasteKeyboardEventSteps(commandKey: CGKeyCode,
@@ -6727,7 +6738,26 @@ private enum ClipboardPasteInserter {
             return outcome
         }
 
-        let pasteKey = currentCommandVPasteVirtualKey()
+        let pasteKey: CGKeyCode
+        switch currentCommandVPasteKeyResolution() {
+        case .virtualKey(let keycode):
+            pasteKey = keycode
+        case .unavailable:
+            // The ANSI V position may be a different Command shortcut on the
+            // active layout. Reuse the owned transcript for manual paste rather
+            // than posting a guessed shortcut or overwriting a newer copy.
+            let outcome = clipboardOnlyOutcomeAfterOwnedWrite {
+                receipt.stillOwns(pb)
+            }
+            if outcome == .copiedWithoutPasting {
+                stageManualPreservation(context, on: pb,
+                                        expectedChangeCount: writeChangeCount)
+                log("paste key unavailable for active layout; transcript copied for manual paste")
+            } else {
+                log("clipboard changed while resolving paste key; insertion stopped")
+            }
+            return outcome
+        }
         let steps = clipboardPasteKeyboardEventSteps(commandKey: virtualKeyCommand,
                                                      pasteKey: pasteKey)
         let postOutcome = post(
@@ -7154,7 +7184,7 @@ private func migrateLegacyIdentityFilesIfNeeded(settings: Settings,
             }
             log("identity migration: moved system-audio recovery state")
         } catch {
-            log("identity migration: recovery-state move failed: \(error.localizedDescription)")
+            log("identity migration: recovery-state move failed: \(privacySafeErrorLogDetail(error))")
         }
     }
 
@@ -7178,7 +7208,7 @@ private func migrateLegacyIdentityFilesIfNeeded(settings: Settings,
             } catch {
                 // Keep the configured legacy path so sync continues to
                 // work; the next launch can retry the rename.
-                log("identity migration: correction sync rename failed: \(error.localizedDescription)")
+                log("identity migration: correction sync rename failed: \(privacySafeErrorLogDetail(error))")
             }
         }
     }
@@ -7194,7 +7224,7 @@ private func migrateLegacyIdentityFilesIfNeeded(settings: Settings,
         do {
             try fileManager.removeItem(at: url)
         } catch {
-            log("identity migration: stale-file cleanup failed for \(privacySafeLogPath(url)): \(error.localizedDescription)")
+            log("identity migration: stale-file cleanup failed for \(privacySafeLogPath(url)): \(privacySafeErrorLogDetail(error))")
         }
     }
 }
@@ -7491,7 +7521,7 @@ enum TCC {
                     proc.waitUntilExit()
                     log("  tccutil reset \(service) \(bundleID) → exit \(proc.terminationStatus)")
                 } catch {
-                    log("  tccutil reset \(service) failed: \(error)")
+                    log("  tccutil reset \(service) failed: \(privacySafeErrorLogDetail(error))")
                 }
             }
             if let completion { Task { @MainActor in completion() } }
@@ -9172,7 +9202,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             startupStatusTitle = "Falling back to \(fallback.shortName)…"
             speechModelStartupProgressFraction = nil
             setMenuBarState(.loading)
-            log("ASR: \(failedProfile.shortName) failed to load during switch; falling back to \(fallback.shortName): \(startupFailureLogDetail(stage: stage, error: error))")
+            log("ASR: \(failedProfile.shortName) failed to load during switch; falling back to \(fallback.shortName): \(privacySafeErrorLogDetail(error))")
             rebuildMenu()
             DispatchQueue.main.async { [weak self] in
                 guard let self, !self.isTerminating else { return }
@@ -9210,7 +9240,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let detail = startupFailureDetail(stage: stage, error: error)
         startupFailure = StartupFailure(stage: stage, detail: detail)
-        log("startup failed (\(reason), \(stage)): \(startupFailureLogDetail(stage: stage, error: error))")
+        log("startup failed (\(reason), \(stage)): \(privacySafeErrorLogDetail(error))")
         setMenuBarState(.error)
         if !missingPermissions().isEmpty {
             startPermissionReadinessMonitor(reason: reason)
@@ -9242,7 +9272,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             } catch {
                 lastError = error
                 stopAudioEngineImmediately()
-                log("audio startup attempt \(attempt)/\(totalAttempts) failed (\(reason)): \(singleLineLogDetail(audioStartupErrorDescription(error)))")
+                log("audio startup attempt \(attempt)/\(totalAttempts) failed (\(reason)): \(privacySafeErrorLogDetail(error))")
 
                 // A nil converter must fail readiness rather than publish an
                 // engine that silently drops every buffer. Still retain the
@@ -10346,7 +10376,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             stopSystemAudioMuteWatchdog()
             systemAudioMutePhase = .idle
             systemAudioUnmuteRequested = false
-            log("output mute skipped: recovery watchdog unavailable (\(error.localizedDescription))")
+            log("output mute skipped: recovery watchdog unavailable (\(privacySafeErrorLogDetail(error)))")
             return
         }
         systemAudioMutePhase = .muting
@@ -10627,7 +10657,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         do {
             try diagnosticsText().write(to: url, atomically: true, encoding: .utf8)
-            log("diagnostics saved to \(privacySafeLogPath(url))")
+            log("diagnostics saved to a user-selected local file")
         } catch {
             showDiagnosticsSaveError(error)
         }
@@ -10646,7 +10676,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func showDiagnosticsSaveError(_ error: Error) {
-        log("diagnostics save failed: \(error.localizedDescription)")
+        log("diagnostics save failed: \(privacySafeErrorLogDetail(error))")
         showAppForModal()
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -13783,7 +13813,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         case fingerprintUnavailable
         case unchanged
         case loaded(corrections: [TranscriptCorrection], fingerprint: CorrectionSyncFileFingerprint)
-        case readFailed(logDescription: String, alertMessage: String)
+        case readFailed(safeErrorCategory: String, alertMessage: String)
     }
 
     /// Runs on `correctionSyncScanQueue` (hence `nonisolated`). Pure
@@ -13800,7 +13830,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             // validateCorrectionSyncPath only throws
             // TranscriptCorrectionsSyncPathError today; keep the
             // catch-all defensive rather than crashing the scan.
-            return .readFailed(logDescription: "\(error)",
+            return .readFailed(safeErrorCategory: privacySafeErrorLogDetail(error),
                                alertMessage: error.localizedDescription)
         }
         guard let fingerprint = correctionSyncFingerprint(for: url) else {
@@ -13811,7 +13841,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             let corrections = try TranscriptCorrectionsTransfer.read(from: url)
             return .loaded(corrections: corrections, fingerprint: fingerprint)
         } catch {
-            return .readFailed(logDescription: "\(error)",
+            return .readFailed(safeErrorCategory: privacySafeErrorLogDetail(error),
                                alertMessage: error.localizedDescription)
         }
     }
@@ -13896,8 +13926,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             correctionSyncFileFingerprint = fingerprint
             correctionSyncBaselineCorrections = normalizedTranscriptCorrections(corrections)
             log("correction sync read \(corrections.count) corrections")
-        case .readFailed(let logDescription, let alertMessage):
-            log("correction sync read failed: \(logDescription)")
+        case .readFailed(let safeErrorCategory, let alertMessage):
+            log("correction sync read failed: \(safeErrorCategory)")
             if presentErrors {
                 showCorrectionTransferError(title: "Sync Failed", message: alertMessage)
             }
@@ -13950,7 +13980,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             log("correction sync wrote \(correctionsToWrite.count) corrections")
             return true
         } catch {
-            log("correction sync write failed: \(error)")
+            log("correction sync write failed: \(privacySafeErrorLogDetail(error))")
             if presentErrors {
                 showCorrectionTransferError(title: "Sync Failed", error: error)
             }
@@ -13959,7 +13989,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func handleCorrectionSyncRejectedPath(_ error: Error, presentErrors: Bool) {
-        log("correction sync rejected path: \(error)")
+        log("correction sync rejected path: \(privacySafeErrorLogDetail(error))")
         guard shouldStopCorrectionSync(afterPathValidationError: error) else {
             if presentErrors {
                 showCorrectionTransferError(title: "Sync Failed", error: error)
@@ -14510,7 +14540,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 startStartup(reason: "speech model cache reset")
             } catch {
                 isResettingSpeechModelCache = false
-                log("ASR: speech model cache reset failed: \(error)")
+                log("ASR: speech model cache reset failed: \(privacySafeErrorLogDetail(error))")
                 showSpeechModelCacheResetError(error)
                 startStartup(reason: "speech model cache reset recovery")
             }
@@ -14939,7 +14969,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 proc.waitUntilExit()
                 isBrewManaged = proc.terminationStatus == 0
             } catch {
-                log("update: brew install check failed: \(error)")
+                log("update: brew install check failed: \(privacySafeErrorLogDetail(error))")
                 isBrewManaged = false
             }
             Task { @MainActor in completion(isBrewManaged) }
@@ -14997,7 +15027,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         do {
             statePath = try createPrivateUpdateProgressStateFile()
         } catch {
-            log("update: creating progress state failed: \(error.localizedDescription)")
+            log("update: creating progress state failed: \(privacySafeErrorLogDetail(error))")
             showUpdateCouldNotStart(detail: "Presspeech couldn't prepare the update progress window.")
             return
         }
@@ -15021,7 +15051,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             helperPath = try writePrivateUpdateHelperScript(script)
         } catch {
             try? FileManager.default.removeItem(atPath: statePath)
-            log("update: writing helper failed: \(error.localizedDescription)")
+            log("update: writing helper failed: \(privacySafeErrorLogDetail(error))")
             showUpdateCouldNotStart(detail: "Presspeech couldn't write the update helper script.")
             return
         }
@@ -15031,7 +15061,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         } catch {
             try? FileManager.default.removeItem(atPath: helperPath)
             try? FileManager.default.removeItem(atPath: statePath)
-            log("update: opening helper log failed: \(error.localizedDescription)")
+            log("update: opening helper log failed: \(privacySafeErrorLogDetail(error))")
             showUpdateCouldNotStart(detail: "Presspeech couldn't open the update helper log.")
             return
         }
@@ -15045,7 +15075,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             try? FileManager.default.removeItem(atPath: helperPath)
             try? FileManager.default.removeItem(atPath: statePath)
             helperLog.handle.closeFile()
-            log("update: launching progress app failed: \(error.localizedDescription)")
+            log("update: launching progress app failed: \(privacySafeErrorLogDetail(error))")
             showUpdateCouldNotStart(detail: "Presspeech couldn't open the update progress window.")
             return
         }
@@ -15486,7 +15516,9 @@ private final class NativeInteractionFixture {
             }
             return keys
         }
-        let pasteKey = currentCommandVPasteVirtualKey()
+        guard case .virtualKey(let pasteKey) = currentCommandVPasteKeyResolution() else {
+            throw SelfTestFailure.failed("active layout cannot resolve Command-V; native fixture cannot post a paste shortcut safely")
+        }
         let modifiers: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate]
         guard let binding = [CGKeyCode(43), 47, 44].compactMap({
             recordableHotkeyChoice(forKeycode: $0, modifiers: modifiers)
@@ -15546,11 +15578,12 @@ private final class NativeInteractionFixture {
         while NSWorkspace.shared.frontmostApplication?.processIdentifier != owner,
               Date() < activationDeadline { pump() }
         try check()
-        try require(NativeInteractionPolicy.postedKeysAreDisjoint(
+        try require(currentCommandVPasteKeyResolution() == .virtualKey(pasteKey)
+                    && NativeInteractionPolicy.postedKeysAreDisjoint(
                         saved: savedKeycodes,
                         punctuation: binding.keycode,
-                        pasteKey: currentCommandVPasteVirtualKey()),
-                    "active-layout paste key conflicts with a saved hotkey")
+                        pasteKey: pasteKey),
+                    "active-layout paste key changed or conflicts with a saved hotkey")
         NativeInteractionHooks.permitEvent = { [weak self] in self?.prepare($0) ?? false }
         NativeInteractionHooks.permitClipboardWrite = { [weak self] in self?.safety() ?? false }
         NativeInteractionHooks.didRestoreClipboard = { [weak self] in self?.restorations += 1 }
@@ -16100,6 +16133,28 @@ private enum PresspeechSelfTest {
     }
 
     private static func testPrivateLogAppend() throws {
+        let privateErrorValue = "private /Users/example/medical-notes.txt\nspoken words"
+        let privateError = NSError(
+            domain: privateErrorValue,
+            code: 42,
+            userInfo: [NSLocalizedDescriptionKey: privateErrorValue]
+        )
+        let safeErrorCategory = privacySafeErrorLogDetail(privateError)
+        try expect(
+            safeErrorCategory.contains("code 42")
+                && safeErrorCategory.contains("Other")
+                && !safeErrorCategory.contains(privateErrorValue)
+                && !safeErrorCategory.contains("medical-notes")
+                && !safeErrorCategory.contains("spoken words"),
+            "persistent error categories must omit domains, descriptions and paths"
+        )
+        let posixCategory = privacySafeErrorLogDetail(
+            NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES), userInfo: [:])
+        )
+        try expect(
+            posixCategory.contains("POSIX code \(EACCES)"),
+            "known error domains should retain a useful bounded category"
+        )
         try expect(
             privacySafeLogPath("/Users/example/Documents/Presspeech Diagnostics.txt"),
             equals: "Presspeech Diagnostics.txt",
@@ -18468,9 +18523,15 @@ private enum PresspeechSelfTest {
         }
         try expect(dvorakPasteKey, equals: Optional(CGKeyCode(0x2f)),
                    "Command-V resolution should follow the active Dvorak mapping")
+        guard let dvorakPasteKey else {
+            throw SelfTestFailure.failed("Dvorak fixture did not resolve a paste key")
+        }
+        try expect(clipboardPasteKeyResolution(layoutKey: dvorakPasteKey),
+                   equals: .virtualKey(0x2f),
+                   "a resolved layout key should retain automatic paste")
         let dvorakPasteSteps = clipboardPasteKeyboardEventSteps(
             commandKey: 0x37,
-            pasteKey: dvorakPasteKey ?? ANSI_PASTE_VIRTUAL_KEY
+            pasteKey: dvorakPasteKey
         )
         try expect(dvorakPasteSteps.map(\.virtualKey), equals: [0x37, 0x2f, 0x2f, 0x37],
                    "the synthesized paste chord should use the layout-resolved key for both edges")
@@ -18480,10 +18541,10 @@ private enum PresspeechSelfTest {
         )
         try expect(unavailableLayoutKey,
                    equals: nil,
-                   "unavailable layout translations should be distinguishable for fallback")
-        try expect(resolvedCommandVPasteVirtualKey(layoutKey: unavailableLayoutKey),
-                   equals: ANSI_PASTE_VIRTUAL_KEY,
-                   "an unreadable layout should retain the legacy ANSI paste fallback")
+                   "unavailable layout translations should be distinguishable from a resolved key")
+        try expect(clipboardPasteKeyResolution(layoutKey: unavailableLayoutKey),
+                   equals: .unavailable,
+                   "an unreadable layout must use manual paste instead of guessing the ANSI V key")
 
         let failedUnicodePostProbe = MainActor.assumeIsolated {
             var attempts = 0

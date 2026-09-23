@@ -36,6 +36,10 @@ collaborator where noted:
   Confirm each opens the documented fixed destination without app, version,
   diagnostics, or user data in the URL.
 - On the target-app compatibility page, complete all eight worksheet outcomes.
+  Confirm its before-test privacy warning matches the currently published
+  builds and links to their version-specific model-download guidance; update
+  or retire the warning when those releases change. Do not recruit a fresh
+  install for compatibility testing without showing that decision point.
   Confirm **Copy report block** and **Download report draft** become available
   only when complete. Copy must contain only the six aggregate counts and
   overall classification; the downloaded plain-text draft must add blank
@@ -528,6 +532,13 @@ label or successful physical-hotkey test alone does not establish that
 synthetic paste and manual recovery work. Record only the input-source names
 and aggregate outcomes; do not retain dictated phrases, transcripts, or field
 contents.
+
+If an already-installed input source exposes no usable Command-V key mapping,
+confirm Presspeech reports clipboard-only recovery and posts no guessed US-layout
+shortcut; try physical Command-V, switching to a known input source first if
+needed, and verify the retained transcript pastes once. Do not install an
+untrusted layout solely to create this condition. Mark this conditional check
+**Not applicable** when no such source is available.
 
 For the keyboard-only delivery-recovery check, use a harmless test transcript
 and create a clipboard-only delivery outcome, then open each menu using the

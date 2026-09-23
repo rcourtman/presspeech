@@ -3,6 +3,18 @@
 The public, navigable version of this protocol is at
 <https://rcourtman.github.io/presspeech/app-compatibility.html>.
 
+**Published-build privacy check (23 September 2026):** The current downloads are
+macOS 0.3.8 and Windows 0.1.12. Both start a missing-model download on launch.
+The macOS request may include an inherited Hugging Face token; the Windows
+request may send Hugging Face usage telemetry or a locally available token,
+with additional routing and proxy risks. Read the [macOS model-download
+warning](../README.md#install-on-macos) or [Windows model-download
+warning](../README.md#install-on-windows) before launching or triggering a
+model download. If you are unsure about those version-specific risks, wait for
+0.3.9 or 0.1.13 to be published rather than launching solely for this check.
+If your model is already ready, do not reset its cache or switch models for
+this protocol.
+
 **Reporting availability checked 23 September 2026:** GitHub currently reports
 that issue creation is restricted for this repository. You can still run the
 protocol and keep its aggregate counts locally, but a new-report link may not
@@ -52,8 +64,11 @@ the same app for at least one focus-change attempt. Tabs are not a substitute.
 both the steady-focus checks and a focus change between two windows of that
 same app. The open [paste-target validation issue](https://github.com/rcourtman/presspeech/issues/33)
 needs evidence that steady focus can paste while a same-process window change
-still recovers safely. A community report helps describe that exact app/build;
-it does not replace native release qualification.
+still recovers safely. If new issues remain restricted but comments on that
+issue are available, you can add this exact macOS Electron result there with
+the six counts, Presspeech/OS/target-app versions, and generic field type.
+Otherwise keep the draft private. A community report does not replace native
+release qualification.
 
 Comparable means the same platform, app version, and generic field type. Add
 another observation to a matching report even when the outcome differs. Open
@@ -63,9 +78,10 @@ counted as completed protocol evidence.
 
 ## Before testing
 
-1. Use the current official Presspeech build and finish its setup checks. On
-   macOS, this baseline requires 0.3.8 or later; update before testing if the
-   About window shows 0.3.7.
+1. Read the published-build privacy check above before launching or
+   downloading a model. Use the current official Presspeech build and finish
+   its setup checks. On macOS, this baseline requires 0.3.8 or later; update
+   before testing if the About window shows 0.3.7.
 2. Open a blank, disposable field in the target app and a second blank field in
    a local scratch app. Never test in a production message, document, account,
    command shell, or field where pasted text can submit, send, or execute. Test
@@ -268,6 +284,13 @@ app or field type unless the existing report is ambiguous. Add your counts
 even when the outcome differs: variation under comparable conditions is
 important evidence. Use a separate report for a different platform or field
 type.
+
+If issue creation is still restricted and your macOS Electron result directly
+addresses [issue #33](https://github.com/rcourtman/presspeech/issues/33), you
+may instead comment there if GitHub permits it. Include the six counts plus
+Presspeech, operating-system, and target-app versions and the generic field
+type. Do not post unrelated results in that thread; retain those drafts
+privately when no suitable route accepts them.
 
 Use this shape for an observation added to an existing report:
 

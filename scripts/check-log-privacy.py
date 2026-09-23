@@ -8,6 +8,9 @@ buffers into Swift `log(...)` and Windows Python `_log(...)` calls. Exact
 microphone/device names and selectors are also private because they can
 contain personal or workplace labels. Raw global keycodes are forbidden
 because they can reveal typed characters.
+Swift error objects and localized descriptions are forbidden because NSError
+domains/userInfo and upstream errors can contain private paths or input. Only
+the reviewed privacySafeErrorLogDetail(error) category wrapper is allowed.
 Counts and other bounded metadata are allowed.
 
 The whole argument expression of each `log(...)` call is scanned —
@@ -55,6 +58,11 @@ FORBIDDEN_IDENTIFIER_RE = re.compile(
       | keycode
       | keyCode
       | keyboardEventKeycode
+      | error
+      | err
+      | exception
+      | errorDescription
+      | localizedDescription
       | s
     )\b
     """,
@@ -81,6 +89,14 @@ SAFE_MEMBER_ACCESS_RE = re.compile(
     """,
     re.VERBOSE,
 )
+
+# A deliberately narrow exception to the error-object ban: this Swift helper
+# renders only the static error type and numeric code. Do not mask arbitrary
+# wrappers, where a future formatter could print localizedDescription.
+SAFE_ERROR_DETAIL_RE = re.compile(
+    r"\bprivacySafeErrorLogDetail\s*\(\s*(?:error|err|exception)\s*\)"
+)
+RAW_LOG_DESCRIPTION_RE = re.compile(r"(?<!\.)\blogDescription\b")
 
 PYTHON_PRIVATE_IDENTIFIERS = {
     "audio",
@@ -228,7 +244,11 @@ def code_only(expr: str) -> str:
 
 def forbidden_identifiers(code: str) -> list[str]:
     masked = SAFE_MEMBER_ACCESS_RE.sub(" ", code)
-    return sorted({match.group(1) for match in FORBIDDEN_IDENTIFIER_RE.finditer(masked)})
+    masked = SAFE_ERROR_DETAIL_RE.sub(" ", masked)
+    found = {match.group(1) for match in FORBIDDEN_IDENTIFIER_RE.finditer(masked)}
+    if RAW_LOG_DESCRIPTION_RE.search(masked):
+        found.add("logDescription")
+    return sorted(found)
 
 
 def scan_text(path: Path, text: str) -> list[str]:
@@ -360,6 +380,7 @@ def run_self_test() -> None:
     log("recent transcript history trimmed by \\(removed) entr\\(removed == 1 ? "y" : "ies")")
     log("trigger mode -> " + mode.rawValue)
     log("request body empty: \\(payload.isEmpty)")
+    log("sync failed: \\(privacySafeErrorLogDetail(error))")
     """
     dirty = """
     log("transcript: \\(cleaned)")
@@ -370,6 +391,12 @@ def run_self_test() -> None:
     log("request body: \\(body)")
     log("history: \\(history.joined(separator: ", "))")
     log("first key: \\(event.keycode)")
+    log("failed: \\(error)")
+    log("failed: \\(error.localizedDescription)")
+    log("failed: \\(String(describing: error))")
+    log("failed: \\(error.map { privacySafeErrorLogDetail($0) } ?? "unknown")")
+    log("failed: \\(errorDescription)")
+    log("failed: \\(logDescription)")
     """
     non_log_calls = """
     catalog("transcript: \\(cleaned)")
@@ -417,8 +444,8 @@ self._log("failed: %s" % exception)
         if scan_paths([non_log_path]):
             raise SystemExit("self-test treated non-log calls as log calls")
         findings = scan_paths([dirty_path])
-        if len(findings) != 8:
-            raise SystemExit(f"self-test expected 8 dirty findings, got {len(findings)}: {findings}")
+        if len(findings) != 14:
+            raise SystemExit(f"self-test expected 14 dirty findings, got {len(findings)}: {findings}")
         for needle, label in [
             (":4:", "String(format:) argument bypass"),
             (":5:", "string concatenation bypass"),

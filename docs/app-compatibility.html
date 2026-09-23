@@ -47,11 +47,12 @@
         <span class="section-eyebrow">Target-app check</span>
         <h1>Test Presspeech with one app</h1>
         <p>Automatic paste depends on the destination and its focus behavior. Use blank disposable fields to check one exact app and version before relying on it for real work. The check records outcomes, never your words.</p>
+        <div class="note warn"><p><strong>Published-build privacy check (23 September 2026):</strong> The current downloads are macOS 0.3.8 and Windows 0.1.12. Both start a missing-model download on launch. The macOS request may include an inherited Hugging Face token; the Windows request may send Hugging Face usage telemetry or a locally available token, with additional routing and proxy risks. Read the <a href="install.html#model-download-privacy">macOS model-download warning</a> or <a href="windows.html#model-download-privacy">Windows model-download warning</a> before launching or triggering a model download. If you are unsure about those version-specific risks, wait for 0.3.9 or 0.1.13 to be published rather than launching solely for this check. If your model is already ready, do not reset its cache or switch models for this protocol.</p></div>
         <div class="actions">
           <a class="button" href="#before-testing">Run the eight checks</a>
           <a class="button secondary" href="#coverage">Choose a useful target</a>
           <a class="button secondary" href="#worksheet">Record outcomes locally</a>
-          <a class="button secondary" href="#share-result">Share aggregate results</a>
+          <a class="button secondary" href="#share-result">Check reporting route</a>
         </div>
       </div>
 
@@ -93,7 +94,7 @@
               <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Electron%2FChromium%20desktop%20app%22">Browse Electron/Chromium reports &rarr;</a></p>
             </article>
           </div>
-          <div class="note"><p><strong>Especially useful now:</strong> if you use an Electron/Chromium app on macOS, include both the steady-focus checks and a focus change between two windows of that same app. The open <a href="https://github.com/rcourtman/presspeech/issues/33">paste-target validation issue</a> needs evidence that steady focus can paste while a same-process window change still recovers safely. A community report helps describe that exact app/build; it does not replace native release qualification.</p></div>
+          <div class="note"><p><strong>Especially useful now:</strong> if you use an Electron/Chromium app on macOS, include both the steady-focus checks and a focus change between two windows of that same app. The open <a href="https://github.com/rcourtman/presspeech/issues/33">paste-target validation issue</a> needs evidence that steady focus can paste while a same-process window change still recovers safely. If new issues remain restricted but comments on that issue are available, you can add this exact macOS Electron result there with the six counts, Presspeech/OS/target-app versions, and generic field type. Otherwise keep the draft private. A community report does not replace native release qualification.</p></div>
           <div class="note"><p><strong>Comparable means the same platform, app version, and generic field type.</strong> Add another observation to a matching report even when your outcome differs. Open a separate report when any of those boundaries differs. The class links search standardized compatibility-report bodies; older general bug reports are intentionally not counted as completed protocol evidence.</p></div>
         </div>
       </section>
@@ -105,7 +106,7 @@
           <ol class="steps">
             <li>
               <strong>Finish Presspeech setup</strong>
-              <p>Use the current official build. On macOS, this baseline requires 0.3.8 or later; update before testing if the About window shows 0.3.7. Confirm the model is ready, the microphone and hotkey checks pass, and <strong>Try Dictation</strong> works first.</p>
+              <p>Read the published-build privacy check above before launching or downloading a model. Use the current official build. On macOS, this baseline requires 0.3.8 or later; update before testing if the About window shows 0.3.7. Confirm the model is ready, the microphone and hotkey checks pass, and <strong>Try Dictation</strong> works first.</p>
             </li>
             <li>
               <strong>Open two disposable fields</strong>
@@ -360,6 +361,7 @@ reproduction; omit private context]</code></pre>
             <li>
               <strong>If GitHub accepts new reports, submit one target-app report</strong>
               <p>If no matching report exists and GitHub currently accepts submissions, open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and select the same overall result in the form, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot. If issue creation is restricted, keep the draft locally and retry later rather than repeatedly opening the blocked form.</p>
+              <p>If issue creation is still restricted and your macOS Electron result directly addresses <a href="https://github.com/rcourtman/presspeech/issues/33">issue #33</a>, you may instead comment there if GitHub permits it. Include the six counts plus Presspeech, operating-system, and target-app versions and the generic field type. Do not post unrelated results in that thread; retain those drafts privately when no suitable route accepts them.</p>
               <p>For <strong>Overall result</strong>, a complete automatic-paste pass means all five steady-focus attempts pasted once and all three focus-change attempts recovered safely. Focus-change recovery is expected; choose the manual-recovery option only when it occurred while the original target stayed focused. Any incorrect or unsafe result takes precedence.</p>
             </li>
             <li>
