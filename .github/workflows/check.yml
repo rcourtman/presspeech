@@ -216,17 +216,22 @@ jobs:
           if index_pins != torch_pins:
               raise SystemExit("CUDA Torch build and package index versions must match")
 
-          install_paths = [
+          # Source installs use the readable pin; workflows use the hashed
+          # release lock and are checked for exact commands below.
+          source_install_paths = [
               Path("README.md"),
               Path("CONTRIBUTING.md"),
               Path("windows/README.md"),
+          ]
+          install_paths = source_install_paths + [
               Path(".github/workflows/windows-release.yml"),
               Path(".github/workflows/windows.yml"),
           ]
           direct_installs = []
           for path in install_paths:
               text = path.read_text(encoding="utf-8")
-              if "-r requirements-cuda.txt" not in text:
+              if (path in source_install_paths and
+                      "-r requirements-cuda.txt" not in text):
                   raise SystemExit(f"{path} does not install requirements-cuda.txt")
               if re.search(r"(?im)^.*\bpip\s+install\b[^\n]*\btorch(?:==|\s|$)", text):
                   direct_installs.append(str(path))
@@ -251,7 +256,8 @@ jobs:
           )
           cuda_install = (
               "python -m pip install --isolated --no-cache-dir --no-deps "
-              "--only-binary=:all: -r requirements-cuda.txt"
+              "--only-binary=:all: --require-hashes "
+              "-r requirements-cuda-release.txt"
           )
           if locked_install not in release_workflow:
               raise SystemExit(
