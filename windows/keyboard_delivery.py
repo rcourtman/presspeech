@@ -2,16 +2,28 @@
 
 A complete shortcut is submitted in one SendInput call so Windows cannot
 interleave physical or separately injected input between its events. The
-caller can still attempt key-up cleanup when Windows does not accept the whole
-batch. Importing this module does not load a Windows DLL or inject input.
+current modifier state is checked immediately before submission; a later key
+press can still race it. The caller can attempt key-up cleanup when Windows
+does not accept the whole batch. Importing this module does not load a Windows
+DLL or inject input.
 """
 import ctypes
 
 
 VK_V = 0x56
 VK_LSHIFT = 0xA0
+VK_RSHIFT = 0xA1
 VK_LCONTROL = 0xA2
+VK_RCONTROL = 0xA3
 VK_LMENU = 0xA4
+VK_RMENU = 0xA5
+VK_LWIN = 0x5B
+VK_RWIN = 0x5C
+
+_MODIFIER_KEYS = (
+    VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL,
+    VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN,
+)
 
 _INPUT_KEYBOARD = 1
 _KEYEVENTF_KEYUP = 0x0002
@@ -20,6 +32,14 @@ _MAPVK_VK_TO_VSC = 0
 
 class KeyboardDeliveryError(OSError):
     """Windows did not confirm that a requested keyboard event was inserted."""
+
+
+class ModifierHeldError(KeyboardDeliveryError):
+    """A held physical modifier would change the intended paste shortcut."""
+
+
+class ModifierStateError(KeyboardDeliveryError):
+    """The physical modifier snapshot could not be read."""
 
 
 # Win32 LONG and DWORD remain 32-bit when Python itself is 64-bit. Fixed-width
@@ -75,6 +95,9 @@ class _WindowsAPI:
         self.MapVirtualKeyW = self.user32.MapVirtualKeyW
         self.MapVirtualKeyW.restype = ctypes.c_uint32
         self.MapVirtualKeyW.argtypes = (ctypes.c_uint32, ctypes.c_uint32)
+        self.GetAsyncKeyState = self.user32.GetAsyncKeyState
+        self.GetAsyncKeyState.restype = ctypes.c_int16
+        self.GetAsyncKeyState.argtypes = (ctypes.c_int,)
         self.SendInput = self.user32.SendInput
         self.SendInput.restype = ctypes.c_uint32
         self.SendInput.argtypes = (
@@ -112,7 +135,22 @@ class Controller:
             )),
         )
 
-    def _send(self, events):
+    def _modifiers_down(self):
+        """Check the current high bit, not the unreliable recent-press bit.
+
+        Win32 also returns zero on some access failures, indistinguishable
+        from an up key. The caller's focus and integrity checks remain needed.
+        """
+        try:
+            return any(
+                int(self._api.GetAsyncKeyState(key)) & 0x8000
+                for key in _MODIFIER_KEYS
+            )
+        except Exception:
+            raise ModifierStateError(
+                "Windows could not check held modifier keys") from None
+
+    def _send(self, events, *, check_modifiers=False):
         events = tuple(events)
         for virtual_key, _flags in events:
             self._validate_virtual_key(virtual_key)
@@ -121,8 +159,17 @@ class Controller:
                 self._input(virtual_key, flags)
                 for virtual_key, flags in events
             ))
+            # SendInput does not reset physical keyboard state. A held Shift,
+            # Alt, Ctrl or Win can turn Ctrl+V into another target command.
+            # Snapshot as close as possible to the single SendInput call;
+            # this is a guard, not an atomic guarantee against a later press.
+            if check_modifiers and self._modifiers_down():
+                raise ModifierHeldError(
+                    "a keyboard modifier is held; paste was not attempted")
             inserted = int(self._api.SendInput(
                 len(inputs), inputs, ctypes.sizeof(_INPUT)))
+        except (ModifierHeldError, ModifierStateError):
+            raise
         except Exception:
             raise KeyboardDeliveryError(
                 "Windows did not accept the keyboard event") from None
@@ -147,4 +194,4 @@ class Controller:
         ), (virtual_key, 0), (virtual_key, _KEYEVENTF_KEYUP), *(
             (modifier, _KEYEVENTF_KEYUP) for modifier in reversed(modifiers)
         )]
-        self._send(events)
+        self._send(events, check_modifiers=True)

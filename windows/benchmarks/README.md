@@ -3,12 +3,19 @@
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER,
 lowercase-normalized CER, first- and final-word retention, silence false positives, and Whisper VAD speech retention.
-Version 8 reports identify the loader's pinned model repository/revision,
+Version 9 reports identify the loader's pinned model repository/revision,
 retain historical consensus WER alongside all-trial WER and a per-clip
 best/worst error envelope, record the bounded Parakeet window count and longest
 model input for each clip, and add the requested language policy plus detected
 language counts for Whisper; they also identify whether the effective Whisper
 VAD policy is the product default or a benchmark-only pause-threshold override.
+Version 9 also normalizes canonically equivalent Unicode text to NFC before
+WER, CER, exact-match, and boundary-word scoring, and keeps remaining combining
+marks attached to WER tokens. Raw transcripts and references are not rewritten.
+Re-score older reports before comparing multilingual metrics when reference or
+hypothesis text may use decomposed accents; version 8 scores can differ without
+any model change. NFC preserves compatibility distinctions, unlike NFKC
+([Unicode normalization](https://www.unicode.org/reports/tr15/)).
 Optional `task_group` labels add separately
 weighted consensus/all-trial WER, inference latency, and silence false-positive
 counts per stratum. Optional `language_group` labels add an independent set of

@@ -10,6 +10,7 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
     def backend(self, *, inserted=None):
         api = mock.Mock()
         api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
         self.events = []
 
         def send_input(count, pointer, size):
@@ -78,6 +79,42 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         )
         self.assertTrue(all(event["count"] == 8 for event in self.events))
 
+    def test_held_modifier_blocks_shortcut_before_any_input_is_sent(self):
+        for key in delivery._MODIFIER_KEYS:
+            with self.subTest(key=key):
+                api = self.backend()
+                api.GetAsyncKeyState.side_effect = (
+                    lambda checked, held=key: -32768 if checked == held else 0)
+
+                with self.assertRaises(delivery.ModifierHeldError):
+                    delivery.Controller(api=api).shortcut(
+                        [delivery.VK_LCONTROL], delivery.VK_V)
+
+                api.SendInput.assert_not_called()
+
+    def test_recent_press_bit_alone_does_not_block_shortcut(self):
+        api = self.backend()
+        api.GetAsyncKeyState.return_value = 1
+
+        delivery.Controller(api=api).shortcut(
+            [delivery.VK_LCONTROL], delivery.VK_V)
+
+        api.SendInput.assert_called_once()
+        self.assertEqual(api.GetAsyncKeyState.call_count,
+                         len(delivery._MODIFIER_KEYS))
+
+    def test_modifier_query_error_blocks_shortcut_without_leaking_detail(self):
+        api = self.backend()
+        api.GetAsyncKeyState.side_effect = OSError("private keyboard detail")
+
+        with self.assertRaises(delivery.ModifierStateError) as raised:
+            delivery.Controller(api=api).shortcut(
+                [delivery.VK_LCONTROL], delivery.VK_V)
+
+        api.SendInput.assert_not_called()
+        self.assertNotIn("private", str(raised.exception))
+        self.assertIsNone(raised.exception.__cause__)
+
     def test_partial_shortcut_batch_is_reported_as_uncertain(self):
         api = self.backend(inserted=2)
         with self.assertRaises(delivery.KeyboardDeliveryError):
@@ -141,6 +178,8 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         self.assertEqual(api.MapVirtualKeyW.argtypes,
                          (ctypes.c_uint32, ctypes.c_uint32))
         self.assertIs(api.MapVirtualKeyW.restype, ctypes.c_uint32)
+        self.assertEqual(api.GetAsyncKeyState.argtypes, (ctypes.c_int,))
+        self.assertIs(api.GetAsyncKeyState.restype, ctypes.c_int16)
         self.assertEqual(api.SendInput.argtypes, (
             ctypes.c_uint32,
             ctypes.POINTER(delivery._INPUT),

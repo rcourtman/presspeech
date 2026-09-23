@@ -2389,7 +2389,8 @@ class TextRegressionTests(unittest.TestCase):
         timer = mock.Mock()
         instance._recording_limit_timer = timer
         with mock.patch.object(app.sd, "InputStream",
-                               side_effect=OSError("device disconnected")):
+                               side_effect=OSError(
+                                   "private device label and path")):
             instance._open_mic_worker(7)
         self.assertFalse(instance.recording)
         self.assertIsNone(instance.input_device)
@@ -2401,8 +2402,9 @@ class TextRegressionTests(unittest.TestCase):
             "System > Sound > Input and Windows microphone privacy settings, "
             "including 'Let desktop apps access your microphone'. On Windows "
             "11 builds with per-app desktop microphone controls, also allow "
-            "Presspeech there. Then try "
-            "again. Details: device disconnected")
+            "Presspeech there. Choose Check Microphone in Setup or another "
+            "input in Settings, then try again.")
+        self.assertNotIn("private", str(instance.notify.mock_calls))
 
     def test_recording_rate_is_bound_before_native_stream_starts(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -3533,6 +3535,30 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertNotIn("remains on the clipboard", str(self.instance.notify.mock_calls))
         self.assertIn("may have partly completed", str(self.instance.notify.mock_calls))
 
+    def test_held_modifier_retains_text_without_shortcut_or_keyup_cleanup(self):
+        self.keyboard.shortcut.side_effect = (
+            app.keyboard_delivery.ModifierHeldError("modifier held"))
+
+        self.assertFalse(self.paste())
+
+        self.keyboard.release.assert_not_called()
+        self.assertFalse(self.instance._injecting_keys)
+        self.assertIn("no paste shortcut was sent",
+                      str(self.instance.notify.mock_calls))
+        self.assert_retained_without_content_logs()
+
+    def test_unavailable_modifier_snapshot_retains_without_keyup_cleanup(self):
+        self.keyboard.shortcut.side_effect = (
+            app.keyboard_delivery.ModifierStateError("state unavailable"))
+
+        self.assertFalse(self.paste())
+
+        self.keyboard.release.assert_not_called()
+        self.assertFalse(self.instance._injecting_keys)
+        self.assertIn("no paste shortcut was sent",
+                      str(self.instance.notify.mock_calls))
+        self.assert_retained_without_content_logs()
+
     def test_ambiguous_shortcut_failure_releases_every_possible_down_key(self):
         self.keyboard.shortcut.side_effect = RuntimeError("side effect then failure")
         self.assertFalse(self.paste())
@@ -3546,6 +3572,7 @@ class DeliveryRecoveryTests(unittest.TestCase):
     def test_partial_native_shortcut_retains_and_attempts_release(self):
         api = mock.Mock()
         api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
         api.SendInput.side_effect = [2, 1, 1]
         self.controller.return_value = self.checked_controller(api=api)
 

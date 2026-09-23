@@ -3,6 +3,7 @@ import io
 import os
 import tempfile
 import unittest
+import unicodedata
 from contextlib import redirect_stdout
 from unittest import mock
 
@@ -201,6 +202,50 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["word_errors"], 1)
         self.assertEqual(metrics["reference_words"], 2)
         self.assertEqual(metrics["wer"], 0.5)
+
+    def test_canonically_equivalent_polish_text_has_no_scoring_errors(self):
+        reference = "Zażółć gęślą jaźń"
+        decomposed = unicodedata.normalize("NFD", reference)
+        self.assertNotEqual(reference, decomposed)
+
+        for source, output in ((reference, decomposed), (decomposed, reference)):
+            with self.subTest(reference_is_decomposed=source == decomposed):
+                metrics = benchmark.accuracy_metrics(source, output)
+                self.assertEqual(metrics["reference_words"], 3)
+                self.assertEqual(metrics["word_errors"], 0)
+                self.assertEqual(metrics["character_errors"], 0)
+                self.assertEqual(metrics["case_sensitive_character_errors"], 0)
+                self.assertTrue(metrics["exact_match"])
+                self.assertTrue(
+                    benchmark.first_word_metrics(source, [output])["retained"])
+                self.assertTrue(
+                    benchmark.final_word_metrics(source, [output])["retained"])
+                self.assertEqual(
+                    benchmark.trial_accuracy_metrics(source, [output])[
+                        "all_word_errors"],
+                    [0],
+                )
+
+    def test_canonical_scoring_still_counts_real_accent_and_case_changes(self):
+        reference = "Émile"
+        unaccented = "Emile"
+        lowercased = "émile"
+
+        self.assertEqual(
+            benchmark.accuracy_metrics(reference, unaccented)["wer"], 1.0)
+        self.assertEqual(
+            benchmark.accuracy_metrics(reference, lowercased)["wer"], 0.0)
+        self.assertGreater(
+            benchmark.accuracy_metrics(reference, lowercased)["case_sensitive_cer"],
+            0,
+        )
+        # Some combining marks have no precomposed NFC form. They remain part
+        # of a word and must not disappear from WER, unlike punctuation.
+        self.assertEqual(
+            benchmark._normalise_words("q\u0307 next"), ["q\u0307", "next"])
+        self.assertEqual(benchmark.accuracy_metrics("q\u0307", "q")["wer"], 1.0)
+        # NFC is deliberately narrower than NFKC compatibility folding.
+        self.assertEqual(benchmark.accuracy_metrics("①", "1")["wer"], 1.0)
 
     def test_case_sensitive_cer_exposes_capitalization_hidden_by_cer(self):
         metrics = benchmark.accuracy_metrics("Hello, World!", "hello, world!")
@@ -724,7 +769,7 @@ class MetricTests(unittest.TestCase):
             "Parakeet windows: 2-2 per trial; longest input 59.750s",
             output.getvalue(),
         )
-        self.assertEqual(result["benchmark_version"], 8)
+        self.assertEqual(result["benchmark_version"], 9)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,

@@ -10,6 +10,7 @@ import platform
 import re
 import statistics
 import time
+import unicodedata
 
 import numpy as np
 import soundfile as sf
@@ -19,22 +20,42 @@ import config as cfg
 import engine
 
 
-WORD_RE = re.compile(r"[\w']+", re.UNICODE)
+def _canonical_text(text):
+    # An accent can be stored as one code point or as a base plus combining
+    # mark.  Score those canonically equivalent spellings alike without the
+    # broader compatibility folding of NFKC (which can erase real differences).
+    return unicodedata.normalize("NFC", text.replace("\u2019", "'"))
 
 
 def _normalise_words(text):
-    text = text.lower().replace("\u2019", "'")
-    return WORD_RE.findall(text)
+    text = _canonical_text(text.lower())
+    # Preserve the historical \w/apostrophe token boundary while keeping a
+    # combining mark attached to its word when NFC has no composed character.
+    # Python's re \w excludes marks, which could silently ignore a real accent
+    # difference or split one spoken word into several scoring tokens.
+    words = []
+    current = []
+    for character in text:
+        if character.isalnum() or character in "_'":
+            current.append(character)
+        elif current and unicodedata.category(character).startswith("M"):
+            current.append(character)
+        elif current:
+            words.append("".join(current))
+            current = []
+    if current:
+        words.append("".join(current))
+    return words
 
 
 def _normalise_chars(text):
-    text = text.lower().replace("\u2019", "'")
+    text = _canonical_text(text.lower())
     return " ".join(text.split())
 
 
 def _normalise_case_chars(text):
     """Normalise spacing without erasing capitalization differences."""
-    return " ".join(text.replace("\u2019", "'").split())
+    return " ".join(_canonical_text(text).split())
 
 
 def edit_distance(reference, hypothesis):
@@ -641,7 +662,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 8,
+        "benchmark_version": 9,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
         "model_snapshot": snapshot,

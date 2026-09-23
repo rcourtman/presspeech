@@ -1641,8 +1641,8 @@ class PresspeechApp:
                 "System > Sound > Input and Windows microphone privacy settings, "
                 "including 'Let desktop apps access your microphone'. On Windows "
                 "11 builds with per-app desktop microphone controls, also allow "
-                "Presspeech there. Then try "
-                "again. Details: %s" % str(exc))
+                "Presspeech there. Choose Check Microphone in Setup or another "
+                "input in Settings, then try again.")
             return
         self._log("mic open ok: %s" % (chosen,))
         if self.icon is not None:
@@ -2399,6 +2399,12 @@ class PresspeechApp:
             "target-unavailable": "The original input window could not be identified. ",
             "focus-changed": "The focused window changed; no paste shortcut was sent. ",
             "target-elevated": "Windows blocks simulated input into this elevated app. ",
+            "modifier-held": (
+                "A keyboard modifier was held; no paste shortcut was sent. "
+                "Release Ctrl, Shift, Alt or Windows before a manual paste. "),
+            "modifier-state-unavailable": (
+                "Keyboard modifier state could not be checked; no paste "
+                "shortcut was sent. "),
             "shortcut-uncertain": "The paste shortcut may have partly completed. ",
         }[reason]
         self.notify("Dictation needs review", prefix +
@@ -2517,10 +2523,14 @@ class PresspeechApp:
             # Submit the complete chord in one SendInput call so physical or
             # separately injected input cannot interleave its chord events.
             keyboard.shortcut(modifiers, keyboard_delivery.VK_V)
+        except keyboard_delivery.ModifierHeldError:
+            failure = "modifier-held"
+        except keyboard_delivery.ModifierStateError:
+            failure = "modifier-state-unavailable"
         except Exception:
             failure = "shortcut-uncertain"
         finally:
-            if failure and keyboard is not None:
+            if failure == "shortcut-uncertain" and keyboard is not None:
                 # A short SendInput result can mean a prefix was inserted.
                 # Release every possible down key without assuming how much of
                 # the batch Windows accepted. Retrying cleanup is best effort.

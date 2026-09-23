@@ -101,6 +101,7 @@ For each configuration, also record this release-gate matrix:
 | Dictation into a current Chromium browser text field | |
 | Dictation into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
+| Held-modifier shortcut guard and manual recovery | |
 | Locked/replaced clipboard recovery with notifications disabled and tray icon in overflow | |
 | Explicit recovery Copy, Discard, Leave Waiting, and Exit behavior | |
 | Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
@@ -1082,6 +1083,15 @@ clipboard.
 - Replace the clipboard after its write, during the route delay, and between
   modifier-down and V. Confirm detected changes skip V, release attempted keys,
   and retain text without replacing the newer copy automatically.
+- With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt and Windows in
+  turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
+  does not release the physically held key, explains the retained dictation,
+  and offers manual Copy or Discard. Release the key before manually pasting.
+  Repeat a normal paste with no other modifier held. This point-in-time check
+  reduces wrong-shortcut risk but cannot make keyboard state and SendInput
+  atomic; inspect the target for any unexpected command or partial insertion.
+  If the Windows key moves focus first, record focus-change recovery instead;
+  that is not evidence that the held-modifier guard ran.
 - Choose Leave Waiting and close with Escape separately. Confirm both retain
   recovery and keep recording paused. Press the dictation hotkey and launch
   Presspeech from Start separately; each must bring the existing recovery
