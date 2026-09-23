@@ -462,9 +462,9 @@ final class AppleBackend: ASRBackend {
     }
 
     func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
-        let t0 = Date()
+        let t0 = ProcessInfo.processInfo.systemUptime
         let text = try await transcribe(samples: samples)
-        return (text, Date().timeIntervalSince(t0))
+        return (text, ProcessInfo.processInfo.systemUptime - t0)
     }
 
     private func makeTranscriber() -> DictationTranscriber {
@@ -641,9 +641,9 @@ final class FluidBackend: ASRBackend {
         // canonical pattern is a fresh state per transcribe call,
         // matching what Presspeech's push-to-talk usage looks like.
         var state = try TdtDecoderState()
-        let t0 = Date()
+        let t0 = ProcessInfo.processInfo.systemUptime
         let result = try await asr.transcribe(samples, decoderState: &state, language: language)
-        return (result.text, Date().timeIntervalSince(t0))
+        return (result.text, ProcessInfo.processInfo.systemUptime - t0)
     }
 }
 
@@ -812,10 +812,10 @@ final class DirectVocabularyBackend: ASRBackend {
     func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
         rescoringObservation = .skipped
         var state = try TdtDecoderState()
-        let t0 = Date()
+        let t0 = ProcessInfo.processInfo.systemUptime
         let result = try await asr.transcribe(samples, decoderState: &state, language: language)
         guard let timings = result.tokenTimings, !timings.isEmpty, !samples.isEmpty else {
-            return (result.text, Date().timeIntervalSince(t0))
+            return (result.text, ProcessInfo.processInfo.systemUptime - t0)
         }
 
         if vocabularyPolicy != .exactSimilarity {
@@ -825,7 +825,8 @@ final class DirectVocabularyBackend: ASRBackend {
                 audioSamples: samples
             )
             rescoringObservation = .sdkOptionalResult(hasOutput: rescored != nil)
-            return (rescored?.text ?? result.text, Date().timeIntervalSince(t0))
+            return (rescored?.text ?? result.text,
+                    ProcessInfo.processInfo.systemUptime - t0)
         }
 
         let evaluated: Result<String, Error>
@@ -853,7 +854,7 @@ final class DirectVocabularyBackend: ASRBackend {
         }
         let completed = completeObservedRescoring(evaluated, fallback: result.text)
         rescoringObservation = completed.observation
-        return (completed.text, Date().timeIntervalSince(t0))
+        return (completed.text, ProcessInfo.processInfo.systemUptime - t0)
     }
 }
 
@@ -953,10 +954,10 @@ final class SlidingWindowBackend: ASRBackend {
         try await manager.startStreaming()
 
         let buffer = makeFloatPCMBuffer(samples: samples)
-        let t0 = Date()
+        let t0 = ProcessInfo.processInfo.systemUptime
         await manager.streamAudio(buffer)
         let text = try await manager.finish()
-        let elapsed = Date().timeIntervalSince(t0)
+        let elapsed = ProcessInfo.processInfo.systemUptime - t0
         await manager.cleanup()
         return (text.trimmingCharacters(in: .whitespacesAndNewlines), elapsed)
     }
@@ -990,9 +991,9 @@ final class UnifiedBatchBackend: ASRBackend {
             samples,
             seconds: trailingSilenceSeconds
         )
-        let t0 = Date()
+        let t0 = ProcessInfo.processInfo.systemUptime
         let text = try await asr.transcribe(paddedSamples)
-        return (text, Date().timeIntervalSince(t0))
+        return (text, ProcessInfo.processInfo.systemUptime - t0)
     }
 }
 
@@ -1016,11 +1017,11 @@ final class NemotronEnglishBackend: ASRBackend {
     func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
         await asr.reset()
         let buffer = makeFloatPCMBuffer(samples: samples)
-        let t0 = Date()
+        let t0 = ProcessInfo.processInfo.systemUptime
         _ = try await asr.process(audioBuffer: buffer)
         let text = try await asr.finish()
         return (text.trimmingCharacters(in: .whitespacesAndNewlines),
-                Date().timeIntervalSince(t0))
+                ProcessInfo.processInfo.systemUptime - t0)
     }
 }
 
@@ -1056,11 +1057,11 @@ final class NemotronMultilingualBackend: ASRBackend {
     func run(samples: [Float]) async throws -> (text: String, elapsed: Double) {
         await asr.reset()
         await asr.setLanguage(language)
-        let t0 = Date()
+        let t0 = ProcessInfo.processInfo.systemUptime
         _ = try await asr.process(samples: samples)
         let text = try await asr.finish()
         return (text.trimmingCharacters(in: .whitespacesAndNewlines),
-                Date().timeIntervalSince(t0))
+                ProcessInfo.processInfo.systemUptime - t0)
     }
 }
 
@@ -2664,7 +2665,7 @@ struct PresspeechBench {
 
         for backend in backends {
             log("preparing \(backend.name)…")
-            let prepT0 = Date()
+            let prepT0 = ProcessInfo.processInfo.systemUptime
             do {
                 try await backend.prepare(warmupSamples: warmup)
             } catch {
@@ -2676,7 +2677,7 @@ struct PresspeechBench {
                 log("  prepare(\(backend.name)) FAILED: \(detail)")
                 continue
             }
-            let prepDt = Date().timeIntervalSince(prepT0)
+            let prepDt = ProcessInfo.processInfo.systemUptime - prepT0
             log("  ready in \(fmtMs(prepDt)) (model load + 1 warmup inference)")
             let cacheComponents = backend.modelCacheComponents.map { component in
                 (label: component.label, bytes: directoryLogicalBytes(at: component.url))
