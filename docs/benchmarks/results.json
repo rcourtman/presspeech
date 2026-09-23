@@ -211,6 +211,30 @@
       },
       "evidence_scope": "Upstream release notes and issue/PR evidence motivate English and multilingual long-form SDK comparisons only; they do not establish a Presspeech quality or latency improvement."
     },
+    "upstream_encoder_precision_2026_09_23": {
+      "upstream_report": "https://github.com/FluidInference/FluidAudio/issues/760",
+      "upstream_implementation": "https://github.com/FluidInference/FluidAudio/pull/872",
+      "released_candidate": "https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.7",
+      "reported_failure_class": "Right-context-sensitive word corruption in a single 15-second Ukrainian Parakeet v3 CoreML window; not a chunk-seam-only failure",
+      "upstream_root_cause_assessment": "Controlled encoder substitution attributed the reported corruption to the shipped mixed-fp16/6-bit-LUT Encoder.mlmodelc; the report and implementation are upstream evidence, not a Presspeech reproduction.",
+      "candidate_encoder": {
+        "name": "Encoder_v2.mlmodelc",
+        "precision": "per-channel linear int8",
+        "upstream_controlled_repro_result": "Decoded all three reported cuts correctly in the same-input substitution; broad WER and Apple Neural Engine latency checks remain outstanding in the implementation report.",
+        "reported_size_mb": 568,
+        "original_encoder_size_mb": 425,
+        "default_behavior": "Opt-in only; the original encoder remains the default"
+      },
+      "presspeech_production_pin": "FluidAudio v0.15.6 with the original encoder",
+      "presspeech_candidate_support": "The benchmark has a candidate-only v3-int8-v2 comparison path; candidate revision c7246f4dc78d05f75cdfc5a550cd72ced0c658bf is documented in experiments/swift-bench/README.md.",
+      "presspeech_evaluation_status": "not_measured",
+      "recommended_checks": [
+        "Compare production and candidate on identical pinned Ukrainian FLEURS fixtures and human-reviewed local dictation.",
+        "Exercise the existing Ukrainian context-variation fixtures and require candidate non-regression on sufficiently broad speech data.",
+        "Measure Apple Neural Engine latency, model-cache size, and memory before considering production use."
+      ],
+      "production_change": "None; upstream isolated repro does not establish Presspeech-wide quality or latency benefit."
+    },
     "upstream_spanish_behavior_2026_09_23": {
       "report": "https://github.com/FluidInference/FluidAudio/issues/842",
       "reported_on": "2026-08-08",
@@ -267,6 +291,7 @@
     "Unified and Nemotron models are candidate-only and are not exposed in the app unless future benchmarks and real dictation tests prove they improve on v3.",
     "The 2026-07-22 FluidAudio v0.15.5 recheck retained Parakeet TDT v3 because both Nemotron candidates had higher average and worst-case WER.",
     "The current v0.15.6 production dependency still requires same-pin corpus evidence before an ASR release gate can pass.",
-    "Upstream v0.15.7-v0.15.8 ASR fixes warrant a v0.16.1 SDK comparison, but no Presspeech performance result is available for that candidate."
+    "Upstream v0.15.7-v0.15.8 ASR fixes warrant a v0.16.1 SDK comparison, but no Presspeech performance result is available for that candidate.",
+    "FluidAudio's opt-in linear-int8 encoder resolves an upstream single-window Ukrainian repro in controlled substitution, but Presspeech has no candidate WER or Apple Neural Engine latency result; production remains on the original encoder."
   ]
 }
