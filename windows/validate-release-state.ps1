@@ -29,6 +29,14 @@ function Get-PresspeechReleaseDisposition(
     if ($ApprovedSha -notmatch '^[0-9a-f]{40}$') {
         throw "Expected SHA must be a lowercase 40-character Git commit ID"
     }
+    $notesFile = Get-Item -LiteralPath $NotesPath -ErrorAction Stop
+    if ($notesFile.Name -cne "$ReleaseVersion.md") {
+        throw "Local release notes do not have the expected versioned name"
+    }
+    $expectedBody = [IO.File]::ReadAllText($notesFile.FullName)
+    if ($expectedBody -match '(?im)^\s*#\s+[^\r\n]*\bunreleased\b') {
+        throw "Windows release notes still contain an unreleased heading"
+    }
     if (-not $Json) {
         return "create"
     }
@@ -65,16 +73,11 @@ function Get-PresspeechReleaseDisposition(
         throw "Existing $ReleaseTag release is not a Windows prerelease"
     }
 
-    $notesFile = Get-Item -LiteralPath $NotesPath
-    if ($notesFile.Name -cne "$ReleaseVersion.md") {
-        throw "Local release notes do not have the expected versioned name"
-    }
     if ($release.body -isnot [string]) {
         throw "GitHub returned invalid release notes metadata"
     }
     # GitHub's REST API returns Markdown bodies with CRLF even when the
     # committed notes use LF. Compare content after line-ending normalization.
-    $expectedBody = [IO.File]::ReadAllText($notesFile.FullName)
     $expectedBody = $expectedBody.Replace("`r`n", "`n").Replace("`r", "`n")
     $actualBody = $release.body.Replace("`r`n", "`n").Replace("`r", "`n")
     if ($actualBody -cne $expectedBody) {
@@ -236,6 +239,17 @@ if ($SelfTest) {
                 "create") {
             throw "missing release-state self-test returned the wrong disposition"
         }
+        $approvedNotes = [IO.File]::ReadAllText($notesPath)
+        [IO.File]::WriteAllText(
+            $notesPath,
+            "# Presspeech for Windows $version (unreleased)`n",
+            [Text.UTF8Encoding]::new($false))
+        Assert-PresspeechRejected {
+            Get-PresspeechReleaseDisposition `
+                "" $tag $version $approved $installerPath $checksumPath $notesPath
+        } "Windows release notes still contain an unreleased heading"
+        [IO.File]::WriteAllText(
+            $notesPath, $approvedNotes, [Text.UTF8Encoding]::new($false))
         if ((Get-PresspeechReleaseDisposition `
                 $emptyDraftJson $tag $version $approved `
                 $installerPath $checksumPath $notesPath) -cne "upload-both") {
