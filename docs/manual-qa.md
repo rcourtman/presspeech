@@ -510,10 +510,17 @@ item after the development-wrapper launch check.
   model and confirm it loads automatically without a first-download prompt.
 - Select a specific USB or Bluetooth microphone, disconnect it while Presspeech
   remains open, and confirm Setup Checklist reports **Using default** (not
-  **Ready**) while explaining that the saved microphone is unavailable and the
+  **Configured**) while explaining that the saved microphone is unavailable and the
   system default is in use. Choose another input, reconnect the saved device,
-  select it again, and confirm the row returns to **Ready** with the selected
-  input identified. Do not record device names in qualification notes.
+  select it again, and confirm the row returns to **Configured** with the
+  selected input identified and instructions to use **Try Dictation** to check
+  that sound reaches Presspeech. Do not record device names in qualification
+  notes.
+- After model and permission checks are complete, choose **Try Dictation** and
+  speak into the scratchpad. Confirm the transcript appears there; the
+  checklist's **Configured** status must not be treated as proof that audio
+  samples have been received. If a test input returns no samples, confirm the
+  existing no-audio recovery directs the user back to microphone selection.
 - Enable macOS keyboard navigation for controls (or Full Keyboard Access),
   then navigate the checklist using Tab and Shift-Tab. Activate a permission
   action that remains missing and changes to **Try Again**;

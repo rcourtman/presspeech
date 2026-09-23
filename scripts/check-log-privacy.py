@@ -93,6 +93,10 @@ PYTHON_PRIVATE_IDENTIFIERS = {
     "device_label",
     "device_name",
     "device_uid",
+    "err",
+    "error",
+    "exception",
+    "exc",
     "history",
     "input_device",
     "input_device_name",
@@ -263,6 +267,19 @@ def python_private_identifiers(node: ast.AST) -> list[str]:
     identifiers: set[str] = set()
 
     def visit(current: ast.AST) -> None:
+        # Exception class names are bounded diagnostic categories; the
+        # exception object itself can contain machine-specific paths or
+        # upstream/private content and must never be interpolated into logs.
+        if (isinstance(current, ast.Attribute) and current.attr == "__name__"
+                and isinstance(current.value, ast.Call)
+                and isinstance(current.value.func, ast.Name)
+                and current.value.func.id == "type"
+                and len(current.value.args) == 1
+                and isinstance(current.value.args[0], ast.Name)
+                and current.value.args[0].id in {"err", "error", "exception", "exc"}
+                and not current.value.keywords):
+            return
+
         # Length/count metadata is safe even when derived from transcript text,
         # correction collections, or audio buffers.
         if (isinstance(current, ast.Call)
@@ -363,6 +380,7 @@ self._log("transcription complete: %d chars" % len(text))
 self._log("audio samples: %d" % audio.size)
 PresspeechApp._log("dictionary rules: %d" % len(self.settings["dictionary"]))
 self._log("backend: %s" % backend)
+self._log("operation failed: %s" % type(exc).__name__)
 """
     python_dirty = """
 self._log(text)
@@ -377,6 +395,10 @@ self._log("failed: %s" % traceback.format_exception(*sys.exc_info()))
 self._log("microphone: %s" % device["name"])
 self._log("configured input: %s" % selector)
 self._log("input device ID: %s" % input_device_uid)
+self._log("failed: %s" % exc)
+self._log(f"failed: {error}")
+self._log("failed: %s" % err)
+self._log("failed: %s" % exception)
 """
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
@@ -412,13 +434,14 @@ self._log("input device ID: %s" % input_device_uid)
         if findings:
             raise SystemExit(f"self-test rejected clean Python log calls: {findings}")
         findings = scan_paths([python_dirty_path])
-        if len(findings) != 12:
+        if len(findings) != 16:
             raise SystemExit(
-                f"self-test expected 12 dirty Python findings, got {len(findings)}: {findings}"
+                f"self-test expected 16 dirty Python findings, got {len(findings)}: {findings}"
             )
         for identifier in (
             "audio", "corrected", "dictionary", "text", "transcript",
             "name", "selector", "input_device_uid",
+            "exc", "error", "err", "exception",
         ):
             if not any(identifier in finding for finding in findings):
                 raise SystemExit(

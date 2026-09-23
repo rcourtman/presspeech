@@ -135,21 +135,11 @@
           <h1>Private push-to-talk dictation for Mac and Windows.</h1>
           <p>Hold a key to speak and release by default, or choose <strong>Press to toggle</strong> to start and stop with separate presses. Presspeech transcribes locally, then pastes at the cursor or keeps a copy for manual paste when it cannot safely verify the destination. No account or cloud transcription; bundled-library network behavior is documented by version.</p>
           <p class="quiet"><strong>macOS 0.3.8:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.12:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
-          <div class="note">
-            <p><strong>First model download:</strong> an internet connection is needed for the local speech model (about 500–600 MB on macOS; about 141 MiB on Windows CPU or 2.5 GB with usable NVIDIA CUDA). macOS 0.3.8 starts the first download on launch; in 0.3.9, a clean install must choose <strong>Download Model</strong> or close Setup to defer. Published Windows 0.1.12 starts its selected download automatically; upcoming 0.1.13 asks before fetching missing Parakeet files.</p>
-          </div>
-          <div class="note warn">
-            <p><strong>Before installing or launching, check the model-download caveat for your build.</strong> The recommendation depends on the published version:</p>
-            <ul>
-              <li><strong>Before installing or launching macOS 0.3.8:</strong> its model-download requests may include a Hugging Face token inherited by Presspeech. The public model needs no account token. If a token may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Dictation audio and transcripts are not sent in these requests. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</li>
-              <li><strong>Before installing or launching Windows 0.1.12:</strong> its model downloads may send Hugging Face usage telemetry and include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. If a Hugging Face token or custom download route is configured on this PC—or you are unsure—wait until Windows 0.1.13 is published. The public models need no account token; dictation audio and transcripts are not sent in model downloads. Read the <a href="windows.html#model-download-privacy">Windows privacy decision and technical details</a> and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</li>
-            </ul>
-          </div>
           <div class="actions">
-            <a class="button" href="install.html">Get the macOS release</a>
-            <a class="button secondary" href="windows.html">Review the Windows prerelease guide</a>
+            <a class="button" href="#macos">Check the macOS release</a>
+            <a class="button secondary" href="#windows">Check the Windows prerelease</a>
           </div>
-          <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Complete the four checkpoints to your first dictation</a>.</p>
+          <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Follow the four-checkpoint first-dictation guide</a>.</p>
           <div class="stat-row" aria-label="macOS release and benchmark summary">
             <div class="stat"><strong>~100 ms</strong><span>model transcription on benchmark clips</span></div>
             <div class="stat"><strong>8.4 MB</strong><span>signed release zip</span></div>
@@ -178,15 +168,21 @@
           <h2>Choose the build that matches your computer</h2>
           <div class="grid two">
             <article class="card">
-              <h3>macOS — released</h3>
+              <h3 id="macos">macOS — released</h3>
               <p>The signed and notarised Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The 0.3.8 release starts its first 500–600 MB local model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; close Setup to defer. Upgrades and cached models load automatically.</p>
-              <p><a href="install.html">Install on Apple Silicon and macOS 14+</a></p>
+              <div class="note warn">
+                <p><strong>Before installing or launching macOS 0.3.8:</strong> model-download requests may include a Hugging Face token inherited by Presspeech. The public model needs no account token. If a token may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Dictation audio and transcripts are not sent in these requests. Read the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+              </div>
+              <p><a href="install.html">Review macOS requirements, privacy, and install steps</a></p>
             </article>
             <article class="card">
-              <h3>Windows — prerelease</h3>
+              <h3 id="windows">Windows — prerelease</h3>
               <p>The currently unsigned x64 installer is for evaluation on Windows 11 (recommended) or Windows 10 only while your specific edition remains supported or is enrolled in applicable Extended Security Updates. Microsoft <a href="https://learn.microsoft.com/en-us/windows/release-health/release-information">ended general support for Windows 10 on 14 October 2025</a>. Allow about 4.4 GB for the app, plus a first model download of about 2.5 GB with usable NVIDIA CUDA (multilingual Parakeet) or 141 MiB on CPU (English-only Whisper base.en). Upcoming 0.1.13 asks before downloading missing Parakeet files; published 0.1.12 does not. Other local models remain selectable.</p>
+              <div class="note warn">
+                <p><strong>Before installing or launching Windows 0.1.12:</strong> model downloads may send Hugging Face usage telemetry and include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. If a Hugging Face token or custom download route is configured on this PC—or you are unsure—wait until Windows 0.1.13 is published. The public models need no account token; dictation audio and transcripts are not sent in model downloads. Read the <a href="windows.html#model-download-privacy">Windows privacy decision and technical details</a> and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+              </div>
               <p class="quiet">Windows may block an unsigned installer, especially under Smart App Control or managed policy. Review the verification and security guidance before downloading; do not bypass a policy block.</p>
-              <p><a href="windows.html">Check requirements, verify the installer, and set up Windows</a></p>
+              <p><a href="windows.html">Review Windows requirements, privacy, and verification steps</a></p>
             </article>
           </div>
           <p class="quiet" data-release-status>Current published downloads: macOS 0.3.8 and Windows 0.1.12 prerelease. Install metadata updated <time datetime="2026-09-23">23 September 2026</time>.</p>

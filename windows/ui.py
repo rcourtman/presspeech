@@ -1547,7 +1547,8 @@ class UpdateWindow:
                 updates.schedule_abandoned_download_cleanup(staging_path)
             except Exception as exc:
                 self.app._log(
-                    "could not schedule interrupted update cleanup: %s" % exc)
+                    "could not schedule interrupted update cleanup: %s" %
+                    type(exc).__name__)
         elif destination is not None:
             # Before the random staging file is created the private directory
             # is empty, so it can be removed synchronously without recursion.

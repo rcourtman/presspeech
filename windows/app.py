@@ -1887,7 +1887,7 @@ class PresspeechApp:
                         (os.path.basename(output_path), left))
             return output_path
         except Exception as exc:
-            self._log("benchmark capture failed: %s" % exc)
+            self._log("benchmark capture failed: %s" % type(exc).__name__)
             self.notify("Benchmark capture failed", str(exc))
             return None
 
@@ -2136,7 +2136,7 @@ class PresspeechApp:
             os.startfile(uri)
             return True
         except (AttributeError, OSError) as exc:
-            self._log("could not open Windows Settings: %s" % exc)
+            self._log("could not open Windows Settings: %s" % type(exc).__name__)
             self.notify(
                 "Could not open Windows Settings",
                 manual_recovery or
@@ -2610,7 +2610,7 @@ class PresspeechApp:
             if self.update_window is None:
                 self.update_window = ui.UpdateWindow(self, update)
         except Exception as exc:
-            self._log("update check failed: %s" % exc)
+            self._log("update check failed: %s" % type(exc).__name__)
             if manual:
                 self.notify("Update check failed", str(exc))
         finally:
@@ -2625,7 +2625,8 @@ class PresspeechApp:
         except Exception as exc:
             # The installer is already running. Cleanup failure must not turn a
             # successful, explicitly approved update into a second launch.
-            self._log("could not schedule update installer cleanup: %s" % exc)
+            self._log("could not schedule update installer cleanup: %s" %
+                      type(exc).__name__)
         time.sleep(0.15)
         self.exit_app()
 
@@ -2734,7 +2735,7 @@ class PresspeechApp:
                     except FileNotFoundError:
                         pass
         except Exception as exc:
-            self._log("autostart error: %s" % exc)
+            self._log("autostart error: %s" % type(exc).__name__)
             self.notify(
                 "Start with Windows not updated",
                 "Open Settings, then choose Apps and Startup to review "
@@ -2948,7 +2949,7 @@ class PresspeechApp:
             self._log("idle model wake completed in %.3fs" %
                       (self._last_model_use - started))
         except Exception as exc:
-            self._log("idle model wake failed: %s" % exc)
+            self._log("idle model wake failed: %s" % type(exc).__name__)
         finally:
             with self._wake_lock:
                 self._wake_in_progress = False

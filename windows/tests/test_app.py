@@ -2282,7 +2282,7 @@ class TextRegressionTests(unittest.TestCase):
             self.assertFalse(instance.apply_autostart())
 
         instance._log.assert_called_once_with(
-            "autostart error: registry denied")
+            "autostart error: PermissionError")
         instance.notify.assert_called_once_with(
             "Start with Windows not updated",
             "Open Settings, then choose Apps and Startup to review "

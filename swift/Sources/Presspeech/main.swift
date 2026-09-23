@@ -2266,15 +2266,15 @@ func privacySafeInputSelectionLogLabel(_ preference: String) -> String {
     return "specific input (name omitted)"
 }
 
-private func audioInputSetupReadyDetail(savedPreference: String,
-                                        devices: [AudioInputDevice]) -> String {
+private func audioInputSetupConfiguredDetail(savedPreference: String,
+                                             devices: [AudioInputDevice]) -> String {
     guard let preference = normalizedInputDevicePreference(savedPreference) else {
-        return "Microphone capture is ready using the system default."
+        return "Selected input: System default. Once available, choose Try Dictation to confirm sound reaches Presspeech."
     }
     guard let selected = audioInputDevice(matching: preference, in: devices) else {
-        return "The saved microphone is unavailable; Presspeech is using the system default."
+        return "The saved microphone is unavailable; Presspeech is using the system default. Choose… to select another input, then use Try Dictation to confirm sound reaches Presspeech when available."
     }
-    return "Microphone capture is ready using \(selected.name)."
+    return "Selected input: \(selected.name). Once available, choose Try Dictation to confirm sound reaches Presspeech."
 }
 
 // MARK: - Logger
@@ -3361,8 +3361,10 @@ private func setupChecklistAnnouncement(
             return "\(title) permission granted."
         case "Ready":
             return "\(title) is ready."
+        case "Configured":
+            return "Audio input is configured. Once available, choose Try Dictation to confirm sound reaches Presspeech."
         case "Using default":
-            return "Audio input is using the system default microphone."
+            return "Audio input is using the system default microphone. Once available, choose Try Dictation to confirm sound reaches Presspeech."
         case "Detected":
             return "The configured dictation hotkey was detected."
         case "Ready to test":
@@ -3471,7 +3473,7 @@ private func audioInputSetupRowState(isSpeechModelReady: Bool,
                                      isStartupInProgress: Bool,
                                      startupStatusTitle: String = "Starting audio input…",
                                      failure: StartupFailure?,
-                                     readyDetail: String = "Microphone capture is ready.",
+                                     configuredDetail: String = "Audio input is configured. Once available, choose Try Dictation to confirm sound reaches Presspeech.",
                                      savedInputUnavailable: Bool = false,
                                      lastCaptureHadNoSamples: Bool = false) -> SetupChecklistRowState {
     if let failure, failure.stage == .audioInput {
@@ -3486,8 +3488,8 @@ private func audioInputSetupRowState(isSpeechModelReady: Bool,
             buttonTitle: "Choose…")
     }
     if isCoreRuntimeReady {
-        return SetupChecklistRowState(detail: readyDetail,
-                                      status: savedInputUnavailable ? "Using default" : "Ready",
+        return SetupChecklistRowState(detail: configuredDetail,
+                                      status: savedInputUnavailable ? "Using default" : "Configured",
                                       buttonTitle: "Choose…")
     }
     if !isSpeechModelReady {
@@ -11318,7 +11320,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // when a saved explicit device needs to be resolved or reported absent.
         let audioInputDevices = normalizedInputDevicePreference(savedAudioInput) == nil
             ? [] : availableAudioInputDevices()
-        let audioReadyDetail = audioInputSetupReadyDetail(
+        let audioInputDetail = audioInputSetupConfiguredDetail(
             savedPreference: savedAudioInput,
             devices: audioInputDevices
         )
@@ -11351,7 +11353,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 isStartupInProgress: startupTask != nil || isRestartingAudioInput,
                 startupStatusTitle: startupStatusTitle,
                 failure: startupFailure,
-                readyDetail: audioReadyDetail,
+                configuredDetail: audioInputDetail,
                 savedInputUnavailable: normalizedInputDevicePreference(savedAudioInput) != nil
                     && audioInputDevice(matching: savedAudioInput, in: audioInputDevices) == nil,
                 lastCaptureHadNoSamples: dictationNotice == .noAudioCaptured),
@@ -16509,6 +16511,18 @@ private enum PresspeechSelfTest {
         try expect(
             setupChecklistAnnouncement(
                 from: baseline,
+                to: snapshot(audio: SetupChecklistRowState(
+                    detail: "Selected input: System default. Once available, choose Try Dictation to confirm sound reaches Presspeech.",
+                    status: "Configured",
+                    buttonTitle: "Choose…"
+                ))
+            ),
+            equals: "Audio input is configured. Once available, choose Try Dictation to confirm sound reaches Presspeech.",
+            "VoiceOver should distinguish a configured input from verified audio"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: baseline,
                 to: snapshot(microphone: SetupChecklistPermissionState(
                     permission: .microphone,
                     detail: "Captures your voice while dictating.",
@@ -17140,21 +17154,21 @@ private enum PresspeechSelfTest {
                                                uid: "fixture-microphone",
                                                name: "Fixture Microphone")
         try expect(
-            audioInputSetupReadyDetail(savedPreference: "", devices: []),
-            equals: "Microphone capture is ready using the system default.",
-            "setup checklist should identify system-default microphone use"
+            audioInputSetupConfiguredDetail(savedPreference: "", devices: []),
+            equals: "Selected input: System default. Once available, choose Try Dictation to confirm sound reaches Presspeech.",
+            "setup checklist should identify the system-default input and explain how to verify audio"
         )
         try expect(
-            audioInputSetupReadyDetail(savedPreference: "fixture-microphone",
-                                       devices: [setupMicrophone]),
-            equals: "Microphone capture is ready using Fixture Microphone.",
-            "setup checklist should identify the selected microphone"
+            audioInputSetupConfiguredDetail(savedPreference: "fixture-microphone",
+                                            devices: [setupMicrophone]),
+            equals: "Selected input: Fixture Microphone. Once available, choose Try Dictation to confirm sound reaches Presspeech.",
+            "setup checklist should identify the selected microphone and explain how to verify audio"
         )
         try expect(
-            audioInputSetupReadyDetail(savedPreference: "missing-microphone",
-                                       devices: [setupMicrophone]),
-            equals: "The saved microphone is unavailable; Presspeech is using the system default.",
-            "setup checklist should explain fallback from an unavailable microphone"
+            audioInputSetupConfiguredDetail(savedPreference: "missing-microphone",
+                                            devices: [setupMicrophone]),
+            equals: "The saved microphone is unavailable; Presspeech is using the system default. Choose… to select another input, then use Try Dictation to confirm sound reaches Presspeech when available.",
+            "setup checklist should explain fallback and how to verify the active input"
         )
         try expect(
             audioInputSetupRowState(
@@ -17162,13 +17176,13 @@ private enum PresspeechSelfTest {
                 isCoreRuntimeReady: true,
                 isStartupInProgress: false,
                 failure: nil,
-                readyDetail: "Microphone capture is ready using Fixture Microphone."
+                configuredDetail: "Selected input: Fixture Microphone. Once available, choose Try Dictation to confirm sound reaches Presspeech."
             ),
             equals: SetupChecklistRowState(
-                detail: "Microphone capture is ready using Fixture Microphone.",
-                status: "Ready",
+                detail: "Selected input: Fixture Microphone. Once available, choose Try Dictation to confirm sound reaches Presspeech.",
+                status: "Configured",
                 buttonTitle: "Choose…"),
-            "ready audio setup should expose the microphone chooser"
+            "configured audio setup should avoid claiming an untested input is ready"
         )
         try expect(
             audioInputSetupRowState(
@@ -17176,11 +17190,11 @@ private enum PresspeechSelfTest {
                 isCoreRuntimeReady: true,
                 isStartupInProgress: false,
                 failure: nil,
-                readyDetail: "The saved microphone is unavailable; Presspeech is using the system default.",
+                configuredDetail: "The saved microphone is unavailable; Presspeech is using the system default. Choose… to select another input, then use Try Dictation to confirm sound reaches Presspeech when available.",
                 savedInputUnavailable: true
             ),
             equals: SetupChecklistRowState(
-                detail: "The saved microphone is unavailable; Presspeech is using the system default.",
+                detail: "The saved microphone is unavailable; Presspeech is using the system default. Choose… to select another input, then use Try Dictation to confirm sound reaches Presspeech when available.",
                 status: "Using default",
                 buttonTitle: "Choose…"),
             "setup should distinguish fallback capture from the saved microphone being ready"
