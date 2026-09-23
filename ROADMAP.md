@@ -131,16 +131,28 @@ describes live dictation cancellation losing text typed during the session and
 cursor-placement problems; that report concerns Cursor, not Presspeech or
 Soink. Together, these sources point to a potentially distinct low-keyboard-use
 case and real revision/recovery hazards, not evidence that Presspeech users
-need streaming. Keep Presspeech's transcription-after-recording behavior
-explicit and do not add streaming on competitor positioning or isolated reports
-alone. Revisit only after privacy-safe intake returns and repeated Presspeech
-reports establish an unmet need, and a native prototype demonstrates safe
-handling of revisions, cancellation, undo, and target-app editing behavior.
+need streaming. An August 2026 [Handy community prototype report](https://github.com/cjpais/Handy/discussions/1919)
+describes append-only live insertion with repeated target checks; its author
+reports one materially conflicting final transcript in 17 replayed recordings,
+without a reference transcript for accuracy scoring. This is a self-reported
+prototype result, not production validation or evidence of Presspeech demand,
+but it makes revision and destination-safety costs concrete. Keep Presspeech's
+transcription-after-recording behavior explicit and do not add streaming on
+competitor positioning or isolated reports alone. Revisit only after privacy-safe
+intake returns and repeated Presspeech reports establish an unmet need, and a
+native prototype demonstrates safe handling of revisions, cancellation, undo,
+and target-app editing behavior.
 
 Public user evidence is thin and self-selected. A recent
 [FOSS discussion of Handy](https://www.reddit.com/r/foss/comments/1vxrgg5/a_free_open_source_speechtotext_tool_that_has/)
 includes anecdotal replies about reducing typing burden and one user's initial
-difficulty finding a toggle mode that was already available. More directly,
+difficulty finding a toggle mode that was already available. On 23 September,
+the original poster in a new [r/macapps on-device dictation thread](https://www.reddit.com/r/macapps/comments/1w3ljff/what_is_the_best_ondevice_voice_transcription_app/)
+listed no subscription, local recognition, and non-English language support as
+requirements, with model choice and diarization as optional. This is one user's
+search amid a mix of user and developer replies, not a market estimate or a
+Presspeech request; it reinforces publishing exact language boundaries, not
+adding a model catalogue on its own. More directly,
 Handy's [Linux notes](https://github.com/cjpais/Handy#linux-notes) warn that,
 in some compositor configurations, its visible recording overlay can steal
 focus and interfere with paste, while
@@ -194,17 +206,20 @@ available paste, and requests explicit copy/retry actions; a Windows
 [Codex Desktop report](https://github.com/openai/codex/issues/37593) describes
 a held shortcut repeatedly starting and cancelling roughly 200 ms sessions,
 as well as silent external-field insertion failures after successful
-transcription; and the [HyperVoice changelog](https://hypervoice.app/changelog)
+transcription; a July 2026 [Handy Windows issue](https://github.com/cjpais/Handy/issues/1771)
+similarly reports frequent delivery failures despite successful recognition,
+with the individual reporter estimating about 60% of attempts on their own
+setup; and the [HyperVoice changelog](https://hypervoice.app/changelog)
 documents clipboard restoration arriving before slower target apps read the
-dictation. These are product-specific issues and maintainer reports, not a
-comparable sample or prevalence estimate. They reinforce measuring delivery
-separately from recognition and testing more than one app class; they do not
-justify broader scope or product-to-product quality claims. Presspeech already
-has a Windows unit test for repeated-keydown suppression, but the report
-supports naming the corresponding physical-hold invariant in native
-qualification: one held key must remain one capture until release. This tests
-Presspeech's own behavior without assuming Codex's implementation or claiming
-a Presspeech defect.
+dictation. These are product-specific reports, not a comparable sample or
+prevalence estimate. They reinforce measuring delivery separately from
+recognition and testing more than one app class; they do not justify broader
+scope or product-to-product quality claims. Presspeech already has a Windows
+unit test for repeated-keydown suppression, but the Codex report supports
+naming the corresponding physical-hold invariant in native qualification: one
+held key must remain one capture until release. This tests Presspeech's own
+behavior without assuming another product's implementation or claiming a
+Presspeech defect.
 
 A recent [Handy Windows issue](https://github.com/cjpais/Handy/issues/1879)
 describes one user's loss of opening words or syllables at recording start

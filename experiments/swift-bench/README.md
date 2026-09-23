@@ -760,6 +760,56 @@ probe, not spontaneous dictation or proof of product quality; retain private,
 consented German push-to-talk evidence as a separate check. Do not change
 production chunking or the SDK pin based on the upstream fix alone.
 
+### Targeted conversational-language probe
+
+The mandatory German FLEURS seam probe is read speech; it cannot establish
+how Parakeet behaves on spontaneous multilingual dictation. FluidAudio issue
+[#842](https://github.com/FluidInference/FluidAudio/issues/842) is a useful
+example of why upstream evidence needs its corrections read too: the reporter
+later withdrew the claim that the behavior was a CoreML-specific translation
+defect. The corrected report attributes the observed English-prior errors on
+fast conversational Spanish to Parakeet v3 itself and the issue was closed as
+not planned. This is upstream evidence, not a Presspeech reproduction or a
+reason by itself to replace the shipped model. Presspeech's Spanish language
+hint filters the decoder's script; it does not language-condition Parakeet.
+
+If a real Presspeech report or a model/runtime update makes conversational
+Spanish relevant, use consented, locally held speech and human-checked
+references. Include independent single-window clips (under 15 seconds) and
+multi-window clips, preferably from more than one speaker; the short clips
+help separate model behavior from chunk seams. Keep this distinct from FLEURS
+read speech. The regression runner redacts transcripts and paths by default.
+Run the same corpus on the production pin for a baseline and on the candidate
+pin for an SDK evaluation, keeping the input digest, trial count, and language
+settings comparable:
+
+```sh
+mkdir -p real-audio/spanish
+# Add consented audio and hand-checked, same-stem .txt references locally.
+
+./run-real-dictation-regression.sh \
+  --input-dir real-audio/spanish \
+  --out-dir real-results/spanish-v3-auto \
+  --backend v3 --language auto --trials 3
+./run-real-dictation-regression.sh \
+  --input-dir real-audio/spanish \
+  --out-dir real-results/spanish-v3-hint \
+  --backend v3 --language es --trials 3
+./run-real-dictation-regression.sh \
+  --input-dir real-audio/spanish \
+  --out-dir real-results/spanish-nemotron-es-us \
+  --backend nemotron-multilingual \
+  --nemotron-multilingual-language es-US \
+  --nemotron-multilingual-chunk-ms 2240 --trials 3
+```
+
+Review the three reports' corpus WER, worst-clip WER, final-word failures,
+p50 latency, FluidAudio revision, language setting, and matching
+`Benchmark inputs SHA-256`. The Nemotron run is a comparison candidate, not a
+product recommendation; a small private sample is exploratory evidence only.
+Use `--show-transcripts` only for local reports that must be inspected, and
+keep those reports and all private fixtures off version control.
+
 ## Same-pin explicit no-mel chunking comparison
 
 The `v3-no-mel` backend lets maintainers compare the released
