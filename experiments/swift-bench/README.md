@@ -594,6 +594,34 @@ the pinned Ukrainian test split) but extracts and converts only the requested
 deterministic row range. FLEURS is CC BY 4.0 read speech with human references;
 like LibriSpeech, it complements rather than replaces real push-to-talk clips.
 
+To measure the macOS Parakeet v3 `auto` path against its language/script hint
+on identical known-language audio, use the same single-backend regression
+twice. The runner records the hint and a corpus digest in each report, so the
+two runs can be checked for matching inputs and SDK revision:
+
+```sh
+./fetch-public-speech-fixtures.sh \
+  --source fleurs --language de_de --split test --count 25
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/fleurs-de_de-test \
+  --out-dir public-results/fleurs-de-auto \
+  --backend v3 --language auto --public-corpus \
+  --show-transcripts --show-paths --trials 3
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/fleurs-de_de-test \
+  --out-dir public-results/fleurs-de-hint \
+  --backend v3 --language de --public-corpus \
+  --show-transcripts --show-paths --trials 3
+```
+
+This is a controlled read-speech probe, not an automatic language-identification
+score or a product pass. A selected hint biases script filtering; it cannot
+force the model to identify or transcribe a language correctly. FLEURS also
+does not represent short, ambiguous, or code-switched push-to-talk speech, so
+keep the privacy-preserving private-dictation check separate. Compare WER,
+final-word retention, and latency only after confirming both reports have the
+same `Benchmark inputs SHA-256`, FluidAudio revision, and trial count.
+
 Then run the production v3 regression with public-corpus reporting:
 
 ```sh

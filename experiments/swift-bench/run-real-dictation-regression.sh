@@ -26,6 +26,7 @@ IFS=$'\t' read -r FLUID_REVISION PRODUCTION_FLUID_REVISION BASELINE_DEPENDENCY <
 INPUT_DIR="real-audio"
 OUTDIR="real-results"
 BACKEND="v3"
+LANGUAGE="auto"
 TRIALS="5"
 UNIFIED_TRAILING_SILENCE_MS="250"
 NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
@@ -50,6 +51,8 @@ Options:
   --backend <name>         presspeech-bench backend: v2, v3, v3-no-mel,
                            v3-sdk-default, v3-int8-v2, unified, nemotron-en, nemotron-multilingual,
                            apple, 110m, fluid, both (default: v3)
+  --language <auto|code>   Parakeet TDT v3 language/script hint (default: auto;
+                           non-auto values require a v3 backend)
   --trials <n>             measured trials per clip (default: 5)
   --unified-trailing-silence-ms <n>
                            Unified-only trailing silence in ms (default: 250)
@@ -125,6 +128,17 @@ backend_uses_nemotron_multilingual() {
     [[ "$BACKEND" == "nemotron-multilingual" || "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
 }
 
+backend_uses_parakeet_v3() {
+    case "$BACKEND" in
+        v3|v3-no-mel|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|fluid|both)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 backend_is_aggregate() {
     [[ "$BACKEND" == "fluid" || "$BACKEND" == "both" ]]
 }
@@ -135,6 +149,25 @@ expected_backend_count() {
         both) printf '6' ;;
         *) printf '1' ;;
     esac
+}
+
+build_bench_args() {
+    local audio_file="$1"
+    BENCH_ARGS=(
+        ".build/release/presspeech-bench"
+        "--file" "$audio_file"
+        "--backend" "$BACKEND"
+        "--trials" "$TRIALS"
+        "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS"
+        "--nemotron-multilingual-language" "$NEMOTRON_MULTILINGUAL_LANGUAGE"
+        "--nemotron-multilingual-chunk-ms" "$NEMOTRON_MULTILINGUAL_CHUNK_MS"
+    )
+    if backend_uses_parakeet_v3; then
+        BENCH_ARGS+=( "--language" "$LANGUAGE" )
+    fi
+    if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
+        BENCH_ARGS+=( "--redact-transcripts" )
+    fi
 }
 
 validate_benchmark_output() {
@@ -433,6 +466,9 @@ write_report_header() {
         echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
         echo "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
         echo "- Trials per clip: $TRIALS"
+        if backend_uses_parakeet_v3; then
+            echo "- Parakeet TDT v3 language/script hint: $LANGUAGE"
+        fi
         if backend_uses_unified; then
             echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
         fi
@@ -527,6 +563,7 @@ run_self_test() {
     INPUT_DIR="$secret_dir"
     OUTDIR="$tmpdir/out"
     BACKEND="v3"
+    LANGUAGE="auto"
     TRIALS="2"
     UNIFIED_TRAILING_SILENCE_MS="250"
     NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
@@ -543,18 +580,32 @@ run_self_test() {
     clip_id="$(clip_id_for 1 "$secret_stem")"
     write_report_header "$report" "20260101T000000Z" 1
     assert_contains "$report" "- FluidAudio revision: $FLUID_REVISION"
+    assert_contains "$report" "- Parakeet TDT v3 language/script hint: auto"
     assert_contains "$report" "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
     assert_not_contains "$report" "Unified trailing silence"
 
     BACKEND="unified"
     write_report_header "$report" "20260101T000000Z" 1
     assert_contains "$report" "- Unified trailing silence: 250 ms"
+    assert_not_contains "$report" "Parakeet TDT v3 language/script hint"
+    LANGUAGE="de"
+    build_bench_args "fixture.wav"
+    assert_not_contains <(printf '%s' "${BENCH_ARGS[*]}") "--language"
     BACKEND="nemotron-multilingual"
+    LANGUAGE="auto"
     write_report_header "$report" "20260101T000000Z" 1
     assert_contains "$report" "- Nemotron multilingual language: en-US"
     assert_contains "$report" "- Nemotron multilingual chunk: 2240 ms"
     BACKEND="v3"
+    LANGUAGE="de"
     write_report_header "$report" "20260101T000000Z" 1
+    assert_contains "$report" "- Parakeet TDT v3 language/script hint: de"
+
+    build_bench_args "fixture.wav"
+    assert_eq "${BENCH_ARGS[*]}" \
+        ".build/release/presspeech-bench --file fixture.wav --backend v3 --trials 2 --unified-trailing-silence-ms 250 --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --language de --redact-transcripts" \
+        "Parakeet language hint forwarding"
+    LANGUAGE="auto"
 
     write_clip_section_header "$report" "$clip_number" "$clip_id" "$secret_stem" "$secret_dir/$secret_stem.wav" "$secret_dir/$secret_stem.txt" 1
     {
@@ -698,6 +749,24 @@ run_self_test() {
     fi
     assert_contains "$missing_value_log" "--trials requires a value"
 
+    local invalid_language_log="$tmpdir/invalid-language.log"
+    if bash "$SCRIPT_PATH" --input-dir "$secret_dir" --language "en-US" \
+        >"$invalid_language_log" 2>&1; then
+        echo "self-test expected an invalid Parakeet language hint to fail" >&2
+        exit 1
+    fi
+    assert_contains "$invalid_language_log" \
+        "--language must be auto or a two-letter lowercase language code"
+
+    local unsupported_backend_language_log="$tmpdir/unsupported-backend-language.log"
+    if bash "$SCRIPT_PATH" --input-dir "$secret_dir" --backend unified \
+        --language de >"$unsupported_backend_language_log" 2>&1; then
+        echo "self-test expected a v3 language hint on Unified to fail" >&2
+        exit 1
+    fi
+    assert_contains "$unsupported_backend_language_log" \
+        "--language is available only with Parakeet TDT v3 backends"
+
     local invalid_wer_log="$tmpdir/invalid-wer.log"
     if bash "$SCRIPT_PATH" --input-dir "$secret_dir" --max-corpus-wer nope \
         >"$invalid_wer_log" 2>&1; then
@@ -736,6 +805,11 @@ while [[ $# -gt 0 ]]; do
         --backend)
             need_value "$@"
             BACKEND="$2"
+            shift 2
+            ;;
+        --language)
+            need_value "$@"
+            LANGUAGE="$2"
             shift 2
             ;;
         --trials)
@@ -826,6 +900,15 @@ fi
 
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
+    exit 2
+fi
+
+if ! [[ "$LANGUAGE" =~ ^(auto|[a-z]{2})$ ]]; then
+    echo "--language must be auto or a two-letter lowercase language code" >&2
+    exit 2
+fi
+if [[ "$LANGUAGE" != "auto" ]] && ! backend_uses_parakeet_v3; then
+    echo "--language is available only with Parakeet TDT v3 backends" >&2
     exit 2
 fi
 
@@ -981,18 +1064,8 @@ for clip in "${clips[@]}"; do
         cp "$ref" "$tmpdir/$clip_id.txt"
     fi
 
-    bench_args=(
-        ".build/release/presspeech-bench"
-        "--file" "$normalized"
-        "--backend" "$BACKEND"
-        "--trials" "$TRIALS"
-        "--unified-trailing-silence-ms" "$UNIFIED_TRAILING_SILENCE_MS"
-        "--nemotron-multilingual-language" "$NEMOTRON_MULTILINGUAL_LANGUAGE"
-        "--nemotron-multilingual-chunk-ms" "$NEMOTRON_MULTILINGUAL_CHUNK_MS"
-    )
-    if [[ "$REDACT_TRANSCRIPTS" -eq 1 ]]; then
-        bench_args+=( "--redact-transcripts" )
-    fi
+    build_bench_args "$normalized"
+    bench_args=( "${BENCH_ARGS[@]}" )
 
     reference_available=0
     if [[ -f "$ref" ]]; then
