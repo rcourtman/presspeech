@@ -162,9 +162,11 @@ PACKAGE_SMOKE_IMPORTS = (
         "ENDPOINT",
         "HF_HUB_DISABLE_IMPLICIT_TOKEN",
         "HF_HUB_DISABLE_TELEMETRY",
+        "HF_HUB_DISABLE_XET",
         "HF_DEBUG",
     )),
     ("huggingface_hub.utils", ("build_hf_headers",)),
+    ("huggingface_hub.file_download", ("is_xet_available",)),
     ("transformers", (
         "AutoModelForRNNT",
         "AutoModelForTDT",

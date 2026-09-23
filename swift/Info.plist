@@ -40,7 +40,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Presspeech uses System Events to paste transcribed text at your cursor and to mute the system audio output during recording.</string>
+	<string>Presspeech mutes your Mac’s output audio while you dictate, then restores it afterward.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

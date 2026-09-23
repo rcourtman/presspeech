@@ -31,6 +31,15 @@ body:
     validations:
       required: true
   - type: textarea
+    id: context
+    attributes:
+      label: Affected context (optional)
+      description: >-
+        Which non-sensitive parts of your workflow make this gap matter? For
+        example, a language, generic target-app class, hardware, or accessibility
+        workflow. Describe a functional need, not a diagnosis; omit personal,
+        medical, employer, or confidential details.
+  - type: textarea
     id: idea
     attributes:
       label: Proposed approach

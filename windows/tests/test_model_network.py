@@ -17,7 +17,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
             "HF_ENDPOINT": "https://attacker.example",
             "HUGGINGFACE_CO_STAGING": "1",
             "HF_HUB_DISABLE_TELEMETRY": "0",
-            "HF_XET_TELEMETRY_ENABLED": "1",
+            "HF_HUB_DISABLE_XET": "0",
             "DISABLE_TELEMETRY": "false",
             "DO_NOT_TRACK": "no",
             "HF_HUB_DISABLE_IMPLICIT_TOKEN": "0",
@@ -40,12 +40,13 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         self.assertEqual(environment["HUGGINGFACE_CO_STAGING"], "0")
         for name in (
                 "HF_HUB_DISABLE_TELEMETRY",
+                "HF_HUB_DISABLE_XET",
                 "DISABLE_TELEMETRY",
                 "DO_NOT_TRACK",
                 "HF_HUB_DISABLE_IMPLICIT_TOKEN",
                 "HF_HUB_DISABLE_UPDATE_CHECK"):
             self.assertEqual(environment[name], "1")
-        self.assertEqual(environment["HF_XET_TELEMETRY_ENABLED"], "0")
+        self.assertEqual(environment["HF_HUB_DISABLE_XET"], "1")
         for name in model_network.REMOVED_ENVIRONMENT:
             self.assertNotIn(name, environment)
         self.assertEqual(environment["HF_HUB_CACHE"], r"C:\model-cache")
@@ -62,6 +63,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         constants = types.SimpleNamespace(
             ENDPOINT="https://huggingface.co/",
             HF_HUB_DISABLE_TELEMETRY=True,
+            HF_HUB_DISABLE_XET=True,
             HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
             HF_HUB_USER_AGENT_ORIGIN=None,
             HF_DEBUG=False,
@@ -74,6 +76,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         model_network.harden_loaded_runtime({
             "huggingface_hub.constants": constants,
             "huggingface_hub.utils": hub_utils,
+            "huggingface_hub.file_download": self._hub_download(),
             "transformers.utils.hub": transformers_hub,
         }, require_loaded=True)
 
@@ -82,6 +85,18 @@ class ModelNetworkPolicyTests(unittest.TestCase):
             model_network.TRANSFORMERS_SESSION_ID,
         )
         hub_utils.build_hf_headers.assert_called_once_with(token=False)
+
+    def test_loaded_runtime_rejects_xet_still_available(self):
+        hub_download = self._hub_download()
+        hub_download.is_xet_available.return_value = True
+        with self.assertRaisesRegex(
+                model_network.ModelNetworkPolicyError, "Xet transfers"):
+            model_network.harden_loaded_runtime({
+                "huggingface_hub.constants": self._constants(),
+                "huggingface_hub.utils": self._hub_utils(),
+                "huggingface_hub.file_download": hub_download,
+                "transformers.utils.hub": self._transformers_hub(),
+            }, require_loaded=True)
 
     def test_loaded_runtime_rejects_account_or_inherited_request_metadata(self):
         for headers, message in (
@@ -114,6 +129,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         constants = types.SimpleNamespace(
             ENDPOINT="https://attacker.example",
             HF_HUB_DISABLE_TELEMETRY=True,
+            HF_HUB_DISABLE_XET=True,
             HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
             HF_HUB_USER_AGENT_ORIGIN=None,
             HF_DEBUG=False,
@@ -135,12 +151,23 @@ class ModelNetworkPolicyTests(unittest.TestCase):
                     "huggingface_hub.constants": types.SimpleNamespace(
                         ENDPOINT="https://huggingface.co",
                         HF_HUB_DISABLE_TELEMETRY=telemetry,
+                        HF_HUB_DISABLE_XET=True,
                         HF_HUB_DISABLE_IMPLICIT_TOKEN=implicit,
                         HF_HUB_USER_AGENT_ORIGIN=None,
                         HF_DEBUG=False,
                     ),
                     "transformers.utils.hub": self._transformers_hub(),
                 }, require_loaded=True)
+
+    def test_loaded_runtime_rejects_enabled_xet_transfers(self):
+        constants = self._constants()
+        constants.HF_HUB_DISABLE_XET = False
+        with self.assertRaisesRegex(
+                model_network.ModelNetworkPolicyError, "Xet transfers"):
+            model_network.harden_loaded_runtime({
+                "huggingface_hub.constants": constants,
+                "transformers.utils.hub": self._transformers_hub(),
+            }, require_loaded=True)
 
     def test_required_runtime_cannot_silently_skip_policy_checks(self):
         with self.assertRaisesRegex(
@@ -149,7 +176,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
 
     def test_runtime_rejects_policy_environment_changed_after_startup(self):
         with mock.patch.dict(
-                os.environ, {"HF_XET_TELEMETRY_ENABLED": "1"}), \
+                os.environ, {"HF_HUB_DISABLE_XET": "0"}), \
                 self.assertRaisesRegex(
                     model_network.ModelNetworkPolicyError,
                     "environment changed"):
@@ -169,6 +196,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
                 "huggingface_hub.constants": types.SimpleNamespace(
                     ENDPOINT="https://huggingface.co",
                     HF_HUB_DISABLE_TELEMETRY=True,
+                    HF_HUB_DISABLE_XET=True,
                     HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
                     HF_HUB_USER_AGENT_ORIGIN="private-workstation",
                     HF_DEBUG=False,
@@ -183,11 +211,13 @@ class ModelNetworkPolicyTests(unittest.TestCase):
                 "huggingface_hub.constants": types.SimpleNamespace(
                     ENDPOINT="https://huggingface.co",
                     HF_HUB_DISABLE_TELEMETRY=True,
+                    HF_HUB_DISABLE_XET=True,
                     HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
                     HF_HUB_USER_AGENT_ORIGIN=None,
                     HF_DEBUG=False,
                 ),
                 "huggingface_hub.utils": self._hub_utils(),
+                "huggingface_hub.file_download": self._hub_download(),
                 "transformers.utils.hub": types.SimpleNamespace(
                     SESSION_ID="random",
                     http_user_agent=lambda: "session_id/still-random",
@@ -201,6 +231,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
                     ENDPOINT="https://huggingface.co",
                     HF_DEBUG=cached,
                     HF_HUB_DISABLE_TELEMETRY=True,
+                    HF_HUB_DISABLE_XET=True,
                     HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
                     HF_HUB_USER_AGENT_ORIGIN=None,
                 )
@@ -228,10 +259,12 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         # A fresh interpreter avoids a preceding test masking an import-order
         # error. Only synthetic credentials are supplied; none are transmitted.
         code = """import engine, model_network
-from huggingface_hub import constants, utils
+from huggingface_hub import constants, file_download, utils
 assert constants.ENDPOINT == 'https://huggingface.co'
 assert constants.HF_DEBUG is False
 assert constants.HF_HUB_DISABLE_TELEMETRY is True
+assert constants.HF_HUB_DISABLE_XET is True
+assert file_download.is_xet_available() is False
 assert constants.HF_HUB_DISABLE_IMPLICIT_TOKEN is True
 assert constants.HF_HUB_USER_AGENT_ORIGIN is None
 model_network.harden_loaded_runtime()
@@ -260,6 +293,7 @@ assert all(marker not in headers['user-agent'].lower() for marker in ('agent/', 
         return types.SimpleNamespace(
             ENDPOINT="https://huggingface.co",
             HF_HUB_DISABLE_TELEMETRY=True,
+            HF_HUB_DISABLE_XET=True,
             HF_HUB_DISABLE_IMPLICIT_TOKEN=True,
             HF_HUB_USER_AGENT_ORIGIN=None,
             HF_DEBUG=False,
@@ -267,10 +301,16 @@ assert all(marker not in headers['user-agent'].lower() for marker in ('agent/', 
 
     @staticmethod
     def _hub_utils(headers=None):
-        return types.SimpleNamespace(build_hf_headers=mock.Mock(return_value=(
-            {"user-agent": "unknown/None; hf_hub/test; python/test"}
-            if headers is None else headers
-        )))
+        return types.SimpleNamespace(
+            build_hf_headers=mock.Mock(return_value=(
+                {"user-agent": "unknown/None; hf_hub/test; python/test"}
+                if headers is None else headers
+            )),
+        )
+
+    @staticmethod
+    def _hub_download():
+        return types.SimpleNamespace(is_xet_available=mock.Mock(return_value=False))
 
 
 if __name__ == "__main__":

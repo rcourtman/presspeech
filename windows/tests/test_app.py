@@ -1421,6 +1421,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(set(loaded), {
             "comtypes", "ctranslate2", "faster_whisper", "librosa",
             "hf_xet", "huggingface_hub.constants", "huggingface_hub.utils",
+            "huggingface_hub.file_download",
             "onnxruntime",
             "pycaw.constants", "pycaw.pycaw", "safetensors", "sentencepiece",
             "soundfile", "soxr", "tokenizers", "torch", "tk_uia",

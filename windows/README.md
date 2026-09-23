@@ -59,14 +59,13 @@ Face snapshot identity; unlike the macOS model cache, it does not independently
 verify every downloaded model file against a SHA-256 manifest. Upcoming 0.1.13
 applies the following policy before any model library imports: it fixes downloads to the public
 `https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
-disables implicit
-authentication and inherited User-Agent origin data, and prevents
-Transformers from adding a random per-launch session identifier. The packaged
-runtime check covers Hub and Transformers behavior; it does not establish an
-opt-out for separate `hf-xet` transfer-performance telemetry. The
-pinned `hf-xet` 1.6.0 build has no runtime-verified telemetry switch;
-setting `HF_XET_TELEMETRY_ENABLED=0` is forward-compatible only, and
-Presspeech does not claim that it disables that telemetry. Every model
+disables the hf-xet transfer client, disables implicit authentication and
+inherited User-Agent origin data, and prevents
+Transformers from adding a random per-launch session identifier. The pinned
+`hf-xet` 1.6.0 build has no verified telemetry opt-out, so Presspeech sets
+`HF_HUB_DISABLE_XET=1` before imports and checks the bundled Hub's cached
+setting and effective Xet availability in the packaged runtime. Hub falls back
+to regular HTTP downloads; Hugging Face still observes the model request. Every model
 call also declines account tokens and remote model code; Transformers weights
 are required to use safetensors. Inherited Hugging Face endpoint or staging
 settings therefore cannot redirect the app's pinned model request.

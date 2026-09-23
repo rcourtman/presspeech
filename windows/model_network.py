@@ -23,10 +23,11 @@ FORCED_ENVIRONMENT = {
     "HF_ENDPOINT": HUGGING_FACE_ENDPOINT,
     "HUGGINGFACE_CO_STAGING": "0",
     "HF_HUB_DISABLE_TELEMETRY": "1",
-    # Forward-compatible opt-out only: pinned hf-xet 1.6.0 has no such
-    # telemetry switch. A future runtime must be reviewed independently;
-    # setting this variable is not evidence that a binary implements it.
-    "HF_XET_TELEMETRY_ENABLED": "0",
+    # Bypass hf-xet entirely: its transfer-performance telemetry is a
+    # separate channel from Hub library telemetry, and the pinned runtime's
+    # opt-out support is not assumed. huggingface_hub falls back to regular
+    # file downloads when this is disabled.
+    "HF_HUB_DISABLE_XET": "1",
     "DISABLE_TELEMETRY": "1",
     "DO_NOT_TRACK": "1",
     "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
@@ -83,6 +84,7 @@ def harden_loaded_runtime(modules=None, require_loaded=False):
 
     constants = loaded.get("huggingface_hub.constants")
     hub_utils = loaded.get("huggingface_hub.utils")
+    hub_download = loaded.get("huggingface_hub.file_download")
     transformers_hub = loaded.get("transformers.utils.hub")
 
     if require_loaded and constants is None:
@@ -100,6 +102,9 @@ def harden_loaded_runtime(modules=None, require_loaded=False):
         if not getattr(constants, "HF_HUB_DISABLE_TELEMETRY", False):
             raise ModelNetworkPolicyError(
                 "Hugging Face telemetry is not disabled")
+        if not getattr(constants, "HF_HUB_DISABLE_XET", False):
+            raise ModelNetworkPolicyError(
+                "Hugging Face Xet transfers are not disabled")
         if not getattr(constants, "HF_HUB_DISABLE_IMPLICIT_TOKEN", False):
             raise ModelNetworkPolicyError(
                 "implicit Hugging Face authentication is not disabled")
@@ -142,6 +147,22 @@ def harden_loaded_runtime(modules=None, require_loaded=False):
             if any(marker in user_agent.lower() for marker in forbidden_metadata):
                 raise ModelNetworkPolicyError(
                     "inherited Hugging Face request identifiers are not disabled")
+
+    if require_loaded:
+        # Verify the predicate actually used by the download path, not just
+        # the environment value or Hub's cached constant.
+        is_xet_available = getattr(hub_download, "is_xet_available", None)
+        if not callable(is_xet_available):
+            raise ModelNetworkPolicyError(
+                "Hugging Face Xet transfer policy could not be verified")
+        try:
+            xet_available = is_xet_available()
+        except Exception as exc:
+            raise ModelNetworkPolicyError(
+                "Hugging Face Xet transfer policy could not be verified") from exc
+        if xet_available is not False:
+            raise ModelNetworkPolicyError(
+                "Hugging Face Xet transfers are not disabled")
 
     if require_loaded and transformers_hub is None:
         raise ModelNetworkPolicyError(
