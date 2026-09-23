@@ -276,6 +276,13 @@ keyboard access testing in addition to assistive-technology testing.
   reorder device indexes, then try dictation. Confirm Presspeech does not
   capture from the substitute; reconnect the selected input and confirm the
   next dictation uses it.
+- Where two safe inputs have identical names under the same audio host API,
+  confirm Setup and Settings do not offer either as a distinct explicit choice.
+  If that selector was already saved, confirm it remains visible as ambiguous,
+  **Check Microphone** does not open either input, and dictation does not
+  silently capture from one. Disconnect one input and confirm the remaining
+  explicit choice becomes usable. If this hardware is unavailable, record
+  **Not run**, not Pass; Automatic is a separate, non-specific choice.
 - With two distinct safe inputs, choose **Automatic** and make one dictation to
   establish its device cache. While idle, reconnect or enable an input so the
   PortAudio list changes and an old index can name a different usable input.

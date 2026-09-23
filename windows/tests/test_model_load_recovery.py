@@ -34,16 +34,56 @@ class ModelLoadRecoveryTests(unittest.TestCase):
                 instance._deliver_text.assert_not_called()
                 self.assertEqual(instance.notify.call_args.args[0], 'Model load failed')
 
-    def test_loaded_parakeet_decode_failure_preserves_existing_fallback(self):
+    def test_loaded_parakeet_decode_failure_uses_only_cached_fallback(self):
         instance = self.make_app()
         instance.transcriber.loaded.return_value = True
         instance.transcriber.transcribe.side_effect = [RuntimeError('GPU decode failed'), 'synthetic text']
         audio = object()
         instance._transcribe_worker_inner(audio)
-        instance.transcriber.load.assert_called_once_with('base.en', notify=instance.notify)
+        instance.transcriber.load.assert_called_once_with(
+            'base.en', notify=instance.notify, local_only=True)
         self.assertEqual(instance.transcriber.transcribe.call_args_list,
                          [mock.call(audio), mock.call(audio)])
         instance._deliver_text.assert_called_once()
+
+    def test_missing_cached_fallback_does_not_download_or_decode_again(self):
+        instance = self.make_app()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.side_effect = RuntimeError('private hypothesis')
+        instance.transcriber.load.side_effect = model_cache.ModelCacheMissingError(
+            'private cache path')
+        audio = object()
+
+        instance._transcribe_worker_inner(audio)
+
+        instance.transcriber.load.assert_called_once_with(
+            'base.en', notify=instance.notify, local_only=True)
+        instance.transcriber.transcribe.assert_called_once_with(audio)
+        instance._deliver_text.assert_not_called()
+        messages = str(instance.notify.mock_calls) + str(instance._log.mock_calls)
+        self.assertNotIn('private hypothesis', messages)
+        self.assertNotIn('private cache path', messages)
+        self.assertIn('no model was downloaded', messages)
+
+    def test_corrupt_cached_fallback_does_not_expose_error_or_decode_again(self):
+        instance = self.make_app()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.side_effect = RuntimeError('private hypothesis')
+        instance.transcriber.load.side_effect = model_cache.ModelCacheCorruptError(
+            'private cache path')
+
+        instance._transcribe_worker_inner(object())
+
+        instance.transcriber.load.assert_called_once_with(
+            'base.en', notify=instance.notify, local_only=True)
+        instance.transcriber.transcribe.assert_called_once()
+        instance._deliver_text.assert_not_called()
+        self.assertEqual(
+            instance._log.call_args.args[0],
+            'fallback model load failed; error details suppressed')
+        messages = str(instance.notify.mock_calls) + str(instance._log.mock_calls)
+        self.assertNotIn('private hypothesis', messages)
+        self.assertNotIn('private cache path', messages)
 
     def test_nonparakeet_decode_failure_does_not_switch_models(self):
         instance = self.make_app()

@@ -1146,7 +1146,9 @@ class SetupWindow:
                   "control appears, allow Presspeech there too. If Windows "
                   "says these settings "
                   "are managed by your organization, contact your administrator; "
-                  "Presspeech cannot override that policy."),
+                  "Presspeech cannot override that policy. Inputs with the "
+                  "same name under one audio system cannot be selected "
+                  "individually; disconnect one to choose the other."),
             justify="left",
             wraplength=560,
         ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 3))
@@ -2064,6 +2066,14 @@ class SettingsWindow:
         )
         self.var_device.set(selected_label)
         self.var_device.grid(row=row, column=1, columnspan=2, sticky="w", padx=10, pady=2)
+        row += 1
+
+        ttk.Label(
+            f,
+            text=("Inputs with the same name under one audio system cannot "
+                  "be selected individually; disconnect one to choose the other."),
+            justify="left", wraplength=620,
+        ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
         row += 1
 
         model_label = ttk.Label(f, text="Speech model")

@@ -911,6 +911,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Browse existing compatibility",
     ),
     ROOT / ".github" / "ISSUE_TEMPLATE" / "compatibility_report.yml": (
+        "eight outcome counts below",
         "id: field-type",
         "id: outcome-counts",
         "Single-line plain-text field",
@@ -3362,6 +3363,12 @@ def check_compatibility_evidence_guidance(
                 f"{display}: incomplete compatibility-evidence guidance — "
                 f"missing {', '.join(repr(phrase) for phrase in missing)}"
             )
+        if path.name == "compatibility_report.yml" and re.search(
+            r"\b(?:six|seven) outcome counts\b", contents, flags=re.I
+        ):
+            errors.append(
+                f"{display}: obsolete compatibility outcome count in issue form"
+            )
     return errors
 
 
@@ -5423,6 +5430,25 @@ def run_self_test() -> None:
             raise SyncError(
                 "self-test: complete compatibility-evidence guidance was rejected"
             )
+
+        compatibility_form = Path(tmp) / "compatibility_report.yml"
+        required_form_count = {compatibility_form: ("eight outcome counts below",)}
+        compatibility_form.write_text(
+            "The worksheet prepares the eight outcome counts below.\n",
+            encoding="utf-8",
+        )
+        if check_compatibility_evidence_guidance(required_form_count):
+            raise SyncError("self-test: current compatibility outcome count was rejected")
+        compatibility_form.write_text(
+            "The worksheet prepares the eight outcome counts below. "
+            "An old note says seven outcome counts.\n",
+            encoding="utf-8",
+        )
+        if not any(
+            "obsolete compatibility outcome count" in error
+            for error in check_compatibility_evidence_guidance(required_form_count)
+        ):
+            raise SyncError("self-test: stale compatibility outcome count was accepted")
 
         worksheet_page = Path(tmp) / "app-compatibility.html"
         worksheet_script = Path(tmp) / "compatibility-worksheet.js"

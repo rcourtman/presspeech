@@ -455,6 +455,42 @@ class InputSelectionTests(unittest.TestCase):
         self.assertEqual(options[-1][1], selected)
         self.assertIn("currently unavailable", options[-1][0])
 
+    def test_picker_does_not_offer_indistinguishable_explicit_inputs(self):
+        duplicated = [*DEVICES, dict(DEVICES[1])]
+        selected = app.PresspeechApp._device_selector(DEVICES[1], "MME")
+        instance = self.make_app()
+        with mock.patch.object(app.sd, "query_devices", return_value=duplicated), \
+                mock.patch.object(app.sd, "query_hostapis", return_value=HOST_APIS):
+            options = instance.input_device_options()
+        self.assertFalse(any(value == selected for _label, value in options))
+        self.assertTrue(any(
+            value == app.PresspeechApp._device_selector(
+                DEVICES[2], "Windows WASAPI")
+            for _label, value in options))
+
+        instance.settings["input_device"] = selected
+        with mock.patch.object(app.sd, "query_devices", return_value=duplicated), \
+                mock.patch.object(app.sd, "query_hostapis", return_value=HOST_APIS):
+            options = instance.input_device_options()
+        ambiguous = [label for label, value in options if value == selected]
+        self.assertEqual(len(ambiguous), 1)
+        self.assertIn("multiple indistinguishable devices", ambiguous[0])
+
+    def test_configured_ambiguous_input_is_not_probed_or_opened(self):
+        duplicated = [*DEVICES, dict(DEVICES[1])]
+        selected = app.PresspeechApp._device_selector(DEVICES[1], "MME")
+        instance = self.make_app(selected)
+        with mock.patch.object(app.sd, "query_devices", return_value=duplicated), \
+                mock.patch.object(app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(app.sd, "check_input_settings") as check, \
+                mock.patch.object(app.PresspeechApp, "_probe_input") as probe:
+            self.assertIsNone(instance._get_input_device())
+        check.assert_not_called()
+        probe.assert_not_called()
+        self.assertIsNone(instance.input_device)
+        self.assertIn("configured input is ambiguous",
+                      instance._log.call_args_list[-1].args[0])
+
     def test_configured_device_never_falls_back_to_another_microphone(self):
         private_name = "Alice's private office microphone"
         instance = self.make_app("MME::" + private_name)
@@ -560,6 +596,23 @@ class InputSelectionTests(unittest.TestCase):
         check.assert_called_once_with(
             device=1, samplerate=16000, channels=1, dtype="float32")
         instance._find_input_device.assert_not_called()
+
+    def test_explicit_cache_is_rejected_when_identical_input_appears(self):
+        selected = app.PresspeechApp._device_selector(DEVICES[1], "MME")
+        instance = self.make_app(selected)
+        instance.input_device = (1, 16000)
+        instance._cached_input_selector = selected
+        duplicated = [*DEVICES, dict(DEVICES[1])]
+        instance._find_input_device = mock.Mock(return_value=None)
+
+        with mock.patch.object(app.sd, "query_devices", return_value=duplicated), \
+                mock.patch.object(app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(app.sd, "check_input_settings") as check:
+            self.assertIsNone(instance._get_input_device())
+
+        check.assert_not_called()
+        self.assertIsNone(instance.input_device)
+        self.assertEqual(instance._find_input_device.call_count, 2)
 
     def test_automatic_cache_does_not_reuse_an_index_that_became_unsafe(self):
         instance = self.make_app()
@@ -1203,6 +1256,23 @@ class HotkeyRegressionTests(unittest.TestCase):
         self.assertEqual(instance._hotkey_action_generation, 4)
         instance._start_hotkey_listener.assert_not_called()
         instance.notify.assert_called_once()
+
+    def test_repair_does_not_retire_a_recording_start_in_progress(self):
+        instance = self.make_app(hotkey="f8")
+        instance._hotkey_action_lock = threading.Lock()
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_generation = 4
+        instance._starting_recording = True
+        instance._start_hotkey_listener = mock.Mock()
+        instance.notify = mock.Mock()
+
+        self.assertFalse(instance.repair_hotkey())
+
+        self.assertEqual(instance._hotkey_action_generation, 4)
+        instance._start_hotkey_listener.assert_not_called()
+        instance.notify.assert_called_once_with(
+            "Finish the active dictation first",
+            "Stop or cancel dictation, then choose Repair Global Hotkey.")
 
     def test_listener_reset_cannot_race_a_raw_filter_transaction(self):
         instance = self.make_app(hotkey="f8")
@@ -2391,12 +2461,39 @@ class TextRegressionTests(unittest.TestCase):
         instance.diagnostics_text = mock.Mock(return_value="safe diagnostics")
         instance.notify = mock.Mock()
 
-        with mock.patch.object(app.clipboard_delivery, "write_text") as write:
+        receipt = app.clipboard_delivery.WriteReceipt(101)
+        with mock.patch.object(
+                app.clipboard_delivery, "write_text", return_value=receipt) as write, \
+                mock.patch.object(
+                    app.clipboard_delivery, "is_current", return_value=True) as current:
             self.assertTrue(instance.copy_diagnostics())
 
         write.assert_called_once_with("safe diagnostics")
+        current.assert_called_once_with(receipt)
         instance.notify.assert_called_once_with(
             "Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
+
+    def test_copy_diagnostics_does_not_claim_success_after_clipboard_changes(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.diagnostics_text = mock.Mock(return_value="safe diagnostics")
+        instance.notify = mock.Mock()
+        instance._log = mock.Mock()
+        receipt = app.clipboard_delivery.WriteReceipt(101)
+
+        with mock.patch.object(
+                app.clipboard_delivery, "write_text", return_value=receipt) as write, \
+                mock.patch.object(
+                    app.clipboard_delivery, "is_current", return_value=False) as current:
+            self.assertFalse(instance.copy_diagnostics())
+
+        write.assert_called_once_with("safe diagnostics")
+        current.assert_called_once_with(receipt)
+        instance._log.assert_called_once_with(
+            "diagnostics clipboard ownership unconfirmed")
+        instance.notify.assert_called_once_with(
+            "Clipboard not confirmed",
+            "Diagnostics could not be confirmed on the clipboard. "
+            "Check its contents before choosing Copy Diagnostics again.")
 
     def test_copy_diagnostics_exposes_locked_clipboard_without_raw_detail(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2415,8 +2512,9 @@ class TextRegressionTests(unittest.TestCase):
             "could not copy diagnostics: ClipboardError")
         instance.notify.assert_called_once_with(
             "Clipboard unavailable",
-            "Diagnostics were not copied. Close any app using the clipboard, "
-            "then choose Copy Diagnostics again.")
+            "Diagnostics could not be confirmed on the clipboard. "
+            "Check its contents; if needed, close any app using the "
+            "clipboard and choose Copy Diagnostics again.")
         self.assertNotIn(
             "private clipboard owner", str(instance.notify.mock_calls))
 
@@ -2851,7 +2949,9 @@ class TextRegressionTests(unittest.TestCase):
         timer.cancel.assert_called_once_with()
         instance.notify.assert_called_once_with(
             "No microphone found",
-            "Check Settings > System > Sound > Input, then enable microphone "
+            "Check the selected microphone in Setup and Settings > System > "
+            "Sound > Input. If two inputs have the same name, disconnect one; "
+            "Presspeech cannot choose a specific one. Enable microphone "
             "access for desktop apps in Windows privacy settings and try again. "
             "On Windows 11 builds with per-app desktop microphone controls, "
             "also allow Presspeech there.")
@@ -3513,8 +3613,8 @@ class ModelIdleTests(unittest.TestCase):
         instance.notify.assert_has_calls([
             mock.call(
                 "Parakeet failed",
-                "Trying the local Whisper base.en fallback. Error details "
-                "were suppressed to keep dictated text private."),
+                "Checking for an already-installed English-only Whisper "
+                "base.en fallback. No model will be downloaded."),
             mock.call(
                 "Transcription failed",
                 "Neither local speech model could complete this dictation. "

@@ -1062,7 +1062,10 @@ class PresspeechApp:
             # that state, or Repair wins and retires the queued press. Without
             # this boundary, Repair could clear the held-key transaction just
             # after the worker starts recording, leaving no release to stop it.
+            # Menu starts bypass the action lock, so also respect their claimed
+            # start transition before replacing the listener.
             if (getattr(self, "recording", False) or
+                    getattr(self, "_starting_recording", False) or
                     getattr(self, "_canceling_recording", False) or
                     getattr(self, "transcribing", False)):
                 return False
@@ -1655,11 +1658,14 @@ class PresspeechApp:
                     self._set_indicator(None)
                     self._log("no working microphone found")
                     self.notify("No microphone found",
-                                "Check Settings > System > Sound > Input, then enable "
-                                "microphone access for desktop apps in Windows privacy "
-                                "settings and try again. On Windows 11 builds with "
-                                "per-app desktop microphone controls, also allow "
-                                "Presspeech there.")
+                                "Check the selected microphone in Setup and "
+                                "Settings > System > Sound > Input. If two inputs "
+                                "have the same name, disconnect one; Presspeech "
+                                "cannot choose a specific one. Enable microphone "
+                                "access for desktop apps in Windows privacy settings "
+                                "and try again. On Windows 11 builds with per-app "
+                                "desktop microphone controls, also allow Presspeech "
+                                "there.")
                     return False
                 with self.lock:
                     if not self.recording or epoch != self._rec_epoch:
@@ -2039,6 +2045,8 @@ class PresspeechApp:
     def input_device_options(self):
         """Return safe live inputs while preserving an unavailable saved choice."""
         options = [("Automatic (recommended)", AUTO_INPUT_DEVICE)]
+        candidates = []
+        selector_counts = {}
         try:
             with AUDIO_BACKEND.operation():
                 devices = sd.query_devices()
@@ -2050,8 +2058,16 @@ class PresspeechApp:
                 host_name = host_apis[device["hostapi"]]["name"]
                 if not self._safe_input_device(device, host_name):
                     continue
+                selector = self._device_selector(device, host_name)
                 label = "%s — %s (device %d)" % (device["name"], host_name, i)
-                options.append((label, self._device_selector(device, host_name)))
+                candidates.append((label, selector))
+                selector_counts[selector] = selector_counts.get(selector, 0) + 1
+            # A PortAudio index is not a persistent device identity. Two inputs
+            # with the same saved host/name selector cannot be offered as two
+            # reliable explicit choices, even if their current indexes differ.
+            options.extend(
+                (label, selector) for label, selector in candidates
+                if selector_counts[selector] == 1)
         configured = self.settings.get("input_device", AUTO_INPUT_DEVICE)
         if (configured != AUTO_INPUT_DEVICE and
                 all(selector != configured for _label, selector in options)):
@@ -2060,8 +2076,10 @@ class PresspeechApp:
             # opening and saving either window silently switch microphones.
             host_name, separator, device_name = configured.partition("::")
             if separator and host_name and device_name:
-                label = "%s — %s (currently unavailable)" % (
-                    device_name, host_name)
+                reason = ("multiple indistinguishable devices"
+                          if selector_counts.get(configured, 0) > 1 else
+                          "currently unavailable")
+                label = "%s — %s (%s)" % (device_name, host_name, reason)
             else:
                 label = "Configured microphone (currently unavailable)"
             options.append((label, configured))
@@ -2100,6 +2118,9 @@ class PresspeechApp:
             ranked = [item for item in ranked if item[5] == selected]
             if not ranked:
                 self._log("configured input is unavailable (name omitted)")
+                return None
+            if len(ranked) != 1:
+                self._log("configured input is ambiguous (name omitted)")
                 return None
         for _selected_first, _score, i, d, _host_name, selector in ranked:
             for rate in (16000, 48000, 44100):
@@ -2145,8 +2166,20 @@ class PresspeechApp:
                 if (topology is None or topology !=
                         getattr(self, "_cached_input_topology", None)):
                     return False
-            elif self._device_selector(device, host_name) != selected:
-                return False
+            else:
+                if self._device_selector(device, host_name) != selected:
+                    return False
+                # Reusing the cached index is no safer than a fresh lookup if
+                # another currently safe input acquired the same selector.
+                matches = 0
+                for candidate in devices:
+                    candidate_host = host_apis[candidate["hostapi"]]["name"]
+                    if (self._safe_input_device(candidate, candidate_host) and
+                            self._device_selector(candidate, candidate_host)
+                            == selected):
+                        matches += 1
+                if matches != 1:
+                    return False
             sd.check_input_settings(
                 device=index, samplerate=rate, channels=1, dtype="float32")
         except Exception:
@@ -2463,9 +2496,29 @@ class PresspeechApp:
             try:
                 self.notify(
                     "Parakeet failed",
-                    "Trying the local Whisper base.en fallback. Error details "
-                    "were suppressed to keep dictated text private.")
-                self.transcriber.load("base.en", notify=self.notify)
+                    "Checking for an already-installed English-only Whisper "
+                    "base.en fallback. No model will be downloaded.")
+                # A decode failure is not consent to fetch another model.  In
+                # particular, first-run Setup consented to Parakeet, not to
+                # the English-only fallback used for this one recording.
+                self.transcriber.load(
+                    "base.en", notify=self.notify, local_only=True)
+            except engine.model_cache.ModelCacheMissingError:
+                self._log("cached fallback unavailable; error details suppressed")
+                self.notify(
+                    "Transcription failed",
+                    "Parakeet could not complete this dictation. The English-only "
+                    "fallback is not installed; no model was downloaded. Try "
+                    "again, or choose another model in Settings.")
+                return
+            except Exception:
+                self._log("fallback model load failed; error details suppressed")
+                self.notify(
+                    "Transcription failed",
+                    "Neither local speech model could complete this dictation. "
+                    "Try again, or choose another model in Settings.")
+                return
+            try:
                 model_started = time.perf_counter()
                 text = self.transcriber.transcribe(audio)
                 model_seconds = time.perf_counter() - model_started
@@ -2910,16 +2963,27 @@ class PresspeechApp:
             # Diagnostics can include system and runtime details. Use the same
             # history/cloud-excluded transaction as transcript copies while
             # keeping deliberate local Ctrl+V available.
-            clipboard_delivery.write_text(self.diagnostics_text())
+            receipt = clipboard_delivery.write_text(self.diagnostics_text())
+            # A successful write can be superseded before the tray callback
+            # reports success. Do not tell the user diagnostics are available
+            # for paste unless the same clipboard generation is still current.
+            if not clipboard_delivery.is_current(receipt):
+                self._log("diagnostics clipboard ownership unconfirmed")
+                self.notify(
+                    "Clipboard not confirmed",
+                    "Diagnostics could not be confirmed on the clipboard. "
+                    "Check its contents before choosing Copy Diagnostics again.")
+                return False
         except Exception as exc:
             # Another Windows process can temporarily hold the clipboard.
             # A tray callback must not disappear without telling the user
-            # whether the support report was actually copied.
+            # whether the support report could be confirmed on the clipboard.
             self._log("could not copy diagnostics: %s" % type(exc).__name__)
             self.notify(
                 "Clipboard unavailable",
-                "Diagnostics were not copied. Close any app using the "
-                "clipboard, then choose Copy Diagnostics again.")
+                "Diagnostics could not be confirmed on the clipboard. "
+                "Check its contents; if needed, close any app using the "
+                "clipboard and choose Copy Diagnostics again.")
             return False
         self.notify("Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
         return True

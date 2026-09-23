@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate relative links and fragments in the checked-in documentation site."""
+"""Validate local links and fragments in the checked-in documentation site."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ DOCS = ROOT / "docs"
 LINK_ATTRIBUTES = {"href", "src", "poster"}
 ERROR_PAGE = Path("404.html")
 SITE_PATH = "/presspeech/"
+SITE_ORIGIN = "https://rcourtman.github.io"
 
 
 class DocumentParser(HTMLParser):
@@ -58,11 +59,22 @@ def link_errors(docs: Path = DOCS) -> list[str]:
         for attribute, raw_value in document.links:
             value = raw_value.strip()
             parts = urlsplit(value)
-            if not value or parts.scheme or parts.netloc or value.startswith("//"):
+            if not value or value.startswith("//"):
                 continue
 
-            raw_path = unquote(parts.path)
-            if raw_path.startswith("/"):
+            same_site = (
+                f"{parts.scheme}://{parts.netloc}" == SITE_ORIGIN
+                and parts.path.startswith(SITE_PATH)
+            )
+            if parts.scheme or parts.netloc:
+                if not same_site:
+                    continue
+                raw_path = unquote(parts.path[len(SITE_PATH):])
+                target = (docs / raw_path).resolve() if raw_path else docs / "index.html"
+            else:
+                raw_path = unquote(parts.path)
+                target = (source.parent / raw_path).resolve() if raw_path else source
+            if not same_site and raw_path.startswith("/"):
                 # GitHub Pages serves docs/404.html for missing URLs at any
                 # depth. Its links must be rooted at the project path or a
                 # request such as /presspeech/compare/missing would resolve
@@ -71,13 +83,13 @@ def link_errors(docs: Path = DOCS) -> list[str]:
                 # unverifiable external URLs.
                 if source.relative_to(docs) == ERROR_PAGE and raw_path.startswith(SITE_PATH):
                     raw_path = raw_path.removeprefix(SITE_PATH)
+                    target = (docs / raw_path).resolve() if raw_path else docs / "index.html"
                 else:
                     errors.append(
                         f"{display(source, docs)}: {attribute}={raw_value!r} uses an unsupported site-absolute path"
                     )
                     continue
 
-            target = (source.parent / raw_path).resolve() if raw_path else source
             try:
                 target.relative_to(docs)
             except ValueError:
@@ -123,6 +135,23 @@ def run_self_test() -> None:
         )
         if link_errors(docs):
             raise RuntimeError("self-test: valid local links were rejected")
+        index.write_text(
+            f'<a href="{SITE_ORIGIN}{SITE_PATH}guide/#setup">Guide</a>'
+            f'<a href="{SITE_ORIGIN}{SITE_PATH}asset.txt">Asset</a>'
+            '<a href="https://example.com/presspeech/missing.html">External</a>',
+            encoding="utf-8",
+        )
+        if link_errors(docs):
+            raise RuntimeError("self-test: valid same-site absolute links were rejected")
+        index.write_text(
+            f'<a href="{SITE_ORIGIN}{SITE_PATH}missing.html">Missing</a>'
+            f'<a href="{SITE_ORIGIN}{SITE_PATH}guide/#absent">Bad fragment</a>'
+            f'<a href="{SITE_ORIGIN}{SITE_PATH}%2e%2e/escape.html">Escape</a>',
+            encoding="utf-8",
+        )
+        errors = link_errors(docs)
+        if len(errors) != 3 or not any("escapes docs/" in error for error in errors):
+            raise RuntimeError(f"self-test: invalid same-site links were accepted: {errors!r}")
         index.write_text(
             '<!doctype html><main><a href="missing.html">Missing</a>'
             '<a href="guide/#absent">Bad fragment</a></main>\n',

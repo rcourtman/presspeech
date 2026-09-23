@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for testing one target app. Run the short
         [compatibility protocol](https://rcourtman.github.io/presspeech/app-compatibility.html)
-        before filling this in. Its optional local worksheet prepares the seven
+        before filling this in. Its optional local worksheet prepares the eight
         outcome counts below without writing selections to browser storage or
         sending them.
         Passing reports are useful too. [Browse existing

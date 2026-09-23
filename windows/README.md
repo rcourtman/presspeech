@@ -49,6 +49,10 @@ base.en with int8 CPU inference; that smaller default is English-only. The
 other Parakeet, Nemotron, and Whisper models remain available in Settings, and
 explicit choices are not overridden. Parakeet TDT v3 and Whisper turbo are the
 multilingual choices; both are intended for a supported NVIDIA GPU.
+If Parakeet fails while transcribing, Presspeech tries Whisper base.en only
+when that English-only model is already installed. It does not download an
+alternate model automatically; a missing fallback leaves the dictation
+undelivered and asks you to retry or choose a model in Settings.
 
 ## Install
 
@@ -174,7 +178,11 @@ index still names the configured microphone, rejecting stale entries when
 re-enumeration shows device reordering after reconnect or resume. For
 **Automatic**, a changed device list causes a fresh selection instead of
 reusing the old index; indistinguishable duplicate device labels are not
-cached. Wait
+cached. If two safe inputs have the same host API and device name, upcoming
+0.1.13 cannot identify either as a specific saved choice: the picker omits
+both, and an existing saved choice remains visible but cannot be used to open
+either microphone while the ambiguity remains. Disconnect one or use **Automatic**
+only if either input is acceptable. Wait
 until it says the model is ready before the
 first dictation. **Try Dictation** remains disabled until then, and **Finish
 Setup** requires both the speech model and global hotkey to be ready. If
@@ -472,7 +480,8 @@ Use **Open Startup Settings** to review Presspeech under Windows
 
 - A working microphone must be connected. Automatic selection prefers the
   Windows Sound Mapper, skips virtual/loopback and WDM-KS devices, and resamples
-  to 16 kHz. A specific safe input can be selected in Settings.
+  to 16 kHz. A specific safe input can be selected in Settings when its host
+  API and device name distinguish it from other safe inputs.
 - Single-instance (named mutex) — launching again reuses the running process
   and restores its open window, or opens Setup before first-run completion and
   Settings afterward.
