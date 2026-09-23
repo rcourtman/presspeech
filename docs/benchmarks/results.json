@@ -156,11 +156,28 @@
         "used_by_app_and_benchmark": true
       },
       "latest_upstream_release_reviewed": {
-        "version": "v0.16.1",
-        "revision": "b811a61",
-        "release_date": "2026-09-21",
-        "url": "https://github.com/FluidInference/FluidAudio/releases/tag/v0.16.1",
-        "release_scope": "Mac Catalyst packaging fix; release notes say no API changes"
+        "version": "v0.17.0",
+        "revision": "3ca01bb",
+        "release_date": "2026-09-23",
+        "url": "https://github.com/FluidInference/FluidAudio/releases/tag/v0.17.0",
+        "release_scope": "ASR MLMultiArray bulk reset/copy optimization, plus unrelated TTS and diarization changes"
+      },
+      "asr_optimization_upstream_evidence": {
+        "pull_request": "https://github.com/FluidInference/FluidAudio/pull/941",
+        "change": "Bulk reset/copy paths replace per-element NSNumber operations where storage layouts permit; stride-aware fallbacks remain.",
+        "upstream_reported_measurement": {
+          "machine": "Apple M3 Pro",
+          "os": "macOS 26.6",
+          "build": "release",
+          "clip_duration_seconds": 11,
+          "model_bundle": "Parakeet TDT 0.6B v3 (Orukeet bundle)",
+          "warm_runs": 20,
+          "median_transcribe_ms_before": 71.1,
+          "median_transcribe_ms_after": 48.3,
+          "transcripts_identical": true
+        },
+        "evidence_scope": "Upstream single-setup measurement; not Presspeech's model bundle, app pipeline, or hardware benchmark.",
+        "presspeech_evaluation_status": "not_measured"
       },
       "relevant_intermediate_asr_releases": [
         {
@@ -194,7 +211,7 @@
       },
       "evaluation_status": "not_measured",
       "recommended_check": "./run-release-asr-checks.sh --sdk-upgrade-only --allow-candidate-dependency",
-      "comparison_controls": "Save current-pin v0.15.6 results on both English release-gate and composed German FLEURS corpora; compare candidate explicit production-config v3 against identical clips, input digests, hints, and trial counts, and review candidate SDK-default chunking separately.",
+      "comparison_controls": "Save current-pin v0.15.6 results on both English release-gate and composed German FLEURS corpora; compare v0.17.0 explicit production-config v3 against identical clips, input digests, hints, and trial counts, and review candidate SDK-default chunking separately.",
       "broader_evaluation_context": {
         "nvidia_model_card": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
         "reported_wer_percent_by_corpus": {
@@ -291,7 +308,7 @@
     "Unified and Nemotron models are candidate-only and are not exposed in the app unless future benchmarks and real dictation tests prove they improve on v3.",
     "The 2026-07-22 FluidAudio v0.15.5 recheck retained Parakeet TDT v3 because both Nemotron candidates had higher average and worst-case WER.",
     "The current v0.15.6 production dependency still requires same-pin corpus evidence before an ASR release gate can pass.",
-    "Upstream v0.15.7-v0.15.8 ASR fixes warrant a v0.16.1 SDK comparison, but no Presspeech performance result is available for that candidate.",
+    "Upstream v0.15.7-v0.15.8 ASR fixes and the v0.17.0 MLMultiArray optimization warrant a same-fixture SDK comparison. The upstream 11-second M3 Pro result is not a Presspeech measurement; no v0.17.0 quality or latency result is available for Presspeech.",
     "FluidAudio's opt-in linear-int8 encoder resolves an upstream single-window Ukrainian repro in controlled substitution, but Presspeech has no candidate WER or Apple Neural Engine latency result; production remains on the original encoder."
   ]
 }
