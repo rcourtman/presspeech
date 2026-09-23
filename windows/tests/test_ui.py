@@ -709,6 +709,14 @@ class AccessibleWindowTests(unittest.TestCase):
                 inspect.getsource(window),
             )
 
+    def test_setup_hotkey_live_status_is_not_labelled_by_static_caption(self):
+        source = inspect.getsource(ui.SetupWindow._build)
+
+        self.assertNotIn(
+            "_label_control(hotkey_status_label, self.hotkey_status)", source)
+        self.assertIn("_mark_live_region(status)", source)
+        self.assertIn("self.hotkey_status, self.autostart_status", source)
+
     def test_delivery_recovery_opens_on_a_non_destructive_command(self):
         source = inspect.getsource(ui.DeliveryRecoveryWindow)
         self.assertIn(

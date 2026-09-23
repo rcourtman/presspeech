@@ -19,6 +19,13 @@ may attach an `agent/<id>` label based on inherited agent-related environment
 markers. The 0.1.13 candidate disables Hub telemetry before imports and checks
 that the rendered model-request headers contain no agent label; do not
 attribute those controls to 0.1.12.
+
+Already used Windows 0.1.12? If you ran a model download with a token available
+and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
+destination you do not trust, treat the token as disclosed to that destination.
+Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
+Do not include token values in logs or support requests.
+
 Finished text does enter the
 shared system clipboard for paste and recovery. macOS 0.3.8 can make
 those entries available through Universal Clipboard; builds containing the

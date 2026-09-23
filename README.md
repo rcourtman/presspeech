@@ -111,6 +111,12 @@ downloads. See the
 [Windows privacy decision and technical details](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
 and the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
+Already used Windows 0.1.12? If you ran a model download with a token available
+and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
+destination you do not trust, treat the token as disclosed to that destination.
+Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
+Do not include token values in logs or support requests.
+
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.
 
@@ -162,6 +168,13 @@ observes the global hotkey, and pastes text at the cursor.
 Accessibility is a broad system-control grant; review its scope and Apple's
 guidance in the [macOS permission section](https://rcourtman.github.io/presspeech/install.html#permissions)
 before granting it.
+
+macOS's **Input Monitoring** grant can let an app monitor input, including
+typed keys. Presspeech receives keyboard events to detect the configured
+hotkey and Escape only to cancel an active recording; it does not inspect
+mouse or trackpad events, and other keys pass through without their values
+being saved, logged, or sent. See [Apple's description of Input
+Monitoring](https://support.apple.com/guide/mac-help/mchl4cedafb6/mac).
 
 If the Presspeech item is hidden by a crowded or notched menu bar, open
 **Presspeech.app** again from Applications, Finder, or Spotlight. The running

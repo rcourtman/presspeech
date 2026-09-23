@@ -26,6 +26,12 @@ authentication, and explicitly sends no account token; see the
 [version-scoped
 network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
+Already used Windows 0.1.12? If you ran a model download with a token available
+and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
+destination you do not trust, treat the token as disclosed to that destination.
+Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
+Do not include token values in logs or support requests.
+
 Preferred engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family
 Presspeech uses on macOS. On an NVIDIA GPU (CUDA) it transcribes with
 punctuation and capitalization in a fraction of real time (~50× realtime on an

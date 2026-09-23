@@ -1142,11 +1142,10 @@ class SetupWindow:
         _bind_window_command(root, "<Escape>", self._defer)
         root.update_idletasks()
         _label_control(microphone_label, self.device)
-        # This status must retain its changing text as its accessible name.
-        # label_for would pin the static caption across live-region updates.
         _label_control(hotkey_label, self.hotkey)
         _label_trigger_choices(trigger_label, hold_trigger, toggle_trigger)
-        _label_control(hotkey_status_label, self.hotkey_status)
+        # Keep the changing status text as its accessible name. Linking this
+        # live region to the static caption would mask its updates.
         _name_control(
             self.hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
         for status in (

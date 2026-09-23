@@ -333,6 +333,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "HF_HUB_USER_AGENT_ORIGIN",
         "configured endpoint",
         "Upcoming Windows 0.1.13",
+        "Already used Windows 0.1.12?",
+        "inherited",
+        "staging setting",
+        "destination you do not trust",
+        "treat the token as disclosed",
+        "revoke the token",
+        "Hugging Face Access Tokens",
+        "Do not include token values",
     ),
     DOCS / "privacy.html": (
         "published Windows 0.1.12",
@@ -347,6 +355,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "These models do not require an account token",
         "Upcoming Windows 0.1.13",
         "disables implicit authentication",
+        "Already used Windows 0.1.12?",
+        "inherited",
+        "staging setting",
+        "destination you do not trust",
+        "treat the token as disclosed",
+        "revoke the token",
+        "Hugging Face Access Tokens",
+        "Do not include token values",
     ),
     DOCS / "privacy" / "network-calls.json": (
         "Published Windows 0.1.12",
@@ -374,6 +390,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "configured endpoint",
         "These models do not require an account token",
         "upcoming 0.1.13",
+        "Already used Windows 0.1.12?",
+        "inherited",
+        "staging setting",
+        "destination you do not trust",
+        "treat the token as disclosed",
+        "revoke the token",
+        "Hugging Face Access Tokens",
+        "Do not include token values",
     ),
     ROOT / "windows" / "README.md": (
         "0.1.12 loader also leaves implicit authentication enabled",
@@ -388,6 +412,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "These public models do not require an account token",
         "Upcoming 0.1.13",
         "disables implicit authentication",
+        "Already used Windows 0.1.12?",
+        "inherited",
+        "staging setting",
+        "destination you do not trust",
+        "treat the token as disclosed",
+        "revoke the token",
+        "Hugging Face Access Tokens",
+        "Do not include token values",
     ),
 }
 
@@ -478,6 +510,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
+        "Already used Windows 0.1.12?",
+        "inherited",
+        "staging setting",
+        "destination you do not trust",
+        "treat the token as disclosed",
+        "revoke the token",
+        "Hugging Face Access Tokens",
+        "Do not include token values",
     ),
     DOCS / "index.html": (
         "Before installing or launching Windows 0.1.12",
@@ -488,6 +528,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
+        "Already used Windows 0.1.12?",
+        "inherited",
+        "staging setting",
+        "destination you do not trust",
+        "treat the token as disclosed",
+        "revoke the token",
+        "Hugging Face Access Tokens",
+        "Do not include token values",
     ),
     DOCS / "getting-started.html": (
         "Before installing or launching Windows 0.1.12",
@@ -498,6 +546,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
+        "Already used Windows 0.1.12?",
+        "inherited",
+        "staging setting",
+        "destination you do not trust",
+        "treat the token as disclosed",
+        "revoke the token",
+        "Hugging Face Access Tokens",
+        "Do not include token values",
     ),
 }
 
@@ -918,7 +974,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models continue loading automatically. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
@@ -1367,7 +1423,7 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>Presspeech needs Microphone, Accessibility(?: \(shown as Device Control and Data Access on macOS 27 and later\))?, and Input Monitoring\..*?</p>",
-        "<p>Presspeech needs Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist shows each grant, explains why it is needed, and opens the relevant macOS prompt or Settings pane.</p>",
+        "<p>Presspeech needs Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist shows each grant, explains why it is needed, and opens the relevant macOS prompt or Settings pane. macOS's Input Monitoring grant can expose typed keys; Presspeech's listener requests keyboard events only for the configured hotkey and Escape to cancel active dictation, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Review <a href=\"https://support.apple.com/guide/mac-help/mchl4cedafb6/mac\">Apple's Input Monitoring guidance</a> before deciding.</p>",
         path=path,
     )
     text = replace_regex(
@@ -3316,6 +3372,14 @@ def run_self_test() -> None:
                 "do not require an account token",
                 "Upcoming Windows 0.1.13",
                 "implicit authentication",
+                "Already used Windows 0.1.12?",
+                "inherited",
+                "staging setting",
+                "destination you do not trust",
+                "treat the token as disclosed",
+                "revoke the token",
+                "Hugging Face Access Tokens",
+                "Do not include token values",
             )
         }
         token_guidance.write_text(
@@ -3328,7 +3392,11 @@ def run_self_test() -> None:
             "It honors HF_ENDPOINT and HUGGINGFACE_CO_STAGING and may add "
             "HF_HUB_USER_AGENT_ORIGIN; a token may accompany a request to the configured endpoint. "
             "Those public models do not require an account token. Upcoming Windows 0.1.13 "
-            "clears these settings and disables implicit authentication.\n",
+            "clears these settings and disables implicit authentication. Already used Windows "
+            "0.1.12? If a model download ran with a token available and an inherited HF_ENDPOINT "
+            "or staging setting may have sent it to a destination you do not trust, treat the token "
+            "as disclosed to that destination. Revoke the token and create a replacement at Hugging Face Access Tokens. Do not include "
+            "token values in logs or support requests.\n",
             encoding="utf-8",
         )
         if check_windows_model_download_privacy_guidance(required_token_guidance):
@@ -3377,6 +3445,14 @@ def run_self_test() -> None:
                 "wait until Windows 0.1.13 is published",
                 "public models need no account token",
                 "Windows privacy decision and technical details",
+                "Already used Windows 0.1.12?",
+                "inherited",
+                "staging setting",
+                "destination you do not trust",
+                "treat the token as disclosed",
+                "revoke the token",
+                "Hugging Face Access Tokens",
+                "Do not include token values",
             )
         }
         summary_guidance.write_text(
@@ -3390,7 +3466,11 @@ def run_self_test() -> None:
             "can change where the model request goes. If a Hugging Face token or "
             "custom download route is configured on this PC, wait until Windows 0.1.13 is published. "
             "The public models need no account token; see the Windows privacy decision "
-            "and technical details.\n",
+            "and technical details. Already used Windows 0.1.12? If a model download ran with "
+            "a token available and an inherited HF_ENDPOINT or staging setting may have sent it to "
+            "a destination you do not trust, treat the token as disclosed to that destination. "
+            "Revoke the token and create a replacement at "
+            "Hugging Face Access Tokens. Do not include token values in logs or support requests.\n",
             encoding="utf-8",
         )
         if check_windows_model_download_privacy_summary(required_summary_guidance):

@@ -3617,7 +3617,7 @@ private func permissionSetupDetail(_ permission: Permission,
             : " This is the permission called Accessibility on earlier macOS versions."
         return "Verifies the focused window and sends the paste shortcut. Apple's grant can control your Mac; its scope is broader than Presspeech's use. Choose Open Settings to review System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
     case .inputMonitoring:
-        return "Lets Presspeech detect the dictation hotkey. Choose Open Settings to review System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to Presspeech."
+        return "macOS's Input Monitoring grant allows apps to monitor input, including typed keys. Presspeech receives keyboard events to detect the configured hotkey and Escape only to cancel an active recording; it doesn't inspect mouse or trackpad events, and other keys pass through without their values being saved, logged, or sent. Choose Open Settings to review System Settings → Privacy & Security → Input Monitoring, then enable Presspeech."
     }
 }
 
@@ -16821,6 +16821,23 @@ private enum PresspeechSelfTest {
             equals: true,
             "accessibility setup should disclose the broad system grant at the decision point"
         )
+        let inputMonitoringDetail = permissionSetupDetail(
+            .inputMonitoring,
+            microphoneAuthorizationStatus: .notDetermined
+        )
+        try expect(inputMonitoringDetail.contains("including typed keys"),
+                   equals: true,
+                   "input-monitoring setup should disclose the grant's broad input scope")
+        try expect(inputMonitoringDetail.contains("Escape to cancel an active recording"),
+                   equals: true,
+                   "input-monitoring setup should explain the non-hotkey key event it handles")
+        try expect(inputMonitoringDetail.contains("doesn't inspect mouse or trackpad events"),
+                   equals: true,
+                   "input-monitoring setup should name the event types Presspeech does not inspect")
+        try expect(inputMonitoringDetail.contains(
+                       "other keys pass through without their values being saved, logged, or sent"),
+                   equals: true,
+                   "input-monitoring setup should describe how ordinary key events are handled")
         let setupPermission = SetupChecklistPermissionState(
             permission: .microphone,
             detail: "Needs microphone access.",
