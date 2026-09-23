@@ -20,7 +20,7 @@ data elsewhere as a workaround. Security reports must use the private route in
 [SECURITY.md](SECURITY.md).
 
 For a completed target-app compatibility check, the worksheet's **Download
-report draft** saves its six aggregate counts and overall classification with
+report draft** saves its seven aggregate counts and overall classification with
 blank prompts for public versions and generic target context. The worksheet
 does not collect or prefill those details; the draft contains no test phrases
 or transcripts. The downloaded file also explains that it is not submitted or
@@ -87,7 +87,7 @@ the complete repeated protocol, including when every check passes. Use the bug
 form for a problem you cannot safely repeat or that is outside text delivery.
 Match an existing report only when the platform, target app version, and
 generic field type are comparable. When they match, comment with the
-worksheet's six counts and overall result, your Presspeech and operating-system
+worksheet's seven counts and overall result, your Presspeech and operating-system
 versions, generic hardware if useful, and relevant conditions; otherwise open
 a separate report. Add the observation even when its outcome differs.
 

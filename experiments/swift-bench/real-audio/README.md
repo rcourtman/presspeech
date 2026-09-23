@@ -37,6 +37,27 @@ For single-backend debugging:
 ./run-real-dictation-regression.sh --backend nemotron-multilingual --nemotron-multilingual-language en-US --nemotron-multilingual-chunk-ms 2240 --trials 5
 ```
 
+For the default release ASR check, keep at least 25 speech clips with 1,000
+reference words **plus five non-speech controls** here. Each control needs a
+distinct recording and an exactly zero-byte `.txt` sidecar; whitespace is not a
+non-speech marker. Include realistic room/device or handling noise, not just
+digital silence. Listen to every control in full to confirm it contains no
+intelligible speech before running:
+
+```sh
+./run-release-asr-checks.sh --non-speech-controls-hand-audited
+```
+
+The release check fails if any of the three default measured v3 trials on a
+control produces deliverable text. To inspect the same behavior directly:
+
+```sh
+./run-real-dictation-regression.sh --backend v3 --trials 3 --max-non-speech-emissions 0
+```
+
+That numeric check does not itself establish that the controls were correctly
+hand-audited.
+
 Reports are written to `real-results/`, which is also ignored by git.
 By default the report redacts reference text, hypothesis text, fixture
 filenames, and local paths while still showing latency, memory, and WER.

@@ -211,7 +211,10 @@ dictation hotkey in first-run setup.
 These recovery controls are not part of the 0.1.12 download above. Builds containing
 this change retain a finished dictation in process memory when clipboard access
 fails, a newer copy replaces it before the paste shortcut, the original target
-cannot be used, or keyboard delivery becomes uncertain. Check the intended field
+cannot be used, a paste key is held, or keyboard delivery becomes uncertain.
+If the hotkey hook detects a held Ctrl, Shift, Alt, Windows, or V key before
+writing, the previous clipboard item remains unchanged. Release the key and
+use Delivery Recovery to copy or discard the waiting text. Check the intended field
 first: an input error can happen after part or all of the paste has completed.
 
 The keyboard-accessible **Delivery Recovery** window opens without displaying

@@ -32,6 +32,9 @@ LONG_PUBLIC_MAX_CORPUS_WER="10"
 DEPENDENCY_MODE="production"
 MIN_PRIVATE_SPEECH_CLIPS=25
 MIN_PRIVATE_REFERENCE_WORDS=1000
+MIN_PRIVATE_NON_SPEECH_CONTROLS=5
+REQUIRE_NON_SPEECH_CONTROLS=1
+NON_SPEECH_CONTROLS_HAND_AUDITED=0
 
 usage() {
     cat <<'USAGE'
@@ -51,6 +54,12 @@ Options:
                             25 non-empty clips and 1,000 words (default)
   --allow-missing-real-audio
                             allow a lightweight run without private dictation;
+                            this cannot report a production release-gate pass
+  --non-speech-controls-hand-audited
+                            attest that zero-byte-reference non-speech controls
+                            were listened to and contain no intelligible speech
+  --allow-missing-non-speech-controls
+                            run without the required audited non-speech gate;
                             this cannot report a production release-gate pass
   --require-public-audio    fail if no public speech clips are present
   --require-long-public-audio
@@ -90,6 +99,7 @@ The default run performs:
   2. a report-only production-v3 short-clip tail diagnostic at 80 and 400 ms
      synthetic capture grace,
   3. required production v3 regression over private real-dictation fixtures,
+     including at least five audited non-speech controls with zero emitted text,
   4. production v3 regression if public speech fixtures exist,
   5. required production v3 multi-window regression over validated composed fixtures,
   6. required production v3 German FLEURS multi-window regression over validated
@@ -209,6 +219,10 @@ final_verdict() {
     elif [[ "$REQUIRE_REAL_AUDIO" -ne 1 ]]; then
         echo "lightweight ASR checks completed"
         echo "not a production release-gate pass: private real-dictation coverage was optional"
+    elif [[ "$REQUIRE_NON_SPEECH_CONTROLS" -ne 1 || \
+            "$NON_SPEECH_CONTROLS_HAND_AUDITED" -ne 1 ]]; then
+        echo "lightweight ASR checks completed"
+        echo "not a production release-gate pass: audited non-speech controls were optional"
     elif [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -ne 1 || \
             "$REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO" -ne 1 ]]; then
         echo "lightweight ASR checks completed"
@@ -338,6 +352,8 @@ run_self_test() {
 
     DEPENDENCY_MODE="production"
     REQUIRE_REAL_AUDIO=1
+    REQUIRE_NON_SPEECH_CONTROLS=1
+    NON_SPEECH_CONTROLS_HAND_AUDITED=1
     REQUIRE_LONG_PUBLIC_AUDIO=1
     REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO=1
     assert_eq "$(final_verdict)" "release ASR checks passed" "release verdict"
@@ -345,6 +361,14 @@ run_self_test() {
     assert_contains <(final_verdict) \
         "not a production release-gate pass: private real-dictation coverage was optional"
     REQUIRE_REAL_AUDIO=1
+    REQUIRE_NON_SPEECH_CONTROLS=0
+    assert_contains <(final_verdict) \
+        "not a production release-gate pass: audited non-speech controls were optional"
+    REQUIRE_NON_SPEECH_CONTROLS=1
+    NON_SPEECH_CONTROLS_HAND_AUDITED=0
+    assert_contains <(final_verdict) \
+        "not a production release-gate pass: audited non-speech controls were optional"
+    NON_SPEECH_CONTROLS_HAND_AUDITED=1
     REQUIRE_LONG_PUBLIC_AUDIO=0
     assert_contains <(final_verdict) \
         "not a production release-gate pass: English or German multi-window coverage was optional"
@@ -443,6 +467,55 @@ run_self_test() {
         "private dictation corpus is below its evidence floor: 1 non-empty references (minimum 25)"
     assert_not_contains "$underfilled_real_log" "synthetic private fixture marker"
     assert_not_contains "$underfilled_real_log" "running helper self-tests"
+
+    local speech_only_real="$tmpdir/speech-only-real"
+    mkdir -p "$speech_only_real"
+    local clip_index
+    for ((clip_index = 0; clip_index < 25; clip_index++)); do
+        printf 'independent synthetic source %s\n' "$clip_index" \
+            >"$speech_only_real/note-$clip_index.wav"
+        printf 'word %.0s' {1..40} >"$speech_only_real/note-$clip_index.txt"
+    done
+    local unaudited_log="$tmpdir/unaudited-controls.log"
+    if bash "$SCRIPT_PATH" --real-audio-dir "$speech_only_real" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        >"$unaudited_log" 2>&1; then
+        echo "self-test expected missing non-speech audit attestation to fail" >&2
+        exit 1
+    fi
+    assert_contains "$unaudited_log" \
+        "release ASR checks require --non-speech-controls-hand-audited"
+    assert_not_contains "$unaudited_log" "running helper self-tests"
+
+    for ((clip_index = 0; clip_index < 4; clip_index++)); do
+        printf 'synthetic room noise %s\n' "$clip_index" \
+            >"$speech_only_real/control-$clip_index.wav"
+        : >"$speech_only_real/control-$clip_index.txt"
+    done
+    local insufficient_controls_log="$tmpdir/insufficient-controls.log"
+    if bash "$SCRIPT_PATH" --real-audio-dir "$speech_only_real" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --non-speech-controls-hand-audited \
+        >"$insufficient_controls_log" 2>&1; then
+        echo "self-test expected too few non-speech controls to fail" >&2
+        exit 1
+    fi
+    assert_contains "$insufficient_controls_log" \
+        "4 zero-byte references (minimum 5)"
+    assert_not_contains "$insufficient_controls_log" "running helper self-tests"
+
+    local waived_controls_log="$tmpdir/waived-controls.log"
+    if bash "$SCRIPT_PATH" --real-audio-dir "$speech_only_real" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --allow-missing-non-speech-controls \
+        >"$waived_controls_log" 2>&1; then
+        echo "self-test expected the waived run to stop at its missing long-form corpus" >&2
+        exit 1
+    fi
+    assert_contains "$waived_controls_log" \
+        "no long-form public speech clips found in $tmpdir/missing-long-public"
+    assert_not_contains "$waived_controls_log" \
+        "release ASR checks require --non-speech-controls-hand-audited"
 
     local allowed_missing_real_log="$tmpdir/allowed-missing-real.log"
     if bash "$SCRIPT_PATH" \
@@ -582,6 +655,14 @@ while [[ $# -gt 0 ]]; do
             REQUIRE_REAL_AUDIO=0
             shift
             ;;
+        --non-speech-controls-hand-audited)
+            NON_SPEECH_CONTROLS_HAND_AUDITED=1
+            shift
+            ;;
+        --allow-missing-non-speech-controls)
+            REQUIRE_NON_SPEECH_CONTROLS=0
+            shift
+            ;;
         --require-public-audio)
             REQUIRE_PUBLIC_AUDIO=1
             shift
@@ -654,7 +735,12 @@ if [[ "$SDK_UPGRADE_ONLY" -eq 1 && "$ALLOW_CANDIDATE_DEPENDENCY" -ne 1 ]]; then
     exit 2
 fi
 
-if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
+if ! [[ "$TRIALS" =~ ^[0-9]+$ ]]; then
+    echo "--trials must be a positive integer" >&2
+    exit 2
+fi
+TRIALS=$((10#$TRIALS))
+if [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
     exit 2
 fi
@@ -685,6 +771,15 @@ if [[ "$REQUIRE_REAL_AUDIO" -eq 1 ]]; then
         --directory "$REAL_AUDIO_DIR" \
         --minimum-clips "$MIN_PRIVATE_SPEECH_CLIPS" \
         --minimum-words "$MIN_PRIVATE_REFERENCE_WORDS"
+    if [[ "$REQUIRE_NON_SPEECH_CONTROLS" -eq 1 ]]; then
+        if [[ "$NON_SPEECH_CONTROLS_HAND_AUDITED" -ne 1 ]]; then
+            echo "release ASR checks require --non-speech-controls-hand-audited; use --allow-missing-non-speech-controls for a lightweight run" >&2
+            exit 1
+        fi
+        python3 ./benchmark-inputs.py validate-private-controls \
+            --directory "$REAL_AUDIO_DIR" \
+            --minimum-clips "$MIN_PRIVATE_NON_SPEECH_CONTROLS"
+    fi
 fi
 if [[ "$REQUIRE_PUBLIC_AUDIO" -eq 1 && "$public_count" -eq 0 ]]; then
     echo "no public speech clips found in $PUBLIC_AUDIO_DIR" >&2
@@ -758,7 +853,13 @@ if [[ "$real_count" -eq 0 ]]; then
 else
     echo
     echo "running private $(v3_baseline_label) ASR regression on $real_count clip(s)..."
-    ./run-real-dictation-regression.sh --input-dir "$REAL_AUDIO_DIR" --backend v3 --trials "$TRIALS"
+    private_regression_args=(
+        --input-dir "$REAL_AUDIO_DIR" --backend v3 --trials "$TRIALS"
+    )
+    if [[ "$REQUIRE_REAL_AUDIO" -eq 1 && "$REQUIRE_NON_SPEECH_CONTROLS" -eq 1 ]]; then
+        private_regression_args+=( --max-non-speech-emissions 0 )
+    fi
+    ./run-real-dictation-regression.sh "${private_regression_args[@]}"
     if [[ "$DEPENDENCY_MODE" == "candidate" && \
           ( "$INCLUDE_CANDIDATE_MODELS" -eq 1 || "$SDK_UPGRADE_ONLY" -eq 1 ) ]]; then
         echo

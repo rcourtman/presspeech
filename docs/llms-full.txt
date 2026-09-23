@@ -35,6 +35,11 @@ Before installing or launching macOS 0.3.8, its model-download requests may incl
 
 ```sh
 brew install --cask rcourtman/presspeech/presspeech
+```
+
+Only after the user decides to launch published 0.3.8 despite the model-download warning above:
+
+```sh
 open /Applications/Presspeech.app
 ```
 
@@ -74,7 +79,7 @@ macOS app can export, import, or keep them in a user-chosen sync file.
 
 The macOS app uses FluidAudio's Swift SDK with the local Parakeet TDT v3 CoreML speech model on the Apple Neural Engine. It is native Swift and uses AVFoundation, CoreGraphics event taps, AppKit, CoreML, NSPasteboard, a synthetic Cmd+V paste event, and direct Unicode key events as a fallback.
 
-The Windows tray app uses Python with native hotkey/audio/paste integration. It prefers multilingual Parakeet TDT v3 through CUDA and selects English-only Whisper base.en int8 on CPU when CUDA is unavailable. On first run it checks whether the default model is cached and asks before downloading missing files; a complete local cache loads without a prompt. Additional local Parakeet, Nemotron, and faster-whisper models are selectable; Parakeet and Whisper turbo are the multilingual choices and are intended for a supported NVIDIA GPU. Platform implementations do not share UI or runtime code.
+The Windows tray app uses Python with native hotkey/audio/paste integration. It prefers multilingual Parakeet TDT v3 through CUDA and selects English-only Whisper base.en int8 on CPU when CUDA is unavailable. Published Windows 0.1.12 starts a missing selected-model download on first launch without asking first. Upcoming 0.1.13 checks the default-model cache locally and asks before downloading missing first-run files; a complete local cache loads without a prompt. Additional local Parakeet, Nemotron, and faster-whisper models are selectable; Parakeet and Whisper turbo are the multilingual choices and are intended for a supported NVIDIA GPU. Platform implementations do not share UI or runtime code.
 
 ## Privacy
 

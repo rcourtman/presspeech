@@ -733,6 +733,48 @@ MAC_MODEL_DOWNLOAD_GUIDANCE = {
     ),
 }
 
+# These are action surfaces, not just release-reference pages. A reader or
+# assistant must not treat the candidate's download prompt as present in the
+# published Windows build, or run the published Mac app as part of an install
+# command before deciding whether to make its model request.
+FIRST_RUN_ACTION_COPY = {
+    ROOT / "README.md": (
+        "If you decide to launch published 0.3.8 after reviewing the model-download",
+        "Only after the user makes an informed choice to launch 0.3.8:",
+    ),
+    DOCS / "install.html": (
+        "If you decide to launch published 0.3.8 after reviewing the",
+        "<strong>Decide whether to launch 0.3.8</strong>",
+        "If you chose to wait after reading the <a href=\"#model-download-privacy\">privacy warning</a>, leave the app unopened",
+    ),
+    DOCS / "windows.html": (
+        "Published 0.1.12 starts the selected download on first launch; it has no pre-download deferral. Only upcoming 0.1.13",
+        "<strong>Decide whether to launch 0.1.12</strong>",
+        "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app",
+        "a missing model starts downloading without another prompt",
+    ),
+    DOCS / "llms-full.txt": (
+        "Only after the user decides to launch published 0.3.8 despite the model-download warning above:",
+        "Published Windows 0.1.12 starts a missing selected-model download on first launch without asking first",
+        "Upcoming 0.1.13 checks the default-model cache locally and asks before downloading missing first-run files",
+    ),
+}
+FIRST_RUN_ACTION_FORBIDDEN = {
+    ROOT / "README.md": (
+        re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),
+    ),
+    DOCS / "install.html": (
+        re.compile(r"<pre><code>brew install --cask rcourtman/presspeech/presspeech\s+open /Applications/Presspeech\.app"),
+    ),
+    DOCS / "windows.html": (
+        re.compile(r"Choose <strong>Set Up Later</strong> to defer; the Parakeet path also offers the smaller CPU model"),
+    ),
+    DOCS / "llms-full.txt": (
+        re.compile(r"On first run it checks whether the default model is cached and asks before downloading missing files"),
+        re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),
+    ),
+}
+
 COMPATIBILITY_OVERALL_RESULTS = (
     "All five steady-focus attempts pasted once; all three focus-change attempts "
     "recovered safely",
@@ -776,7 +818,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Focus-change recovery is expected",
         "keyboard layout/input source only when it differs from your usual layout",
         "Manual-paste recovery occurred during steady focus",
-        "including its six counts and Overall result",
+        "including its seven counts and Overall result",
         *COMPATIBILITY_OVERALL_RESULTS,
     ),
     DOCS / "index.html": (
@@ -796,7 +838,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "manual-paste recovery occurred while the original target stayed focused",
-        "worksheet's six counts and Overall result",
+        "worksheet's seven counts and Overall result",
         "Download report draft",
         "blank prompts for public versions and generic target context",
         "keyboard layout/input source only if it differs from your",
@@ -813,7 +855,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "manual-recovery option only when it occurred while the original target stayed focused",
-        "worksheet's six counts and Overall result",
+        "worksheet's seven counts and Overall result",
         "Download report draft",
         "blank prompts for public version and generic target context",
         "keyboard layout/input source only if it differs from your",
@@ -1087,20 +1129,22 @@ MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/pre
 
 Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
-Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. Use Homebrew when it is already installed because it also handles updates. If Homebrew is missing, offer the direct download instead of forcing the user to install Homebrew first.
-
-Run:
+Before downloading or installing, run these read-only compatibility checks:
   uname -m
   sw_vers -productVersion
+
+Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14. Do not download, install, or launch Presspeech on an unsupported Mac.
+
+Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. After the compatibility checks pass, check whether Homebrew is already available:
+  command -v brew
+
+If Homebrew is available and the user chooses it, install with:
   brew install --cask rcourtman/presspeech/presspeech
+
+Otherwise offer the direct notarised zip using the current version-pinned download and verification steps at https://rcourtman.github.io/presspeech/install.html#direct-download. Do not install Homebrew just for Presspeech. After verification, unzip and move Presspeech.app to Applications, but do not follow the guide's launch instruction yet. Do not run the Homebrew command when Homebrew is unavailable.
 
 Only after the user makes an informed choice to launch 0.3.8:
   open /Applications/Presspeech.app
-
-Direct download:
-  https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
-
-Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
 After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
@@ -2586,6 +2630,27 @@ def check_mac_model_download_guidance(
     return errors
 
 
+def check_first_run_action_copy(
+    required_surfaces: dict[Path, tuple[str, ...]] = FIRST_RUN_ACTION_COPY,
+    forbidden_surfaces: dict[Path, tuple[re.Pattern[str], ...]] = FIRST_RUN_ACTION_FORBIDDEN,
+) -> list[str]:
+    errors: list[str] = []
+    for path in sorted(required_surfaces.keys() | forbidden_surfaces.keys()):
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        try:
+            contents = read_text(path)
+        except OSError as exc:
+            errors.append(f"{display}: cannot read first-run guidance: {exc}")
+            continue
+        for phrase in required_surfaces.get(path, ()):
+            if phrase not in contents:
+                errors.append(f"{display}: missing first-run action boundary {phrase!r}")
+        for pattern in forbidden_surfaces.get(path, ()):
+            if pattern.search(contents):
+                errors.append(f"{display}: first-run action misstates the published build or combines install and launch")
+    return errors
+
+
 def check_windows_model_download_privacy_summary(
     surfaces: dict[Path, tuple[str, ...]] = WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY,
 ) -> list[str]:
@@ -2725,8 +2790,8 @@ def check_getting_started_preflight_order(
     )
     required = (
         "Check before first launch",
-        "if a model is missing",
-        "its download starts when you open Presspeech—not when you download the installer",
+        "in macOS 0.3.8 and Windows 0.1.12, a missing model starts downloading when you open Presspeech—not when you download the installer",
+        "The upcoming 0.3.9 and 0.1.13 builds ask before a clean-install download, but are not yet published",
         "Dictation audio and transcripts are not included in model requests",
         "macOS 0.3.8",
         "a model request may include a Hugging Face token inherited by Presspeech",
@@ -2768,6 +2833,128 @@ def check_getting_started_preflight_order(
             f"{display}: setup shortcuts must follow the model-download decision"
         ]
     return []
+
+
+def check_getting_started_scratchpad_privacy_order(
+    path: Path = DOCS / "getting-started.html",
+) -> list[str]:
+    """Disclose clipboard exposure before the first in-app dictation step."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing scratchpad clipboard guidance"]
+
+    contents = read_text(path)
+    section_start = contents.find('<section id="private-test">')
+    section_end = contents.find("</section>", section_start)
+    if section_start < 0 or section_end < 0:
+        return [f"{display}: missing first-dictation practice section"]
+    section = contents[section_start:section_end]
+    warning_start = section.find('id="scratchpad-clipboard-boundary"')
+    first_step = section.find('<ol class="steps">')
+    if warning_start < 0 or first_step < 0 or warning_start > first_step:
+        return [f"{display}: scratchpad clipboard warning must precede practice steps"]
+
+    warning_end = section.find("</div>", warning_start)
+    warning = section[warning_start:warning_end] if warning_end >= 0 else ""
+    required = (
+        "not a guarantee that the system clipboard is untouched",
+        "macOS 0.3.8",
+        "Windows 0.1.12",
+        "macOS Universal Clipboard",
+        "Windows Clipboard History",
+        "non-sensitive test words",
+        'href="privacy.html#operating-system-clipboard-services"',
+    )
+    missing = [phrase for phrase in required if phrase not in warning]
+    if missing:
+        return [
+            f"{display}: incomplete scratchpad clipboard warning — missing "
+            + ", ".join(repr(phrase) for phrase in missing)
+        ]
+    return []
+
+
+def check_model_recovery_privacy_order(
+    html_path: Path = DOCS / "troubleshooting.html",
+    markdown_path: Path = DOCS / "troubleshooting.md",
+) -> list[str]:
+    """Keep repeat-download decisions ahead of troubleshooting actions and deep links."""
+    errors: list[str] = []
+    sections = (
+        (
+            html_path,
+            (
+                ('id="start-here"', "</section>", "Reopen Presspeech's controls", (
+                    "Check before model recovery", "reopening a published build with a missing model",
+                    "Model requests do not include dictation audio or transcripts",
+                )),
+                ('id="macos-model"', "</article>", "Check the connection and retry first", (
+                    "Before reopening, retrying, or resetting macOS 0.3.8",
+                    "another download may include a Hugging Face token inherited by Presspeech",
+                    "do not start another download", "macOS 0.3.9 is published and installed",
+                    "privacy.html#macos-0-3-8-after-use",
+                )),
+                ('id="windows-model"', "</article>", "Keep Setup open and wait", (
+                    "Before reopening, retrying, or selecting an uncached model in Windows 0.1.12",
+                    "usage telemetry", "already-configured or saved token",
+                    "custom routing can change its destination", "TLS-inspecting HTTPS proxy",
+                    "do not start another download", "Windows 0.1.13 is published and installed",
+                    "windows.html#model-download-privacy",
+                )),
+            ),
+        ),
+        (
+            markdown_path,
+            (
+                ("## Start Here", "\n## ", "Reopen Presspeech's controls", (
+                    "Check before model recovery", "Reopening a published build with a missing model",
+                    "Model requests do not include dictation audio or transcripts",
+                )),
+                ("### Speech Model Fails To Load", "\n### ", "Check the connection and retry first", (
+                    "Before reopening, retrying, or resetting macOS 0.3.8",
+                    "Another download may include a Hugging Face token inherited by Presspeech",
+                    "do not start another download", "macOS 0.3.9 is published and installed",
+                    "privacy.html#macos-0-3-8-after-use",
+                )),
+                ("### Speech Model Is Preparing Or Failed", "\n### ", "Keep Setup open and wait", (
+                    "Before reopening, retrying, or selecting an uncached model in Windows 0.1.12",
+                    "usage telemetry", "already-configured or saved token",
+                    "custom routing can change its destination", "TLS-inspecting HTTPS proxy",
+                    "do not start another download", "Windows 0.1.13 is published and installed",
+                    "windows.html#model-download-privacy",
+                )),
+            ),
+        ),
+    )
+    for path, checks in sections:
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing model recovery guidance")
+            continue
+        raw = read_text(path)
+        for start_marker, end_marker, action, required in checks:
+            start = raw.find(start_marker)
+            end = raw.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+            if start < 0 or end < 0:
+                errors.append(f"{display}: missing model recovery section {start_marker!r}")
+                continue
+            section = " ".join(raw[start:end].split()).casefold()
+            action_position = section.find(action.casefold())
+            if action_position < 0:
+                errors.append(f"{display}: missing model recovery action {action!r}")
+                continue
+            missing_or_late = [
+                phrase for phrase in required
+                if section.find(phrase.casefold()) < 0
+                or section.find(phrase.casefold()) > action_position
+            ]
+            if missing_or_late:
+                errors.append(
+                    f"{display}: model recovery privacy decision must precede "
+                    f"{action!r} in {start_marker!r}; missing or late "
+                    + ", ".join(repr(phrase) for phrase in missing_or_late)
+                )
+    return errors
 
 
 def check_windows_agent_install_privacy_order(
@@ -2940,7 +3127,7 @@ def check_compatibility_worksheet_contract(
             *(
                 (f"focus-{index}", outcome)
                 for index in range(1, 4)
-                for outcome in ("copied", "inserted", "other")
+                for outcome in ("copied", "inserted", "failed", "notrun")
             ),
         ]
         if (
@@ -2948,8 +3135,8 @@ def check_compatibility_worksheet_contract(
             or sorted(options) != sorted(expected_options)
         ):
             errors.append(
-                "docs/app-compatibility.html: worksheet must expose three categories "
-                "for each of five steady and three focus-change attempts"
+                "docs/app-compatibility.html: worksheet must expose three steady-focus "
+                "and four focus-change categories for each attempt"
             )
         textareas = re.findall(r"<textarea\b[^>]*>", form, flags=re.I)
         summary_match = (
@@ -3389,8 +3576,44 @@ def check_cross_platform_compare_privacy(
     return []
 
 
+def check_macos_agent_install_order(
+    prompt: str = MAC_INSTALL_PROMPT, readme: str | None = None,
+) -> list[str]:
+    """Require a compatibility stop before either install path or launch."""
+    if readme is None:
+        readme = read_text(ROOT / "README.md")
+    if "### Assistant Install Prompt" in readme:
+        readme = readme.split("### Assistant Install Prompt", 1)[1].split(
+            "</details>", 1
+        )[0]
+    sequences = (
+        ("macOS assistant prompt", prompt, (
+            "Before installing or launching macOS 0.3.8", "uname -m",
+            "sw_vers -productVersion", "Stop if", "command -v brew",
+            "brew install --cask", "current version-pinned download",
+            "Only after the user makes an informed choice to launch 0.3.8",
+            "open /Applications/Presspeech.app",
+        )),
+        ("README assistant prompt", readme, (
+            "Before downloading or installing, run these read-only compatibility checks",
+            "uname -m", "sw_vers -productVersion", "Stop if this is not",
+            "command -v brew", "brew install --cask",
+            "current version-pinned notarised ZIP",
+            "Only after the user makes an informed choice to launch 0.3.8",
+            "open /Applications/Presspeech.app",
+        )),
+    )
+    errors = []
+    for display, content, markers in sequences:
+        positions = [content.find(marker) for marker in markers]
+        if any(position < 0 for position in positions) or positions != sorted(positions):
+            errors.append(f"{display}: compatibility and privacy decisions must precede install and launch")
+    return errors
+
+
 def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     errors: list[str] = []
+    errors.extend(check_macos_agent_install_order())
     required_mac_launch_choice = (
         "installing the app without opening it does not make the model request",
         "If the user chooses to wait, skip the `open` command below",
@@ -3482,6 +3705,18 @@ def diff_text(path: Path, current: str, expected: str) -> str:
 
 
 def run_self_test() -> None:
+    if check_macos_agent_install_order():
+        raise SyncError("self-test: safe macOS assistant install order was rejected")
+    early_install = MAC_INSTALL_PROMPT.replace(
+        "Before installing or launching macOS 0.3.8",
+        "brew install --cask rcourtman/presspeech/presspeech\n"
+        "Before installing or launching macOS 0.3.8", 1,
+    )
+    if not check_macos_agent_install_order(prompt=early_install):
+        raise SyncError("self-test: install before compatibility stop was accepted")
+    missing_check = MAC_INSTALL_PROMPT.replace("  sw_vers -productVersion", "")
+    if not check_macos_agent_install_order(prompt=missing_check):
+        raise SyncError("self-test: missing macOS compatibility check was accepted")
     metadata: dict[str, object] = {
         "last_updated": "2026-01-02",
         "version": "8.7.6",
@@ -4493,9 +4728,10 @@ def run_self_test() -> None:
         getting_started = Path(tmp) / "getting-started.html"
         safe_getting_started = (
             '<div id="model-download-preflight">'
-            '<p><strong>Check before first launch:</strong> if a model is missing, its download starts '
-            'when you open Presspeech—not when you download the installer. Dictation audio and transcripts '
-            'are not included in model requests.</p>'
+            '<p><strong>Check before first launch:</strong> in macOS 0.3.8 and Windows 0.1.12, '
+            'a missing model starts downloading when you open Presspeech—not when you download the installer. '
+            'The upcoming 0.3.9 and 0.1.13 builds ask before a clean-install download, but are not yet published. '
+            'Dictation audio and transcripts are not included in model requests.</p>'
             '<ul><li><strong>macOS 0.3.8:</strong> a model request may include a Hugging Face token inherited '
             'by Presspeech. If one may be available—or you are unsure—keep the app closed and wait until '
             'macOS 0.3.9 is published. '
@@ -4557,6 +4793,69 @@ def run_self_test() -> None:
         )
         if not check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: missing getting-started preflight was accepted")
+
+        scratchpad_guidance = Path(tmp) / "scratchpad.html"
+        safe_scratchpad = (
+            '<section id="private-test"><p>Practice</p>'
+            '<div id="scratchpad-clipboard-boundary">'
+            'not a guarantee that the system clipboard is untouched; '
+            'macOS 0.3.8; Windows 0.1.12; macOS Universal Clipboard; '
+            'Windows Clipboard History; use non-sensitive test words. '
+            '<a href="privacy.html#operating-system-clipboard-services">Privacy</a>'
+            '</div><ol class="steps"><li>Open Try Dictation</li></ol></section>'
+        )
+        scratchpad_guidance.write_text(safe_scratchpad, encoding="utf-8")
+        if check_getting_started_scratchpad_privacy_order(scratchpad_guidance):
+            raise SyncError("self-test: ordered scratchpad warning was rejected")
+        scratchpad_guidance.write_text(
+            safe_scratchpad.replace(
+                '<p>Practice</p>', '<ol class="steps"><li>Open Try Dictation</li></ol><p>Practice</p>'
+            ),
+            encoding="utf-8",
+        )
+        if not check_getting_started_scratchpad_privacy_order(scratchpad_guidance):
+            raise SyncError("self-test: scratchpad warning after practice was accepted")
+        scratchpad_guidance.write_text(
+            safe_scratchpad.replace("Windows Clipboard History", "clipboard history"),
+            encoding="utf-8",
+        )
+        if not check_getting_started_scratchpad_privacy_order(scratchpad_guidance):
+            raise SyncError("self-test: incomplete scratchpad warning was accepted")
+
+        recovery_html = Path(tmp) / "troubleshooting.html"
+        recovery_markdown = Path(tmp) / "troubleshooting.md"
+        safe_recovery_html = read_text(DOCS / "troubleshooting.html")
+        safe_recovery_markdown = read_text(DOCS / "troubleshooting.md")
+        recovery_html.write_text(safe_recovery_html, encoding="utf-8")
+        recovery_markdown.write_text(safe_recovery_markdown, encoding="utf-8")
+        if check_model_recovery_privacy_order(recovery_html, recovery_markdown):
+            raise SyncError("self-test: safe model-recovery decisions were rejected")
+        for path, safe, phrase in (
+            (recovery_html, safe_recovery_html, "Check before model recovery"),
+            (recovery_html, safe_recovery_html, "another download may include a Hugging Face token"),
+            (recovery_html, safe_recovery_html, "custom routing can change its destination"),
+            (recovery_markdown, safe_recovery_markdown, "Check before model recovery"),
+            (recovery_markdown, safe_recovery_markdown, "Another download may include a Hugging Face token"),
+            (recovery_markdown, safe_recovery_markdown, "custom routing can change its destination"),
+        ):
+            path.write_text(safe.replace(phrase, "", 1), encoding="utf-8")
+            if not check_model_recovery_privacy_order(recovery_html, recovery_markdown):
+                raise SyncError(f"self-test: missing model-recovery warning was accepted: {phrase}")
+            path.write_text(safe, encoding="utf-8")
+        recovery_html.write_text(
+            safe_recovery_html.replace(
+                "do not start another download; when you can choose the timing,",
+                "when you can choose the timing,",
+                1,
+            ).replace(
+                "Check the connection and retry first.",
+                "Check the connection and retry first. do not start another download;",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_model_recovery_privacy_order(recovery_html, recovery_markdown):
+            raise SyncError("self-test: model-recovery action before its warning was accepted")
 
         windows_agent_prompt = Path(tmp) / "agents.md"
         agent_warning = (
@@ -4638,7 +4937,7 @@ def run_self_test() -> None:
         ) + "".join(
             f'<input type="radio" name="focus-{index}" value="{outcome}">'
             for index in range(1, 4)
-            for outcome in ("copied", "inserted", "other")
+            for outcome in ("copied", "inserted", "failed", "notrun")
         )
         worksheet_page.write_text(
             '<script src="compatibility-worksheet.js" defer></script>'
@@ -4674,6 +4973,22 @@ def run_self_test() -> None:
             raise SyncError("self-test: local compatibility worksheet was rejected")
         valid_worksheet_page = worksheet_page.read_text(encoding="utf-8")
         valid_worksheet_script = worksheet_script.read_text(encoding="utf-8")
+        worksheet_page.write_text(
+            valid_worksheet_page.replace(
+                '<input type="radio" name="focus-1" value="failed">',
+                '<input type="radio" name="focus-1" value="other">',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "four focus-change categories" in error
+            for error in check_compatibility_worksheet_contract(
+                worksheet_page, worksheet_script
+            )
+        ):
+            raise SyncError("self-test: ambiguous focus-change category was accepted")
+        worksheet_page.write_text(valid_worksheet_page, encoding="utf-8")
         worksheet_page.write_text(
             re.sub(
                 r'<div id="worksheet-report-actions" hidden>.*?</div>',
@@ -4808,6 +5123,26 @@ def run_self_test() -> None:
         if not check_mac_model_download_guidance(required_model_download_guidance):
             raise SyncError("self-test: vague Mac model-download guidance was not flagged")
 
+        action_copy = Path(tmp) / "first-run-copy.txt"
+        required_action_copy = {action_copy: ("Published 0.1.12 starts without asking",)}
+        forbidden_action_copy = {
+            action_copy: (re.compile(r"brew install --cask.*\nopen /Applications/Presspeech\.app"),)
+        }
+        action_copy.write_text("Published 0.1.12 starts without asking\n", encoding="utf-8")
+        if check_first_run_action_copy(required_action_copy, forbidden_action_copy):
+            raise SyncError("self-test: versioned first-run action was rejected")
+        action_copy.write_text("Upcoming 0.1.13 asks before downloading\n", encoding="utf-8")
+        if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
+            raise SyncError("self-test: missing published first-run action was accepted")
+        action_copy.write_text(
+            "Published 0.1.12 starts without asking\n"
+            "brew install --cask rcourtman/presspeech/presspeech\n"
+            "open /Applications/Presspeech.app\n",
+            encoding="utf-8",
+        )
+        if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
+            raise SyncError("self-test: combined install-and-launch command was accepted")
+
         phase_copy.write_text(
             "Upcoming Windows **9.8.7** adds this behavior.\n",
             encoding="utf-8",
@@ -4854,6 +5189,7 @@ def main() -> int:
             errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
             errors.extend(check_mac_release_phase_copy(metadata))
             errors.extend(check_mac_model_download_guidance())
+            errors.extend(check_first_run_action_copy())
             errors.extend(check_windows_release_phase_copy(metadata))
             errors.extend(check_windows_release_references(metadata))
             errors.extend(check_icon_stats(metadata))
@@ -4874,6 +5210,8 @@ def main() -> int:
             errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
             errors.extend(check_getting_started_preflight_order())
+            errors.extend(check_model_recovery_privacy_order())
+            errors.extend(check_getting_started_scratchpad_privacy_order())
             errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
@@ -4907,6 +5245,7 @@ def main() -> int:
         errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
         errors.extend(check_mac_release_phase_copy(metadata))
         errors.extend(check_mac_model_download_guidance())
+        errors.extend(check_first_run_action_copy())
         errors.extend(check_windows_release_phase_copy(metadata))
         errors.extend(check_windows_release_references(metadata))
         errors.extend(check_icon_stats(metadata))
@@ -4927,6 +5266,8 @@ def main() -> int:
         errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())
         errors.extend(check_getting_started_preflight_order())
+        errors.extend(check_model_recovery_privacy_order())
+        errors.extend(check_getting_started_scratchpad_privacy_order())
         errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())

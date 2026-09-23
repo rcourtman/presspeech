@@ -116,6 +116,42 @@ def validate_private_reference_corpus(
     return clips, words
 
 
+def validate_private_control_corpus(directory: Path, minimum_clips: int) -> int:
+    """Count explicit zero-byte non-speech references without exposing names.
+
+    A whitespace-only sidecar is ambiguous: it might be an accidentally blank
+    speech reference. Never let it satisfy a non-speech evidence floor.
+    """
+    if minimum_clips < 1:
+        raise InputError("private non-speech evidence floor must be positive")
+    if directory.is_symlink() or not directory.is_dir():
+        raise InputError("private dictation fixture directory is missing or unsafe")
+    controls = 0
+    for clip in directory.rglob("*"):
+        if clip.suffix.casefold() not in SUPPORTED_AUDIO_SUFFIXES or not clip.is_file():
+            continue
+        require_regular_file(clip, "private audio fixture")
+        reference = clip.with_suffix(".txt")
+        require_regular_file(reference, "private reference sidecar")
+        try:
+            contents = reference.read_bytes()
+            if not contents:
+                controls += 1
+            elif not wer_tokens(contents.decode("utf-8")):
+                raise InputError(
+                    "private corpus has a blank reference that is not a zero-byte "
+                    "non-speech sidecar"
+                )
+        except (OSError, UnicodeError) as exc:
+            raise InputError("private reference sidecar is unreadable") from exc
+    if controls < minimum_clips:
+        raise InputError(
+            "private non-speech corpus is below its evidence floor: "
+            f"{controls} zero-byte references (minimum {minimum_clips})"
+        )
+    return controls
+
+
 def copy_stable(source: Path, destination: Path, label: str) -> str:
     """Copy one file and reject content that changes during the snapshot."""
     require_regular_file(source, label)
@@ -368,10 +404,31 @@ def run_self_test() -> None:
             )
         empty_control = private_corpus / "empty-control.wav"
         empty_control.write_bytes(b"separate non-speech fixture")
-        empty_control.with_suffix(".txt").write_text("\n", encoding="utf-8")
+        empty_control.with_suffix(".txt").write_bytes(b"")
         clips, words = validate_private_reference_corpus(private_corpus, 25, 1001)
         if (clips, words) != (25, 1001):
             raise AssertionError("private reference evidence did not meet exact floors")
+        if validate_private_control_corpus(private_corpus, 1) != 1:
+            raise AssertionError("zero-byte non-speech control was not counted")
+        try:
+            validate_private_control_corpus(private_corpus, 2)
+        except InputError as exc:
+            if "1 zero-byte references (minimum 2)" not in str(exc):
+                raise
+        else:
+            raise AssertionError("underfilled non-speech corpus passed its floor")
+        ambiguous = private_corpus / "ambiguous.wav"
+        ambiguous.write_bytes(b"a different recording")
+        ambiguous.with_suffix(".txt").write_text(" \n", encoding="utf-8")
+        try:
+            validate_private_control_corpus(private_corpus, 1)
+        except InputError as exc:
+            if "blank reference that is not a zero-byte" not in str(exc):
+                raise
+        else:
+            raise AssertionError("ambiguous blank reference passed as a control")
+        ambiguous.unlink()
+        ambiguous.with_suffix(".txt").unlink()
         try:
             validate_private_reference_corpus(private_corpus, 26, 1001)
         except InputError as exc:
@@ -423,6 +480,12 @@ def parse_args() -> argparse.Namespace:
     private_parser.add_argument("--directory", type=Path, required=True)
     private_parser.add_argument("--minimum-clips", type=int, required=True)
     private_parser.add_argument("--minimum-words", type=int, required=True)
+    control_parser = subparsers.add_parser(
+        "validate-private-controls",
+        help="validate explicit private non-speech control volume",
+    )
+    control_parser.add_argument("--directory", type=Path, required=True)
+    control_parser.add_argument("--minimum-clips", type=int, required=True)
     return parser.parse_args()
 
 
@@ -449,10 +512,22 @@ def main() -> int:
                 f"{clips} non-empty references, {words} reference words; floors met"
             )
             return 0
-        raise InputError("choose snapshot, verify, or --self-test")
+        if args.command == "validate-private-controls":
+            controls = validate_private_control_corpus(
+                args.directory, args.minimum_clips
+            )
+            print(
+                "private non-speech corpus evidence: "
+                f"{controls} zero-byte references; floor met"
+            )
+            return 0
+        raise InputError("choose snapshot, verify, validate-private-corpus, "
+                         "validate-private-controls, or --self-test")
     except (InputError, OSError, UnicodeError) as exc:
         if args.command == "validate-private-corpus":
             print(f"private speech corpus validation failed: {exc}", file=sys.stderr)
+        elif args.command == "validate-private-controls":
+            print(f"private non-speech corpus validation failed: {exc}", file=sys.stderr)
         else:
             print(f"benchmark input snapshot failed: {exc}", file=sys.stderr)
         return 1

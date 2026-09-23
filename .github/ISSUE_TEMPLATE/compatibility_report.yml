@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for testing one target app. Run the short
         [compatibility protocol](https://rcourtman.github.io/presspeech/app-compatibility.html)
-        before filling this in. Its optional local worksheet prepares the six
+        before filling this in. Its optional local worksheet prepares the seven
         outcome counts below without writing selections to browser storage or
         sending them.
         Passing reports are useful too. [Browse existing
@@ -113,13 +113,16 @@ body:
     attributes:
       label: Eight-check outcome counts
       description: |
-        Paste the block from the protocol's local worksheet, including its six
+        Paste the block from the protocol's local worksheet, including its seven
         counts and Overall result, or enter the same values manually. The first
-        three counts must total five and the final three must total three. Use
+        three counts must total five and the final four must total three. Use
         counts and the fixed classification only; do not quote any transcript
-        or clipboard content. If a focus-change check could not be completed
-        safely, include it under Other or not completed and explain why under
-        Relevant conditions.
+        or clipboard content. A completed focus-change attempt with no insertion
+        but missing notice or incomplete recovery is a failed recovery, not an
+        unrun attempt. Count checks that could not be run under Not completed
+        and explain why under Relevant conditions. In an older six-count draft,
+        a nonzero Other or not completed count is ambiguous; do not relabel it
+        as a comparable new count. Retest safely if possible.
       placeholder: |
         Five steady-focus results
         Pasted once: 5
@@ -129,7 +132,8 @@ body:
         Three focus-change results
         Copied for manual paste without inserting anywhere: 3
         Inserted into any field: 0
-        Other or not completed: 0
+        No insertion, but recovery failed: 0
+        Not completed: 0
 
         Overall result: All five steady-focus attempts pasted once; all three focus-change attempts recovered safely
     validations:
@@ -165,7 +169,7 @@ body:
       options:
         - label: I used only blank disposable fields and harmless test phrases.
           required: true
-        - label: My three steady-focus outcome counts total five and my three focus-change outcome counts total three.
+        - label: My three steady-focus outcome counts total five and my four focus-change outcome counts total three.
           required: true
         - label: I removed all dictated/recognized text, clipboard contents, private names, titles, paths, credentials, and sensitive screenshots from this report.
           required: true

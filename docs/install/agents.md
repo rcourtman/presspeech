@@ -11,20 +11,22 @@ Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
 Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
-Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. Use Homebrew when it is already installed because it also handles updates. If Homebrew is missing, offer the direct download instead of forcing the user to install Homebrew first.
-
-Run:
+Before downloading or installing, run these read-only compatibility checks:
   uname -m
   sw_vers -productVersion
+
+Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14. Do not download, install, or launch Presspeech on an unsupported Mac.
+
+Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. After the compatibility checks pass, check whether Homebrew is already available:
+  command -v brew
+
+If Homebrew is available and the user chooses it, install with:
   brew install --cask rcourtman/presspeech/presspeech
+
+Otherwise offer the direct notarised zip using the current version-pinned download and verification steps at https://rcourtman.github.io/presspeech/install.html#direct-download. Do not install Homebrew just for Presspeech. After verification, unzip and move Presspeech.app to Applications, but do not follow the guide's launch instruction yet. Do not run the Homebrew command when Homebrew is unavailable.
 
 Only after the user makes an informed choice to launch 0.3.8:
   open /Applications/Presspeech.app
-
-Direct download:
-  https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
-
-Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
 After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.
 ```

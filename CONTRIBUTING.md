@@ -72,7 +72,7 @@ evidence and do not replace the native release checks in
 [`docs/manual-qa.md`](docs/manual-qa.md).
 
 When a matching platform/app-version/field-type report already exists and
-comments are enabled, add the worksheet's six counts and overall result there
+comments are enabled, add the worksheet's seven counts and overall result there
 with the Presspeech and operating-system versions, generic hardware if useful,
 and relevant conditions.
 When issue creation is available, open a separate report for conditions that

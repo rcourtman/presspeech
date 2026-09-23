@@ -11,6 +11,9 @@ import ctypes
 
 
 VK_V = 0x56
+VK_SHIFT = 0x10
+VK_CONTROL = 0x11
+VK_MENU = 0x12
 VK_LSHIFT = 0xA0
 VK_RSHIFT = 0xA1
 VK_LCONTROL = 0xA2
@@ -21,6 +24,7 @@ VK_LWIN = 0x5B
 VK_RWIN = 0x5C
 
 _MODIFIER_KEYS = (
+    VK_V, VK_SHIFT, VK_CONTROL, VK_MENU,
     VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL,
     VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN,
 )
@@ -35,7 +39,7 @@ class KeyboardDeliveryError(OSError):
 
 
 class ModifierHeldError(KeyboardDeliveryError):
-    """A held physical modifier would change the intended paste shortcut."""
+    """A held paste key would change the intended shortcut."""
 
 
 class ModifierStateError(KeyboardDeliveryError):
@@ -159,13 +163,13 @@ class Controller:
                 self._input(virtual_key, flags)
                 for virtual_key, flags in events
             ))
-            # SendInput does not reset physical keyboard state. A held Shift,
-            # Alt, Ctrl or Win can turn Ctrl+V into another target command.
+            # SendInput does not reset physical keyboard state. A held paste
+            # key can change the chord or be released by our synthetic key-up.
             # Snapshot as close as possible to the single SendInput call;
             # this is a guard, not an atomic guarantee against a later press.
             if check_modifiers and self._modifiers_down():
                 raise ModifierHeldError(
-                    "a keyboard modifier is held; paste was not attempted")
+                    "a paste key is held; paste was not attempted")
             inserted = int(self._api.SendInput(
                 len(inputs), inputs, ctypes.sizeof(_INPUT)))
         except (ModifierHeldError, ModifierStateError):

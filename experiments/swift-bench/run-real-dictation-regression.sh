@@ -39,6 +39,7 @@ SELF_TEST=0
 EXPERIMENT_ENVIRONMENT_STATE="unreported"
 MAX_REFERENCE_DELETION_RUN=""
 MAX_CORPUS_WER=""
+MAX_NON_SPEECH_EMISSIONS=""
 BENCHMARK_INPUT_SHA256="unreported"
 
 usage() {
@@ -70,6 +71,9 @@ Options:
   --max-corpus-wer <percent>
                            fail if the conservative corpus WER exceeds this
                            percentage (worst observed transcript per clip)
+  --max-non-speech-emissions <n>
+                           fail if more than n measured trials on zero-byte
+                           non-speech references emit deliverable text
   --self-test              run parser and report-redaction self-tests
   -h, --help               show this help
 
@@ -173,15 +177,21 @@ build_bench_args() {
 validate_benchmark_output() {
     local log_file="$1"
     local expected_backends="$2"
-    local require_reference="$3"
-    awk -v expected="$expected_backends" -v require_ref="$require_reference" '
+    local reference_kind="$3"
+    awk -v expected="$expected_backends" -v reference_kind="$reference_kind" '
         function inspect_result(line) {
             results += 1
-            if (require_ref == 1 &&
+            if (reference_kind == "speech" &&
                 (line !~ /\[WER [0-9]+([.][0-9]+)?%\]/ ||
                  line !~ /\[final-word retained=(true|false)([[:space:]]|\])/ ||
                  line !~ /\[word-errors=[0-9]+ reference-words=[0-9]+\]/ ||
                  line !~ /\[max-reference-deletion-run=[0-9]+\]/)) {
+                incomplete_results += 1
+            }
+            if (reference_kind == "control" &&
+                (line !~ /\[WER [0-9]+([.][0-9]+)?%\]/ ||
+                 line !~ /\[word-errors=[0-9]+ reference-words=0\]/ ||
+                 line !~ /\[max-reference-deletion-run=0\]/)) {
                 incomplete_results += 1
             }
         }
@@ -209,6 +219,36 @@ validate_benchmark_output() {
     ' "$log_file"
 }
 
+non_speech_trial_metrics() {
+    local log_file="$1"
+    # Use only benchmark-owned per-trial receipts, never text or a set of
+    # distinct transcripts. Validate numbering so an omitted trial fails closed.
+    awk '
+        /^[[:space:]]*output: trial=[0-9]+\/[0-9]+ empty=(true|false) characters=[0-9]+$/ {
+            line = $0
+            sub(/^[[:space:]]*output: trial=/, "", line)
+            gsub(/[\/=]/, " ", line)
+            split(line, fields, /[[:space:]]+/)
+            trial = fields[1]
+            total = fields[2]
+            empty = fields[4]
+            characters = fields[6]
+            observed += 1
+            if (trial != observed || total < 1 || trial > total) invalid = 1
+            if (observed == 1) expected = total
+            else if (total != expected) invalid = 1
+            if (empty == "false") nonempty += 1
+            if ((empty == "true" && characters != 0) ||
+                (empty == "false" && characters == 0)) invalid = 1
+        }
+        END {
+            if (invalid || observed < 1 || observed != expected)
+                print "unknown\tunknown"
+            else printf("%d\t%d\n", nonempty, observed)
+        }
+    ' "$log_file"
+}
+
 worst_reference_deletion_run() {
     local report="$1"
     sed -nE 's/.*\[max-reference-deletion-run=([0-9]+)\].*/\1/p' "$report" \
@@ -222,9 +262,8 @@ conservative_corpus_metrics() {
     awk '
         function flush_clip() {
             if (!clip_seen) return
-            if (clip_reference_words < 1) {
-                invalid = 1
-            } else {
+            # Zero-byte references are non-speech controls, not speech WER.
+            if (clip_reference_words > 0) {
                 total_errors += clip_worst_errors
                 total_words += clip_reference_words
             }
@@ -282,13 +321,38 @@ append_environment_gate() {
         else
             echo "- Default-environment prerequisite: blocked"
         fi
-        if [[ -z "$MAX_REFERENCE_DELETION_RUN" && -z "$MAX_CORPUS_WER" ]]; then
+        if [[ -z "$MAX_REFERENCE_DELETION_RUN" && -z "$MAX_CORPUS_WER" && \
+              -z "$MAX_NON_SPEECH_EMISSIONS" ]]; then
             echo "Exploratory run: no quality gate requested."
         fi
     } >>"$report"
     # Ungated exploration preserves intentionally configured environments.
     [[ "$EXPERIMENT_ENVIRONMENT_STATE" == "default" || \
-       ( -z "$MAX_REFERENCE_DELETION_RUN" && -z "$MAX_CORPUS_WER" ) ]]
+       ( -z "$MAX_REFERENCE_DELETION_RUN" && -z "$MAX_CORPUS_WER" && \
+         -z "$MAX_NON_SPEECH_EMISSIONS" ) ]]
+}
+
+append_non_speech_gate() {
+    local report="$1"
+    local controls="$2"
+    local nonempty="$3"
+    local trials="$4"
+    local verdict="passes"
+    if [[ "$controls" -lt 1 || "$trials" -ne "$((controls * TRIALS))" || \
+          "$nonempty" -gt "$MAX_NON_SPEECH_EMISSIONS" ]]; then
+        verdict="fails"
+    fi
+    {
+        echo
+        echo "## Non-speech emission gate"
+        echo
+        echo "- Zero-byte non-speech references: $controls"
+        echo "- Measured trials: $trials"
+        echo "- Trials with deliverable text: $nonempty"
+        echo "- Maximum allowed emitting trials: $MAX_NON_SPEECH_EMISSIONS"
+        echo "- Verdict: $verdict"
+    } >>"$report"
+    [[ "$verdict" == "passes" ]]
 }
 
 append_quality_gate() {
@@ -357,6 +421,8 @@ single_backend_summary_row() {
         function flush_wer() {
             if (clip_wer_seen == 0) return
             wer_sum += clip_worst_wer
+            p50_sum += clip_p50
+            speech_p50_seen += 1
             if (wer_seen == 0 || clip_worst_wer > worst_wer) {
                 worst_wer = clip_worst_wer
             }
@@ -365,6 +431,7 @@ single_backend_summary_row() {
             clip_wer_seen = 0
             clip_worst_wer = 0
             clip_final_fail = 0
+            clip_p50 = 0
         }
         /latency:.*p50=/ {
             # A backend emits latency before either one stable transcript or
@@ -374,10 +441,10 @@ single_backend_summary_row() {
             p50 = $0
             sub(/^.*p50=[[:space:]]*/, "", p50)
             sub(/ ms.*$/, "", p50)
-            p50_sum += p50
+            clip_p50 = p50
             p50_seen += 1
         }
-        /\[WER [0-9.]+%\]/ {
+        /\[WER [0-9.]+%\]/ && /\[word-errors=[0-9]+ reference-words=[1-9][0-9]*\]/ {
             match($0, /\[WER [0-9.]+%\]/)
             wer = substr($0, RSTART + 5, RLENGTH - 7) + 0
             if (clip_wer_seen == 0 || wer > clip_worst_wer) clip_worst_wer = wer
@@ -392,7 +459,7 @@ single_backend_summary_row() {
             avg_wer = wer_seen > 0 ? sprintf("%.2f", wer_sum / wer_seen) : "unknown"
             worst = wer_seen > 0 ? sprintf("%.1f", worst_wer) : "unknown"
             failures = wer_seen > 0 ? final_fail : "unknown"
-            avg_p50 = p50_seen > 0 ? sprintf("%.1f", p50_sum / p50_seen) : "unknown"
+            avg_p50 = speech_p50_seen > 0 ? sprintf("%.1f", p50_sum / speech_p50_seen) : "unknown"
             printf("| `%s` | %d | %s | %s | %s | %s |\n", backend, rows, avg_wer, worst, failures, avg_p50)
         }
     ' "$report"
@@ -411,7 +478,7 @@ append_single_backend_summary() {
         echo
         echo "## Summary"
         echo
-        echo "| Backend | Clip rows | Mean worst-clip WER % | Worst WER % | Final-word failures | Average p50 ms |"
+        echo "| Backend | Clip rows | Mean worst-speech-clip WER % | Worst speech WER % | Speech final-word failures | Average speech p50 ms |"
         echo "|---|---:|---:|---:|---:|---:|"
         printf '%s\n' "$summary_row"
         echo
@@ -481,6 +548,9 @@ write_report_header() {
         fi
         if [[ -n "$MAX_CORPUS_WER" ]]; then
             echo "- Maximum conservative corpus WER: ${MAX_CORPUS_WER}%"
+        fi
+        if [[ -n "$MAX_NON_SPEECH_EMISSIONS" ]]; then
+            echo "- Maximum non-speech emitting trials: $MAX_NON_SPEECH_EMISSIONS"
         fi
         echo "- Transcript output: $(transcript_output_label)"
         echo "- Fixture paths: $(fixture_paths_label)"
@@ -642,7 +712,7 @@ run_self_test() {
     assert_contains "$summary_source" "$expected_summary"
     assert_contains "$summary_source" \
         "Conservative corpus WER (worst observed transcript per clip): 5.71% (2 errors / 35 reference words)"
-    validate_benchmark_output "$summary_source" 2 1
+    validate_benchmark_output "$summary_source" 2 speech
     assert_eq "$(worst_reference_deletion_run "$summary_source")" "4" "worst consecutive deletion parser"
     MAX_REFERENCE_DELETION_RUN="4"
     append_quality_gate "$summary_source" "$(worst_reference_deletion_run "$summary_source")"
@@ -695,7 +765,7 @@ run_self_test() {
         echo '    latency:  p50=  80.0 ms  min=  79.0 ms  max=  81.0 ms'
         echo '    transcript: <redacted 3 chars>'
     } >"$no_reference_source"
-    validate_benchmark_output "$no_reference_source" 1 0
+    validate_benchmark_output "$no_reference_source" 1 missing
 
     local incomplete_source="$tmpdir/incomplete-source.log"
     {
@@ -703,11 +773,58 @@ run_self_test() {
         echo '    transcript: [WER 0.0%] <redacted 3 chars>'
     } >"$incomplete_source"
     local validation_log="$tmpdir/validation.log"
-    if validate_benchmark_output "$incomplete_source" 1 1 >"$validation_log" 2>&1; then
+    if validate_benchmark_output "$incomplete_source" 1 speech >"$validation_log" 2>&1; then
         echo "self-test expected incomplete benchmark metrics to fail validation" >&2
         exit 1
     fi
     assert_contains "$validation_log" "benchmark output missing required metrics:"
+
+    local control_source="$tmpdir/control-source.log"
+    {
+        echo '    latency:  p50=  80.0 ms  min=  79.0 ms  max=  81.0 ms'
+        echo '    output: trial=1/3 empty=true characters=0'
+        echo '    output: trial=2/3 empty=false characters=9'
+        echo '    output: trial=3/3 empty=true characters=0'
+        echo '    transcript: [WER 100.0%] [word-errors=1 reference-words=0] [max-reference-deletion-run=0] <redacted 9 chars>'
+    } >"$control_source"
+    validate_benchmark_output "$control_source" 1 control
+    assert_eq "$(non_speech_trial_metrics "$control_source")" $'1\t3' \
+        "non-speech per-trial receipts"
+    assert_eq "$(conservative_corpus_metrics "$control_source")" \
+        $'unknown\tunknown\tunknown' "non-speech excluded from corpus WER"
+    cat "$control_source" >>"$summary_source"
+    assert_eq "$(conservative_corpus_metrics "$summary_source")" \
+        $'5.71\t2\t35' "non-speech does not dilute speech WER"
+    assert_eq "$(single_backend_summary_row "$summary_source")" \
+        '| `v3` | 3 | 7.00 | 10.0 | 2 | 60.0 |' \
+        "non-speech excluded from speech WER summary"
+    if validate_benchmark_output "$summary_source" 3 speech >"$validation_log" 2>&1; then
+        echo "self-test expected a non-speech result to fail speech validation" >&2
+        exit 1
+    fi
+    sed 's/trial=3\/3/trial=2\/3/' "$control_source" >"$tmpdir/duplicate-control.log"
+    assert_eq "$(non_speech_trial_metrics "$tmpdir/duplicate-control.log")" \
+        $'unknown\tunknown' "duplicate non-speech trial rejected"
+    sed 's/reference-words=0/reference-words=1/' "$control_source" \
+        >"$tmpdir/invalid-control.log"
+    if validate_benchmark_output "$tmpdir/invalid-control.log" 1 control \
+        >"$validation_log" 2>&1; then
+        echo "self-test expected an invalid non-speech result to fail validation" >&2
+        exit 1
+    fi
+    TRIALS=3
+    MAX_NON_SPEECH_EMISSIONS=0
+    if append_non_speech_gate "$control_source" 1 1 3; then
+        echo "self-test expected an emitting non-speech trial to fail" >&2
+        exit 1
+    fi
+    MAX_NON_SPEECH_EMISSIONS=1
+    append_non_speech_gate "$control_source" 1 1 3
+    if append_non_speech_gate "$control_source" 0 0 0; then
+        echo "self-test expected missing controls to fail" >&2
+        exit 1
+    fi
+    MAX_NON_SPEECH_EMISSIONS=""
 
     local stage_dir="$tmpdir/staged"
     local final_dir="$tmpdir/published"
@@ -775,6 +892,24 @@ run_self_test() {
     fi
     assert_contains "$invalid_wer_log" \
         "--max-corpus-wer must be a non-negative decimal percentage"
+
+    local invalid_non_speech_log="$tmpdir/invalid-non-speech.log"
+    if bash "$SCRIPT_PATH" --input-dir "$secret_dir" \
+        --max-non-speech-emissions nope >"$invalid_non_speech_log" 2>&1; then
+        echo "self-test expected a non-integer emission bound to fail" >&2
+        exit 1
+    fi
+    assert_contains "$invalid_non_speech_log" \
+        "--max-non-speech-emissions must be a non-negative integer"
+
+    local aggregate_non_speech_log="$tmpdir/aggregate-non-speech.log"
+    if bash "$SCRIPT_PATH" --input-dir "$secret_dir" --backend fluid \
+        --max-non-speech-emissions 0 >"$aggregate_non_speech_log" 2>&1; then
+        echo "self-test expected a non-speech gate over aggregate backends to fail" >&2
+        exit 1
+    fi
+    assert_contains "$aggregate_non_speech_log" \
+        "--max-non-speech-emissions requires a single benchmark backend"
 
     local aggregate_wer_log="$tmpdir/aggregate-wer.log"
     if bash "$SCRIPT_PATH" --input-dir "$secret_dir" --backend fluid \
@@ -858,6 +993,11 @@ while [[ $# -gt 0 ]]; do
             MAX_CORPUS_WER="$2"
             shift 2
             ;;
+        --max-non-speech-emissions)
+            need_value "$@"
+            MAX_NON_SPEECH_EMISSIONS="$2"
+            shift 2
+            ;;
         --self-test)
             SELF_TEST=1
             shift
@@ -898,7 +1038,12 @@ MSG
     exit 1
 fi
 
-if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
+if ! [[ "$TRIALS" =~ ^[0-9]+$ ]]; then
+    echo "--trials must be a positive integer" >&2
+    exit 2
+fi
+TRIALS=$((10#$TRIALS))
+if [[ "$TRIALS" -lt 1 ]]; then
     echo "--trials must be a positive integer" >&2
     exit 2
 fi
@@ -927,6 +1072,19 @@ fi
 if [[ -n "$MAX_CORPUS_WER" ]] && backend_is_aggregate; then
     echo "--max-corpus-wer requires a single benchmark backend" >&2
     exit 2
+fi
+
+if [[ -n "$MAX_NON_SPEECH_EMISSIONS" ]] &&
+   ! [[ "$MAX_NON_SPEECH_EMISSIONS" =~ ^[0-9]+$ ]]; then
+    echo "--max-non-speech-emissions must be a non-negative integer" >&2
+    exit 2
+fi
+if [[ -n "$MAX_NON_SPEECH_EMISSIONS" ]] && backend_is_aggregate; then
+    echo "--max-non-speech-emissions requires a single benchmark backend" >&2
+    exit 2
+fi
+if [[ -n "$MAX_NON_SPEECH_EMISSIONS" ]]; then
+    MAX_NON_SPEECH_EMISSIONS=$((10#$MAX_NON_SPEECH_EMISSIONS))
 fi
 
 if ! [[ "$UNIFIED_TRAILING_SILENCE_MS" =~ ^[0-9]+$ ]]; then
@@ -978,6 +1136,18 @@ if [[ "${#missing_refs[@]}" -gt 0 && "$ALLOW_MISSING_REF" -eq 0 ]]; then
     echo "missing reference transcript sidecars:" >&2
     printf '  %s\n' "${missing_refs[@]}" >&2
     echo "add .txt sidecars or pass --allow-missing-ref to skip WER for those clips" >&2
+    exit 1
+fi
+
+control_count=0
+for clip in "${clips[@]}"; do
+    ref="${clip%.*}.txt"
+    if [[ -f "$ref" && ! -s "$ref" ]]; then
+        control_count=$((control_count + 1))
+    fi
+done
+if [[ -n "$MAX_NON_SPEECH_EMISSIONS" && "$control_count" -eq 0 ]]; then
+    echo "--max-non-speech-emissions requires zero-byte non-speech reference sidecars" >&2
     exit 1
 fi
 
@@ -1045,6 +1215,9 @@ backend_count="$(expected_backend_count "$BACKEND")"
 write_report_header "$report" "$timestamp" "${#clips[@]}"
 
 EXPERIMENT_ENVIRONMENT_STATE="pending"
+control_nonempty_total=0
+control_trial_total=0
+observed_control_count=0
 clip_index=0
 for clip in "${clips[@]}"; do
     clip_index=$((clip_index + 1))
@@ -1084,14 +1257,28 @@ for clip in "${clips[@]}"; do
     EXPERIMENT_ENVIRONMENT_STATE="$(python3 ./experiment-environment.py --log "$log_file" --previous "$EXPERIMENT_ENVIRONMENT_STATE")"
     cat "$log_file" >>"$report"
 
-    require_reference=0
+    reference_kind="missing"
     if [[ -f "$ref" ]]; then
-        require_reference=1
+        reference_kind="speech"
+        if [[ ! -s "$ref" ]]; then
+            reference_kind="control"
+        fi
     fi
-    if ! validate_benchmark_output "$log_file" "$backend_count" "$require_reference"; then
+    if ! validate_benchmark_output "$log_file" "$backend_count" "$reference_kind"; then
         cat "$log_file" >&2
         echo "invalid benchmark output for clip $clip_number" >&2
         exit 1
+    fi
+    if [[ "$reference_kind" == "control" && "$backend_count" -eq 1 ]]; then
+        IFS=$'\t' read -r nonempty_trials observed_trials \
+            < <(non_speech_trial_metrics "$log_file")
+        if [[ "$nonempty_trials" == "unknown" || "$observed_trials" -ne "$TRIALS" ]]; then
+            echo "invalid non-speech trial receipts for clip $clip_number" >&2
+            exit 1
+        fi
+        control_nonempty_total=$((control_nonempty_total + nonempty_trials))
+        control_trial_total=$((control_trial_total + observed_trials))
+        observed_control_count=$((observed_control_count + 1))
     fi
 
     echo '```' >>"$report"
@@ -1104,6 +1291,12 @@ if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" ]]; then
 fi
 
 append_single_backend_summary "$report"
+if [[ "$backend_count" -eq 1 && "$control_count" -gt 0 ]]; then
+    {
+        echo
+        echo "Non-speech controls (zero-byte references): $observed_control_count; deliverable text in $control_nonempty_total/$control_trial_total measured trials."
+    } >>"$report"
+fi
 
 quality_gate_passed=1
 if ! append_environment_gate "$report"; then
@@ -1118,6 +1311,12 @@ fi
 if [[ -n "$MAX_CORPUS_WER" ]]; then
     observed_corpus_wer="$(conservative_corpus_wer "$report")"
     if ! append_corpus_wer_gate "$report" "$observed_corpus_wer"; then
+        quality_gate_passed=0
+    fi
+fi
+if [[ -n "$MAX_NON_SPEECH_EMISSIONS" ]]; then
+    if ! append_non_speech_gate "$report" "$observed_control_count" \
+        "$control_nonempty_total" "$control_trial_total"; then
         quality_gate_passed=0
     fi
 fi

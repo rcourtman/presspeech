@@ -152,12 +152,19 @@ Download the notarised app:
 - [Download the latest published Presspeech.zip](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip).
 - For a version-pinned archive and its matching SHA-256, use the
   [current macOS install guide](https://rcourtman.github.io/presspeech/install.html#direct-download).
-- Unzip it, move **Presspeech.app** to **Applications**, then open it.
+- Unzip it and move **Presspeech.app** to **Applications**. If you choose to wait
+  after reading the warning above, leave it unopened.
 
 Or install with Homebrew, which is the easiest path for updates:
 
 ```sh
 brew install --cask rcourtman/presspeech/presspeech
+```
+
+If you decide to launch published 0.3.8 after reviewing the model-download
+warning above, open the installed app:
+
+```sh
 open /Applications/Presspeech.app
 ```
 
@@ -220,16 +227,29 @@ credential settings, or launch 0.3.8 without the user's informed choice. Model
 downloads do not include dictation audio or transcripts. See
 https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
-Use either the direct notarised download or the Homebrew Cask.
-Homebrew is preferred when it is already installed because it also
-handles updates:
+Before downloading or installing, run these read-only compatibility checks:
 
-    https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
+    uname -m
+    sw_vers -productVersion
+
+Stop if this is not an Apple Silicon (arm64) Mac running macOS 14 or later.
+Do not download, install, or launch Presspeech on an unsupported Mac.
+
+After the checks pass, check whether Homebrew is already available with
+`command -v brew`. If it is and the user chooses Homebrew, run:
 
     brew install --cask rcourtman/presspeech/presspeech
+
+Otherwise use the current version-pinned notarised ZIP and verification
+steps at https://rcourtman.github.io/presspeech/install.html#direct-download.
+Do not install Homebrew just for Presspeech. After verification, unzip and
+move Presspeech.app to Applications, but do not follow the guide's launch
+instruction yet.
+
+Only after the user makes an informed choice to launch 0.3.8:
+
     open /Applications/Presspeech.app
 
-Confirm the Mac is Apple Silicon and running macOS 14 or later.
 After launch, use Presspeech's Setup Checklist from the menu bar to finish
 the model, permissions, and hotkey readiness. Focus on setup and the first
 private test; do not ask the user to star, review, or otherwise endorse the
@@ -415,7 +435,7 @@ form](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_
 GitHub reported issue creation as restricted on 23 September 2026, so verify
 the route accepts reports first; if it does not, keep the report draft
 privately and retry later rather than posting sensitive data elsewhere. The
-worksheet's **Download report draft** saves those six counts and their overall
+worksheet's **Download report draft** saves those seven counts and their overall
 classification with blank prompts for public versions and generic target
 context; it does not collect or save phrases or transcripts.
 If the same platform, app version, and generic field type already has a report,

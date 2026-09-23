@@ -47,7 +47,7 @@
         <h1>From download to your first words</h1>
         <p>Choose your platform, finish setup, and try one private dictation before using Presspeech in another app. Speech is transcribed on-device; model downloads use the network.</p>
         <div class="note warn" id="model-download-preflight">
-          <p><strong>Check before first launch:</strong> if a model is missing, its download starts when you open Presspeech—not when you download the installer. You can download a build and leave it unopened. Dictation audio and transcripts are not included in model requests.</p>
+          <p><strong>Check before first launch:</strong> in macOS 0.3.8 and Windows 0.1.12, a missing model starts downloading when you open Presspeech—not when you download the installer. The upcoming 0.3.9 and 0.1.13 builds ask before a clean-install download, but are not yet published. You can download a current build and leave it unopened. Dictation audio and transcripts are not included in model requests.</p>
           <ul>
             <li><strong>macOS 0.3.8 — wait if a token may be inherited:</strong> a model request may include a Hugging Face token inherited by Presspeech. If one may be available—or you are unsure—keep the app closed and wait until macOS 0.3.9 is published. Read the <a href="install.html#model-download-privacy">full macOS warning</a>.</li>
             <li><strong>Windows 0.1.12 — wait if you want to avoid possible telemetry, or cannot rule out a token or custom route:</strong> a request may send Hugging Face usage telemetry or include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. If its trust is unclear, do not launch while it is in use. If you prefer to avoid this possible usage telemetry, are concerned that a Hugging Face token or custom download route may be configured on this PC, or are unsure, wait until Windows 0.1.13 is published. If you install now but choose to wait, leave <strong>Launch Presspeech</strong> unchecked. Read the <a href="windows.html#model-download-privacy">full Windows warning</a>; upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings.</li>
@@ -134,7 +134,7 @@
               <ol class="steps">
                 <li>
                   <strong>Prepare the speech model</strong>
-                  <p>Wait for the speech model to finish preparing. If Setup prompts you to download it, choose <strong>Download Model</strong> to start the download, or choose <strong>Set Up Later</strong> to defer. Keep Presspeech open while it prepares, and reopen Setup Checklist from the menu-bar item if needed.</p>
+                  <p>In 0.3.8, a missing model begins downloading when you launch the app; wait for it to finish preparing. In upcoming 0.3.9, a clean install instead asks you to choose <strong>Download Model</strong> or <strong>Set Up Later</strong> to defer. Keep Presspeech open while a download prepares, and reopen Setup Checklist from the menu-bar item if needed.</p>
                 </li>
                 <li>
                   <strong>Grant the three permissions</strong>
@@ -171,7 +171,8 @@
         <div class="wrap">
           <span class="section-eyebrow">Safe practice</span>
           <h2>Try the first dictation in Presspeech</h2>
-          <p>Use the built-in scratchpad to check the complete flow without sending text into another app.</p>
+          <p>Use a harmless practice sentence in the built-in scratchpad to check the complete flow without sending text into another app.</p>
+          <div class="note warn" id="scratchpad-clipboard-boundary"><p><strong>Before you practice:</strong> the scratchpad is an in-app destination, not a guarantee that the system clipboard is untouched. macOS 0.3.8 can put dictated text on the clipboard during delivery; Windows 0.1.12 can copy it for recovery if focus changes. Manually copying scratchpad text also uses the clipboard. With Handoff enabled, macOS Universal Clipboard may make copied text available on nearby Apple devices; Windows Clipboard History or sync and third-party clipboard managers may retain it. Use only non-sensitive test words, then review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a> before dictating anything sensitive.</p></div>
           <ol class="steps">
             <li>
               <strong>Open Try Dictation</strong>
@@ -194,7 +195,6 @@
         <div class="wrap">
           <span class="section-eyebrow">Ready to use</span>
           <h2>Dictate into a familiar text field</h2>
-          <div class="note"><p><strong>Before dictating sensitive text:</strong> Presspeech passes finished text through the system clipboard. macOS 0.3.8 can make transcript entries available through Universal Clipboard when Handoff is enabled; Windows 0.1.12 writes can be retained by Clipboard History or synced when that setting is enabled. Review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a>, including later-build controls and third-party clipboard managers.</p></div>
           <p>Open a blank TextEdit document on macOS or Notepad on Windows, click in it, and repeat hold–speak–release without changing windows. Press <strong>Escape</strong> to cancel an active recording.</p>
           <div class="note"><p><strong>If Presspeech copies instead:</strong> it cannot verify the same destination. Paste the existing transcript into the intended field; do not dictate it again first. This safe fallback can occur in some Electron/Chromium apps on macOS 0.3.8 even when the window appears unchanged. On Windows, reopen an administrator-level target normally rather than elevating Presspeech.</p></div>
           <div class="note warn"><p><strong>Command shells can run pasted text.</strong> <strong>Append newline</strong>, Windows <strong>newline</strong>, or spoken formatting can submit text. Dictate commands into Try Dictation or a text editor, review the exact text, then paste and run deliberately. See <a href="https://support.apple.com/en-gb/127377">Apple</a> and <a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings">Windows</a> terminal guidance.</p></div>

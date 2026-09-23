@@ -42,7 +42,20 @@ UPDATE_DIRECTORY_PREFIX = "Presspeech-update-"
 
 
 class UpdateError(RuntimeError):
+    """Curated update failure that is safe to present in the UI."""
+
     pass
+
+
+def user_facing_error(error, fallback):
+    """Return a curated updater error, never an arbitrary exception string.
+
+    UpdateError messages are authored by this module and must not interpolate
+    network, filesystem, or operating-system exception details.
+    """
+    if isinstance(error, UpdateError):
+        return str(error)
+    return fallback
 
 
 def parse_version(value):
@@ -252,7 +265,7 @@ def fetch_update(current_version, opener=None, timeout=15):
         except Exception as exc:
             if isinstance(exc, UpdateError):
                 raise
-            raise UpdateError("could not check GitHub releases: %s" % exc) from exc
+            raise UpdateError("could not check GitHub releases") from None
         if len(payload) > 2 * 1024 * 1024:
             raise UpdateError("GitHub release response was unexpectedly large")
         try:
@@ -294,8 +307,10 @@ def _read_checksum(update, opener, timeout):
             final_url = getattr(response, "geturl", lambda: url)()
             _checked_download_url(final_url)
             payload = response.read(expected_size + 1)
-    except Exception as exc:
-        raise UpdateError("could not download the release checksum: %s" % exc) from exc
+    except UpdateError:
+        raise
+    except Exception:
+        raise UpdateError("could not download the release checksum") from None
     if len(payload) != expected_size:
         raise UpdateError("release checksum size did not match the release")
     if hashlib.sha256(payload).hexdigest().lower() != expected_digest:
@@ -649,4 +664,4 @@ def download_update(update, destination=None, progress=None,
             pass
         if isinstance(exc, UpdateError):
             raise
-        raise UpdateError("could not download the installer: %s" % exc) from exc
+        raise UpdateError("could not download the installer") from None

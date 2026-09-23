@@ -41,13 +41,17 @@ collaborator where noted:
   or retire the warning when those releases change. Do not recruit a fresh
   install for compatibility testing without showing that decision point.
   Confirm **Copy report block** and **Download report draft** become available
-  only when complete. Copy must contain only the six aggregate counts and
+  only when complete. Copy must contain only the seven aggregate counts and
   overall classification; the downloaded plain-text draft must add blank
   prompts for public versions and generic target context without prefilled app
   identity or version values. It must also say it was not submitted or
   monitored and link back to current support guidance. Neither action may
   include phrases or transcripts. Reset the worksheet and confirm selections
-  are not restored after reload.
+  are not restored after reload. Classify a completed focus-change attempt
+  with no insertion but missing notice or recovery text as **No insertion, but
+  recovery failed** and verify the overall result is **An incorrect or unsafe
+  result occurred**. A genuinely unrun slot with no completed failure must
+  instead yield **Testing could not be completed**.
 - In a signed-out browser, confirm the repository About description and topics
   expose both the released macOS app and Windows prerelease instead of
   presenting a Mac-only project. Confirm the Pages home page, Get started,
@@ -375,11 +379,13 @@ keyboard access testing in addition to assistive-technology testing.
   Record any inaccessible or ambiguous state as a failure rather than
   inferring support from the indicator's custom palette.
 - In Setup, focus each Parakeet/CPU/other-model choice and let its state move
-  from awaiting consent to preparing; focus should advance to **Dictation
-  hotkey**, not jump back to the microphone picker. Focus **Retry Speech Model**,
-  **Try Dictation**, or **Finish Setup** before each becomes unavailable and
-  confirm focus moves to adjacent **Set Up Later**. Repeat keyboard-only and
-  with Narrator; verify the destination control and status remain understandable.
+  from awaiting consent to preparing; focus should advance to the **Microphone**
+  selector, the next visible Setup control, rather than remain on a disabled or
+  hidden model choice. Confirm Tab then follows the remaining visible controls
+  in order. Focus **Retry Speech Model**, **Try Dictation**, or **Finish Setup**
+  before each becomes unavailable and confirm focus moves to adjacent **Set Up
+  Later**. Repeat keyboard-only and with Narrator; verify the destination
+  control and status remain understandable.
 - While the model is preparing, confirm **Try Dictation** and **Finish Setup**
   remain disabled. Choose **Set Up Later**, restart, and confirm setup opens
   again with the selected microphone, dictation style, and Start with Windows
@@ -1091,13 +1097,15 @@ clipboard.
   Narrator announces each control's purpose. Initial focus must be on Leave
   Waiting, so an Enter already in flight cannot copy or discard text when the
   asynchronous window first appears.
-- Replace the clipboard after its write, during the route delay, and between
-  modifier-down and V. Confirm detected changes skip V, release attempted keys,
-  and retain text without replacing the newer copy automatically.
-- With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt and Windows in
+- Replace the clipboard after its write, during the route delay, and just
+  before the one-batch shortcut submission. Confirm detected changes skip the
+  shortcut and retain text without replacing the newer copy automatically.
+  A change during or after SendInput remains an unguarded race.
+- With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt, Windows and V in
   turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
   does not release the physically held key, explains the retained dictation,
-  and offers manual Copy or Discard. Release the key before manually pasting.
+  and offers manual Copy or Discard. A key already held before delivery should
+  leave the prior clipboard item unchanged. Release it before manually pasting.
   Repeat a normal paste with no other modifier held. This point-in-time check
   reduces wrong-shortcut risk but cannot make keyboard state and SendInput
   atomic; inspect the target for any unexpected command or partial insertion.

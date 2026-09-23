@@ -66,7 +66,7 @@ same app. The open [paste-target validation issue](https://github.com/rcourtman/
 needs evidence that steady focus can paste while a same-process window change
 still recovers safely. If new issues remain restricted but comments on that
 issue are available, you can add this exact macOS Electron result there with
-the six counts, Presspeech/OS/target-app versions, and generic field type.
+the seven counts, Presspeech/OS/target-app versions, and generic field type.
 Otherwise keep the draft private. A community report does not replace native
 release qualification.
 
@@ -183,12 +183,15 @@ distinct identity check. Do not substitute tabs or fields in one window, and
 do not use a field where Return, Enter, or a paste action can submit or execute
 text.
 
-Classify each attempt as **copied for manual paste without inserting
-anywhere**, **inserted into a field**, or **other/not completed**. The three
-counts should total three.
+Classify each slot as **copied for manual paste without inserting anywhere**,
+**inserted into a field**, **no insertion, but recovery failed**, or **not
+completed**. Recovery failed means a completed attempt inserted nowhere but
+the notice or complete transcript was unavailable; it is an incorrect result,
+not an unrun check. The four counts should total three.
 
 Text reaching either test window or any unrelated destination is a safety
-failure. Stop testing; do not retry in a real document. If the behavior could
+failure. Stop testing; mark that slot as inserted and each unrun slot as not
+completed. Do not retry in a real document. If the behavior could
 expose or execute sensitive content, use the private reporting route in
 [`SECURITY.md`](../SECURITY.md). Otherwise, report only privacy-safe outcomes
 through a public route when one is available; if intake is restricted, retain
@@ -197,13 +200,13 @@ the aggregate locally and retry later.
 ## Record categories without recording words
 
 The [public protocol page](https://rcourtman.github.io/presspeech/app-compatibility.html#worksheet)
-includes an optional in-page worksheet for the eight outcome categories. It
+includes an optional in-page worksheet for the eight check outcomes. It
 calculates the two aggregate count sets and prepares a report-ready block with
 the canonical overall classification.
 Selections stay only in the page controls: the worksheet does not send
 selections, write them to browser storage, or provide a field for a phrase,
 transcript, or report context. Use **Reset worksheet** to clear them. **Copy
-report block** places only the labelled six counts and overall classification
+report block** places only the labelled seven counts and overall classification
 on the clipboard. **Download report draft** saves those counts with blank
 prompts for public versions and generic target context; the worksheet does not
 collect or prefill those details. The plain-text draft contains no phrases or
@@ -211,13 +214,13 @@ transcripts, and the user decides what to share. It also says the download is
 not submitted or monitored, points to the support guide for current reporting
 routes, and advises keeping the file private if no suitable route is available.
 The browser or operating system controls the downloaded file. It can preserve
-a completed result and a reminder of useful context while no public reporting
-route is available. Once all eight outcomes are selected, the worksheet reveals
+a classified result and a reminder of useful context while no public reporting
+route is available. Once all eight check slots are classified, the worksheet reveals
 the existing-report search and a link to check whether GitHub currently accepts
 a new report. Selections are not submitted; if intake is restricted, keep the
 draft locally and retry later.
 
-Without the worksheet, tally the same six categories manually:
+Without the worksheet, tally the same seven categories manually:
 
 ```text
 Five steady-focus results
@@ -228,17 +231,30 @@ Incorrect or unsafe: [0-5]
 Three focus-change results
 Copied for manual paste without inserting anywhere: [0-3]
 Inserted into any field: [0-3]
-Other or not completed: [0-3]
+No insertion, but recovery failed: [0-3]
+Not completed: [0-3]
 
 Overall result: [classification from the definitions below]
 ```
 
-The first three values must total five and the final three must total three.
+The first three values must total five and the final four must total three.
 Record known clipboard-change interruptions separately under relevant
-conditions; do not turn them into a seventh category or include their text.
+conditions; do not turn them into another category or include their text.
 If unexpected insertion stops the focus-safety check early, count that attempt
-as **Inserted into a field** and each unrun remainder as **Other or not
-completed**.
+as **Inserted into a field** and each unrun remainder as **Not completed**.
+If a completed attempt inserts nowhere but does not show a recovery notice or
+does not make the complete transcript available, count it as **No insertion,
+but recovery failed**, not **Not completed**. Either completed failure makes
+the overall result **An incorrect or unsafe result occurred**; reserve
+**Testing could not be completed** for unrun slots when no completed failure
+occurred.
+
+An older six-count worksheet draft may combine failed recovery and unrun slots
+as **Other or not completed**. If that count is zero, both new counts are zero.
+If it is nonzero, do not guess which happened or present it as a comparable
+seven-count baseline. Keep the old draft private; if safe, rerun the protocol
+with the current categories. If a safety failure caused the stop, do not repeat
+it in a real field and use the appropriate reporting route when available.
 
 ## Keep separate boundaries separate
 
@@ -287,7 +303,7 @@ type.
 
 If issue creation is still restricted and your macOS Electron result directly
 addresses [issue #33](https://github.com/rcourtman/presspeech/issues/33), you
-may instead comment there if GitHub permits it. Include the six counts plus
+may instead comment there if GitHub permits it. Include the seven counts plus
 Presspeech, operating-system, and target-app versions and the generic field
 type. Do not post unrelated results in that thread; retain those drafts
 privately when no suitable route accepts them.
@@ -299,7 +315,7 @@ Presspeech version: [x.y.z]
 Operating-system version: [version]
 Hardware (optional, no serial or device names): [generic model/chip]
 
-[paste the worksheet's six counts and Overall result]
+[paste the worksheet's seven counts and Overall result]
 
 Relevant conditions: [trigger mode, keyboard layout/input source when
 relevant, suffix, clipboard manager/history, assistive technology, or a minimal

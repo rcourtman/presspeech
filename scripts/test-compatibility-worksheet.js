@@ -43,7 +43,8 @@ function makeDocument() {
     "steady-unsafe-count",
     "focus-copied-count",
     "focus-inserted-count",
-    "focus-other-count",
+    "focus-failed-count",
+    "focus-notrun-count",
   ];
   const elements = new Map(ids.map((id) => [id, makeElement(id)]));
   const outcomes = new Map();
@@ -123,7 +124,7 @@ async function main() {
     ["pasted", "pasted", "recovered", "unsafe", "recovered"].forEach(
       (value, index) => doc.outcomes.set(`steady-${index + 1}`, value),
     );
-    ["copied", "inserted", "other"].forEach((value, index) =>
+    ["copied", "inserted", "failed"].forEach((value, index) =>
       doc.outcomes.set(`focus-${index + 1}`, value),
     );
     form.listeners.change();
@@ -136,7 +137,10 @@ async function main() {
     assert.match(summary.value, /Incorrect or unsafe: 1/);
     assert.match(summary.value, /Copied for manual paste without inserting anywhere: 1/);
     assert.match(summary.value, /Inserted into any field: 1/);
-    assert.match(summary.value, /Other or not completed: 1/);
+    assert.match(summary.value, /No insertion, but recovery failed: 1/);
+    assert.match(summary.value, /Not completed: 0/);
+    assert.equal(doc.getElementById("focus-failed-count").textContent, "1");
+    assert.equal(doc.getElementById("focus-notrun-count").textContent, "0");
     assert.match(summary.value, /Overall result: An incorrect or unsafe result occurred/);
     assert.doesNotMatch(summary.value, /Platform|Target app|Operating-system version/);
     assert.match(
@@ -200,7 +204,7 @@ async function main() {
     await save.listeners.click();
     assert.equal(blobs.length, 2, "incomplete worksheets must not be downloaded");
 
-    doc.outcomes.set("focus-3", "other");
+    doc.outcomes.set("focus-3", "notrun");
     form.listeners.change();
     globalThis.Blob = undefined;
     await save.listeners.click();
@@ -211,6 +215,29 @@ async function main() {
     assert.equal(
       worksheet.summarise(Array(5).fill(null), Array(3).fill(null)).remaining,
       8,
+    );
+    const allPasted = Array(5).fill("pasted");
+    assert.equal(
+      worksheet.summarise(allPasted, ["copied", "failed", "copied"]).overall,
+      "An incorrect or unsafe result occurred",
+      "a completed recovery failure must not be reported as an unrun test",
+    );
+    assert.equal(
+      worksheet.summarise(allPasted, ["copied", "notrun", "copied"]).overall,
+      "Testing could not be completed",
+    );
+    assert.equal(
+      worksheet.summarise(allPasted, ["failed", "notrun", "notrun"]).overall,
+      "An incorrect or unsafe result occurred",
+      "completed failures take precedence over subsequent unrun slots",
+    );
+    assert.equal(
+      worksheet.summarise(allPasted, Array(3).fill("copied")).overall,
+      "All five steady-focus attempts pasted once; all three focus-change attempts recovered safely",
+    );
+    assert.equal(
+      worksheet.summarise(["recovered", ...Array(4).fill("pasted")], Array(3).fill("copied")).overall,
+      "Manual-paste recovery occurred during steady focus; no incorrect or unsafe result occurred",
     );
     console.log("compatibility worksheet tests passed");
   } finally {

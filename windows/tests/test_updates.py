@@ -73,6 +73,20 @@ def release(version, complete=True, draft=False):
 
 
 class UpdateSelectionTests(unittest.TestCase):
+    def test_user_facing_errors_hide_arbitrary_exception_details(self):
+        private_detail = "proxy-password=synthetic-private-marker"
+        self.assertEqual(
+            updates.user_facing_error(
+                RuntimeError(private_detail), "Update operation failed."),
+            "Update operation failed.",
+        )
+        self.assertEqual(
+            updates.user_facing_error(
+                updates.UpdateError("release checksum verification failed"),
+                "Update operation failed."),
+            "release checksum verification failed",
+        )
+
     def test_version_parser_accepts_release_tag_and_plain_version(self):
         self.assertEqual(updates.parse_version("windows-v1.2.3"), (1, 2, 3))
         self.assertEqual(updates.parse_version("1.2.3"), (1, 2, 3))
@@ -179,6 +193,18 @@ class UpdateSelectionTests(unittest.TestCase):
         self.assertEqual(headers["user-agent"], updates.USER_AGENT)
         self.assertEqual(headers["x-github-api-version"], updates.API_VERSION)
         self.assertNotIn("x-presspeech-version", headers)
+
+    def test_fetch_failure_does_not_expose_exception_text(self):
+        private_detail = "proxy-password=synthetic-private-marker"
+
+        def opener(_request, timeout):
+            raise RuntimeError(private_detail)
+
+        with self.assertRaises(updates.UpdateError) as raised:
+            updates.fetch_update("0.1.0", opener=opener)
+        self.assertEqual(
+            str(raised.exception), "could not check GitHub releases")
+        self.assertNotIn(private_detail, str(raised.exception))
 
     def test_fetch_traverses_canonical_release_pages(self):
         first_page = [
@@ -316,6 +342,41 @@ class DownloadTests(unittest.TestCase):
             "checksum_size": len(checksum_payload),
             "checksum_digest": hashlib.sha256(checksum_payload).hexdigest(),
         }, digest
+
+    def test_checksum_download_error_does_not_expose_exception_text(self):
+        private_detail = "proxy-password=synthetic-private-marker"
+        update, _digest = self.make_update(b"safe installer")
+
+        def opener(_request, timeout):
+            raise RuntimeError(private_detail)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(updates.UpdateError) as raised:
+                updates.download_update(
+                    update, directory, opener=opener)
+        self.assertEqual(
+            str(raised.exception), "could not download the release checksum")
+        self.assertNotIn(private_detail, str(raised.exception))
+
+    def test_installer_download_error_does_not_expose_exception_text(self):
+        private_detail = "proxy-password=synthetic-private-marker"
+        payload = b"safe installer"
+        update, digest = self.make_update(payload)
+
+        def opener(request, timeout):
+            if request.full_url.endswith("checksum"):
+                return Response(
+                    ("%s  %s\n" %
+                     (digest, update["installer_name"])).encode("ascii"))
+            raise RuntimeError(private_detail)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(updates.UpdateError) as raised:
+                updates.download_update(
+                    update, directory, opener=opener)
+        self.assertEqual(
+            str(raised.exception), "could not download the installer")
+        self.assertNotIn(private_detail, str(raised.exception))
 
     def test_download_is_verified_and_moved_atomically(self):
         payload = b"safe installer"

@@ -242,6 +242,20 @@ class UpdateWindowTests(unittest.TestCase):
         self.assertTrue(app.os.path.exists(window.downloaded_installer))
         window._close()
 
+    def test_download_worker_redacts_unexpected_exception_details(self):
+        window = self.make_window()
+        private_detail = "proxy-password=synthetic-private-marker"
+
+        with mock.patch.object(
+                app.ui.updates, "download_update",
+                side_effect=RuntimeError(private_detail)):
+            window._download_worker()
+
+        self.assertEqual(
+            window.events.get_nowait(),
+            ("error", "Could not prepare or download the update."),
+        )
+
     def test_close_racing_ready_event_removes_completed_installer(self):
         window = self.make_window()
 
@@ -303,7 +317,8 @@ class UpdateWindowTests(unittest.TestCase):
         window.progress.config.assert_called_with(value=0)
         window.download_button.config.assert_called_with(state="normal")
         showerror.assert_called_once_with(
-            "Update failed", "launch failed", parent=window.root)
+            "Update failed", "Could not start the verified installer.",
+            parent=window.root)
 
     def test_hard_exit_hands_a_stalled_partial_download_to_cleanup(self):
         window = self.make_window()
@@ -330,6 +345,25 @@ class UpdateWindowTests(unittest.TestCase):
         cleanup.assert_called_once_with(partial)
         app.os.remove(partial)
         app.os.rmdir(directory)
+
+
+class UpdateCheckFailureTests(unittest.TestCase):
+    def test_manual_failure_notification_redacts_exception_details(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._update_lock = threading.Lock()
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        private_detail = "proxy-password=synthetic-private-marker"
+
+        with mock.patch.object(
+                app.updates, "fetch_update",
+                side_effect=RuntimeError(private_detail)):
+            instance._update_check_worker(manual=True)
+
+        instance._log.assert_called_once_with(
+            "update check failed: RuntimeError")
+        instance.notify.assert_called_once_with(
+            "Update check failed", "Could not check for updates. Please try again.")
 
 
 class InputSelectionTests(unittest.TestCase):
@@ -3505,6 +3539,26 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.controller.assert_not_called()
         self.assert_retained_without_content_logs()
         self.assertNotIn("private clipboard detail", str(self.instance._log.mock_calls))
+
+    def test_hook_held_paste_key_preserves_previous_clipboard(self):
+        for key in app.keyboard_delivery._MODIFIER_KEYS:
+            with self.subTest(key=key):
+                self.instance._filter_pressed_vks = {key}
+                self.instance._undelivered_dictations.clear()
+                self.copy.reset_mock()
+                self.assertFalse(self.paste())
+                self.copy.assert_not_called()
+                self.controller.assert_not_called()
+                self.assert_retained_without_content_logs()
+
+    def test_hook_key_pressed_after_clipboard_write_prevents_shortcut(self):
+        with mock.patch.object(
+                self.instance, "_paste_keys_held_in_hook",
+                side_effect=[False, True]):
+            self.assertFalse(self.paste())
+        self.copy.assert_called_once()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
 
     def test_external_copy_immediately_after_write_stops_delivery(self):
         self.owned.return_value = False

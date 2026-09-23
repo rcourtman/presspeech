@@ -10,7 +10,7 @@
   }
 })(function createWorksheet() {
   const STEADY_OUTCOMES = ["pasted", "recovered", "unsafe"];
-  const FOCUS_OUTCOMES = ["copied", "inserted", "other"];
+  const FOCUS_OUTCOMES = ["copied", "inserted", "failed", "notrun"];
 
   function countsFor(values, allowed) {
     const counts = Object.fromEntries(allowed.map((value) => [value, 0]));
@@ -37,9 +37,9 @@
     const remaining = [...steady, ...focus].filter((value) => value === null).length;
     let overall = "";
     if (remaining === 0) {
-      if (steadyCounts.unsafe > 0 || focusCounts.inserted > 0) {
+      if (steadyCounts.unsafe > 0 || focusCounts.inserted > 0 || focusCounts.failed > 0) {
         overall = "An incorrect or unsafe result occurred";
-      } else if (focusCounts.other > 0) {
+      } else if (focusCounts.notrun > 0) {
         overall = "Testing could not be completed";
       } else if (steadyCounts.recovered > 0) {
         overall = "Manual-paste recovery occurred during steady focus; no incorrect or unsafe result occurred";
@@ -68,7 +68,8 @@
       "Three focus-change results",
       `Copied for manual paste without inserting anywhere: ${result.focus.copied}`,
       `Inserted into any field: ${result.focus.inserted}`,
-      `Other or not completed: ${result.focus.other}`,
+      `No insertion, but recovery failed: ${result.focus.failed}`,
+      `Not completed: ${result.focus.notrun}`,
       "",
       `Overall result: ${result.overall}`,
     ].join("\n");
@@ -117,7 +118,8 @@
       "steady-unsafe-count": ["steady", "unsafe"],
       "focus-copied-count": ["focus", "copied"],
       "focus-inserted-count": ["focus", "inserted"],
-      "focus-other-count": ["focus", "other"],
+      "focus-failed-count": ["focus", "failed"],
+      "focus-notrun-count": ["focus", "notrun"],
     };
 
     function selected(prefix, total) {
@@ -137,7 +139,7 @@
       save.disabled = !result.complete;
       reportActions.hidden = !result.complete;
       status.textContent = result.complete
-        ? `All eight outcomes recorded. Overall: ${result.overall}.`
+        ? `All eight check slots classified. Overall: ${result.overall}.`
         : `${result.remaining} ${result.remaining === 1 ? "outcome remains" : "outcomes remain"}.`;
     }
 

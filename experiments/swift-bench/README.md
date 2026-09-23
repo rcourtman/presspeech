@@ -1150,7 +1150,19 @@ or model work, it requires at least 25 clips with non-empty references and
 These volume floors match the product-candidate screen; they do not establish speaker/category diversity, reference
 accuracy, or an acceptable WER. The references still need human review, and
 the private short-dictation WER/final-word/latency rows remain evidence for
-maintainer review rather than an absolute pass threshold. `--allow-missing-real-audio`
+maintainer review rather than an absolute pass threshold. The default release
+gate also requires five distinct-source, hand-audited non-speech recordings in
+the private corpus. Give each one an exactly zero-byte `.txt` sidecar and include
+realistic room, handling, or device noise—not only digital silence. Listen to
+the entire recordings before asserting `--non-speech-controls-hand-audited`.
+The production-v3 regression then fails if **any measured trial** emits text on
+a control. Its privacy-safe per-trial output receipts, rather than the number
+of distinct transcripts, detect intermittent emissions. Speech WER and average
+speech p50 exclude controls; the report separately counts their emitting trials.
+This is a non-speech model-behavior check, not a VAD boundary or microphone-to-
+paste latency measurement. A `release ASR checks passed` verdict still does not
+attest acceptable short-dictation WER or replace review of those report rows.
+`--allow-missing-real-audio`
 explicitly downgrades the run and skips these private-corpus floors. After the
 preflight, it runs helper self-tests, the required production-v3 private
 real-dictation regression, and a report-only short-clip tail diagnostic at 80
@@ -1167,12 +1179,16 @@ explicit spelling of the default requirement; `--require-public-audio` can
 additionally require the optional short public corpus:
 
 ```sh
-./run-release-asr-checks.sh --require-real-audio
-./run-release-asr-checks.sh --require-public-audio
+./run-release-asr-checks.sh --non-speech-controls-hand-audited
+./run-release-asr-checks.sh --non-speech-controls-hand-audited --require-public-audio
 ```
 
 For a lightweight run without private clips, use
 `--allow-missing-real-audio`; the wrapper marks it as non-release evidence.
+Use `--allow-missing-non-speech-controls` only for a lightweight run without
+audited controls; neither that waiver nor merely passing a bare audit flag can
+turn missing controls into a release pass. The wrapper checks the control
+sidecars and fails before native work if the default evidence floor is unmet.
 Likewise, `--allow-missing-long-public-audio` and/or
 `--allow-missing-multilingual-long-public-audio` explicitly downgrade a run;
 omitting any required human or multi-window corpus cannot produce a production

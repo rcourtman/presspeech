@@ -6,6 +6,11 @@ the same recovery steps available as plain Markdown.
 
 ## Start Here
 
+**Check before model recovery:** Reopening a published build with a missing
+model, retrying a failed load, or resetting the cache may make another model
+request. Read the macOS 0.3.8 or Windows 0.1.12 privacy decision below before
+taking that step. Model requests do not include dictation audio or transcripts.
+
 1. Reopen Presspeech's controls. Open `Presspeech.app` again on macOS or launch
    Presspeech again from the Windows Start Menu. The running process restores
    Setup or Settings instead of starting a second dictation process.
@@ -42,6 +47,15 @@ checks separately when the visible System Settings toggle and actual keyboard
 delivery disagree.
 
 ### Speech Model Fails To Load
+
+**Before reopening, retrying, or resetting macOS 0.3.8 with a missing or
+damaged model:** Another download may include a Hugging Face token inherited by
+Presspeech. The public model needs no account token. If one may be present in
+the environment that launches Presspeech—or you are unsure—do not start another
+download; when you can choose the timing, wait until macOS 0.3.9 is published
+and installed. Leave a working model cache in place. Read the
+[guidance for existing 0.3.8 users](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use)
+before resetting anything.
 
 Check the connection and retry first. If Presspeech reports an incomplete or
 corrupt cache, use **Support -> Reset Speech Model Cache...**. Presspeech deletes
@@ -130,6 +144,17 @@ process restores its open window, opens Setup during first run, or opens Setting
 afterward.
 
 ### Speech Model Is Preparing Or Failed
+
+**Before reopening, retrying, or selecting an uncached model in Windows
+0.1.12:** A new model request may send Hugging Face usage telemetry and an
+already-configured or saved token; custom routing can change its destination.
+A TLS-inspecting HTTPS proxy trusted by the client can read any token sent. If
+you want to avoid possible telemetry, are concerned about a token or custom
+route, or are unsure, do not start another download; wait until Windows 0.1.13
+is published and installed. If a TLS-inspecting proxy is in use and its trust
+is unclear, do not launch while it is in use. Read the
+[full Windows privacy decision](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
+before retrying.
 
 Keep Setup open and wait for the selected model to report ready. A hotkey press
 while it is preparing is intentionally ignored. If Setup reports a failure,

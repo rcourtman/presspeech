@@ -57,6 +57,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Start here</span>
           <h2>Check the visible state first</h2>
+          <div class="note warn"><p><strong>Check before model recovery:</strong> reopening a published build with a missing model, retrying a failed load, or resetting the cache may make another model request. Read the <a href="#macos-model">macOS 0.3.8</a> or <a href="#windows-model">Windows 0.1.12</a> privacy decision below before taking that step. Model requests do not include dictation audio or transcripts.</p></div>
           <ol class="steps">
             <li>
               <strong>Reopen Presspeech's controls</strong>
@@ -90,6 +91,7 @@
             </article>
             <article class="card" id="macos-model">
               <h3>The speech model fails to load</h3>
+              <p><strong>Before reopening, retrying, or resetting macOS 0.3.8 with a missing or damaged model:</strong> another download may include a Hugging Face token inherited by Presspeech. The public model needs no account token. If one may be present in the environment that launches Presspeech—or you are unsure—do not start another download; when you can choose the timing, wait until macOS 0.3.9 is published and installed. Leave a working model cache in place. Read the <a href="privacy.html#macos-0-3-8-after-use">guidance for existing 0.3.8 users</a> before resetting anything.</p>
               <p>Check the connection and retry first. If Presspeech reports an incomplete or corrupt cache, choose <strong>Support → Reset Speech Model Cache…</strong>. This deletes only the local model cache, then downloads and verifies a fresh copy; it does not remove settings or dictionary rules.</p>
             </article>
             <article class="card" id="macos-hotkey">
@@ -130,6 +132,7 @@
             </article>
             <article class="card" id="windows-model">
               <h3>The model is still preparing or failed</h3>
+              <p><strong>Before reopening, retrying, or selecting an uncached model in Windows 0.1.12:</strong> a new model request may send Hugging Face usage telemetry and an already-configured or saved token; custom routing can change its destination. A TLS-inspecting HTTPS proxy trusted by the client can read any token sent. If you want to avoid possible telemetry, are concerned about a token or custom route, or are unsure, do not start another download; wait until Windows 0.1.13 is published and installed. If a TLS-inspecting proxy is in use and its trust is unclear, do not launch while it is in use. Read the <a href="windows.html#model-download-privacy">full Windows privacy decision</a> before retrying.</p>
               <p>Keep Setup open and wait for the selected model to report ready. A hotkey press while it is preparing is intentionally ignored. If Setup reports a failure, choose <strong>Retry Speech Model</strong>. Check the connection and available disk space; on an NVIDIA system, also update the display driver or select a local Whisper model in Settings.</p>
             </article>
             <article class="card" id="windows-microphone">

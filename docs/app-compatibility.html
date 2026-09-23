@@ -94,7 +94,7 @@
               <p><a href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22%20in%3Abody%20%22Electron%2FChromium%20desktop%20app%22">Browse Electron/Chromium reports &rarr;</a></p>
             </article>
           </div>
-          <div class="note"><p><strong>Especially useful now:</strong> if you use an Electron/Chromium app on macOS, include both the steady-focus checks and a focus change between two windows of that same app. The open <a href="https://github.com/rcourtman/presspeech/issues/33">paste-target validation issue</a> needs evidence that steady focus can paste while a same-process window change still recovers safely. If new issues remain restricted but comments on that issue are available, you can add this exact macOS Electron result there with the six counts, Presspeech/OS/target-app versions, and generic field type. Otherwise keep the draft private. A community report does not replace native release qualification.</p></div>
+          <div class="note"><p><strong>Especially useful now:</strong> if you use an Electron/Chromium app on macOS, include both the steady-focus checks and a focus change between two windows of that same app. The open <a href="https://github.com/rcourtman/presspeech/issues/33">paste-target validation issue</a> needs evidence that steady focus can paste while a same-process window change still recovers safely. If new issues remain restricted but comments on that issue are available, you can add this exact macOS Electron result there with the seven counts, Presspeech/OS/target-app versions, and generic field type. Otherwise keep the draft private. A community report does not replace native release qualification.</p></div>
           <div class="note"><p><strong>Comparable means the same platform, app version, and generic field type.</strong> Add another observation to a matching report even when your outcome differs. Open a separate report when any of those boundaries differs. The class links search standardized compatibility-report bodies; older general bug reports are intentionally not counted as completed protocol evidence.</p></div>
         </div>
       </section>
@@ -193,8 +193,9 @@
               <p>Record known clipboard-change interruptions separately as above. For an Electron/Chromium app, use two separate windows of that same app for at least one attempt. Same-process windows are a distinct identity check; tabs or fields in one window are not a substitute.</p>
             </article>
           </div>
-          <p>Classify each attempt as <strong>copied for manual paste without inserting anywhere</strong>, <strong>inserted into a field</strong>, or <strong>other/not completed</strong>. The three counts should total three.</p>
-          <div class="note warn"><p><strong>Stop on unexpected insertion.</strong> Text reaching either test window or any unrelated destination is a safety failure. Do not retry in a real document. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private reporting route</a> if the behavior could expose or execute sensitive content.</p></div>
+          <p>Classify each slot as <strong>copied for manual paste without inserting anywhere</strong>, <strong>inserted into a field</strong>, <strong>no insertion, but recovery failed</strong>, or <strong>not completed</strong>. Recovery failed means a completed attempt inserted nowhere but the notice or complete transcript was unavailable; it is an incorrect result, not an unrun check. The four counts should total three.</p>
+          <p>An older six-count draft may combine failed recovery and unrun slots as <strong>Other or not completed</strong>. If that count is zero, both new counts are zero. If it is nonzero, do not guess or present the draft as a comparable seven-count baseline. Keep it private and, if safe, rerun the protocol using the current categories.</p>
+          <div class="note warn"><p><strong>Stop on unexpected insertion.</strong> Text reaching either test window or any unrelated destination is a safety failure. Do not retry in a real document. Mark the attempted slot as inserted and each unrun slot as not completed. Use the <a href="https://github.com/rcourtman/presspeech/security/advisories/new">private reporting route</a> if the behavior could expose or execute sensitive content.</p></div>
         </div>
       </section>
 
@@ -203,7 +204,7 @@
           <span class="section-eyebrow">Local worksheet</span>
           <h2>Record categories, not words</h2>
           <p>Use this optional worksheet as you complete the checks above. It records only the outcome category selected for each attempt, calculates the two sets of aggregate counts, and prepares the exact count and overall-result block used by the compatibility report. There is nowhere to enter a phrase, transcript, or report context.</p>
-          <div class="note" id="worksheet-privacy"><p><strong>Local and temporary:</strong> selections stay in this page's controls. The worksheet does not send selections or write them to browser storage. Choose <strong>Reset worksheet</strong> to clear them. <strong>Copy report block</strong> puts only the labelled six counts and overall classification on your clipboard. <strong>Download report draft</strong> saves those counts with blank prompts for public version and generic target context; the worksheet does not collect or prefill those details. The plain-text draft contains no phrases or transcripts. It names the <code>SUPPORT.md</code> guide for current reporting routes, says the download is not submitted or monitored, and advises keeping the file private if no suitable route is available. Your browser or operating system controls the downloaded file.</p></div>
+          <div class="note" id="worksheet-privacy"><p><strong>Local and temporary:</strong> selections stay in this page's controls. The worksheet does not send selections or write them to browser storage. Choose <strong>Reset worksheet</strong> to clear them. <strong>Copy report block</strong> puts only the labelled seven counts and overall classification on your clipboard. <strong>Download report draft</strong> saves those counts with blank prompts for public version and generic target context; the worksheet does not collect or prefill those details. The plain-text draft contains no phrases or transcripts. It names the <code>SUPPORT.md</code> guide for current reporting routes, says the download is not submitted or monitored, and advises keeping the file private if no suitable route is available. Your browser or operating system controls the downloaded file.</p></div>
 
           <form class="compatibility-worksheet" id="compatibility-worksheet" autocomplete="off" hidden>
             <div class="worksheet-group" aria-labelledby="steady-worksheet-heading">
@@ -245,25 +246,28 @@
 
             <div class="worksheet-group" aria-labelledby="focus-worksheet-heading">
               <h3 id="focus-worksheet-heading">Three focus-change attempts</h3>
-              <p>Choose what happened after focus moved and the dictation finished. If unexpected insertion makes you stop early, classify that attempt as <strong>Inserted into a field</strong> and each unrun remainder as <strong>Other or not completed</strong>.</p>
+              <p>Choose what happened after focus moved and the dictation finished. If the notice or complete recovery copy is missing even though nothing was inserted, choose <strong>No insertion, but recovery failed</strong>. If unexpected insertion makes you stop early, classify that attempt as <strong>Inserted into a field</strong> and each unrun remainder as <strong>Not completed</strong>.</p>
               <div class="worksheet-attempts worksheet-attempts--three">
                 <fieldset class="worksheet-attempt">
                   <legend>Attempt 1</legend>
                   <label><input type="radio" name="focus-1" value="copied"><span>Copied; inserted nowhere</span></label>
                   <label><input type="radio" name="focus-1" value="inserted"><span>Inserted into a field</span></label>
-                  <label><input type="radio" name="focus-1" value="other"><span>Other or not completed</span></label>
+                  <label><input type="radio" name="focus-1" value="failed"><span>No insertion, but recovery failed</span></label>
+                  <label><input type="radio" name="focus-1" value="notrun"><span>Not completed</span></label>
                 </fieldset>
                 <fieldset class="worksheet-attempt">
                   <legend>Attempt 2</legend>
                   <label><input type="radio" name="focus-2" value="copied"><span>Copied; inserted nowhere</span></label>
                   <label><input type="radio" name="focus-2" value="inserted"><span>Inserted into a field</span></label>
-                  <label><input type="radio" name="focus-2" value="other"><span>Other or not completed</span></label>
+                  <label><input type="radio" name="focus-2" value="failed"><span>No insertion, but recovery failed</span></label>
+                  <label><input type="radio" name="focus-2" value="notrun"><span>Not completed</span></label>
                 </fieldset>
                 <fieldset class="worksheet-attempt">
                   <legend>Attempt 3</legend>
                   <label><input type="radio" name="focus-3" value="copied"><span>Copied; inserted nowhere</span></label>
                   <label><input type="radio" name="focus-3" value="inserted"><span>Inserted into a field</span></label>
-                  <label><input type="radio" name="focus-3" value="other"><span>Other or not completed</span></label>
+                  <label><input type="radio" name="focus-3" value="failed"><span>No insertion, but recovery failed</span></label>
+                  <label><input type="radio" name="focus-3" value="notrun"><span>Not completed</span></label>
                 </fieldset>
               </div>
             </div>
@@ -281,9 +285,10 @@
                     <tr><th scope="row" rowspan="3">Steady focus</th><td>Pasted once</td><td><output id="steady-pasted-count">0</output></td></tr>
                     <tr><td>Recovered safely</td><td><output id="steady-recovered-count">0</output></td></tr>
                     <tr><td>Incorrect or unsafe</td><td><output id="steady-unsafe-count">0</output></td></tr>
-                    <tr><th scope="row" rowspan="3">Focus change</th><td>Copied for manual paste without inserting anywhere</td><td><output id="focus-copied-count">0</output></td></tr>
+                    <tr><th scope="row" rowspan="4">Focus change</th><td>Copied for manual paste without inserting anywhere</td><td><output id="focus-copied-count">0</output></td></tr>
                     <tr><td>Inserted into any field</td><td><output id="focus-inserted-count">0</output></td></tr>
-                    <tr><td>Other or not completed</td><td><output id="focus-other-count">0</output></td></tr>
+                    <tr><td>No insertion, but recovery failed</td><td><output id="focus-failed-count">0</output></td></tr>
+                    <tr><td>Not completed</td><td><output id="focus-notrun-count">0</output></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -296,7 +301,7 @@
                 <button class="button secondary" type="reset">Reset worksheet</button>
               </div>
               <div class="note" id="worksheet-report-actions" hidden>
-                <p><strong>All eight outcomes are ready.</strong> Copy or download the aggregate block above, then check for the same platform, app version, and field type. Add your counts to a matching report if comments are enabled; open a new one only if GitHub currently accepts submissions. If not, keep the draft locally and retry later.</p>
+                <p><strong>All eight check slots are classified.</strong> Copy or download the aggregate block above, then check for the same platform, app version, and field type. Add your counts to a matching report if comments are enabled; open a new one only if GitHub currently accepts submissions. If not, keep the draft locally and retry later.</p>
                 <div class="actions">
                   <a class="button" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22">Check matching reports</a>
                   <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Check new-report availability</a>
@@ -340,7 +345,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Community evidence</span>
           <h2>Share counts, not content</h2>
-          <div class="note warn"><p><strong>Reporting availability checked 23 September 2026:</strong> GitHub currently reports that issue creation is restricted for this repository. You can still run this protocol and keep a report draft locally, but a new-report link may not accept a submission. Use <strong>Download report draft</strong> above to save the six counts and classification with blank context prompts, then check for a comparable open report and whether comments are enabled before sharing. Do not post transcripts, clipboard contents, or other private data elsewhere as a workaround.</p></div>
+          <div class="note warn"><p><strong>Reporting availability checked 23 September 2026:</strong> GitHub currently reports that issue creation is restricted for this repository. You can still run this protocol and keep a report draft locally, but a new-report link may not accept a submission. Use <strong>Download report draft</strong> above to save the seven counts and classification with blank context prompts, then check for a comparable open report and whether comments are enabled before sharing. Do not post transcripts, clipboard contents, or other private data elsewhere as a workaround.</p></div>
           <ol class="steps">
             <li>
               <strong>Find the same platform, app, version, and field type</strong>
@@ -351,7 +356,7 @@
 Operating-system version: [version]
 Hardware (optional, no serial or device names): [generic model/chip]
 
-[paste the worksheet's six counts and Overall result]
+[paste the worksheet's seven counts and Overall result]
 
 Relevant conditions: [trigger mode, keyboard layout/input source when
 relevant, suffix, clipboard manager/history, assistive technology, or a minimal
@@ -361,7 +366,7 @@ reproduction; omit private context]</code></pre>
             <li>
               <strong>If GitHub accepts new reports, submit one target-app report</strong>
               <p>If no matching report exists and GitHub currently accepts submissions, open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and select the same overall result in the form, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot. If issue creation is restricted, keep the draft locally and retry later rather than repeatedly opening the blocked form.</p>
-              <p>If issue creation is still restricted and your macOS Electron result directly addresses <a href="https://github.com/rcourtman/presspeech/issues/33">issue #33</a>, you may instead comment there if GitHub permits it. Include the six counts plus Presspeech, operating-system, and target-app versions and the generic field type. Do not post unrelated results in that thread; retain those drafts privately when no suitable route accepts them.</p>
+              <p>If issue creation is still restricted and your macOS Electron result directly addresses <a href="https://github.com/rcourtman/presspeech/issues/33">issue #33</a>, you may instead comment there if GitHub permits it. Include the seven counts plus Presspeech, operating-system, and target-app versions and the generic field type. Do not post unrelated results in that thread; retain those drafts privately when no suitable route accepts them.</p>
               <p>For <strong>Overall result</strong>, a complete automatic-paste pass means all five steady-focus attempts pasted once and all three focus-change attempts recovered safely. Focus-change recovery is expected; choose the manual-recovery option only when it occurred while the original target stayed focused. Any incorrect or unsafe result takes precedence.</p>
             </li>
             <li>

@@ -6526,7 +6526,14 @@ private enum ClipboardPasteInserter {
     /// fixture and diagnostics writes so a new delivery path cannot silently
     /// omit any privacy marker or `currentHostOnly`.
     static func writeTranscript(_ text: String, to pb: NSPasteboard) -> Bool {
-        writeTranscriptWithReceipt(text, to: pb) != nil
+        // A writeObjects success is not proof that our text is still current:
+        // another app can copy before a recovery action reports "copied".
+        // Never clear a delivery warning on the basis of a stale receipt.
+        copyConfirmed(writeTranscriptWithReceipt(text, to: pb), on: pb)
+    }
+
+    static func copyConfirmed(_ receipt: WriteReceipt?, on pb: NSPasteboard) -> Bool {
+        receipt?.stillOwns(pb) == true
     }
 
     static func writeTranscriptWithReceipt(_ text: String,
@@ -6575,8 +6582,11 @@ private enum ClipboardPasteInserter {
         #endif
         let wrote = pb.writeObjects([item])
         if wrote {
-            // Replacements retire the old offer. The insertion path can carry
-            // its original snapshot/deadline into a new explicitly owned offer.
+            // A successful replacement retires the old offer. A failed Copy
+            // before ownership must not consume a still-valid option; if
+            // ownership was taken but writing failed, the next token check
+            // rejects its stale generation. The insertion path can carry its
+            // original snapshot/deadline into a new explicitly owned offer.
             discardPendingRestore(on: pb)
         }
         return wrote ? WriteReceipt(pasteboardName: pb.name, changeCount: ownedChangeCount) : nil
@@ -6848,7 +6858,6 @@ private final class LocalOnlyTranscriptTextView: NSTextView {
         let range = selectedRange()
         guard range.location != NSNotFound, range.length > 0 else { return false }
         let selected = (string as NSString).substring(with: range)
-        ClipboardPasteInserter.discardPendingRestore(on: .general)
         return ClipboardPasteInserter.writeTranscript(selected, to: .general)
     }
 
@@ -6892,9 +6901,18 @@ private func directUnicodeInsertionOutcome(
             }
             return recovery
         }
-        // A failed chunk would leave a gap. Stop immediately instead of
-        // emitting later text after content we know was not delivered.
-        guard postChunk(chunk) else { return .failed }
+        // Event construction can fail after earlier chunks were posted. Stop
+        // rather than emitting a later chunk across the gap, but still try to
+        // offer the complete transcript through the existing copy-only
+        // recovery path. A partial destination must never get a simple "paste
+        // this copy" notice that could duplicate the already posted prefix.
+        guard postChunk(chunk) else {
+            let recovery = copyWithoutPasting()
+            if postedAnyChunk && recovery != .clipboardChanged {
+                return .deliveryUncertain
+            }
+            return recovery
+        }
         postedAnyChunk = true
     }
     return .inserted
@@ -10205,7 +10223,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             } else if recordingPasteTarget == nil {
                                 log("paste skipped; target unavailable at recording start; transcript copied")
                             } else {
-                                log("paste skipped; focused window changed; transcript copied")
+                                // A late focus change and a failed event
+                                // construction can both recover by copying.
+                                // The outcome does not distinguish them.
+                                log("automatic insertion stopped; transcript copied for recovery")
                             }
                         case .deliveryUncertain:
                             log("direct Unicode delivery stopped after an earlier chunk; destination check required")
@@ -10551,7 +10572,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     @objc private func historyClicked(_ sender: NSMenuItem) {
         guard let s = sender.representedObject as? String else { return }
         let pb = NSPasteboard.general
-        ClipboardPasteInserter.discardPendingRestore(on: pb)
         guard ClipboardPasteInserter.writeTranscript(s, to: pb) else {
             log("history clipboard write failed")
             NSSound.beep()
@@ -10610,9 +10630,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private func copyDiagnosticsToClipboard() {
         let text = diagnosticsText()
         let pb = NSPasteboard.general
-        ClipboardPasteInserter.discardPendingRestore(on: pb)
-        pb.clearContents()
-        pb.setString(text, forType: .string)
+        guard ClipboardPasteInserter.copyConfirmed(
+            ClipboardPasteInserter.writeWithReceipt(text, to: pb), on: pb
+        ) else {
+            log("diagnostics clipboard write failed")
+            NSSound.beep()
+            return
+        }
         log("diagnostics copied to clipboard")
     }
 
@@ -12259,7 +12283,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     @objc private func copyDictationScratchpadClicked(_ sender: NSButton) {
         guard let text = dictationScratchpadTextView?.string, !text.isEmpty else { return }
-        ClipboardPasteInserter.discardPendingRestore(on: .general)
         if !ClipboardPasteInserter.writeTranscript(text, to: .general) {
             log("scratchpad clipboard write failed")
             NSSound.beep()
@@ -18550,21 +18573,70 @@ private enum PresspeechSelfTest {
 
         let failedUnicodePostProbe = MainActor.assumeIsolated {
             var attempts = 0
-            return directUnicodeInsertionOutcome(
+            var copied = false
+            let outcome = directUnicodeInsertionOutcome(
                 chunks: [[1], [2]],
                 targetStillFocused: { true },
                 postChunk: { _ in
                     attempts += 1
                     return false
                 },
-                copyWithoutPasting: { .copiedWithoutPasting }
-            ) == .failed && attempts == 1
+                copyWithoutPasting: {
+                    copied = true
+                    return .copiedWithoutPasting
+                }
+            )
+            return (outcome: outcome, attempts: attempts, copied: copied)
         }
-        try expect(
-            failedUnicodePostProbe,
-            equals: true,
-            "direct Unicode insertion should stop after the first failed chunk"
-        )
+        try expect(failedUnicodePostProbe.outcome, equals: .copiedWithoutPasting,
+                   "a failed first Unicode chunk should offer the complete clipboard copy")
+        try expect(failedUnicodePostProbe.attempts, equals: 1,
+                   "direct Unicode insertion should stop after the first failed chunk")
+        try expect(failedUnicodePostProbe.copied, equals: true,
+                   "a failed Unicode post should attempt recovery even with history disabled")
+        let failedLaterUnicodePostProbe = MainActor.assumeIsolated {
+            var attemptedChunks: [[UInt16]] = []
+            var copied = false
+            let outcome = directUnicodeInsertionOutcome(
+                chunks: [[1], [2], [3]],
+                targetStillFocused: { true },
+                postChunk: { chunk in
+                    attemptedChunks.append(chunk)
+                    return chunk != [2]
+                },
+                copyWithoutPasting: {
+                    copied = true
+                    return .copiedWithoutPasting
+                }
+            )
+            return (outcome: outcome, attemptedChunks: attemptedChunks, copied: copied)
+        }
+        try expect(failedLaterUnicodePostProbe.outcome, equals: .deliveryUncertain,
+                   "a failed later Unicode chunk must report possible partial insertion")
+        try expect(failedLaterUnicodePostProbe.attemptedChunks, equals: [[1], [2]],
+                   "Unicode insertion must not skip a failed chunk and keep typing")
+        try expect(failedLaterUnicodePostProbe.copied, equals: true,
+                   "partial Unicode delivery should still attempt a complete recovery copy")
+        let failedLaterUnicodeRecovery = MainActor.assumeIsolated {
+            directUnicodeInsertionOutcome(
+                chunks: [[1], [2]],
+                targetStillFocused: { true },
+                postChunk: { $0 == [1] },
+                copyWithoutPasting: { .failed }
+            )
+        }
+        try expect(failedLaterUnicodeRecovery, equals: .deliveryUncertain,
+                   "a failed recovery copy must not hide an already posted Unicode prefix")
+        let changedLaterUnicodeRecovery = MainActor.assumeIsolated {
+            directUnicodeInsertionOutcome(
+                chunks: [[1], [2]],
+                targetStillFocused: { true },
+                postChunk: { $0 == [1] },
+                copyWithoutPasting: { .clipboardChanged }
+            )
+        }
+        try expect(changedLaterUnicodeRecovery, equals: .clipboardChanged,
+                   "partial Unicode recovery must not conceal newer clipboard ownership")
         try expect(
             clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
             equals: [
@@ -18988,13 +19060,21 @@ private enum PresspeechSelfTest {
             let receipt = ClipboardPasteInserter.writeTranscriptWithReceipt(
                 "temporary receipt fixture", to: pasteboard
             )
-            let initiallyOwned = receipt?.stillOwns(pasteboard) == true
+            let initiallyOwned = ClipboardPasteInserter.copyConfirmed(
+                receipt, on: pasteboard
+            )
+            let missingReceiptWasRejected = !ClipboardPasteInserter.copyConfirmed(
+                nil, on: pasteboard
+            )
             // Deterministically place an external copy between write return
             // and the caller's next read of changeCount (the former race).
             pasteboard.clearContents()
             let wroteExternal = pasteboard.setString("new external receipt fixture", forType: .string)
             let newerCount = pasteboard.changeCount
             let wouldPostPaste = receipt?.stillOwns(pasteboard) == true
+            let wouldClaimRecoveryCopy = ClipboardPasteInserter.copyConfirmed(
+                receipt, on: pasteboard
+            )
             if let original, let receipt {
                 ClipboardPasteInserter.stageManualRestore(original,
                                                        to: pasteboard,
@@ -19003,21 +19083,27 @@ private enum PresspeechSelfTest {
             let restored = ClipboardPasteInserter.pendingRestoreToken(on: pasteboard).flatMap { ClipboardPasteInserter.performPendingRestore(on: pasteboard, token: $0) }
             return (
                 initiallyOwned: initiallyOwned,
+                missingReceiptWasRejected: missingReceiptWasRejected,
                 wroteExternal: wroteExternal,
                 receiptStayedOriginal: receipt != nil && receipt?.changeCount != newerCount,
                 wouldPostPaste: wouldPostPaste,
+                wouldClaimRecoveryCopy: wouldClaimRecoveryCopy,
                 restored: restored,
                 remaining: pasteboard.string(forType: .string)
             )
         }
         try expect(acquiredGenerationProbe.initiallyOwned, equals: true,
                    "a write receipt should identify its acquired pasteboard generation")
+        try expect(acquiredGenerationProbe.missingReceiptWasRejected, equals: true,
+                   "a recovery copy without a write receipt must not claim success")
         try expect(acquiredGenerationProbe.wroteExternal, equals: true,
                    "the receipt test should install a newer external clipboard value")
         try expect(acquiredGenerationProbe.receiptStayedOriginal, equals: true,
                    "a write receipt must never adopt the count of a later external copy")
         try expect(acquiredGenerationProbe.wouldPostPaste, equals: false,
                    "a changed clipboard owner should veto clipboard paste before posting")
+        try expect(acquiredGenerationProbe.wouldClaimRecoveryCopy, equals: false,
+                   "a changed clipboard owner must not be reported as a successful recovery copy")
         try expect(acquiredGenerationProbe.restored == nil, equals: true,
                    "a manual offer must reject a newer external owner using the acquired count")
         try expect(acquiredGenerationProbe.remaining, equals: "new external receipt fixture",

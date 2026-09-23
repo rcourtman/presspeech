@@ -97,7 +97,7 @@
         </div>
         <p class="quiet" data-release-status>Current published Windows prerelease: 0.1.12. Install metadata updated <time datetime="2026-09-23">23 September 2026</time>.</p>
         <div class="note">
-          <p><strong>Check your language before downloading.</strong> Fresh systems with usable NVIDIA CUDA select multilingual Parakeet (~2.5 GB). Without usable CUDA, the fresh CPU default is English-only Whisper base.en (~141 MiB). Published 0.1.12 starts the selected download on first launch; upcoming 0.1.13 asks before fetching either missing first-run default model. Choose <strong>Set Up Later</strong> to defer; the Parakeet path also offers the smaller CPU model. Other local models remain selectable in Settings. <a href="#language-support">Compare the two first-run paths</a>.</p>
+          <p><strong>Check your language before downloading.</strong> Fresh systems with usable NVIDIA CUDA select multilingual Parakeet (~2.5 GB). Without usable CUDA, the fresh CPU default is English-only Whisper base.en (~141 MiB). Published 0.1.12 starts the selected download on first launch; it has no pre-download deferral. Only upcoming 0.1.13 asks before fetching either missing first-run default model and offers <strong>Set Up Later</strong> to defer; its Parakeet path also offers the smaller CPU model. Other local models remain selectable in Settings. <a href="#language-support">Compare the two first-run paths</a>.</p>
         </div>
         <div class="note warn">
           <p><strong>This prerelease is not code-signed.</strong> Windows may show <strong>Unknown publisher</strong>, and managed PCs or Windows 11 Smart App Control may block it. <a href="https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions">Microsoft documents that Smart App Control has no per-app exception</a>. Verify that the download came from this repository and compare its SHA-256 checksum before deciding whether to run it. Never bypass a warning for a file from another source.</p>
@@ -161,8 +161,8 @@ gh release verify-asset windows-v0.1.12 $installer --repo rcourtman/presspeech</
               <p>The current build is unsigned. If Microsoft Defender SmartScreen shows <strong>Windows protected your PC</strong>, confirm the filename and verified hash before choosing <strong>More info → Run anyway</strong>. That choice applies to a SmartScreen reputation warning, not a Smart App Control block: <a href="https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions">Smart App Control has no per-app exception</a>. If Smart App Control or your administrator blocks the installer, stop; do not disable protection or work around the block.</p>
             </li>
             <li>
-              <strong>Launch Presspeech</strong>
-              <p>Open it from the Start Menu. It installs for your user account under <code>%LOCALAPPDATA%\Programs\Presspeech</code> and appears in <strong>Settings → Apps → Installed apps</strong> for normal removal.</p>
+              <strong>Decide whether to launch 0.1.12</strong>
+              <p>If you chose to wait after reading the <a href="#model-download-privacy">privacy decision</a>, leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app. If you choose to use published 0.1.12 now, open it from the Start Menu; a missing model starts downloading without another prompt. It installs for your user account under <code>%LOCALAPPDATA%\Programs\Presspeech</code> and appears in <strong>Settings → Apps → Installed apps</strong> for normal removal.</p>
             </li>
           </ol>
           <p class="quiet">Why the warning? <a href="https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation">Microsoft explains that unsigned downloads start without publisher reputation</a>; each new unsigned version may prompt again.</p>
@@ -245,11 +245,11 @@ After the user completes the installer, launch Presspeech from the Start Menu on
       <section id="first-launch">
         <div class="wrap">
           <span class="section-eyebrow">First launch</span>
-          <h2>Wait for the local model</h2>
+          <h2>Check model preparation before dictating</h2>
           <ol class="steps">
             <li>
               <strong>Check the selected path</strong>
-              <p>Presspeech tests the packaged CUDA runtime. A usable NVIDIA setup selects multilingual Parakeet TDT v3; without usable CUDA, a fresh installation selects Whisper base.en for CPU use. Upcoming 0.1.13 asks before downloading missing first-run default model files: Parakeet (up to ~2.5 GB) or English-only Whisper base.en on CPU (~141 MiB). Choose another model in Settings or defer; the Parakeet path also offers the smaller CPU model. A complete local snapshot loads without another download prompt.</p>
+              <p>Presspeech tests the packaged CUDA runtime. A usable NVIDIA setup selects multilingual Parakeet TDT v3; without usable CUDA, a fresh installation selects Whisper base.en for CPU use. Published 0.1.12 starts the selected missing-model download when you launch it, without another prompt. Upcoming 0.1.13 asks before downloading missing first-run default model files: Parakeet (up to ~2.5 GB) or English-only Whisper base.en on CPU (~141 MiB). Only in that upcoming build can you defer the first download from Setup; its Parakeet path also offers the smaller CPU model. A complete local snapshot loads without another download prompt.</p>
             </li>
             <li>
               <strong>Let preparation finish</strong>

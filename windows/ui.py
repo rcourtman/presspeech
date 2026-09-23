@@ -1793,7 +1793,10 @@ class UpdateWindow:
                     os.rmdir(destination)
                 except OSError:
                     pass
-            self.events.put(("error", str(exc)))
+            self.events.put((
+                "error",
+                updates.user_facing_error(
+                    exc, "Could not prepare or download the update.")))
         finally:
             with self.download_lock:
                 self.active_download_directory = None
@@ -1880,7 +1883,10 @@ class UpdateWindow:
                             self.progress.config(value=0)
                             self.download_button.config(state="normal")
                             messagebox.showerror(
-                                "Update failed", str(exc), parent=self.root)
+                                "Update failed",
+                                updates.user_facing_error(
+                                    exc, "Could not start the verified installer."),
+                                parent=self.root)
                     else:
                         self._discard_completed_download()
                         _set_accessible_text(self.status, "Ready to download")

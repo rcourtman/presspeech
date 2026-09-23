@@ -2400,8 +2400,8 @@ class PresspeechApp:
             "focus-changed": "The focused window changed; no paste shortcut was sent. ",
             "target-elevated": "Windows blocks simulated input into this elevated app. ",
             "modifier-held": (
-                "A keyboard modifier was held; no paste shortcut was sent. "
-                "Release Ctrl, Shift, Alt or Windows before a manual paste. "),
+                "A Ctrl, Shift, Alt, Windows, or V key was held; no paste "
+                "shortcut was sent. Release it before a manual paste. "),
             "modifier-state-unavailable": (
                 "Keyboard modifier state could not be checked; no paste "
                 "shortcut was sent. "),
@@ -2472,7 +2472,18 @@ class PresspeechApp:
         self.notify("Dictation copied", message)
         return True
 
+    def _paste_keys_held_in_hook(self):
+        """Catch reserved hotkeys that may not show as asynchronously down."""
+        transaction_lock = getattr(self, "_hotkey_transaction_lock", None)
+        with transaction_lock if transaction_lock is not None else nullcontext():
+            pressed = getattr(self, "_filter_pressed_vks", ())
+            return any(key in pressed for key in keyboard_delivery._MODIFIER_KEYS)
+
     def _paste(self, text, paste_target=PasteTarget("", 0)):
+        # Preserve the old clipboard if the hook already knows paste is unsafe.
+        if self._paste_keys_held_in_hook():
+            self._remember_undelivered_dictation(text, "modifier-held")
+            return False
         try:
             receipt = clipboard_delivery.write_text(text)
         except Exception:
@@ -2506,6 +2517,9 @@ class PresspeechApp:
             return False
         if not clipboard_delivery.is_current(receipt):
             self._remember_undelivered_dictation(text, "clipboard-changed")
+            return False
+        if self._paste_keys_held_in_hook():
+            self._remember_undelivered_dictation(text, "modifier-held")
             return False
         keyboard = None
         modifiers = [keyboard_delivery.VK_LCONTROL]
@@ -2651,7 +2665,10 @@ class PresspeechApp:
         except Exception as exc:
             self._log("update check failed: %s" % type(exc).__name__)
             if manual:
-                self.notify("Update check failed", str(exc))
+                self.notify(
+                    "Update check failed",
+                    updates.user_facing_error(
+                        exc, "Could not check for updates. Please try again."))
         finally:
             self._update_lock.release()
 
