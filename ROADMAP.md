@@ -147,6 +147,17 @@ prevalence estimate. They reinforce measuring delivery separately from
 recognition and testing more than one app class; they do not justify broader
 scope or product-to-product quality claims.
 
+A recent [Handy Windows issue](https://github.com/cjpais/Handy/issues/1879)
+describes one user's loss of opening words or syllables at recording start
+under particular configurations. This is evidence about that product and
+reported build only, not a Presspeech defect or a prevalence estimate. It
+does justify checking capture onset as part of the end-to-end loop: Windows
+release qualification now includes repeated short, harmless phrases begun
+immediately after the listening cue, across hold and toggle modes, with only
+aggregate outcomes retained. Do not collect community audio or transcripts to
+investigate this category risk; see the [Windows release
+qualification](docs/manual-qa.md#windows-release-qualification).
+
 A separate [RSI-community discussion about a Windows push-to-talk tool](https://www.reddit.com/r/RSI/comments/1tl9vxw/i_built_a_free_fully_offline_pushtotalk_dictation/)
 raised sustained key-holding as a possible added physical burden and suggested
 press-to-toggle. This is a single anecdotal exchange, and the commenter
@@ -254,10 +265,14 @@ Priority falls when a proposal is based only on competitor parity, has no
 repeatable problem, requires an unbounded preferences surface, or cannot be
 tested on the native platform before release.
 
-To influence the roadmap, search the
+To influence the roadmap when GitHub accepts new reports, search the
 [existing issues](https://github.com/rcourtman/presspeech/issues) before filing
 a [bug report](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml)
 or [feature request](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml).
 Describe frequency, impact, the current workaround, and an observable success
-condition. For recognition and performance work, follow the privacy-safe
-evidence guidance in [CONTRIBUTING.md](CONTRIBUTING.md).
+condition. As checked on 23 September 2026, issue creation is restricted; if
+no comparable open report accepts comments, keep privacy-safe observations
+locally and retry when intake returns. Do not route around the restriction by
+posting reports or private data elsewhere. For recognition and performance
+work, follow the privacy-safe evidence guidance in
+[CONTRIBUTING.md](CONTRIBUTING.md).

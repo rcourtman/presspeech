@@ -124,7 +124,7 @@
               <ol class="steps">
                 <li>
                   <strong>Prepare the speech model</strong>
-                  <p>The macOS 0.3.8 build starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> to start it; close Setup to defer. Keep Presspeech open while the model prepares. Reopen Setup Checklist from the menu-bar item if needed. Existing installations and cached models continue loading automatically.</p>
+                  <p>Wait for the speech model to finish preparing. If Setup prompts you to download it, choose <strong>Download Model</strong>; close Setup to defer. Keep Presspeech open while it prepares, and reopen Setup Checklist from the menu-bar item if needed.</p>
                 </li>
                 <li>
                   <strong>Grant the three permissions</strong>
@@ -185,7 +185,7 @@
           <span class="section-eyebrow">Ready to use</span>
           <h2>Dictate into a familiar text field</h2>
           <p>Open a blank TextEdit document on macOS or Notepad on Windows, click in it, and repeat hold–speak–release without changing windows. Press <strong>Escape</strong> to cancel an active recording.</p>
-          <div class="note"><p><strong>If Presspeech copies instead:</strong> it cannot verify the same destination. Return to the intended field and paste the existing transcript manually. On Windows, reopen an administrator-level target normally rather than elevating Presspeech.</p></div>
+          <div class="note"><p><strong>If Presspeech copies instead:</strong> it cannot verify the same destination. Paste the existing transcript into the intended field; do not dictate it again first. This safe fallback can occur in some Electron/Chromium apps on macOS 0.3.8 even when the window appears unchanged. On Windows, reopen an administrator-level target normally rather than elevating Presspeech.</p></div>
           <div class="note warn"><p><strong>Command shells can run pasted text.</strong> <strong>Append newline</strong>, Windows <strong>newline</strong>, or spoken formatting can submit text. Dictate commands into Try Dictation or a text editor, review the exact text, then paste and run deliberately. See <a href="https://support.apple.com/en-gb/127377">Apple</a> and <a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings">Windows</a> terminal guidance.</p></div>
           <div class="note"><p><strong>Clipboard privacy:</strong> operating-system services or third-party clipboard managers can retain or sync copied text. Review the <a href="privacy.html">clipboard privacy boundary</a> before dictating sensitive text.</p></div>
           <p>Before relying on a browser editor, Electron app, terminal, or remote session, run the <a href="app-compatibility.html">privacy-safe target-app check</a>. It tests automatic paste and clipboard recovery without publishing your words.</p>

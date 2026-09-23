@@ -15416,6 +15416,8 @@ private enum PresspeechSelfTest {
             return runSuite("update", testUpdate)
         case "hostile-env":
             return runSuite("hostile-env", testHostileRegistryEnvDetection)
+        case "model-download-env-child":
+            return runSuite("model-download-env-child", testModelDownloadEnvironmentSanitizationChild)
         case "logging":
             return runSuite("logging", testPrivateLogAppend)
         case "diagnostics":
@@ -20350,6 +20352,62 @@ private enum PresspeechSelfTest {
                 failedCredentialVariables: ["HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN"]
             ),
             "Foundation-visible redirects and credentials must both fail closed"
+        )
+
+        // Exercise getenv/unsetenv and Foundation's environment snapshot in a
+        // separate process with synthetic markers. Never inspect or mutate
+        // credentials from the test runner's real environment.
+        guard let executableURL = Bundle.main.executableURL else {
+            throw SelfTestFailure.failed("self-test executable URL is unavailable")
+        }
+        let child = Process()
+        child.executableURL = executableURL
+        child.arguments = ["--self-test", "model-download-env-child"]
+        child.environment = [
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            "HF_TOKEN": "presspeech-synthetic-token-marker",
+            "HUGGING_FACE_HUB_TOKEN": "presspeech-synthetic-token-marker",
+            "HUGGINGFACEHUB_API_TOKEN": "presspeech-synthetic-token-marker",
+            "REGISTRY_URL": "https://presspeech.invalid/",
+            "MODEL_REGISTRY_URL": "https://presspeech.invalid/",
+        ]
+        child.standardOutput = FileHandle.nullDevice
+        child.standardError = FileHandle.nullDevice
+        try child.run()
+        child.waitUntilExit()
+        try expect(
+            child.terminationStatus,
+            equals: EXIT_SUCCESS,
+            "real process environment sanitization must remove credentials before Foundation snapshots it"
+        )
+    }
+
+    private static func testModelDownloadEnvironmentSanitizationChild() throws {
+        let preparation = prepareProcessModelDownloadEnvironment()
+        try expect(
+            preparation.removedCredentialVariables,
+            equals: HUGGING_FACE_TOKEN_ENV_VARS.sorted(),
+            "the process sanitizer must remove every inherited Hugging Face credential spelling"
+        )
+        try expect(
+            preparation.failedCredentialVariables,
+            equals: [],
+            "synthetic inherited credentials must be removable"
+        )
+        try expect(
+            preparation.hostileRegistryVariables,
+            equals: ["MODEL_REGISTRY_URL", "REGISTRY_URL"],
+            "registry override names must remain detected while credentials are removed"
+        )
+        try expect(
+            detectedHuggingFaceTokenEnvVars(inVariableNames: modelDownloadEnvironmentVariableNames()),
+            equals: [],
+            "getenv must no longer expose credentials after sanitization"
+        )
+        try expect(
+            detectedHuggingFaceTokenEnvVars(inVariableNames: Set(ProcessInfo.processInfo.environment.keys)),
+            equals: [],
+            "Foundation must not expose credentials after sanitization"
         )
     }
 

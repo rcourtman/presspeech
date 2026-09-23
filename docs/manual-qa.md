@@ -93,6 +93,7 @@ For each configuration, also record this release-gate matrix:
 | Verify candidate, install per-user, and launch from Start | |
 | First model preparation through first successful dictation | |
 | Ten consecutive dictations into Notepad | |
+| Ten short-phrase onset checks across hold/toggle; first word or syllable retained | |
 | Dictation into a current Chromium browser text field | |
 | Dictation into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
@@ -253,6 +254,15 @@ keyboard access testing in addition to assistive-technology testing.
   Dictation** and confirm one hotkey press starts and the next stops. Switch to
   **Hold to talk** in Setup and confirm the next dictation stops on release.
   Repeat both radio buttons with Narrator and keyboard-only navigation.
+- On each clean CPU and NVIDIA configuration, use **Try Dictation** to repeat
+  one short, harmless phrase ten times, alternating five hold-mode and five
+  toggle-mode attempts. Begin speaking immediately after the visible
+  **Listening…** cue. Compare each result privately with the expected phrase
+  and record only the aggregate number with the complete opening word/syllable
+  and the number with any opening loss. Do not retain the phrase, transcript,
+  or audio in the qualification record. Any opening loss blocks qualification
+  pending local diagnosis; distinguish capture timing from recognition variation
+  before changing inference policy.
 - With a text editor focused, select **Left Win** and dictate in both hold and
   toggle modes; confirm the Start menu never opens and the transcript returns
   to the original editor. Repeat with **F11** in an app that normally assigns
@@ -389,6 +399,7 @@ Record this release-gate matrix against the exact installed candidate:
 | --- | --- |
 | Verify signature, notarisation, staple, version, archive size, and SHA-256 | |
 | First launch through model, microphone, Accessibility / Device Control and Data Access, Input Monitoring, and keyboard-event-posting readiness | |
+| Clean first model download with synthetic values in all inherited Hugging Face token variables | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
 | Electron issue #33: steady-focus paste once; a switch between two windows of the same app must use clipboard recovery | |
@@ -400,6 +411,16 @@ Record this release-gate matrix against the exact installed candidate:
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
 | Menu-bar/Dock access and dictation recovery with VoiceOver and keyboard-only navigation | |
+
+For the synthetic-credential row, use a disposable macOS profile or VM with no
+Hugging Face login/cache. Launch the installed candidate executable directly
+with nonfunctional marker values in `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, and
+`HUGGINGFACEHUB_API_TOKEN` (do not use or inspect real token values). Confirm
+the normal first-download choice appears, the public model download succeeds,
+and any local log mentions variable names only—not marker values. Do not copy
+raw logs or capture/share request headers. This packaged-app check complements
+`swift run Presspeech --self-test hostile-env`, which exercises actual process
+environment removal and Foundation visibility with synthetic values.
 
 For issue #33, pass only if a steady-focus Electron target receives the complete
 transcript once, while switching to a second window of that same app before
