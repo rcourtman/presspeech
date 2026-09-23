@@ -429,7 +429,10 @@ Use **Open Startup Settings** to review Presspeech under Windows
 - **Copy Diagnostics** includes configuration counts, runtime state, and
   microphone availability, never transcripts, audio, dictionary contents,
   exact microphone names, raw error details, or raw log lines.
-- Clipboard is used briefly to paste; it is overwritten.
+- Upcoming 0.1.13 marks transcript, recovery, and user-requested diagnostics
+  copies for exclusion from Windows Clipboard History and Cloud Clipboard;
+  they remain available for local Ctrl+V. Published 0.1.12 does not apply this
+  exclusion, and other local clipboard readers remain a separate boundary.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
   Whisper reports include the exact Silero VAD boundary policy so WER, quiet

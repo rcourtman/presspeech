@@ -5724,6 +5724,10 @@ enum TextInsertionOutcome: Equatable {
     case inserted
     case copiedWithoutPasting
     case failed
+    // At least one Direct Unicode chunk was posted before delivery stopped.
+    // The destination may contain a prefix, so a plain "paste this copy"
+    // notice or a second insertion strategy could duplicate text.
+    case deliveryUncertain
     // Terminal failure: a fallback can itself copy when focus changes, so it
     // must not run after another process has replaced our clipboard contents.
     case clipboardChanged
@@ -5739,7 +5743,7 @@ func dictationCompletionNotice(processedText: String,
     switch insertionOutcome {
     case .copiedWithoutPasting:
         return .copiedToClipboard
-    case .failed, .clipboardChanged:
+    case .failed, .deliveryUncertain, .clipboardChanged:
         return keepsRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
     case .inserted:
         return nil
@@ -6843,14 +6847,25 @@ private func directUnicodeInsertionOutcome(
     postChunk: ([UInt16]) -> Bool,
     copyWithoutPasting: () -> TextInsertionOutcome
 ) -> TextInsertionOutcome {
+    var postedAnyChunk = false
     for chunk in chunks {
         // Direct Unicode typing is a sequence of independent key events, not
         // one atomic paste. Revalidate before every chunk so switching focus
         // during a long fallback cannot redirect the remaining transcript.
-        guard targetStillFocused() else { return copyWithoutPasting() }
+        guard targetStillFocused() else {
+            let recovery = copyWithoutPasting()
+            // The full transcript is offered for recovery, but an earlier
+            // chunk may already be in the original field. Do not tell the
+            // user to paste it again without first checking that field.
+            if postedAnyChunk && recovery != .clipboardChanged {
+                return .deliveryUncertain
+            }
+            return recovery
+        }
         // A failed chunk would leave a gap. Stop immediately instead of
         // emitting later text after content we know was not delivered.
         guard postChunk(chunk) else { return .failed }
+        postedAnyChunk = true
     }
     return .inserted
 }
@@ -10162,6 +10177,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             } else {
                                 log("paste skipped; focused window changed; transcript copied")
                             }
+                        case .deliveryUncertain:
+                            log("direct Unicode delivery stopped after an earlier chunk; destination check required")
                         case .failed, .clipboardChanged:
                             log("text insertion failed")
                         }
@@ -18353,6 +18370,23 @@ private enum PresspeechSelfTest {
             equals: [],
             "direct Unicode chunking should reject invalid chunk sizes"
         )
+        let preChunkFocusLossProbe = MainActor.assumeIsolated {
+            var copied = false
+            let outcome = directUnicodeInsertionOutcome(
+                chunks: [[1, 2]],
+                targetStillFocused: { false },
+                postChunk: { _ in false },
+                copyWithoutPasting: {
+                    copied = true
+                    return .copiedWithoutPasting
+                }
+            )
+            return (outcome: outcome, copied: copied)
+        }
+        try expect(preChunkFocusLossProbe.outcome, equals: .copiedWithoutPasting,
+                   "focus loss before Unicode posting should retain the simple paste recovery notice")
+        try expect(preChunkFocusLossProbe.copied, equals: true,
+                   "focus loss before Unicode posting should copy the complete transcript")
         let focusBoundUnicodeProbe = MainActor.assumeIsolated {
             var focusChecks = [true, false]
             var postedChunks: [[UInt16]] = []
@@ -18373,8 +18407,8 @@ private enum PresspeechSelfTest {
         }
         try expect(
             focusBoundUnicodeProbe.outcome,
-            equals: .copiedWithoutPasting,
-            "direct Unicode insertion should fail closed when focus changes between chunks"
+            equals: .deliveryUncertain,
+            "focus loss after a Unicode chunk should not claim that nothing reached the field"
         )
         try expect(
             focusBoundUnicodeProbe.postedChunks,
@@ -18386,6 +18420,40 @@ private enum PresspeechSelfTest {
             equals: true,
             "an interrupted Direct Unicode fallback should preserve the transcript on the clipboard"
         )
+        let failedPartialRecoveryProbe = MainActor.assumeIsolated {
+            var focusChecks = [true, false]
+            return directUnicodeInsertionOutcome(
+                chunks: [[1], [2]],
+                targetStillFocused: { focusChecks.removeFirst() },
+                postChunk: { _ in true },
+                copyWithoutPasting: { .failed }
+            )
+        }
+        try expect(failedPartialRecoveryProbe, equals: .deliveryUncertain,
+                   "a failed recovery copy after Unicode posting must not enable another insertion fallback")
+        let changedPartialRecoveryProbe = MainActor.assumeIsolated {
+            var focusChecks = [true, false]
+            return directUnicodeInsertionOutcome(
+                chunks: [[1], [2]],
+                targetStillFocused: { focusChecks.removeFirst() },
+                postChunk: { _ in true },
+                copyWithoutPasting: { .clipboardChanged }
+            )
+        }
+        try expect(changedPartialRecoveryProbe, equals: .clipboardChanged,
+                   "Unicode recovery must not conceal replacement of the clipboard by another owner")
+        try expect(TextInsertionOutcome.deliveryUncertain.allowsFallback, equals: false,
+                   "uncertain partial Unicode delivery must not start a duplicate fallback")
+        try expect(dictationCompletionNotice(processedText: "fixed fixture",
+                                             insertionOutcome: .deliveryUncertain,
+                                             keepsRecentTranscripts: true),
+                   equals: .insertionFailed,
+                   "partial Unicode delivery should tell users to inspect the field before recovery")
+        try expect(dictationCompletionNotice(processedText: "fixed fixture",
+                                             insertionOutcome: .deliveryUncertain,
+                                             keepsRecentTranscripts: false),
+                   equals: .insertionFailedWithoutHistory,
+                   "partial Unicode delivery must not offer unavailable history recovery")
 
         // Dvorak maps the physical ANSI-V position to `k` while Command is
         // held; its `v` key is the ANSI period position. Exercise the exact

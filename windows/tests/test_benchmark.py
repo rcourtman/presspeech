@@ -301,6 +301,43 @@ class MetricTests(unittest.TestCase):
                     benchmark.run_benchmark(path)
                 constructor.assert_not_called()
 
+    def test_review_and_silence_flags_require_json_booleans_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            for field in ("reference_reviewed", "expected_silence"):
+                for invalid in ("false", "true", 0, 1, None, []):
+                    with self.subTest(field=field, invalid=invalid):
+                        sample = {"id": "sample", "audio": "ignored.wav",
+                                  "reference": "spoken words", field: invalid}
+                        with open(path, "w", encoding="utf-8") as handle:
+                            json.dump({"samples": [sample]}, handle)
+                        with mock.patch.object(
+                                benchmark.engine, "Transcriber") as constructor:
+                            with self.assertRaisesRegex(ValueError, field):
+                                benchmark.run_benchmark(path)
+                            constructor.assert_not_called()
+
+    def test_reviewed_speech_needs_reference_and_silence_cannot_have_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            cases = [
+                ({"reference_reviewed": True}, "reference"),
+                ({"reference_reviewed": True, "reference": "   "}, "reference"),
+                ({"reference": None}, "reference"),
+                ({"expected_silence": True, "reference": "spoken words"},
+                 "reference"),
+            ]
+            for fields, expected_error in cases:
+                with self.subTest(fields=fields):
+                    sample = {"id": "sample", "audio": "ignored.wav", **fields}
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump({"samples": [sample]}, handle)
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, expected_error):
+                            benchmark.run_benchmark(path)
+                        constructor.assert_not_called()
+
     def test_invalid_language_is_rejected_before_model_loading(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "manifest.json")

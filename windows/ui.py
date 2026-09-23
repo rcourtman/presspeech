@@ -36,6 +36,7 @@ except ImportError:
         add_acc_object = _unavailable
         label_for = _unavailable
         set_acc_name = _unavailable
+        set_acc_description = _unavailable
 
     tk_uia = _UnavailableTkUia()
 
@@ -118,6 +119,12 @@ MODEL_DOWNLOAD_PRIVACY_NOTICE = (
     "account token; audio and transcripts stay on this PC. Presspeech honors "
     "configured HTTP proxy and custom CA settings; a TLS-inspecting proxy "
     "trusted by that CA configuration can also see the model request."
+)
+MODEL_DOWNLOAD_ACCESSIBLE_DESCRIPTION = (
+    "Model requests target Hugging Face. Model-library telemetry and account "
+    "tokens are disabled; dictation audio and transcripts stay on this PC. "
+    "Configured HTTP proxy and custom CA settings still apply; a trusted "
+    "TLS-inspecting proxy can read the request."
 )
 
 
@@ -239,6 +246,14 @@ def _label_control(label, control):
 def _name_control(control, name):
     try:
         tk_uia.set_acc_name(control, name)
+    except Exception:
+        _accessibility_failed()
+
+
+def _describe_control(control, description):
+    """Expose supplementary instructions without overloading a control name."""
+    try:
+        tk_uia.set_acc_description(control, description)
     except Exception:
         _accessibility_failed()
 
@@ -1255,6 +1270,10 @@ class SetupWindow:
         # live region to the static caption would mask its updates.
         _name_control(
             self.hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
+        _describe_control(
+            self.download_model_button, MODEL_DOWNLOAD_ACCESSIBLE_DESCRIPTION)
+        _describe_control(
+            self.cpu_model_button, MODEL_DOWNLOAD_ACCESSIBLE_DESCRIPTION)
         for status in (
                 self.model_label, self.microphone_status,
                 self.hotkey_status, self.autostart_status):
@@ -1357,8 +1376,7 @@ class SetupWindow:
                     self.download_model_button,
                     "Download the English-only CPU Whisper base.en model, "
                     "about 141 MiB. This requests pinned model files from "
-                    "huggingface.co; dictation audio and transcripts stay "
-                    "on this PC.")
+                    "huggingface.co.")
                 self.cpu_model_button.pack_forget()
             else:
                 _set_accessible_text(
@@ -1375,8 +1393,7 @@ class SetupWindow:
                 _name_control(
                     self.download_model_button,
                     "Download the multilingual Parakeet model, up to about "
-                    "2.5 GB. Hugging Face receives the model-file request; "
-                    "dictation audio and transcripts stay on this PC.")
+                    "2.5 GB.")
                 if self.cpu_model_button.winfo_manager() != "pack":
                     self.cpu_model_button.pack(
                         before=self.other_model_button,

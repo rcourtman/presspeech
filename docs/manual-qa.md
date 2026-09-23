@@ -165,9 +165,16 @@ keyboard access testing in addition to assistive-technology testing.
   Settings…** actions have useful names, appear before the microphone controls
   in visual and Tab order, and can be activated. Confirm initial focus lands on
   **Download Parakeet model (up to ~2.5 GB)**; Tab should reach the other model
-  choices before the microphone selector. Confirm the choices
-  are absent and initial focus lands on the microphone selector when the model
-  is already cached. Before the choice appears, confirm its Alt+D, Alt+U, and
+  choices before the microphone selector. With Narrator and keyboard-only
+  navigation, focus each download action and verify its accessible name
+  identifies the model and size, and its accessible description or associated
+  disclosure is available to Narrator and explains the request boundary: model
+  requests target Hugging Face, no account token,
+  model-library telemetry, dictation audio, or transcripts are sent, and
+  configured proxy/CA settings still apply (a trusted TLS-inspecting proxy can
+  read the request). Confirm the choices are absent and initial focus lands on
+  the microphone selector when the model is already cached. Before the choice
+  appears, confirm its Alt+D, Alt+U, and
   Alt+M shortcuts cannot activate hidden choices; once the choice appears,
   verify the matching shortcuts work. If the local-cache check reaches the
   consent state after Setup opens, confirm focus moves to the download choice
@@ -186,7 +193,11 @@ keyboard access testing in addition to assistive-technology testing.
   and its approximate 141 MiB download, and that no model download starts
   before **Download English-only CPU model (~141 MiB)** is activated. With
   keyboard-only navigation and Narrator, verify the size and download, defer, and
-  alternate-model choices are clear. Confirm initial focus lands on
+  alternate-model choices are clear. When the download action is focused,
+  verify its accessible name identifies the model and size and its accessible
+  description or associated disclosure is available to Narrator and explains
+  the same request boundary. No model download should start before activation.
+  Confirm initial focus lands on
   **Download English-only CPU model (~141 MiB)**; Tab should reach the
   alternate-model choice and then the microphone selector. Choose **Set Up
   Later** and confirm

@@ -115,7 +115,8 @@ but canonical fixtures make runs easier to compare.
 
 - Listen to each speech clip and correct its reference before setting
   `"reference_reviewed": true`. WER, CER, and first-/final-word retention are
-  not reported for unreviewed references.
+  not reported for unreviewed references. A reviewed speech row must contain
+  non-empty reference text.
 - Lowercase-normalized CER remains comparable with prior reports;
   case-sensitive CER additionally counts capitalization differences while
   applying the same whitespace normalization. Inspect per-sample `accuracy.case_sensitive_cer`
@@ -123,7 +124,9 @@ but canonical fixtures make runs easier to compare.
   alter word error rate.
 - For a human-reviewed non-speech clip, set `"expected_silence": true` and
   `"reference_reviewed": true`, with no reference text. Every non-empty trial
-  then counts as a silence false positive.
+  then counts as a silence false positive. Both flags must be JSON booleans
+  (`true` or `false`), not quoted strings or numbers; contradictory rows are
+  rejected before the model loads.
 - Include short commands, quiet speech, fast speech, natural pauses, meaningful
   final words, and representative microphone/background conditions. A Parakeet
   release corpus should also include human-reviewed speech longer than 60

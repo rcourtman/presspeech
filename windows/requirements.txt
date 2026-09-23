@@ -3,7 +3,6 @@ sounddevice>=0.4.6
 pynput>=1.7.6
 pystray>=0.19.5
 Pillow>=10.0.0
-pyperclip>=1.8.2
 pycaw==20251023
 tk-uia==0.8.0
 numpy>=1.26.0

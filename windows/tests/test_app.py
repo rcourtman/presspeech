@@ -2161,10 +2161,10 @@ class TextRegressionTests(unittest.TestCase):
         instance.diagnostics_text = mock.Mock(return_value="safe diagnostics")
         instance.notify = mock.Mock()
 
-        with mock.patch.object(app.pyperclip, "copy") as copy:
+        with mock.patch.object(app.clipboard_delivery, "write_text") as write:
             self.assertTrue(instance.copy_diagnostics())
 
-        copy.assert_called_once_with("safe diagnostics")
+        write.assert_called_once_with("safe diagnostics")
         instance.notify.assert_called_once_with(
             "Presspeech", "Privacy-safe diagnostics copied to the clipboard.")
 
@@ -2175,12 +2175,14 @@ class TextRegressionTests(unittest.TestCase):
         instance._log = mock.Mock()
 
         with mock.patch.object(
-                app.pyperclip, "copy",
-                side_effect=RuntimeError("private clipboard owner")):
+                app.clipboard_delivery, "write_text",
+                side_effect=app.clipboard_delivery.ClipboardError(
+                    "private clipboard owner")) as write:
             self.assertFalse(instance.copy_diagnostics())
 
+        write.assert_called_once_with("safe diagnostics")
         instance._log.assert_called_once_with(
-            "could not copy diagnostics: RuntimeError")
+            "could not copy diagnostics: ClipboardError")
         instance.notify.assert_called_once_with(
             "Clipboard unavailable",
             "Diagnostics were not copied. Close any app using the clipboard, "
@@ -2612,7 +2614,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._schedule_model_idle_unload = mock.Mock()
         instance._model_executor = mock.Mock()
 
-        with mock.patch.object(app.pyperclip, "copy") as copy, \
+        with mock.patch.object(app.clipboard_delivery, "write_text") as write, \
                 mock.patch.object(app.threading, "Thread") as worker:
             self.assertTrue(instance.cancel_recording())
 
@@ -2643,7 +2645,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._set_indicator.assert_called_once_with(None)
         instance._schedule_model_idle_unload.assert_called_once_with()
         instance._model_executor.submit.assert_not_called()
-        copy.assert_not_called()
+        write.assert_not_called()
         self.assertFalse(instance._canceling_recording)
 
     def test_cancel_closes_the_active_stream_before_restoring_playback(self):

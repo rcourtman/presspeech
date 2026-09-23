@@ -47,18 +47,18 @@
         <h1>From download to your first words</h1>
         <p>Choose your platform, finish setup, and try one private dictation before using Presspeech in another app. Speech is transcribed on-device; model downloads use the network.</p>
         <div class="note warn" id="model-download-preflight">
-          <p><strong>Check before first launch:</strong> if a model is missing, its download starts when you open Presspeech—not when you download the installer. Dictation audio and transcripts are not included in model requests.</p>
+          <p><strong>Check before first launch:</strong> if a model is missing, its download starts when you open Presspeech—not when you download the installer. You can download a build and leave it unopened. Dictation audio and transcripts are not included in model requests.</p>
           <ul>
-            <li><strong>macOS 0.3.8:</strong> a model request may include a Hugging Face token inherited by Presspeech. If one may be available—or you are unsure—keep the app closed and wait until macOS 0.3.9 is published. Read the <a href="#macos-model-download-privacy">full macOS guidance</a>.</li>
-            <li><strong>Windows 0.1.12:</strong> a request may send Hugging Face usage telemetry or include a saved token. A custom route can send the request and any token it carries to another destination; a TLS-inspecting HTTPS proxy trusted by the client can read any token it receives. If a TLS-inspecting proxy is active and its trust is unclear, do not launch 0.1.12 while it is active. To avoid possible telemetry or if you cannot rule out a saved token or custom route, wait until Windows 0.1.13 is published. The upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings; read the <a href="#windows-model-download-privacy">full Windows guidance</a> before launching through a TLS-inspecting proxy. If already installed, leave <strong>Launch Presspeech</strong> unchecked.</li>
+            <li><strong>macOS 0.3.8 — wait if a token may be inherited:</strong> a model request may include a Hugging Face token inherited by Presspeech. If one may be available—or you are unsure—keep the app closed and wait until macOS 0.3.9 is published. Read the <a href="install.html#model-download-privacy">full macOS warning</a>.</li>
+            <li><strong>Windows 0.1.12 — wait if you want to avoid possible telemetry, or cannot rule out a token or custom route:</strong> a request may send Hugging Face usage telemetry or include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. If its trust is unclear, do not launch while it is in use. If you prefer to avoid this possible usage telemetry, are concerned that a Hugging Face token or custom download route may be configured on this PC, or are unsure, wait until Windows 0.1.13 is published. If you install now but choose to wait, leave <strong>Launch Presspeech</strong> unchecked. Read the <a href="windows.html#model-download-privacy">full Windows warning</a>; upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings.</li>
           </ul>
           <p>If you choose to wait, check the <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases page</a> to confirm a later version is published before following its install steps; the source branch can be ahead of released downloads.</p>
-          <p>The public models need no account token. Do not inspect or share token values. See the <a href="privacy.html#network-calls">version-specific privacy inventory</a> for technical details.</p>
+          <p>The public models need no account token. Do not inspect or share token values. If you choose to use a published build now, read its full warning before launch. See the <a href="privacy.html#network-calls">version-specific privacy inventory</a> for technical details.</p>
         </div>
         <div class="actions">
           <a class="button" href="install.html">Install on macOS</a>
           <a class="button secondary" href="windows.html">Review the Windows install guide</a>
-          <a class="button secondary" href="#choose-platform">Already installed? Check launch notes</a>
+          <a class="button secondary" href="#quick-path">Already installed? Pick your next step</a>
         </div>
       </div>
 
@@ -73,7 +73,7 @@
             </li>
             <li>
               <strong>Installed, not Ready</strong>
-              <span><a href="#choose-platform">Check the model-download warning for your platform first</a>, then continue to Finish Setup below. Wait for the local model before testing the hotkey.</span>
+              <span><a href="#model-download-preflight">Check the first-launch decision above</a>, then continue to Finish Setup below. Wait for the local model before testing the hotkey.</span>
             </li>
             <li>
               <strong>Ready, not tested</strong>
@@ -96,13 +96,7 @@
             <article class="card" id="macos">
               <h3>macOS 0.3.8</h3>
               <p>Requires Apple Silicon and macOS 14 or later. The release is notarised. The 0.3.8 build starts its first 500–600 MB local model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; choose Set Up Later to defer. Upgrades and cached models load automatically. Speech recognition runs on your Mac.</p>
-              <div class="note warn" id="macos-model-download-privacy">
-                <p><strong>Before installing or launching:</strong> macOS 0.3.8 model-download requests may include a Hugging Face token inherited by Presspeech, though the public model needs no account token. If one may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Downloading the macOS ZIP from GitHub does not make a model request; the first download of a missing model starts when the app launches, so you can keep the downloaded app unopened while waiting. Dictation audio and transcripts are not sent. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
-                <details>
-                  <summary>Already used macOS 0.3.8? See what to do</summary>
-                  <p><a href="privacy.html#macos-0-3-8-after-use">Follow the steps before another model download.</a></p>
-                </details>
-              </div>
+              <p class="quiet"><strong>Already used macOS 0.3.8?</strong> Read the <a href="privacy.html#macos-0-3-8-after-use">follow-up guidance before another model download</a>.</p>
               <p><a href="install.html">Install the macOS release</a></p>
             </article>
             <article class="card" id="windows">
@@ -121,17 +115,11 @@
                   <p>The installer is unsigned. Follow the <a href="windows.html#download-verify-run">SHA-256 verification steps</a>. After checking the source and hash, you may choose <strong>More info → Run anyway</strong> for a SmartScreen warning. If Smart App Control or managed policy blocks it, stop—do not try to circumvent the block.</p>
                 </li>
               </ol>
-              <div class="note warn" id="windows-model-download-privacy">
-                <p><strong>Before installing or launching Windows 0.1.12:</strong> its model downloads may send Hugging Face usage telemetry and include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. Upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use. If you prefer to avoid this possible usage telemetry, are concerned that a Hugging Face token or custom download route may be configured on this PC, or are unsure, wait until Windows 0.1.13 is published. Downloading the installer and checksum from GitHub does not make a model request; the selected model download starts when Presspeech launches. If you install 0.1.12 but choose to wait, leave <strong>Launch Presspeech</strong> unchecked at the end of setup. The public models need no account token; dictation audio and transcripts are not sent in model downloads. See the <a href="windows.html#model-download-privacy">Windows privacy decision and technical details</a> and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
-                <details>
-                  <summary>Already used Windows 0.1.12? Check token safety</summary>
-                  <p>If a model download ran with a token available and an inherited <code>HF_ENDPOINT</code> or staging setting may have sent it to a destination you do not trust—or an untrusted TLS-inspecting HTTPS proxy could read the request—treat the token as disclosed to that destination or proxy. A proxy that only tunnels HTTPS cannot read the token. <a href="https://huggingface.co/settings/token">Revoke the token and create a replacement at Hugging Face Access Tokens</a>; do not include token values in logs or support requests.</p>
-                </details>
-              </div>
+              <p class="quiet"><strong>Already used Windows 0.1.12?</strong> Read the <a href="windows.html#windows-0-1-12-after-use">token-safety guidance for a past model download</a>. Do not include token values in logs or support requests.</p>
               <p><a href="windows.html#language-support">Check requirements and install the Windows prerelease</a></p>
             </article>
           </div>
-          <p class="quiet">Already installed? After checking the warning for your platform above, <a href="#finish-setup">continue to finish setup</a>.</p>
+          <p class="quiet">Already installed? After checking the <a href="#model-download-preflight">first-launch decision</a>, <a href="#finish-setup">continue to finish setup</a>.</p>
           <div class="note"><p><strong>Not supported:</strong> Intel Macs and Windows on Arm. For Windows 10, follow the support qualification above; see the <a href="windows.html">Windows install guide</a> before downloading.</p></div>
         </div>
       </section>

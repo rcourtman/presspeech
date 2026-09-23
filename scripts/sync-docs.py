@@ -451,13 +451,14 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "macos-0-3-8-after-use",
     ),
     DOCS / "getting-started.html": (
-        "Before installing or launching",
-        "macOS 0.3.8 model-download requests",
-        "Hugging Face token inherited by Presspeech",
-        "public model needs no account token",
+        "Check before first launch",
+        "macOS 0.3.8 — wait if a token may be inherited",
+        "a model request may include a Hugging Face token inherited by Presspeech",
+        "public models need no account token",
         "wait until macOS 0.3.9 is published",
-        "Dictation audio and transcripts are not sent",
-        "version-specific network inventory",
+        "Dictation audio and transcripts are not included in model requests",
+        "version-specific privacy inventory",
+        "install.html#model-download-privacy",
         "Already used macOS 0.3.8?",
         "macos-0-3-8-after-use",
     ),
@@ -582,7 +583,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Do not include token values",
     ),
     DOCS / "getting-started.html": (
-        "Before installing or launching Windows 0.1.12",
+        "Windows 0.1.12 — wait if you want to avoid possible telemetry",
         "usage telemetry",
         "already-configured or locally saved Hugging Face token",
         "Custom download routing can change where the model request",
@@ -591,14 +592,9 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
-        "Windows privacy decision and technical details",
+        "windows.html#model-download-privacy",
         "Already used Windows 0.1.12?",
-        "inherited",
-        "staging setting",
-        "destination you do not trust",
-        "treat the token as disclosed",
-        "revoke the token",
-        "Hugging Face Access Tokens",
+        "windows.html#windows-0-1-12-after-use",
         "Do not include token values",
     ),
     DOCS / "faq.html": (
@@ -2712,7 +2708,7 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
 def check_getting_started_preflight_order(
     path: Path = DOCS / "getting-started.html",
 ) -> list[str]:
-    """Keep launch/setup shortcuts behind the current model-download warnings."""
+    """Keep install/setup shortcuts behind the current model-download decision."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     if not path.exists():
         return [f"{display}: missing getting-started model-download preflight"]
@@ -2736,19 +2732,20 @@ def check_getting_started_preflight_order(
         "a model request may include a Hugging Face token inherited by Presspeech",
         "If one may be available—or you are unsure—keep the app closed and wait until macOS 0.3.9 is published",
         "Windows 0.1.12",
-        "a request may send Hugging Face usage telemetry or include a saved token",
-        "A custom route can send the request and any token it carries to another destination",
-        "a TLS-inspecting HTTPS proxy trusted by the client can read any token it receives",
-        "If a TLS-inspecting proxy is active and its trust is unclear, do not launch 0.1.12 while it is active",
-        "To avoid possible telemetry or if you cannot rule out a saved token or custom route, wait until Windows 0.1.13 is published",
-        "The upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings",
-        "before launching through a TLS-inspecting proxy",
-        "If already installed, leave <strong>Launch Presspeech</strong> unchecked",
+        "a request may send Hugging Face usage telemetry or include an already-configured or locally saved Hugging Face token",
+        "Custom download routing can change where the model request—and a token it carries—goes",
+        "A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives",
+        "If its trust is unclear, do not launch while it is in use",
+        "If you prefer to avoid this possible usage telemetry",
+        "are concerned that a Hugging Face token or custom download route may be configured on this PC, or are unsure",
+        "wait until Windows 0.1.13 is published",
+        "upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings",
+        "leave <strong>Launch Presspeech</strong> unchecked",
         "public models need no account token",
         "Do not inspect or share token values",
         'href="https://github.com/rcourtman/presspeech/releases"',
-        'href="#macos-model-download-privacy"',
-        'href="#windows-model-download-privacy"',
+        'href="install.html#model-download-privacy"',
+        'href="windows.html#model-download-privacy"',
     )
     missing = [phrase for phrase in required if phrase not in preflight]
     if missing:
@@ -2758,25 +2755,17 @@ def check_getting_started_preflight_order(
         ]
 
     actions = contents.find('<div class="actions">')
-    if actions < 0 or preflight_start > actions:
+    if actions < 0 or preflight_end < 0 or preflight_end > actions:
         return [
             f"{display}: model-download preflight must precede the first onboarding actions"
         ]
 
-    warning_positions = [
-        contents.find('id="macos-model-download-privacy"'),
-        contents.find('id="windows-model-download-privacy"'),
-    ]
-    if any(position < 0 for position in warning_positions):
-        return [f"{display}: missing a platform-specific model-download warning"]
-
-    first_setup_warning = max(warning_positions)
     setup_actions = [
         match.start() for match in re.finditer(r'href="#finish-setup"', contents)
     ]
-    if not setup_actions or any(position < first_setup_warning for position in setup_actions):
+    if not setup_actions or any(position < preflight_end for position in setup_actions):
         return [
-            f"{display}: setup shortcuts must follow both platform-specific model-download warnings"
+            f"{display}: setup shortcuts must follow the model-download decision"
         ]
     return []
 
@@ -4510,17 +4499,17 @@ def run_self_test() -> None:
             '<ul><li><strong>macOS 0.3.8:</strong> a model request may include a Hugging Face token inherited '
             'by Presspeech. If one may be available—or you are unsure—keep the app closed and wait until '
             'macOS 0.3.9 is published. '
-            '<a href="#macos-model-download-privacy">full macOS guidance</a></li>'
+            '<a href="install.html#model-download-privacy">full macOS warning</a></li>'
             '<li><strong>Windows 0.1.12:</strong> a request may send Hugging Face usage telemetry or include '
-            'a saved token. A custom route can send the request and any token it carries to another '
-            'destination; a TLS-inspecting HTTPS proxy trusted by the client can read any token it receives. '
-            'If a TLS-inspecting proxy is active and its trust is unclear, do not launch 0.1.12 while it is '
-            'active. To avoid possible telemetry or if you cannot rule out a saved token or custom route, '
-            'wait until Windows 0.1.13 is published. The upcoming 0.1.13 removes account-token authentication '
-            'but still honors proxy and CA settings; read the '
-            '<a href="#windows-model-download-privacy">full Windows guidance</a> before launching through '
-            'a TLS-inspecting proxy. If already installed, leave '
-            '<strong>Launch Presspeech</strong> unchecked.</li></ul>'
+            'an already-configured or locally saved Hugging Face token. Custom download routing can change '
+            'where the model request—and a token it carries—goes. A TLS-inspecting HTTPS proxy trusted by '
+            'the client can read any 0.1.12 token it receives. If its trust is unclear, do not launch while '
+            'it is in use. If you prefer to avoid this possible usage telemetry, are concerned that a Hugging '
+            'Face token or custom download route may be configured on this PC, or are unsure, wait until '
+            'Windows 0.1.13 is published. If installing '
+            'now, leave <strong>Launch Presspeech</strong> unchecked. The upcoming 0.1.13 removes '
+            'account-token authentication but still honors proxy and CA settings. '
+            '<a href="windows.html#model-download-privacy">full Windows warning</a></li></ul>'
             '<p>If you choose to wait, check the '
             '<a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases page</a> to confirm '
             'a later version is published before following its install steps; the source branch can be ahead '
@@ -4529,10 +4518,8 @@ def run_self_test() -> None:
             '<a href="privacy.html#network-calls">version-specific privacy inventory</a> for technical '
             'details.</p></div>'
             '<div class="actions"><a href="install.html">Install</a>'
-            '<a href="#choose-platform">Already installed?</a></div>'
-            '<section id="quick-path"><a href="#choose-platform">Check warning</a></section>'
-            '<div id="macos-model-download-privacy">Mac warning</div>'
-            '<div id="windows-model-download-privacy">Windows warning</div>'
+            '<a href="#quick-path">Already installed?</a></div>'
+            '<section id="quick-path"><a href="#model-download-preflight">Check warning</a></section>'
             '<a href="#finish-setup">Continue to setup</a>'
         )
         getting_started.write_text(safe_getting_started, encoding="utf-8")
@@ -4544,15 +4531,26 @@ def run_self_test() -> None:
         )
         if not check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: missing token-handling guidance was accepted")
+        for warning in (
+            "keep the app closed and wait until macOS 0.3.9 is published",
+            "wait until Windows 0.1.13 is published",
+            "If its trust is unclear, do not launch while it is in use",
+        ):
+            getting_started.write_text(
+                safe_getting_started.replace(warning, ""),
+                encoding="utf-8",
+            )
+            if not check_getting_started_preflight_order(getting_started):
+                raise SyncError(f"self-test: missing first-launch warning was accepted: {warning}")
         getting_started.write_text(
             safe_getting_started.replace(
-                '<a href="#choose-platform">Already installed?</a>',
-                '<a href="#finish-setup">Already installed?</a>',
+                '<div id="model-download-preflight">',
+                '<a href="#finish-setup">Skip to setup</a><div id="model-download-preflight">',
             ),
             encoding="utf-8",
         )
         if not check_getting_started_preflight_order(getting_started):
-            raise SyncError("self-test: setup shortcut before platform warnings was accepted")
+            raise SyncError("self-test: setup shortcut before first-launch decision was accepted")
         getting_started.write_text(
             safe_getting_started.replace('id="model-download-preflight"', 'id="removed"'),
             encoding="utf-8",

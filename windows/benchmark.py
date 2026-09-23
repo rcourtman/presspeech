@@ -467,6 +467,19 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             if label is not None and (
                     not isinstance(label, str) or not label.strip()):
                 raise ValueError("sample %s must be a non-empty string" % field)
+        # Do not coerce JSON strings such as "false" to True: that would count
+        # an unreviewed reference as reviewed or score speech as silence.
+        for field in ("reference_reviewed", "expected_silence"):
+            if field in sample and not isinstance(sample[field], bool):
+                raise ValueError("sample %s must be a boolean" % field)
+        reference = sample.get("reference", "")
+        if not isinstance(reference, str):
+            raise ValueError("sample reference must be a string")
+        if sample.get("expected_silence", False):
+            if reference.strip():
+                raise ValueError("silence sample must not have reference text")
+        elif sample.get("reference_reviewed", False) and not reference.strip():
+            raise ValueError("reviewed speech sample needs reference text")
     # Validate and freeze report provenance before loading any model. This
     # describes the requested pinned source, not a fresh integrity attestation.
     snapshot = engine.model_snapshot(model_name)
@@ -545,7 +558,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             "estimated_adaptive_release_to_paste_seconds": (
                 app.POST_ROLL_MIN_SEC + median_seconds + app.PASTE_DELAY_SEC
             ),
-            "reference_reviewed": bool(sample.get("reference_reviewed", False)),
+            "reference_reviewed": sample.get("reference_reviewed", False),
             "speech_detection": speech_detection_metrics(
                 audio_seconds, backend_timings,
                 expected_trials=(runs if model_name in engine.WHISPER_MODELS
@@ -559,7 +572,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         if language_group is not None:
             result["language_group"] = language_group.strip()
         result["silence"] = silence_metrics(
-            bool(sample.get("expected_silence", False)),
+            sample.get("expected_silence", False),
             result["reference_reviewed"],
             transcripts,
         )

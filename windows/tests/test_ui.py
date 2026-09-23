@@ -472,6 +472,12 @@ class AccessibleWindowTests(unittest.TestCase):
             body.index('text="Choose another model in Settings…"'),
             body.index('text="Dictation hotkey"'),
         )
+        self.assertIn(
+            "self.download_model_button, MODEL_DOWNLOAD_ACCESSIBLE_DESCRIPTION",
+            body)
+        self.assertIn(
+            "self.cpu_model_button, MODEL_DOWNLOAD_ACCESSIBLE_DESCRIPTION",
+            body)
         self.assertIn("self.model_consent_frame.grid_remove()", body)
         self.assertIn("root.after_idle(self._focus_initial_setup_control)", body)
         self.assertLess(
@@ -602,12 +608,16 @@ class AccessibleWindowTests(unittest.TestCase):
         control = mock.Mock()
 
         with mock.patch.object(ui.tk_uia, "label_for") as label_for, \
-                mock.patch.object(ui.tk_uia, "set_acc_name") as set_name:
+                mock.patch.object(ui.tk_uia, "set_acc_name") as set_name, \
+                mock.patch.object(
+                    ui.tk_uia, "set_acc_description") as set_description:
             ui._label_control(label, control)
             ui._name_control(control, "Dictionary rules")
+            ui._describe_control(control, "Extra instructions")
 
         label_for.assert_called_once_with(label, control)
         set_name.assert_called_once_with(control, "Dictionary rules")
+        set_description.assert_called_once_with(control, "Extra instructions")
 
     def test_trigger_choices_keep_context_in_ui_automation(self):
         label, hold, toggle = mock.Mock(), mock.Mock(), mock.Mock()
@@ -926,15 +936,13 @@ class SetupWindowTests(unittest.TestCase):
             (
                 "parakeet-tdt-0.6b-v3",
                 "Download the multilingual Parakeet model, up to about "
-                "2.5 GB. Hugging Face receives the model-file request; "
-                "dictation audio and transcripts stay on this PC.",
+                "2.5 GB.",
             ),
             (
                 "base.en",
                 "Download the English-only CPU Whisper base.en model, "
                 "about 141 MiB. This requests pinned model files from "
-                "huggingface.co; dictation audio and transcripts stay "
-                "on this PC.",
+                "huggingface.co.",
             ),
         )
         for model, accessible_name in cases:
@@ -948,6 +956,15 @@ class SetupWindowTests(unittest.TestCase):
 
                 name_control.assert_any_call(
                     window.download_model_button, accessible_name)
+
+    def test_model_download_accessible_description_matches_policy_boundary(self):
+        description = ui.MODEL_DOWNLOAD_ACCESSIBLE_DESCRIPTION
+        for detail in (
+                "Hugging Face", "Model-library telemetry", "account tokens",
+                "dictation audio", "transcripts", "HTTP proxy", "custom CA",
+                "TLS-inspecting proxy can read the request"):
+            with self.subTest(detail=detail):
+                self.assertIn(detail, description)
 
     def test_first_run_cpu_download_waits_for_choice_and_hides_redundant_fallback(self):
         window = self.make_window(

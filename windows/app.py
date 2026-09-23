@@ -29,7 +29,6 @@ import model_network
 import numpy as np
 import soxr
 import sounddevice as sd
-import pyperclip
 import clipboard_delivery
 import keyboard_delivery
 from pynput import keyboard as pkb
@@ -184,7 +183,10 @@ PACKAGE_SMOKE_IMPORTS = (
     ("comtypes", ()),
     ("pycaw.constants", ("AudioDeviceState", "EDataFlow")),
     ("pycaw.pycaw", ("AudioUtilities",)),
-    ("tk_uia", ("add_acc_object", "enable", "label_for", "set_acc_name")),
+    ("tk_uia", (
+        "add_acc_object", "enable", "label_for", "set_acc_description",
+        "set_acc_name",
+    )),
 )
 
 
@@ -2701,7 +2703,10 @@ class PresspeechApp:
 
     def copy_diagnostics(self, icon=None, item=None):
         try:
-            pyperclip.copy(self.diagnostics_text())
+            # Diagnostics can include system and runtime details. Use the same
+            # history/cloud-excluded transaction as transcript copies while
+            # keeping deliberate local Ctrl+V available.
+            clipboard_delivery.write_text(self.diagnostics_text())
         except Exception as exc:
             # Another Windows process can temporarily hold the clipboard.
             # A tray callback must not disappear without telling the user
