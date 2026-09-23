@@ -46,6 +46,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release runtime does not match its pins' }
       - name: Unit tests
         working-directory: windows
+        # The opted-in native probe replaces the runner clipboard only with
+        # synthetic text and checks the real Win32 privacy marker. Keep this
+        # opt-in scoped to the disposable GitHub-hosted job, not local or
+        # self-hosted test runs.
+        env:
+          PRESSPEECH_NATIVE_CLIPBOARD_TEST: "1"
         run: python -m unittest discover -s tests -v
       - name: Compile Python sources
         working-directory: windows
