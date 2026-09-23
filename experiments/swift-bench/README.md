@@ -75,11 +75,14 @@ swift build
 The Swift benchmark pins FluidAudio to the same exact revision as the
 production app (currently the released v0.15.6 commit). The default benchmark
 and `run-release-asr-checks.sh` therefore use the app's speech-library revision.
-As checked on 2026-09-23, upstream's latest release is v0.16.1; v0.15.7 and
-v0.15.8 contain Parakeet v3 long-form, final-window, seam, and blank-window
-recovery changes, while v0.16.1 itself is a Mac Catalyst packaging fix with
-no API changes. These notes justify an evaluation, not a claim that Presspeech's
-quality or latency improves. The production app and `v3` benchmark also
+As checked on 2026-09-23, upstream's latest release is v0.17.0. It includes
+ASR PR #941's bulk `MLMultiArray` reset/copy optimization, a candidate for
+measurement rather than evidence of a Presspeech speedup. The earlier v0.15.7
+and v0.15.8 releases contain Parakeet v3 long-form, final-window, seam, and
+blank-window recovery changes. Upstream changes justify evaluation, not a claim
+that Presspeech's quality or latency improves; see the
+[benchmark evidence and limitations](../../docs/benchmarks.html). The
+production app and `v3` benchmark also
 explicitly retain the released mel-context chunking behavior. `v3-sdk-default`
 is the deliberate exception:
 it exposes the pinned SDK's default so a changed default can be measured as a

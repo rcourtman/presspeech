@@ -1019,7 +1019,7 @@ class SyncError(RuntimeError):
 
 MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
-Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. Use Homebrew when it is already installed because it also handles updates. If Homebrew is missing, offer the direct download instead of forcing the user to install Homebrew first.
 
@@ -1027,6 +1027,8 @@ Run:
   uname -m
   sw_vers -productVersion
   brew install --cask rcourtman/presspeech/presspeech
+
+Only after the user makes an informed choice to launch 0.3.8:
   open /Applications/Presspeech.app
 
 Direct download:
@@ -1038,7 +1040,7 @@ After launch, explain that macOS 0.3.8 starts its first local speech-model downl
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
-Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. These public models need no account token. If a Hugging Face token or custom download route may be configured on this PC—or the user is unsure—offer to wait until Windows 0.1.13 is published. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. These public models need no account token. If a Hugging Face token or custom download route may be configured on this PC—or the user is unsure—offer to wait until Windows 0.1.13 is published. Downloading the installer and checksum from GitHub does not make a model request; 0.1.12 starts its selected model download when Presspeech launches. If the user chooses to wait but still wants to install, tell them to uncheck the installer's final "Launch Presspeech" option; do not start the app. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
   https://rcourtman.github.io/presspeech/windows.html#download-verify-run
@@ -1096,7 +1098,7 @@ Once the checksum succeeds and any requested attestation check also succeeds—o
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button, then finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button, then finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
@@ -2621,10 +2623,13 @@ def check_getting_started_preflight_order(
         else contents[preflight_start:preflight_end]
     )
     required = (
-        "Before installing or opening",
+        "Before the first model download",
         "macOS 0.3.8",
         "Windows 0.1.12",
         "public models need no account token",
+        "Downloading the app package from GitHub does not make a model request",
+        "wait for the relevant fixed release before launching the app",
+        "leave <strong>Launch Presspeech</strong> unchecked",
         'href="#macos-model-download-privacy"',
         'href="#windows-model-download-privacy"',
     )
@@ -3280,6 +3285,36 @@ def check_cross_platform_compare_privacy(
 
 def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     errors: list[str] = []
+    required_mac_launch_choice = (
+        "installing the app without opening it does not make the model request",
+        "If the user chooses to wait, skip the `open` command below",
+        "Only after the user makes an informed choice to launch 0.3.8",
+    )
+    missing_mac_launch_choice = [
+        phrase for phrase in required_mac_launch_choice
+        if phrase not in MAC_INSTALL_PROMPT
+    ]
+    if missing_mac_launch_choice:
+        errors.append(
+            "macOS assistant prompt: keep package installation distinct from the launch-triggered model request; missing "
+            + ", ".join(repr(phrase) for phrase in missing_mac_launch_choice)
+        )
+
+    required_windows_launch_choice = (
+        "Downloading the installer and checksum from GitHub does not make a model request",
+        'uncheck the installer\'s final "Launch Presspeech" option',
+        'make sure the installer\'s final "Launch Presspeech" option was unchecked',
+    )
+    missing_windows_launch_choice = [
+        phrase for phrase in required_windows_launch_choice
+        if phrase not in WINDOWS_INSTALL_PROMPT
+    ]
+    if missing_windows_launch_choice:
+        errors.append(
+            "Windows assistant prompt: keep package installation distinct from the launch-triggered model request; missing "
+            + ", ".join(repr(phrase) for phrase in missing_windows_launch_choice)
+        )
+
     required_windows_provenance = (
         "gh release verify $tag --repo rcourtman/presspeech",
         "gh release verify-asset $tag $installer --repo rcourtman/presspeech",
@@ -3599,6 +3634,9 @@ def run_self_test() -> None:
             or "9.8.7" in synced_agents
             or "Do not inspect or display token values" not in MAC_INSTALL_PROMPT
             or "launch 0.3.8 without the user's informed choice" not in MAC_INSTALL_PROMPT
+            or "skip the `open` command below" not in MAC_INSTALL_PROMPT
+            or 'uncheck the installer\'s final "Launch Presspeech" option' not in WINDOWS_INSTALL_PROMPT
+            or 'leave the app unopened' not in WINDOWS_INSTALL_PROMPT
             or (
                 "gh release verify $tag --repo rcourtman/presspeech"
                 not in WINDOWS_INSTALL_PROMPT
@@ -4294,8 +4332,11 @@ def run_self_test() -> None:
 
         getting_started = Path(tmp) / "getting-started.html"
         safe_getting_started = (
-            '<div id="model-download-preflight"><p>Before installing or opening '
-            'macOS 0.3.8 and Windows 0.1.12. These public models need no account token. '
+            '<div id="model-download-preflight"><p>Before the first model download '
+            'on macOS 0.3.8 and Windows 0.1.12. These public models need no account token. '
+            'Downloading the app package from GitHub does not make a model request; '
+            'wait for the relevant fixed release before launching the app. '
+            'leave <strong>Launch Presspeech</strong> unchecked. '
             '<a href="#macos-model-download-privacy">macOS</a> '
             '<a href="#windows-model-download-privacy">Windows</a></p></div>'
             '<div class="actions"><a href="install.html">Install</a>'

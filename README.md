@@ -72,6 +72,10 @@ and the Apple Neural Engine. The default model is multilingual
 Hugging Face usage telemetry and include an already-configured or locally saved
 Hugging Face token. Custom download routing can change where the model
 request—and a token it carries—goes.
+The Hugging Face request starts when Presspeech launches to fetch a missing
+model; downloading the installer and checksum from GitHub does not make that
+request. If you install 0.1.12 but choose to wait, leave **Launch Presspeech**
+unchecked at the end of setup.
 If a Hugging Face token or custom download route is configured on this PC—or
 you are unsure—wait until Windows 0.1.13 is published. The public models need
 no account token; dictation audio and transcripts are not sent in model
@@ -127,6 +131,9 @@ source-build details.
 may include a Hugging Face token inherited by Presspeech. The public model
 needs no account token. If a token may be present in the environment that
 launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published.
+Downloading the macOS ZIP from GitHub does not make a model request; the first
+download of a missing model starts when the app launches. You can keep the
+downloaded app unopened while waiting for 0.3.9.
 Dictation audio and transcripts are not sent in these requests. See the
 [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 Already used macOS 0.3.8? See the
