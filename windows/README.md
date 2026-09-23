@@ -334,6 +334,9 @@ important asynchronous status changes such as model readiness, microphone check
 results, update completion or failure, and settings save results without moving
 keyboard focus. Download byte counters remain visual rather than repeatedly
 interrupting speech.
+For a repeatable native Windows UI Automation and Narrator sign-off, see the
+[accessibility QA checklist](ACCESSIBILITY-QA.md); mocked unit tests do not
+replace this platform check.
 The Try Dictation scratchpad also keeps its Dictate command and live status in
 sync when recording is stopped by the hotkey, Escape, the recording limit, or
 an input failure. While a model is preparing, transcription is finishing, or
