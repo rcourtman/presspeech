@@ -451,6 +451,32 @@ DELIVERY_BOUNDARY_GUIDANCE = {
     ROOT / "marketing" / "SHARING.md": ("cannot be verified", "clipboard"),
 }
 
+# Keep the large macOS model transfer's consent behavior explicit by release:
+# the linked 0.3.8 app starts on launch, while 0.3.9 gates a clean install on
+# the user's choice. Vague "depending on the build" copy hides the behavior
+# that matters most to someone deciding whether to start a 500+ MB download.
+MAC_MODEL_DOWNLOAD_GUIDANCE = {
+    ROOT / "README.md": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
+    DOCS / "index.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
+    DOCS / "getting-started.html": (
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+    ),
+    DOCS / "install.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
+    DOCS / "faq.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
+    DOCS / "privacy.html": (
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+    ),
+    DOCS / "privacy" / "network-calls.json": (
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+    ),
+    DOCS / "llms-full.txt": (
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+    ),
+    DOCS / "install" / "agents.md": (
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+    ),
+}
+
 COMPATIBILITY_OVERALL_RESULTS = (
     "All five steady-focus attempts pasted once; all three focus-change attempts "
     "recovered safely",
@@ -809,7 +835,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that the first local speech-model download is ~500-600 MB. Depending on the build, it starts on launch or Setup asks a new install to choose Download Model; closing Setup then defers the download. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models continue loading automatically. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
@@ -1200,13 +1226,13 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:The Presspeech icon appears in the menu bar|Homebrew is the easiest path if you already use it or want command-line updates)\..*?</p>",
-        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. Depending on the build, the first model download starts automatically or Setup asks you to choose <strong>Download Model</strong>; close Setup to defer when offered. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
+        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; close Setup to defer. Existing installs and cached models load automatically. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
         path=path,
     )
     text = replace_regex(
         text,
         r'<div class="fact"><strong>(?:Model download|First model download)</strong><span>.*?</span></div>',
-        '<div class="fact"><strong>First model download</strong><span>Internet is required to download the local model, about 500-600 MB. Depending on the build, it starts on launch or after you choose Download Model in Setup. Afterward, speech recognition runs on your Mac.</span></div>',
+        '<div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts the first download on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models load automatically.</span></div>',
         path=path,
     )
     text = replace_regex(
@@ -1500,9 +1526,19 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             path=path,
         )
     download_sentence = (
-        "First launch downloads the local speech model weights, about 500-600 MB, "
-        "into `~/Library/Application Support/FluidAudio/`.\n"
+        "The macOS 0.3.8 release starts its first speech-model download (about 500-600 MB) "
+        "on launch. In 0.3.9, a clean install must choose Download Model in Setup; "
+        "closing Setup defers it. Existing installations and cached models load automatically. "
+        "The model is stored under `~/Library/Application Support/FluidAudio/`.\n"
     )
+    old_mac_download_copy = (
+        "The first macOS speech-model download is about 500-600 MB into "
+        "`~/Library/Application Support/FluidAudio/`. Depending on the build, it starts on "
+        "launch or after a new install chooses Download Model in Setup; existing installs "
+        "keep automatic startup.\n"
+    )
+    if old_mac_download_copy in text:
+        text = replace_literal(text, old_mac_download_copy, download_sentence, path=path)
     text = re.sub(
         r"First launch downloads the default local speech model weights, about 500-600 MB, "
         r"into `~/Library/Application Support/FluidAudio/`\. The [^.]+ model downloads only if selected\.\n",
@@ -1884,6 +1920,25 @@ def check_windows_model_download_privacy_guidance(
             errors.append(
                 f"{display}: incomplete version-scoped Windows model-download privacy "
                 "guidance — missing "
+                + ", ".join(repr(phrase) for phrase in missing)
+            )
+    return errors
+
+
+def check_mac_model_download_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = MAC_MODEL_DOWNLOAD_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing macOS model-download version guidance")
+            continue
+        contents = " ".join(read_text(path).split()).casefold()
+        missing = [phrase for phrase in required if phrase.casefold() not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete macOS model-download version guidance — missing "
                 + ", ".join(repr(phrase) for phrase in missing)
             )
     return errors
@@ -2692,8 +2747,9 @@ def run_self_test() -> None:
             "create privacy-safe local reports with bounded recent log lines.\n"
         )
         llms_full.write_text(
-            "First launch downloads the local speech model weights, about 500-600 MB, "
-            "into `~/Library/Application Support/FluidAudio/`.\n\n"
+            "First launch downloads the default local speech model weights, about 500-600 MB, "
+            "into `~/Library/Application Support/FluidAudio/`. The Parakeet model downloads "
+            "only if selected.\n\n"
             "Use Setup Checklist from the Presspeech menu bar item to finish the speech model, "
             "Microphone, Accessibility, Input Monitoring, and hotkey readiness checks.\n\n"
             + old_diagnostics
@@ -2703,7 +2759,9 @@ def run_self_test() -> None:
         synced_llms_full = sync_llms_full(llms_full, metadata)
         if (old_diagnostics in synced_llms_full
                 or synced_llms_full.count("For support, macOS Copy/Save Diagnostics") != 1
-                or "raw error details, and raw log lines" not in synced_llms_full):
+                or "raw error details, and raw log lines" not in synced_llms_full
+                or "The macOS 0.3.8 release starts its first speech-model download" not in synced_llms_full
+                or "In 0.3.9, a clean install must choose Download Model" not in synced_llms_full):
             raise SyncError("self-test: llms-full diagnostics paragraph was not replaced")
 
         compare_dir = Path(tmp) / "compare"
@@ -3279,6 +3337,26 @@ def run_self_test() -> None:
         )
         if check_mac_release_phase_copy(metadata, [phase_copy]):
             raise SyncError("self-test: release-stable Mac copy was rejected")
+
+        model_download_guidance = Path(tmp) / "mac-model-download-guidance.md"
+        required_model_download_guidance = {
+            model_download_guidance: (
+                "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+            )
+        }
+        model_download_guidance.write_text(
+            "macOS 0.3.8 downloads 500 MB on launch. 0.3.9 asks a clean install "
+            "to choose Download Model or defer in Setup.\n",
+            encoding="utf-8",
+        )
+        if check_mac_model_download_guidance(required_model_download_guidance):
+            raise SyncError("self-test: clear versioned Mac download guidance was rejected")
+        model_download_guidance.write_text(
+            "The Mac download behavior depends on the build.\n", encoding="utf-8"
+        )
+        if not check_mac_model_download_guidance(required_model_download_guidance):
+            raise SyncError("self-test: vague Mac model-download guidance was not flagged")
+
         phase_copy.write_text(
             "Upcoming Windows **9.8.7** adds this behavior.\n",
             encoding="utf-8",
@@ -3324,6 +3402,7 @@ def main() -> int:
         if args.check:
             errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
             errors.extend(check_mac_release_phase_copy(metadata))
+            errors.extend(check_mac_model_download_guidance())
             errors.extend(check_windows_release_phase_copy(metadata))
             errors.extend(check_windows_release_references(metadata))
             errors.extend(check_icon_stats(metadata))
@@ -3365,6 +3444,7 @@ def main() -> int:
 
         errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
         errors.extend(check_mac_release_phase_copy(metadata))
+        errors.extend(check_mac_model_download_guidance())
         errors.extend(check_windows_release_phase_copy(metadata))
         errors.extend(check_windows_release_references(metadata))
         errors.extend(check_icon_stats(metadata))

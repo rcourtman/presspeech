@@ -141,7 +141,7 @@
           </div>
           <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Complete the four checkpoints to your first dictation</a>.</p>
           <div class="note">
-            <p><strong>First model download:</strong> an internet connection is needed for the local speech model (about 500–600 MB on macOS; about 141 MiB on Windows CPU or 2.5 GB with usable NVIDIA CUDA). Depending on the macOS build, the first download starts automatically or Setup asks a new install to choose <strong>Download Model</strong>. Published Windows 0.1.12 starts its selected download automatically; upcoming 0.1.13 asks before fetching missing Parakeet files.</p>
+            <p><strong>First model download:</strong> an internet connection is needed for the local speech model (about 500–600 MB on macOS; about 141 MiB on Windows CPU or 2.5 GB with usable NVIDIA CUDA). macOS 0.3.8 starts the first download on launch; in 0.3.9, a clean install must choose <strong>Download Model</strong> or close Setup to defer. Published Windows 0.1.12 starts its selected download automatically; upcoming 0.1.13 asks before fetching missing Parakeet files.</p>
             <p><strong>Before installing or launching Windows 0.1.12:</strong> model downloads may send Hugging Face usage telemetry and include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. If a Hugging Face token or custom download route is configured on this PC—or you are unsure—wait until Windows 0.1.13 is published. The public models need no account token; dictation audio and transcripts are not sent in model downloads. Read the <a href="windows.html#model-download-privacy">Windows privacy decision and technical details</a> and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
           </div>
           <div class="stat-row" aria-label="macOS release and benchmark summary">
@@ -173,7 +173,7 @@
           <div class="grid two">
             <article class="card">
               <h3>macOS — released</h3>
-              <p>The signed and notarised Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The app zip is small; the first 500–600 MB local model download starts on launch or after a new install chooses <strong>Download Model</strong> in Setup, depending on the build.</p>
+              <p>The signed and notarised Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The 0.3.8 release starts its first 500–600 MB local model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; close Setup to defer. Upgrades and cached models load automatically.</p>
               <p><a href="install.html">Install on Apple Silicon and macOS 14+</a></p>
             </article>
             <article class="card">

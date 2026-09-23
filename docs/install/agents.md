@@ -22,7 +22,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that the first local speech-model download is ~500-600 MB. Depending on the build, it starts on launch or Setup asks a new install to choose Download Model; closing Setup then defers the download. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.
+After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models continue loading automatically. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.
 ```
 
 ## Windows

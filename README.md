@@ -139,12 +139,12 @@ Requirements:
 - Apple Silicon Mac
 - macOS 14 (Sonoma) or later
 
-The first local speech-model download is about 500–600 MB. CoreML also needs
-free space to prepare it. Depending on the build, the download starts on first
-launch or Setup asks you to choose **Download Model**; when that choice appears,
-the checklist shows the current estimated space needed before the download
-starts, and you can close Setup to defer. Existing installs and cached models
-continue loading automatically. Use **Setup Checklist…** to finish the
+The macOS 0.3.8 release starts its first local speech-model download
+(about 500–600 MB) on launch. In 0.3.9, a clean install must choose
+**Download Model** in Setup; close Setup to defer. CoreML also needs free space
+to prepare the model, and Setup shows the current estimated space needed before
+the download starts. Existing installs and cached models continue loading
+automatically. Use **Setup Checklist…** to finish the
 model, permission, and hotkey checks. The checklist stays incomplete until the
 configured hotkey actually reaches Presspeech; if it does not respond or
 controls another Mac feature, choose a different key under Settings.

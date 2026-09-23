@@ -4,7 +4,7 @@
   "network_calls": [
     {
       "name": "macos_first_launch_model_download",
-      "when": "Depending on the macOS build, a first install starts the model download on launch or after choosing Download Model in Setup; existing installs keep automatic startup. Integrity-failure re-downloads and user-triggered cache resets can also download the model",
+      "when": "macOS 0.3.8 starts its first model download on launch. In 0.3.9, a clean install must choose Download Model in Setup; closing Setup defers the transfer. Existing installs and cached models load automatically. Integrity-failure re-downloads and user-triggered cache resets can also download the model",
       "destination": [
         "huggingface.co and its subdomains",
         "Hugging Face model-storage and CDN hosts under hf.co"
