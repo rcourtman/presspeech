@@ -263,6 +263,11 @@ class ModelNetworkPolicyTests(unittest.TestCase):
         # error. Only synthetic credentials are supplied; none are transmitted.
         code = """import engine, model_network
 from huggingface_hub import constants, file_download, utils
+from huggingface_hub.utils import _detect_agent
+registry_fetches = []
+_detect_agent._registry = None
+_detect_agent._read_cached_registry = lambda *_args, **_kwargs: None
+_detect_agent._fetch_registry = lambda: registry_fetches.append(True) or {}
 assert constants.ENDPOINT == 'https://huggingface.co'
 assert constants.HF_DEBUG is False
 assert constants.HF_HUB_DISABLE_TELEMETRY is True
@@ -274,6 +279,7 @@ model_network.harden_loaded_runtime()
 headers = {str(name).lower(): str(value) for name, value in utils.build_hf_headers(token=False).items()}
 assert 'authorization' not in headers
 assert all(marker not in headers['user-agent'].lower() for marker in ('agent/', 'origin/', 'session_id/'))
+assert not registry_fetches, 'telemetry-disabled header construction attempted an agent-registry request'
 """
         environment = dict(os.environ, HF_DEBUG="1", HF_ENDPOINT="https://invalid.example",
                            HF_TOKEN="synthetic-fixture", HF_HUB_USER_AGENT_ORIGIN="synthetic-origin",

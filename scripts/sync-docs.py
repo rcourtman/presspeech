@@ -2269,6 +2269,55 @@ def check_windows_model_download_privacy_summary(
     return errors
 
 
+def check_readme_windows_install_decision_order(
+    path: Path = ROOT / "README.md",
+) -> list[str]:
+    """Keep Windows privacy and unsigned-build decisions before README install steps."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing Windows install section"]
+
+    contents = read_text(path)
+    heading = "## Install on Windows"
+    start = contents.find(heading)
+    if start < 0:
+        return [f"{display}: missing Windows install section"]
+    end = contents.find("\n## ", start + len(heading))
+    section = contents[start:end] if end >= 0 else contents[start:]
+
+    warnings = (
+        ("model-download privacy", "**Before installing or launching Windows 0.1.12:**"),
+        ("unsigned-installer policy", "The installer is currently unsigned"),
+    )
+    actions = (
+        "Download the self-contained installer",
+        "- After verification, run the installer and launch Presspeech",
+        "- If a shell-capable assistant is doing the installation",
+    )
+    warning_positions: list[tuple[str, int]] = []
+    errors: list[str] = []
+    for label, marker in warnings:
+        position = section.find(marker)
+        if position < 0:
+            errors.append(f"{display}: missing Windows {label} warning")
+        else:
+            warning_positions.append((label, position))
+
+    for action in actions:
+        action_position = section.find(action)
+        if action_position < 0:
+            errors.append(f"{display}: missing Windows install step {action!r}")
+            continue
+        for label, warning_position in warning_positions:
+            if warning_position > action_position:
+                errors.append(
+                    f"{display}: Windows {label} warning must precede "
+                    "installer download, run, and assistant instructions"
+                )
+                break
+    return errors
+
+
 def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]:
     """Keep the FAQ's release warnings ahead of safe guide routes."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
@@ -3686,6 +3735,34 @@ def run_self_test() -> None:
         if check_windows_model_download_privacy_summary(required_summary_guidance):
             raise SyncError("self-test: complete Windows privacy decision was rejected")
 
+        readme_install = Path(tmp) / "README.md"
+        readme_install.write_text(
+            "## Install on Windows\n"
+            "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
+            "The installer is currently unsigned; stop if managed policy blocks it.\n"
+            "Download the self-contained installer.\n"
+            "- After verification, run the installer and launch Presspeech from the Start Menu.\n"
+            "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
+            "\n## Install on macOS\n",
+            encoding="utf-8",
+        )
+        if check_readme_windows_install_decision_order(readme_install):
+            raise SyncError("self-test: ordered README Windows warnings were rejected")
+        readme_install.write_text(
+            "## Install on Windows\n"
+            "Download the self-contained installer.\n"
+            "- After verification, run the installer and launch Presspeech from the Start Menu.\n"
+            "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
+            "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
+            "The installer is currently unsigned; stop if managed policy blocks it.\n"
+            "\n## Install on macOS\n",
+            encoding="utf-8",
+        )
+        if not check_readme_windows_install_decision_order(readme_install):
+            raise SyncError(
+                "self-test: README Windows install instructions before the warnings were accepted"
+            )
+
         mac_summary = Path(tmp) / "macos-privacy-summary.html"
         required_mac_summary = {
             mac_summary: (
@@ -4079,6 +4156,7 @@ def main() -> int:
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
+            errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
             errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_delivery_boundary_guidance())
@@ -4125,6 +4203,7 @@ def main() -> int:
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())
+        errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())
         errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_delivery_boundary_guidance())

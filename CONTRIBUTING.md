@@ -13,10 +13,11 @@ confidential route for reporting a conduct concern.
 For setup help and recovery guides, start with [SUPPORT.md](SUPPORT.md).
 User support and issue discussion are public and require a GitHub account.
 As checked on 23 September 2026, GitHub reports that issue creation is
-restricted for this repository. Check the issue list and confirm the relevant
-route is available before preparing a new report; keep privacy-safe results
-local if no public route accepts them. Do not use another public service as a
-workaround for a blocked form.
+restricted for this repository, and the repository does not expose a public
+Discussions page. Check the issue list for a matching issue and whether its
+thread accepts comments; keep privacy-safe results local if no public route
+accepts them. Do not use another public service as a workaround for a blocked
+form.
 
 Use the cross-platform [bug report
 form](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml)

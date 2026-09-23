@@ -6,14 +6,14 @@ to open or comment on an issue. Before reporting, use the recovery guide that
 matches the problem:
 
 **Feedback availability checked 23 September 2026:** GitHub currently reports
-that issue creation is restricted for this repository. The report forms linked
-below may therefore be unavailable even though existing issues can be read.
-Do not keep retrying a blocked form or include private data elsewhere as a
-workaround. Check the [issue list](https://github.com/rcourtman/presspeech/issues)
-for a matching discussion and whether GitHub permits commenting; if no usable
-public route is available, keep the privacy-safe report draft locally and retry
-after issue creation is restored. Security reports must use the private route
-in [SECURITY.md](SECURITY.md).
+that issue creation is restricted for this repository, and the repository does
+not expose a public Discussions page. Existing issue threads may still accept
+comments. Check the [issue list](https://github.com/rcourtman/presspeech/issues)
+for a matching issue and whether GitHub permits commenting; if no usable thread
+is available, keep the privacy-safe report draft locally and retry after issue
+creation is restored. Do not keep retrying a blocked form or include private
+data elsewhere as a workaround. Security reports must use the private route in
+[SECURITY.md](SECURITY.md).
 
 For a completed target-app compatibility check, the worksheet's **Download
 report draft** saves its six aggregate counts and overall classification with

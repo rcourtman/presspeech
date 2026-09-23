@@ -68,6 +68,37 @@ and the Apple Neural Engine. The default model is multilingual
 
 ## Install on Windows
 
+**Before installing or launching Windows 0.1.12:** its model downloads may send
+Hugging Face usage telemetry and include an already-configured or locally saved
+Hugging Face token. Custom download routing can change where the model
+request—and a token it carries—goes.
+If a Hugging Face token or custom download route is configured on this PC—or
+you are unsure—wait until Windows 0.1.13 is published. The public models need
+no account token; dictation audio and transcripts are not sent in model
+downloads. See the
+[Windows privacy decision and technical details](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
+and the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+
+Already used Windows 0.1.12? If you ran a model download with a token available
+and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
+destination you do not trust, treat the token as disclosed to that destination.
+Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
+Do not include token values in logs or support requests.
+
+The installer is currently unsigned, so SmartScreen may show **Unknown
+publisher**. Choose **More info → Run anyway** only after SHA-256 verification
+and if SmartScreen offers that choice. That option does not apply to a Smart
+App Control block, which has no per-app exception. If Smart App Control or
+managed policy blocks the installer, stop; do not try to circumvent the block.
+
+The installed app is about 4.4 GB. On a fresh PC with NVIDIA CUDA, the
+upcoming Windows build containing this change asks before the default
+multilingual Parakeet model's first download (about 2.5 GB); without usable
+CUDA, Presspeech selects the smaller English-only Whisper base.en CPU model
+(about 141 MiB). Other local models remain selectable in Settings; review the
+[Windows language and hardware split](https://rcourtman.github.io/presspeech/windows.html#language-support)
+before downloading if you need another language.
+
 Download the self-contained installer—Python is not required:
 
 - Open the [current Windows download and verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run).
@@ -85,37 +116,6 @@ Download the self-contained installer—Python is not required:
   [guarded Windows prompt](https://rcourtman.github.io/presspeech/install/agents.md).
   It checks x64 compatibility, pins the current release, verifies the checksum,
   asks before launch, and stops rather than weakening Windows security policy.
-
-The installer is currently unsigned, so SmartScreen may show **Unknown
-publisher**. Choose **More info → Run anyway** only after SHA-256 verification
-and if SmartScreen offers that choice. That option does not apply to a Smart
-App Control block, which has no per-app exception. If Smart App Control or
-managed policy blocks the installer, stop; do not try to circumvent the block.
-The installed app is about
-4.4 GB. On a fresh PC with NVIDIA CUDA, the upcoming Windows build containing
-this change asks before the default multilingual Parakeet model's first
-download (about 2.5 GB); without usable CUDA, Presspeech selects the smaller
-Whisper base.en CPU model (about 141 MiB), which is English-only. Other
-local models remain selectable in Settings; review the [Windows language and hardware
-split](https://rcourtman.github.io/presspeech/windows.html#language-support)
-before downloading if you need another language.
-
-**Before installing or launching Windows 0.1.12:** its model downloads may send
-Hugging Face usage telemetry and include an already-configured or locally saved
-Hugging Face token. Custom download routing can change where the model
-request—and a token it carries—goes.
-If a Hugging Face token or custom download route is configured on this PC—or
-you are unsure—wait until Windows 0.1.13 is published. The public models need
-no account token; dictation audio and transcripts are not sent in model
-downloads. See the
-[Windows privacy decision and technical details](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
-and the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
-
-Already used Windows 0.1.12? If you ran a model download with a token available
-and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
-destination you do not trust, treat the token as disclosed to that destination.
-Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
-Do not include token values in logs or support requests.
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.
