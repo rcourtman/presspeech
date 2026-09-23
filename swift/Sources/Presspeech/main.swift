@@ -263,9 +263,9 @@ enum DictationNotice: Equatable {
         case .copiedToClipboard:
             return "Transcript copied — press ⌘V to paste"
         case .insertionFailed:
-            return "Couldn't paste — use Copy Last Transcript"
+            return "Delivery uncertain — check field before retrying"
         case .insertionFailedWithoutHistory:
-            return "Couldn't paste — try again"
+            return "Delivery uncertain — check field before retrying"
         case .transcriptionFailed:
             return "Transcription failed — try again"
         case .noSpeechDetected:
@@ -282,9 +282,9 @@ enum DictationNotice: Equatable {
         case .copiedToClipboard:
             return "Copied — press ⌘V to paste"
         case .insertionFailed:
-            return "Couldn't paste — copy from menu"
+            return "Check field; copy from menu if needed"
         case .insertionFailedWithoutHistory:
-            return "Couldn't paste — try again"
+            return "Check field before retrying"
         case .transcriptionFailed:
             return "Transcription failed — try again"
         case .noSpeechDetected:
@@ -301,9 +301,9 @@ enum DictationNotice: Equatable {
         case .copiedToClipboard:
             return "Transcript copied. Press Command V to paste."
         case .insertionFailed:
-            return "Couldn't paste. Use Copy Last Transcript in the Presspeech menu."
+            return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu."
         case .insertionFailedWithoutHistory:
-            return "Couldn't paste. Recent Transcripts is off, so try dictating again."
+            return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. Recent Transcripts is off, so there is no Copy Last Transcript action; correct or remove any partial text before dictating again."
         case .transcriptionFailed:
             return "Transcription failed. Try again."
         case .noSpeechDetected:
@@ -9708,11 +9708,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         )
     }
 
-    // Visible + audible, actionable feedback when a press produced no pasted
-    // text. The menu keeps the recovery instruction until the next recording,
-    // while the optional waveform panel briefly shows the same instruction at
-    // the user's point of attention. The sound honours the feedback toggle;
-    // the icon flash always fires for users who hide the waveform or run silent.
+    // Visible + audible, actionable feedback when insertion cannot be
+    // confirmed. Input delivery may be partial, so the notice asks the user to
+    // inspect the destination before copying or retrying. The menu keeps the
+    // recovery instruction until the next recording, while the optional
+    // waveform panel briefly shows the same instruction at the user's point of
+    // attention. The sound honours the feedback toggle; the icon flash always
+    // fires for users who hide the waveform or run silent.
     private func signalDictationFailure(_ notice: DictationNotice) {
         dictationNotice = notice
         statusItem?.button?.toolTip = notice.statusTitle
@@ -21000,8 +21002,14 @@ private enum PresspeechSelfTest {
                    equals: "Transcript copied — press ⌘V to paste",
                    "focus-safe delivery should explain immediate clipboard recovery")
         try expect(DictationNotice.insertionFailed.statusTitle,
-                   equals: "Couldn't paste — use Copy Last Transcript",
-                   "failed insertion should direct the user to in-memory recovery")
+                   equals: "Delivery uncertain — check field before retrying",
+                   "failed insertion should prompt a destination check before retrying")
+        try expect(DictationNotice.insertionFailed.hudTitle,
+                   equals: "Check field; copy from menu if needed",
+                   "the failure HUD should check the destination before suggesting transcript recovery")
+        try expect(DictationNotice.insertionFailedWithoutHistory.hudTitle,
+                   equals: "Check field before retrying",
+                   "the failure HUD without history should check the destination before retrying")
         try expect(DictationNotice.noSpeechDetected.hudTitle,
                    equals: "No speech detected — try again",
                    "empty recognition should not look like a successful dictation")
@@ -21017,6 +21025,12 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.copiedToClipboard.accessibilityValue,
                    equals: "Transcript copied. Press Command V to paste.",
                    "clipboard recovery should be explicit without relying on the Command glyph")
+        try expect(DictationNotice.insertionFailed.accessibilityValue,
+                   equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu.",
+                   "uncertain delivery should prevent duplicate insertion during in-memory recovery")
+        try expect(DictationNotice.insertionFailedWithoutHistory.accessibilityValue,
+                   equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. Recent Transcripts is off, so there is no Copy Last Transcript action; correct or remove any partial text before dictating again.",
+                   "uncertain delivery without history should explain the available recovery boundary")
         try expect(dictationCompletionNotice(processedText: "hello",
                                               insertionOutcome: .copiedWithoutPasting,
                                               keepsRecentTranscripts: true),

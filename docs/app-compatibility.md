@@ -15,7 +15,10 @@ Presspeech binds each recording to the window where it began. It should paste
 only when it can still verify that destination. A focus change normally leaves
 the transcript available for manual paste. On macOS, if Presspeech detects another copy replacing
 the clipboard during delivery, it stops and preserves that newer copy;
-it shows a **Couldn't paste** notice instead of overwriting it with the transcript.
+0.3.8 shows **Couldn't paste**, while builds with revised wording say
+**Delivery uncertain**. A failed input event does not prove that no text reached
+the destination, so inspect the target before retrying or using **Copy Last
+Transcript**.
 
 Target apps expose focus and paste behavior differently. A result from one app
 version, operating-system version, and Presspeech build is therefore evidence
@@ -111,10 +114,14 @@ For each attempt:
 4. If delivery succeeded or Presspeech showed its copied/manual-paste notice,
    paste into the separate local scratch field before copying anything else.
    With restoration off and no intervening clipboard change, this should be
-   the finished transcript. After a **Couldn't paste** notice on macOS, do not
-   assume the clipboard contains it: use **Copy Last Transcript** if offered,
-   or dictate again if Recent Transcripts is off. Record the failed delivery;
-   deliberate recovery afterward does not turn it into a successful attempt.
+   the finished transcript. After a delivery warning on macOS, do not assume
+   the clipboard contains the transcript or that the destination received
+   nothing: inspect the target before retrying. If text is missing, use
+   **Copy Last Transcript** if offered, removing any partial text before
+   pasting the full transcript. If Recent Transcripts is off, there is no
+   in-app copy-recovery entry; correct or remove partial text before dictating
+   again. Record the failed delivery; deliberate recovery afterward does not
+   turn it into a successful attempt.
 5. Record one outcome:
    - **Pasted once:** the target received one copy and no recovery notice
      appeared. Its text matches the scratch copy, including the configured

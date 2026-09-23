@@ -74,8 +74,13 @@ dictating it again.
 Presspeech also uses this fallback when it cannot verify the same destination.
 Some Electron/Chromium-based apps do not consistently expose the focused-window
 information the current Mac app checks, so the notice can appear even if the
-window looks unchanged. If Presspeech instead says **Couldn't paste — use Copy
-Last Transcript**, choose that menu action before trying again.
+window looks unchanged. A failed input event does not prove that no text reached
+the field. If Presspeech says **Couldn't paste — use Copy Last Transcript** in
+0.3.8, or **Delivery uncertain** in builds with the revised notice, inspect the
+destination before trying again. If text is missing, choose **Copy Last
+Transcript** when offered, but remove any partial text before pasting the full
+transcript. When **Recent Transcripts** is off, Presspeech has no in-app
+copy-recovery entry; correct or remove any partial text before dictating again.
 
 ### Previous Clipboard Content Is Pasted
 
