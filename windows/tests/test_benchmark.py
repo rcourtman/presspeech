@@ -355,6 +355,67 @@ class MetricTests(unittest.TestCase):
         self.assertIn("Language: automatic detection", output.getvalue())
         self.assertIn("Detected language trials: pl 1", output.getvalue())
 
+    def test_whisper_pause_override_is_benchmark_only_and_reported(self):
+        manifest = {
+            "model": "base.en",
+            "runs": 1,
+            "samples": [{"id": "pause", "audio": "ignored.wav"}],
+        }
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "int8"
+        transcriber.transcribe.return_value = "pause test"
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber",
+                    return_value=transcriber) as transcriber_type, \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                result = benchmark.run_benchmark(
+                    path, whisper_vad_min_silence_ms=2000)
+
+        transcriber_type.assert_called_once_with(
+            measure_stages=True, whisper_vad_min_silence_ms=2000)
+        expected_policy = dict(benchmark.engine.WHISPER_VAD_POLICY)
+        expected_policy["min_silence_duration_ms"] = 2000
+        self.assertEqual(result["whisper_vad_policy"], expected_policy)
+        self.assertEqual(
+            result["whisper_vad_policy_origin"], "benchmark-only override")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn(
+            "Whisper VAD (benchmark-only override)", output.getvalue())
+
+    def test_invalid_whisper_pause_override_fails_before_model_load(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "base.en", "samples": []}, handle)
+            for invalid in (-1, True, 2.0, "2000"):
+                with self.subTest(invalid=invalid):
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, "non-negative integer"):
+                            benchmark.run_benchmark(
+                                path, whisper_vad_min_silence_ms=invalid)
+                        constructor.assert_not_called()
+
+    def test_whisper_pause_override_rejects_non_whisper_model_before_load(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "parakeet-tdt-0.6b-v3", "samples": []}, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "faster-whisper"):
+                    benchmark.run_benchmark(
+                        path, whisper_vad_min_silence_ms=2000)
+                constructor.assert_not_called()
+
     def test_unscoreable_and_unreviewed_references_do_not_pollute_trial_wer(self):
         manifest = {"runs": 1, "samples": [
             {"id": "punctuation", "audio": "ignored.wav", "reference": "...",
@@ -626,7 +687,7 @@ class MetricTests(unittest.TestCase):
             "Parakeet windows: 2-2 per trial; longest input 59.750s",
             output.getvalue(),
         )
-        self.assertEqual(result["benchmark_version"], 7)
+        self.assertEqual(result["benchmark_version"], 8)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,
@@ -851,6 +912,8 @@ class MetricTests(unittest.TestCase):
         detection = result["samples"][0]["speech_detection"]
         self.assertEqual(
             result["whisper_vad_policy"], benchmark.engine.WHISPER_VAD_POLICY)
+        self.assertEqual(
+            result["whisper_vad_policy_origin"], "Presspeech product default")
         self.assertEqual(detection["all_seconds"], [1.25, 0.0])
         self.assertEqual(detection["measured_trials"], 2)
         self.assertEqual(detection["missing_trials"], 0)

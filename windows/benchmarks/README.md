@@ -3,11 +3,13 @@
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER,
 lowercase-normalized CER, first- and final-word retention, silence false positives, and Whisper VAD speech retention.
-Version 7 reports identify the loader's pinned model repository/revision,
+Version 8 reports identify the loader's pinned model repository/revision,
 retain historical consensus WER alongside all-trial WER and a per-clip
 best/worst error envelope, record the bounded Parakeet window count and longest
 model input for each clip, and add the requested language policy plus detected
-language counts for Whisper. Optional `task_group` labels add separately
+language counts for Whisper; they also identify whether the effective Whisper
+VAD policy is the product default or a benchmark-only pause-threshold override.
+Optional `task_group` labels add separately
 weighted consensus/all-trial WER, inference latency, and silence false-positive
 counts per stratum. Optional `language_group` labels add an independent set of
 language-stratified accuracy, worst-trial envelope, boundary-retention, silence,
@@ -21,6 +23,28 @@ groups. Source metadata records what the loader requests; it does not
 independently attest the local model files.
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
+
+For a local Whisper pause-policy experiment, compare the release's 160 ms
+minimum silence split with explicit alternatives without editing product code:
+
+```bat
+.venv\Scripts\python benchmark.py --manifest benchmarks\manifest.json --model base.en --runs 5 --output benchmarks\whisper-160ms.json
+.venv\Scripts\python benchmark.py --manifest benchmarks\manifest.json --model base.en --runs 5 --whisper-vad-min-silence-ms 2000 --output benchmarks\whisper-2000ms.json
+```
+
+`--whisper-vad-min-silence-ms` changes only the benchmark's Whisper policy;
+the report records the full effective policy and labels it as a benchmark-only
+override. Omitting it records the unchanged Presspeech product default. The
+option is rejected for non-Whisper models. The 160 ms and 2,000 ms cases match
+the distinct defaults in the pinned faster-whisper 1.2.1 transcription path
+and `VadOptions` ([transcribe.py](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/transcribe.py),
+[vad.py](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/vad.py));
+neither default is evidence that one is better for dictation. Use identical
+reviewed audio, references, model, language, hardware, and run count; include
+natural pauses, quiet speech, short commands, and silence controls. Compare WER,
+per-trial errors, VAD-retained duration, rejected-speech trials, boundary-word
+retention, silence false positives, and latency by task group before proposing
+any product-policy change.
 
 ## Candidate watch: multilingual CPU recognition
 

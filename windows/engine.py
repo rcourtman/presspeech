@@ -143,9 +143,22 @@ NEMOTRON_NAME = "nemotron-speech-streaming-en-0.6b"
 MOONSHINE_NAME = "moonshine-streaming-medium"
 
 
-def whisper_vad_parameters():
-    """Return a fresh faster-whisper VAD policy for one transcription."""
-    return dict(WHISPER_VAD_POLICY)
+def whisper_vad_parameters(min_silence_duration_ms=None):
+    """Return a fresh faster-whisper VAD policy for one transcription.
+
+    ``min_silence_duration_ms`` is an opt-in benchmark parameter. Product
+    transcribers omit it and retain the reviewed release policy.
+    """
+    if min_silence_duration_ms is not None:
+        if (isinstance(min_silence_duration_ms, bool)
+                or not isinstance(min_silence_duration_ms, int)
+                or min_silence_duration_ms < 0):
+            raise ValueError(
+                "min_silence_duration_ms must be a non-negative integer")
+    policy = dict(WHISPER_VAD_POLICY)
+    if min_silence_duration_ms is not None:
+        policy["min_silence_duration_ms"] = min_silence_duration_ms
+    return policy
 
 
 # Stable feature shapes avoid a roughly one-second CUDA/cuDNN setup cost for
@@ -405,7 +418,8 @@ def _parakeet_max_new_tokens(model, input_features, torch_module):
 
 
 class Transcriber:
-    def __init__(self, precision="auto", measure_stages=False):
+    def __init__(self, precision="auto", measure_stages=False,
+                 whisper_vad_min_silence_ms=None):
         self.lock = threading.Lock()
         self.inference_lock = threading.Lock()
         self.precision = precision
@@ -414,6 +428,10 @@ class Transcriber:
         # prepare/transfer/generate/decode values describe completed work
         # instead of submission time.
         self.measure_stages = measure_stages
+        # This is only overridden by the local benchmark. App construction
+        # keeps the reviewed product policy (160 ms) unchanged.
+        self._whisper_vad_policy = whisper_vad_parameters(
+            whisper_vad_min_silence_ms)
         self.model = None
         self.processor = None
         self.backend = None
@@ -612,9 +630,10 @@ class Transcriber:
                 whisper_options = {}
                 if _filter_silence:
                     # faster-whisper currently mutates some caller-provided
-                    # VAD dictionaries while normalising options. Give every
-                    # request its own copy of the reviewed product policy.
-                    whisper_options["vad_parameters"] = whisper_vad_parameters()
+                    # VAD dictionaries while normalising options. Give each
+                    # request an isolated copy of its product or test policy.
+                    whisper_options["vad_parameters"] = dict(
+                        self._whisper_vad_policy)
                 segments, info = model.transcribe(
                     audio, language=language, beam_size=1,
                     vad_filter=_filter_silence,

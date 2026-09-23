@@ -548,6 +548,44 @@ class ParakeetConfigurationTests(unittest.TestCase):
         first["speech_pad_ms"] = 0
         self.assertEqual(second["speech_pad_ms"], 400)
 
+    def test_whisper_vad_pause_override_is_validated_and_isolated(self):
+        expected = dict(engine.WHISPER_VAD_POLICY)
+        expected["min_silence_duration_ms"] = 2000
+        self.assertEqual(engine.whisper_vad_parameters(2000), expected)
+        self.assertEqual(
+            engine.Transcriber()._whisper_vad_policy,
+            engine.WHISPER_VAD_POLICY,
+        )
+        for invalid in (-1, True, 2000.0, "2000"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "non-negative integer"):
+                    engine.whisper_vad_parameters(invalid)
+
+    def test_whisper_vad_override_is_fresh_for_each_transcription(self):
+        observed_policies = []
+
+        def transcribe(_audio, **options):
+            observed_policies.append(dict(options["vad_parameters"]))
+            options["vad_parameters"]["min_silence_duration_ms"] = 7
+            return (iter([types.SimpleNamespace(text=" speech")]),
+                    types.SimpleNamespace(duration_after_vad=1.0))
+
+        model = mock.Mock()
+        model.transcribe.side_effect = transcribe
+        transcriber = engine.Transcriber(whisper_vad_min_silence_ms=2000)
+        transcriber.model = model
+        transcriber.backend = "whisper"
+
+        transcriber.transcribe(mock.sentinel.audio)
+        transcriber.transcribe(mock.sentinel.audio)
+
+        self.assertEqual(len(observed_policies), 2)
+        self.assertTrue(all(
+            policy["min_silence_duration_ms"] == 2000
+            and policy["threshold"] == 0.5
+            for policy in observed_policies))
+        self.assertEqual(engine.WHISPER_VAD_POLICY["min_silence_duration_ms"], 160)
+
     def test_whisper_does_not_decode_when_vad_finds_no_speech(self):
         segments = mock.MagicMock()
         model = mock.Mock()

@@ -446,7 +446,7 @@ def _benchmark_language(manifest, override):
 
 
 def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
-                  language=None):
+                  language=None, whisper_vad_min_silence_ms=None):
     manifest_path = os.path.abspath(manifest_path)
     manifest_dir = os.path.dirname(manifest_path)
     with open(manifest_path, "r", encoding="utf-8") as handle:
@@ -470,10 +470,22 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     # Validate and freeze report provenance before loading any model. This
     # describes the requested pinned source, not a fresh integrity attestation.
     snapshot = engine.model_snapshot(model_name)
+    if (whisper_vad_min_silence_ms is not None
+            and model_name not in engine.WHISPER_MODELS):
+        raise ValueError(
+            "Whisper VAD experiments require a faster-whisper model")
+    whisper_vad_policy = (
+        engine.whisper_vad_parameters(whisper_vad_min_silence_ms)
+        if model_name in engine.WHISPER_MODELS else None
+    )
 
     # Stage barriers are benchmark-only: they make CUDA timings factual while
     # keeping synchronization overhead out of interactive dictation.
-    transcriber = engine.Transcriber(measure_stages=True)
+    transcriber_options = {"measure_stages": True}
+    if whisper_vad_min_silence_ms is not None:
+        transcriber_options["whisper_vad_min_silence_ms"] = (
+            whisper_vad_min_silence_ms)
+    transcriber = engine.Transcriber(**transcriber_options)
     _sync_cuda()
     started = time.perf_counter()
     transcriber.load(model_name)
@@ -616,7 +628,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 7,
+        "benchmark_version": 8,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
         "model_snapshot": snapshot,
@@ -625,10 +637,12 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         "requested_language": requested_language,
         # Keep reports interpretable across faster-whisper updates. The
         # boundary policy can affect both WER and silence false positives.
-        "whisper_vad_policy": (
-            engine.whisper_vad_parameters()
-            if model_name in engine.WHISPER_MODELS else None
-        ),
+        "whisper_vad_policy": whisper_vad_policy,
+        "whisper_vad_policy_origin": (
+            "benchmark-only override"
+            if whisper_vad_min_silence_ms is not None
+            else "Presspeech product default"
+        ) if whisper_vad_policy is not None else None,
         "precision": precision,
         "model_dtype": model_dtype,
         "cuda_allocated_mib": cuda_allocated_mib,
@@ -703,9 +717,12 @@ def _print_summary(result):
           (snapshot["repository"], snapshot["revision"]))
     vad_policy = result.get("whisper_vad_policy")
     if vad_policy is not None:
+        origin = result.get("whisper_vad_policy_origin")
+        origin = " (%s)" % origin if origin else ""
         print(
-            "Whisper VAD: threshold %.2f / negative %.2f / speech >= %d ms / "
+            "Whisper VAD%s: threshold %.2f / negative %.2f / speech >= %d ms / "
             "silence split %d ms / edge padding %d ms" % (
+                origin,
                 vad_policy["threshold"],
                 vad_policy["neg_threshold"],
                 vad_policy["min_speech_duration_ms"],
@@ -871,11 +888,16 @@ def main():
     parser.add_argument(
         "--language",
         help="lowercase language code, or 'auto' for multilingual Whisper detection")
+    parser.add_argument(
+        "--whisper-vad-min-silence-ms", type=int,
+        help=("benchmark-only Whisper VAD pause threshold override in "
+              "milliseconds; does not change the app policy"))
     parser.add_argument("--output", help="JSON output path")
     args = parser.parse_args()
     result = run_benchmark(
         args.manifest, model_name=args.model, runs=args.runs,
-        precision=args.precision, language=args.language)
+        precision=args.precision, language=args.language,
+        whisper_vad_min_silence_ms=args.whisper_vad_min_silence_ms)
     _print_summary(result)
     if args.output:
         output_path = os.path.abspath(args.output)
