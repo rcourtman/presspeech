@@ -177,10 +177,10 @@ press-to-toggle. This is a single anecdotal exchange, and the commenter
 disclosed working on a competing dictation product, so it is a weak signal—not
 a Presspeech request or prevalence measure. Presspeech already supports
 press-to-toggle on both platforms, with recording status and cancellation
-controls; the proportionate response is to make the existing option easier to
-discover in first-use copy, not add another trigger mode. Revisit only if
-Presspeech-specific reports show that the current choice or its controls fall
-short.
+controls. The homepage and first-dictation guide already surface the option in
+first-use copy, so that proportionate discovery step is in place; do not add
+another trigger mode based on this signal. Revisit only if Presspeech-specific
+reports show that the current choice or its controls fall short.
 
 Feedback intake is currently a measurement limitation: on 23 September,
 GitHub's [Presspeech issue list](https://github.com/rcourtman/presspeech/issues)

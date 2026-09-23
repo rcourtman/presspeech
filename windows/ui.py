@@ -2096,14 +2096,15 @@ class DeliveryRecoveryWindow:
 
     def _refresh_waiting_state(self, status=None):
         waiting = bool(self.app.has_undelivered_dictation())
-        if not waiting:
-            # Windows keyboard guidance warns against disabling the control
-            # that owns focus. Move to the remaining safe command first; this
-            # also gives Narrator a stable destination for the status update.
-            self.leave_button.focus_set()
         state = "normal" if waiting else "disabled"
-        self.copy_button.config(state=state)
-        self.discard_button.config(state=state)
+        # A tray action can resolve the last item while this window is open.
+        # Move focus only when disabling the focused action; otherwise a
+        # background status refresh would unexpectedly steal focus from the
+        # user's current control or another Presspeech window.
+        _set_control_state(
+            self.root, self.copy_button, state, self.leave_button)
+        _set_control_state(
+            self.root, self.discard_button, state, self.leave_button)
         if status is None:
             status = (
                 "A dictation is waiting. Check its original field before copying."

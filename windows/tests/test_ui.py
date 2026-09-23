@@ -1415,8 +1415,9 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
         self.assertIn("still kept in memory", set_text.call_args.args[1])
         window.leave_button.focus_set.assert_not_called()
 
-    def test_verified_copy_disables_destructive_actions_and_restores_focus(self):
+    def test_verified_copy_disables_actions_and_moves_focus_before_disabling_it(self):
         window = self.make_window()
+        window.root.focus_get.return_value = window.copy_button
         window.app.copy_undelivered_dictation.return_value = True
         window.app.has_undelivered_dictation.return_value = False
         order = []
@@ -1434,6 +1435,36 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
         self.assertIn("You can record again", set_text.call_args.args[1])
         window.leave_button.focus_set.assert_called_once_with()
         self.assertEqual(order[0], "focus")
+
+    def test_external_resolution_does_not_steal_focus_from_another_control(self):
+        window = self.make_window()
+        window.app.has_undelivered_dictation.return_value = False
+        another_control = object()
+        window.root.focus_get.return_value = another_control
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._refresh_waiting_state()
+
+        window.leave_button.focus_set.assert_not_called()
+        window.copy_button.config.assert_called_once_with(state="disabled")
+        window.discard_button.config.assert_called_once_with(state="disabled")
+
+    def test_disabling_focused_discard_moves_focus_before_it_is_disabled(self):
+        window = self.make_window()
+        window.app.has_undelivered_dictation.return_value = False
+        window.root.focus_get.return_value = window.discard_button
+        order = []
+        window.leave_button.focus_set.side_effect = lambda: order.append("focus")
+        window.copy_button.config.side_effect = (
+            lambda **_options: order.append("disable-copy"))
+        window.discard_button.config.side_effect = (
+            lambda **_options: order.append("disable-discard"))
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._refresh_waiting_state()
+
+        window.leave_button.focus_set.assert_called_once_with()
+        self.assertEqual(order, ["disable-copy", "focus", "disable-discard"])
 
     def test_discard_never_requests_a_copy_and_reports_completion(self):
         window = self.make_window()
