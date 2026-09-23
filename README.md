@@ -375,8 +375,12 @@ Presspeech is local-first:
   token in model-download requests and honors inherited `HF_ENDPOINT` and
   `HUGGINGFACE_CO_STAGING` settings; a configured endpoint may therefore
   receive that token. An inherited `HF_HUB_USER_AGENT_ORIGIN` is also added to
-  request metadata. Upcoming 0.1.13 fixes the endpoint and removes these
-  inherited values. See the version-scoped [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+  request metadata. Its pinned Hub 1.29.0 client may also fetch
+  `/api/agent-harnesses` when its local registry cache is missing or stale and
+  may add an `agent/<id>` label based on inherited agent-related environment
+  markers. Upcoming 0.1.13 disables Hub telemetry before imports, checks for
+  agent attribution, fixes the endpoint, and removes inherited values. See the
+  version-scoped [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
@@ -394,7 +398,7 @@ Presspeech is local-first:
 
 Network calls made by Presspeech are limited to:
 
-- speech model downloads normally from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 asks new installs before the first download and removes inherited Hugging Face account tokens from its own download process. Published Windows 0.1.12 honors inherited `HF_ENDPOINT`/`HUGGINGFACE_CO_STAGING` routing and `HF_HUB_USER_AGENT_ORIGIN` metadata, and may send a configured or cached Hugging Face token to the configured endpoint. Upcoming Windows 0.1.13 fixes those settings and disables implicit authentication,
+- speech model downloads normally from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 asks new installs before the first download and removes inherited Hugging Face account tokens from its own download process. Published Windows 0.1.12 honors inherited `HF_ENDPOINT`/`HUGGINGFACE_CO_STAGING` routing and `HF_HUB_USER_AGENT_ORIGIN` metadata, and may send a configured or cached Hugging Face token to the configured endpoint. Its pinned Hub client may also request `/api/agent-harnesses` when its registry cache is missing or stale and add an `agent/<id>` label to model-request metadata. Upcoming Windows 0.1.13 fixes those settings, disables Hub telemetry, checks for agent attribution, and disables implicit authentication,
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, plus the compatibility
   guide link in macOS 0.3.8 / upcoming Windows 0.1.13 or builds containing that

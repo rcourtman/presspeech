@@ -12,7 +12,13 @@ require an account token. The 0.1.12 loader also honors inherited
 destination, and may add `HF_HUB_USER_AGENT_ORIGIN` to request metadata. A
 locally available token may therefore accompany a request to a configured
 endpoint. Upcoming Windows 0.1.13 fixes those settings and adds runtime-verified
-telemetry and authentication opt-outs.
+telemetry and authentication opt-outs. The released 0.1.12 dependency also pins
+`huggingface-hub` 1.29.0, whose telemetry-enabled header builder may request
+`/api/agent-harnesses` when its local registry cache is missing or stale and
+may attach an `agent/<id>` label based on inherited agent-related environment
+markers. The 0.1.13 candidate disables Hub telemetry before imports and checks
+that the rendered model-request headers contain no agent label; do not
+attribute those controls to 0.1.12.
 Finished text does enter the
 shared system clipboard for paste and recovery. macOS 0.3.8 can make
 those entries available through Universal Clipboard; builds containing the

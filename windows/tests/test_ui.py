@@ -435,6 +435,11 @@ class AccessibleWindowTests(unittest.TestCase):
 
         self.assertIn("pinned model files from Hugging", body)
         self.assertIn("Stay online", body)
+        self.assertIn("English-only ", body)
+        self.assertIn("Whisper base.en on CPU (~141 MiB)", body)
+        self.assertIn("multilingual CPU model", body)
+        self.assertIn("Multilingual Parakeet and Whisper ", body)
+        self.assertIn("supported NVIDIA GPU", body)
         self.assertLess(
             body.index("pinned model files from Hugging"),
             body.index('text="Microphone"'),

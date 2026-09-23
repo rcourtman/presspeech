@@ -7,8 +7,12 @@ runs on your machine; Presspeech has no account or cloud transcription service.
 The published 0.1.12 build leaves Hugging Face Hub/Transformers default usage
 telemetry enabled during model downloads. These libraries may send usage data
 to Hugging Face, and model-request metadata includes a random per-process
-session ID. Model downloads do not send dictation audio or transcripts; the
-exact telemetry fields are not independently itemised. Its pinned `hf-xet` 1.6.0
+session ID. Its pinned `huggingface-hub` 1.29.0 client may also make a
+best-effort request to `/api/agent-harnesses` if its local registry cache is
+missing or stale, then may add an `agent/<id>` label to model
+request metadata based on inherited agent-related environment markers.
+Model downloads do not send dictation audio or transcripts; the exact telemetry
+fields are not independently itemised. Its pinned `hf-xet` 1.6.0
 predates the later, separate Xet transfer-telemetry implementation. The 0.1.12
 loader also leaves implicit authentication enabled: an available `HF_TOKEN`,
 `HUGGING_FACE_HUB_TOKEN`, or token in the local Hugging Face cache may accompany
@@ -84,9 +88,10 @@ applies the following policy before any model library imports: it fixes download
 `https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
 disables the hf-xet transfer client, disables implicit authentication and
 inherited endpoint/staging/User-Agent-origin settings, and prevents
-Transformers from adding a random per-launch session identifier. The pinned
-`hf-xet` 1.6.0 build has no verified telemetry opt-out, so Presspeech sets
-`HF_HUB_DISABLE_XET=1` before imports and checks the bundled Hub's cached
+Transformers from adding a random per-launch session identifier. The packaged
+runtime also verifies that rendered Hub headers contain no agent-attribution
+label. The pinned `hf-xet` 1.6.0 build has no verified telemetry opt-out, so
+Presspeech sets `HF_HUB_DISABLE_XET=1` before imports and checks the bundled Hub's cached
 setting and effective Xet availability in the packaged runtime. Hub falls back
 to regular HTTP downloads; Hugging Face still observes the model request. Every model
 call also declines account tokens and remote model code; Transformers weights

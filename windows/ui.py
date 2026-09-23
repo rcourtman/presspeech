@@ -942,7 +942,11 @@ class SetupWindow:
                   "Presspeech fetches its pinned model files from Hugging "
                   "Face. Setup asks before fetching missing Parakeet files; "
                   "the CPU default prepares automatically. Stay online while "
-                  "it prepares; speech is processed on this PC."),
+                  "it prepares; speech is processed on this PC. Without "
+                  "usable NVIDIA CUDA, a fresh install uses English-only "
+                  "Whisper base.en on CPU (~141 MiB); there is currently no "
+                  "multilingual CPU model. Multilingual Parakeet and Whisper "
+                  "turbo require a supported NVIDIA GPU."),
             justify="left",
             wraplength=560,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 8))

@@ -326,6 +326,8 @@ CLIPBOARD_SERVICE_GUIDANCE = {
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
     ROOT / "SECURITY.md": (
         "published Windows 0.1.12 prerelease",
+        "agent-harnesses",
+        "agent-related environment markers",
         "HF_ENDPOINT",
         "HUGGINGFACE_CO_STAGING",
         "HF_HUB_USER_AGENT_ORIGIN",
@@ -334,6 +336,8 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
     ),
     DOCS / "privacy.html": (
         "published Windows 0.1.12",
+        "agent-harnesses",
+        "agent-related environment markers",
         "HF_TOKEN",
         "local Hugging Face cache",
         "HF_ENDPOINT",
@@ -346,6 +350,8 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
     ),
     DOCS / "privacy" / "network-calls.json": (
         "Published Windows 0.1.12",
+        "agent-harnesses",
+        "agent-related environment markers",
         "HF_TOKEN",
         "local Hugging Face cache",
         "HF_ENDPOINT",
@@ -358,6 +364,8 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
     ),
     DOCS / "windows.html": (
         "Privacy for published Windows 0.1.12",
+        "agent-harnesses",
+        "agent-related environment markers",
         "HF_TOKEN",
         "local Hugging Face cache",
         "HF_ENDPOINT",
@@ -369,6 +377,8 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
     ),
     ROOT / "windows" / "README.md": (
         "0.1.12 loader also leaves implicit authentication enabled",
+        "agent-harnesses",
+        "agent-related environment markers",
         "HF_TOKEN",
         "local Hugging Face cache",
         "HF_ENDPOINT",
@@ -379,6 +389,12 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "Upcoming 0.1.13",
         "disables implicit authentication",
     ),
+}
+
+WINDOWS_AGENT_DISCLOSURE = {
+    ROOT / "README.md": ("agent-harnesses", "agent-related environment markers"),
+    DOCS / "llms.txt": ("agent-harnesses", "agent-related environment markers"),
+    DOCS / "llms-full.txt": ("agent-harnesses", "agent-related environment markers"),
 }
 
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
@@ -1365,7 +1381,9 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     privacy_line = (
         "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
         "during Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
-        "Hugging Face, model-request metadata includes a random per-process session ID, and an available "
+        "Hugging Face, model-request metadata includes a random per-process session ID, and pinned Hub "
+        "1.29.0 may request /api/agent-harnesses and add an agent/<id> label based on inherited "
+        "agent-related environment markers. An available "
         "Hugging Face token may accompany a model request. Inherited HF_ENDPOINT and "
         "HUGGINGFACE_CO_STAGING settings can change its destination, and HF_HUB_USER_AGENT_ORIGIN "
         "is included in request metadata if set; the token may accompany a request to that configured "
@@ -1442,6 +1460,26 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
 def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     del metadata
     text = read_text(path)
+    # Keep the checked-in assistant reference's published-build disclosure when
+    # refreshing other generated facts; this copy is not a release claim for 0.1.13.
+    privacy_marker = "model-request metadata includes a random per-process session ID. "
+    privacy_paragraph = text.partition("## Privacy")[2].lstrip().partition("\n\n")[0]
+    if "agent-harnesses" not in privacy_paragraph:
+        text = text.replace(
+            privacy_marker,
+            privacy_marker + "The pinned Hub 1.29.0 client may request /api/agent-harnesses when its local registry cache is missing or stale and may add an agent/<id> label to model-request metadata based on inherited agent-related environment markers. Upcoming Windows 0.1.13 disables Hub telemetry before imports and checks that rendered headers contain no agent label; these controls are not in published 0.1.12. ",
+            1,
+        )
+    calls_marker = "1. Speech model downloads normally"
+    before_calls, marker, calls_text = text.partition(calls_marker)
+    if marker and "agent-harnesses" not in calls_text:
+        telemetry_marker = "the exact telemetry fields are not independently itemised."
+        calls_text = calls_text.replace(
+            telemetry_marker,
+            telemetry_marker + " The pinned Hub 1.29.0 client may request /api/agent-harnesses when its local registry cache is missing or stale and may add an agent/<id> label to model-request User-Agent metadata based on inherited agent-related environment markers. Upcoming Windows 0.1.13 disables Hub telemetry before imports and checks that rendered headers contain no agent label; these controls are not in published 0.1.12.",
+            1,
+        )
+        text = before_calls + marker + calls_text
     old_privacy_summary = (
         "Presspeech has no analytics, event tracking, crash reporter, account system, "
         "transcript sync, or cloud transcription endpoint. Audio is captured while "
@@ -2998,6 +3036,20 @@ def run_self_test() -> None:
         if check_windows_model_download_privacy_guidance(required_token_guidance):
             raise SyncError("self-test: complete version-scoped account-token disclosure was rejected")
 
+        agent_guidance = Path(tmp) / "agent-disclosure.md"
+        required_agent_guidance = {
+            agent_guidance: ("agent-harnesses", "agent-related environment markers"),
+        }
+        agent_guidance.write_text("Windows 0.1.12 uses Hub 1.29.0.\n", encoding="utf-8")
+        if not check_windows_model_download_privacy_guidance(required_agent_guidance):
+            raise SyncError("self-test: missing agent disclosure was not flagged")
+        agent_guidance.write_text(
+            "Windows 0.1.12 may fetch agent-harnesses and add an agent label "
+            "from agent-related environment markers.\n", encoding="utf-8"
+        )
+        if check_windows_model_download_privacy_guidance(required_agent_guidance):
+            raise SyncError("self-test: complete agent disclosure was rejected")
+
         summary_guidance = Path(tmp) / "windows-privacy-summary.html"
         required_summary_guidance = {
             summary_guidance: (
@@ -3281,6 +3333,7 @@ def main() -> int:
             errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_windows_model_download_privacy_guidance())
+            errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
@@ -3321,6 +3374,7 @@ def main() -> int:
         errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_windows_model_download_privacy_guidance())
+        errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())
