@@ -969,20 +969,23 @@ class SetupWindow:
         microphone_check_label.grid(row=6, column=0, sticky="w", pady=(5, 3))
         microphone_check = ttk.Frame(frame)
         microphone_check.grid(row=6, column=1, sticky="ew", padx=(12, 0), pady=(5, 3))
-        self.microphone_status = ttk.Label(microphone_check, text="Waiting to check…")
+        self.microphone_status = ttk.Label(microphone_check, text="Not checked")
         self.microphone_status.pack(side="left")
         self.check_microphone_button = ttk.Button(
-            microphone_check, text="Check Again", command=self._check_microphone)
+            microphone_check,
+            text="Check Microphone",
+            command=self._check_microphone,
+        )
         self.check_microphone_button.pack(side="right", padx=(12, 0))
 
         ttk.Label(
             frame,
-            text=("Setup briefly opens the selected microphone automatically "
-                  "to check for an input level; Windows may show its "
-                  "microphone-use indicator. Audio samples are used only to "
-                  "measure input level in memory, then discarded — they are "
-                  "not saved, sent, or transcribed. "
-                  "Speak while the check runs. If it fails, enable Microphone "
+            text=("The local microphone check opens the selected input only "
+                  "when you choose Check Microphone; Windows may show its microphone-use "
+                  "indicator. Audio samples are used only to measure input "
+                  "level in memory, then discarded — they are not saved, "
+                  "sent, or transcribed. Speak while the check runs. If it "
+                  "fails, enable Microphone "
                   "access, Let apps access your microphone, and Let desktop "
                   "apps access your microphone. If Windows says these settings "
                   "are managed by your organization, contact your administrator; "
@@ -1150,7 +1153,6 @@ class SetupWindow:
         self.scrollable_body.fit_to_screen()
         root.after_idle(self.device.focus_set)
         root.after(100, self._poll_model)
-        root.after(150, self._check_microphone)
 
     def _poll_model(self):
         if self.root is None:
@@ -1216,14 +1218,12 @@ class SetupWindow:
         settings = self.app.settings
         if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
             # Try Dictation uses the app's live capture configuration. Apply and
-            # persist the checked device now so the test cannot silently record
-            # from the previous automatic input and setup can be resumed later.
+            # persist the selected device now so setup can be resumed later.
             settings["input_device"] = selected
             self.app.input_device = None
             self.app._cached_input_selector = None
             cfg.save(settings)
-        _set_accessible_text(self.microphone_status, "Waiting to check…")
-        self.root.after(0, self._check_microphone)
+            _set_accessible_text(self.microphone_status, "Not checked")
 
     def _dictation_instructions(self):
         hotkey = self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]).title()
@@ -1330,13 +1330,17 @@ class SetupWindow:
         current = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])
         if selected != current:
-            _set_accessible_text(self.microphone_status, "Waiting to check…")
-            self.root.after(0, self._check_microphone)
+            # The user selected a different device while the previous,
+            # explicitly requested check was running. Do not open the new
+            # device until they choose Check Microphone for it.
+            _set_accessible_text(self.microphone_status, "Not checked")
             return
         if result == "level":
             text = "Ready — input level detected"
         elif result == "silent":
-            text = "Connected, but no input level detected — unmute and check again"
+            text = (
+                "Connected, but no input level detected — unmute and "
+                "choose Check Microphone again")
         else:
             text = "Needs attention — microphone could not be opened"
         _set_accessible_text(self.microphone_status, text)

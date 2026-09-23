@@ -69,6 +69,7 @@ class DocumentParser(HTMLParser):
         self.tabindex_issues: list[str] = []
         self.video_descriptions: list[str | None] = []
         self.hidden_ids: set[str] = set()
+        self.worksheet_status_roles: list[str | None] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
@@ -101,6 +102,8 @@ class DocumentParser(HTMLParser):
             self.heading_levels.append(int(tag[1]))
         if "id" in attributes and attributes["id"] is not None:
             self.ids.append(attributes["id"])
+            if attributes["id"] == "worksheet-status":
+                self.worksheet_status_roles.append(attributes.get("role"))
             if (
                 "hidden" in attributes
                 or "inert" in attributes
@@ -282,6 +285,11 @@ def document_errors(path: Path, docs: Path) -> list[str]:
     parser.feed(path.read_text(encoding="utf-8"))
     parser.close()
     errors: list[str] = []
+    if path.relative_to(docs) == Path("app-compatibility.html"):
+        if parser.worksheet_status_roles != ["status"]:
+            errors.append(
+                "compatibility worksheet status must exist once with role='status'"
+            )
 
     if parser.html_lang != "en":
         errors.append(f"html lang must be 'en', found {parser.html_lang!r}")
@@ -739,12 +747,25 @@ def run_self_test() -> None:
             "<script src='site-navigation.js' defer></script></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
             + primary_nav(compatibility, current_href="troubleshooting.html")
-            + "<main id='main-content'><h1>Compatibility</h1></main>"
+            + "<main id='main-content'><h1>Compatibility</h1>"
+            "<p id='worksheet-status' role='status'>Results update here.</p></main>"
             "</body></html>",
             encoding="utf-8",
         )
         if document_errors(compatibility, docs):
             raise RuntimeError("self-test: Help subsection navigation was rejected")
+        compatibility_markup = compatibility.read_text(encoding="utf-8")
+        for markup in (
+            compatibility_markup.replace(" role='status'", ""),
+            compatibility_markup.replace(" id='worksheet-status' role='status'", ""),
+        ):
+            compatibility.write_text(markup, encoding="utf-8")
+            if not any(
+                "compatibility worksheet status" in error
+                for error in document_errors(compatibility, docs)
+            ):
+                raise RuntimeError("self-test: inaccessible worksheet status was accepted")
+        compatibility.write_text(compatibility_markup, encoding="utf-8")
 
         index.write_text(
             index.read_text(encoding="utf-8").replace(" aria-current='page'", ""),

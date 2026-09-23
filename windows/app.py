@@ -2092,7 +2092,7 @@ class PresspeechApp:
         try:
             # Keep one discovery lease across lookup, reset, and retry. A
             # reconnect can leave PortAudio's process-wide device table stale,
-            # and Setup's Check Again must recover it just as recording does.
+            # and Setup's Check Microphone must recover it just as recording does.
             with AUDIO_BACKEND.operation() as audio_lease:
                 try:
                     chosen = self._find_input_device(selected, probe=probe)

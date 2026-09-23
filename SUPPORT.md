@@ -1,7 +1,8 @@
 # Support
 
-User support happens in public on GitHub. You need a GitHub account to
-open or comment on an issue. Before posting, use the recovery guide that
+Setup and recovery guidance is available below. When GitHub permits it, user
+support and issue discussion happen publicly there; you need a GitHub account
+to open or comment on an issue. Before reporting, use the recovery guide that
 matches the problem:
 
 **Feedback availability checked 23 September 2026:** GitHub currently reports
@@ -17,6 +18,28 @@ in [SECURITY.md](SECURITY.md).
 For a completed target-app compatibility check, the worksheet's **Download
 report block** saves only its six aggregate counts and overall classification
 as a plain-text file. It does not include test phrases or transcripts.
+
+While issue creation is restricted, you can prepare an unsent private draft
+instead of losing the details. Record only what will help reproduce or measure
+the problem:
+
+```text
+Presspeech version / operating-system version:
+Affected stage (setup, recording, recognition, delivery, or controls):
+Expected result / observed result:
+Smallest safe reproduction steps, or how often it occurs:
+Generic context if relevant (target-app class/version, language, or hardware):
+Recovery or workaround tried; did it succeed?
+Attempts / failures, when countable:
+```
+
+For a text-delivery issue, use harmless test text and note whether focus changed,
+whether Presspeech showed a recovery notice, and whether manual paste recovered
+the complete test phrase; never save or share the phrase itself. Keep copied
+diagnostics private until you review them, and do not attach raw logs, audio,
+transcripts, or screenshots with user data. This draft is not sent or monitored;
+submit it only if a suitable public route becomes available. For compatibility
+checks, use the worksheet's counts-only download above.
 
 - **First dictation or setup:** follow [Getting started](https://rcourtman.github.io/presspeech/getting-started.html).
 - **macOS install or permissions:** check the [macOS install guide](https://rcourtman.github.io/presspeech/install.html), [FAQ](https://rcourtman.github.io/presspeech/faq.html), and [troubleshooting guide](https://rcourtman.github.io/presspeech/troubleshooting.html).

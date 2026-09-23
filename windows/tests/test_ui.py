@@ -481,16 +481,25 @@ class AccessibleWindowTests(unittest.TestCase):
                 "apps access your microphone"):
             self.assertIn(switch, body)
 
-    def test_setup_discloses_automatic_microphone_probe_handling(self):
+    def test_setup_makes_microphone_probe_explicit_and_discloses_handling(self):
         body = inspect.getsource(ui.SetupWindow._build)
 
         for disclosure in (
-                "opens the selected microphone automatically",
-                "microphone-use indicator",
-                "measure input level in memory",
+                "check opens the selected input only ",
+                "when you choose Check Microphone",
+                "Check Microphone",
+                "microphone-use ",
+                "indicator. Audio samples are used only",
+                "measure input ",
+                "level in memory, then discarded",
                 "discarded",
-                "not saved, sent, or transcribed"):
+                "not saved, ",
+                "sent, or transcribed"):
             self.assertIn(disclosure, body)
+        self.assertIn('text="Not checked"', body)
+        self.assertIn('text="Check Microphone"', body)
+        self.assertNotIn("root.after(150, self._check_microphone)", body)
+        self.assertNotIn("root.after(0, self._check_microphone)", body)
         self.assertIn("wraplength=560", body)
 
     def test_setup_escalates_managed_microphone_privacy_to_administrator(self):
@@ -1017,8 +1026,8 @@ class SetupWindowTests(unittest.TestCase):
         self.assertIsNone(window.app._cached_input_selector)
         save.assert_called_once_with(window.app.settings)
         set_text.assert_called_once_with(
-            window.microphone_status, "Waiting to check…")
-        window.root.after.assert_called_once_with(0, window._check_microphone)
+            window.microphone_status, "Not checked")
+        window.root.after.assert_not_called()
 
     def test_deferred_setup_keeps_choices_and_applies_autostart(self):
         window = self.make_window("loading")
@@ -1110,7 +1119,8 @@ class SetupWindowTests(unittest.TestCase):
 
         set_text.assert_called_once_with(
             window.microphone_status,
-            "Connected, but no input level detected — unmute and check again",
+            "Connected, but no input level detected — unmute and "
+            "choose Check Microphone again",
         )
 
     def test_failed_microphone_result_points_to_recovery_controls(self):
@@ -1127,6 +1137,24 @@ class SetupWindowTests(unittest.TestCase):
             window.microphone_status,
             "Needs attention — microphone could not be opened",
         )
+
+    def test_selection_change_during_check_does_not_open_new_device(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.device_values = {"Desk microphone": "desk"}
+        window.device.get.return_value = "Desk microphone"
+        window.microphone_events.put((
+            "auto", "level", [("Desk microphone", "desk")]))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        self.assertFalse(window.microphone_checking)
+        window.check_microphone_button.config.assert_called_once_with(
+            state="normal")
+        set_text.assert_called_once_with(
+            window.microphone_status, "Not checked")
+        window.root.after.assert_not_called()
 
     def test_reconnected_microphone_refreshes_picker_without_losing_selection(self):
         window = self.make_window("ready")

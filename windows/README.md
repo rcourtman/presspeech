@@ -119,19 +119,25 @@ model unload and is removed after failed loading or normal unload. A process
 crash can leave that private temporary folder behind; no automatic broad cache
 cleanup is performed.
 
-The first-run readiness window shows model loading, microphone selection and a
-live microphone check, a selectable dictation hotkey, hold-to-talk or
-press-to-toggle style, global-listener status, and Start with Windows in one
-place. Start with Windows is off for a new profile; select it if you want
+The upcoming 0.1.13 first-run readiness window shows model loading, microphone
+selection and an on-demand microphone check, a selectable dictation hotkey,
+hold-to-talk or press-to-toggle style, global-listener status, and Start with
+Windows in one place. Published 0.1.12 checks the selected microphone
+automatically during setup and when its selection changes. In 0.1.13, Setup
+leaves the selected device closed until you choose **Check Microphone**;
+changing the selected input also does not open it. Start with Windows is off
+for a new profile; select it if you want
 Presspeech ready after sign-in. Existing saved choices are retained. The hotkey
-and style apply immediately and remain selected if setup is deferred. Speak
-while the check runs. It briefly opens the selected input,
+and style apply immediately and remain selected if setup is deferred. When you
+choose **Check Microphone**, the check briefly opens the selected input,
 discards its samples in memory, and distinguishes an input level from a
 connected-but-silent device or one that cannot be opened. If it is silent,
-unmute it and choose **Check Again**; if it cannot be opened, use the window's
-direct links to Windows Microphone Privacy or Sound Input settings first. If a
-USB or Bluetooth microphone was disconnected, reconnect it and choose **Check
-Again**; Presspeech refreshes device discovery without requiring a restart. A
+unmute it and choose **Check Microphone** again (in published 0.1.12, use
+**Check Again** to repeat its automatic check); if it cannot be opened, use the
+window's direct links to Windows Microphone Privacy or Sound Input settings
+first. If a USB or Bluetooth microphone was disconnected, reconnect it and
+choose **Check Microphone** again (or **Check Again** in 0.1.12); Presspeech
+refreshes device discovery without requiring a restart. A
 specifically selected microphone remains selected while unavailable instead of
 silently changing to Automatic or another input. Before opening the microphone
 for each recording, Presspeech also confirms that a cached Windows audio-device

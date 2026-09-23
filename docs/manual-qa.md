@@ -148,8 +148,9 @@ keyboard access testing in addition to assistive-technology testing.
   candidate version, the Start Menu shortcut launches that installed copy, and
   no separate Python installation is needed.
 - On a clean Windows profile, launch the packaged app and confirm the setup
-  window automatically checks the selected microphone without blocking model
-  status updates. Confirm **Start Presspeech with Windows** is initially
+  window does not open the microphone until **Check Microphone** is activated,
+  and model status continues updating while no check is running. Confirm
+  **Start Presspeech with Windows** is initially
   unchecked. Opt in, defer setup, and verify the saved choice is registered;
   then turn it off and confirm the choice remains off after completing setup.
 - On a clean Windows x64 profile with usable NVIDIA CUDA and no cached pinned
@@ -170,11 +171,15 @@ keyboard access testing in addition to assistive-technology testing.
 - While Setup is awaiting the model choice, press the configured dictation
   hotkey. Confirm Setup is presented again and Presspeech does not open the
   microphone or claim to be listening.
-- With microphone access enabled, speak during the check and confirm the status
-  changes from **Listening — speak a few words…** to **Ready — input level
-  detected**. Change the selected input and confirm setup checks the new device.
-  After the model is ready, use **Try Dictation** and confirm it captures that
-  selected device before setup is finished.
+- With microphone access enabled, activate **Check Microphone**, speak during
+  the check, and confirm the status changes from **Listening — speak a few
+  words…** to **Ready — input level detected**. Change the selected input and
+  confirm it says **Not checked** without opening the device; activate **Check
+  Microphone** to test the newly selected device. After the model is ready, use
+  **Try Dictation** and confirm it captures that selected device before setup
+  is finished. Repeat by changing the selected input while a check is active;
+  confirm completion leaves the new input **Not checked** and does not start a
+  second check until you activate **Check Microphone**.
 - On at least one configuration, select an input that diagnostics reports at
   44.1 or 48 kHz. Start a toggle-mode recording, open Settings while continuing
   to speak, change the microphone selection, save, and then stop recording.
@@ -182,22 +187,22 @@ keyboard access testing in addition to assistive-technology testing.
   present. Confirm the next dictation uses the saved selection; switching
   between Automatic and that explicit input is sufficient when only one safe
   physical microphone is available.
-- Mute the selected microphone, choose **Check Again**, and confirm setup says
-  it is connected but no input level was detected instead of claiming it is
-  ready. Unmute it, speak, and check again successfully.
+- Mute the selected microphone, choose **Check Microphone**, and confirm setup
+  says it is connected but no input level was detected instead of claiming it
+  is ready. Unmute it, speak, and check again successfully.
 - Select a specific USB or Bluetooth microphone, disconnect and reconnect it
-  while Presspeech remains open, then choose **Check Again**. Confirm the check
-  detects input without a dictation attempt or app restart and the selector no
-  longer labels the input unavailable. Reopen Setup and Settings while it is
+  while Presspeech remains open, then choose **Check Microphone**. Confirm the
+  check detects input without a dictation attempt or app restart and the
+  selector no longer labels the input unavailable. Reopen Setup and Settings while it is
   disconnected and confirm the unavailable device remains selected; saving or
   deferring setup must not switch it to Automatic or another microphone. While
   it is disconnected, connect or enable a different input so Windows can
   reorder device indexes, then try dictation. Confirm Presspeech does not
   capture from the substitute; reconnect the selected input and confirm the
   next dictation uses it.
-- Turn off **Let desktop apps access your microphone**, choose **Check Again**,
-  and confirm setup reports that the microphone could not be opened without
-  exposing raw device or PortAudio errors.
+- Turn off **Let desktop apps access your microphone**, choose **Check
+  Microphone**, and confirm setup reports that the microphone could not be
+  opened without exposing raw device or PortAudio errors.
 - Using only Tab, Shift-Tab, and Enter, open **Microphone Privacy Settings** and
   **Sound Input Settings** from setup. Confirm each button opens the expected
   Windows Settings page, then restore access and rerun the check successfully.
@@ -216,8 +221,8 @@ keyboard access testing in addition to assistive-technology testing.
   in Setup's final row it must move through **Try Dictation**, **Retry Speech
   Model** when enabled, **Set Up Later**, then **Finish Setup**, without jumping
   right and back left.
-- Invoke **Check Again**, **Retry Speech Model**, and **Download Update** using
-  the keyboard. While each operation is active, confirm focus moves to the
+- Invoke **Check Microphone**, **Retry Speech Model**, and **Download Update**
+  using the keyboard. While each operation is active, confirm focus moves to the
   microphone or model selector, or to **Later**, before the invoked command is
   disabled. When model readiness changes with **Try Dictation** or **Finish
   Setup** focused, confirm focus returns to the microphone selector rather than
@@ -556,6 +561,11 @@ item after the development-wrapper launch check.
   **Detected** and the footer changes to **Done**. Start dictation from the menu
   on a fresh launch and confirm that action does not falsely mark the hotkey as
   detected.
+- With the default **Press and hold** mode, confirm the setup tip and the
+  one-time VoiceOver readiness announcement explain that users who prefer not
+  to hold the key can choose **Press to toggle** in **Settings → Dictation →
+  Trigger**. Select toggle mode and confirm the setup tip reflects the active
+  mode and explains how to switch back.
 - While the checklist is short enough to scroll, leave it on the lower
   permission or hotkey rows as model progress or a permission state changes.
   Confirm the live refresh keeps the same scroll position instead of jumping

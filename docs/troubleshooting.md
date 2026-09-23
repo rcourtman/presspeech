@@ -132,14 +132,20 @@ in Settings.
 
 ### Microphone Is Silent Or Cannot Open
 
-Select the intended input in Setup, speak during its local level check, and
-choose **Check Again**. If the input cannot open, use Setup's links to Windows
-Microphone Privacy and Sound Input settings. Turn on **Microphone access** and
-**Let desktop apps access your microphone**, then confirm the input under
+Published Windows 0.1.12 checks the selected input automatically during Setup
+and when its selection changes; choose **Check Again** to repeat that check.
+Upcoming 0.1.13 and builds
+containing this change keep the selected device closed until you choose
+**Check Microphone**. Speak during its local level check; if the input is
+silent, unmute it and choose **Check Again** in 0.1.12 or **Check Microphone**
+in 0.1.13. If the input cannot open, use Setup's links to Windows Microphone
+Privacy and Sound Input settings. Turn on **Microphone access** and **Let
+desktop apps access your microphone**, then confirm the input under
 **Settings -> System -> Sound -> Input**. Windows does not show a separate
 Presspeech toggle for this unpackaged desktop app. If a USB or Bluetooth input
-was disconnected, reconnect it and choose **Check Again**; the check refreshes
-microphone discovery without requiring an app restart. Presspeech keeps an
+was disconnected, reconnect it and choose **Check Again** in 0.1.12 or **Check
+Microphone** in 0.1.13; the check refreshes microphone discovery without
+requiring an app restart. Presspeech keeps an
 unavailable specifically selected input selected rather than silently using a
 different microphone. Before opening the microphone for each recording, it also
 confirms that its cached Windows audio-device index still names that configured

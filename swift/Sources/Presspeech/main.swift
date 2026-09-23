@@ -3366,7 +3366,7 @@ private func setupChecklistAnnouncement(
         case "Detected":
             return "The configured dictation hotkey was detected."
         case "Ready to test":
-            return "The hotkey is ready to test. Use it, or choose Start Dictation in the Presspeech menu."
+            return "The hotkey is ready to test. Use it, or choose Start Dictation in the Presspeech menu. You can change between Press and hold and Press to toggle in Settings → Dictation → Trigger."
         case "Missing":
             let action = current.buttonTitle ?? "Open Settings"
             return "\(title) permission is still missing. Choose \(action) in Setup Checklist."
@@ -3550,6 +3550,20 @@ private func setupChecklistCanTryDictation(isReady: Bool,
                                            permissionsGranted: Bool,
                                            isTerminating: Bool) -> Bool {
     isReady && permissionsGranted && !isTerminating
+}
+
+private func setupChecklistTipText(snapshot: SetupChecklistSnapshot,
+                                   triggerMode: TriggerMode) -> String {
+    if snapshot.permissions.contains(where: { $0.permission == .microphone && $0.status == "Restricted" }) {
+        return "Microphone access is restricted by macOS or device policy. A Grant or Try Again action cannot change it; contact your administrator if you need access."
+    }
+    if snapshot.hotkey.status == "Ready to test" {
+        let triggerHint = triggerMode == .hold
+            ? "Prefer not to hold the key? Choose Press to toggle in Settings → Dictation → Trigger."
+            : "Press to toggle is active. Choose Press and hold in Settings → Dictation → Trigger to switch back."
+        return "Test the hotkey before choosing Done. \(triggerHint) If you prefer menu controls, choose Try Dictation and use Start Dictation in the menu. If the hotkey controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
+    }
+    return "Tip: If the permission prompt does not appear or Presspeech is missing from System Settings, choose Try Again. Presspeech will reset its permission entry and re-request, which can clear stuck macOS state."
 }
 
 private func permissionSetupDetail(_ permission: Permission,
@@ -11409,7 +11423,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 identifiedBy: NSUserInterfaceItemIdentifier("setup-tip"),
                 in: root
             ) as? NSTextField else { return false }
-            tip.stringValue = setupChecklistTipText(snapshot: snapshot)
+            tip.stringValue = setupChecklistTipText(snapshot: snapshot,
+                                                    triggerMode: settings.triggerMode)
         }
         return true
     }
@@ -11458,16 +11473,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             button.setAccessibilityHelp(nil)
         }
         return true
-    }
-
-    private func setupChecklistTipText(snapshot: SetupChecklistSnapshot) -> String {
-        if snapshot.permissions.contains(where: { $0.permission == .microphone && $0.status == "Restricted" }) {
-            return "Microphone access is restricted by macOS or device policy. A Grant or Try Again action cannot change it; contact your administrator if you need access."
-        }
-        if snapshot.hotkey.status == "Ready to test" {
-            return "Test the hotkey before choosing Done. If you prefer menu controls, choose Try Dictation and use Start Dictation in the menu. If the hotkey controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
-        }
-        return "Tip: If the permission prompt does not appear or Presspeech is missing from System Settings, choose Try Again. Presspeech will reset its permission entry and re-request, which can clear stuck macOS state."
     }
 
     private func makeSetupChecklistView(snapshot: SetupChecklistSnapshot) -> NSView {
@@ -11536,7 +11541,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 ? nil : #selector(retryStartupFromSetupClicked(_:))))
 
         if !snapshot.isComplete {
-            let tip = setupLabel(setupChecklistTipText(snapshot: snapshot),
+            let tip = setupLabel(setupChecklistTipText(snapshot: snapshot,
+                                                       triggerMode: settings.triggerMode),
                                  font: .systemFont(ofSize: 11),
                                  color: .secondaryLabelColor)
             tip.identifier = NSUserInterfaceItemIdentifier("setup-tip")
@@ -16426,6 +16432,27 @@ private enum PresspeechSelfTest {
             equals: String?.none,
             "opening the checklist should not announce its entire initial state"
         )
+        let holdModeReady = snapshot(hotkey: SetupChecklistRowState(
+            detail: "Hold Right Option briefly, then release.",
+            status: "Ready to test",
+            buttonTitle: nil
+        ))
+        let holdModeTip = setupChecklistTipText(snapshot: holdModeReady, triggerMode: .hold)
+        try expect(holdModeTip.contains("Prefer not to hold the key? Choose Press to toggle"),
+                   equals: true,
+                   "first-use guidance should make press-to-toggle discoverable from hold mode")
+        try expect(holdModeTip.contains("Settings → Dictation → Trigger"),
+                   equals: true,
+                   "first-use guidance should give the exact trigger-mode settings route")
+
+        let toggleModeTip = setupChecklistTipText(snapshot: holdModeReady, triggerMode: .toggle)
+        try expect(toggleModeTip.contains("Press to toggle is active"),
+                   equals: true,
+                   "first-use guidance should accurately describe an already-selected toggle mode")
+        try expect(toggleModeTip.contains("Choose Press and hold"),
+                   equals: true,
+                   "toggle-mode guidance should identify the available alternative")
+
         try expect(
             setupChecklistAnnouncement(
                 from: baseline,
@@ -16491,8 +16518,8 @@ private enum PresspeechSelfTest {
                     buttonTitle: nil
                 ))
             ),
-            equals: "The hotkey is ready to test. Use it, or choose Start Dictation in the Presspeech menu.",
-            "hotkey readiness should include a menu-driven alternative"
+            equals: "The hotkey is ready to test. Use it, or choose Start Dictation in the Presspeech menu. You can change between Press and hold and Press to toggle in Settings → Dictation → Trigger.",
+            "hotkey readiness should announce menu controls and the alternative trigger mode"
         )
         try expect(
             setupChecklistAnnouncement(
