@@ -501,6 +501,14 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     ),
 }
 
+# Published 0.1.12 and the unreleased 0.1.13 candidate have different
+# authentication behavior. Keep each claim attached to the affected version.
+WINDOWS_MODEL_DOWNLOAD_PRIVACY_SCOPE_SURFACES = (
+    ROOT / "README.md",
+    DOCS / "privacy.html",
+    DOCS / "privacy" / "network-calls.json",
+)
+
 # Discovery and setup surfaces must not collapse focus-safe delivery into an
 # "every app" promise. Automatic insertion is conditional; clipboard recovery
 # is part of the product contract rather than an exceptional implementation
@@ -2002,6 +2010,70 @@ def check_windows_model_download_privacy_guidance(
     return errors
 
 
+def check_windows_model_download_privacy_scopes(
+    surfaces: tuple[Path, ...] = WINDOWS_MODEL_DOWNLOAD_PRIVACY_SCOPE_SURFACES,
+) -> list[str]:
+    """Require explicit same-sentence version scoping for authentication claims."""
+    errors: list[str] = []
+    for path in surfaces:
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing Windows download privacy scope")
+            continue
+        contents = read_text(path)
+        if path.name == "network-calls.json":
+            try:
+                inventory = json.loads(contents)
+            except json.JSONDecodeError as exc:
+                errors.append(f"{display}: invalid network inventory: {exc.msg}")
+                continue
+            if not isinstance(inventory, dict):
+                errors.append(f"{display}: invalid network inventory structure")
+                continue
+            calls = inventory.get("network_calls", [])
+            model_call = next(
+                (call for call in calls
+                 if isinstance(call, dict)
+                 and call.get("name") == "windows_first_launch_model_download"),
+                None,
+            )
+            if not isinstance(model_call, dict) or not isinstance(model_call.get("data_sent"), str):
+                errors.append(f"{display}: missing Windows model-download privacy detail")
+                continue
+            contents = model_call["data_sent"]
+        elif path.suffix.lower() == ".html":
+            contents = html.unescape(re.sub(r"<[^>]*>", " ", contents))
+
+        # Protect version separators before sentence splitting.
+        contents = re.sub(r"\b0\.1\.12\b", "publishedbuild", contents, flags=re.I)
+        contents = re.sub(r"\b0\.1\.13\b", "candidatebuild", contents, flags=re.I)
+        sentences = re.split(r"(?<=[.!?])\s+", " ".join(contents.casefold().split()))
+        auth_enabled = [
+            sentence for sentence in sentences
+            if "leaves implicit authentication enabled" in sentence
+        ]
+        if not any("publishedbuild" in sentence for sentence in auth_enabled):
+            errors.append(
+                f"{display}: implicit authentication must be explicitly attributed "
+                "to published Windows 0.1.12"
+            )
+        if any("publishedbuild" not in sentence for sentence in auth_enabled):
+            errors.append(
+                f"{display}: implicit-authentication exposure has an ambiguous or "
+                "incorrect version subject"
+            )
+        if not any(
+            "candidatebuild" in sentence
+            and re.search(r"\bdisables\b.{0,120}\bimplicit authentication\b", sentence)
+            for sentence in sentences
+        ):
+            errors.append(
+                f"{display}: candidate Windows 0.1.13's authentication opt-out "
+                "must be explicitly version-scoped"
+            )
+    return errors
+
+
 def check_mac_model_download_guidance(
     surfaces: dict[Path, tuple[str, ...]] = MAC_MODEL_DOWNLOAD_GUIDANCE,
 ) -> list[str]:
@@ -3212,6 +3284,24 @@ def run_self_test() -> None:
         if check_windows_model_download_privacy_guidance(required_token_guidance):
             raise SyncError("self-test: complete version-scoped account-token disclosure was rejected")
 
+        scope_guidance = Path(tmp) / "windows-download-privacy-scopes.md"
+        scope_guidance.write_text(
+            "Published Windows 0.1.12 leaves implicit authentication enabled. "
+            "Upcoming Windows 0.1.13 candidate disables implicit authentication.\n",
+            encoding="utf-8",
+        )
+        if check_windows_model_download_privacy_scopes((scope_guidance,)):
+            raise SyncError("self-test: correctly scoped Windows privacy claims were rejected")
+        scope_guidance.write_text(
+            "Published Windows 0.1.12 leaves implicit authentication enabled. "
+            "Upcoming Windows 0.1.13 disables Hub telemetry. It also leaves implicit "
+            "authentication enabled. The 0.1.13 candidate disables implicit "
+            "authentication.\n",
+            encoding="utf-8",
+        )
+        if not check_windows_model_download_privacy_scopes((scope_guidance,)):
+            raise SyncError("self-test: ambiguous Windows authentication scope was accepted")
+
         agent_guidance = Path(tmp) / "agent-disclosure.md"
         required_agent_guidance = {
             agent_guidance: ("agent-harnesses", "agent-related environment markers"),
@@ -3573,6 +3663,7 @@ def main() -> int:
             errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_windows_model_download_privacy_guidance())
+            errors.extend(check_windows_model_download_privacy_scopes())
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
@@ -3616,6 +3707,7 @@ def main() -> int:
         errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_windows_model_download_privacy_guidance())
+        errors.extend(check_windows_model_download_privacy_scopes())
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())

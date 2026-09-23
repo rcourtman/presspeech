@@ -134,7 +134,11 @@ competitor feature lists.
 A wider check finds the same handoff class in other products: an individual
 macOS [OmniVoice Studio report](https://github.com/debpalash/VoiceStudio/issues/287)
 describes a focus-stealing widget and failed clipboard write that could insert
-old clipboard contents; a Windows [Codex Desktop report](https://github.com/openai/codex/issues/37593)
+old clipboard contents; a macOS [Codex Desktop report](https://github.com/openai/codex/issues/37443)
+describes completed transcription intermittently missing from an external field
+without a failure notice or recovery copy, leaving the prior clipboard as the
+available paste, and requests explicit copy/retry actions; a Windows
+[Codex Desktop report](https://github.com/openai/codex/issues/37593) likewise
 separates successful transcription from silent failure in external fields; and
 the [HyperVoice changelog](https://hypervoice.app/changelog) documents clipboard
 restoration arriving before slower target apps read the dictation. These are

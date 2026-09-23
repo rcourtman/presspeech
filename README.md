@@ -422,7 +422,17 @@ Presspeech is local-first:
 
 Network calls made by Presspeech are limited to:
 
-- speech model downloads normally from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 asks new installs before the first download and removes inherited Hugging Face account tokens from its own download process. Published Windows 0.1.12 honors inherited `HF_ENDPOINT`/`HUGGINGFACE_CO_STAGING` routing and `HF_HUB_USER_AGENT_ORIGIN` metadata, and may send a configured or cached Hugging Face token to the configured endpoint. Its pinned Hub client may also request `/api/agent-harnesses` when its registry cache is missing or stale and add an `agent/<id>` label to model-request metadata. Upcoming Windows 0.1.13 fixes those settings, disables Hub telemetry, checks for agent attribution, and disables implicit authentication,
+- Speech-model downloads normally use the public Hugging Face Hub and its storage CDN (first launch,
+  integrity-failure re-download, or user-triggered cache reset). Upcoming macOS 0.3.9 asks new
+  installs before the first download and removes inherited Hugging Face account tokens from its
+  own download process. Published Windows 0.1.12 honors inherited `HF_ENDPOINT` /
+  `HUGGINGFACE_CO_STAGING` routing and `HF_HUB_USER_AGENT_ORIGIN` metadata; it may send a
+  configured or cached token to the configured endpoint and may request `/api/agent-harnesses`
+  or add an `agent/<id>` label. Published Windows 0.1.12 also leaves implicit authentication
+  enabled. The Windows 0.1.13 candidate is not yet published; it disables Hub telemetry and
+  implicit authentication, fixes the endpoint and inherited settings, checks agent attribution,
+  bypasses `hf-xet`, and uses a fixed non-unique Transformers session ID. Do not attribute these
+  candidate controls to 0.1.12.
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, plus the compatibility
   guide link in macOS 0.3.8 / upcoming Windows 0.1.13 or builds containing that

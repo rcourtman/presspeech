@@ -33,6 +33,25 @@ on LibriSpeech test-other, so that split is not an independent held-out check.
 Treat Orukeet as an evaluation candidate only. Its project advertises CPU and
 CUDA runtimes, but does not establish compatibility with Presspeech's Windows
 packaging; its weights are CC BY-SA 4.0, unlike NVIDIA Parakeet's CC BY 4.0.
+The upstream v0.1.1 Python package requires Python 3.12+, which matches
+Presspeech's pinned CPython 3.12.10 version; the installer says it selects CPU,
+CUDA, or Metal runtimes, verifies model/SDK hashes, and supports offline
+inference. Orukeet also documents an ONNX INT8 integration through OpenWhispr's
+sherpa-onnx loader, including a Windows installation path; OpenWhispr advertises
+Windows builds. That establishes a separate desktop integration route, not
+compatibility with Presspeech's hash-locked dependencies and PyInstaller
+package or evidence of Windows CPU latency. The upstream timed result is a
+separate M4 Pro/Metal patch benchmark; the project says the full timed benchmark
+has not been rerun for its packaged v0.1.1 SDK. Its ONNX INT8 archive is listed
+as 486,807,585 bytes before extraction and 671,619,800 bytes after extraction.
+These are upstream implementation facts, not measured Presspeech setup,
+memory, or latency. Check the current
+[Orukeet project](https://github.com/Oruk-AI/orukeet) for artifact and license
+changes before testing or distributing it, and review its
+[OpenWhispr integration notes](https://github.com/Oruk-AI/orukeet/blob/main/integrations/openwhispr/README.md)
+and [OpenWhispr platform documentation](https://github.com/OpenWhispr/openwhispr)
+as a separate implementation reference.
+
 Before considering an app integration:
 
 - Verify Windows CPU runtime, CUDA behavior where supported, offline inference,

@@ -3334,6 +3334,93 @@ private func setupChecklistSnapshotsHaveSameStructure(_ lhs: SetupChecklistSnaps
     }
 }
 
+/// Summarize only actionable setup changes for assistive technology. Model
+/// download details include frequent progress updates, so comparing row
+/// details (or announcing every checklist refresh) would interrupt users.
+private func setupChecklistAnnouncement(
+    from previous: SetupChecklistSnapshot?,
+    to current: SetupChecklistSnapshot,
+    operatingSystemMajorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+) -> String? {
+    guard let previous else { return nil }
+    if !previous.isComplete && current.isComplete {
+        return "Setup complete. Dictation is ready."
+    }
+
+    func rowAnnouncement(title: String,
+                         previous: SetupChecklistRowState,
+                         current: SetupChecklistRowState) -> String? {
+        let statusChanged = previous.status != current.status
+        let actionChangedWhileMissing = !statusChanged
+            && current.status == "Missing"
+            && previous.buttonTitle != current.buttonTitle
+        guard statusChanged || actionChangedWhileMissing else { return nil }
+
+        switch current.status {
+        case "Granted":
+            return "\(title) permission granted."
+        case "Ready":
+            return "\(title) is ready."
+        case "Using default":
+            return "Audio input is using the system default microphone."
+        case "Detected":
+            return "The configured dictation hotkey was detected."
+        case "Ready to test":
+            return "The hotkey is ready to test. Use it, or choose Start Dictation in the Presspeech menu."
+        case "Missing":
+            let action = current.buttonTitle ?? "Open Settings"
+            return "\(title) permission is still missing. Choose \(action) in Setup Checklist."
+        case "Restricted":
+            return "Microphone access is restricted. Contact your administrator if you need access."
+        case "Needs retry":
+            return "\(title) needs attention. Choose \(current.buttonTitle ?? "Retry") in Setup Checklist."
+        case "Check input":
+            return "No microphone audio reached Presspeech. Choose another input in Setup Checklist."
+        default:
+            // Loading, starting, waiting, and download-progress changes are
+            // intentionally silent; the visible checklist still updates.
+            return nil
+        }
+    }
+
+    var announcements: [String] = []
+    if let message = rowAnnouncement(title: "Speech model",
+                                     previous: previous.speechModel,
+                                     current: current.speechModel) {
+        announcements.append(message)
+    }
+    if let message = rowAnnouncement(title: "Audio input",
+                                     previous: previous.audioInput,
+                                     current: current.audioInput) {
+        announcements.append(message)
+    }
+    for permission in current.permissions {
+        guard let oldPermission = previous.permissions.first(where: {
+            $0.permission == permission.permission
+        }) else { continue }
+        let title = permission.permission.displayName(
+            operatingSystemMajorVersion: operatingSystemMajorVersion
+        )
+        if let message = rowAnnouncement(
+            title: title,
+            previous: SetupChecklistRowState(detail: oldPermission.detail,
+                                              status: oldPermission.status,
+                                              buttonTitle: oldPermission.buttonTitle),
+            current: SetupChecklistRowState(detail: permission.detail,
+                                            status: permission.status,
+                                            buttonTitle: permission.buttonTitle)
+        ) {
+            announcements.append(message)
+        }
+    }
+    if let message = rowAnnouncement(title: "Hotkey",
+                                     previous: previous.hotkey,
+                                     current: current.hotkey) {
+        announcements.append(message)
+    }
+    return announcements.isEmpty ? nil : announcements.joined(separator: " ")
+}
+
 private func firstSpeechModelDownloadSetupDetail(profile: SpeechModelProfile) -> String {
     let requiredFreeSpace = formattedByteCount(
         UInt64(speechModelDownloadRequiredBytes(for: profile))
@@ -8233,6 +8320,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var setupChecklistWindow: NSWindow?
     private var setupChecklistRefreshTimer: Timer?
     private var renderedSetupChecklistSnapshot: SetupChecklistSnapshot?
+    private var announcedSetupChecklistSnapshot: SetupChecklistSnapshot?
     private var dictationScratchpadWindow: NSWindow?
     private weak var dictationScratchpadTextView: NSTextView?
     private var correctionsManagerWindow: NSWindow?
@@ -8493,6 +8581,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     /// high-value controls needed as an alternative access route.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         buildDockMenu()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        if let window = setupChecklistWindow {
+            announceSetupChecklistChangesIfNeeded(in: window)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -11060,6 +11154,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard let window = notification.object as? NSWindow,
               window === setupChecklistWindow else { return }
         stopSetupChecklistRefreshTimer()
+        // Reopening starts a new checklist reading context, not a delayed
+        // announcement of everything that changed while the window was closed.
+        announcedSetupChecklistSnapshot = nil
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              window === setupChecklistWindow else { return }
+        announceSetupChecklistChangesIfNeeded(in: window)
     }
 
     private func startSetupChecklistRefreshTimer() {
@@ -11100,6 +11203,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             renderedSetupChecklistSnapshot = snapshot
             window.contentView?.layoutSubtreeIfNeeded()
             rebuildMenu()
+            announceSetupChecklistChangesIfNeeded(in: window)
             return
         }
 
@@ -11138,6 +11242,23 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             window.makeFirstResponder(replacement)
         }
         rebuildMenu()
+        announceSetupChecklistChangesIfNeeded(in: window)
+    }
+
+    /// Keep status feedback in the setup window's context. If a permission
+    /// action has opened System Settings, retain the last announced snapshot
+    /// until this window becomes key again, then summarize the current state.
+    private func announceSetupChecklistChangesIfNeeded(in window: NSWindow) {
+        guard window.isKeyWindow, NSApp.isActive,
+              let snapshot = renderedSetupChecklistSnapshot else { return }
+        let announcement = setupChecklistAnnouncement(
+            from: announcedSetupChecklistSnapshot,
+            to: snapshot
+        )
+        announcedSetupChecklistSnapshot = snapshot
+        if let announcement {
+            announceForAccessibility(announcement)
+        }
     }
 
     private func setupChecklistSnapshot() -> SetupChecklistSnapshot {
@@ -16258,7 +16379,165 @@ private enum PresspeechSelfTest {
         )
     }
 
+    private static func testSetupChecklistAnnouncements() throws {
+        let startingModel = SetupChecklistRowState(
+            detail: "Downloading model — 41%",
+            status: "Loading",
+            buttonTitle: nil
+        )
+        let waitingAudio = SetupChecklistRowState(
+            detail: "Waiting for model",
+            status: "Waiting",
+            buttonTitle: nil
+        )
+        let missingMicrophone = SetupChecklistPermissionState(
+            permission: .microphone,
+            detail: "Waiting for microphone access",
+            status: "Missing",
+            buttonTitle: "Continue"
+        )
+        let waitingHotkey = SetupChecklistRowState(
+            detail: "Waiting for setup",
+            status: "Waiting",
+            buttonTitle: nil
+        )
+
+        func snapshot(model: SetupChecklistRowState? = nil,
+                      audio: SetupChecklistRowState? = nil,
+                      microphone: SetupChecklistPermissionState? = nil,
+                      hotkey: SetupChecklistRowState? = nil,
+                      isComplete: Bool = false) -> SetupChecklistSnapshot {
+            SetupChecklistSnapshot(
+                speechModel: model ?? startingModel,
+                audioInput: audio ?? waitingAudio,
+                permissions: [microphone ?? missingMicrophone],
+                hotkey: hotkey ?? waitingHotkey,
+                showInDock: false,
+                canTryDictation: false,
+                isComplete: isComplete
+            )
+        }
+
+        let baseline = snapshot()
+        try expect(
+            setupChecklistAnnouncement(from: nil, to: baseline),
+            equals: String?.none,
+            "opening the checklist should not announce its entire initial state"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: baseline,
+                to: snapshot(model: SetupChecklistRowState(
+                    detail: "Downloading model — 42%",
+                    status: "Loading",
+                    buttonTitle: nil
+                ))
+            ),
+            equals: String?.none,
+            "download progress changes should not interrupt VoiceOver"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: baseline,
+                to: snapshot(microphone: SetupChecklistPermissionState(
+                    permission: .microphone,
+                    detail: "Captures your voice while dictating.",
+                    status: "Granted",
+                    buttonTitle: nil
+                ))
+            ),
+            equals: "Microphone permission granted.",
+            "a newly granted permission should be announced"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: baseline,
+                to: snapshot(microphone: SetupChecklistPermissionState(
+                    permission: .microphone,
+                    detail: "Restricted by device management",
+                    status: "Restricted",
+                    buttonTitle: nil
+                ))
+            ),
+            equals: "Microphone access is restricted. Contact your administrator if you need access.",
+            "a restricted microphone should announce that the user cannot grant it"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: snapshot(microphone: SetupChecklistPermissionState(
+                    permission: .microphone,
+                    detail: "Microphone access was denied.",
+                    status: "Missing",
+                    buttonTitle: "Open Settings"
+                )),
+                to: snapshot(microphone: SetupChecklistPermissionState(
+                    permission: .microphone,
+                    detail: "Microphone access was denied.",
+                    status: "Missing",
+                    buttonTitle: "Try Again"
+                ))
+            ),
+            equals: "Microphone permission is still missing. Choose Try Again in Setup Checklist.",
+            "a newly available permission recovery action should be announced"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: baseline,
+                to: snapshot(hotkey: SetupChecklistRowState(
+                    detail: "Hold Right Option briefly, then release.",
+                    status: "Ready to test",
+                    buttonTitle: nil
+                ))
+            ),
+            equals: "The hotkey is ready to test. Use it, or choose Start Dictation in the Presspeech menu.",
+            "hotkey readiness should include a menu-driven alternative"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: baseline,
+                to: snapshot(model: SetupChecklistRowState(
+                    detail: "Model preparation failed",
+                    status: "Needs retry",
+                    buttonTitle: "Retry"
+                ))
+            ),
+            equals: "Speech model needs attention. Choose Retry in Setup Checklist.",
+            "recovery announcements should offer the available action without reading raw error details"
+        )
+        try expect(
+            setupChecklistAnnouncement(
+                from: baseline,
+                to: snapshot(audio: SetupChecklistRowState(
+                    detail: "No microphone samples reached Presspeech",
+                    status: "Check input",
+                    buttonTitle: "Choose…"
+                ))
+            ),
+            equals: "No microphone audio reached Presspeech. Choose another input in Setup Checklist.",
+            "an empty microphone capture should announce its recovery route"
+        )
+
+        let complete = snapshot(
+            model: SetupChecklistRowState(detail: "Ready", status: "Ready", buttonTitle: nil),
+            audio: SetupChecklistRowState(detail: "Ready", status: "Ready", buttonTitle: nil),
+            microphone: SetupChecklistPermissionState(
+                permission: .microphone,
+                detail: "Granted",
+                status: "Granted",
+                buttonTitle: nil
+            ),
+            hotkey: SetupChecklistRowState(detail: "Detected", status: "Detected", buttonTitle: nil),
+            isComplete: true
+        )
+        try expect(
+            setupChecklistAnnouncement(from: baseline, to: complete),
+            equals: "Setup complete. Dictation is ready.",
+            "completion should be one concise announcement rather than several row updates"
+        )
+    }
+
     private static func testReadiness() throws {
+        try testSetupChecklistAnnouncements()
         try expect(
             microphoneSetupDetail(authorizationStatus: .notDetermined),
             equals: "Captures your voice while dictating. Choose Continue to open the macOS microphone prompt, then choose OK.",
