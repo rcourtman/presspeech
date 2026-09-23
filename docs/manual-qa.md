@@ -509,6 +509,18 @@ item after the development-wrapper launch check.
   shows **Copied — press ⌘V to paste**, and returns to the missing-permission
   setup state. Regrant the permission and confirm a fresh dictation can paste
   automatically; the interrupted dictation must never paste later.
+- For macOS 0.3.9 and later, use a disposable test account to repeat the
+  in-flight revocation check separately for focused-window Accessibility and
+  Quartz keyboard-event posting (the `PostEvent` TCC service). Revoke each
+  grant while a harmless dictation is transcribing and leave it missing
+  through completion. Confirm Presspeech does not paste that dictation and
+  leaves the complete transcript on the clipboard. While access is missing,
+  Setup/Diagnostics must identify the missing check. After restoring access,
+  confirm the old transcript is not pasted later and a fresh dictation pastes
+  normally. Record the grant and revocation timing, without recording
+  transcript or target-window contents. A grant revoked and restored entirely
+  before the next permission check may not be observed; do not treat this test
+  as proof that every short-lived revocation is detected.
 - In an Electron/Chromium app such as VS Code, open two separate windows with
   editable fields. Dictate without leaving the first window and confirm the
   text is pasted automatically rather than falling back to **Copied — press
@@ -757,8 +769,12 @@ clipboard.
   Discard and Leave Waiting. Navigate and invoke each action using only Tab,
   Shift-Tab, Enter, Escape and its underlined access key; repeat with Narrator
   and confirm status changes are announced once without exposing the words.
-  Initial focus must be on Leave Waiting, so an Enter already in flight cannot
-  copy or discard text when the asynchronous window first appears.
+  From Leave Waiting, verify Tab reaches Copy for Manual Paste and then
+  Discard Dictation in the same order as their visible positions; Shift-Tab
+  must reverse that sequence. Confirm focus remains visibly discernible and
+  Narrator announces each control's purpose. Initial focus must be on Leave
+  Waiting, so an Enter already in flight cannot copy or discard text when the
+  asynchronous window first appears.
 - Replace the clipboard after its write, during the route delay, and between
   modifier-down and V. Confirm detected changes skip V, release attempted keys,
   and retain text without replacing the newer copy automatically.
