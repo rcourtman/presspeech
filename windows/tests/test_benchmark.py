@@ -1273,7 +1273,7 @@ class MetricTests(unittest.TestCase):
                       output.getvalue())
         self.assertIn(
             "Reviewed speech VAD: observed rejections 0/0 measured trials in 0/1 clips; "
-            "retained-audio median n/a; duration coverage 0/2 trials (2 missing)",
+            "retained-audio median n/a; duration coverage 0/2 trials (2 missing; incomplete)",
             output.getvalue())
         json.dumps(result, allow_nan=False)
 
