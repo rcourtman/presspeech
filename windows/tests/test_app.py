@@ -3094,7 +3094,54 @@ class StartupTests(unittest.TestCase):
             [mock.call("loading"), mock.call(None)],
         )
         log.assert_any_call(
-            "first-run Parakeet download deferred pending user choice")
+            "first-run model download deferred pending user choice")
+
+    def test_first_run_cpu_model_stays_local_until_download_is_confirmed(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "setup_complete": False,
+        }
+        instance.transcriber = mock.Mock()
+        instance.transcriber.load.side_effect = (
+            app.engine.model_cache.ModelCacheMissingError("not cached"))
+        instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_generation = 0
+        instance._model_load_target = None
+        with mock.patch.object(app.engine, "cuda_available", return_value=False), \
+                mock.patch.object(app.PresspeechApp, "_log"):
+            instance._preload_model_worker()
+
+        self.assertEqual(instance.settings["model"], "base.en")
+        instance.transcriber.load.assert_called_once_with(
+            "base.en", notify=instance.notify, local_only=True,
+            progress_callback=mock.ANY)
+        instance.transcriber.warmup.assert_not_called()
+        self.assertEqual(instance.model_status, "awaiting_download_consent")
+        self.assertIn("141 MiB", instance.model_status_detail)
+
+    def test_parakeet_consent_does_not_authorize_cpu_default_download(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "base.en", "setup_complete": False}
+        instance._initial_model_download_consented = True
+        instance._initial_model_download_consent_model = "parakeet-tdt-0.6b-v3"
+        instance.transcriber = mock.Mock()
+        instance.transcriber.load.side_effect = (
+            app.engine.model_cache.ModelCacheMissingError("not cached"))
+        instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._model_retry_lock = threading.Lock()
+        instance._model_load_generation = 0
+        instance._model_load_target = None
+        with mock.patch.object(app.PresspeechApp, "_log"):
+            instance._preload_model_worker()
+
+        instance.transcriber.load.assert_called_once_with(
+            "base.en", notify=instance.notify, local_only=True,
+            progress_callback=mock.ANY)
+        self.assertEqual(instance.model_status, "awaiting_download_consent")
 
     def test_first_run_parakeet_uses_a_complete_local_snapshot_without_prompt(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -3123,7 +3170,8 @@ class StartupTests(unittest.TestCase):
 
     def test_setup_download_choice_queues_exactly_the_waiting_model(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
-        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.settings = {
+            "model": "parakeet-tdt-0.6b-v3", "setup_complete": False}
         instance.model_status = "awaiting_download_consent"
         instance._model_retry_lock = __import__("threading").Lock()
         instance._model_load_generation = 0
@@ -3131,11 +3179,26 @@ class StartupTests(unittest.TestCase):
 
         self.assertTrue(instance.confirm_initial_model_download())
         self.assertTrue(instance._initial_model_download_consented)
+        self.assertEqual(instance._initial_model_download_consent_model,
+                         "parakeet-tdt-0.6b-v3")
         self.assertEqual(instance.model_status, "loading")
         instance._model_executor.submit.assert_called_once_with(
             instance._preload_model_worker, "parakeet-tdt-0.6b-v3", 1)
         self.assertFalse(instance.confirm_initial_model_download())
         instance._model_executor.submit.assert_called_once()
+
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "base.en", "setup_complete": False}
+        instance.model_status = "awaiting_download_consent"
+        instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_generation = 0
+        instance._model_executor = mock.Mock()
+        self.assertTrue(instance.confirm_initial_model_download())
+        self.assertTrue(instance._initial_model_download_consented)
+        self.assertEqual(instance._initial_model_download_consent_model,
+                         "base.en")
+        instance._model_executor.submit.assert_called_once_with(
+            instance._preload_model_worker, "base.en", 1)
 
     def test_confirmed_first_run_model_download_can_use_the_network(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -3144,6 +3207,7 @@ class StartupTests(unittest.TestCase):
             "setup_complete": False,
         }
         instance._initial_model_download_consented = True
+        instance._initial_model_download_consent_model = "parakeet-tdt-0.6b-v3"
         instance.transcriber = mock.Mock()
         instance.notify = mock.Mock()
         instance._set_indicator = mock.Mock()
@@ -3202,7 +3266,8 @@ class StartupTests(unittest.TestCase):
 
     def test_setup_can_choose_and_persist_the_smaller_cpu_model(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
-        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.settings = {
+            "model": "parakeet-tdt-0.6b-v3", "setup_complete": False}
         instance.model_status = "awaiting_download_consent"
         instance._model_retry_lock = __import__("threading").Lock()
         instance._model_load_generation = 0
@@ -3213,6 +3278,9 @@ class StartupTests(unittest.TestCase):
 
         self.assertEqual(instance.settings["model"], "base.en")
         self.assertTrue(instance.settings["model_explicit"])
+        self.assertTrue(instance._initial_model_download_consented)
+        self.assertEqual(instance._initial_model_download_consent_model,
+                         "base.en")
         save.assert_called_once_with(instance.settings)
         self.assertEqual(instance.model_status, "loading")
         instance._model_executor.submit.assert_called_once_with(
@@ -3232,13 +3300,15 @@ class StartupTests(unittest.TestCase):
         instance.open_setup.assert_called_once_with()
         instance._set_indicator.assert_not_called()
 
-    def test_fresh_non_cuda_install_selects_cpu_model(self):
+    def test_fresh_non_cuda_install_selects_cpu_model_without_network(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {
             "model": "parakeet-tdt-0.6b-v3",
             "setup_complete": False,
         }
         instance.transcriber = mock.Mock()
+        instance.transcriber.load.side_effect = (
+            app.engine.model_cache.ModelCacheMissingError("not cached"))
         instance.transcriber._device = "cpu"
         instance.notify = mock.Mock()
         instance._set_indicator = mock.Mock()
@@ -3250,9 +3320,10 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(instance.settings["model"], "base.en")
         save.assert_called_once_with(instance.settings)
         instance.transcriber.load.assert_called_once_with(
-            "base.en", notify=instance.notify, progress_callback=mock.ANY)
-        self.assertIn("Whisper base.en on CPU", instance.model_status_detail)
-        self.assertIn("English-only", instance.model_status_detail)
+            "base.en", notify=instance.notify, local_only=True,
+            progress_callback=mock.ANY)
+        self.assertEqual(instance.model_status, "awaiting_download_consent")
+        self.assertIn("141 MiB", instance.model_status_detail)
         instance.notify.assert_any_call(
             "CPU speech model selected",
             "NVIDIA CUDA is unavailable; using English-only Whisper "

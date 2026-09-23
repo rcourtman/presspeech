@@ -433,15 +433,17 @@ class AccessibleWindowTests(unittest.TestCase):
     def test_setup_explains_first_model_download_before_microphone_checks(self):
         body = inspect.getsource(ui.SetupWindow._build)
 
-        self.assertIn("pinned model files from Hugging", body)
+        self.assertIn("pinned speech-model files from ", body)
+        self.assertIn('"Hugging Face. Setup asks', body)
         self.assertIn("Stay online", body)
         self.assertIn("English-only ", body)
         self.assertIn("Whisper base.en on CPU (~141 MiB)", body)
-        self.assertIn("multilingual CPU model", body)
+        self.assertIn("asks before downloading missing", body)
+        self.assertIn("first-run model files", body)
         self.assertIn("Multilingual Parakeet and Whisper ", body)
         self.assertIn("supported NVIDIA GPU", body)
         self.assertLess(
-            body.index("pinned model files from Hugging"),
+            body.index("Presspeech fetches pinned speech-model files"),
             body.index('text="Microphone"'),
         )
 
@@ -790,9 +792,11 @@ class SetupWindowTests(unittest.TestCase):
         window = ui.SetupWindow.__new__(ui.SetupWindow)
         window.app = mock.Mock(
             model_status=status, model_status_detail=detail)
+        window.app.settings = {"model": "parakeet-tdt-0.6b-v3"}
         window.root = mock.Mock()
         window.model_label = mock.Mock()
         window.model_consent_frame = mock.Mock()
+        window.model_consent_label = mock.Mock()
         window.download_model_button = mock.Mock()
         window.cpu_model_button = mock.Mock()
         window.other_model_button = mock.Mock()
@@ -863,17 +867,51 @@ class SetupWindowTests(unittest.TestCase):
         self.assertIn(
             mock.call(
                 window.model_label,
-                "Needs your choice — full Parakeet model download is about 2.5 GB"),
+                "Needs your choice — Full Parakeet model download is about 2.5 GB"),
             set_text.call_args_list,
         )
+        set_text.assert_any_call(
+            window.download_model_button,
+            "Download Parakeet model (up to ~2.5 GB)", announce=False)
         window.model_consent_frame.grid.assert_called_once_with()
-        window.download_model_button.config.assert_called_once_with(state="normal")
+        window.download_model_button.config.assert_any_call(state="normal")
         window.cpu_model_button.config.assert_called_once_with(state="normal")
+        window.cpu_model_button.pack.assert_called_once_with(
+            before=window.other_model_button, anchor="w", pady=(4, 0))
         window.other_model_button.config.assert_called_once_with(state="normal")
         window.progress.config.assert_called_once_with(
             mode="determinate", value=0)
         self.assertFalse(window.app.confirm_initial_model_download.called)
         self.assertFalse(window.app.select_cpu_model_after_download_declined.called)
+
+    def test_first_run_cpu_download_waits_for_choice_and_hides_redundant_fallback(self):
+        window = self.make_window(
+            "awaiting_download_consent",
+            "English-only Whisper base.en model download is about 141 MiB")
+        window.app.settings["model"] = "base.en"
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertIn(
+            mock.call(
+                window.model_label,
+                "Needs your choice — English-only Whisper base.en model "
+                "download is about 141 MiB"),
+            set_text.call_args_list,
+        )
+        set_text.assert_any_call(
+            window.model_consent_label,
+            "The English-only Whisper base.en speech model is about 141 MiB. "
+            "Choose Download to fetch its pinned files from huggingface.co. "
+            "Audio and transcripts stay on this PC.", announce=False)
+        set_text.assert_any_call(
+            window.download_model_button,
+            "Download English-only CPU model (~141 MiB)", announce=False)
+        window.download_model_button.config.assert_any_call(state="normal")
+        window.cpu_model_button.pack_forget.assert_called_once_with()
+        window.cpu_model_button.config.assert_any_call(state="disabled")
+        self.assertFalse(window.app.confirm_initial_model_download.called)
 
     def test_ready_enables_try_dictation_and_keeps_observing(self):
         window = self.make_window("ready", "base.en on cpu")
@@ -1375,6 +1413,67 @@ class SetupWindowTests(unittest.TestCase):
 
 
 class UpdateWindowTests(unittest.TestCase):
+    def test_release_notes_are_plain_bounded_and_keep_disclosure_first(self):
+        rendered = ui._release_notes_for_display(
+            "## Model-download privacy correction\r\n"
+            "- **Tokens** are not needed. See [privacy guide]"
+            "(https://example.invalid/private).\r\n"
+            "`HF_ENDPOINT` is ignored.")
+
+        self.assertIn("Model-download privacy correction", rendered)
+        self.assertIn("• Tokens are not needed.", rendered)
+        self.assertIn("privacy guide", rendered)
+        self.assertNotIn("https://example.invalid/private", rendered)
+        self.assertIn("HF_ENDPOINT", rendered)
+        self.assertNotIn("\r", rendered)
+        self.assertEqual(
+            ui._release_notes_for_display(None),
+            "(No release notes available.)")
+
+    def test_release_notes_are_capped(self):
+        rendered = ui._release_notes_for_display("x" * 9000)
+
+        self.assertLessEqual(len(rendered), 8000)
+        self.assertTrue(rendered.endswith("[Release notes shortened]"))
+
+    def test_update_dialog_shows_release_notes_before_download_controls(self):
+        window = ui.UpdateWindow.__new__(ui.UpdateWindow)
+        window.update = {
+            "version": "0.1.13",
+            "body": "## Model-download privacy correction\n"
+                    "This release removes inherited account credentials.",
+        }
+        root = mock.Mock()
+        scrollable = mock.Mock()
+        scrollable.content = mock.Mock()
+        label_calls = []
+
+        def label(*args, **kwargs):
+            label_calls.append(kwargs)
+            return mock.Mock()
+
+        with mock.patch.object(ui, "_interactive_window", return_value=root), \
+                mock.patch.object(ui, "_ScrollableDialogBody",
+                                  return_value=scrollable), \
+                mock.patch.object(ui.ttk, "Label", side_effect=label), \
+                mock.patch.object(ui.ttk, "Progressbar", return_value=mock.Mock()), \
+                mock.patch.object(ui.ttk, "Frame", return_value=mock.Mock()), \
+                mock.patch.object(ui.ttk, "Button", return_value=mock.Mock()), \
+                mock.patch.object(ui, "_add_access_key"), \
+                mock.patch.object(ui, "_bind_window_command"), \
+                mock.patch.object(ui, "_mark_live_region"):
+            window._build()
+
+        displayed = [call.get("text", "") for call in label_calls]
+        notes_position = next(
+            index for index, text in enumerate(displayed)
+            if "Model-download privacy correction" in text)
+        status_position = next(
+            index for index, text in enumerate(displayed)
+            if text == "Ready to download")
+        self.assertLess(notes_position, status_position)
+        self.assertIn("inherited account credentials", displayed[notes_position])
+
     def test_download_moves_focus_before_disabling_its_command(self):
         window = ui.UpdateWindow.__new__(ui.UpdateWindow)
         window.root = mock.Mock()
@@ -1961,6 +2060,7 @@ class DictionarySettingsTests(unittest.TestCase):
         window.retry_model_button.config.assert_called_with(state="normal")
 
         window.app.model_status = "awaiting_download_consent"
+        window.app.settings["model"] = "parakeet-tdt-0.6b-v3"
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_model()
 

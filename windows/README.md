@@ -74,16 +74,19 @@ Requirements:
   multilingual default; Windows PCs without usable CUDA automatically start
   with the smaller English-only Whisper base.en CPU model
 
-Upcoming 0.1.13 asks before downloading missing or incomplete first-run
-multilingual Parakeet files (up to ~2.5 GB). Choose the multilingual download,
-the smaller English-only Whisper base.en CPU model (~141 MiB), another model in
-Settings, or **Set Up Later**. Model files are fetched from `huggingface.co`; deferring
-does not start the Parakeet download, and a complete cached snapshot loads
-without another prompt. Published 0.1.12 does not include this choice.
+Upcoming 0.1.13 asks before downloading missing first-run default model files:
+multilingual Parakeet (up to ~2.5 GB) with usable CUDA, or English-only
+Whisper base.en (~141 MiB) without usable CUDA. On the Parakeet path, choose
+that download, the smaller CPU model, another model in Settings, or
+**Set Up Later**. On the CPU path, choose its download, another model in
+Settings, or **Set Up Later**. Model files are fetched from `huggingface.co`;
+deferring does not start the pending default-model download, and a complete
+cached snapshot loads without another prompt. Published 0.1.12 does not include
+this choice.
 
 First launch detects whether the packaged Torch runtime can use NVIDIA CUDA.
-It selects Parakeet for usable CUDA or Whisper base.en otherwise; after any
-required confirmation, missing pinned model files are fetched into
+It selects Parakeet for usable CUDA or Whisper base.en otherwise; after you
+confirm a missing first-run default-model download, pinned files are fetched into
 `%USERPROFILE%\.cache\huggingface` and loaded and warmed in the background.
 Each Presspeech release pins every Windows Hugging Face model to an exact
 repository commit reviewed for that app version, so a fresh install cannot

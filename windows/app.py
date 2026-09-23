@@ -584,6 +584,19 @@ def _startup_model(settings, cuda_available):
     return configured
 
 
+def _needs_first_run_download_choice(settings, model_name):
+    """Require consent for either default model's first-run network fetch."""
+    return (
+        not settings.get("setup_complete", True) and
+        (engine.is_parakeet(model_name) or model_name == CPU_FIRST_RUN_MODEL))
+
+
+def _first_run_download_detail(model_name):
+    if model_name == CPU_FIRST_RUN_MODEL:
+        return "English-only Whisper base.en model download is about 141 MiB"
+    return "Full Parakeet model download is about 2.5 GB"
+
+
 def _model_timing_summary(timing):
     """Format privacy-safe backend timing, including Whisper VAD retention."""
     if not isinstance(timing, dict) or not timing:
@@ -663,6 +676,7 @@ class PresspeechApp:
         self.model_status_detail = "Waiting to load"
         self.model_download_progress = None
         self._initial_model_download_consented = False
+        self._initial_model_download_consent_model = None
         self._model_retry_lock = threading.Lock()
         self._model_load_target = None
         self._model_load_generation = 0
@@ -1348,14 +1362,16 @@ class PresspeechApp:
             return True
 
     def confirm_initial_model_download(self):
-        """Start the missing multilingual model download after explicit choice."""
+        """Start a missing first-run model download after explicit choice."""
         with self._model_retry_lock:
             if (getattr(self, "model_status", "pending") !=
                     "awaiting_download_consent" or
-                    not engine.is_parakeet(self.settings.get("model"))):
+                    not _needs_first_run_download_choice(
+                        self.settings, self.settings.get("model"))):
                 return False
             self._initial_model_download_consented = True
             model_name = self.settings["model"]
+            self._initial_model_download_consent_model = model_name
             self.model_status = "loading"
             self.model_status_detail = "Checking local model files…"
             self.model_download_progress = None
@@ -1372,7 +1388,11 @@ class PresspeechApp:
             self.settings["model"] = "base.en"
             self.settings["model_explicit"] = True
             cfg.save(self.settings)
+            # Choosing the smaller CPU model here is also explicit consent to
+            # fetch its missing files; do not present the same choice twice.
+            self._initial_model_download_consented = True
             model_name = self.settings["model"]
+            self._initial_model_download_consent_model = model_name
             self.model_status = "loading"
             self.model_status_detail = "Checking local model files…"
             self.model_download_progress = None
@@ -2856,9 +2876,10 @@ class PresspeechApp:
         self._log("loading speech model: %s" % model_name)
         try:
             consent_required = (
-                not getattr(self, "_initial_model_download_consented", False) and
-                not self.settings.get("setup_complete", True) and
-                engine.is_parakeet(model_name))
+                not (getattr(self, "_initial_model_download_consented", False) and
+                     getattr(self, "_initial_model_download_consent_model", None)
+                     == model_name) and
+                _needs_first_run_download_choice(self.settings, model_name))
             if consent_required:
                 try:
                     # The loader itself remains local-only until Setup gets an
@@ -2873,13 +2894,12 @@ class PresspeechApp:
                             return
                         self.model_status = "awaiting_download_consent"
                         self.model_download_progress = None
-                        self.model_status_detail = (
-                            "Parakeet model files need a choice; a full download "
-                            "is about 2.5 GB")
+                        self.model_status_detail = _first_run_download_detail(
+                            model_name)
                         self._model_load_target = None
                     self._set_indicator(None)
                     self._log(
-                        "first-run Parakeet download deferred pending user choice")
+                        "first-run model download deferred pending user choice")
                     return
             else:
                 self.transcriber.load(

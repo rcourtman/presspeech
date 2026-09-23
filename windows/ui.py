@@ -4,6 +4,7 @@ import ctypes
 import math
 import os
 import queue
+import re
 import tempfile
 import threading
 import tkinter as tk
@@ -981,10 +982,10 @@ class SetupWindow:
         self._progress_active = True
         ttk.Label(
             frame,
-            text=("If the selected speech model is not already on this PC, "
-                  "Presspeech fetches its pinned model files from Hugging "
-                  "Face. Setup asks before fetching missing Parakeet files; "
-                  "the CPU default prepares automatically. Stay online while "
+            text=("Presspeech fetches pinned speech-model files from "
+                  "Hugging Face. Setup asks before downloading missing "
+                  "first-run model files, including the English-only CPU "
+                  "default. Stay online while "
                   "it prepares; speech is processed on this PC. Without "
                   "usable NVIDIA CUDA, a fresh install uses English-only "
                   "Whisper base.en on CPU (~141 MiB); there is currently no "
@@ -1058,7 +1059,7 @@ class SetupWindow:
         self.model_consent_frame = ttk.Frame(frame)
         self.model_consent_frame.grid(
             row=9, column=0, columnspan=2, sticky="ew", pady=(4, 8))
-        ttk.Label(
+        self.model_consent_label = ttk.Label(
             self.model_consent_frame,
             text=("A full multilingual Parakeet model download is about 2.5 GB "
                   "from huggingface.co; a partial local cache may need less. "
@@ -1067,7 +1068,8 @@ class SetupWindow:
                   "Whisper base.en on CPU (~141 MiB)."),
             justify="left",
             wraplength=560,
-        ).pack(anchor="w")
+        )
+        self.model_consent_label.pack(anchor="w")
         self.download_model_button = ttk.Button(
             self.model_consent_frame,
             text="Download Parakeet model (up to ~2.5 GB)",
@@ -1208,10 +1210,15 @@ class SetupWindow:
         self._poll_microphone_events()
         status = getattr(self.app, "model_status", "pending")
         detail = getattr(self.app, "model_status_detail", "")
+        model_name = self.app.settings.get("model", cfg.DEFAULTS["model"])
+        consent_detail = detail or (
+            "English-only Whisper base.en model download is about 141 MiB"
+            if model_name == "base.en" else
+            "Full Parakeet model download is about 2.5 GB")
         labels = {
             "pending": "Waiting to start…",
             "awaiting_download_consent": (
-                "Needs your choice — full Parakeet model download is about 2.5 GB"),
+                "Needs your choice — " + consent_detail),
             "ready": "Ready" + ((" — " + detail) if detail else ""),
             "error": "Needs attention" + ((" — " + detail) if detail else ""),
         }
@@ -1235,8 +1242,39 @@ class SetupWindow:
                 self.other_model_button):
             _set_control_state(
                 self.root, button,
-                "normal" if consent_required else "disabled", self.hotkey)
+                ("normal" if consent_required and
+                 (button is not self.cpu_model_button or
+                  model_name != "base.en") else "disabled"), self.hotkey)
         if consent_required:
+            if model_name == "base.en":
+                _set_accessible_text(
+                    self.model_consent_label,
+                    "The English-only Whisper base.en speech model is about "
+                    "141 MiB. Choose Download to fetch its pinned files from "
+                    "huggingface.co. Audio and transcripts stay on this PC.",
+                    announce=False)
+                _set_accessible_text(
+                    self.download_model_button,
+                    "Download English-only CPU model (~141 MiB)",
+                    announce=False)
+                self.cpu_model_button.pack_forget()
+            else:
+                _set_accessible_text(
+                    self.model_consent_label,
+                    "A full multilingual Parakeet model download is about "
+                    "2.5 GB from huggingface.co; a partial local cache may "
+                    "need less. Hugging Face receives the model request; "
+                    "audio and transcripts stay on this PC. Or choose "
+                    "English-only Whisper base.en on CPU (~141 MiB).",
+                    announce=False)
+                _set_accessible_text(
+                    self.download_model_button,
+                    "Download Parakeet model (up to ~2.5 GB)",
+                    announce=False)
+                if self.cpu_model_button.winfo_manager() != "pack":
+                    self.cpu_model_button.pack(
+                        before=self.other_model_button,
+                        anchor="w", pady=(4, 0))
             self.model_consent_frame.grid()
         else:
             self.model_consent_frame.grid_remove()
@@ -1463,6 +1501,32 @@ class SetupWindow:
         self.app.setup_window = None
 
 
+def _release_notes_for_display(body):
+    """Render bounded GitHub Markdown as inert, readable update text."""
+    if not isinstance(body, str):
+        body = ""
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
+    lines = []
+    for line in body.split("\n"):
+        line = re.sub(r"^\s*#{1,6}\s+", "", line)
+        line = re.sub(r"^(\s*)[-*]\s+", r"\1• ", line)
+        # Keep link labels but not active URLs. The update dialog is a plain
+        # text surface; users can consult the release page separately.
+        line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+        line = re.sub(r"\*\*(.*?)\*\*|__(.*?)__",
+                      lambda match: match.group(1) or match.group(2), line)
+        line = re.sub(r"`([^`]*)`", r"\1", line)
+        lines.append(line)
+    rendered = "\n".join(lines).strip()
+    if not rendered:
+        return "(No release notes available.)"
+    max_chars = 8000
+    if len(rendered) > max_chars:
+        suffix = "\n\n[Release notes shortened]"
+        rendered = rendered[:max_chars - len(suffix)].rstrip() + suffix
+    return rendered
+
+
 class UpdateWindow:
     """Explicit, verified Windows update download and install prompt."""
 
@@ -1490,10 +1554,21 @@ class UpdateWindow:
                   font=("Segoe UI", 14, "bold")).pack(anchor="w")
         ttk.Label(
             frame,
-            text=("The installer is downloaded only if you approve it.\n"
-                  "Its size and SHA-256 checksum will be verified before it runs."),
+            text=("Review the release notes before deciding. The installer is "
+                  "downloaded only if you approve it; its size and SHA-256 "
+                  "checksum are verified before it runs."),
             justify="left",
+            wraplength=560,
         ).pack(anchor="w", pady=(6, 12))
+        ttk.Label(
+            frame, text="Release notes", font=("Segoe UI", 10, "bold")
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            frame,
+            text=_release_notes_for_display(self.update.get("body", "")),
+            justify="left",
+            wraplength=560,
+        ).pack(anchor="w", pady=(0, 12))
         self.status = ttk.Label(frame, text="Ready to download")
         self.status.pack(anchor="w")
         self.progress = ttk.Progressbar(frame, mode="determinate", length=370)
@@ -1942,9 +2017,15 @@ class SettingsWindow:
             text = "Speech model needs attention" + (
                 (" — " + detail) if detail else "")
         elif status == "awaiting_download_consent":
-            text = (
-                "Parakeet model files aren't fully cached. Choose whether to "
-                "start the full download (~2.5 GB) in Setup.")
+            model_name = self.app.settings.get("model", cfg.DEFAULTS["model"])
+            if model_name == "base.en":
+                text = (
+                    "English-only Whisper base.en files aren't fully cached "
+                    "(~141 MiB). Choose whether to download them in Setup.")
+            else:
+                text = (
+                    "Parakeet model files aren't fully cached. Choose whether "
+                    "to start the full download (~2.5 GB) in Setup.")
         elif status == "loading":
             text, phase = _model_loading_feedback(self.app)
             text += " Dictation is unavailable until it is ready."
@@ -2362,12 +2443,17 @@ class ScratchpadWindow:
                 "Speech model needs attention. Open Setup or Settings to retry.",
             )
         if model_status == "awaiting_download_consent":
-            return (
-                "Dictate (or use the hotkey)", "disabled",
-                "Parakeet model files aren't fully cached. Open Setup to start "
-                "the full download (~2.5 GB), choose the smaller English-only "
-                "CPU model, or defer.",
-            )
+            model_name = self.app.settings.get("model", cfg.DEFAULTS["model"])
+            if model_name == "base.en":
+                detail = (
+                    "English-only Whisper base.en files aren't fully cached "
+                    "(~141 MiB). Open Setup to download them or defer.")
+            else:
+                detail = (
+                    "Parakeet model files aren't fully cached. Open Setup to "
+                    "start the full download (~2.5 GB), choose the smaller "
+                    "English-only CPU model, or defer.")
+            return "Dictate (or use the hotkey)", "disabled", detail
         if model_status != "ready":
             return (
                 "Dictate (or use the hotkey)", "disabled",

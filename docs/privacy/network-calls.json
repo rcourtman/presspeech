@@ -41,14 +41,14 @@
     },
     {
       "name": "windows_first_launch_model_download",
-      "when": "Published Windows 0.1.12 starts its selected model download on first launch. Upcoming 0.1.13 downloads missing CPU base.en files automatically but asks in Setup before fetching missing or incomplete first-run Parakeet files. Later Settings selections may also download missing files",
+      "when": "Published Windows 0.1.12 starts its selected model download on first launch. Upcoming 0.1.13 checks the first-run default model cache locally and asks in Setup before downloading missing files for either default: English-only CPU base.en (~141 MiB) or Parakeet (~2.5 GB). Cached models load without a prompt; later Settings selections may also download missing files",
       "destination": [
         "huggingface.co and its subdomains",
         "Hugging Face model-storage and CDN hosts under hf.co",
         "Windows 0.1.12 only: inherited HF_ENDPOINT (if set) or the Hugging Face staging endpoint selected by HUGGINGFACE_CO_STAGING",
         "Windows 0.1.12 only: configured Hub endpoint + /api/agent-harnesses when the local agent-registry cache is missing or stale"
       ],
-      "purpose": "Download local speech-model weights: multilingual Parakeet TDT v3 when NVIDIA CUDA is usable, or English-only Whisper base.en for the automatic CPU first-run path; other models are user-selectable",
+      "purpose": "Download local speech-model weights: multilingual Parakeet TDT v3 when NVIDIA CUDA is usable, or English-only Whisper base.en for the CPU first-run path; other models are user-selectable",
       "approximate_size": "About 2.5 GB for a full Parakeet TDT v3 snapshot (a partial cache may need less) or 141 MiB for Whisper base.en",
       "first_run_controls_by_release": [
         {
@@ -73,8 +73,8 @@
             },
             {
               "model": "CPU-default Whisper base.en",
-              "trigger": "automatic_on_first_run",
-              "can_defer": false
+              "trigger": "explicit_setup_choice_before_download",
+              "can_defer": true
             }
           ]
         }

@@ -175,6 +175,16 @@ keyboard access testing in addition to assistive-technology testing.
   clean profile, choose the multilingual download and confirm it starts only
   after that choice. With a complete pinned Parakeet snapshot already cached,
   confirm startup loads it without asking to download it again.
+- On a clean Windows x64 profile without usable NVIDIA CUDA and no cached
+  Whisper base.en snapshot, confirm Setup reports the English-only CPU model
+  and its approximate 141 MiB download, and that no model download starts
+  before **Download English-only CPU model** is activated. With keyboard-only
+  navigation and Narrator, verify the size and the download/defer/alternate
+  model actions are clear. Choose **Set Up Later** and confirm no download
+  continues; reopen Setup and verify the choice remains available. In another
+  clean profile, accept the download and confirm fetching begins only after
+  that action and Setup reports its progress. With a complete local base.en
+  snapshot, confirm startup loads it without asking again.
 - While Setup is awaiting the model choice, press the configured dictation
   hotkey. Confirm Setup is presented again and Presspeech does not open the
   microphone or claim to be listening.

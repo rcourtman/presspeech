@@ -64,6 +64,19 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.resolve_snapshot.assert_called_once()
         self.assertTrue(self.resolve_snapshot.call_args.kwargs["local_only"])
 
+    def test_whisper_load_can_check_its_pinned_cache_without_network(self):
+        faster_whisper = types.ModuleType("faster_whisper")
+        faster_whisper.WhisperModel = mock.Mock()
+        with mock.patch.dict(sys.modules, {"faster_whisper": faster_whisper}), \
+                mock.patch.object(engine, "cuda_available", return_value=False):
+            engine.Transcriber().load("base.en", local_only=True)
+
+        self.assertEqual(
+            self.resolve_snapshot.call_args.args[:2],
+            (engine.WHISPER_MODELS["base.en"][0],
+             engine.WHISPER_MODELS["base.en"][1]))
+        self.assertTrue(self.resolve_snapshot.call_args.kwargs["local_only"])
+
     def test_model_cache_progress_callback_keeps_snapshot_pin_unchanged(self):
         progress = mock.Mock()
         self.assertEqual(engine._cached_model_path(

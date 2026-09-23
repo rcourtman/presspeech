@@ -151,10 +151,8 @@ async function main() {
       worksheet.formatReportDraft(summary.value),
       /does not submit a report or notify maintainers; saved drafts are not monitored/,
     );
-    assert.match(
-      worksheet.formatReportDraft(summary.value),
-      /https:\/\/github\.com\/rcourtman\/presspeech\/blob\/main\/SUPPORT\.md/,
-    );
+    assert.match(worksheet.formatReportDraft(summary.value), /SUPPORT\.md guide/);
+    assert.doesNotMatch(worksheet.formatReportDraft(summary.value), /https?:\/\//);
     assert.match(
       worksheet.formatReportDraft(summary.value),
       /keep this draft private and retry later/,

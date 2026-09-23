@@ -92,10 +92,10 @@ App Control block, which has no per-app exception. If Smart App Control or
 managed policy blocks the installer, stop; do not try to circumvent the block.
 
 The installed app is about 4.4 GB. On a fresh PC with NVIDIA CUDA, the
-upcoming Windows build containing this change asks before the default
-multilingual Parakeet model's first download (about 2.5 GB); without usable
-CUDA, Presspeech selects the smaller English-only Whisper base.en CPU model
-(about 141 MiB). Other local models remain selectable in Settings; review the
+upcoming Windows build asks before downloading missing multilingual Parakeet
+files (about 2.5 GB); without usable CUDA, it asks before downloading the
+English-only Whisper base.en CPU model (about 141 MiB). Other local models
+remain selectable in Settings; review the
 [Windows language and hardware split](https://rcourtman.github.io/presspeech/windows.html#language-support)
 before downloading if you need another language.
 
@@ -106,11 +106,12 @@ Download the self-contained installer—Python is not required:
   guarded PowerShell commands together while the next prerelease is prepared.
 - After verification, run the installer and launch Presspeech from the Start
   Menu.
-- In the upcoming Windows build containing this change, Setup asks before
-  downloading missing Parakeet model files (up to ~2.5 GB). Choose that
-  download, the smaller English-only Whisper base.en CPU model (~141 MiB),
-  another model in Settings, or **Set Up Later**. Published 0.1.12 does not
-  include this prompt. Wait for **Preparing speech model…** to disappear
+- In the upcoming Windows build, Setup asks before downloading missing
+  first-run default model files: multilingual Parakeet (up to ~2.5 GB) with
+  usable CUDA or English-only Whisper base.en on CPU (~141 MiB) without it.
+  Choose the offered download, another model in Settings, or **Set Up Later**;
+  the Parakeet path also offers the smaller CPU model. Published 0.1.12 does
+  not include this prompt. Wait for **Preparing speech model…** to disappear
   before the first dictation.
 - If a shell-capable assistant is doing the installation, give it the
   [guarded Windows prompt](https://rcourtman.github.io/presspeech/install/agents.md).

@@ -1047,7 +1047,7 @@ Run these read-only checks in PowerShell:
 
 Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
 
-Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Published Windows 0.1.12 starts the selected model download on first launch. Upcoming 0.1.13 asks before downloading missing Parakeet files and offers the smaller CPU model or deferral. Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
+Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Published Windows 0.1.12 starts the selected model download on first launch. Upcoming 0.1.13 asks before downloading missing first-run default model files on either path; Setup offers deferral on both and the smaller CPU model on the Parakeet path. Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
   $ErrorActionPreference = 'Stop'
@@ -1092,7 +1092,7 @@ Once the checksum succeeds and any requested attestation check also succeeds—o
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete Parakeet cache may need less). With 0.1.13, Setup asks before downloading missing Parakeet files and offers the smaller CPU model or deferral; with published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button, then finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button, then finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
@@ -2267,8 +2267,8 @@ MODEL_DOWNLOAD_FIRST_RUN_CONTROL_EXPECTATIONS = {
             },
             {
                 "model": "CPU-default Whisper base.en",
-                "trigger": "automatic_on_first_run",
-                "can_defer": False,
+                "trigger": "explicit_setup_choice_before_download",
+                "can_defer": True,
             },
         ],
     },
@@ -2286,8 +2286,8 @@ MODEL_DOWNLOAD_SCHEMA_DESCRIPTION = (
 MODEL_DOWNLOAD_FIRST_RUN_GUIDANCE = (
     "macOS 0.3.8 and Windows 0.1.12 start a missing-model download automatically",
     "a clean install in upcoming macOS 0.3.9 asks you to choose Download Model or close Setup to defer",
-    "upcoming Windows 0.1.13 asks before fetching missing Parakeet files",
-    "the CPU-default Whisper base.en download remains automatic",
+    "upcoming Windows 0.1.13 asks before fetching missing files for either first-run default",
+    "cached models load without a prompt",
     "Existing macOS installs keep automatic startup",
     "The machine-readable inventory lists these controls per release and model",
     "Schema 1 lists model-download choices by release and missing model",

@@ -417,7 +417,9 @@ class Transcriber:
             elif is_moonshine(model_name):
                 self._load_moonshine(notify, progress_callback)
             else:
-                self._load_whisper(model_name, notify, progress_callback)
+                self._load_whisper(
+                    model_name, notify, progress_callback,
+                    local_only=local_only)
             self.model_name = model_name
             if notify is not None:
                 notify("Presspeech", "Model %s ready." % model_name)
@@ -505,7 +507,8 @@ class Transcriber:
         self.backend = "moonshine"
         self._device = device
 
-    def _load_whisper(self, model_name, notify, progress_callback=None):
+    def _load_whisper(self, model_name, notify, progress_callback=None,
+                      *, local_only=False):
         try:
             repository, revision = WHISPER_MODELS[model_name]
         except KeyError:
@@ -517,7 +520,8 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Whisper %s on %s..." % (model_name, device))
         model_path = _cached_model_path(
-            model_name, progress_callback=progress_callback)
+            model_name, local_only=local_only,
+            progress_callback=progress_callback)
         # faster-whisper may otherwise download an unpinned tokenizer when a
         # cache reset removes tokenizer.json between validation and construction.
         with ExitStack() as staging:

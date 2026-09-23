@@ -83,8 +83,7 @@
       "",
       "This download does not submit a report or notify maintainers; saved drafts are not monitored. " +
         "Your browser or operating system controls the downloaded file.",
-      "Before sharing, check the current reporting guidance and search for a matching report:",
-      "https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md",
+      "Before sharing, check Presspeech's SUPPORT.md guide and search for a matching report.",
       "If no suitable route is available, keep this draft private and retry later. Do not post private data elsewhere to work around a restriction.",
       "",
       "Test date (optional):",
