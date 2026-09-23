@@ -207,12 +207,14 @@ keyboard access testing in addition to assistive-technology testing.
   F11 and confirm that app command is not invoked. Confirm unrelated keys still
   work normally while Presspeech runs.
 - Set Windows **Text size** to 225% and use a 1024 x 768 display (or VM). Confirm
-  Setup, Settings, the update prompt, Delivery Recovery, and Try Dictation stay
-  within the desktop. Confirm the structured dialogs expose scrollbars when
-  needed and automatically scroll each control into view while navigating with
-  Tab and Shift-Tab; confirm Try Dictation exposes a visible transcript
-  scrollbar and keeps its editor, status, and Dictate command usable. Resize
-  every window and repeat with Narrator enabled.
+  text in Setup, Settings, the update prompt, Delivery Recovery, and Try
+  Dictation grows with the setting while each window stays within the desktop.
+  Change Text size while Setup or Settings is open and confirm its text follows
+  without restarting Presspeech. Confirm the structured dialogs expose
+  scrollbars when needed and automatically scroll each control into view while
+  navigating with Tab and Shift-Tab; confirm Try Dictation exposes a visible
+  transcript scrollbar and keeps its editor, status, and Dictate command usable.
+  Resize every window and repeat with Narrator enabled.
 - At 100%, 150%, and 225% display scaling, start and stop a dictation. Confirm
   the **Listening…** and **Transcribing…** indicator text is not clipped, the
   surface remains above the taskbar on the active display, and it never takes

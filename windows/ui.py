@@ -1,6 +1,7 @@
 """Tkinter windows: setup, settings, delivery recovery, and status UI."""
 
 import ctypes
+import math
 import os
 import queue
 import tempfile
@@ -62,6 +63,7 @@ class _WindowHost:
             root = tk.Tk()
             self.root = root
             root.withdraw()
+            _watch_windows_text_scale(root)
             # Tk 8.6's Windows accessibility proxy leaves most ttk controls
             # anonymous or inert. One installation follows every later
             # Toplevel created by this interpreter.
@@ -399,6 +401,51 @@ def _windows_text_scale(registry=None):
     if not 100 <= percentage <= 225:
         return 1.0
     return percentage / 100.0
+
+
+class _TkTextScaling:
+    """Apply Windows' independent text-size setting to point-sized Tk fonts."""
+
+    def __init__(self, root):
+        self.tk = root.tk
+        try:
+            baseline = float(self.tk.call("tk", "scaling"))
+        except Exception:
+            baseline = 1.0
+        self.baseline = (
+            baseline if math.isfinite(baseline) and baseline > 0 else 1.0)
+        self.current = 1.0
+
+    def update(self, text_scale):
+        try:
+            text_scale = float(text_scale)
+        except (TypeError, ValueError):
+            text_scale = 1.0
+        if not 1.0 <= text_scale <= 2.25:
+            text_scale = 1.0
+        if text_scale == self.current:
+            return False
+        try:
+            # Preserve Tk's DPI-derived baseline and scale only point units.
+            self.tk.call("tk", "scaling", self.baseline * text_scale)
+        except Exception:
+            # Accessibility scaling is best-effort; never prevent setup from
+            # opening if Tcl/Tk cannot change its scaling at runtime.
+            return False
+        self.current = text_scale
+        return True
+
+
+def _watch_windows_text_scale(root):
+    """Keep shared dialog fonts aligned with Windows Text size changes."""
+    scaling = _TkTextScaling(root)
+
+    def refresh():
+        scaling.update(_windows_text_scale())
+        root.after(250, refresh)
+
+    refresh()
+    return scaling
 
 
 def _scaled_font_points(points, text_scale):

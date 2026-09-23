@@ -209,6 +209,55 @@ class AccessibleWindowTests(unittest.TestCase):
         registry.QueryValueEx.side_effect = OSError("setting unavailable")
         self.assertEqual(ui._windows_text_scale(registry), 1.0)
 
+    def test_tk_dialog_text_scale_preserves_the_display_dpi_baseline(self):
+        interpreter = mock.Mock()
+        interpreter.call.return_value = 1.25
+        scaling = ui._TkTextScaling(types.SimpleNamespace(tk=interpreter))
+        interpreter.call.reset_mock()
+
+        self.assertTrue(scaling.update(1.5))
+        interpreter.call.assert_called_once_with("tk", "scaling", 1.875)
+        self.assertFalse(scaling.update(1.5))
+        interpreter.call.assert_called_once()
+
+        self.assertTrue(scaling.update(1.0))
+        self.assertEqual(
+            interpreter.call.call_args,
+            mock.call("tk", "scaling", 1.25),
+        )
+
+    def test_tk_dialog_text_scale_rejects_values_outside_windows_range(self):
+        interpreter = mock.Mock()
+        interpreter.call.return_value = 1.0
+        scaling = ui._TkTextScaling(types.SimpleNamespace(tk=interpreter))
+        interpreter.call.reset_mock()
+
+        self.assertTrue(scaling.update(2.25))
+        self.assertTrue(scaling.update(2.26))
+        self.assertEqual(interpreter.call.call_args_list, [
+            mock.call("tk", "scaling", 2.25),
+            mock.call("tk", "scaling", 1.0),
+        ])
+
+    def test_shared_tk_host_refreshes_text_scale_while_dialogs_are_open(self):
+        interpreter = mock.Mock()
+        interpreter.call.return_value = 1.25
+        root = mock.Mock(tk=interpreter)
+
+        with mock.patch.object(
+                ui, "_windows_text_scale", side_effect=(1.5, 2.0)):
+            scaling = ui._watch_windows_text_scale(root)
+            refresh = root.after.call_args.args[1]
+            refresh()
+
+        self.assertEqual(scaling.current, 2.0)
+        self.assertIn(mock.call(250, refresh), root.after.call_args_list)
+        self.assertEqual(interpreter.call.call_args_list, [
+            mock.call("tk", "scaling"),
+            mock.call("tk", "scaling", 1.875),
+            mock.call("tk", "scaling", 2.5),
+        ])
+
     def test_indicator_custom_fonts_follow_accessibility_text_scale(self):
         self.assertEqual(ui._scaled_font_points(10, 1.0), 10)
         self.assertEqual(ui._scaled_font_points(10, 1.5), 15)

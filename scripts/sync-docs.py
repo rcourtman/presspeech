@@ -538,6 +538,20 @@ MONTH_NUMBERS = {
 }
 
 STALE_PATTERNS = [
+    (
+        re.compile(
+            r"\b(?:the )?apps? ship with no account, subscription, telemetry\b",
+            re.IGNORECASE,
+        ),
+        "unqualified no-telemetry claim conflicts with published Windows dependencies",
+    ),
+    (
+        re.compile(
+            r"\bPresspeech has no analytics, event tracking, crash reporter\b",
+            re.IGNORECASE,
+        ),
+        "first-party analytics claim does not distinguish bundled-library telemetry",
+    ),
     (re.compile(r"2\.2 MB"), "old release zip size"),
     (re.compile(r'"softwareVersion": "0\.2\.1"'), "old structured-data version"),
     (
@@ -1234,6 +1248,12 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n" + setup_line,
             path=path,
         )
+    privacy_line = (
+        "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
+        "published Windows 0.1.12 does not disable bundled-library telemetry during model downloads (see the privacy inventory)."
+    )
+    if re.search(r"(?m)^- Privacy:.*$", text):
+        text = re.sub(r"(?m)^- Privacy:.*$", privacy_line, text, count=1)
     diagnostics_line = "- Diagnostics: macOS Copy/Save Diagnostics and Windows Copy Diagnostics report runtime and microphone availability without transcript, dictionary, exact microphone names, raw error details, or raw log lines.\n"
     if re.search(r"(?m)^- Diagnostics:.*$", text):
         text = re.sub(r"(?m)^- Diagnostics:.*$", diagnostics_line.rstrip("\n"), text, count=1)
@@ -1251,6 +1271,17 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "https://rcourtman.github.io/presspeech/windows.html.",
         1,
     )
+    old_short_answer = (
+        "The apps ship with no account, subscription, telemetry, or cloud transcription endpoint."
+    )
+    if old_short_answer in text:
+        text = replace_literal(
+            text,
+            old_short_answer,
+            "The apps have no account or cloud transcription endpoint and Presspeech does not operate first-party analytics. "
+            "Published Windows 0.1.12 does not disable Hugging Face library telemetry during model downloads; see the privacy inventory.",
+            path=path,
+        )
     windows_page = "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
     if windows_page not in text:
         text = replace_literal(
@@ -1266,6 +1297,23 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
 def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     del metadata
     text = read_text(path)
+    old_privacy_summary = (
+        "Presspeech has no analytics, event tracking, crash reporter, account system, "
+        "transcript sync, or cloud transcription endpoint. Audio is captured while "
+        "the hotkey is active, transcribed locally, then discarded."
+    )
+    if old_privacy_summary in text:
+        text = replace_literal(
+            text,
+            old_privacy_summary,
+            "Presspeech does not operate first-party analytics, event tracking, or crash reporting, "
+            "and has no account system, transcript sync, or cloud transcription endpoint. The "
+            "published Windows 0.1.12 installer does not disable Hugging Face libraries' default "
+            "usage telemetry during model downloads; this dependency-generated activity is "
+            "separate from audio or transcript upload. Audio is captured while the hotkey is "
+            "active, transcribed locally, then discarded.",
+            path=path,
+        )
     download_sentence = (
         "First launch downloads the local speech model weights, about 500-600 MB, "
         "into `~/Library/Application Support/FluidAudio/`.\n"
@@ -2394,6 +2442,21 @@ def run_self_test() -> None:
         )
         if not stale_copy_errors([stale]):
             raise SyncError("self-test: stale clipboard privacy wording was not flagged")
+        telemetry_copy = Path(tmp) / "telemetry.txt"
+        telemetry_copy.write_text(
+            "The apps ship with no account, subscription, telemetry, or cloud transcription endpoint.\n"
+            "Presspeech has no analytics, event tracking, crash reporter, account system.\n",
+            encoding="utf-8",
+        )
+        if len(stale_copy_errors([telemetry_copy])) != 2:
+            raise SyncError("self-test: unqualified telemetry claims were not flagged")
+        telemetry_copy.write_text(
+            "Presspeech does not operate first-party analytics. Published Windows 0.1.12 "
+            "does not disable bundled-library telemetry during model downloads.\n",
+            encoding="utf-8",
+        )
+        if stale_copy_errors([telemetry_copy]):
+            raise SyncError("self-test: version-scoped telemetry disclosure was rejected")
         stale_svg = Path(tmp) / "caption.svg"
         stale_svg.write_text(
             "On macOS there is no Dock icon, no preferences window.\n",
