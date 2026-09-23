@@ -87,8 +87,13 @@
             <article class="card" id="macos">
               <h3>macOS 0.3.8</h3>
               <p>Requires Apple Silicon and macOS 14 or later. The release is notarised. The 0.3.8 build starts its first 500–600 MB local model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; close Setup to defer. Upgrades and cached models load automatically. Speech recognition runs on your Mac.</p>
-              <p class="quiet"><strong>Before installing or launching:</strong> macOS 0.3.8 model-download requests may include a Hugging Face token inherited by Presspeech, though the public model needs no account token. If one may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Dictation audio and transcripts are not sent. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
-              <p><a href="privacy.html#macos-0-3-8-after-use">Already used macOS 0.3.8? See what to do before another model download.</a></p>
+              <div class="note warn" id="macos-model-download-privacy">
+                <p><strong>Before installing or launching:</strong> macOS 0.3.8 model-download requests may include a Hugging Face token inherited by Presspeech, though the public model needs no account token. If one may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Dictation audio and transcripts are not sent. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+                <details>
+                  <summary>Already used macOS 0.3.8? See what to do</summary>
+                  <p><a href="privacy.html#macos-0-3-8-after-use">Follow the steps before another model download.</a></p>
+                </details>
+              </div>
               <p><a href="install.html">Install the macOS release</a></p>
             </article>
             <article class="card" id="windows">
@@ -107,7 +112,13 @@
                   <p>The installer is unsigned. Follow the <a href="windows.html#download-verify-run">SHA-256 verification steps</a>. After checking the source and hash, you may choose <strong>More info → Run anyway</strong> for a SmartScreen warning. If Smart App Control or managed policy blocks it, stop—do not try to circumvent the block.</p>
                 </li>
               </ol>
-              <p class="quiet"><strong>Before installing or launching Windows 0.1.12:</strong> its model downloads may send Hugging Face usage telemetry and include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. If a Hugging Face token or custom download route is configured on this PC—or you are unsure—wait until Windows 0.1.13 is published. The public models need no account token; dictation audio and transcripts are not sent in model downloads. See the <a href="windows.html#model-download-privacy">Windows privacy decision and technical details</a> and the <a href="privacy.html#network-calls">version-specific network inventory</a>. <strong>Already used Windows 0.1.12?</strong> If a model download ran with a token available and an inherited <code>HF_ENDPOINT</code> or staging setting may have sent it to a destination you do not trust, treat the token as disclosed to that destination. <a href="https://huggingface.co/settings/token">Revoke the token and create a replacement at Hugging Face Access Tokens</a>; do not include token values in logs or support requests.</p>
+              <div class="note warn" id="windows-model-download-privacy">
+                <p><strong>Before installing or launching Windows 0.1.12:</strong> its model downloads may send Hugging Face usage telemetry and include an already-configured or locally saved Hugging Face token. Custom download routing can change where the model request—and a token it carries—goes. If a Hugging Face token or custom download route is configured on this PC—or you are unsure—wait until Windows 0.1.13 is published. The public models need no account token; dictation audio and transcripts are not sent in model downloads. See the <a href="windows.html#model-download-privacy">Windows privacy decision and technical details</a> and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+                <details>
+                  <summary>Already used Windows 0.1.12? Check token safety</summary>
+                  <p>If a model download ran with a token available and an inherited <code>HF_ENDPOINT</code> or staging setting may have sent it to a destination you do not trust, treat the token as disclosed to that destination. <a href="https://huggingface.co/settings/token">Revoke the token and create a replacement at Hugging Face Access Tokens</a>; do not include token values in logs or support requests.</p>
+                </details>
+              </div>
               <p><a href="windows.html#language-support">Check requirements and install the Windows prerelease</a></p>
             </article>
           </div>
