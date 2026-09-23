@@ -5083,11 +5083,12 @@ actor TranscriptionWorker {
         }
 
         log("ASR: downloading + verifying + loading \(profile.shortName) CoreML weights…")
-        let t0 = Date()
+        // Wall-clock adjustments must not skew model-load timing.
+        let t0 = ProcessInfo.processInfo.systemUptime
         engine = .parakeetV3(try await loadParakeetV3(progressHandler: progressHandler))
         loadedProfile = profile
         ready = true
-        log("ASR: \(profile.shortName) ready in \(String(format: "%.2f", Date().timeIntervalSince(t0))) s")
+        log("ASR: \(profile.shortName) ready in \(String(format: "%.2f", ProcessInfo.processInfo.systemUptime - t0)) s")
     }
 
     private func loadParakeetV3(progressHandler: ProgressHandler?) async throws -> AsrManager {
@@ -10094,10 +10095,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             var permissionInterruptionObserved = false
             defer { recordingPasteTarget = nil }
             do {
-                let t0 = Date()
+                // ASR latency is elapsed time, not a wall-clock timestamp.
+                let t0 = ProcessInfo.processInfo.systemUptime
                 let text = try await asr.transcribe(samples: samples,
                                                     language: dictationLanguage.fluidLanguage)
-                let dt = Date().timeIntervalSince(t0)
+                let dt = ProcessInfo.processInfo.systemUptime - t0
                 if !isTerminating {
                     // Losing a grant must not throw away a transcription that
                     // has already completed. Remember even a transient loss:
