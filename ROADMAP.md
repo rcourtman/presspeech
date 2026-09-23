@@ -172,13 +172,13 @@ and target-app editing behavior.
 Public user evidence is thin and self-selected. A recent
 [FOSS discussion of Handy](https://www.reddit.com/r/foss/comments/1vxrgg5/a_free_open_source_speechtotext_tool_that_has/)
 includes anecdotal replies about reducing typing burden and one user's initial
-difficulty finding a toggle mode that was already available. On 23 September,
-the original poster in a new [r/macapps on-device dictation thread](https://www.reddit.com/r/macapps/comments/1w3ljff/what_is_the_best_ondevice_voice_transcription_app/)
-listed no subscription, local recognition, and non-English language support as
-requirements, with model choice and diarization as optional. This is one user's
-search amid a mix of user and developer replies, not a market estimate or a
-Presspeech request; it reinforces publishing exact language boundaries, not
-adding a model catalogue on its own. More directly,
+difficulty finding a toggle mode that was already available. In an August 31,
+2026 [r/macapps on-device dictation thread](https://www.reddit.com/r/macapps/comments/1w3ljff/what_is_the_best_ondevice_voice_transcription_app/),
+the original poster listed no subscription, local recognition, and non-English
+language support as requirements, with model choice and diarization as
+optional. This is one user's search amid a mix of user and developer replies,
+not a market estimate or a Presspeech request; it reinforces publishing exact
+language boundaries, not adding a model catalogue on its own. More directly,
 Handy's [Linux notes](https://github.com/cjpais/Handy#linux-notes) warn that,
 in some compositor configurations, its visible recording overlay can steal
 focus and interfere with paste, while
