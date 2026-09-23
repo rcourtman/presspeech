@@ -217,13 +217,36 @@ enum MenuBarState {
     case error
 }
 
-func menuBarAccessibilityValue(for state: MenuBarState) -> String {
+func menuBarAccessibilityValue(for state: MenuBarState,
+                              notice: DictationNotice? = nil) -> String {
+    if let notice {
+        switch state {
+        case .idle, .error:
+            return notice.accessibilityValue
+        case .loading, .recording, .busy:
+            break
+        }
+    }
     switch state {
     case .loading: return "Loading"
     case .idle: return "Ready"
     case .recording: return "Recording"
     case .busy: return "Transcribing"
     case .error: return "Needs attention"
+    }
+}
+
+func shouldNotifyAssistiveAppsOfMenuBarState(_ state: MenuBarState,
+                                              hasDictationNotice: Bool) -> Bool {
+    switch state {
+    case .recording:
+        // A spoken value-change response could be picked up by the live mic.
+        return false
+    case .error where hasDictationNotice:
+        // The actionable dictation error has its own concise announcement.
+        return false
+    default:
+        return true
     }
 }
 
@@ -8333,6 +8356,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         "com.local.presspeech.menu.launch-at-login"
     )
     private var statusItem: NSStatusItem!
+    private var lastMenuBarAccessibilityValue: String?
     private var templateImage: NSImage?
     private var recordingImage: NSImage?
     private var errorImage: NSImage?
@@ -9295,7 +9319,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             log("statusItem: presspeech-menubar.png not in Bundle.main — text fallback")
         }
         button.toolTip = "Presspeech"
-        button.setAccessibilityValue(menuBarAccessibilityValue(for: .loading))
+        updateMenuBarAccessibilityValue(menuBarAccessibilityValue(for: .loading),
+                                        notifyAssistiveApps: false)
     }
 
     private func tintedCopy(of source: NSImage, with color: NSColor) -> NSImage {
@@ -9320,7 +9345,16 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func setMenuBarState(_ state: MenuBarState) {
         guard let button = statusItem.button else { return }
-        button.setAccessibilityValue(menuBarAccessibilityValue(for: state))
+        let value = menuBarAccessibilityValue(for: state, notice: dictationNotice)
+        // Never request a VoiceOver announcement while captured microphone
+        // audio is live: synthesized screen-reader speech could enter the
+        // dictation. The current value is still available on the status item;
+        // post updates after capture ends and for non-capture recovery states.
+        let notifyAssistiveApps = shouldNotifyAssistiveAppsOfMenuBarState(
+            state,
+            hasDictationNotice: dictationNotice != nil
+        )
+        updateMenuBarAccessibilityValue(value, notifyAssistiveApps: notifyAssistiveApps)
         switch state {
         case .loading:
             // Subtle dim while the model compiles. nil contentTintColor
@@ -9344,6 +9378,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         case .error:
             button.image = errorImage ?? templateImage
             button.contentTintColor = nil
+        }
+    }
+
+    private func updateMenuBarAccessibilityValue(_ value: String,
+                                                 notifyAssistiveApps: Bool) {
+        guard value != lastMenuBarAccessibilityValue,
+              let button = statusItem?.button else { return }
+        lastMenuBarAccessibilityValue = value
+        button.setAccessibilityValue(value)
+        if notifyAssistiveApps {
+            NSAccessibility.post(element: button, notification: .valueChanged)
         }
     }
 
@@ -9617,7 +9662,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             Sounds.playError()
         }
         flashErrorMenuBarIcon()
-        statusItem?.button?.setAccessibilityValue(notice.accessibilityValue)
         announceForAccessibility(notice.accessibilityValue)
         if settings.showRecordingWaveform {
             showRecordingHUD(mode: .notice(notice), level: 0)
@@ -9645,7 +9689,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             self.setMenuBarState(.idle)
             if let notice = self.dictationNotice {
                 self.statusItem.button?.toolTip = notice.statusTitle
-                self.statusItem.button?.setAccessibilityValue(notice.accessibilityValue)
             }
             self.rebuildMenu()
         }
@@ -20753,9 +20796,41 @@ private enum PresspeechSelfTest {
                                         isTerminating: true),
                    equals: false,
                    "terminating app should reject trigger-mode changes")
+        try expect(menuBarAccessibilityValue(for: .loading),
+                   equals: "Loading",
+                   "menu-bar accessibility value should expose startup state")
+        try expect(menuBarAccessibilityValue(for: .idle),
+                   equals: "Ready",
+                   "menu-bar accessibility value should expose ready state")
         try expect(menuBarAccessibilityValue(for: .recording),
                    equals: "Recording",
-                   "menu-bar accessibility value should announce recording state")
+                   "menu-bar accessibility value should expose recording state")
+        try expect(menuBarAccessibilityValue(for: .busy),
+                   equals: "Transcribing",
+                   "menu-bar accessibility value should expose transcription state")
+        try expect(menuBarAccessibilityValue(for: .error),
+                   equals: "Needs attention",
+                   "menu-bar accessibility value should expose startup recovery state")
+        try expect(menuBarAccessibilityValue(for: .error,
+                                             notice: .noAudioCaptured),
+                   equals: DictationNotice.noAudioCaptured.accessibilityValue,
+                   "dictation recovery should retain its actionable status on the menu-bar item")
+        try expect(shouldNotifyAssistiveAppsOfMenuBarState(.recording,
+                                                           hasDictationNotice: false),
+                   equals: false,
+                   "recording-state changes should not speak into the live microphone")
+        try expect(shouldNotifyAssistiveAppsOfMenuBarState(.busy,
+                                                           hasDictationNotice: false),
+                   equals: true,
+                   "transcription-state changes should reach assistive apps after capture ends")
+        try expect(shouldNotifyAssistiveAppsOfMenuBarState(.error,
+                                                           hasDictationNotice: true),
+                   equals: false,
+                   "dictation recovery should not duplicate its actionable announcement")
+        try expect(shouldNotifyAssistiveAppsOfMenuBarState(.idle,
+                                                           hasDictationNotice: false),
+                   equals: true,
+                   "the completed ready state should reach assistive apps")
         try expect(DictationNotice.copiedToClipboard.statusTitle,
                    equals: "Transcript copied — press ⌘V to paste",
                    "focus-safe delivery should explain immediate clipboard recovery")

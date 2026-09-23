@@ -672,6 +672,14 @@ item after the development-wrapper launch check.
 - Enable macOS Voice Control and confirm the Presspeech status item is named
   **Presspeech**, its recording state is announced, and the named start/stop
   menu actions can be selected by voice.
+- With VoiceOver enabled, navigate to the Presspeech status item and confirm
+  it remains named **Presspeech** while its current value changes through
+  **Ready**, **Recording**, **Transcribing**, and **Ready** again. Confirm the
+  completed transcription and recovery values are available without relying on
+  the icon or colour. Presspeech must not request a spoken recording-start
+  announcement while the microphone is capturing; after capture ends, confirm
+  the **Transcribing** and completion/recovery value changes reach VoiceOver
+  without repeating on unchanged states.
 - With VoiceOver enabled, trigger a focus-change recovery and a no-speech
   result. Confirm each recovery instruction is announced once without moving
   VoiceOver focus away from the target app, including when feedback sounds and
