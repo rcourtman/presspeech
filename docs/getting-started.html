@@ -200,10 +200,10 @@
         <div class="wrap">
           <span class="section-eyebrow">Ready to use</span>
           <h2>Dictate into a familiar text field</h2>
+          <div class="note"><p><strong>Before dictating sensitive text:</strong> Presspeech passes finished text through the system clipboard. macOS 0.3.8 can make transcript entries available through Universal Clipboard when Handoff is enabled; Windows 0.1.12 writes can be retained by Clipboard History or synced when that setting is enabled. Review the <a href="privacy.html#operating-system-clipboard-services">clipboard privacy boundary</a>, including later-build controls and third-party clipboard managers.</p></div>
           <p>Open a blank TextEdit document on macOS or Notepad on Windows, click in it, and repeat hold–speak–release without changing windows. Press <strong>Escape</strong> to cancel an active recording.</p>
           <div class="note"><p><strong>If Presspeech copies instead:</strong> it cannot verify the same destination. Paste the existing transcript into the intended field; do not dictate it again first. This safe fallback can occur in some Electron/Chromium apps on macOS 0.3.8 even when the window appears unchanged. On Windows, reopen an administrator-level target normally rather than elevating Presspeech.</p></div>
           <div class="note warn"><p><strong>Command shells can run pasted text.</strong> <strong>Append newline</strong>, Windows <strong>newline</strong>, or spoken formatting can submit text. Dictate commands into Try Dictation or a text editor, review the exact text, then paste and run deliberately. See <a href="https://support.apple.com/en-gb/127377">Apple</a> and <a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings">Windows</a> terminal guidance.</p></div>
-          <div class="note"><p><strong>Clipboard privacy:</strong> operating-system services or third-party clipboard managers can retain or sync copied text. Review the <a href="privacy.html">clipboard privacy boundary</a> before dictating sensitive text.</p></div>
           <p>Before relying on a browser editor, Electron app, terminal, or remote session, run the <a href="app-compatibility.html">privacy-safe target-app check</a>. It tests automatic paste and clipboard recovery without publishing your words.</p>
         </div>
       </section>

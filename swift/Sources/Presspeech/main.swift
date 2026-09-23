@@ -3547,7 +3547,11 @@ private func firstSpeechModelDownloadSetupDetail(profile: SpeechModelProfile) ->
     let requiredFreeSpace = formattedByteCount(
         UInt64(speechModelDownloadRequiredBytes(for: profile))
     )
-    return "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. Allow about \(requiredFreeSpace) free to download and prepare it with CoreML. Dictation audio and transcripts stay on your Mac. Choose Download Model to begin, or close setup to defer."
+    return "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. " +
+        "The public model needs no account token; Presspeech removes inherited Hugging Face tokens before downloading. " +
+        "Dictation audio and transcripts stay on your Mac. " +
+        "Allow about \(requiredFreeSpace) free to download and prepare it with CoreML. " +
+        "Choose Download Model to begin, or close setup to defer."
 }
 
 private func speechModelSetupRowState(profile: SpeechModelProfile,
@@ -17499,6 +17503,12 @@ private enum PresspeechSelfTest {
         try expect(firstDownloadDetail.contains("500–600 MB from Hugging Face"),
                    equals: true,
                    "first-download consent should identify the approximate transfer size and source")
+        try expect(firstDownloadDetail.contains("The public model needs no account token"),
+                   equals: true,
+                   "first-download consent should clarify that the public model needs no account token")
+        try expect(firstDownloadDetail.contains("removes inherited Hugging Face tokens before downloading"),
+                   equals: true,
+                   "first-download consent should disclose inherited-token handling")
         try expect(firstDownloadDetail.contains(formattedByteCount(UInt64(
                        speechModelDownloadRequiredBytes(for: .multilingualV3)))),
                    equals: true,

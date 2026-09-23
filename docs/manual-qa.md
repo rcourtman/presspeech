@@ -463,11 +463,14 @@ For the synthetic-credential row, use a disposable macOS profile or VM with no
 Hugging Face login/cache. Launch the installed candidate executable directly
 with nonfunctional marker values in `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, and
 `HUGGINGFACEHUB_API_TOKEN` (do not use or inspect real token values). Confirm
-the normal first-download choice appears, the public model download succeeds,
-and any local log mentions variable names only—not marker values. Do not copy
-raw logs or capture/share request headers. This packaged-app check complements
-`swift run Presspeech --self-test hostile-env`, which exercises actual process
-environment removal and Foundation visibility with synthetic values.
+the normal first-download choice clearly says the public model needs no account
+token, Presspeech removes inherited Hugging Face tokens before
+downloading, and dictation audio and transcripts stay on the Mac. Confirm the
+public model download succeeds and any local log mentions variable names
+only—not marker values. Do not copy raw logs or capture/share request headers.
+This packaged-app check complements the focused
+`swift run Presspeech --self-test hostile-env` check, which exercises actual
+process environment removal and Foundation visibility with synthetic values.
 
 For issue #33, pass only if a steady-focus Electron target receives the complete
 transcript once, while switching to a second window of that same app before
