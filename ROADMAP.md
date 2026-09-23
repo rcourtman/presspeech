@@ -125,6 +125,18 @@ to qualify, not as a mandate for a new shortcut or persistent archive. Do not
 infer adoption, unmet demand, or roadmap priority from discussion activity or
 competitor feature lists.
 
+A wider check finds the same handoff class in other products: an individual
+macOS [OmniVoice Studio report](https://github.com/debpalash/VoiceStudio/issues/287)
+describes a focus-stealing widget and failed clipboard write that could insert
+old clipboard contents; a Windows [Codex Desktop report](https://github.com/openai/codex/issues/37593)
+separates successful transcription from silent failure in external fields; and
+the [HyperVoice changelog](https://hypervoice.app/changelog) documents clipboard
+restoration arriving before slower target apps read the dictation. These are
+product-specific issues and maintainer reports, not a comparable sample or
+prevalence estimate. They reinforce measuring delivery separately from
+recognition and testing more than one app class; they do not justify broader
+scope or product-to-product quality claims.
+
 A separate [RSI-community discussion about a Windows push-to-talk tool](https://www.reddit.com/r/RSI/comments/1tl9vxw/i_built_a_free_fully_offline_pushtotalk_dictation/)
 raised sustained key-holding as a possible added physical burden and suggested
 press-to-toggle. This is a single anecdotal exchange, and the commenter
