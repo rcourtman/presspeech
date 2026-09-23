@@ -1512,6 +1512,31 @@ class SetupWindowTests(unittest.TestCase):
             "Ready — input level detected",
         )
 
+    def test_unexpected_microphone_check_error_completes_without_details(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.app.check_input_device.side_effect = OSError(
+            "private device or driver detail")
+
+        window._check_microphone_worker("auto")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        window.app.check_input_device.assert_called_once_with("auto")
+        self.assertTrue(window.microphone_events.empty())
+        self.assertFalse(window.microphone_checking)
+        window.check_microphone_button.config.assert_called_once_with(
+            state="normal")
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Microphone check failed — choose Check Microphone to retry",
+        )
+        self.assertNotIn(
+            "private device or driver detail",
+            str(set_text.call_args_list),
+        )
+
     def test_silent_microphone_result_does_not_claim_readiness(self):
         window = self.make_window("ready")
         window.microphone_checking = True

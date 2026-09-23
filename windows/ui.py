@@ -1505,7 +1505,13 @@ class SetupWindow:
         ).start()
 
     def _check_microphone_worker(self, selected):
-        result = self.app.check_input_device(selected)
+        try:
+            result = self.app.check_input_device(selected)
+        except Exception:
+            # The app normally converts audio-backend failures to "unavailable".
+            # Keep the asynchronous UI state recoverable if an unexpected
+            # exception escapes that boundary; never surface driver details.
+            result = "check_error"
         # Query again after the check: it may have refreshed PortAudio after a
         # reconnect. Do this on the worker so a slow driver never blocks Tk.
         try:
@@ -1561,6 +1567,8 @@ class SetupWindow:
             text = (
                 "Connected, but no input level detected — unmute and "
                 "choose Check Microphone again")
+        elif result == "check_error":
+            text = "Microphone check failed — choose Check Microphone to retry"
         else:
             text = "Needs attention — microphone could not be opened"
         _set_accessible_text(self.microphone_status, text)
