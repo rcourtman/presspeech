@@ -2912,15 +2912,15 @@ enum Permission: String, CaseIterable, Equatable {
 func microphoneSetupDetail(authorizationStatus: AVAuthorizationStatus) -> String {
     switch authorizationStatus {
     case .notDetermined:
-        return "Captures your voice while dictating. Choose Grant, then choose OK in the macOS prompt."
+        return "Captures your voice while dictating. Choose Continue to open the macOS microphone prompt, then choose OK."
     case .denied:
-        return "Microphone access was previously denied. Choose Grant to open System Settings → Privacy & Security → Microphone, then enable Presspeech."
+        return "Microphone access was previously denied. Choose Open Settings to review System Settings → Privacy & Security → Microphone, then enable Presspeech."
     case .restricted:
         return "Microphone access is restricted by macOS or device management. Contact your administrator if you need access."
     case .authorized:
         return "Captures your voice while dictating."
     @unknown default:
-        return "Captures your voice while dictating. Use 'Grant' to review microphone access in System Settings."
+        return "Captures your voice while dictating. Choose Open Settings to review microphone access."
     }
 }
 
@@ -3469,9 +3469,9 @@ private func permissionSetupDetail(_ permission: Permission,
         let renameNote = paneName == permission.rawValue
             ? ""
             : " This is the permission called Accessibility on earlier macOS versions."
-        return "Verifies the focused window and sends the paste shortcut. Apple's grant can control your Mac; its scope is broader than Presspeech's use. Choose Grant to open System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
+        return "Verifies the focused window and sends the paste shortcut. Apple's grant can control your Mac; its scope is broader than Presspeech's use. Choose Open Settings to review System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
     case .inputMonitoring:
-        return "Lets Presspeech detect the dictation hotkey. Choose Grant to open System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to Presspeech."
+        return "Lets Presspeech detect the dictation hotkey. Choose Open Settings to review System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to Presspeech."
     }
 }
 
@@ -3497,9 +3497,48 @@ private func setupPermissionPresentation(permission: Permission,
                                            buttonTitle: nil,
                                            isRestricted: true)
     }
+    let buttonTitle: String
+    if grantRequestCount >= 1 {
+        buttonTitle = "Try Again"
+    } else {
+        switch permission {
+        case .microphone:
+            // The first microphone request opens Apple's system prompt. A
+            // prior denial cannot show that prompt again, so this action opens
+            // the persistent Privacy & Security setting instead.
+            switch microphoneAuthorizationStatus {
+            case .notDetermined:
+                buttonTitle = "Continue"
+            case .denied:
+                buttonTitle = "Open Settings"
+            case .restricted:
+                buttonTitle = "Open Settings" // returned above as Restricted
+            case .authorized:
+                buttonTitle = "Open Settings" // inconsistent with isGranted
+            @unknown default:
+                buttonTitle = "Open Settings"
+            }
+        case .accessibility, .inputMonitoring:
+            buttonTitle = "Open Settings"
+        }
+    }
     return SetupPermissionPresentation(status: "Missing",
-                                       buttonTitle: grantRequestCount >= 1 ? "Try Again" : "Grant",
+                                       buttonTitle: buttonTitle,
                                        isRestricted: false)
+}
+
+private func setupActionAccessibilityLabel(buttonTitle: String,
+                                           contextName: String) -> String {
+    switch buttonTitle {
+    case "Continue":
+        return "Continue to request \(contextName) access"
+    case "Open Settings":
+        return "Open Settings for \(contextName)"
+    case "Try Again":
+        return "Try again for \(contextName)"
+    default:
+        return "\(buttonTitle) \(contextName)"
+    }
 }
 
 private func permissionReadinessMenuStatusTitle(missingPermissions: [Permission],
@@ -11278,7 +11317,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         button.target = self
         button.action = action
         button.tag = tag
-        button.setAccessibilityLabel("\(buttonTitle) \(title)")
+        button.setAccessibilityLabel(setupActionAccessibilityLabel(
+            buttonTitle: buttonTitle,
+            contextName: title
+        ))
         if title == "Audio input", buttonTitle == "Choose…" {
             let help = "Review available microphones and select the input Presspeech should use."
             button.toolTip = help
@@ -11297,7 +11339,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if snapshot.hotkey.status == "Ready to test" {
             return "Test the hotkey before choosing Done. If you prefer menu controls, choose Try Dictation and use Start Dictation in the menu. If the hotkey controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
         }
-        return "Tip: If clicking 'Grant' doesn't open a prompt or show Presspeech in System Settings, click 'Try Again' — Presspeech will reset its TCC permission entry and re-request, which clears stuck macOS state."
+        return "Tip: If the permission prompt does not appear or Presspeech is missing from System Settings, choose Try Again. Presspeech will reset its permission entry and re-request, which can clear stuck macOS state."
     }
 
     private func makeSetupChecklistView(snapshot: SetupChecklistSnapshot) -> NSView {
@@ -11522,7 +11564,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             button.bezelStyle = .rounded
             button.tag = tag
             button.identifier = NSUserInterfaceItemIdentifier("setup-\(identifier)-action")
-            button.setAccessibilityLabel("\(buttonTitle) \(title)")
+            button.setAccessibilityLabel(setupActionAccessibilityLabel(
+                buttonTitle: buttonTitle,
+                contextName: title
+            ))
             if title == "Audio input", buttonTitle == "Choose…" {
                 let help = "Review available microphones and select the input Presspeech should use."
                 button.toolTip = help
@@ -11745,13 +11790,16 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
 
         let title: String
-        if clicks >= 1 {
-            // First click already happened; permission still denied,
-            // so signal explicitly that a second click will reset
-            // any stuck TCC state and re-request.
-            title = "⚠ Grant \(permissionName) (try again — will reset stuck state)…"
-        } else {
-            title = "⚠ Grant \(permissionName) permission…"
+        switch presentation.buttonTitle ?? "Open Settings" {
+        case "Continue":
+            title = "⚠ Continue to request \(permissionName) access…"
+        case "Try Again":
+            // A second explicit action resets the represented TCC entry
+            // before requesting again; do not imply that the first action
+            // itself granted access.
+            title = "⚠ Try Again — reset stuck \(permissionName) access…"
+        default:
+            title = "⚠ Open Settings for \(permissionName)…"
         }
         let item = NSMenuItem(title: title,
                               action: #selector(grantPermissionClicked(_:)),
@@ -16206,18 +16254,58 @@ private enum PresspeechSelfTest {
     private static func testReadiness() throws {
         try expect(
             microphoneSetupDetail(authorizationStatus: .notDetermined),
-            equals: "Captures your voice while dictating. Choose Grant, then choose OK in the macOS prompt.",
+            equals: "Captures your voice while dictating. Choose Continue to open the macOS microphone prompt, then choose OK.",
             "first-time microphone authorization should explain the system prompt"
         )
         try expect(
             microphoneSetupDetail(authorizationStatus: .denied),
-            equals: "Microphone access was previously denied. Choose Grant to open System Settings → Privacy & Security → Microphone, then enable Presspeech.",
+            equals: "Microphone access was previously denied. Choose Open Settings to review System Settings → Privacy & Security → Microphone, then enable Presspeech.",
             "a previous microphone denial should direct users to the persistent Settings control"
         )
         try expect(
             microphoneSetupDetail(authorizationStatus: .restricted),
             equals: "Microphone access is restricted by macOS or device management. Contact your administrator if you need access.",
             "restricted microphone access should not imply that a user can grant it"
+        )
+        try expect(
+            setupPermissionPresentation(permission: .microphone,
+                                        isGranted: false,
+                                        microphoneAuthorizationStatus: .notDetermined,
+                                        grantRequestCount: 0),
+            equals: SetupPermissionPresentation(status: "Missing",
+                                                buttonTitle: "Continue",
+                                                isRestricted: false),
+            "first-time microphone setup should use a neutral action before Apple's permission prompt"
+        )
+        try expect(
+            setupPermissionPresentation(permission: .microphone,
+                                        isGranted: false,
+                                        microphoneAuthorizationStatus: .denied,
+                                        grantRequestCount: 0),
+            equals: SetupPermissionPresentation(status: "Missing",
+                                                buttonTitle: "Open Settings",
+                                                isRestricted: false),
+            "a denied microphone permission should label its persistent Settings route accurately"
+        )
+        try expect(
+            setupPermissionPresentation(permission: .accessibility,
+                                        isGranted: false,
+                                        microphoneAuthorizationStatus: .notDetermined,
+                                        grantRequestCount: 0),
+            equals: SetupPermissionPresentation(status: "Missing",
+                                                buttonTitle: "Open Settings",
+                                                isRestricted: false),
+            "Accessibility setup should name its System Settings action"
+        )
+        try expect(
+            setupPermissionPresentation(permission: .inputMonitoring,
+                                        isGranted: false,
+                                        microphoneAuthorizationStatus: .notDetermined,
+                                        grantRequestCount: 0),
+            equals: SetupPermissionPresentation(status: "Missing",
+                                                buttonTitle: "Open Settings",
+                                                isRestricted: false),
+            "Input Monitoring setup should name its System Settings action"
         )
         try expect(
             setupPermissionPresentation(permission: .microphone,
@@ -16248,6 +16336,18 @@ private enum PresspeechSelfTest {
                                                 buttonTitle: "Try Again",
                                                 isRestricted: false),
             "a restricted microphone must not suppress recovery for a different permission"
+        )
+        try expect(
+            setupActionAccessibilityLabel(buttonTitle: "Continue",
+                                          contextName: "Microphone"),
+            equals: "Continue to request Microphone access",
+            "VoiceOver should explain that Continue opens a microphone request"
+        )
+        try expect(
+            setupActionAccessibilityLabel(buttonTitle: "Open Settings",
+                                          contextName: "Device Control and Data Access"),
+            equals: "Open Settings for Device Control and Data Access",
+            "VoiceOver should name the actual macOS Settings route"
         )
         try expect(
             permissionReadinessMenuStatusTitle(
@@ -16294,7 +16394,7 @@ private enum PresspeechSelfTest {
             permission: .microphone,
             detail: "Needs microphone access.",
             status: "Missing",
-            buttonTitle: "Grant"
+            buttonTitle: "Continue"
         )
         let setupBefore = SetupChecklistSnapshot(
             speechModel: SetupChecklistRowState(detail: "10%", status: "Loading", buttonTitle: nil),

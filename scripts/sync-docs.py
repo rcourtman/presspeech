@@ -1235,8 +1235,14 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     )
     text = replace_regex(
         text,
-        r"<p>(?:Click each warning row in the menu|Use the Grant buttons in Setup Checklist)\..*?</p>",
-        "<p>Use the Grant buttons in Setup Checklist. The main menu also shows clickable permission rows while anything is missing, so setup can continue even after the checklist window is closed.</p>",
+        r"<p>(?:Click each warning row in the menu|Use the Grant buttons in Setup Checklist|"
+        r"Use the context-specific <strong>Continue</strong>, <strong>Open Settings</strong>, "
+        r"or <strong>Try Again</strong> actions in Setup Checklist)\..*?</p>",
+        "<p>Use the context-specific <strong>Continue</strong>, "
+        "<strong>Open Settings</strong>, or <strong>Try Again</strong> actions in "
+        "Setup Checklist. The main menu also shows clickable permission rows "
+        "while anything is missing, so setup can continue even after the "
+        "checklist window is closed.</p>",
         path=path,
     )
     if "<strong>Grant the three permissions</strong>" in text:

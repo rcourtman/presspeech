@@ -460,21 +460,23 @@ item after the development-wrapper launch check.
   input identified. Do not record device names in qualification notes.
 - Enable macOS keyboard navigation for controls (or Full Keyboard Access),
   then navigate the checklist using Tab and Shift-Tab. Activate a permission
-  action that remains missing and changes from **Grant** to **Try Again**;
+  action that remains missing and changes to **Try Again**;
   confirm keyboard focus remains on that replacement action when the row is
   redrawn.
   Continue through the complete loop in both directions after each redraw;
   confirm no removed action retains focus and no current permission, Dock,
   Try Dictation, or Close/Done control is skipped.
-- With VoiceOver enabled, confirm each permission action includes its context,
-  such as **Grant Microphone** and **Grant Accessibility** on macOS 14, or
-  **Grant Device Control and Data Access** on macOS 27 and later, rather than
-  being announced only as **Grant**.
+- With VoiceOver enabled, confirm permission actions describe their route and
+  target: **Continue to request Microphone access** before the first microphone
+  prompt, **Open Settings for Microphone** after a denial, and **Open Settings
+  for Accessibility** (macOS 14) or **Open Settings for Device Control and Data
+  Access** (macOS 27 and later). A repeated attempt should be announced as
+  **Try again for [permission]**, not as a grant that has already happened.
 - During a speech-model download, leave the VoiceOver cursor on a lower row's
   title, detail, and status in turn while the progress text changes. Confirm
   routine live refreshes keep the cursor on that element instead of resetting
   reading position to **Set Up Presspeech**. Repeat while a permission action
-  changes from **Grant** to **Try Again** without adding or removing the row.
+  changes to **Try Again** without adding or removing the row.
 - Complete setup, close every Presspeech window, then open the already-running
   app again from Finder or Spotlight. Confirm Setup Checklist appears instead
   of a second app instance. Enable **Show in Dock**, right-click the
@@ -792,16 +794,17 @@ item after the development-wrapper launch check.
 - On a managed test Mac where microphone access is restricted by macOS or
   device policy, confirm Setup Checklist labels the microphone **Restricted**,
   explains that an administrator may need to change the policy, and offers no
-  Grant/Try Again action. The status menu should show a disabled restriction
+  permission action. The status menu should show a disabled restriction
   notice instead of resetting or re-requesting microphone access; other
   missing permission rows should remain actionable.
 - On a disposable test account, independently reset the Presspeech `PostEvent`
   TCC service while leaving focused-window Accessibility available. Confirm the
   Accessibility row returns to **Missing**, dictation cannot start, and **Copy
   Diagnostics** reports focused-window access as granted but keyboard-event
-  posting as missing. Choose **Grant** (or **Try Again** after a stale denial),
-  re-enable the requested access, and confirm both diagnostic subchecks and the
-  setup row return to granted before repeating a TextEdit paste.
+  posting as missing. Choose **Open Settings** (or **Try Again** after a stale
+  denial), re-enable the requested access, and confirm both diagnostic
+  subchecks and the setup row return to granted before repeating a TextEdit
+  paste.
 - Confirm the app handles a missing permission by staying not-ready instead
   of recording.
 

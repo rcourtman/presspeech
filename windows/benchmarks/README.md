@@ -14,6 +14,42 @@ not independently attest the local model files.
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
+## Candidate watch: multilingual CPU recognition
+
+Windows' first-run CPU fallback is English-only Whisper `base.en`; the
+multilingual Parakeet path currently requires a much larger download. This is
+an explicit language/availability tradeoff, not evidence that `base.en` is a
+multilingual fallback. NVIDIA's Parakeet model card lists 25 European
+languages and shows uneven FLEURS WER across them
+([model card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)). A
+September 2026 Orukeet paper reports
+9.85% pooled WER versus 11.01% for Parakeet on 20,146 FLEURS recordings, with
+lower WER on 23 of 25 languages ([paper](https://arxiv.org/abs/2609.10054),
+[model/runtime details](https://github.com/Oruk-AI/orukeet)). These are
+author-reported public-benchmark results, not Presspeech or Windows-dictation
+evidence. The paper also discloses final adaptation and checkpoint selection
+on LibriSpeech test-other, so that split is not an independent held-out check.
+
+Treat Orukeet as an evaluation candidate only. Its project advertises CPU and
+CUDA runtimes, but does not establish compatibility with Presspeech's Windows
+packaging; its weights are CC BY-SA 4.0, unlike NVIDIA Parakeet's CC BY 4.0.
+Before considering an app integration:
+
+- Verify Windows CPU runtime, CUDA behavior where supported, offline inference,
+  pinned model/runtime artifacts, and the weight-license obligations.
+- Compare the same reviewed multilingual public clips and locally held,
+  consented spontaneous dictations on the same Windows machine. Keep public
+  read-speech and spontaneous dictation as separate task groups; include short,
+  quiet, noisy, disfluent, and boundary-sensitive speech plus silence controls.
+- Report per-language/task-group WER and worst-trial errors alongside first-
+  and final-word retention, silence false positives, first-load/preparation,
+  memory/cache footprint, and cold/warm inference latency. Compare CPU results
+  with the current CPU path on English clips; do not score English-only
+  `base.en` as a multilingual baseline.
+
+Do not change the first-run model or expose a new selectable model based only
+on the public WER figures. Keep audio and references local as described below.
+
 Start a local manifest from the tracked structure:
 
 ```bat
