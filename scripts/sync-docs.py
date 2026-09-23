@@ -468,6 +468,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until macOS 0.3.9 is published",
         "Dictation audio and transcripts are not sent",
         'id="faq-macos-install-privacy"',
+        "install.html#model-download-privacy",
+        "macOS install guide",
     ),
     DOCS / "install.html": (
         'id="model-download-privacy"',
@@ -489,6 +491,9 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "informed choice",
     ),
     DOCS / "llms.txt": (
+        "Before installing or launching macOS 0.3.8",
+        "model-download requests may include a Hugging Face token inherited by Presspeech",
+        "install.html#model-download-privacy",
         "macOS 0.3.8 may attach an inherited Hugging Face token",
         "public model needs no account token",
         "wait until macOS 0.3.9 is published",
@@ -497,6 +502,9 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "macos-0-3-8-after-use",
     ),
     DOCS / "llms-full.txt": (
+        "Before installing or launching macOS 0.3.8",
+        "model-download requests may include a Hugging Face token inherited by Presspeech",
+        "install.html#model-download-privacy",
         "macOS 0.3.8 can attach an inherited `HF_TOKEN`",
         "public model needs no account token",
         "If a token may be inherited by Presspeech",
@@ -1590,6 +1598,18 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n" + setup_line,
             path=path,
         )
+    download_privacy_notice = (
+        "- Before installing or launching macOS 0.3.8, model-download requests may include "
+        "a Hugging Face token inherited by Presspeech. The public model needs no account "
+        "token; if one may be present in the environment that launches Presspeech—or you "
+        "are unsure—wait until macOS 0.3.9 is published. See "
+        "https://rcourtman.github.io/presspeech/install.html#model-download-privacy.\n"
+    )
+    if download_privacy_notice not in text:
+        marker = "- macOS latest published download:"
+        if marker not in text:
+            marker = "- Homebrew install:"
+        text = replace_literal(text, marker, download_privacy_notice + marker, path=path)
     privacy_line = (
         "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
         "macOS 0.3.8 may attach an inherited Hugging Face token to model-download requests, "
@@ -1678,6 +1698,20 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
 def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     del metadata
     text = read_text(path)
+    macos_install_notice = (
+        "Before installing or launching macOS 0.3.8, its model-download requests may "
+        "include a Hugging Face token inherited by Presspeech. The public model needs "
+        "no account token. If one may be present in the environment that launches "
+        "Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Review the "
+        "[current privacy decision](https://rcourtman.github.io/presspeech/"
+        "install.html#model-download-privacy) first.\n\n"
+    )
+    macos_install_heading = "### macOS\n\n"
+    if macos_install_heading in text and macos_install_notice not in text:
+        text = replace_literal(
+            text, macos_install_heading,
+            macos_install_heading + macos_install_notice, path=path,
+        )
     # Keep the checked-in assistant reference's published-build disclosure when
     # refreshing other generated facts; this copy is not a release claim for 0.1.13.
     privacy_marker = "model-request metadata includes a random per-process session ID. "
@@ -2221,7 +2255,7 @@ def check_windows_model_download_privacy_summary(
 
 
 def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]:
-    """Keep the FAQ's release warnings ahead of every install action."""
+    """Keep the FAQ's release warnings ahead of safe guide routes."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     if not path.exists():
         return [f"{display}: missing FAQ install privacy warning"]
@@ -2236,8 +2270,8 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
         (
             'id="faq-macos-install-privacy"',
             (
-                "releases/latest/download/Presspeech.zip",
-                "brew install --cask rcourtman/presspeech/presspeech",
+                'href="install.html#model-download-privacy"',
+                'href="install.html"',
             ),
             "macOS",
         ),
@@ -2259,6 +2293,14 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
                 f"{display}: {platform} model-download privacy warning must "
                 "precede its install action"
             )
+    if (
+        "releases/latest/download/Presspeech.zip" in answer
+        or "brew install --cask" in answer
+    ):
+        errors.append(
+            f"{display}: FAQ must not bypass the macOS privacy decision "
+            "with a direct download"
+        )
     return errors
 
 
@@ -2292,6 +2334,26 @@ def check_macos_model_download_privacy_summary(
                 errors.append(
                     f"{display}: the macOS model-download privacy decision must "
                     "precede the direct download action"
+                )
+        elif path.name in ("llms.txt", "llms-full.txt"):
+            raw = read_text(path)
+            install = (
+                raw.partition("### macOS")[2].partition("### Windows")[0]
+                if path.name == "llms-full.txt" else raw
+            )
+            warning = install.find("Before installing or launching macOS 0.3.8")
+            actions = (
+                ("brew install --cask", "Direct download:")
+                if path.name == "llms-full.txt"
+                else ("- macOS latest published download:", "- Homebrew install:")
+            )
+            if warning < 0 or any(
+                install.find(action) < 0 or warning > install.find(action)
+                for action in actions
+            ):
+                errors.append(
+                    f"{display}: the macOS privacy decision must precede "
+                    "download and install instructions"
                 )
     return errors
 
@@ -2872,6 +2934,7 @@ def run_self_test() -> None:
         legacy_llms = Path(tmp) / "legacy-llms.txt"
         legacy_llms.write_text(
             "- Release size: about 1 MB signed zip; model cache is about 600 MB on first launch.\n"
+            "- macOS latest published download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip\n"
             "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n"
             "- Install: https://rcourtman.github.io/presspeech/install.html\n"
             "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
@@ -2887,10 +2950,15 @@ def run_self_test() -> None:
         if (
             OLD_LLMS_PRIVACY_SUMMARY in synced_llms
             or "random per-process session ID" not in synced_llms
+            or "Before installing or launching macOS 0.3.8" not in synced_llms
             or "macOS 0.3.8 may attach an inherited Hugging Face token" not in synced_llms
             or "wait until macOS 0.3.9 is published" not in synced_llms
             or "leave a working model cache in place" not in synced_llms
             or "macos-0-3-8-after-use" not in synced_llms
+            or synced_llms.find("Before installing or launching macOS 0.3.8")
+            > synced_llms.find("- macOS latest published download:")
+            or synced_llms.find("Before installing or launching macOS 0.3.8")
+            > synced_llms.find("- Homebrew install:")
         ):
             raise SyncError("self-test: inaccurate llms privacy claim was not corrected")
         legacy_llms.write_text(synced_llms, encoding="utf-8")
@@ -3129,6 +3197,10 @@ def run_self_test() -> None:
             "create privacy-safe local reports with bounded recent log lines.\n"
         )
         llms_full.write_text(
+            "## Install\n\n### macOS\n\n"
+            "brew install --cask rcourtman/presspeech/presspeech\n\n"
+            "Direct download:\nhttps://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip\n\n"
+            "### Windows\n\nWindows guide.\n\n"
             "First launch downloads the default local speech model weights, about 500-600 MB, "
             "into `~/Library/Application Support/FluidAudio/`. The Parakeet model downloads "
             "only if selected.\n\n"
@@ -3142,8 +3214,13 @@ def run_self_test() -> None:
         if (old_diagnostics in synced_llms_full
                 or synced_llms_full.count("For support, macOS Copy/Save Diagnostics") != 1
                 or "raw error details, and raw log lines" not in synced_llms_full
+                or "Before installing or launching macOS 0.3.8" not in synced_llms_full
                 or "The macOS 0.3.8 release starts its first speech-model download" not in synced_llms_full
-                or "In 0.3.9, a clean install must choose Download Model" not in synced_llms_full):
+                or "In 0.3.9, a clean install must choose Download Model" not in synced_llms_full
+                or synced_llms_full.find("Before installing or launching macOS 0.3.8")
+                > synced_llms_full.find("brew install --cask")
+                or synced_llms_full.find("Before installing or launching macOS 0.3.8")
+                > synced_llms_full.find("Direct download:")):
             raise SyncError("self-test: llms-full diagnostics paragraph was not replaced")
 
         compare_dir = Path(tmp) / "compare"
@@ -3610,9 +3687,8 @@ def run_self_test() -> None:
             '<article><h3>How do I install it?</h3>'
             '<p id="faq-macos-install-privacy">macOS warning</p>'
             '<p id="faq-windows-install-privacy">Windows warning</p>'
-            '<a href="https://github.com/rcourtman/presspeech/releases/latest/'
-            'download/Presspeech.zip">Download</a>'
-            '<code>brew install --cask rcourtman/presspeech/presspeech</code>'
+            '<a href="install.html#model-download-privacy">Privacy decision</a>'
+            '<a href="install.html">macOS guide</a>'
             '<a href="windows.html#download-verify-run">Windows guide</a>'
             '</article>',
             encoding="utf-8",
@@ -3621,9 +3697,8 @@ def run_self_test() -> None:
             raise SyncError("self-test: ordered FAQ privacy warnings were rejected")
         faq_install.write_text(
             '<article><h3>How do I install it?</h3>'
-            '<a href="https://github.com/rcourtman/presspeech/releases/latest/'
-            'download/Presspeech.zip">Download</a>'
-            '<code>brew install --cask rcourtman/presspeech/presspeech</code>'
+            '<a href="install.html#model-download-privacy">Privacy decision</a>'
+            '<a href="install.html">macOS guide</a>'
             '<a href="windows.html#download-verify-run">Windows guide</a>'
             '<p id="faq-macos-install-privacy">macOS warning</p>'
             '<p id="faq-windows-install-privacy">Windows warning</p>'
@@ -3633,6 +3708,20 @@ def run_self_test() -> None:
         faq_order_errors = check_faq_install_privacy_order(faq_install)
         if len(faq_order_errors) != 2:
             raise SyncError("self-test: install action before FAQ privacy warning was accepted")
+        faq_install.write_text(
+            '<article><h3>How do I install it?</h3>'
+            '<p id="faq-macos-install-privacy">macOS warning</p>'
+            '<p id="faq-windows-install-privacy">Windows warning</p>'
+            '<a href="install.html#model-download-privacy">Privacy decision</a>'
+            '<a href="install.html">macOS guide</a>'
+            '<a href="windows.html#download-verify-run">Windows guide</a>'
+            '<a href="https://github.com/rcourtman/presspeech/releases/latest/'
+            'download/Presspeech.zip">Download</a>'
+            '</article>',
+            encoding="utf-8",
+        )
+        if not check_faq_install_privacy_order(faq_install):
+            raise SyncError("self-test: FAQ direct download shortcut was accepted")
 
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {

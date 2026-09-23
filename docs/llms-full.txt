@@ -31,6 +31,8 @@ Windows:
 
 ### macOS
 
+Before installing or launching macOS 0.3.8, its model-download requests may include a Hugging Face token inherited by Presspeech. The public model needs no account token. If one may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Review the [current privacy decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy) first.
+
 ```sh
 brew install --cask rcourtman/presspeech/presspeech
 open /Applications/Presspeech.app
