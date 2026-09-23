@@ -87,8 +87,7 @@ let UPDATE_REMIND_LATER_SECONDS: TimeInterval = 24 * 3600  // 24h
 let GITHUB_LATEST_RELEASE_URL = URL(string: "https://api.github.com/repos/rcourtman/presspeech/releases/latest")!
 let GITHUB_REPOSITORY_PAGE = URL(string: "https://github.com/rcourtman/presspeech")!
 let GITHUB_RELEASES_PAGE = URL(string: "https://github.com/rcourtman/presspeech/releases/latest")!
-let GITHUB_BUG_REPORT_PAGE = URL(string: "https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml")!
-let GITHUB_FEATURE_REQUEST_PAGE = URL(string: "https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml")!
+let GITHUB_SUPPORT_GUIDE_PAGE = URL(string: "https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md")!
 let APP_COMPATIBILITY_GUIDE_PAGE = URL(string: "https://rcourtman.github.io/presspeech/app-compatibility.html")!
 let HOMEBREW_CASK_TAP = "rcourtman/presspeech"
 let HOMEBREW_CASK_TOKEN = "rcourtman/presspeech/presspeech"
@@ -10464,7 +10463,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     @objc private func reportProblemClicked(_ sender: NSMenuItem) {
-        NSWorkspace.shared.open(GITHUB_BUG_REPORT_PAGE)
+        NSWorkspace.shared.open(GITHUB_SUPPORT_GUIDE_PAGE)
     }
 
     @objc private func testAppCompatibilityClicked(_ sender: NSMenuItem) {
@@ -10472,7 +10471,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     @objc private func suggestImprovementClicked(_ sender: NSMenuItem) {
-        NSWorkspace.shared.open(GITHUB_FEATURE_REQUEST_PAGE)
+        NSWorkspace.shared.open(GITHUB_SUPPORT_GUIDE_PAGE)
     }
 
     private func showDiagnosticsSaveError(_ error: Error) {
@@ -11041,14 +11040,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                        action: #selector(reportProblemClicked(_:)),
                                        keyEquivalent: "")
         reportProblem.target = self
-        reportProblem.toolTip = "Open the privacy-aware bug report form on GitHub."
+        reportProblem.toolTip = "Open the privacy-safe support and reporting guide."
         sub.addItem(reportProblem)
 
         let suggestImprovement = NSMenuItem(title: "Suggest an Improvement…",
                                             action: #selector(suggestImprovementClicked(_:)),
                                             keyEquivalent: "")
         suggestImprovement.target = self
-        suggestImprovement.toolTip = "Open the focused feature request form on GitHub."
+        suggestImprovement.toolTip = "Open the product roadmap and feedback guide."
         sub.addItem(suggestImprovement)
 
         let resetModel = NSMenuItem(title: isResettingSpeechModelCache ? "Resetting Speech Model Cache…" : "Reset Speech Model Cache…",

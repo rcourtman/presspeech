@@ -1,5 +1,9 @@
 # Support
 
+The app's **Report a Problem** and **Suggest an Improvement** actions open this
+guide. They do not send diagnostics or submit a report; choose whether to use a
+public route below, and keep any draft private when no route accepts it.
+
 Setup and recovery guidance is available below. When GitHub permits it, user
 support and issue discussion happen publicly there; you need a GitHub account
 to open or comment on an issue. Before reporting, use the recovery guide that
@@ -59,8 +63,8 @@ If the problem remains, search the [existing issues](https://github.com/rcourtma
 
 Issues are public. Never include dictated text, audio, dictionary or shortcut
 contents, credentials, private paths, or other sensitive data. Diagnostics are
-not sent automatically: opening a feedback form only opens a fixed GitHub URL,
-and you decide what to paste and submit.
+not sent automatically: the app's feedback actions only open this guide. If a
+public route becomes available, you decide what to paste and submit.
 
 For a paste or clipboard problem, the bug form asks for the target app class,
 focus behavior, clipboard-restore setting, manual-recovery result, and repeat

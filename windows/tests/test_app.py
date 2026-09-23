@@ -134,26 +134,32 @@ class SingleInstanceActivationTests(unittest.TestCase):
 
 
 class SupportLinkTests(unittest.TestCase):
+    def test_feedback_guide_is_fixed_public_repository_page(self):
+        self.assertEqual(
+            app.SUPPORT_GUIDE_URL,
+            "https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md",
+        )
+
     def make_app(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
         return instance
 
-    def test_report_problem_opens_fixed_bug_form(self):
+    def test_report_problem_opens_support_guide(self):
         instance = self.make_app()
         with mock.patch.object(app.os, "startfile", create=True) as startfile:
             self.assertTrue(instance.report_problem())
 
-        startfile.assert_called_once_with(app.BUG_REPORT_URL)
+        startfile.assert_called_once_with(app.SUPPORT_GUIDE_URL)
         instance.notify.assert_not_called()
 
-    def test_suggest_improvement_opens_fixed_feature_form(self):
+    def test_suggest_improvement_opens_support_guide(self):
         instance = self.make_app()
         with mock.patch.object(app.os, "startfile", create=True) as startfile:
             self.assertTrue(instance.suggest_improvement())
 
-        startfile.assert_called_once_with(app.FEATURE_REQUEST_URL)
+        startfile.assert_called_once_with(app.SUPPORT_GUIDE_URL)
 
     def test_app_compatibility_opens_fixed_privacy_safe_guide(self):
         instance = self.make_app()

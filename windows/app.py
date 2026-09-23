@@ -134,11 +134,8 @@ AUTO_INPUT_DEVICE = "auto"
 MICROPHONE_PRIVACY_SETTINGS_URI = "ms-settings:privacy-microphone"
 DEFAULT_INPUT_SETTINGS_URI = "ms-settings:sound-defaultinputproperties"
 STARTUP_SETTINGS_URI = "ms-settings:startupapps"
-BUG_REPORT_URL = (
-    "https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml"
-)
-FEATURE_REQUEST_URL = (
-    "https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml"
+SUPPORT_GUIDE_URL = (
+    "https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md"
 )
 APP_COMPATIBILITY_GUIDE_URL = (
     "https://rcourtman.github.io/presspeech/app-compatibility.html"
@@ -2705,10 +2702,10 @@ class PresspeechApp:
         return self._open_support_page(APP_COMPATIBILITY_GUIDE_URL)
 
     def report_problem(self, icon=None, item=None):
-        return self._open_support_page(BUG_REPORT_URL)
+        return self._open_support_page(SUPPORT_GUIDE_URL)
 
     def suggest_improvement(self, icon=None, item=None):
-        return self._open_support_page(FEATURE_REQUEST_URL)
+        return self._open_support_page(SUPPORT_GUIDE_URL)
 
     # ---------------- helpers ----------------
 
