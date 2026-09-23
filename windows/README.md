@@ -9,7 +9,7 @@ telemetry enabled during model downloads. These libraries may send usage data
 to Hugging Face, and model-request metadata includes a random per-process
 session ID. Model downloads do not send dictation audio or transcripts; the
 exact telemetry fields are not independently itemised. Its pinned `hf-xet` 1.6.0
-predates the later, separate Xet transfer-telemetry implementation; see the
+predates the later, separate Xet transfer-telemetry implementation. The 0.1.12 loader also leaves implicit authentication enabled: an available `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or token in the local Hugging Face cache may accompany a public model request. These public models do not require an account token. Upcoming 0.1.13 disables implicit authentication and explicitly sends no account token; see the
 [version-scoped
 network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
@@ -55,9 +55,17 @@ Requirements:
   multilingual default; Windows PCs without usable CUDA automatically start
   with the smaller English-only Whisper base.en CPU model
 
-First launch detects whether the packaged Torch runtime can use NVIDIA CUDA,
-then downloads either Parakeet (~2.5 GB) or Whisper base.en (~141 MiB) into
-`%USERPROFILE%\.cache\huggingface`, and loads and warms it in the background.
+Upcoming 0.1.13 asks before downloading missing or incomplete first-run
+multilingual Parakeet files (up to ~2.5 GB). Choose the multilingual download,
+the smaller English-only Whisper base.en CPU model (~141 MiB), another model in
+Settings, or **Set Up Later**. Model files are fetched from `huggingface.co`; deferring
+does not start the Parakeet download, and a complete cached snapshot loads
+without another prompt. Published 0.1.12 does not include this choice.
+
+First launch detects whether the packaged Torch runtime can use NVIDIA CUDA.
+It selects Parakeet for usable CUDA or Whisper base.en otherwise; after any
+required confirmation, missing pinned model files are fetched into
+`%USERPROFILE%\.cache\huggingface` and loaded and warmed in the background.
 Each Presspeech release pins every Windows Hugging Face model to an exact
 repository commit reviewed for that app version, so a fresh install cannot
 silently receive a different snapshot. Windows relies on the immutable Hugging

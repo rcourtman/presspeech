@@ -1,6 +1,6 @@
 # Presspeech product roadmap
 
-Last reviewed: 22 September 2026
+Last reviewed: 23 September 2026
 
 Presspeech is the small, private dictation tool: hold or toggle a key, speak,
 and put locally transcribed text into the app you were using. The roadmap
@@ -80,6 +80,39 @@ paste recovery instead. The
 reports from published builds the same small, privacy-safe baseline. Passing
 reports provide the denominator that failure-only issues cannot, but community
 reports supplement rather than replace native release testing.
+
+### Product intelligence and community evidence (23 September 2026)
+
+A small scan of two active local projects shows that offline recognition,
+push-to-talk, and cross-app insertion are not unique differentiators among
+these products: [Whisper Local](https://github.com/drajb/whisper-local)
+advertises Windows and macOS support alongside hotwords, per-app rules, and
+optional local cleanup; [Parrot](https://github.com/basic-intelligence/parrot)
+describes local dictation across macOS, Windows, and Linux with cleanup and a
+personal dictionary. This is a narrow feature scan, not market sizing or an
+independent quality comparison. The implication is not to chase those feature
+lists: Presspeech should earn distinction through a small, trustworthy
+dictation loop and evidence that text reaches the intended target or is
+recovered safely.
+
+Public user evidence is thin and self-selected. A recent
+[FOSS discussion of Handy](https://www.reddit.com/r/foss/comments/1vxrgg5/a_free_open_source_speechtotext_tool_that_has/)
+includes anecdotal replies about reducing typing burden and one user's initial
+difficulty finding a toggle mode that was already available. This is a narrow
+discoverability signal about another project, not a representative survey or
+Presspeech feedback. Do not infer adoption, unmet demand, or roadmap priority
+from discussion activity or competitor feature lists.
+
+Feedback intake is currently a measurement limitation: on 23 September,
+GitHub's [Presspeech issue list](https://github.com/rcourtman/presspeech/issues)
+shows issue creation restricted (and four open issues). New reports therefore
+cannot be treated as evidence of low demand or few compatibility failures.
+The local compatibility worksheet preserves aggregate counts without sending
+them; if a comparable open report accepts comments, users can add their result
+there, otherwise they should keep it privately and retry when intake returns.
+Do not route around the restriction by soliciting transcripts, diagnostics,
+or reports on unrelated public services. Reassess the community signal after
+the project has a working, privacy-safe intake path.
 
 ## Next: earn a stable Windows release
 

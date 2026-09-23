@@ -136,7 +136,25 @@ keyboard access testing in addition to assistive-technology testing.
   no separate Python installation is needed.
 - On a clean Windows profile, launch the packaged app and confirm the setup
   window automatically checks the selected microphone without blocking model
-  preparation.
+  status updates.
+- On a clean Windows x64 profile with usable NVIDIA CUDA and no cached pinned
+  Parakeet snapshot, confirm Setup identifies the multilingual path and its
+  approximate 2.5 GB first download. With keyboard-only navigation and Narrator,
+  verify the **Download Parakeet model**, **Use English-only CPU model**,
+  and **Choose another model in Settings** actions have useful names, appear
+  after the microphone controls in Tab order, and can be activated. Confirm
+  they are absent when the model is already cached. Before activating any model
+  choice, confirm no model download has started. Choose **Set Up Later** and
+  confirm setup remains incomplete and no model download continues; reopen
+  Setup and verify the decision is offered
+  again. In a separate clean test profile, choose the CPU option and confirm
+  the selected model is English-only Whisper base.en (~141 MiB). In another
+  clean profile, choose the multilingual download and confirm it starts only
+  after that choice. With a complete pinned Parakeet snapshot already cached,
+  confirm startup loads it without asking to download it again.
+- While Setup is awaiting the model choice, press the configured dictation
+  hotkey. Confirm Setup is presented again and Presspeech does not open the
+  microphone or claim to be listening.
 - With microphone access enabled, speak during the check and confirm the status
   changes from **Listening — speak a few words…** to **Ready — input level
   detected**. Change the selected input and confirm setup checks the new device.
@@ -483,6 +501,11 @@ item after the development-wrapper launch check.
   the entire combination persists. A bare comma must still type normally;
   Command-comma must start/stop dictation without opening the target app's
   preferences. Repeat with Control-Option plus a letter and with Shift added.
+- With **Show in Dock** enabled and Command-comma still selected, confirm the
+  Settings command opens when Presspeech is active without starting dictation;
+  switch to another app and confirm the same chord remains the global dictation
+  hotkey there. This checks that Presspeech preserves its own App-menu command
+  without disabling the user's global binding elsewhere.
 - In hold mode, release modifiers before the trigger key, then repeat in the
   opposite order. Confirm dictation stops exactly once on trigger-key release.
   Hold the trigger through autorepeat and verify only one recording starts.

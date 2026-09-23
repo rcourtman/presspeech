@@ -320,6 +320,42 @@ CLIPBOARD_SERVICE_GUIDANCE = {
     ),
 }
 
+# Windows 0.1.12's public-model loader did not disable Hub's default implicit
+# token behavior. Keep this version-specific account-token disclosure aligned
+# across the privacy page, structured inventory, and release-facing guides.
+WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
+    DOCS / "privacy.html": (
+        "published Windows 0.1.12",
+        "HF_TOKEN",
+        "local Hugging Face cache",
+        "These models do not require an account token",
+        "Upcoming Windows 0.1.13",
+        "disables implicit authentication",
+    ),
+    DOCS / "privacy" / "network-calls.json": (
+        "Published Windows 0.1.12",
+        "HF_TOKEN",
+        "local Hugging Face cache",
+        "public models do not require an account token",
+        "Upcoming Windows 0.1.13",
+        "implicit authentication",
+    ),
+    DOCS / "windows.html": (
+        "Privacy for published Windows 0.1.12",
+        "HF_TOKEN",
+        "local Hugging Face cache",
+        "These models do not require an account token",
+        "upcoming 0.1.13",
+    ),
+    ROOT / "windows" / "README.md": (
+        "0.1.12 loader also leaves implicit authentication enabled",
+        "HF_TOKEN",
+        "local Hugging Face cache",
+        "These public models do not require an account token",
+        "Upcoming 0.1.13 disables implicit authentication",
+    ),
+}
+
 # Discovery and setup surfaces must not collapse focus-safe delivery into an
 # "every app" promise. Automatic insertion is conditional; clipboard recovery
 # is part of the product contract rather than an exceptional implementation
@@ -707,7 +743,7 @@ Run these read-only checks in PowerShell:
 
 Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
 
-Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
+Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Published Windows 0.1.12 starts the selected model download on first launch. Upcoming 0.1.13 asks before downloading missing Parakeet files and offers the smaller CPU model or deferral. Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
   $ErrorActionPreference = 'Stop'
@@ -740,7 +776,7 @@ After verification succeeds, show the user the installer path and verified hash.
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch downloads a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA). Wait for model preparation, check the microphone, and finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After the user completes the installer, launch Presspeech from the Start Menu. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete Parakeet cache may need less). With 0.1.13, Setup asks before downloading missing Parakeet files and offers the smaller CPU model or deferral; with published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Wait for model preparation, check the microphone, and finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
@@ -1258,7 +1294,8 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     privacy_line = (
         "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
         "during Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
-        "Hugging Face, and model-request metadata includes a random per-process session ID. Dictation audio "
+        "Hugging Face, model-request metadata includes a random per-process session ID, and an available "
+        "Hugging Face token may accompany a public model request. Dictation audio "
         "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
         "itemised (see the privacy inventory)."
     )
@@ -1288,7 +1325,20 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             "The apps have no account or cloud transcription endpoint and Presspeech does not operate first-party analytics. "
             "Published Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads; "
             "the libraries may send usage data, and model-request metadata includes a random per-process session ID. "
+            "It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a public model request; these models do not require an account token. "
             "Dictation audio and transcripts are not sent in model downloads; see the version-specific privacy inventory for details and limits.",
+            path=path,
+        )
+    old_windows_privacy = (
+        "Published Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads; "
+        "the libraries may send usage data, and model-request metadata includes a random per-process session ID."
+    )
+    if (old_windows_privacy in text
+            and old_windows_privacy + " It also leaves implicit authentication enabled" not in text):
+        text = replace_literal(
+            text,
+            old_windows_privacy,
+            old_windows_privacy + " It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a public model request; these models do not require an account token.",
             path=path,
         )
     windows_page = "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
@@ -1321,7 +1371,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             "Hugging Face libraries' default usage telemetry enabled. They may send usage data "
             "to Hugging Face, and model-request metadata includes a random per-process session ID. "
             "Dictation audio and transcripts are not sent in model downloads; exact telemetry "
-            "fields are not independently itemised. Audio is captured while the hotkey is "
+            "fields are not independently itemised. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or token in the local Hugging Face cache may accompany a public model request; these models do not require an account token. Audio is captured while the hotkey is "
             "active, transcribed locally, then discarded.",
             path=path,
         )
@@ -1347,6 +1397,18 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             download_sentence,
             download_sentence + "\n"
             + setup_sentence,
+            path=path,
+        )
+    old_model_privacy = (
+        "Published Windows 0.1.12 leaves the bundled Hugging Face libraries' default usage telemetry enabled. "
+        "The libraries may send library-defined usage data to Hugging Face, and Transformers includes a random per-process session identifier in model-request metadata; the exact telemetry fields are not independently itemised."
+    )
+    if (old_model_privacy in text
+            and old_model_privacy + " It also leaves default implicit authentication enabled" not in text):
+        text = replace_literal(
+            text,
+            old_model_privacy,
+            old_model_privacy + " It also leaves default implicit authentication enabled, so a token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a public model request; these public models do not require an account token.",
             path=path,
         )
     diagnostics_sentence = (
@@ -1668,6 +1730,26 @@ def check_clipboard_service_guidance(
             errors.append(
                 f"{display}: incomplete operating-system clipboard guidance — "
                 f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
+def check_windows_model_download_privacy_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing Windows model-download privacy disclosure")
+            continue
+        contents = " ".join(read_text(path).split()).casefold()
+        missing = [phrase for phrase in required if phrase.casefold() not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete version-scoped Windows model-download privacy "
+                "guidance — missing "
+                + ", ".join(repr(phrase) for phrase in missing)
             )
     return errors
 
@@ -2767,6 +2849,31 @@ def run_self_test() -> None:
         if check_clipboard_service_guidance(required_clipboard_guidance):
             raise SyncError("self-test: complete clipboard-service boundary was rejected")
 
+        token_guidance = Path(tmp) / "model-download-privacy.html"
+        required_token_guidance = {
+            token_guidance: (
+                "Published Windows 0.1.12",
+                "HF_TOKEN",
+                "local Hugging Face cache",
+                "do not require an account token",
+                "Upcoming Windows 0.1.13",
+                "implicit authentication",
+            )
+        }
+        token_guidance.write_text(
+            "Windows downloads only public models.\n", encoding="utf-8"
+        )
+        if not check_windows_model_download_privacy_guidance(required_token_guidance):
+            raise SyncError("self-test: missing version-scoped account-token disclosure was accepted")
+        token_guidance.write_text(
+            "Published Windows 0.1.12 may use HF_TOKEN or the local Hugging Face cache. "
+            "Those public models do not require an account token. Upcoming Windows 0.1.13 "
+            "disables implicit authentication.\n",
+            encoding="utf-8",
+        )
+        if check_windows_model_download_privacy_guidance(required_token_guidance):
+            raise SyncError("self-test: complete version-scoped account-token disclosure was rejected")
+
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {
             delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
@@ -3019,6 +3126,7 @@ def main() -> int:
             errors.extend(check_windows_verified_download_flow())
             errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
+            errors.extend(check_windows_model_download_privacy_guidance())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_compatibility_worksheet_contract())
@@ -3057,6 +3165,7 @@ def main() -> int:
         errors.extend(check_windows_verified_download_flow())
         errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
+        errors.extend(check_windows_model_download_privacy_guidance())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_compatibility_worksheet_contract())

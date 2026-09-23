@@ -89,12 +89,16 @@ MODEL_CACHE_ALTERNATIVES = {
 }
 
 
-def _cached_model_path(model_name):
+def _cached_model_path(model_name, *, local_only=False):
     snapshot = model_snapshot(model_name)
+    options = {}
+    if local_only:
+        options["local_only"] = True
     return model_cache.resolve_snapshot(
         snapshot["repository"], snapshot["revision"], MODEL_CACHE_FILES[model_name],
         optional_files=MODEL_CACHE_OPTIONAL_FILES.get(model_name, ()),
-        required_any=MODEL_CACHE_ALTERNATIVES.get(model_name, ()))
+        required_any=MODEL_CACHE_ALTERNATIVES.get(model_name, ()),
+        **options)
 
 
 # Pin the complete Silero boundary policy used for push-to-talk clips. In
@@ -396,13 +400,13 @@ class Transcriber:
     def loaded(self, model_name):
         return self.model is not None and self.model_name == model_name
 
-    def load(self, model_name, notify=None):
+    def load(self, model_name, notify=None, *, local_only=False):
         with self.lock:
             if self.loaded(model_name):
                 return
             self._unload_locked()
             if is_parakeet(model_name):
-                self._load_parakeet(notify)
+                self._load_parakeet(notify, local_only=local_only)
             elif is_nemotron(model_name):
                 self._load_nemotron(notify)
             elif is_moonshine(model_name):
@@ -413,15 +417,16 @@ class Transcriber:
             if notify is not None:
                 notify("Presspeech", "Model %s ready." % model_name)
 
-    def _load_parakeet(self, notify):
+    def _load_parakeet(self, notify, *, local_only=False):
         import torch
         from transformers import AutoModelForTDT, AutoProcessor
         model_network.harden_loaded_runtime()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if notify is not None:
             notify("Presspeech",
-                   "Loading Parakeet-TDT v3 on %s (first run downloads ~2.5 GB)..." % device)
-        model_path = _cached_model_path("parakeet-tdt-0.6b-v3")
+                   "Preparing Parakeet-TDT v3 on %s; a missing first-run model is about 2.5 GB." % device)
+        model_path = _cached_model_path(
+            "parakeet-tdt-0.6b-v3", local_only=local_only)
         self.processor = _configure_parakeet_processor(
             AutoProcessor.from_pretrained(
                 model_path, local_files_only=True, revision=PARAKEET_REVISION,

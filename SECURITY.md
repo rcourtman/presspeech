@@ -4,7 +4,11 @@ Presspeech is a local-only dictation tool. Presspeech does not send audio or
 transcripts to a network service. The published Windows 0.1.12 prerelease does
 not disable the bundled Hugging Face libraries' default usage telemetry during
 model downloads; those dependency-generated events are distinct from audio or
-transcript upload. Upcoming Windows 0.1.13 adds a runtime-verified opt-out.
+transcript upload. It also leaves default implicit authentication enabled, so
+an available Hugging Face token from `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or
+the local token cache may accompany a public model request; those models do not
+require an account token. Upcoming Windows 0.1.13 adds runtime-verified
+telemetry and authentication opt-outs.
 Finished text does enter the
 shared system clipboard for paste and recovery. macOS 0.3.8 can make
 those entries available through Universal Clipboard; builds containing the

@@ -433,12 +433,38 @@ class AccessibleWindowTests(unittest.TestCase):
     def test_setup_explains_first_model_download_before_microphone_checks(self):
         body = inspect.getsource(ui.SetupWindow._build)
 
-        self.assertIn("downloads it before first use", body)
+        self.assertIn("pinned model files from Hugging", body)
         self.assertIn("Stay online", body)
         self.assertLess(
-            body.index("downloads it before first use"),
+            body.index("pinned model files from Hugging"),
             body.index('text="Microphone"'),
         )
+
+    def test_setup_exposes_consent_and_cpu_fallback_for_large_first_download(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        for disclosure in (
+                "full multilingual Parakeet model download is about 2.5 GB",
+                "huggingface.co",
+                "Hugging Face receives the model request",
+                "transcripts stay on this PC",
+                "English-only ",
+                "Whisper base.en on CPU (~141 MiB)"):
+            self.assertIn(disclosure, body)
+        for button in (
+                'text="Download Parakeet model (up to ~2.5 GB)"',
+                'text="Use English-only CPU model (~141 MiB)"',
+                'text="Choose another model in Settings…"'):
+            self.assertIn(button, body)
+        self.assertLess(
+            body.index('text="Microphone"'),
+            body.index('text="Download Parakeet model (up to ~2.5 GB)"'),
+        )
+        self.assertLess(
+            body.index('text="Choose another model in Settings…"'),
+            body.index('text="Dictation hotkey"'),
+        )
+        self.assertIn("self.model_consent_frame.grid_remove()", body)
 
     def test_setup_names_all_windows_microphone_privacy_switches(self):
         body = inspect.getsource(ui.SetupWindow._build)
@@ -684,6 +710,10 @@ class SetupWindowTests(unittest.TestCase):
             model_status=status, model_status_detail=detail)
         window.root = mock.Mock()
         window.model_label = mock.Mock()
+        window.model_consent_frame = mock.Mock()
+        window.download_model_button = mock.Mock()
+        window.cpu_model_button = mock.Mock()
+        window.other_model_button = mock.Mock()
         window.progress = mock.Mock()
         window.retry_button = mock.Mock()
         window.try_button = mock.Mock()
@@ -724,6 +754,27 @@ class SetupWindowTests(unittest.TestCase):
         window.progress.config.assert_called_once_with(
             mode="determinate", value=0)
         window.root.after.assert_called_once_with(300, window._poll_model)
+
+    def test_first_run_model_consent_shows_choices_without_progress_claim(self):
+        window = self.make_window("awaiting_download_consent")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertIn(
+            mock.call(
+                window.model_label,
+                "Needs your choice — full Parakeet model download is about 2.5 GB"),
+            set_text.call_args_list,
+        )
+        window.model_consent_frame.grid.assert_called_once_with()
+        window.download_model_button.config.assert_called_once_with(state="normal")
+        window.cpu_model_button.config.assert_called_once_with(state="normal")
+        window.other_model_button.config.assert_called_once_with(state="normal")
+        window.progress.config.assert_called_once_with(
+            mode="determinate", value=0)
+        self.assertFalse(window.app.confirm_initial_model_download.called)
+        self.assertFalse(window.app.select_cpu_model_after_download_declined.called)
 
     def test_ready_enables_try_dictation_and_keeps_observing(self):
         window = self.make_window("ready", "base.en on cpu")
@@ -1189,6 +1240,20 @@ class ScratchpadWindowTests(unittest.TestCase):
             "Speech model needs attention. Open Setup or Settings to retry.",
         )
 
+    def test_pending_model_download_choice_opens_setup_in_live_status(self):
+        window = self.make_window(model_status="awaiting_download_consent")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_controls()
+
+        window.btn.config.assert_called_once_with(state="disabled")
+        set_text.assert_any_call(
+            window.status,
+            "Parakeet model files aren't fully cached. Open Setup to start "
+            "the full download (~2.5 GB), choose the smaller English-only "
+            "CPU model, or defer.",
+        )
+
     def test_control_poll_keeps_observing_external_lifecycle_changes(self):
         window = self.make_window()
         window._refresh_controls = mock.Mock()
@@ -1635,6 +1700,19 @@ class DictionarySettingsTests(unittest.TestCase):
             set_text.call_args_list,
         )
         window.retry_model_button.config.assert_called_with(state="normal")
+
+        window.app.model_status = "awaiting_download_consent"
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertIn(
+            mock.call(
+                window.model_status,
+                "Parakeet model files aren't fully cached. Choose whether to "
+                "start the full download (~2.5 GB) in Setup."),
+            set_text.call_args_list,
+        )
+        window.retry_model_button.config.assert_called_with(state="disabled")
 
     def test_save_is_blocked_atomically_during_recording(self):
         window = self.make_window([["original", "rule"]])

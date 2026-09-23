@@ -664,6 +664,7 @@ class PresspeechApp:
         self.pending_update = None
         self.model_status = "pending"
         self.model_status_detail = "Waiting to load"
+        self._initial_model_download_consented = False
         self._model_retry_lock = threading.Lock()
         self._model_load_target = None
         self._model_load_generation = 0
@@ -1313,6 +1314,11 @@ class PresspeechApp:
         if status == "ready" and loaded:
             return True
 
+        if status == "awaiting_download_consent":
+            self._log("dictation deferred; first-run model download needs a choice")
+            self.open_setup()
+            return False
+
         # Startup already owns the model executor while pending/loading. A
         # failed, explicitly unloaded, or newly selected model needs one fresh
         # load attempt; changing the state before submitting prevents repeats.
@@ -1337,6 +1343,36 @@ class PresspeechApp:
             # Publish loading before queueing work. Repeated UI or hotkey
             # requests then observe the in-flight state and cannot enqueue
             # duplicate loads.
+            self.model_status = "loading"
+            self.model_status_detail = "Loading %s" % model_name
+            self._queue_model_load_locked(model_name)
+            return True
+
+    def confirm_initial_model_download(self):
+        """Start the missing multilingual model download after explicit choice."""
+        with self._model_retry_lock:
+            if (getattr(self, "model_status", "pending") !=
+                    "awaiting_download_consent" or
+                    not engine.is_parakeet(self.settings.get("model"))):
+                return False
+            self._initial_model_download_consented = True
+            model_name = self.settings["model"]
+            self.model_status = "loading"
+            self.model_status_detail = "Loading %s" % model_name
+            self._queue_model_load_locked(model_name)
+            return True
+
+    def select_cpu_model_after_download_declined(self):
+        """Choose the smaller English-only CPU model instead of Parakeet."""
+        with self._model_retry_lock:
+            if (getattr(self, "model_status", "pending") !=
+                    "awaiting_download_consent" or
+                    not engine.is_parakeet(self.settings.get("model"))):
+                return False
+            self.settings["model"] = "base.en"
+            self.settings["model_explicit"] = True
+            cfg.save(self.settings)
+            model_name = self.settings["model"]
             self.model_status = "loading"
             self.model_status_detail = "Loading %s" % model_name
             self._queue_model_load_locked(model_name)
@@ -2801,7 +2837,32 @@ class PresspeechApp:
         self._set_indicator("loading")
         self._log("loading speech model: %s" % model_name)
         try:
-            self.transcriber.load(model_name, notify=self.notify)
+            consent_required = (
+                not getattr(self, "_initial_model_download_consented", False) and
+                not self.settings.get("setup_complete", True) and
+                engine.is_parakeet(model_name))
+            if consent_required:
+                try:
+                    # The loader itself remains local-only until Setup gets an
+                    # explicit choice. This avoids a cache-check/download race.
+                    self.transcriber.load(
+                        model_name, notify=self.notify, local_only=True)
+                except engine.model_cache.ModelCacheMissingError:
+                    with model_state_lock:
+                        if (request_generation != self._model_load_generation or
+                                self.settings.get("model") != model_name):
+                            return
+                        self.model_status = "awaiting_download_consent"
+                        self.model_status_detail = (
+                            "Parakeet model files need a choice; a full download "
+                            "is about 2.5 GB")
+                        self._model_load_target = None
+                    self._set_indicator(None)
+                    self._log(
+                        "first-run Parakeet download deferred pending user choice")
+                    return
+            else:
+                self.transcriber.load(model_name, notify=self.notify)
             self._log("warming speech model")
             self.transcriber.warmup(
                 seconds=MODEL_WARMUP_SEC, all_buckets=True)

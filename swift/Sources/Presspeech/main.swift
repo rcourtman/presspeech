@@ -41,6 +41,7 @@ import UniformTypeIdentifiers
 let SAMPLE_RATE: Double = 16_000
 let DEFAULT_HOTKEY_KEYCODE: CGKeyCode = 61  // Right Option
 let ESCAPE_KEYCODE: CGKeyCode = 53
+let APPLICATION_SETTINGS_KEY_EQUIVALENT = ","
 // Keep native modal-dialog navigation available while the hotkey recorder's
 // local event monitor is active. These keys are not valid dictation hotkeys,
 // but AppKit needs their keyDown events for Return/Enter, Tab, Space, and
@@ -3623,6 +3624,26 @@ private func hotkeyRecordingDecision(for event: HotkeyEventSnapshot) -> HotkeyRe
     return .accept(choice)
 }
 
+/// The global dictation listener normally wins over an application's shortcut.
+/// Preserve Presspeech's own standard Settings command when that App menu is
+/// available and Presspeech is frontmost; the same configured binding remains
+/// global while another application is active.
+private func shouldPassThroughApplicationSettingsShortcut(
+    event: HotkeyEventSnapshot,
+    hotkey: HotkeyChoice,
+    applicationIsActive: Bool,
+    settingsMenuAvailable: Bool,
+    unmodifiedKeyLabel: String?
+) -> Bool {
+    applicationIsActive
+        && settingsMenuAvailable
+        && event.typeRawValue == CGEventType.keyDown.rawValue
+        && event.keycode == hotkey.keycode
+        && hotkey.requiredModifiers == .maskCommand
+        && event.flags.intersection(HOTKEY_COMBINATION_MODIFIERS) == .maskCommand
+        && unmodifiedKeyLabel == APPLICATION_SETTINGS_KEY_EQUIVALENT
+}
+
 private func hotkeyRecorderShouldPassThrough(_ event: HotkeyEventSnapshot) -> Bool {
     event.typeRawValue == CGEventType.keyDown.rawValue
         && (event.keycode == ESCAPE_KEYCODE
@@ -3829,6 +3850,10 @@ final class HotkeyListener {
     var onRelease: (() -> Void)?
     var onCancel: (() -> Void)?
     var isRecordingActive: (() -> Bool)?
+    /// True only when the normal Presspeech App menu (and its Settings key
+    /// equivalent) is exposed. Read dynamically so toggling Show in Dock takes
+    /// effect without restarting the event tap.
+    fileprivate var applicationSettingsMenuIsAvailable: (() -> Bool)?
     /// Describes why a new recording cannot start. Toggle mode uses this to
     /// report a rejected press without flipping its state. nil means ready.
     fileprivate var recordingStartBlocker: (() -> RecordingStartBlocker?)?
@@ -3926,6 +3951,22 @@ final class HotkeyListener {
         if !didLogFirstEvent {
             didLogFirstEvent = true
             log("HotkeyListener: first keyboard event received — tap is delivering")
+        }
+
+        if NSApp.isActive,
+           let settingsMenuAvailable = applicationSettingsMenuIsAvailable?(),
+           event.typeRawValue == CGEventType.keyDown.rawValue,
+           event.keycode == hotkey.keycode,
+           hotkey.requiredModifiers == .maskCommand,
+           event.flags.intersection(HOTKEY_COMBINATION_MODIFIERS) == .maskCommand,
+           shouldPassThroughApplicationSettingsShortcut(
+                event: event,
+                hotkey: hotkey,
+                applicationIsActive: true,
+                settingsMenuAvailable: settingsMenuAvailable,
+                unmodifiedKeyLabel: hotkeyKeyDisplayName(event.keycode)
+           ) {
+            return false
         }
 
         let startBlocker = recordingStartBlocker?()
@@ -8245,6 +8286,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         NSApp.setActivationPolicy(settings.showInDock ? .regular : .accessory)
         installApplicationMenu()
+        hotkey.applicationSettingsMenuIsAvailable = { [weak self] in
+            self?.settings.showInDock == true
+        }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         configureStatusItemImage()
@@ -10063,7 +10107,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let settingsItem = NSMenuItem(title: "Settings…",
                                       action: #selector(showSettingsFromApplicationMenu(_:)),
-                                      keyEquivalent: ",")
+                                      keyEquivalent: APPLICATION_SETTINGS_KEY_EQUIVALENT)
         settingsItem.target = self
         applicationMenu.addItem(settingsItem)
         applicationMenu.addItem(.separator())
@@ -13436,7 +13480,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let alert = NSAlert()
         alert.messageText = "Record Hotkey"
-        alert.informativeText = "Press a right-side modifier, an F-key, or a key with Command, Control or Option (Shift is optional), then confirm. A custom combination takes precedence over the same shortcut in other apps. Conflicts cannot all be detected. On Apple keyboards, F-keys may require Fn."
+        alert.informativeText = "Press a right-side modifier, an F-key, or a key with Command, Control or Option (Shift is optional), then confirm. A custom combination takes precedence over the same shortcut in other apps. When Show in Dock is enabled, Presspeech's Command-comma Settings shortcut takes precedence while Presspeech is active. Conflicts cannot all be detected. On Apple keyboards, F-keys may require Fn."
         alert.addButton(withTitle: "Use Selected")
         alert.addButton(withTitle: "Cancel")
         let useButton = alert.buttons[0]
@@ -15488,6 +15532,7 @@ private enum PresspeechSelfTest {
 
     private static func testHotkey() throws {
         try testCustomHotkeyBindings()
+        try testApplicationSettingsShortcutPrecedence()
         try testHotkeyRecorderModifierReleaseOrdering()
         try testHotkeyRecorderEventSnapshot()
         try testCustomHotkeyTransitions()
@@ -15587,6 +15632,43 @@ private enum PresspeechSelfTest {
         settings.hotkeyBinding = hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
         try expect(Settings(testDefaults: defaults).hotkeyBinding, equals: hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE),
                    "reset must replace the full structured binding")
+    }
+
+    private static func testApplicationSettingsShortcutPrecedence() throws {
+        guard let commandComma = recordableHotkeyChoice(forKeycode: 43, modifiers: .maskCommand) else {
+            throw SelfTestFailure.failed("Command-comma test binding unavailable")
+        }
+        let press = event(.keyDown, keycode: commandComma.keycode,
+                          flags: CGEventFlags.maskCommand.rawValue)
+        func passesThrough(_ snapshot: HotkeyEventSnapshot,
+                           active: Bool = true,
+                           menuAvailable: Bool = true,
+                           keyLabel: String? = ",") -> Bool {
+            shouldPassThroughApplicationSettingsShortcut(
+                event: snapshot,
+                hotkey: commandComma,
+                applicationIsActive: active,
+                settingsMenuAvailable: menuAvailable,
+                unmodifiedKeyLabel: keyLabel
+            )
+        }
+
+        try expect(passesThrough(press), equals: true,
+                   "Presspeech Settings should keep Command-comma while its App menu is available")
+        try expect(passesThrough(press, active: false), equals: false,
+                   "the configured Command-comma dictation hotkey should remain global in other apps")
+        try expect(passesThrough(press, menuAvailable: false), equals: false,
+                   "the hotkey should win when Show in Dock hides the App menu")
+        try expect(passesThrough(press, keyLabel: "a"), equals: false,
+                   "only the Settings menu's current-layout key equivalent should pass through")
+        try expect(passesThrough(event(.keyDown, keycode: commandComma.keycode,
+                                       flags: (CGEventFlags.maskCommand.union(.maskShift)).rawValue)),
+                   equals: false,
+                   "a different modifier combination must not invoke the Settings key equivalent")
+        try expect(passesThrough(event(.keyUp, keycode: commandComma.keycode,
+                                       flags: CGEventFlags.maskCommand.rawValue)),
+                   equals: false,
+                   "only the menu shortcut key-down should bypass the global listener")
     }
 
     private static func testHotkeyRecorderModifierReleaseOrdering() throws {

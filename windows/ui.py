@@ -939,8 +939,10 @@ class SetupWindow:
         ttk.Label(
             frame,
             text=("If the selected speech model is not already on this PC, "
-                  "Presspeech downloads it before first use. Stay online "
-                  "while it prepares."),
+                  "Presspeech fetches its pinned model files from Hugging "
+                  "Face. Setup asks before fetching missing Parakeet files; "
+                  "the CPU default prepares automatically. Stay online while "
+                  "it prepares; speech is processed on this PC."),
             justify="left",
             wraplength=560,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -991,25 +993,61 @@ class SetupWindow:
         )
         sound_button.pack(side="left", padx=(8, 0))
 
+        # Put the optional download choices after the microphone controls so
+        # forward Tab order matches their visual order from Setup's initial
+        # microphone focus.
+        self.model_consent_frame = ttk.Frame(frame)
+        self.model_consent_frame.grid(
+            row=9, column=0, columnspan=2, sticky="ew", pady=(4, 8))
+        ttk.Label(
+            self.model_consent_frame,
+            text=("A full multilingual Parakeet model download is about 2.5 GB "
+                  "from huggingface.co; a partial local cache may need less. "
+                  "Hugging Face receives the model request; audio and "
+                  "transcripts stay on this PC. Or choose English-only "
+                  "Whisper base.en on CPU (~141 MiB)."),
+            justify="left",
+            wraplength=560,
+        ).pack(anchor="w")
+        self.download_model_button = ttk.Button(
+            self.model_consent_frame,
+            text="Download Parakeet model (up to ~2.5 GB)",
+            command=self.app.confirm_initial_model_download,
+        )
+        self.download_model_button.pack(anchor="w", pady=(6, 0))
+        self.cpu_model_button = ttk.Button(
+            self.model_consent_frame,
+            text="Use English-only CPU model (~141 MiB)",
+            command=self.app.select_cpu_model_after_download_declined,
+        )
+        self.cpu_model_button.pack(anchor="w", pady=(4, 0))
+        self.other_model_button = ttk.Button(
+            self.model_consent_frame,
+            text="Choose another model in Settings…",
+            command=self.app.open_settings,
+        )
+        self.other_model_button.pack(anchor="w", pady=(4, 0))
+        self.model_consent_frame.grid_remove()
+
         hotkey_label = ttk.Label(frame, text="Dictation hotkey")
-        hotkey_label.grid(row=9, column=0, sticky="w")
+        hotkey_label.grid(row=10, column=0, sticky="w")
         self.hotkey = ttk.Combobox(
             frame, values=cfg.HOTKEYS, state="readonly", width=18)
         self.hotkey.set(self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]))
-        self.hotkey.grid(row=9, column=1, sticky="w", padx=(12, 0), pady=3)
+        self.hotkey.grid(row=10, column=1, sticky="w", padx=(12, 0), pady=3)
         self.hotkey.bind("<<ComboboxSelected>>", self._hotkey_changed)
         ttk.Label(
             frame,
             text=ALTGR_HOTKEY_GUIDANCE,
             justify="left",
             wraplength=560,
-        ).grid(row=10, column=0, columnspan=2, sticky="w", pady=(3, 8))
+        ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(3, 8))
 
         trigger_label = ttk.Label(frame, text="Dictation style")
-        trigger_label.grid(row=11, column=0, sticky="w", pady=(0, 6))
+        trigger_label.grid(row=12, column=0, sticky="w", pady=(0, 6))
         trigger_options = ttk.Frame(frame)
         trigger_options.grid(
-            row=11, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
+            row=12, column=1, sticky="w", padx=(12, 0), pady=(0, 6))
         self.trigger = tk.StringVar(
             value=self.app.settings.get("trigger", cfg.DEFAULTS["trigger"]))
         hold_trigger = ttk.Radiobutton(
@@ -1022,9 +1060,9 @@ class SetupWindow:
         toggle_trigger.pack(side="left", padx=(12, 0))
 
         hotkey_status_label = ttk.Label(frame, text="Global hotkey status")
-        hotkey_status_label.grid(row=12, column=0, sticky="w", pady=(0, 6))
+        hotkey_status_label.grid(row=13, column=0, sticky="w", pady=(0, 6))
         hotkey_actions = ttk.Frame(frame)
-        hotkey_actions.grid(row=12, column=1, sticky="ew", padx=(12, 0), pady=(0, 6))
+        hotkey_actions.grid(row=13, column=1, sticky="ew", padx=(12, 0), pady=(0, 6))
         self.hotkey_status = ttk.Label(hotkey_actions, text="Starting\u2026")
         self.hotkey_status.pack(side="left")
         self.repair_hotkey_button = ttk.Button(
@@ -1036,10 +1074,10 @@ class SetupWindow:
             value=self.app.settings.get("autostart", True))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
-                            row=13, column=0, columnspan=2, sticky="w", pady=(2, 6))
+                            row=14, column=0, columnspan=2, sticky="w", pady=(2, 6))
 
         startup_actions = ttk.Frame(frame)
-        startup_actions.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(0, 14))
+        startup_actions.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(0, 14))
         self.autostart_status = ttk.Label(startup_actions, text="")
         self.autostart_status.pack(side="left")
         startup_button = ttk.Button(
@@ -1049,7 +1087,7 @@ class SetupWindow:
         startup_button.pack(side="right")
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=15, column=0, columnspan=2, sticky="ew")
+        buttons.grid(row=16, column=0, columnspan=2, sticky="ew")
         self.try_button = ttk.Button(
             buttons, text="Try Dictation", command=self.app.open_scratchpad,
             state="disabled")
@@ -1079,6 +1117,9 @@ class SetupWindow:
                 (startup_button, "o"),
                 (self.try_button, "t"),
                 (self.retry_button, "r"),
+                (self.download_model_button, "d"),
+                (self.cpu_model_button, "u"),
+                (self.other_model_button, "m"),
                 (self.finish_button, "f"),
                 (later_button, "l")):
             _add_access_key(root, button, key)
@@ -1113,11 +1154,24 @@ class SetupWindow:
             # loader reports "Loading …". Do not present that as a distinct
             # load-only phase: setup may take time while downloading too.
             "loading": "Preparing speech model — downloading or loading…",
+            "awaiting_download_consent": (
+                "Needs your choice — full Parakeet model download is about 2.5 GB"),
             "ready": "Ready" + ((" — " + detail) if detail else ""),
             "error": "Needs attention" + ((" — " + detail) if detail else ""),
         }
         _set_accessible_text(
             self.model_label, labels.get(status, detail or status))
+        consent_required = status == "awaiting_download_consent"
+        for button in (
+                self.download_model_button, self.cpu_model_button,
+                self.other_model_button):
+            _set_control_state(
+                self.root, button,
+                "normal" if consent_required else "disabled", self.device)
+        if consent_required:
+            self.model_consent_frame.grid()
+        else:
+            self.model_consent_frame.grid_remove()
         hotkey_state, hotkey_detail = _hotkey_readiness(self.app)
         _set_accessible_text(self.hotkey_status, hotkey_detail)
         self.repair_hotkey_button.config(state="normal")
@@ -1131,7 +1185,7 @@ class SetupWindow:
             self.root, self.finish_button,
             ("normal" if status == "ready" and
              hotkey_state == "ready" else "disabled"), self.device)
-        if status in ("ready", "error"):
+        if status in ("ready", "error", "awaiting_download_consent"):
             if getattr(self, "_progress_active", False):
                 self.progress.stop()
                 self._progress_active = False
@@ -1789,6 +1843,10 @@ class SettingsWindow:
         elif status == "error":
             text = "Speech model needs attention" + (
                 (" — " + detail) if detail else "")
+        elif status == "awaiting_download_consent":
+            text = (
+                "Parakeet model files aren't fully cached. Choose whether to "
+                "start the full download (~2.5 GB) in Setup.")
         else:
             text = (
                 "Preparing selected speech model… Dictation is unavailable "
@@ -2194,6 +2252,13 @@ class ScratchpadWindow:
             return (
                 "Dictate (or use the hotkey)", "disabled",
                 "Speech model needs attention. Open Setup or Settings to retry.",
+            )
+        if model_status == "awaiting_download_consent":
+            return (
+                "Dictate (or use the hotkey)", "disabled",
+                "Parakeet model files aren't fully cached. Open Setup to start "
+                "the full download (~2.5 GB), choose the smaller English-only "
+                "CPU model, or defer.",
             )
         if model_status != "ready":
             return (

@@ -55,6 +55,21 @@ class CacheFirstTests(unittest.TestCase):
         self.assertEqual(self.resolve(), str(self.snapshot))
         self.assertEqual(self.flags(), [True]); self.assert_pinned_anonymous()
 
+    def test_local_only_cache_miss_never_falls_back_to_a_download(self):
+        self.download.side_effect = self.missing('no cache')
+        with self.assertRaises(model_cache.ModelCacheMissingError):
+            model_cache.resolve_snapshot(
+                'fixture/public', self.revision, self.files, local_only=True)
+        self.assertEqual(self.flags(), [True])
+        self.assert_pinned_anonymous()
+
+    def test_local_only_incomplete_snapshot_never_falls_back_to_a_download(self):
+        (self.snapshot / 'tokenizer.json').unlink()
+        with self.assertRaises(model_cache.ModelCacheMissingError):
+            model_cache.resolve_snapshot(
+                'fixture/public', self.revision, self.files, local_only=True)
+        self.assertEqual(self.flags(), [True])
+
     def test_missing_snapshot_falls_back_once_with_same_pin_and_privacy(self):
         self.download.side_effect = [self.missing('no cache'), str(self.snapshot)]
         self.assertEqual(self.resolve(), str(self.snapshot))

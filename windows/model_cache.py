@@ -70,7 +70,9 @@ def _validate_snapshot(snapshot, revision, required_files, optional_files=(), re
     return str(path)
 
 
-def resolve_snapshot(repository, revision, required_files, *, optional_files=(), required_any=()):
+def resolve_snapshot(
+        repository, revision, required_files, *, optional_files=(),
+        required_any=(), local_only=False):
     """Resolve only the reviewed inference files; never fetch alternative weights."""
     if not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("model revision must be an immutable commit")
@@ -99,7 +101,12 @@ def resolve_snapshot(repository, revision, required_files, *, optional_files=(),
 
     try:
         return attempt(True)
-    except (LocalEntryNotFoundError, ModelCacheMissingError):
+    except (LocalEntryNotFoundError, ModelCacheMissingError) as exc:
+        if local_only:
+            if isinstance(exc, LocalEntryNotFoundError):
+                raise ModelCacheMissingError(
+                    "pinned model snapshot is not locally available") from exc
+            raise
         if offline_requested():
             raise
     # Do not wrap this attempt or backend loading: a second miss, HTTP failure,

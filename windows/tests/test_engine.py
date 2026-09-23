@@ -56,6 +56,14 @@ class ParakeetConfigurationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported speech model"):
             engine.model_snapshot("unreviewed/model")
 
+    def test_model_cache_can_be_checked_without_network_fallback(self):
+        self.assertEqual(
+            engine._cached_model_path("parakeet-tdt-0.6b-v3", local_only=True),
+            "synthetic-pinned-snapshot",
+        )
+        self.resolve_snapshot.assert_called_once()
+        self.assertTrue(self.resolve_snapshot.call_args.kwargs["local_only"])
+
     def test_parakeet_uses_smallest_pre_warmed_audio_bucket(self):
         self.assertEqual(engine._parakeet_bucket_seconds(1.0), 15)
         self.assertEqual(engine._parakeet_bucket_seconds(15.0), 15)

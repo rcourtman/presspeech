@@ -134,5 +134,7 @@ keyboard layout, right-modifier hardware behavior, or microphone/model behavior.
 Those remain separate manual checks. Explicit user confirmation is not a Quartz
 clipboard-consumption acknowledgement.
 The fixture exercises the recorder's real decision function through a native
-local monitor, not its modal confirmation UI or persistence; the existing pure
-hotkey suite covers persistence and invalid input.
+local monitor, not its modal confirmation UI, persistence, or the full app's
+Command-comma Settings-menu precedence; the existing pure hotkey suite covers
+the decision policy and persistence, while the manual hotkey checklist covers
+the actual app-menu interaction.

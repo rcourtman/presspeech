@@ -69,8 +69,12 @@ Download the self-contained installer—Python is not required:
   guarded PowerShell commands together while the next prerelease is prepared.
 - After verification, run the installer and launch Presspeech from the Start
   Menu.
-- On first launch, wait for **Preparing speech model…** to disappear before
-  the first dictation.
+- In the upcoming Windows build containing this change, Setup asks before
+  downloading missing Parakeet model files (up to ~2.5 GB). Choose that
+  download, the smaller English-only Whisper base.en CPU model (~141 MiB),
+  another model in Settings, or **Set Up Later**. Published 0.1.12 does not
+  include this prompt. Wait for **Preparing speech model…** to disappear
+  before the first dictation.
 - If a shell-capable assistant is doing the installation, give it the
   [guarded Windows prompt](https://rcourtman.github.io/presspeech/install/agents.md).
   It checks x64 compatibility, pins the current release, verifies the checksum,
@@ -82,10 +86,11 @@ and if SmartScreen offers that choice. That option does not apply to a Smart
 App Control block, which has no per-app exception. If Smart App Control or
 managed policy blocks the installer, stop; do not try to circumvent the block.
 The installed app is about
-4.4 GB. On a fresh PC with NVIDIA CUDA, the default Parakeet model download is
-about 2.5 GB; without usable CUDA, Presspeech selects the smaller Whisper
-base.en CPU model (about 141 MiB), which is English-only. Other local models
-remain selectable in Settings; review the [Windows language and hardware
+4.4 GB. On a fresh PC with NVIDIA CUDA, the upcoming Windows build containing
+this change asks before the default multilingual Parakeet model's first
+download (about 2.5 GB); without usable CUDA, Presspeech selects the smaller
+Whisper base.en CPU model (about 141 MiB), which is English-only. Other
+local models remain selectable in Settings; review the [Windows language and hardware
 split](https://rcourtman.github.io/presspeech/windows.html#language-support)
 before downloading if you need another language.
 
@@ -230,15 +235,19 @@ each platform rather than identical.
   keep the report private and retry later rather than posting elsewhere
 - **Presspeech → Settings…** or **Command-comma** — when **Show in Dock** is
   enabled, open the same settings hierarchy from the standard macOS app menu;
-  that menu also exposes standard Edit and Window commands for Presspeech's
+  if Command-comma is also the dictation hotkey, this Settings command wins
+  while Presspeech is active and the hotkey remains global in other apps. That
+  menu also exposes standard Edit and Window commands for Presspeech's
   scratchpad and manager windows
 - **Settings → Dictation → Hotkey** — choose Right Option, Right Control, Right
   Command, selected F-keys, or **Record Hotkey…** for another F-key/right
   modifier or a key combined with Command, Control or Option (plus optional
   Shift), such as Command-comma. Confirm the preview before saving. Custom
   combinations take precedence over the same shortcut in other apps; conflicts
-  cannot all be detected. Escape remains reserved for cancellation. Bindings
-  track physical keys, and their labels follow the current keyboard layout.
+  cannot all be detected. Presspeech's Command-comma Settings command takes
+  precedence while Presspeech is active and **Show in Dock** is enabled.
+  Escape remains reserved for cancellation. Bindings track physical keys, and
+  their labels follow the current keyboard layout.
   Hold mode ends when the trigger key is released, even if its modifiers were
   released first. Apple keyboards may require **Fn** to send an F-key
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
@@ -347,6 +356,9 @@ Presspeech is local-first:
 - No Presspeech-authored analytics, accounts, or crash reporter. Bundled
   speech-library network behavior differs by published version; see the
   [privacy inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+- Published Windows 0.1.12 may include a locally available Hugging Face account
+  token in public model-download requests; upcoming 0.1.13 disables this
+  implicit authentication. See the version-scoped [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
@@ -364,7 +376,7 @@ Presspeech is local-first:
 
 Network calls made by Presspeech are limited to:
 
-- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 removes inherited Hugging Face account tokens from its own model-download process, and upcoming Windows 0.1.13 disables the Hub libraries' telemetry and implicit authentication before import,
+- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); published Windows 0.1.12 may include a configured or cached Hugging Face token, while upcoming Windows 0.1.13 disables implicit authentication; upcoming macOS 0.3.9 removes inherited Hugging Face account tokens from its own model-download process,
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, plus the compatibility
   guide link in macOS 0.3.8 / upcoming Windows 0.1.13 or builds containing that
