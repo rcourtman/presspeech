@@ -111,6 +111,20 @@ refresh it only when the corrected model-download paths are actually published;
 the existing warnings already do this, so this is a release-readiness gate,
 not a reason to add more feature or reassurance copy.
 
+Streaming text is a visible adjacent use case, but not yet a Presspeech priority.
+Superscribe Lite's launch page markets words appearing in the target field while
+the user is speaking. A May 2026 [r/macapps discussion](https://www.reddit.com/r/macapps/comments/1tb0dv7/dictation_app_that_inserts_text_in_real_time/)
+includes one participant who follows live words to keep track of technical
+paragraphs; another describes live text as distracting, and a developer notes
+that provisional words can change after insertion, making correction in an
+arbitrary target field difficult. These are promotional positioning and
+self-selected comments, not a representative demand sample or controlled
+comparison. Keep Presspeech's transcription-after-recording behavior explicit,
+but do not add streaming on this evidence alone. Revisit only after privacy-safe
+intake returns and repeated Presspeech reports establish the need and a native
+prototype demonstrates safe handling of revisions, cancellation, and target-app
+editing behavior.
+
 Public user evidence is thin and self-selected. A recent
 [FOSS discussion of Handy](https://www.reddit.com/r/foss/comments/1vxrgg5/a_free_open_source_speechtotext_tool_that_has/)
 includes anecdotal replies about reducing typing burden and one user's initial

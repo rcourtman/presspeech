@@ -461,6 +461,14 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Already used macOS 0.3.8?",
         "macos-0-3-8-after-use",
     ),
+    DOCS / "faq.html": (
+        "Before installing or launching macOS 0.3.8",
+        "Hugging Face token inherited by Presspeech",
+        "public model needs no account token",
+        "wait until macOS 0.3.9 is published",
+        "Dictation audio and transcripts are not sent",
+        'id="faq-macos-install-privacy"',
+    ),
     DOCS / "install.html": (
         'id="model-download-privacy"',
         "Before installing or launching macOS 0.3.8",
@@ -571,6 +579,15 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "revoke the token",
         "Hugging Face Access Tokens",
         "Do not include token values",
+    ),
+    DOCS / "faq.html": (
+        "Before installing or launching Windows 0.1.12",
+        "usage telemetry",
+        "include an available token",
+        "custom routing can change where the token goes",
+        "wait until Windows 0.1.13 is published",
+        "dictation audio and transcripts are not sent",
+        'id="faq-windows-install-privacy"',
     ),
 }
 
@@ -2203,6 +2220,48 @@ def check_windows_model_download_privacy_summary(
     return errors
 
 
+def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]:
+    """Keep the FAQ's release warnings ahead of every install action."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing FAQ install privacy warning"]
+
+    contents = read_text(path)
+    start = contents.find("<h3>How do I install it?</h3>")
+    end = contents.find("</article>", start)
+    if start < 0 or end < 0:
+        return [f"{display}: missing FAQ install answer"]
+    answer = contents[start:end]
+    rules = (
+        (
+            'id="faq-macos-install-privacy"',
+            (
+                "releases/latest/download/Presspeech.zip",
+                "brew install --cask rcourtman/presspeech/presspeech",
+            ),
+            "macOS",
+        ),
+        (
+            'id="faq-windows-install-privacy"',
+            ("windows.html#download-verify-run",),
+            "Windows",
+        ),
+    )
+    errors: list[str] = []
+    for warning, actions, platform in rules:
+        warning_position = answer.find(warning)
+        action_positions = [answer.find(action) for action in actions]
+        if warning_position < 0 or any(
+            position < 0 or warning_position > position
+            for position in action_positions
+        ):
+            errors.append(
+                f"{display}: {platform} model-download privacy warning must "
+                "precede its install action"
+            )
+    return errors
+
+
 def check_macos_model_download_privacy_summary(
     surfaces: dict[Path, tuple[str, ...]] = MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY,
     install_page: Path = DOCS / "install.html",
@@ -3546,6 +3605,35 @@ def run_self_test() -> None:
         if not any("must precede the direct download action" in error for error in mac_order_errors):
             raise SyncError("self-test: early macOS download action was accepted")
 
+        faq_install = Path(tmp) / "faq.html"
+        faq_install.write_text(
+            '<article><h3>How do I install it?</h3>'
+            '<p id="faq-macos-install-privacy">macOS warning</p>'
+            '<p id="faq-windows-install-privacy">Windows warning</p>'
+            '<a href="https://github.com/rcourtman/presspeech/releases/latest/'
+            'download/Presspeech.zip">Download</a>'
+            '<code>brew install --cask rcourtman/presspeech/presspeech</code>'
+            '<a href="windows.html#download-verify-run">Windows guide</a>'
+            '</article>',
+            encoding="utf-8",
+        )
+        if check_faq_install_privacy_order(faq_install):
+            raise SyncError("self-test: ordered FAQ privacy warnings were rejected")
+        faq_install.write_text(
+            '<article><h3>How do I install it?</h3>'
+            '<a href="https://github.com/rcourtman/presspeech/releases/latest/'
+            'download/Presspeech.zip">Download</a>'
+            '<code>brew install --cask rcourtman/presspeech/presspeech</code>'
+            '<a href="windows.html#download-verify-run">Windows guide</a>'
+            '<p id="faq-macos-install-privacy">macOS warning</p>'
+            '<p id="faq-windows-install-privacy">Windows warning</p>'
+            '</article>',
+            encoding="utf-8",
+        )
+        faq_order_errors = check_faq_install_privacy_order(faq_install)
+        if len(faq_order_errors) != 2:
+            raise SyncError("self-test: install action before FAQ privacy warning was accepted")
+
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {
             delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
@@ -3827,6 +3915,7 @@ def main() -> int:
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
+            errors.extend(check_faq_install_privacy_order())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_compatibility_worksheet_contract())
@@ -3871,6 +3960,7 @@ def main() -> int:
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())
+        errors.extend(check_faq_install_privacy_order())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_compatibility_worksheet_contract())
