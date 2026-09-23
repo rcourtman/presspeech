@@ -1317,6 +1317,12 @@ class SetupWindow:
                     self.download_model_button,
                     "Download English-only CPU model (~141 MiB)",
                     announce=False)
+                _name_control(
+                    self.download_model_button,
+                    "Download the English-only CPU Whisper base.en model, "
+                    "about 141 MiB. This requests pinned model files from "
+                    "huggingface.co; dictation audio and transcripts stay "
+                    "on this PC.")
                 self.cpu_model_button.pack_forget()
             else:
                 _set_accessible_text(
@@ -1331,6 +1337,11 @@ class SetupWindow:
                     self.download_model_button,
                     "Download Parakeet model (up to ~2.5 GB)",
                     announce=False)
+                _name_control(
+                    self.download_model_button,
+                    "Download the multilingual Parakeet model, up to about "
+                    "2.5 GB. Hugging Face receives the model-file request; "
+                    "dictation audio and transcripts stay on this PC.")
                 if self.cpu_model_button.winfo_manager() != "pack":
                     self.cpu_model_button.pack(
                         before=self.other_model_button,

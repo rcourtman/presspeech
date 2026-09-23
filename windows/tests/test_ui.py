@@ -895,6 +895,34 @@ class SetupWindowTests(unittest.TestCase):
         self.assertFalse(window.app.confirm_initial_model_download.called)
         self.assertFalse(window.app.select_cpu_model_after_download_declined.called)
 
+    def test_first_run_download_action_names_model_and_privacy_boundary(self):
+        cases = (
+            (
+                "parakeet-tdt-0.6b-v3",
+                "Download the multilingual Parakeet model, up to about "
+                "2.5 GB. Hugging Face receives the model-file request; "
+                "dictation audio and transcripts stay on this PC.",
+            ),
+            (
+                "base.en",
+                "Download the English-only CPU Whisper base.en model, "
+                "about 141 MiB. This requests pinned model files from "
+                "huggingface.co; dictation audio and transcripts stay "
+                "on this PC.",
+            ),
+        )
+        for model, accessible_name in cases:
+            with self.subTest(model=model):
+                window = self.make_window("awaiting_download_consent")
+                window.app.settings["model"] = model
+
+                with mock.patch.object(ui, "_set_accessible_text"), \
+                        mock.patch.object(ui, "_name_control") as name_control:
+                    window._poll_model()
+
+                name_control.assert_any_call(
+                    window.download_model_button, accessible_name)
+
     def test_first_run_cpu_download_waits_for_choice_and_hides_redundant_fallback(self):
         window = self.make_window(
             "awaiting_download_consent",
