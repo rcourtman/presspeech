@@ -15435,6 +15435,7 @@ private final class NativeInteractionFixture {
     private var eventGate = NativeInteractionPolicy.EventGate()
     private var upstreamSeen: Int64 = 0
     private var activationObserver: NSObjectProtocol?
+    private var pasteKey: CGKeyCode = ANSI_PASTE_VIRTUAL_KEY
 
     static func run() throws {
         let fixture = NativeInteractionFixture()
@@ -15500,9 +15501,9 @@ private final class NativeInteractionFixture {
         // Let the upstream gate release only paired Command/V keys after an
         // abort. It rejects unpaired key-ups before they reach another app.
         let commandRelease = event.getIntegerValueField(.keyboardEventKeycode) == 55
-            && !event.flags.contains(.maskCommand)
+            && event.type == .keyUp && !event.flags.contains(.maskCommand)
         let pasteRelease = event.getIntegerValueField(.keyboardEventKeycode) == Int64(pasteKey)
-            && event.typeRawValue == CGEventType.keyUp.rawValue
+            && event.type == .keyUp
         guard safety() || commandRelease || pasteRelease else { return false }
         guard event.getIntegerValueField(.eventSourceUnixProcessID) == Int64(owner) else {
             abort("native event source ownership unavailable")
@@ -15654,6 +15655,7 @@ private final class NativeInteractionFixture {
         guard case .virtualKey(let pasteKey) = currentCommandVPasteKeyResolution() else {
             throw SelfTestFailure.failed("active layout cannot resolve Command-V; native fixture cannot post a paste shortcut safely")
         }
+        self.pasteKey = pasteKey
         let modifiers: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate]
         guard let binding = [CGKeyCode(43), 47, 44].compactMap({
             recordableHotkeyChoice(forKeycode: $0, modifiers: modifiers)
