@@ -5,11 +5,12 @@ Fast, private, local push-to-talk dictation for Windows — a Windows port of
 speak, release, and the transcript is typed at the cursor. Speech recognition
 runs on your machine; Presspeech has no account or cloud transcription service.
 The published 0.1.12 build leaves Hugging Face Hub/Transformers default usage
-telemetry enabled during model downloads. These libraries may send usage data,
-and model-request metadata includes a random per-process session ID. Model
-downloads do not send dictation audio or transcripts; the exact telemetry fields
-are not independently itemised. Its pinned `hf-xet` 1.6.0 predates the later,
-separate Xet transfer-telemetry implementation; see the [version-scoped
+telemetry enabled during model downloads. These libraries may send usage data
+to Hugging Face, and model-request metadata includes a random per-process
+session ID. Model downloads do not send dictation audio or transcripts; the
+exact telemetry fields are not independently itemised. Its pinned `hf-xet` 1.6.0
+predates the later, separate Xet transfer-telemetry implementation; see the
+[version-scoped
 network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
 Preferred engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family

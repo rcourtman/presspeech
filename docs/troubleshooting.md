@@ -188,6 +188,12 @@ or the [private vulnerability-reporting
 form](https://github.com/rcourtman/presspeech/security/advisories/new) for a
 security issue.
 
+**Feedback availability checked 23 September 2026:** GitHub currently reports
+that issue creation is restricted for this repository, so the public bug form
+may not accept a new report. Check for a matching issue and whether comments
+are available. If there is no usable public route, keep the privacy-safe report
+locally and retry later; do not post private data elsewhere as a workaround.
+
 GitHub issues are public. Diagnostics omit transcript text, audio, dictionary
 contents, exact microphone names, raw error details, and raw log lines. Review
 the separate local log before sharing any excerpt because device labels and

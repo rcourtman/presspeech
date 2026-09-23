@@ -1257,7 +1257,10 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         )
     privacy_line = (
         "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
-        "published Windows 0.1.12 does not disable bundled-library telemetry during model downloads (see the privacy inventory)."
+        "during Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
+        "Hugging Face, and model-request metadata includes a random per-process session ID. Dictation audio "
+        "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
+        "itemised (see the privacy inventory)."
     )
     if re.search(r"(?m)^- Privacy:.*$", text):
         text = re.sub(r"(?m)^- Privacy:.*$", privacy_line, text, count=1)
@@ -1313,10 +1316,12 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             text,
             old_privacy_summary,
             "Presspeech does not operate first-party analytics, event tracking, or crash reporting, "
-            "and has no account system, transcript sync, or cloud transcription endpoint. The "
-            "published Windows 0.1.12 installer does not disable Hugging Face libraries' default "
-            "usage telemetry during model downloads; this dependency-generated activity is "
-            "separate from audio or transcript upload. Audio is captured while the hotkey is "
+            "and has no account system, transcript sync, or cloud transcription endpoint. "
+            "During model downloads, the published Windows 0.1.12 prerelease leaves bundled "
+            "Hugging Face libraries' default usage telemetry enabled. They may send usage data "
+            "to Hugging Face, and model-request metadata includes a random per-process session ID. "
+            "Dictation audio and transcripts are not sent in model downloads; exact telemetry "
+            "fields are not independently itemised. Audio is captured while the hotkey is "
             "active, transcribed locally, then discarded.",
             path=path,
         )

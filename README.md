@@ -89,6 +89,13 @@ remain selectable in Settings; review the [Windows language and hardware
 split](https://rcourtman.github.io/presspeech/windows.html#language-support)
 before downloading if you need another language.
 
+**Windows 0.1.12 privacy note:** during model downloads, bundled Hugging Face
+Hub/Transformers libraries may send default usage telemetry to Hugging Face;
+model-request metadata also includes a random per-process session ID. This is
+separate from dictation: audio and transcripts are not sent in model downloads.
+The exact telemetry fields for this build are not independently itemised. See
+the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.
 
