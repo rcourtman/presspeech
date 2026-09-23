@@ -139,6 +139,12 @@ source-build details.
 may include a Hugging Face token inherited by Presspeech. The public model
 needs no account token. If a token may be present in the environment that
 launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published.
+The bundled FluidAudio client also honors an inherited lowercase
+`https_proxy` setting. A TLS-inspecting HTTPS proxy trusted by macOS can read
+any 0.3.8 token it receives; a tunnelling proxy cannot read the HTTPS request.
+If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while
+it is in use. Upcoming 0.3.9 removes account-token authentication but still
+honors proxy settings.
 Downloading the macOS ZIP from GitHub does not make a model request; the first
 download of a missing model starts when the app launches. You can keep the
 downloaded app unopened while waiting for 0.3.9.
@@ -222,7 +228,7 @@ Before installing or launching macOS 0.3.8, disclose that a Hugging
 Face token inherited by Presspeech may be included in model-download requests;
 the public model needs no account token. If a token may be present in the
 environment that launches Presspeech—or the user is unsure—offer to wait until
-macOS 0.3.9 is published. Do not inspect or display token values, change
+macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy; an untrusted TLS-inspecting proxy could read a 0.3.8 token, while a tunnelling proxy cannot. If the proxy's trust is unclear, do not launch 0.3.8 while it is in use. Do not inspect or display token values, change
 credential settings, or launch 0.3.8 without the user's informed choice. Model
 downloads do not include dictation audio or transcripts. See
 https://rcourtman.github.io/presspeech/privacy.html#network-calls.

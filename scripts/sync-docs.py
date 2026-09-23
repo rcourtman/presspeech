@@ -253,6 +253,46 @@ WINDOWS_LANGUAGE_GUIDANCE = {
     ),
 }
 
+# People and install assistants can arrive at these anchors without seeing the
+# top-of-page model-download warning. Review the local reminder for each newly
+# published release instead of silently carrying the old first-launch decision
+# into a new version.
+ANCHORED_INSTALL_PREFLIGHTS = (
+    {
+        "path": DOCS / "install.html",
+        "anchor": "direct-download",
+        "platform": "macos",
+        "version_key": "version",
+        "reviewed_version": "0.3.8",
+        "required": (
+            "Before opening macOS 0.3.8",
+            "missing-model download starts on launch",
+            "Hugging Face token inherited by Presspeech",
+            "leave the downloaded app unopened",
+            "wait until macOS 0.3.9 is published",
+            "full release-specific warning",
+        ),
+    },
+    {
+        "path": DOCS / "windows.html",
+        "anchor": "download-verify-run",
+        "platform": "windows",
+        "version_key": "windows_version",
+        "reviewed_version": "0.1.12",
+        "required": (
+            "Before launching Windows 0.1.12",
+            "missing-model download starts on launch",
+            "usage telemetry or an available token",
+            "custom routing can change where a token goes",
+            "TLS-inspecting HTTPS proxy",
+            "wait until Windows 0.1.13 is published",
+            "Launch Presspeech",
+            "unchecked on the final installer screen",
+            "full release-specific warning",
+        ),
+    },
+)
+
 # Presspeech itself has no transcript-sync feature, but normal delivery writes
 # to each platform's general clipboard. Public privacy and retrieval surfaces
 # must preserve the separate operating-system boundary, distinguish published
@@ -531,6 +571,48 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "leave its cache in place",
         "integrity retry or cache reset",
         "wait until 0.3.9 is installed",
+    ),
+}
+
+# The pinned FluidAudio client used by both macOS versions routes HTTPS model
+# requests through an inherited lowercase https_proxy. The published 0.3.8
+# build may also attach an inherited account token; 0.3.9 removes that token
+# but does not remove the proxy setting. Keep this distinction visible at every
+# first-launch decision surface and in the technical inventory.
+MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
+    ROOT / "README.md": (
+        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+    ),
+    ROOT / "SECURITY.md": (
+        "macOS 0.3.8", "https_proxy", "http_proxy", "treat that token as disclosed",
+        "still honors proxy settings",
+    ),
+    DOCS / "index.html": (
+        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+    ),
+    DOCS / "getting-started.html": (
+        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "proxy's trust is unclear"
+    ),
+    DOCS / "faq.html": (
+        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "tunnelling proxy"
+    ),
+    DOCS / "install.html": (
+        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+    ),
+    DOCS / "install" / "agents.md": (
+        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+    ),
+    DOCS / "privacy.html": (
+        "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "treat the token as disclosed"
+    ),
+    DOCS / "privacy" / "network-calls.json": (
+        "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "0.3.9 still honors proxy settings"
+    ),
+    DOCS / "llms.txt": (
+        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+    ),
+    DOCS / "llms-full.txt": (
+        "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "0.3.8 token"
     ),
 }
 
@@ -1127,7 +1209,7 @@ class SyncError(RuntimeError):
 
 MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
-Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. Upcoming 0.3.9 removes account-token authentication but still honors proxy settings. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Before downloading or installing, run these read-only compatibility checks:
   uname -m
@@ -1733,7 +1815,11 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "- Before installing or launching macOS 0.3.8, model-download requests may include "
         "a Hugging Face token inherited by Presspeech. The public model needs no account "
         "token; if one may be present in the environment that launches Presspeech—or you "
-        "are unsure—wait until macOS 0.3.9 is published. See "
+        "are unsure—wait until macOS 0.3.9 is published. The pinned FluidAudio client "
+        "honors inherited lowercase `https_proxy`; an untrusted TLS-inspecting proxy could "
+        "read a 0.3.8 token, while a tunnelling proxy cannot. If the proxy's trust is unclear, "
+        "do not launch 0.3.8 while it is in use. Upcoming 0.3.9 removes account-token "
+        "authentication but still honors proxy settings. See "
         "https://rcourtman.github.io/presspeech/install.html#model-download-privacy.\n"
     )
     if download_privacy_notice not in text:
@@ -1746,7 +1832,10 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "macOS 0.3.8 may attach an inherited Hugging Face token to model-download requests, "
         "although the public model needs no account token. If a token may be present in the environment "
         "that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published; dictation audio "
-        "and transcripts are not sent in those requests. If macOS 0.3.8 is already in use, leave a working "
+        "and transcripts are not sent in those requests. If macOS 0.3.8 already downloaded a model "
+        "with a token available and an untrusted TLS-inspecting proxy could read the request, "
+        "treat the token as disclosed to that proxy and revoke it at Hugging Face Access Tokens. "
+        "Leave a working "
         "model cache in place and wait for 0.3.9 before a planned re-download; see "
         "https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use. "
         "During Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
@@ -1835,7 +1924,12 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         "Before installing or launching macOS 0.3.8, its model-download requests may "
         "include a Hugging Face token inherited by Presspeech. The public model needs "
         "no account token. If one may be present in the environment that launches "
-        "Presspeech—or you are unsure—wait until macOS 0.3.9 is published. Review the "
+        "Presspeech—or you are unsure—wait until macOS 0.3.9 is published. "
+        "The pinned FluidAudio client also honors inherited lowercase `https_proxy`; "
+        "an untrusted TLS-inspecting proxy could read a 0.3.8 token, while a tunnelling "
+        "proxy cannot. If the proxy's trust is unclear, do not launch 0.3.8 while it is "
+        "in use. Upcoming 0.3.9 removes account-token authentication but still honors "
+        "proxy settings. Review the "
         "[current privacy decision](https://rcourtman.github.io/presspeech/"
         "install.html#model-download-privacy) first.\n\n"
     )
@@ -2258,6 +2352,119 @@ def check_windows_verified_download_flow(
         errors.append(
             f"{display}: visible installer links must follow #download-verify-run guidance"
         )
+    return errors
+
+
+def check_anchored_install_preflights(
+    metadata: dict[str, object],
+    surfaces: tuple[dict[str, object], ...] = ANCHORED_INSTALL_PREFLIGHTS,
+) -> list[str]:
+    """Keep release-specific privacy decisions visible at deep-linked install steps."""
+    errors: list[str] = []
+    for surface in surfaces:
+        path = Path(surface["path"])
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        platform = str(surface["platform"])
+        version = metadata.get(str(surface["version_key"]))
+        if version != surface["reviewed_version"]:
+            errors.append(
+                f"{display}: review the {platform} anchored install preflight "
+                f"for release {version} before publishing"
+            )
+            continue
+        if not path.exists():
+            errors.append(f"{display}: missing {platform} install guide")
+            continue
+        contents = read_text(path)
+        anchor = f'<section id="{surface["anchor"]}">'
+        start = contents.find(anchor)
+        end = contents.find("</section>", start + len(anchor)) if start >= 0 else -1
+        if start < 0 or end < 0:
+            errors.append(f"{display}: missing #{surface['anchor']} install section")
+            continue
+        section = contents[start:end]
+        note = re.search(
+            rf'<div class="note warn" data-install-preflight="{platform}">(.*?)</div>',
+            section,
+            flags=re.S,
+        )
+        if note is None:
+            errors.append(
+                f"{display}: #{surface['anchor']} needs a local model-download "
+                "privacy reminder before the install steps"
+            )
+            continue
+        visible = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", note.group(1))).split())
+        missing = [phrase for phrase in surface["required"] if phrase not in visible]
+        if 'href="#model-download-privacy"' not in note.group(1):
+            missing.append("link to #model-download-privacy")
+        if missing:
+            errors.append(
+                f"{display}: #{surface['anchor']} has incomplete release-specific "
+                "preflight — missing " + ", ".join(repr(phrase) for phrase in missing)
+            )
+        download_name = (
+            r"Presspeech\.zip" if platform == "macos"
+            else r'Presspeech-Setup-[^"/]+-x64\.exe'
+        )
+        download = re.search(
+            rf'<a href="https://github\.com/rcourtman/presspeech/releases/download/[^"/]+/{download_name}">',
+            contents[start:],
+        )
+        if download is None or note.start() > download.start():
+            errors.append(
+                f"{display}: #{surface['anchor']} privacy reminder must "
+                "precede the direct download link"
+            )
+        if platform == "macos":
+            if (
+                "If you chose to wait" not in section
+                or "leave it unopened" not in section
+                or "Otherwise, open it" not in section
+            ):
+                errors.append(
+                    f"{display}: direct-download launch step must keep the "
+                    "wait-without-opening option"
+                )
+            homebrew = contents.find("<h2>Homebrew install and launch</h2>")
+            homebrew_note = contents.find(
+                "<strong>Before the <code>open</code> command:</strong>", homebrew
+            )
+            homebrew_code = contents.find(
+                "<pre><code>brew install --cask rcourtman/presspeech/presspeech",
+                homebrew,
+            )
+            if not (0 <= homebrew < homebrew_note < homebrew_code) or not all(
+                phrase in contents[homebrew_note:homebrew_code]
+                for phrase in (
+                    "macOS 0.3.8",
+                    "skip <code>open</code>",
+                    'href="#model-download-privacy"',
+                )
+            ):
+                errors.append(
+                    f"{display}: Homebrew open command needs the release-specific "
+                    "wait-without-opening reminder first"
+                )
+        else:
+            launch_step = re.search(
+                r"<li>\s*<strong>Decide whether to launch 0\.1\.12</strong>\s*<p>(.*?)</p>",
+                contents[end:],
+                flags=re.S,
+            )
+            if launch_step is None or not all(
+                phrase in launch_step.group(1)
+                for phrase in (
+                    "If you chose to wait",
+                    "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked",
+                    "do not open the app",
+                    "If you choose to use published 0.1.12 now",
+                )
+            ):
+                errors.append(
+                    f"{display}: Windows launch step must keep the "
+                    "wait-without-launching option"
+                )
     return errors
 
 
@@ -3725,6 +3932,134 @@ def run_self_test() -> None:
         "release_zip_size": "7.6 MB",
     }
     with tempfile.TemporaryDirectory() as tmp:
+        preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.12"}
+        preflight_surfaces = []
+        for surface in ANCHORED_INSTALL_PREFLIGHTS:
+            fixture = dict(surface)
+            fixture["path"] = Path(tmp) / f"{surface['platform']}-install.html"
+            note = (
+                f'<div class="note warn" data-install-preflight="{surface["platform"]}">'
+                + " ".join(surface["required"])
+                + '<a href="#model-download-privacy">full release-specific warning</a></div>'
+            )
+            if surface["platform"] == "macos":
+                download = '<a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.8/Presspeech.zip">Download</a>'
+                action = (
+                    "If you chose to wait, leave it unopened. "
+                    "Otherwise, open it"
+                )
+                suffix = (
+                    "<h2>Homebrew install and launch</h2>"
+                    "<p><strong>Before the <code>open</code> command:</strong> "
+                    "macOS 0.3.8; skip <code>open</code>; "
+                    '<a href="#model-download-privacy">Read warning</a></p>'
+                    "<pre><code>brew install --cask rcourtman/presspeech/presspeech"
+                    "</code></pre>"
+                )
+            else:
+                download = '<a href="https://github.com/rcourtman/presspeech/releases/download/windows-v0.1.12/Presspeech-Setup-0.1.12-x64.exe">Download</a>'
+                action = ""
+                suffix = (
+                    "<li><strong>Decide whether to launch 0.1.12</strong><p>"
+                    "If you chose to wait after reading the privacy decision, "
+                    "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked "
+                    "and do not open the app. If you choose to use published 0.1.12 now, "
+                    "open it from the Start Menu.</p></li>"
+                )
+            Path(fixture["path"]).write_text(
+                f'<section id="{surface["anchor"]}">{note}{download}{action}</section>{suffix}',
+                encoding="utf-8",
+            )
+            preflight_surfaces.append(fixture)
+        preflight_surfaces = tuple(preflight_surfaces)
+        if check_anchored_install_preflights(preflight_metadata, preflight_surfaces):
+            raise SyncError("self-test: valid anchored install preflights were rejected")
+        stale_preflight_metadata = dict(preflight_metadata, version="0.3.9")
+        if not any(
+            "review the macos anchored install preflight" in error
+            for error in check_anchored_install_preflights(
+                stale_preflight_metadata, preflight_surfaces
+            )
+        ):
+            raise SyncError("self-test: stale release-specific preflight was accepted")
+        mac_fixture = Path(preflight_surfaces[0]["path"])
+        valid_mac_fixture = mac_fixture.read_text(encoding="utf-8")
+        mac_note = re.search(
+            r'<div class="note warn" data-install-preflight="macos">.*?</div>',
+            valid_mac_fixture,
+        )
+        if mac_note is None:
+            raise SyncError("self-test: missing macOS preflight fixture")
+        mac_fixture.write_text(
+            valid_mac_fixture.replace(mac_note.group(0), "").replace(
+                "</section>", mac_note.group(0) + "</section>"
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "privacy reminder must precede the direct download link" in error
+            for error in check_anchored_install_preflights(
+                preflight_metadata, preflight_surfaces
+            )
+        ):
+            raise SyncError("self-test: late anchored privacy reminder was accepted")
+        mac_fixture.write_text(
+            valid_mac_fixture.replace(mac_note.group(0), ""), encoding="utf-8"
+        )
+        if not any(
+            "needs a local model-download privacy reminder" in error
+            for error in check_anchored_install_preflights(
+                preflight_metadata, preflight_surfaces
+            )
+        ):
+            raise SyncError("self-test: missing anchored privacy reminder was accepted")
+        mac_fixture.write_text(
+            valid_mac_fixture.replace("skip <code>open</code>", "open immediately"),
+            encoding="utf-8",
+        )
+        if not any(
+            "Homebrew open command needs the release-specific" in error
+            for error in check_anchored_install_preflights(
+                preflight_metadata, preflight_surfaces
+            )
+        ):
+            raise SyncError("self-test: unconditional Homebrew open was accepted")
+        windows_fixture = Path(preflight_surfaces[1]["path"])
+        valid_windows_fixture = windows_fixture.read_text(encoding="utf-8")
+        windows_note = re.search(
+            r'<div class="note warn" data-install-preflight="windows">.*?</div>',
+            valid_windows_fixture,
+        )
+        if windows_note is None:
+            raise SyncError("self-test: missing Windows preflight fixture")
+        windows_fixture.write_text(
+            valid_windows_fixture.replace(windows_note.group(0), "").replace(
+                "</section>", windows_note.group(0) + "</section>"
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "privacy reminder must precede the direct download link" in error
+            for error in check_anchored_install_preflights(
+                preflight_metadata, preflight_surfaces
+            )
+        ):
+            raise SyncError("self-test: late Windows privacy reminder was accepted")
+        windows_fixture.write_text(
+            valid_windows_fixture.replace(
+                "If you chose to wait after reading",
+                "Open it without a privacy decision after reading",
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "Windows launch step must keep the wait-without-launching option" in error
+            for error in check_anchored_install_preflights(
+                preflight_metadata, preflight_surfaces
+            )
+        ):
+            raise SyncError("self-test: unconditional Windows launch was accepted")
+
         release_zip = Path(tmp) / "Presspeech.zip"
         release_zip.write_bytes(b"release fixture\n")
         generated_metadata = build_metadata(
@@ -3859,7 +4194,9 @@ def run_self_test() -> None:
             or "Before installing or launching macOS 0.3.8" not in synced_llms
             or "macOS 0.3.8 may attach an inherited Hugging Face token" not in synced_llms
             or "wait until macOS 0.3.9 is published" not in synced_llms
-            or "leave a working model cache in place" not in synced_llms
+            or "Leave a working model cache in place" not in synced_llms
+            or "https_proxy" not in synced_llms
+            or "TLS-inspecting" not in synced_llms
             or "macos-0-3-8-after-use" not in synced_llms
             or synced_llms.find("Before installing or launching macOS 0.3.8")
             > synced_llms.find("- macOS latest published download:")
@@ -5105,6 +5442,19 @@ def run_self_test() -> None:
             raise SyncError("self-test: release-stable Mac copy was rejected")
 
         model_download_guidance = Path(tmp) / "mac-model-download-guidance.md"
+        proxy_guidance = Path(tmp) / "mac-proxy-guidance.md"
+        proxy_required = {
+            proxy_guidance: ("https_proxy", "TLS-inspecting", "0.3.8 token", "0.3.9"),
+        }
+        proxy_guidance.write_text("The model uses a proxy.\n", encoding="utf-8")
+        if not check_mac_model_download_guidance(proxy_required):
+            raise SyncError("self-test: missing macOS proxy disclosure was accepted")
+        proxy_guidance.write_text(
+            "https_proxy: a TLS-inspecting proxy could read a 0.3.8 token; 0.3.9 removes it.\n",
+            encoding="utf-8",
+        )
+        if check_mac_model_download_guidance(proxy_required):
+            raise SyncError("self-test: complete macOS proxy disclosure was rejected")
         required_model_download_guidance = {
             model_download_guidance: (
                 "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
@@ -5196,6 +5546,7 @@ def main() -> int:
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_windows_verified_download_flow())
+            errors.extend(check_anchored_install_preflights(metadata))
             errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_windows_model_download_privacy_guidance())
@@ -5206,6 +5557,7 @@ def main() -> int:
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE))
             errors.extend(check_macos_model_download_privacy_summary())
+            errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
@@ -5252,6 +5604,7 @@ def main() -> int:
         errors.extend(check_platform_orientation())
         errors.extend(check_windows_unsigned_guidance())
         errors.extend(check_windows_verified_download_flow())
+        errors.extend(check_anchored_install_preflights(metadata))
         errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_windows_model_download_privacy_guidance())
@@ -5262,6 +5615,7 @@ def main() -> int:
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE))
         errors.extend(check_macos_model_download_privacy_summary())
+        errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())

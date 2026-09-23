@@ -1703,6 +1703,25 @@ class TextRegressionTests(unittest.TestCase):
             "private test transcript")
         instance._paste.assert_not_called()
 
+    def test_child_focus_change_inside_scratchpad_stays_private(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        scratchpad = mock.Mock()
+        scratchpad.root = mock.Mock()
+        instance.scratchpad = scratchpad
+        instance._paste = mock.Mock()
+        target = app.PasteTarget(
+            "presspeech.exe", 1234, app.os.getpid(), 0, 501)
+        another_control = target._replace(focus_handle=502)
+
+        with mock.patch.object(
+                app, "_foreground_paste_target", return_value=another_control):
+            instance._deliver_text(
+                "private test transcript", target, scratchpad)
+
+        scratchpad.append_text.assert_called_once_with(
+            "private test transcript")
+        instance._paste.assert_not_called()
+
     def test_focus_change_does_not_append_to_captured_scratchpad(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         scratchpad = mock.Mock()
@@ -1791,6 +1810,27 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
+
+        copy.assert_called_once_with("private transcript")
+        controller.assert_not_called()
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        instance.notify.assert_called_once()
+
+    def test_focus_moves_to_another_control_in_same_window_without_paste(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        original = app.PasteTarget("notepad.exe", 1234, 41, 0, 501)
+        other_control = app.PasteTarget("notepad.exe", 1234, 41, 0, 502)
+
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target", return_value=other_control), \
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
+            self.assertFalse(instance._paste("private transcript", original))
 
         copy.assert_called_once_with("private transcript")
         controller.assert_not_called()

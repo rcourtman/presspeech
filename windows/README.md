@@ -315,6 +315,12 @@ clipboard with a small reliability delay. Normal Windows apps retain fast Ctrl+V
 Each recording is bound to the window that was focused when it began. If focus
 changes while the model is transcribing, Presspeech leaves the transcript on the
 clipboard and notifies you instead of pasting private text into the wrong window.
+Where Windows exposes a separate focused child control, Presspeech also checks
+that control before sending Ctrl+V; moving between two native edit controls in
+one window then uses Delivery Recovery instead of automatic paste. Custom-drawn
+browser and Electron fields can share one Win32 control handle, so this is not
+a guarantee of field identity within those apps. Keep the intended field
+focused until delivery finishes, and review where the text landed.
 [Windows prevents](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput#remarks)
 a standard app from sending simulated input into an app running as administrator.
 Presspeech detects that boundary, leaves the transcript on the clipboard, and
@@ -444,6 +450,9 @@ Use **Open Startup Settings** to review Presspeech under Windows
   exclusion, and other local clipboard readers remain a separate boundary.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
+  version 10 reports include one aggregate input digest so paired runs can
+  confirm the same effective audio, references, and scoring labels, rather
+  than relying on matching file names alone;
   Whisper reports include the exact Silero VAD boundary policy so WER, quiet
   speech rejection, and silence false positives remain comparable across
   dependency updates. Reports also preserve the requested language policy and

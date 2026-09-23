@@ -1,13 +1,45 @@
 import json
 import io
 import os
+import sys
 import tempfile
+import types
 import unittest
 import unicodedata
 from contextlib import redirect_stdout
 from unittest import mock
 
 import benchmark
+
+
+class CudaTimingTests(unittest.TestCase):
+    def test_cpu_only_runtime_needs_no_cuda_barrier(self):
+        with mock.patch.dict(sys.modules, {"torch": None}):
+            benchmark._sync_cuda()
+
+        torch = types.ModuleType("torch")
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = False
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            benchmark._sync_cuda()
+        torch.cuda.synchronize.assert_not_called()
+
+    def test_cuda_barrier_runs_when_available(self):
+        torch = types.ModuleType("torch")
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = True
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            benchmark._sync_cuda()
+        torch.cuda.synchronize.assert_called_once_with()
+
+    def test_failed_cuda_barrier_invalidates_latency_run(self):
+        torch = types.ModuleType("torch")
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = True
+        torch.cuda.synchronize.side_effect = RuntimeError("CUDA synchronization failed")
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            with self.assertRaisesRegex(RuntimeError, "CUDA synchronization failed"):
+                benchmark._sync_cuda()
 
 
 class MetricTests(unittest.TestCase):
@@ -423,7 +455,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(path)
 
         transcriber.transcribe.assert_called_once_with(
@@ -455,7 +487,7 @@ class MetricTests(unittest.TestCase):
                     return_value=transcriber) as transcriber_type, \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(
                     path, whisper_vad_min_silence_ms=2000)
 
@@ -518,7 +550,7 @@ class MetricTests(unittest.TestCase):
                 json.dump(manifest, handle)
             with mock.patch.object(benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(benchmark, "load_audio",
-                                      return_value=(mock.sentinel.audio, 1.0, 16000)):
+                                      return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(path)
         self.assertEqual(result["reviewed_sample_count"], 1)
         self.assertEqual(result["reviewed_reference_word_count"], 2)
@@ -742,7 +774,7 @@ class MetricTests(unittest.TestCase):
                     return_value=transcriber) as transcriber_type, \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(manifest_path)
 
         transcriber_type.assert_called_once_with(measure_stages=True)
@@ -769,7 +801,8 @@ class MetricTests(unittest.TestCase):
             "Parakeet windows: 2-2 per trial; longest input 59.750s",
             output.getvalue(),
         )
-        self.assertEqual(result["benchmark_version"], 9)
+        self.assertIn("not measured delivery", output.getvalue())
+        self.assertEqual(result["benchmark_version"], 10)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,
@@ -814,7 +847,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(manifest_path)
 
         self.assertAlmostEqual(result["aggregate_wer"], 1 / 6)
@@ -941,7 +974,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000)):
+                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(manifest_path)
 
         self.assertIsNone(result["aggregate_wer"])
@@ -988,7 +1021,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 2.0, 16000)):
+                        return_value=(mock.sentinel.audio, 2.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(manifest_path)
 
         detection = result["samples"][0]["speech_detection"]
@@ -1041,7 +1074,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 2.0, 16000)):
+                        return_value=(mock.sentinel.audio, 2.0, 16000, "0" * 64)):
                 result = benchmark.run_benchmark(manifest_path)
 
         detection = result["samples"][0]["speech_detection"]

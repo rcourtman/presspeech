@@ -19,7 +19,6 @@ import time
 import winsound
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
-from typing import NamedTuple
 
 # Hugging Face clients read privacy and endpoint settings at import time.  This
 # local bootstrap must precede every third-party import, including indirect
@@ -31,6 +30,10 @@ import soxr
 import sounddevice as sd
 import clipboard_delivery
 import keyboard_delivery
+from paste_target import (
+    PasteTarget, focused_child_handle as _focused_child_handle,
+    matches as _paste_target_matches, same_window as _paste_target_same_window,
+)
 from pynput import keyboard as pkb
 from PIL import Image, ImageDraw
 from pystray import Icon, Menu, MenuItem
@@ -188,13 +191,6 @@ PACKAGE_SMOKE_IMPORTS = (
         "set_acc_name",
     )),
 )
-
-
-class PasteTarget(NamedTuple):
-    process_name: str
-    window_handle: int
-    process_identifier: int = 0
-    integrity_level: int = 0
 
 
 def _update_check_due(last_check_epoch, now_epoch=None):
@@ -408,7 +404,7 @@ def _resample_to_16k(audio, from_rate):
 
 
 def _foreground_paste_target():
-    """Return the foreground window and its executable as one snapshot."""
+    """Return the foreground window, process and Win32 focus where available."""
     try:
         import ctypes
         from ctypes import wintypes
@@ -418,6 +414,7 @@ def _foreground_paste_target():
         user32.GetForegroundWindow.restype = wintypes.HWND
         user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND,
                                                     ctypes.POINTER(wintypes.DWORD)]
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
         kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL,
                                          wintypes.DWORD]
         kernel32.OpenProcess.restype = wintypes.HANDLE
@@ -431,13 +428,17 @@ def _foreground_paste_target():
         if not hwnd:
             return PasteTarget("", 0)
         process_id = wintypes.DWORD()
-        if not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id)):
+        thread_identifier = user32.GetWindowThreadProcessId(
+            hwnd, ctypes.byref(process_id))
+        if not thread_identifier:
             return PasteTarget("", int(hwnd))
+        focus_handle = _focused_child_handle(
+            user32, int(hwnd), int(thread_identifier))
         handle = kernel32.OpenProcess(0x1000, False, process_id.value)
         if not handle:
             return PasteTarget(
                 "", int(hwnd), int(process_id.value),
-                _process_integrity_level(process_id.value))
+                _process_integrity_level(process_id.value), focus_handle)
         try:
             size = wintypes.DWORD(32768)
             path = ctypes.create_unicode_buffer(size.value)
@@ -445,11 +446,11 @@ def _foreground_paste_target():
                     handle, 0, path, ctypes.byref(size)):
                 return PasteTarget(
                     "", int(hwnd), int(process_id.value),
-                    _process_integrity_level(process_id.value))
+                    _process_integrity_level(process_id.value), focus_handle)
             return PasteTarget(
                 os.path.basename(path.value).lower(), int(hwnd),
                 int(process_id.value),
-                _process_integrity_level(process_id.value))
+                _process_integrity_level(process_id.value), focus_handle)
         finally:
             kernel32.CloseHandle(handle)
     except Exception:
@@ -540,18 +541,6 @@ def _paste_target_blocks_simulated_input(paste_target, source_integrity=None):
     if source_integrity is None:
         source_integrity = _process_integrity_level(os.getpid())
     return bool(source_integrity and target_integrity > source_integrity)
-
-
-def _paste_target_matches(expected, current):
-    """Match an exact window owner, using its executable if PID is unavailable."""
-    if (not expected.window_handle or
-            current.window_handle != expected.window_handle):
-        return False
-    if expected.process_identifier:
-        return current.process_identifier == expected.process_identifier
-    if expected.process_name:
-        return current.process_name == expected.process_name
-    return False
 
 
 def _paste_route(process_name):
@@ -2341,7 +2330,10 @@ class PresspeechApp:
             return
         if (scratchpad_target is getattr(self, "scratchpad", None) and
                 getattr(scratchpad_target, "root", None) is not None):
-            if _paste_target_matches(
+            # This is an in-process private sink, not a Ctrl+V into whichever
+            # child control has focus. Changing controls inside the same
+            # scratchpad must not divert its transcript to the clipboard.
+            if _paste_target_same_window(
                     paste_target, _foreground_paste_target()):
                 scratchpad_target.append_text(text)
             else:

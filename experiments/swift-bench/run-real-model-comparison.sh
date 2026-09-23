@@ -70,9 +70,11 @@ Supported input extensions: wav, aiff, aif, caf, m4a, mp3, flac.
 Each audio file must have a same-stem .txt reference sidecar.
 Generated context-variation triplets deliberately repeat source audio and can
 be analysed separately, but cannot satisfy the independent-corpus candidate
-screen. A thresholded candidate corpus also needs at least five independently
-recorded, hand-audited non-speech controls. Mark each with a zero-byte .txt
-sidecar; include realistic room/device noise rather than only digital silence.
+screen. Generated window-position variants likewise repeat the same speech
+and cannot satisfy that screen. A thresholded candidate corpus also needs at
+least five independently recorded, hand-audited non-speech controls. Mark each
+with a zero-byte .txt sidecar; include realistic room/device noise rather than
+only digital silence.
 USAGE
 }
 
@@ -930,6 +932,21 @@ run_self_test() {
     fi
     assert_contains "$context_preflight_log" "missing regular context manifest"
 
+    local shift_gate_dir="$tmpdir/shift-gate"
+    mkdir -p "$shift_gate_dir"
+    printf 'Presspeech generated public window-position speech fixtures\n' \
+        >"$shift_gate_dir/.presspeech-public-window-shift-fixtures"
+    local shift_gate_log="$tmpdir/shift-gate.log"
+    if bash "$SCRIPT_PATH" \
+        --input-dir "$shift_gate_dir" \
+        --candidate-backend v3-no-mel \
+        --require-candidate-pass >"$shift_gate_log" 2>&1; then
+        echo "self-test expected repeated window-position fixtures to be rejected by the candidate gate" >&2
+        exit 1
+    fi
+    assert_contains "$shift_gate_log" \
+        "window-position fixtures cannot satisfy the independent-corpus candidate screen"
+
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
     python3 ./test-context-inputs.py
@@ -1064,12 +1081,31 @@ MSG
     exit 2
 fi
 
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && \
+      ( -e "$INPUT_DIR/.presspeech-public-window-shift-fixtures" || \
+        -L "$INPUT_DIR/.presspeech-public-window-shift-fixtures" ) ]]; then
+    cat >&2 <<'MSG'
+window-position fixtures cannot satisfy the independent-corpus candidate screen
+
+The same source speech is repeated at several leading-silence offsets. Use
+run-real-dictation-regression.sh for a report-only position-sensitivity probe,
+and use a separate independent corpus for a candidate gate.
+MSG
+    exit 2
+fi
+
 CONTEXT_CORPUS=0
 CONTEXT_MANIFEST_SHA256=""
 if [[ -e "$INPUT_DIR/.presspeech-public-context-fixtures" || \
       -L "$INPUT_DIR/.presspeech-public-context-fixtures" ]]; then
     CONTEXT_CORPUS=1
     python3 ./compose-public-context-fixtures.py \
+        --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
+fi
+
+if [[ -e "$INPUT_DIR/.presspeech-public-window-shift-fixtures" || \
+      -L "$INPUT_DIR/.presspeech-public-window-shift-fixtures" ]]; then
+    python3 ./compose-public-window-shift-fixtures.py \
         --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
 fi
 

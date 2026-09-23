@@ -308,6 +308,7 @@ For a quick non-ASR check of argument parsing and report redaction:
 ./run-vocabulary-bias-regression.sh --self-test
 python3 ./benchmark-inputs.py --self-test
 python3 ./compose-public-context-fixtures.py --self-test
+python3 ./compose-public-window-shift-fixtures.py --self-test
 python3 ./analyze-context-variation.py --self-test
 ./.build/debug/presspeech-bench --self-test
 ```
@@ -721,6 +722,47 @@ keep the short, private-dictation, and multilingual checks. Override either
 bound for an explicitly reviewed corpus with
 `--long-public-max-corpus-wer` or
 `--long-public-max-reference-deletion-run`.
+
+### Window-position sensitivity diagnostic
+
+The release corpus keeps each source utterance at one fixed location in a
+multi-window clip. A separate, **report-only** probe moves the *same* speech
+relative to the window timeline without changing its words or sample bytes.
+This tests a risk suggested by [FluidAudio's window-composition report
+#760](https://github.com/FluidInference/FluidAudio/issues/760); it does not
+assume that Presspeech reproduces the upstream result or that the issue's
+opt-in encoder replacement improves the shipped app.
+
+```sh
+python3 ./compose-public-window-shift-fixtures.py \
+  --input-dir public-audio/librispeech-dev-clean-long-form \
+  --output-dir public-audio/librispeech-dev-clean-window-shift
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/librispeech-dev-clean-window-shift \
+  --out-dir public-results/window-shift \
+  --backend v3 --language en --public-corpus --show-paths --trials 3
+```
+
+The composer first validates the ordinary long-form corpus. For each
+composite it writes 0, 3,500, and 7,000 ms leading-silence variants, records
+the offset and digests in `manifest.tsv`, and verifies byte-identical speech
+and references across each group. The regression runner validates the
+generated corpus again before freezing inputs; its report contains the exact
+benchmark-input digest. Compare each source's rows side by side: exact word
+errors/WER, consecutive deletions, final-word retention, and p50 latency.
+Do not rely only on the all-variants average or treat repeated speech as
+independent evidence. A changed transcript is worth inspecting with
+`--show-transcripts`; it is **not** proof of a particular window/merge cause,
+because added silence may also affect preprocessing. The longer shifted clips
+also have more samples to process, so their p50s are not like-for-like speed
+comparisons. The helper does not run as part of the release gate, does not set
+a pass threshold, and the model comparison runner refuses to use this corpus
+for `--require-candidate-pass`.
+Repeat on the German FLEURS long-form corpus with `--language de` when
+qualifying multilingual chunking; still retain independent human dictation.
+
+Run `python3 ./compose-public-window-shift-fixtures.py --self-test` for a
+no-model check of composition, tamper detection, and safe replacement.
 
 ### Multilingual long-form seam probe
 

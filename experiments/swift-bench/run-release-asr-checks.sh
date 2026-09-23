@@ -268,6 +268,9 @@ run_self_test() {
     # inside this wrapper's self-test so CI cannot report the release boundary
     # healthy while its required multi-window corpus helper has rotted.
     python3 ./compose-public-long-form-fixtures.py --self-test
+    # The shifted-copy probe itself is report-only, but its pairing and
+    # safe-replacement checks should remain runnable for SDK evaluations.
+    python3 ./compose-public-window-shift-fixtures.py --self-test
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-release-asr-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -821,6 +824,7 @@ python3 ./benchmark-inputs.py --self-test
 ./add-real-dictation-fixture.sh --self-test
 ./fetch-public-speech-fixtures.sh --self-test
 python3 ./compose-public-long-form-fixtures.py --self-test
+python3 ./compose-public-window-shift-fixtures.py --self-test
 python3 ./compose-public-context-fixtures.py --self-test
 python3 ./analyze-context-variation.py --self-test
 ./run-real-dictation-regression.sh --self-test

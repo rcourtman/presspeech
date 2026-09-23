@@ -9,7 +9,8 @@
       "when": "macOS 0.3.8 starts its first model download on launch. In 0.3.9, a clean install must choose Download Model in Setup; choosing Set Up Later defers the transfer. Existing installs and cached models load automatically. Integrity-failure re-downloads and user-triggered cache resets can also download the model",
       "destination": [
         "huggingface.co and its subdomains",
-        "Hugging Face model-storage and CDN hosts under hf.co"
+        "Hugging Face model-storage and CDN hosts under hf.co",
+        "macOS 0.3.8 and 0.3.9: inherited lowercase https_proxy and http_proxy settings can route HTTPS model requests through a configured HTTPS proxy"
       ],
       "purpose": "FluidAudio downloads the Parakeet TDT v3 CoreML model weights",
       "approximate_size": "500-600 MB",
@@ -37,7 +38,7 @@
           ]
         }
       ],
-      "data_sent": "Standard HTTPS request metadata; no dictation audio. macOS 0.3.8 can attach an inherited HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN as an Authorization header. Upcoming 0.3.9 removes those credentials from its own process before FluidAudio can read them, so its public model download carries no account credential; this does not alter the user's shell or token store"
+      "data_sent": "Standard HTTPS request metadata; no dictation audio. macOS 0.3.8 can attach an inherited HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN as an Authorization header. Upcoming 0.3.9 removes those credentials from its own process before FluidAudio can read them, so its public model download carries no account credential; this does not alter the user's shell or token store. Both versions use the pinned FluidAudio client, which honors inherited lowercase https_proxy and http_proxy settings. A tunnelling proxy sees connection metadata but not request headers; a TLS-inspecting HTTPS proxy trusted by macOS could read any token sent by published 0.3.8. Upcoming 0.3.9 still honors proxy settings but removes inherited account-token authentication"
     },
     {
       "name": "windows_first_launch_model_download",

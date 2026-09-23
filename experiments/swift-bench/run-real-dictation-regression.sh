@@ -41,6 +41,7 @@ MAX_REFERENCE_DELETION_RUN=""
 MAX_CORPUS_WER=""
 MAX_NON_SPEECH_EMISSIONS=""
 BENCHMARK_INPUT_SHA256="unreported"
+WINDOW_SHIFT_CORPUS=0
 
 usage() {
     cat <<'USAGE'
@@ -555,6 +556,9 @@ write_report_header() {
         echo "- Transcript output: $(transcript_output_label)"
         echo "- Fixture paths: $(fixture_paths_label)"
         echo "- Clips: $clip_count"
+        if [[ "$WINDOW_SHIFT_CORPUS" -eq 1 ]]; then
+            echo "- Evidence scope: repeated-speech window-position diagnostic; not an independent release or candidate gate"
+        fi
         echo
         report_note
     } >"$report"
@@ -653,6 +657,10 @@ run_self_test() {
     assert_contains "$report" "- Parakeet TDT v3 language/script hint: auto"
     assert_contains "$report" "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
     assert_not_contains "$report" "Unified trailing silence"
+    WINDOW_SHIFT_CORPUS=1
+    write_report_header "$report" "20260101T000000Z" 1
+    assert_contains "$report" "repeated-speech window-position diagnostic"
+    WINDOW_SHIFT_CORPUS=0
 
     BACKEND="unified"
     write_report_header "$report" "20260101T000000Z" 1
@@ -860,6 +868,23 @@ run_self_test() {
     assert_contains "$stage_dir/report.md" "new report"
 
     local missing_value_log="$tmpdir/missing-value.log"
+    local shift_dir="$tmpdir/window-shift"
+    mkdir -p "$shift_dir"
+    printf 'Presspeech generated public window-position speech fixtures\n' \
+        >"$shift_dir/.presspeech-public-window-shift-fixtures"
+    local shift_log="$tmpdir/window-shift.log"
+    if bash "$SCRIPT_PATH" --input-dir "$shift_dir" \
+        --max-corpus-wer 10 >"$shift_log" 2>&1; then
+        echo "self-test expected repeated speech to reject an independent-corpus gate" >&2
+        exit 1
+    fi
+    assert_contains "$shift_log" "window-position fixtures are report-only"
+    if bash "$SCRIPT_PATH" --input-dir "$shift_dir" >"$shift_log" 2>&1; then
+        echo "self-test expected malformed window-position corpus to fail preflight" >&2
+        exit 1
+    fi
+    assert_contains "$shift_log" "missing regular window-position manifest"
+
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
         echo "self-test expected --trials without a value to fail" >&2
         exit 1
@@ -1036,6 +1061,18 @@ Create it and add private audio files plus matching .txt reference files.
 See real-audio/README.md.
 MSG
     exit 1
+fi
+
+if [[ -e "$INPUT_DIR/.presspeech-public-window-shift-fixtures" || \
+      -L "$INPUT_DIR/.presspeech-public-window-shift-fixtures" ]]; then
+    if [[ -n "$MAX_REFERENCE_DELETION_RUN" || -n "$MAX_CORPUS_WER" ||
+          -n "$MAX_NON_SPEECH_EMISSIONS" ]]; then
+        echo "window-position fixtures are report-only; do not apply independent-corpus quality gates" >&2
+        exit 2
+    fi
+    python3 ./compose-public-window-shift-fixtures.py \
+        --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
+    WINDOW_SHIFT_CORPUS=1
 fi
 
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]]; then

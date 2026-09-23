@@ -3,13 +3,13 @@
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER,
 lowercase-normalized CER, first- and final-word retention, silence false positives, and Whisper VAD speech retention.
-Version 9 reports identify the loader's pinned model repository/revision,
+Reports identify the loader's pinned model repository/revision,
 retain historical consensus WER alongside all-trial WER and a per-clip
 best/worst error envelope, record the bounded Parakeet window count and longest
 model input for each clip, and add the requested language policy plus detected
 language counts for Whisper; they also identify whether the effective Whisper
 VAD policy is the product default or a benchmark-only pause-threshold override.
-Version 9 also normalizes canonically equivalent Unicode text to NFC before
+Version 9 and later normalize canonically equivalent Unicode text to NFC before
 WER, CER, exact-match, and boundary-word scoring, and keeps remaining combining
 marks attached to WER tokens. Raw transcripts and references are not rewritten.
 Re-score older reports before comparing multilingual metrics when reference or
@@ -28,6 +28,19 @@ hint and Whisper's detected-language counts; clips missing either label are
 omitted from the intersection report but remain in corpus and singly labelled
 groups. Source metadata records what the loader requests; it does not
 independently attest the local model files.
+Version 10 adds `benchmark_inputs_sha256` to the JSON report and console summary.
+It hashes the multiset of mono, resampled float32 samples **actually sent to
+ASR**, original clip durations and sample rates, exact reference text, review
+and silence flags, and task/language labels. It does not include paths, sample
+IDs, manifest order, model, decoder language, precision, or run count. Compare
+the digest *and* those separate report settings before attributing a WER or
+latency difference to a model or VAD policy. A changed digest means the input
+comparison is not paired; a matching digest does not establish reference
+quality, speaker diversity, hardware equality, or a native release pass. The
+report exposes only one aggregate digest, not individual audio hashes.
+Versions 9 and earlier have no input digest and cannot retrospectively prove
+that two runs used identical inputs.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -199,9 +212,13 @@ but canonical fixtures make runs easier to compare.
   silence uses the separate false-positive counters.
 - Compare Parakeet optimizations using both total inference latency and the
   synchronized per-stage medians. Stage barriers are benchmark-only and are
-  deliberately disabled during interactive dictation. For clips longer than
-  60 seconds, confirm every trial reports more than one window and a longest
-  input no greater than 60 seconds.
+  deliberately disabled during interactive dictation. A failed CUDA barrier
+  aborts the benchmark rather than producing untrustworthy timings. The
+  reported release-to-paste figures only add configured minimum/maximum
+  post-roll and paste-delay constants to measured inference; they do not
+  measure capture scheduling, resampling, delivery, or target-app response.
+  For clips longer than 60 seconds, confirm every trial reports more than one
+  window and a longest input no greater than 60 seconds.
 - Do not commit audio, reference text, manifests, hypotheses, or result files.
 
 The manifest's `runs` value must be a positive JSON integer and is the number

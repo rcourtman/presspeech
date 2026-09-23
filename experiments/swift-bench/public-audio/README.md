@@ -123,6 +123,14 @@ production v3 backend with `--language de`, applying the long-form WER and
 deletion-run screens. To omit this corpus for a lightweight, non-release check,
 pass `--allow-missing-multilingual-long-public-audio` explicitly.
 
+For a report-only test of whether the **same long-form speech** changes when it
+starts at different positions, run `compose-public-window-shift-fixtures.py`
+on either validated long-form corpus and then
+`run-real-dictation-regression.sh` on its output. The full commands and
+interpretation limits are in the parent benchmark README. The generated
+variants intentionally repeat audio and cannot replace the release corpus or
+an independent model-candidate screen.
+
 ## Spanish language-behavior probe
 
 The upstream report of errors on spontaneous Latin-American Spanish motivates

@@ -39,6 +39,21 @@ proxy that only tunnels HTTPS cannot read the token.
 Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
 Do not include token values in logs or support requests.
 
+The macOS 0.3.8 build may include an inherited `HF_TOKEN`,
+`HUGGING_FACE_HUB_TOKEN`, or `HUGGINGFACEHUB_API_TOKEN` in a model-download
+request. Its pinned FluidAudio client also honors inherited lowercase
+`https_proxy` and `http_proxy` settings. A tunnelling proxy sees connection
+metadata but not HTTPS request headers; a TLS-inspecting HTTPS proxy trusted by
+macOS could read any 0.3.8 token it receives. If a 0.3.8 model download ran
+with a token available and an untrusted TLS-inspecting proxy could read the
+request, treat that token as disclosed to the proxy: revoke it and create a
+replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
+Upcoming macOS 0.3.9 removes inherited account-token authentication before
+model loading, but still honors proxy settings. A working local model cache
+does not need a planned re-download; see the
+[macOS after-use guidance](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).
+Do not include token values in logs or support requests.
+
 Finished text does enter the
 shared system clipboard for paste and recovery. macOS 0.3.8 can make
 those entries available through Universal Clipboard; builds containing the

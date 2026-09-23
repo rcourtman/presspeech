@@ -16,6 +16,7 @@ import numpy as np
 import soundfile as sf
 
 import app
+from benchmark_provenance import asr_audio_sha256, benchmark_inputs_sha256
 import config as cfg
 import engine
 
@@ -405,16 +406,23 @@ def load_audio(path):
     original_seconds = len(audio) / float(sample_rate)
     if sample_rate != 16000:
         audio = app._resample_to_16k(audio, sample_rate)
-    return audio, original_seconds, sample_rate
+    # Hash the exact mono, resampled signal used for inference, not the file
+    # container. A changed recording cannot masquerade as a model regression.
+    audio = np.ascontiguousarray(audio, dtype=np.float32)
+    return audio, original_seconds, sample_rate, asr_audio_sha256(audio)
 
 
 def _sync_cuda():
     try:
         import torch
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-    except Exception:
-        pass
+    except ModuleNotFoundError as exc:
+        # CPU-only Whisper benchmarks need no PyTorch. A broken installed
+        # runtime, or a failed CUDA barrier, must not produce latency figures.
+        if exc.name != "torch":
+            raise
+        return
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
 
 def _percentile(values, percentile):
@@ -535,13 +543,25 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     warmup_seconds = time.perf_counter() - started
 
     sample_results = []
+    input_rows = []
     for sample in samples:
         task_group = sample.get("task_group")
         language_group = sample.get("language_group")
         audio_path = sample["audio"]
         if not os.path.isabs(audio_path):
             audio_path = os.path.join(manifest_dir, audio_path)
-        audio, audio_seconds, source_rate = load_audio(audio_path)
+        audio, audio_seconds, source_rate, audio_digest = load_audio(audio_path)
+        input_rows.append({
+            "asr_audio_sha256": audio_digest,
+            "audio_seconds": audio_seconds,
+            "source_sample_rate": source_rate,
+            "reference": sample.get("reference", ""),
+            "reference_reviewed": sample.get("reference_reviewed", False),
+            "expected_silence": sample.get("expected_silence", False),
+            "task_group": task_group.strip() if task_group is not None else None,
+            "language_group": (
+                language_group.strip() if language_group is not None else None),
+        })
         timings = []
         transcripts = []
         backend_timings = []
@@ -662,8 +682,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 9,
+        "benchmark_version": 10,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "model": model_name,
         "model_snapshot": snapshot,
         # "auto" means faster-whisper received no language hint. The detected
@@ -749,6 +770,7 @@ def _print_summary(result):
     snapshot = result["model_snapshot"]
     print("Snapshot: %s@%s" %
           (snapshot["repository"], snapshot["revision"]))
+    print("Benchmark inputs SHA-256: %s" % result["benchmark_inputs_sha256"])
     vad_policy = result.get("whisper_vad_policy")
     if vad_policy is not None:
         origin = result.get("whisper_vad_policy_origin")
@@ -836,7 +858,8 @@ def _print_summary(result):
                       metrics["reviewed_silence_trial_count"]))
     for sample in result["samples"]:
         timing = sample["inference_seconds"]
-        print("\n%s: %.3fs median (%.1fx realtime, adaptive/max release-to-paste %.3f/%.3fs)" % (
+        print("\n%s: %.3fs median (%.1fx realtime; inference + min/max post-roll "
+              "+ paste delay %.3f/%.3fs, not measured delivery)" % (
             sample["id"], timing["median"], sample["realtime_speedup"],
             sample["estimated_adaptive_release_to_paste_seconds"],
             sample["estimated_release_to_paste_seconds"],

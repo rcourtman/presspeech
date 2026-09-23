@@ -838,6 +838,15 @@ item after the development-wrapper launch check.
   bounded lookup. Other categories must be retained verbatim for triage.
   Do not add the target name, window title, field contents, or transcript to
   that log extract. Every fallback is still an automatic-paste failure.
+- Confirm Settings → Text → Recent Transcripts labels **Off — No Copy Last
+  Transcript** before selection. If a harmless test produces **Delivery
+  uncertain**, clear Recent Transcripts and, on a separate attempt, switch
+  them Off while that warning is present. The warning must remain, now say
+  there is no menu copy, and ask the user to check the destination before
+  retrying; the status item must not silently return to **Ready**. Do not paste
+  a full transcript over possible partial text. If the test target does not
+  produce uncertain delivery, mark this case Not run rather than treating a
+  copied/manual-paste notice as proof.
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.
@@ -1143,3 +1152,12 @@ clipboard.
   text and emoji to qualify the Unicode clipboard path. Verify the non-delayed
   clipboard data survives its private owner window being destroyed, and that
   the exclusion marker does not regress either remote delivery route.
+- In a native test window containing two edit controls with distinct Win32
+  focus HWNDs (verify both handles with a Windows inspection tool), start
+  dictation in the first and move keyboard focus to the second before delivery.
+  Confirm no Ctrl+V is sent, the text is retained for Delivery Recovery, and
+  neither field receives an automatic paste. Repeat without moving focus and
+  confirm the first control receives one paste. Also try a browser or Electron
+  window with two fields and record what happens: those fields may share one
+  Win32 focus HWND, so passing the native-control check does not establish
+  field-level identity for custom-rendered apps. Do not claim it does.

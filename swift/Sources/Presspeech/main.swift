@@ -288,7 +288,7 @@ enum DictationNotice: Equatable {
         case .insertionFailed:
             return "Delivery uncertain — check field before retrying"
         case .insertionFailedWithoutHistory:
-            return "Delivery uncertain — check field before retrying"
+            return "Delivery uncertain — no menu copy; check field"
         case .transcriptionFailed:
             return "Transcription failed — try again"
         case .noSpeechDetected:
@@ -326,7 +326,7 @@ enum DictationNotice: Equatable {
         case .insertionFailed:
             return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu."
         case .insertionFailedWithoutHistory:
-            return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. Recent Transcripts is off, so there is no Copy Last Transcript action; correct or remove any partial text before dictating again."
+            return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. No transcript is available in the Presspeech menu; correct or remove any partial text before dictating again."
         case .transcriptionFailed:
             return "Transcription failed. Try again."
         case .noSpeechDetected:
@@ -857,6 +857,21 @@ let RECENT_TRANSCRIPT_LIMIT_DISPLAY: [RecentTranscriptLimit: String] = [
     .last1: "Last 1",
     .last5: "Last 5",
 ]
+
+func recentTranscriptLimitSettingTitle(_ limit: RecentTranscriptLimit) -> String {
+    // The Off choice is also a recovery decision: a failed or partial paste
+    // cannot be retried from the menu once its in-memory transcript is gone.
+    if limit == .off { return "Off — No Copy Last Transcript" }
+    return RECENT_TRANSCRIPT_LIMIT_DISPLAY[limit] ?? limit.rawValue
+}
+
+func dictationNoticeAfterHistoryChange(_ notice: DictationNotice?,
+                                      hasRecentTranscripts: Bool) -> DictationNotice? {
+    if !hasRecentTranscripts, notice?.requiresInMemoryHistory == true {
+        return .insertionFailedWithoutHistory
+    }
+    return notice
+}
 
 func parseRecentTranscriptLimit(storedValue value: Any?) -> RecentTranscriptLimit? {
     if let raw = value as? String {
@@ -5728,9 +5743,9 @@ enum TextInsertionOutcome: Equatable {
     case inserted
     case copiedWithoutPasting
     case failed
-    // At least one Direct Unicode chunk was posted before delivery stopped.
-    // The destination may contain a prefix, so a plain "paste this copy"
-    // notice or a second insertion strategy could duplicate text.
+    // A paste key-down or Direct Unicode chunk was posted, or a partial paste
+    // shortcut could not release its keys. The destination may contain all or
+    // part of the text, so another strategy could duplicate or misdirect it.
     case deliveryUncertain
     // Terminal failure: a fallback can itself copy when focus changes, so it
     // must not run after another process has replaced our clipboard contents.
@@ -5977,6 +5992,9 @@ private enum ClipboardPasteEventOutcome: Equatable {
     case targetChanged
     case clipboardChanged
     case failed
+    // V key-down was posted or partial-shortcut cleanup failed. A second
+    // insertion strategy could duplicate or misdirect the transcript.
+    case deliveryUncertain
 }
 
 @MainActor
@@ -5988,13 +6006,18 @@ private func postFocusBoundClipboardPasteSteps(
     postStep: (KeyboardEventStep) -> Bool
 ) -> ClipboardPasteEventOutcome {
     var pressedKeys: [CGKeyCode] = []
+    var pasteKeyDownPosted = false
 
-    func releasePressedKeys() {
+    func releasePressedKeys() -> Bool {
+        var allReleased = true
         for key in pressedKeys.reversed() {
-            _ = postStep(KeyboardEventStep(virtualKey: key,
+            if !postStep(KeyboardEventStep(virtualKey: key,
                                            keyDown: false,
-                                           flags: []))
+                                           flags: [])) {
+                allReleased = false
+            }
         }
+        return allReleased
     }
 
     for step in steps {
@@ -6006,17 +6029,19 @@ private func postFocusBoundClipboardPasteSteps(
             // AX focus lookup may block. Check clipboard ownership afterward,
             // even when focus changed, before a copy-only fallback can run.
             guard clipboardStillOwned() else {
-                releasePressedKeys()
+                _ = releasePressedKeys()
                 return .clipboardChanged
             }
             guard focused else {
-                releasePressedKeys()
-                return .targetChanged
+                return releasePressedKeys() ? .targetChanged : .deliveryUncertain
             }
         }
         guard postStep(step) else {
-            releasePressedKeys()
-            return .failed
+            let released = releasePressedKeys()
+            return (pasteKeyDownPosted || !released) ? .deliveryUncertain : .failed
+        }
+        if step.virtualKey == pasteKey, step.keyDown {
+            pasteKeyDownPosted = true
         }
         if step.keyDown {
             if !pressedKeys.contains(step.virtualKey) {
@@ -6796,11 +6821,13 @@ private enum ClipboardPasteInserter {
             return outcome
         }
         guard postOutcome == .posted else {
-            log("paste event creation failed")
+            log(postOutcome == .deliveryUncertain
+                ? "paste shortcut interrupted after posting; delivery uncertain"
+                : "paste shortcut interrupted before V key-down")
             // Keep restoration explicit even on delivery failure. A later
             // typing fallback does not prove the destination consumed a paste.
             stageManualPreservation(context, on: pb, expectedChangeCount: writeChangeCount)
-            return .failed
+            return postOutcome == .deliveryUncertain ? .deliveryUncertain : .failed
         }
 
         // Posting Command+V is not a consumption acknowledgement. Keep the
@@ -10229,7 +10256,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                 log("automatic insertion stopped; transcript copied for recovery")
                             }
                         case .deliveryUncertain:
-                            log("direct Unicode delivery stopped after an earlier chunk; destination check required")
+                            log("text delivery uncertain after a posted input event; destination check required")
                         case .failed, .clipboardChanged:
                             log("text insertion failed")
                         }
@@ -10590,13 +10617,28 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let count = history.count
         history.removeAll()
         log("history cleared (\(count) entries)")
-        if dictationNotice?.requiresInMemoryHistory == true {
-            clearDictationNotice()
-            if isReady, !isRecording, !isBusy, !isTerminating {
-                setMenuBarState(.idle)
-            }
-        }
+        refreshDictationNoticeAfterHistoryChange()
         rebuildMenu()
+    }
+
+    private func refreshDictationNoticeAfterHistoryChange() {
+        let updated = dictationNoticeAfterHistoryChange(
+            dictationNotice,
+            hasRecentTranscripts: !history.isEmpty
+        )
+        guard updated != dictationNotice, let updated else { return }
+        // History can disappear while an uncertain-delivery notice is still
+        // active. Do not turn that warning into Ready or replay a failure
+        // sound; update only its now-unavailable recovery instructions.
+        dictationNotice = updated
+        statusItem?.button?.toolTip = updated.statusTitle
+        statusItem?.button?.setAccessibilityHelp(updated.accessibilityValue)
+        if isReady, !isRecording, !isBusy, !isTerminating {
+            setMenuBarState(errorFlashWorkItem == nil ? .idle : .error)
+        }
+        if recordingHUDPanel?.isVisible == true {
+            recordingHUDView?.mode = .notice(updated)
+        }
     }
 
     @objc private func quitClicked(_ sender: NSMenuItem) {
@@ -12723,12 +12765,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let recentSub = NSMenu()
         recentSub.autoenablesItems = false
         for limit in RecentTranscriptLimit.allCases {
-            let item = NSMenuItem(title: RECENT_TRANSCRIPT_LIMIT_DISPLAY[limit] ?? limit.rawValue,
+            let item = NSMenuItem(title: recentTranscriptLimitSettingTitle(limit),
                                   action: #selector(selectRecentTranscriptLimit(_:)),
                                   keyEquivalent: "")
             item.target = self
             item.state = (limit == settings.recentTranscriptLimit) ? .on : .off
             item.representedObject = limit.rawValue
+            if limit == .off {
+                item.toolTip = "Keeps no transcript history. Copy Last Transcript will be unavailable after uncertain delivery."
+            }
             recentSub.addItem(item)
         }
         recentParent.submenu = recentSub
@@ -14386,12 +14431,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
               let limit = RecentTranscriptLimit(rawValue: raw) else { return }
         settings.recentTranscriptLimit = limit
         applyRecentTranscriptLimit()
-        if history.isEmpty, dictationNotice?.requiresInMemoryHistory == true {
-            clearDictationNotice()
-            if isReady, !isRecording, !isBusy, !isTerminating {
-                setMenuBarState(.idle)
-            }
-        }
+        refreshDictationNoticeAfterHistoryChange()
         rebuildMenu()
     }
 
@@ -18677,6 +18717,69 @@ private enum PresspeechSelfTest {
             "focus-bound clipboard paste should release Command without emitting V"
         )
 
+        // A post failure before V-down is safe to retry with Unicode typing
+        // only when the partial shortcut's keys were released successfully.
+        // Once V-down was posted, a target may already have pasted the whole
+        // transcript even if a subsequent key-up fails. Never type it again.
+        for failedStep in 0..<4 {
+            let interruptedPasteProbe = MainActor.assumeIsolated {
+                let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
+                                                             pasteKey: 0x09)
+                var attempts = 0
+                var posted: [KeyboardEventStep] = []
+                let outcome = postFocusBoundClipboardPasteSteps(
+                    steps,
+                    pasteKey: 0x09,
+                    targetStillFocused: { true },
+                    clipboardStillOwned: { true },
+                    postStep: { step in
+                        defer { attempts += 1 }
+                        guard attempts != failedStep else { return false }
+                        posted.append(step)
+                        return true
+                    }
+                )
+                return (outcome: outcome, posted: posted)
+            }
+            try expect(interruptedPasteProbe.outcome,
+                       equals: failedStep < 2 ? .failed : .deliveryUncertain,
+                       "paste failures after V-down must not allow a second insertion strategy")
+            try expect(interruptedPasteProbe.posted.contains(where: {
+                $0.virtualKey == 0x09 && $0.keyDown
+            }), equals: failedStep >= 2,
+                       "the uncertainty boundary must match the first successfully posted V-down")
+            if failedStep > 0 {
+                try expect(interruptedPasteProbe.posted.last,
+                           equals: Optional(KeyboardEventStep(virtualKey: 0x37,
+                                                                keyDown: false, flags: [])),
+                           "interrupted paste must release its posted Command key")
+            }
+        }
+        for focusSurvives in [true, false] {
+            let failedPasteCleanupProbe = MainActor.assumeIsolated {
+                var posted: [KeyboardEventStep] = []
+                let outcome = postFocusBoundClipboardPasteSteps(
+                    clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                    pasteKey: 0x09,
+                    targetStillFocused: { focusSurvives },
+                    clipboardStillOwned: { true },
+                    postStep: { step in
+                        // Neither V-down nor the cleanup Command-up is accepted.
+                        guard step.virtualKey != 0x09, step.keyDown else { return false }
+                        posted.append(step)
+                        return true
+                    }
+                )
+                return (outcome: outcome, posted: posted)
+            }
+            try expect(failedPasteCleanupProbe.outcome, equals: .deliveryUncertain,
+                       "a failed modifier release must block fallback and copy-only advice")
+            try expect(failedPasteCleanupProbe.posted,
+                       equals: [KeyboardEventStep(virtualKey: 0x37,
+                                                   keyDown: true, flags: .maskCommand)],
+                       "failed cleanup fixture should have posted only Command-down")
+        }
+
         for focusSurvives in [true, false] {
             let ownershipDuringFocusProbe = MainActor.assumeIsolated {
                 let pasteboard = NSPasteboard(name: NSPasteboard.Name(
@@ -19137,6 +19240,35 @@ private enum PresspeechSelfTest {
 
     private static func testRecentTranscriptLimit() throws {
         let transcripts = ["newest", "second", "third", "fourth", "fifth", "sixth"]
+
+        try expect(
+            recentTranscriptLimitSettingTitle(.off),
+            equals: "Off — No Copy Last Transcript",
+            "the history-off choice should disclose the lost in-app recovery action"
+        )
+        try expect(
+            recentTranscriptLimitSettingTitle(.last1),
+            equals: "Last 1",
+            "retained-history choices should keep their familiar labels"
+        )
+        try expect(
+            dictationNoticeAfterHistoryChange(.insertionFailed,
+                                              hasRecentTranscripts: false),
+            equals: .insertionFailedWithoutHistory,
+            "clearing history after uncertain delivery must not erase its warning"
+        )
+        try expect(
+            dictationNoticeAfterHistoryChange(.insertionFailed,
+                                              hasRecentTranscripts: true),
+            equals: .insertionFailed,
+            "a retained transcript should keep the menu-copy recovery instruction"
+        )
+        try expect(
+            dictationNoticeAfterHistoryChange(.copiedToClipboard,
+                                              hasRecentTranscripts: false),
+            equals: .copiedToClipboard,
+            "history changes must not hide an available manual-paste notice"
+        )
 
         try expect(
             limitedRecentTranscripts(transcripts, limit: .off),
@@ -21558,6 +21690,9 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.insertionFailed.statusTitle,
                    equals: "Delivery uncertain — check field before retrying",
                    "failed insertion should prompt a destination check before retrying")
+        try expect(DictationNotice.insertionFailedWithoutHistory.statusTitle,
+                   equals: "Delivery uncertain — no menu copy; check field",
+                   "history-off insertion failure should not promise menu recovery")
         try expect(DictationNotice.insertionFailed.hudTitle,
                    equals: "Check field; copy from menu if needed",
                    "the failure HUD should check the destination before suggesting transcript recovery")
@@ -21583,7 +21718,7 @@ private enum PresspeechSelfTest {
                    equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu.",
                    "uncertain delivery should prevent duplicate insertion during in-memory recovery")
         try expect(DictationNotice.insertionFailedWithoutHistory.accessibilityValue,
-                   equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. Recent Transcripts is off, so there is no Copy Last Transcript action; correct or remove any partial text before dictating again.",
+                   equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. No transcript is available in the Presspeech menu; correct or remove any partial text before dictating again.",
                    "uncertain delivery without history should explain the available recovery boundary")
         try expect(dictationCompletionNotice(processedText: "hello",
                                               insertionOutcome: .copiedWithoutPasting,

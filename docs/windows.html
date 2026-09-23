@@ -114,6 +114,9 @@
         <div class="wrap">
           <span class="section-eyebrow">Before you download</span>
           <h2 id="language-support">Requirements, language, and download size</h2>
+          <div class="note warn" data-install-preflight="windows">
+            <p><strong>Before launching Windows 0.1.12:</strong> its first missing-model download starts on launch and may send Hugging Face usage telemetry or an available token; custom routing can change where a token goes, and a TLS-inspecting HTTPS proxy trusted by the client can read one. If such a proxy is in use and its trust is unclear, do not launch while it is in use; upcoming 0.1.13 still honors proxy and CA settings. If you prefer to avoid possible telemetry, cannot rule out a token or custom route, or are unsure, wait until Windows 0.1.13 is published. Downloading the installer does not start the model request. If you install but wait, leave <strong>Launch Presspeech</strong> unchecked on the final installer screen. Read the <a href="#model-download-privacy">full release-specific warning</a> before deciding.</p>
+          </div>
           <div class="facts">
             <div class="fact"><strong>Windows 11</strong><span>A 64-bit x64 PC. Windows 10 remains compatible but needs Extended Security Updates or an edition that remains supported; Windows on Arm is not supported.</span></div>
             <div class="fact"><strong>4.4 GB installed</strong><span>The installer includes the Python and speech runtimes; Python is not required separately.</span></div>
