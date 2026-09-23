@@ -218,7 +218,9 @@ each platform rather than identical.
   recovery in one exact target app
 - **Support → Report a Problem… / Suggest an Improvement…** — open the
   focused GitHub forms; copy the privacy-safe diagnostics first for a bug, and
-  never post dictated text, audio, or dictionary contents
+  never post dictated text, audio, or dictionary contents. GitHub reported
+  that issue creation is restricted on 23 September 2026; if a form is blocked,
+  keep the report private and retry later rather than posting elsewhere
 - **Presspeech → Settings…** or **Command-comma** — when **Show in Dock** is
   enabled, open the same settings hierarchy from the standard macOS app menu;
   that menu also exposes standard Edit and Window commands for Presspeech's

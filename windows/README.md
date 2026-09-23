@@ -4,8 +4,10 @@ Fast, private, local push-to-talk dictation for Windows — a Windows port of
 [presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
 speak, release, and the transcript is typed at the cursor. Speech recognition
 runs on your machine; Presspeech has no account or cloud transcription service.
-The published 0.1.12 build does not disable bundled Hugging Face library
-telemetry during model downloads; see the [network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+The published 0.1.12 build does not disable Hugging Face Hub/Transformers usage
+telemetry during model downloads. Its pinned `hf-xet` 1.6.0 predates the later,
+separate Xet transfer-telemetry implementation; see the [version-scoped
+network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
 Preferred engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family
 Presspeech uses on macOS. On an NVIDIA GPU (CUDA) it transcribes with

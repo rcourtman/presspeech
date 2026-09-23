@@ -17,6 +17,7 @@ the production app.
 | Tag | Stack | Where it runs |
 |---|---|---|
 | **`v3`** | FluidAudio Swift SDK → Parakeet TDT 0.6 B **v3** → CoreML | Apple Neural Engine |
+| **`v3-no-mel`** | production v3 model + explicit `melChunkContext: false` (silence-aligned long-form candidate) | Apple Neural Engine |
 | **`v3-sdk-default`** | production v3 model + the pinned FluidAudio revision's default chunking policy | Apple Neural Engine |
 | **`v2`** | FluidAudio Swift SDK → English-only Parakeet TDT 0.6 B **v2** → CoreML | Apple Neural Engine |
 | **`v3-int8-v2`** | production `v3` path + candidate linear-int8 `Encoder_v2` | Apple Neural Engine |
@@ -56,6 +57,7 @@ swift build
 
 # 3a. Swift backends.
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3 --trials 5
+./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3-no-mel --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v3-sdk-default --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend v2 --trials 5
 ./.build/debug/presspeech-bench --file test-audio/short-clean.wav --backend unified --trials 5
@@ -671,6 +673,40 @@ keep the short, private-dictation, and multilingual checks. Override either
 bound for an explicitly reviewed corpus with
 `--long-public-max-corpus-wer` or
 `--long-public-max-reference-deletion-run`.
+
+## Same-pin explicit no-mel chunking comparison
+
+The `v3-no-mel` backend lets maintainers compare the released
+`melChunkContext: true` path against explicit `melChunkContext: false` without
+moving either Swift package pin. In FluidAudio v3 this selects the
+silence-aligned long-form chunk-start policy; it is an experimental ASR path,
+not a production setting or a promise that seams are fixed. Use the normal
+paired-corpus comparison on short and ordinary public/private clips, then
+require the composed multi-window corpus for the absolute long-form screen:
+
+```sh
+./run-real-model-comparison.sh \
+  --input-dir public-audio/librispeech-dev-clean \
+  --out-dir public-results/no-mel \
+  --candidate-backend v3-no-mel \
+  --public-corpus --show-transcripts --show-paths --trials 3
+
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/librispeech-dev-clean-long-form \
+  --out-dir public-results/no-mel-long-form \
+  --backend v3-no-mel --public-corpus --show-transcripts --show-paths \
+  --max-reference-deletion-run 6 --max-corpus-wer 10 --trials 3
+```
+
+On the production pin, `--include-candidate-models` on
+`run-release-asr-checks.sh` also adds this same-pin comparison for any
+available short, public, private, and long-form corpora. Review both the
+relative paired comparison and the absolute long-form WER/deletion-run checks;
+neither a speed win nor a corpus average can
+hide a seam regression. A candidate comparison is evidence only, not approval
+to change the app's explicit production setting. Upstream has reported both
+quiet-speech recovery and distinct window-context/seam failures, so retain
+short, multilingual, and human-dictation controls.
 
 ## FluidAudio SDK-default chunking regression
 

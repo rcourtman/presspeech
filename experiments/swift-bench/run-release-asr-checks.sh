@@ -53,7 +53,8 @@ Options:
                             fail if conservative multi-window corpus WER exceeds
                             this percentage (default: 10)
   --include-candidate-models
-                            also run Parakeet v2, Unified, and current Nemotron
+                            on the production pin, also run explicit no-mel v3
+                            chunking, Parakeet v2, Unified, and current Nemotron
                             candidate checks; a candidate dependency run also
                             compares its SDK-default v3 chunking and includes
                             the opt-in linear-int8 v3 encoder
@@ -75,8 +76,8 @@ The default run performs:
   3. production v3 regression if public speech fixtures exist,
   4. required production v3 multi-window regression over validated composed fixtures.
 
-Candidate models are not shipped by the app. Use --include-candidate-models
-only when evaluating whether a future model is good enough to expose. Use
+Candidate models and chunking policies are not shipped by the app. Use
+--include-candidate-models only for explicit candidate evaluation. Use
 --sdk-upgrade-only when the model is unchanged and the candidate is a newer
 FluidAudio revision.
 By default, the benchmark and production app must pin the exact same
@@ -603,6 +604,16 @@ else
             --trials "$TRIALS"
     fi
 
+    if [[ "$DEPENDENCY_MODE" == "production" && \
+          "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        echo
+        echo "running private released-v3 vs explicit no-mel chunking comparison on $real_count clip(s)..."
+        ./run-real-model-comparison.sh \
+            --input-dir "$REAL_AUDIO_DIR" \
+            --candidate-backend v3-no-mel \
+            --trials "$TRIALS"
+    fi
+
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
         echo "running private v3-vs-Unified candidate comparison on $real_count clip(s)..."
@@ -672,6 +683,16 @@ else
             --trials "$TRIALS"
     fi
 
+    if [[ "$DEPENDENCY_MODE" == "production" && \
+          "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        echo
+        echo "running public released-v3 vs explicit no-mel chunking comparison on $public_count clip(s)..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$PUBLIC_AUDIO_DIR" \
+            --candidate-backend v3-no-mel \
+            --trials "$TRIALS"
+    fi
+
     if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
         echo "running public v3-vs-Unified candidate comparison on $public_count clip(s)..."
@@ -738,6 +759,30 @@ else
         --show-paths \
         --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
         --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
+
+    if [[ "$DEPENDENCY_MODE" == "production" && \
+          "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        echo
+        echo "running long-form public explicit no-mel absolute ASR regression..."
+        ./run-real-dictation-regression.sh \
+            --input-dir "$LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/long-form \
+            --backend v3-no-mel \
+            --trials "$TRIALS" \
+            --public-corpus \
+            --show-transcripts \
+            --show-paths \
+            --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
+            --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
+
+        echo
+        echo "running long-form public released-v3 vs explicit no-mel chunking comparison..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/long-form \
+            --candidate-backend v3-no-mel \
+            --trials "$TRIALS"
+    fi
 
     if [[ ( "$INCLUDE_CANDIDATE_MODELS" -eq 1 || "$SDK_UPGRADE_ONLY" -eq 1 ) && \
           "$DEPENDENCY_MODE" == "candidate" ]]; then

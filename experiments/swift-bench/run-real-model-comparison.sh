@@ -48,8 +48,8 @@ Options:
   --out-dir <path>         report directory (default: real-results)
   --trials <n>             measured trials per clip/backend (default: 3)
   --candidate-backend <name>
-                           comparison backend: unified, v2, v3-sdk-default,
-                           or v3-int8-v2
+                           comparison backend: unified, v2, v3-no-mel,
+                           v3-sdk-default, or v3-int8-v2
                            (default: unified)
   --language <auto|code>   Parakeet language/script hint (default: auto)
   --unified-trailing-silence-ms <n>
@@ -353,6 +353,8 @@ backend_setting() {
         [[ "$backend" == "v3" ]] && printf 'encoder=int8-original' || printf 'encoder=int8-v2'
     elif [[ "$candidate" == "v3-sdk-default" ]]; then
         [[ "$backend" == "v3" ]] && printf 'chunking=released-mel-context' || printf 'chunking=sdk-default'
+    elif [[ "$candidate" == "v3-no-mel" ]]; then
+        [[ "$backend" == "v3" ]] && printf 'chunking=released-mel-context' || printf 'chunking=explicit-no-mel'
     elif [[ "$candidate" == "v2" ]]; then
         [[ "$backend" == "v3" ]] && printf 'multilingual-v3' || printf 'english-v2'
     else
@@ -529,8 +531,9 @@ candidate_screen() {
 
     local blockers=()
     [[ "$candidate" == "unified" || "$candidate" == "v2" || \
-       "$candidate" == "v3-sdk-default" || "$candidate" == "v3-int8-v2" ]] || \
-        blockers+=("screen is defined only for unified, v2, v3-sdk-default, or v3-int8-v2")
+       "$candidate" == "v3-sdk-default" || "$candidate" == "v3-no-mel" || \
+       "$candidate" == "v3-int8-v2" ]] || \
+        blockers+=("screen is defined only for unified, v2, v3-no-mel, v3-sdk-default, or v3-int8-v2")
     if [[ "$candidate" == "unified" && \
             "$UNIFIED_TRAILING_SILENCE_MS" != "$REQUIRED_UNIFIED_TRAILING_SILENCE_MS" ]]; then
         blockers+=("Unified trailing silence must be ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms")
@@ -645,6 +648,10 @@ run_self_test() {
         "chunking=released-mel-context" "released chunking setting label"
     assert_eq "$(backend_setting v3-sdk-default v3-sdk-default)" \
         "chunking=sdk-default" "SDK-default chunking setting label"
+    assert_eq "$(backend_setting v3 v3-no-mel)" \
+        "chunking=released-mel-context" "released chunking setting label for no-mel A/B"
+    assert_eq "$(backend_setting v3-no-mel v3-no-mel)" \
+        "chunking=explicit-no-mel" "explicit no-mel chunking setting label"
 
     local rounded_wer_log="$tmpdir/rounded-wer.log"
     {
@@ -816,6 +823,8 @@ run_self_test() {
         $'passes\t' "passing encoder candidate screen"
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean v3-sdk-default)" \
         $'passes\t' "passing SDK-default chunking candidate screen"
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean v3-no-mel)" \
+        $'passes\t' "passing explicit no-mel chunking candidate screen"
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean v2)" \
         $'passes\t' "passing English model candidate screen"
     assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean unified)" \
@@ -1019,9 +1028,9 @@ if ! [[ "$TRIALS" =~ ^[0-9]+$ ]] || [[ "$TRIALS" -lt 1 ]]; then
 fi
 
 case "$CANDIDATE_BACKEND" in
-    unified|v2|v3-sdk-default|v3-int8-v2) ;;
+    unified|v2|v3-no-mel|v3-sdk-default|v3-int8-v2) ;;
     *)
-        echo "--candidate-backend must be unified, v2, v3-sdk-default, or v3-int8-v2" >&2
+        echo "--candidate-backend must be unified, v2, v3-no-mel, v3-sdk-default, or v3-int8-v2" >&2
         exit 2
         ;;
 esac
@@ -1372,7 +1381,8 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
     backend_summary_row "$tsv" "v3"
     backend_summary_row "$tsv" "$CANDIDATE_BACKEND"
     if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" || \
-          "$CANDIDATE_BACKEND" == "v3-sdk-default" || "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
+          "$CANDIDATE_BACKEND" == "v3-sdk-default" || \
+          "$CANDIDATE_BACKEND" == "v3-no-mel" || "$CANDIDATE_BACKEND" == "v3-int8-v2" ]]; then
         echo
         echo "## Model Candidate Evidence Screen"
         echo

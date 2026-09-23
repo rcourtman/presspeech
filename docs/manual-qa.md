@@ -332,7 +332,7 @@ Record this release-gate matrix against the exact installed candidate:
 | First launch through model, microphone, Accessibility / Device Control and Data Access, Input Monitoring, and keyboard-event-posting readiness | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
-| Steady-focus and same-process two-window Electron checks for issue #33 | |
+| Electron issue #33: steady-focus paste once; a switch between two windows of the same app must use clipboard recovery | |
 | Ten TextEdit and ten slow Electron manual-restore trials for issue #36 | |
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
@@ -340,6 +340,12 @@ Record this release-gate matrix against the exact installed candidate:
 | Sleep/resume, microphone route change, and first dictation afterward | |
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup, Try Dictation, menu-bar/Dock access, and recovery with VoiceOver and keyboard-only navigation | |
+
+For issue #33, pass only if a steady-focus Electron target receives the complete
+transcript once, while switching to a second window of that same app before
+delivery inserts nothing and leaves the complete transcript available for
+manual paste. A matching process identifier alone does not authorize paste;
+any insertion after the window switch is a failure.
 
 For the keyboard-only delivery-recovery check, use a harmless test transcript
 and create a clipboard-only delivery outcome, then open each menu using the
