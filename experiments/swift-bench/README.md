@@ -112,9 +112,12 @@ chunking-policy candidate:
 ```
 
 This runs explicit released-config v3 and the candidate SDK's default v3 on
-the available private, public, and required composed long-form corpora. It does
-not download or evaluate Unified, v2, Nemotron, or the candidate int8 encoder;
-use `--include-candidate-models` instead when those are part of the question.
+the available private, public, English multi-window, and German FLEURS
+multi-window corpora. The SDK-default path is measured and compared with the
+same `de` hint on the German corpus; both candidate long-form regressions use
+the same WER and consecutive-deletion limits as explicit v3. It does not
+download or evaluate Unified, v2, Nemotron, or the candidate int8 encoder; use
+`--include-candidate-models` instead when those are part of the question.
 The result remains candidate evidence and cannot report a production release
 pass while the app and benchmark dependency pins differ.
 

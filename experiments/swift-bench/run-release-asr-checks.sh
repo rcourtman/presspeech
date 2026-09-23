@@ -1008,6 +1008,32 @@ else
         --show-paths \
         --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
         --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
+
+    if [[ "$DEPENDENCY_MODE" == "candidate" && \
+          ( "$INCLUDE_CANDIDATE_MODELS" -eq 1 || "$SDK_UPGRADE_ONLY" -eq 1 ) ]]; then
+        echo
+        echo "running German FLEURS candidate SDK-default absolute ASR regression..."
+        ./run-real-dictation-regression.sh \
+            --input-dir "$MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/fleurs-de_de-long-form \
+            --backend v3-sdk-default \
+            --language de \
+            --trials "$TRIALS" \
+            --public-corpus \
+            --show-transcripts \
+            --show-paths \
+            --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
+            --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
+
+        echo
+        echo "running German FLEURS released-v3 vs candidate SDK-default chunking comparison..."
+        ./run-public-model-comparison.sh \
+            --fixture-dir "$MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/fleurs-de_de-long-form \
+            --candidate-backend v3-sdk-default \
+            --language de \
+            --trials "$TRIALS"
+    fi
 fi
 
 echo

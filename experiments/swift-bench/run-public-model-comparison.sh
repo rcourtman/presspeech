@@ -14,6 +14,7 @@ FIXTURE_DIR=""
 OUTDIR="public-results"
 TRIALS="3"
 CANDIDATE_BACKEND="unified"
+LANGUAGE="auto"
 UNIFIED_TRAILING_SILENCE_MS="250"
 REQUIRE_CANDIDATE_PASS=0
 SILENCE_CONTROLS_HAND_AUDITED=0
@@ -40,6 +41,8 @@ Options:
                           comparison backend: unified, v2, v3-no-mel,
                           v3-sdk-default, or v3-int8-v2
                           (default: unified)
+  --language <auto|code>  Parakeet v3 hint for both sides of a v3 comparison
+                          (default: auto); unified and v2 remain English-only
   --unified-trailing-silence-ms <n>
                           Unified-only trailing silence in ms (default: 250)
   --require-candidate-pass
@@ -116,6 +119,8 @@ build_compare_args() {
     # baseline.
     if [[ "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" ]]; then
         COMPARE_ARGS+=( "--language" "en" )
+    elif [[ "$LANGUAGE" != "auto" ]]; then
+        COMPARE_ARGS+=( "--language" "$LANGUAGE" )
     fi
     if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 ]]; then
         COMPARE_ARGS+=( "--require-candidate-pass" )
@@ -140,6 +145,15 @@ assert_contains() {
     local needle="$2"
     if ! grep -Fq -- "$needle" "$file"; then
         echo "self-test expected output to contain: $needle" >&2
+        exit 1
+    fi
+}
+
+assert_not_contains() {
+    local file="$1"
+    local needle="$2"
+    if grep -Fq -- "$needle" "$file"; then
+        echo "self-test expected output not to contain: $needle" >&2
         exit 1
     fi
 }
@@ -181,11 +195,39 @@ run_self_test() {
     assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--show-paths" \
         "SDK-default comparison should not receive an English-only hint"
 
+    LANGUAGE="de"
+    build_compare_args
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 2]}" "--language" \
+        "v3 language hint forwarding"
+    assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "de" \
+        "v3 language value forwarding"
+
     CANDIDATE_BACKEND="v3-no-mel"
+    LANGUAGE="auto"
     build_compare_args
     assert_eq "${COMPARE_ARGS[8]}" "v3-no-mel" "explicit no-mel candidate forwarding"
     assert_eq "${COMPARE_ARGS[${#COMPARE_ARGS[@]} - 1]}" "--show-paths" \
         "no-mel comparison should not receive an English-only hint"
+
+    local german_candidate_log="$tmpdir/german-candidate.log"
+    if bash "$SCRIPT_PATH" --candidate-backend v3-sdk-default --language de \
+        --fixture-dir "$tmpdir/missing-public" >"$german_candidate_log" 2>&1; then
+        echo "self-test expected an empty German fixture directory to stop before inference" >&2
+        exit 1
+    fi
+    assert_contains "$german_candidate_log" \
+        "no public audio clips found in $tmpdir/missing-public"
+    assert_not_contains "$german_candidate_log" \
+        "--language must be auto or a two-letter lowercase language code"
+
+    local invalid_english_hint_log="$tmpdir/invalid-english-hint.log"
+    if bash "$SCRIPT_PATH" --candidate-backend unified --language de \
+        --fixture-dir "$tmpdir/missing-public" >"$invalid_english_hint_log" 2>&1; then
+        echo "self-test expected a non-English hint for Unified to fail" >&2
+        exit 1
+    fi
+    assert_contains "$invalid_english_hint_log" \
+        "--candidate-backend unified is English-only; --language must be auto or en"
 
     local missing_value_log="$tmpdir/missing-value.log"
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
@@ -249,6 +291,11 @@ while [[ $# -gt 0 ]]; do
             CANDIDATE_BACKEND="$2"
             shift 2
             ;;
+        --language)
+            need_value "$@"
+            LANGUAGE="$2"
+            shift 2
+            ;;
         --unified-trailing-silence-ms)
             need_value "$@"
             UNIFIED_TRAILING_SILENCE_MS="$2"
@@ -305,6 +352,16 @@ case "$CANDIDATE_BACKEND" in
         exit 2
         ;;
 esac
+
+if ! [[ "$LANGUAGE" =~ ^(auto|[a-z]{2})$ ]]; then
+    echo "--language must be auto or a two-letter lowercase language code" >&2
+    exit 2
+fi
+if [[ ( "$CANDIDATE_BACKEND" == "unified" || "$CANDIDATE_BACKEND" == "v2" ) && \
+      "$LANGUAGE" != "auto" && "$LANGUAGE" != "en" ]]; then
+    echo "--candidate-backend $CANDIDATE_BACKEND is English-only; --language must be auto or en" >&2
+    exit 2
+fi
 
 if ! is_nonnegative_integer "$UNIFIED_TRAILING_SILENCE_MS"; then
     echo "--unified-trailing-silence-ms must be a non-negative integer" >&2
