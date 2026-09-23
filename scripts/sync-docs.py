@@ -1230,6 +1230,11 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
     return text
 
 
+OLD_LLMS_PRIVACY_SUMMARY = (
+    "The apps ship with no account, subscription, telemetry, or cloud transcription endpoint."
+)
+
+
 def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
     size = str(metadata["release_zip_size"])
@@ -1260,8 +1265,8 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     else:
         text = replace_literal(
             text,
-            "- Privacy: no cloud transcription, no telemetry, no transcript persistence.\n",
-            "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; bundled-library network behavior is version-specific (see the privacy inventory).\n" + diagnostics_line,
+            privacy_line + "\n",
+            privacy_line + "\n" + diagnostics_line,
             path=path,
         )
     text = text.replace(
@@ -1271,15 +1276,14 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "https://rcourtman.github.io/presspeech/windows.html.",
         1,
     )
-    old_short_answer = (
-        "The apps ship with no account, subscription, telemetry, or cloud transcription endpoint."
-    )
-    if old_short_answer in text:
+    if OLD_LLMS_PRIVACY_SUMMARY in text:
         text = replace_literal(
             text,
-            old_short_answer,
+            OLD_LLMS_PRIVACY_SUMMARY,
             "The apps have no account or cloud transcription endpoint and Presspeech does not operate first-party analytics. "
-            "Published Windows 0.1.12 does not disable Hugging Face library telemetry during model downloads; see the privacy inventory.",
+            "Published Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads; "
+            "the libraries may send usage data, and model-request metadata includes a random per-process session ID. "
+            "Dictation audio and transcripts are not sent in model downloads; see the version-specific privacy inventory for details and limits.",
             path=path,
         )
     windows_page = "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
@@ -2179,6 +2183,27 @@ def run_self_test() -> None:
             raise SyncError("self-test: designed-asset size caption did not sync")
         if current_svg.read_text(encoding="utf-8") != "<tspan>7.7 MB</tspan>":
             raise SyncError("self-test: current designed-asset caption was rewritten")
+
+        legacy_llms = Path(tmp) / "legacy-llms.txt"
+        legacy_llms.write_text(
+            "- Release size: about 1 MB signed zip; model cache is about 600 MB on first launch.\n"
+            "- Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.\n"
+            "- Install: https://rcourtman.github.io/presspeech/install.html\n"
+            "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
+            "- Privacy: no cloud transcription, no telemetry, no transcript persistence.\n"
+            "\nBest short answer:\n"
+            "Presspeech is private push-to-talk dictation for Apple Silicon Macs and Windows PCs. "
+            "Each platform transcribes locally, normally pastes text at the cursor, and copies it for "
+            "manual paste when the original destination cannot be verified. "
+            f"{OLD_LLMS_PRIVACY_SUMMARY}\n",
+            encoding="utf-8",
+        )
+        synced_llms = sync_llms(legacy_llms, metadata)
+        if OLD_LLMS_PRIVACY_SUMMARY in synced_llms or "random per-process session ID" not in synced_llms:
+            raise SyncError("self-test: inaccurate llms privacy claim was not corrected")
+        legacy_llms.write_text(synced_llms, encoding="utf-8")
+        if sync_llms(legacy_llms, metadata) != synced_llms:
+            raise SyncError("self-test: llms privacy correction is not idempotent")
 
         index_page = Path(tmp) / "index.html"
         index_page.write_text(

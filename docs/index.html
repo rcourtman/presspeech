@@ -141,7 +141,7 @@
           </div>
           <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Complete the four checkpoints to your first dictation</a>.</p>
           <div class="note">
-            <p><strong>Before first launch:</strong> an internet connection is needed to download the local speech model (about 500–600 MB on macOS; about 141 MiB on Windows CPU or 2.5 GB with usable NVIDIA CUDA). Dictation audio and transcripts are not sent to a transcription service. Network behavior still varies by published build: Windows 0.1.12 does not disable bundled Hugging Face libraries’ default usage telemetry during model downloads. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+            <p><strong>Before first launch:</strong> an internet connection is needed to download the local speech model (about 500–600 MB on macOS; about 141 MiB on Windows CPU or 2.5 GB with usable NVIDIA CUDA). Dictation audio and transcripts are not sent to a transcription service. Windows 0.1.12 leaves Hugging Face libraries’ default usage telemetry enabled during model downloads. The libraries may send usage data, and model-request metadata includes a random per-process session ID. The exact telemetry fields are not independently itemised. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
           </div>
           <div class="stat-row" aria-label="macOS release and benchmark summary">
             <div class="stat"><strong>~100 ms</strong><span>model transcription on benchmark clips</span></div>

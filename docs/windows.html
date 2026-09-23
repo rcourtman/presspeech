@@ -85,7 +85,8 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Windows prerelease</span>
         <h1>Private dictation on your Windows PC</h1>
-        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it keeps the result on the clipboard for manual paste. There is no account or cloud transcription. Published 0.1.12 does not disable bundled Hugging Face library telemetry during model downloads; see the <a href="privacy.html#network-calls">network-call inventory</a>.</p>
+        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it keeps the result on the clipboard for manual paste. There is no account or cloud transcription.</p>
+        <p><strong>Privacy for published Windows 0.1.12:</strong> Hugging Face libraries’ default usage telemetry remains enabled during model downloads. The libraries may send usage data, and model-request metadata includes a random per-process session ID. Dictation audio and transcripts are not sent in these model downloads; the exact telemetry fields are not independently itemised. See the <a href="privacy.html#network-calls">version-specific network-call inventory</a>.</p>
         <p class="quiet" data-release-status>Current published Windows prerelease: 0.1.12. Install metadata updated <time datetime="2026-09-22">22 September 2026</time>.</p>
         <div class="note">
           <p><strong>Check your language before downloading.</strong> Fresh systems with usable NVIDIA CUDA select multilingual Parakeet (~2.5 GB). Without usable CUDA, the fresh CPU default is English-only Whisper base.en (~141 MiB). Other local models remain selectable in Settings. <a href="#language-support">Compare the two first-run paths</a>.</p>
