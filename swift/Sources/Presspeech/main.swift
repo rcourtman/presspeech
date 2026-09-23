@@ -5552,7 +5552,7 @@ private func dictationMenuControlState(isReady: Bool,
             action: .stop,
             title: "Stop and Transcribe",
             isEnabled: !isTerminating,
-            help: "Stop recording, transcribe locally, and paste into the window where recording began."
+            help: "Stop recording and transcribe locally. If the original window or permissions cannot be verified, Presspeech tries to copy the transcript for manual paste."
         )
     }
 
@@ -5872,6 +5872,14 @@ private func shouldAttemptAutomaticDictationDelivery(
     missingPermissions: [Permission]
 ) -> Bool {
     !permissionInterruptionObserved && missingPermissions.isEmpty
+}
+
+/// A grant can return while audio drains or recognition runs. Once a missing
+/// grant has been observed for this recording, its original target must not
+/// become eligible for automatic paste again.
+private func hasObservedPermissionInterruption(earlier: Bool,
+                                               missingPermissions: [Permission]) -> Bool {
+    earlier || !missingPermissions.isEmpty
 }
 
 func textInsertionStrategyChain(primary: TextInsertionStrategy) -> [TextInsertionStrategy] {
@@ -8684,6 +8692,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var isFinishingRecording = false
     private var isBusy = false
     private var recordingPasteTarget: DictationPasteTarget?
+    private var recordingPermissionInterruptionObserved = false
     private var isReady = false
     private var isCoreRuntimeReady = false
     private var isSpeechModelReady = false
@@ -9312,6 +9321,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isRecording = false
         isBusy = false
         recordingPasteTarget = nil
+        recordingPermissionInterruptionObserved = false
         speechModelStartupProgressFraction = nil
         stopRecordingLevelMeter()
 
@@ -9533,6 +9543,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isRecording = false
         isBusy = false
         recordingPasteTarget = nil
+        recordingPermissionInterruptionObserved = false
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
@@ -10076,6 +10087,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             enterPermissionBlockedState(missing: missing, reason: "hotkey press")
             return
         }
+        recordingPermissionInterruptionObserved = false
         // Snapshot the destination before audio startup, which can block while
         // rebuilding the engine. A focus change during that work must make the
         // eventual delivery fail closed, not retarget it to the new window.
@@ -10113,9 +10125,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private func handleRelease() {
         guard isRecording, !isFinishingRecording, !isTerminating else { return }
         let missing = missingPermissions()
-        guard missing.isEmpty else {
-            enterPermissionBlockedState(missing: missing, reason: "hotkey release")
-            return
+        if !missing.isEmpty {
+            // Audio already captured can still be transcribed locally. Do not
+            // discard it just because a delivery/input grant disappeared;
+            // remember the loss even if the grant returns before completion.
+            recordingPermissionInterruptionObserved = true
+            log("release: permission interrupted; completed dictation will use clipboard-only recovery")
         }
 
         // Do not cut the microphone at the keyboard-event boundary. Speech
@@ -10192,6 +10207,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         isRecording = false
         let samples = audio.endRecording()
+        let permissionInterruptionBeforeTranscription = hasObservedPermissionInterruption(
+            earlier: recordingPermissionInterruptionObserved,
+            missingPermissions: missingPermissions()
+        )
+        recordingPermissionInterruptionObserved = false
         // Keep returning speaker audio out of the retained microphone tail.
         // endRecording closes the capture boundary before the asynchronous
         // unmute lifecycle can complete.
@@ -10206,6 +10226,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 log(hint)
             }
             log("release: clip too short (\(String(format: "%.2f", dur)) s), discarding")
+            let currentlyMissingPermissions = missingPermissions()
+            if !currentlyMissingPermissions.isEmpty {
+                // There is no usable recording to transcribe. Still leave the
+                // runtime blocked, as the former release-time guard did.
+                enterPermissionBlockedState(missing: currentlyMissingPermissions,
+                                            reason: "short clip after permission interruption")
+                return
+            }
             signalDictationFailure(notice)
             updateSetupChecklist()
             rebuildMenu()
@@ -10225,7 +10253,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         Task { @MainActor in
             var completionNotice: DictationNotice?
-            var permissionInterruptionObserved = false
+            var permissionInterruptionObserved = permissionInterruptionBeforeTranscription
             defer { recordingPasteTarget = nil }
             do {
                 // ASR latency is elapsed time, not a wall-clock timestamp.
@@ -10239,7 +10267,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                     // if the grant returns while text processing runs, this
                     // dictation still uses clipboard-only recovery rather than
                     // assuming the original destination remains authorized.
-                    permissionInterruptionObserved = !missingPermissions().isEmpty
+                    permissionInterruptionObserved = hasObservedPermissionInterruption(
+                        earlier: permissionInterruptionObserved,
+                        missingPermissions: missingPermissions()
+                    )
                     let processed = processedDictationText(rawTranscript: text,
                                                            corrections: settings.transcriptCorrections,
                                                            spokenFormattingCommands: settings.spokenFormattingCommands,
@@ -10262,8 +10293,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                                                       keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0)
                     } else {
                         let missing = missingPermissions()
-                        permissionInterruptionObserved = permissionInterruptionObserved
-                            || !missing.isEmpty
+                        permissionInterruptionObserved = hasObservedPermissionInterruption(
+                            earlier: permissionInterruptionObserved,
+                            missingPermissions: missing
+                        )
                         let deliveredText = pastedText(from: cleaned,
                                                        suffix: settings.pasteSuffix)
                         let insertionOutcome: TextInsertionOutcome
@@ -10289,7 +10322,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             }
                         case .copiedWithoutPasting:
                             if permissionInterruptionObserved {
-                                log("paste skipped; permission changed during transcription; transcript copied")
+                                log("paste skipped; permission interrupted before delivery; transcript copied")
                             } else if recordingPasteTarget == nil {
                                 log("paste skipped; target unavailable at recording start; transcript copied")
                             } else {
@@ -10357,11 +10390,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         cancelPostReleaseCapture()
         guard isRecording || audio.isRunning else {
             recordingPasteTarget = nil
+            recordingPermissionInterruptionObserved = false
             hotkey.resetToggleState()
             return
         }
 
         recordingPasteTarget = nil
+        recordingPermissionInterruptionObserved = false
         cancelMaxDurationAutoRelease()
         _ = audio.endRecording()
         isRecording = false
@@ -10385,6 +10420,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private func cancelRecordingForTermination() {
         cancelMaxDurationAutoRelease()
         cancelPostReleaseCapture()
+        recordingPermissionInterruptionObserved = false
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
@@ -17802,6 +17838,24 @@ private enum PresspeechSelfTest {
             equals: false,
             "a transient permission interruption should not retarget automatic delivery"
         )
+        try expect(
+            hasObservedPermissionInterruption(earlier: false,
+                                              missingPermissions: [.accessibility]),
+            equals: true,
+            "a grant missing at recording release should mark that dictation interrupted"
+        )
+        try expect(
+            hasObservedPermissionInterruption(earlier: true,
+                                              missingPermissions: []),
+            equals: true,
+            "a restored grant must not erase an interruption observed at release"
+        )
+        try expect(
+            hasObservedPermissionInterruption(earlier: false,
+                                              missingPermissions: []),
+            equals: false,
+            "an uninterrupted recording should retain automatic delivery eligibility"
+        )
 
         try expect(
             productionSpeechModelProfile(rawValue: nil),
@@ -21760,6 +21814,20 @@ private enum PresspeechSelfTest {
                                       hasMissingPermissions: false).action,
             equals: .stop,
             "recording menu should expose a stop-and-transcribe action"
+        )
+        try expect(
+            dictationMenuControlState(isReady: true,
+                                      isRecording: true,
+                                      isBusy: false,
+                                      isTerminating: false,
+                                      hasMissingPermissions: true),
+            equals: DictationMenuControlState(
+                action: .stop,
+                title: "Stop and Transcribe",
+                isEnabled: true,
+                help: "Stop recording and transcribe locally. If the original window or permissions cannot be verified, Presspeech tries to copy the transcript for manual paste."
+            ),
+            "permission loss during recording should keep Stop available and describe manual recovery"
         )
         try expect(
             dictationMenuControlState(isReady: true,

@@ -148,7 +148,11 @@ The upcoming 0.1.13 first-run readiness window shows model loading, microphone
 selection and an on-demand microphone check, a selectable dictation hotkey,
 hold-to-talk or press-to-toggle style, global-listener status, and Start with
 Windows in one place. Published 0.1.12 checks the selected microphone
-automatically during setup and when its selection changes. In 0.1.13, Setup
+automatically during setup and when its selection changes; its Setup has no
+dictation-style selector, and Start with Windows is on for a new profile.
+Choose **Press to toggle** in Settings and turn startup off before choosing
+**Finish Setup**, **Set Up Later**, or closing Setup if you do not want it at
+sign-in. In 0.1.13, Setup
 leaves the selected device closed until you choose **Check Microphone**;
 changing the selected input also does not open it. Start with Windows is off
 for a new profile; select it if you want

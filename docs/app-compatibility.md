@@ -3,7 +3,7 @@
 The public, navigable version of this protocol is at
 <https://rcourtman.github.io/presspeech/app-compatibility.html>.
 
-**Published-build privacy check (23 September 2026):** The current downloads are
+**Published-build privacy check (24 September 2026):** The current downloads are
 macOS 0.3.8 and Windows 0.1.12. Both start a missing-model download on launch.
 The macOS request may include an inherited Hugging Face token; the Windows
 request may send Hugging Face usage telemetry or a locally available token,
@@ -15,7 +15,7 @@ model download. If you are unsure about those version-specific risks, wait for
 If your model is already ready, do not reset its cache or switch models for
 this protocol.
 
-**Reporting availability checked 23 September 2026:** GitHub currently reports
+**Reporting availability checked 24 September 2026:** GitHub currently reports
 that issue creation is restricted for this repository. You can still run the
 protocol and keep its aggregate counts locally, but a new-report link may not
 accept a submission. Check for a comparable open report and whether comments
@@ -72,7 +72,7 @@ same app. The open [paste-target validation issue](https://github.com/rcourtman/
 needs evidence that steady focus can paste while a same-process window change
 still recovers safely. If new issues remain restricted but comments on that
 issue are available, you can add this exact macOS Electron result there with
-the seven counts, Presspeech/OS/target-app versions, and generic field type.
+the eight counts, Presspeech/OS/target-app versions, and generic field type.
 Otherwise keep the draft private. A community report does not replace native
 release qualification.
 
@@ -123,9 +123,11 @@ counted as completed protocol evidence.
 
 ## Check steady-focus delivery
 
-Run five completed attempts. Use a different harmless phrase each time so stale or
-duplicated delivery is visible; for example, say a colour, an animal, and the
-attempt number. If English suits the selected language hint, an optional full
+Plan five attempts. Stop early if an attempt is incorrect or unsafe; do not
+repeat it just to fill the worksheet. Use a different harmless phrase each
+time so stale or duplicated delivery is visible; for example, say a colour,
+an animal, and the attempt number. If English suits the selected language
+hint, an optional full
 set is: **amber rabbit one**, **blue otter two**, **copper robin three**,
 **green badger four**, **ivory falcon five**, **purple fox six**, **silver
 heron seven**, and **yellow turtle eight**. Otherwise use the same pattern in
@@ -162,16 +164,23 @@ For each attempt:
      or delivered to another field, or paste failed without a recovery notice.
 6. Clear both disposable fields before the next attempt.
 
+After an incorrect or unsafe result, stop testing. Mark that attempt
+**Incorrect or unsafe**, then mark every unrun steady-focus and focus-change
+slot **Not completed**. Do not retry in a real document. If you cannot
+continue for another reason, mark unrun slots **Not completed**; a completed
+failure is never an unrun check. An early stop is not a passing five-attempt
+baseline.
+
 If you know another copy changed the clipboard during delivery, record that
 attempt as an interruption under **Relevant conditions** and repeat with a fresh
-harmless phrase. Exclude known interruptions from the five completed-attempt
-counts. Do not use this exclusion for unexplained failures; report those as
-**Incorrect or unsafe** above.
+harmless phrase if it remains safe to continue. Exclude known interruptions
+from the five scheduled check slots. Do not use this exclusion for unexplained
+failures; report those as **Incorrect or unsafe** above.
 
 A copied/manual-paste result is a safe recovery, not an automatic-paste pass.
 Keep its count separate so reports do not hide app classes where insertion is
-consistently unavailable. The three aggregate outcome counts should total
-five.
+consistently unavailable. The four aggregate steady-focus counts, including
+not completed, should total five.
 
 ## Check focus safety
 
@@ -186,7 +195,7 @@ With no intervening clipboard change, the safe result is:
 - Presspeech shows the copied/manual-paste notice; and
 - the complete transcript is available for deliberate manual paste.
 
-Repeat three completed attempts, recording known clipboard-change interruptions
+Plan three attempts, recording known clipboard-change interruptions
 separately as above. For an Electron/Chromium app, use two separate windows of
 the same app for at least one attempt because same-process windows are a
 distinct identity check. Do not substitute tabs or fields in one window, and
@@ -216,7 +225,7 @@ the canonical overall classification.
 Selections stay only in the page controls: the worksheet does not send
 selections, write them to browser storage, or provide a field for a phrase,
 transcript, or report context. Use **Reset worksheet** to clear them. **Copy
-report block** places only the labelled seven counts and overall classification
+report block** places only the labelled eight counts and overall classification
 on the clipboard. **Download report draft** saves those counts with blank
 prompts for public versions and generic target context; the worksheet does not
 collect or prefill those details. The plain-text draft contains no phrases or
@@ -230,13 +239,14 @@ the existing-report search and a link to the GitHub issue list, where the
 current issue-creation status is visible. Selections are not submitted; if
 intake is restricted, keep the draft locally and retry later.
 
-Without the worksheet, tally the same seven categories manually:
+Without the worksheet, tally the same eight categories manually:
 
 ```text
 Five steady-focus results
 Pasted once: [0-5]
 Recovered safely: [0-5]
 Incorrect or unsafe: [0-5]
+Not completed: [0-5]
 
 Three focus-change results
 Copied for manual paste without inserting anywhere: [0-3]
@@ -247,9 +257,11 @@ Not completed: [0-3]
 Overall result: [classification from the definitions below]
 ```
 
-The first three values must total five and the final four must total three.
+The first four values must total five and the final four must total three.
 Record known clipboard-change interruptions separately under relevant
 conditions; do not turn them into another category or include their text.
+If an incorrect or unsafe steady-focus result stops testing early, count it
+under **Incorrect or unsafe** and every unrun slot under **Not completed**.
 If unexpected insertion stops the focus-safety check early, count that attempt
 as **Inserted into a field** and each unrun remainder as **Not completed**.
 If a completed attempt inserts nowhere but does not show a recovery notice or
@@ -259,10 +271,12 @@ the overall result **An incorrect or unsafe result occurred**; reserve
 **Testing could not be completed** for unrun slots when no completed failure
 occurred.
 
-An older six-count worksheet draft may combine failed recovery and unrun slots
-as **Other or not completed**. If that count is zero, both new counts are zero.
+An older seven-count draft with five classified steady-focus attempts can add
+**Steady-focus not completed: 0**. An older six-count worksheet draft may
+combine failed recovery and unrun focus-change slots as **Other or not
+completed**. If that count is zero, both new focus-change counts are zero.
 If it is nonzero, do not guess which happened or present it as a comparable
-seven-count baseline. Keep the old draft private; if safe, rerun the protocol
+eight-count baseline. Keep the old draft private; if safe, rerun the protocol
 with the current categories. If a safety failure caused the stop, do not repeat
 it in a real field and use the appropriate reporting route when available.
 
@@ -313,7 +327,7 @@ type.
 
 If issue creation is still restricted and your macOS Electron result directly
 addresses [issue #33](https://github.com/rcourtman/presspeech/issues/33), you
-may instead comment there if GitHub permits it. Include the seven counts plus
+may instead comment there if GitHub permits it. Include the eight counts plus
 Presspeech, operating-system, and target-app versions and the generic field
 type. Do not post unrelated results in that thread; retain those drafts
 privately when no suitable route accepts them.
@@ -325,7 +339,7 @@ Presspeech version: [x.y.z]
 Operating-system version: [version]
 Hardware (optional, no serial or device names): [generic model/chip]
 
-[paste the worksheet's seven counts and Overall result]
+[paste the worksheet's eight counts and Overall result]
 
 Relevant conditions: [trigger mode, keyboard layout/input source when
 relevant, suffix, clipboard manager/history, assistive technology, or a minimal
@@ -346,8 +360,9 @@ contain user data. **Copy Diagnostics** produces a privacy-safe summary if you
 choose to include it; exact microphone names, raw error details, and raw local
 log lines are not copied into that report.
 
-An incorrect or unsafe result should also include the smallest repeatable
-sequence in the report. Security-sensitive behavior belongs in the private
+An incorrect or unsafe result should also include the smallest observed
+sequence in the report; do not repeat a safety failure solely for reporting.
+Security-sensitive behavior belongs in the private
 process in [`SECURITY.md`](../SECURITY.md), not a public issue.
 
 Community reports are exploratory evidence. Maintainers still run the broader

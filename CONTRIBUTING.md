@@ -64,7 +64,7 @@ keep the worksheet's privacy-safe result local and retry when a public route is
 available. Do not use another public service as a workaround. [Browse existing
 compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
 first and add counts only when those conditions are comparable. The protocol
-records five steady-focus attempts and three focus-change attempts using blank
+records five steady-focus and three focus-change slots using blank
 disposable fields. Successful reports matter as much as failures: without
 them, issue counts cannot show the denominator or distinguish an app-class
 limitation from a one-machine failure. These community reports are exploratory
@@ -72,7 +72,7 @@ evidence and do not replace the native release checks in
 [`docs/manual-qa.md`](docs/manual-qa.md).
 
 When a matching platform/app-version/field-type report already exists and
-comments are enabled, add the worksheet's seven counts and overall result there
+comments are enabled, add the worksheet's eight counts and overall result there
 with the Presspeech and operating-system versions, generic hardware if useful,
 and relevant conditions.
 When issue creation is available, open a separate report for conditions that

@@ -35,13 +35,14 @@ collaborator where noted:
   build contains it, **Test App Compatibility…** from the installed candidate.
   Confirm each opens the documented fixed destination without app, version,
   diagnostics, or user data in the URL.
-- On the target-app compatibility page, complete all eight worksheet outcomes.
+- On the target-app compatibility page, classify all eight worksheet slots.
   Confirm its before-test privacy warning matches the currently published
   builds and links to their version-specific model-download guidance; update
   or retire the warning when those releases change. Do not recruit a fresh
   install for compatibility testing without showing that decision point.
   Confirm **Copy report block** and **Download report draft** become available
-  only when complete. Copy must contain only the seven aggregate counts and
+  only when all slots are classified. Copy must contain only the eight aggregate
+  counts and
   overall classification; the downloaded plain-text draft must add blank
   prompts for public versions and generic target context without prefilled app
   identity or version values. It must also say it was not submitted or
@@ -51,7 +52,11 @@ collaborator where noted:
   with no insertion but missing notice or recovery text as **No insertion, but
   recovery failed** and verify the overall result is **An incorrect or unsafe
   result occurred**. A genuinely unrun slot with no completed failure must
-  instead yield **Testing could not be completed**.
+  instead yield **Testing could not be completed**. Classify the first
+  steady-focus attempt as **Incorrect or unsafe** and the seven remaining slots
+  as **Not completed**; verify the block does not imply eight completed
+  attempts and the overall
+  result remains **An incorrect or unsafe result occurred**.
 - In a signed-out browser, confirm the repository About description and topics
   expose both the released macOS app and Windows prerelease instead of
   presenting a Mac-only project. Confirm the Pages home page, Get started,
@@ -527,6 +532,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
+| Permission loss while recording: captured speech completes to clipboard-only recovery | |
 | Screen Sharing shared-clipboard path: consecutive remote pastes stay fresh; a focus change recovers safely | |
 | Sleep/resume, microphone route change, and first dictation afterward | |
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
@@ -873,6 +879,19 @@ item after the development-wrapper launch check.
   shows **Copied — press ⌘V to paste**, and returns to the missing-permission
   setup state. Regrant the permission and confirm a fresh dictation can paste
   automatically; the interrupted dictation must never paste later.
+- In a disposable test account, begin a harmless recording in a target field,
+  then revoke Accessibility or keyboard-event posting access while recording.
+  Stop using the menu if the hotkey no longer reaches Presspeech; the Stop
+  action must remain enabled and its help must describe manual recovery. If
+  audio was captured, the recording must still finish transcription and offer
+  the complete resulting transcript on the clipboard for manual paste, rather
+  than silently discarding it; no automatic paste may reach the original field or
+  System Settings.
+  Confirm the missing-permission setup state appears after recovery and a fresh
+  dictation works after regranting. Record only the grant and action timing and
+  aggregate result, never the dictated words or clipboard contents. If macOS
+  does not apply the revocation to the running app, mark this check **Blocked**
+  rather than treating it as a pass.
 - For macOS 0.3.9 and later, use a disposable test account to repeat the
   in-flight revocation check separately for focused-window Accessibility and
   Quartz keyboard-event posting (the `PostEvent` TCC service). Revoke each

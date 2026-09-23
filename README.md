@@ -125,6 +125,11 @@ Download the self-contained installer—Python is not required:
   the Parakeet path also offers the smaller CPU model. Published 0.1.12 does
   not include this prompt. Wait for **Preparing speech model…** to disappear
   before the first dictation.
+- On a new 0.1.12 profile, Setup selects **Start Presspeech with Windows** by
+  default; turn it off before choosing **Finish Setup**, **Set Up Later**, or
+  closing Setup if you do not want the app at sign-in.
+  Choose **Press to toggle** in Settings, not Setup. Upcoming 0.1.13 defaults
+  startup off and offers the dictation-style choice in Setup.
 - If a shell-capable assistant is doing the installation, give it the
   [guarded Windows prompt](https://rcourtman.github.io/presspeech/install/agents.md).
   It checks x64 compatibility, pins the current release, verifies the checksum,
@@ -437,9 +442,10 @@ Automatic paste depends on how the destination exposes its focused window and
 consumes clipboard content. Before relying on Presspeech in an important app,
 run the [eight-check target-app
 protocol](https://rcourtman.github.io/presspeech/app-compatibility.html) in
-blank disposable fields. It records five steady-focus attempts and three
-focus-change attempts as aggregate counts: pasted once, recovered safely, or
-incorrect/unsafe. Never publish the phrases or transcripts.
+blank disposable fields. It records five steady-focus and three focus-change
+slots as aggregate counts: successful delivery, safe recovery,
+incorrect or unsafe results, and checks not completed after an early stop.
+Never publish the phrases or transcripts.
 
 Passing reports matter as much as failures because they provide the denominator
 for platform/app/version/field combinations. If no app is already in mind, the
@@ -448,10 +454,10 @@ reports so an unrepresented target class is easy to choose. [Browse existing com
 reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
 before opening the focused [compatibility report
 form](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml).
-GitHub reported issue creation as restricted on 23 September 2026, so verify
+GitHub still reported issue creation as restricted on 24 September 2026, so verify
 the route accepts reports first; if it does not, keep the report draft
 privately and retry later rather than posting sensitive data elsewhere. The
-worksheet's **Download report draft** saves those seven counts and their overall
+worksheet's **Download report draft** saves those eight counts and their overall
 classification with blank prompts for public versions and generic target
 context; it does not collect or save phrases or transcripts.
 If the same platform, app version, and generic field type already has a report,

@@ -9,7 +9,7 @@ support and issue discussion happen publicly there; you need a GitHub account
 to open or comment on an issue. Before reporting, use the recovery guide that
 matches the problem:
 
-**Feedback availability checked 23 September 2026:** GitHub currently reports
+**Feedback availability checked 24 September 2026:** GitHub currently reports
 that issue creation is restricted for this repository, and the repository does
 not expose a public Discussions page. Existing issue threads may still accept
 comments. Check the [issue list](https://github.com/rcourtman/presspeech/issues)
@@ -19,10 +19,11 @@ creation is restored. Do not keep retrying a blocked form or include private
 data elsewhere as a workaround. Security reports must use the private route in
 [SECURITY.md](SECURITY.md).
 
-For a completed target-app compatibility check, the worksheet's **Download
-report draft** saves its seven aggregate counts and overall classification with
-blank prompts for public versions and generic target context. The worksheet
-does not collect or prefill those details; the draft contains no test phrases
+For a classified target-app compatibility check, including an early stop, the
+worksheet's **Download report draft** saves its eight aggregate counts and
+overall classification with blank prompts for public versions and generic
+target context. The worksheet does not collect or prefill those details; the
+draft contains no test phrases
 or transcripts. The downloaded file also explains that it is not submitted or
 monitored, points back to this guide for current reporting routes, and says to
 keep it private and retry later if no suitable route is available.
@@ -82,12 +83,15 @@ count. Reproduce with harmless test text, report only whether the complete text
 was recovered, and omit the text itself plus document, tab, account, server,
 and window names.
 
-Use the compatibility form rather than the general bug form when you can run
-the complete repeated protocol, including when every check passes. Use the bug
-form for a problem you cannot safely repeat or that is outside text delivery.
+Use the compatibility form rather than the general bug form when you can
+classify all eight protocol slots, including slots marked **Not completed**
+after an early stop. Do not repeat an unsafe attempt merely to fill the form.
+Use the bug form for a problem outside text delivery or one where even a
+disposable attempt is unsafe. Use the private process in [SECURITY.md](SECURITY.md)
+if behavior could expose or execute sensitive content.
 Match an existing report only when the platform, target app version, and
 generic field type are comparable. When they match, comment with the
-worksheet's seven counts and overall result, your Presspeech and operating-system
+worksheet's eight counts and overall result, your Presspeech and operating-system
 versions, generic hardware if useful, and relevant conditions; otherwise open
 a separate report. Add the observation even when its outcome differs.
 

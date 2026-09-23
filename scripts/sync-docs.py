@@ -823,6 +823,19 @@ FIRST_RUN_ACTION_COPY = {
     ROOT / "README.md": (
         "If you decide to launch published 0.3.8 after reviewing the model-download",
         "Only after the user makes an informed choice to launch 0.3.8:",
+        "Choose **Press to toggle** in Settings, not Setup.",
+        "**Finish Setup**, **Set Up Later**, or",
+    ),
+    ROOT / "windows" / "README.md": (
+        "Start with Windows is on for a new profile.",
+        "Choose **Press to toggle** in Settings",
+        "**Finish Setup**, **Set Up Later**, or closing Setup",
+    ),
+    DOCS / "getting-started.html": (
+        "Only upcoming 0.1.13 can defer that first download from Setup.",
+        "published 0.1.12 selects <strong>Start Presspeech with Windows</strong> by default",
+        "Its Setup has no dictation-style selector",
+        "<strong>Set Up Later</strong>, or closing Setup if you do not want the app at sign-in",
     ),
     DOCS / "install.html": (
         "If you decide to launch published 0.3.8 after reviewing the",
@@ -838,6 +851,9 @@ FIRST_RUN_ACTION_COPY = {
         "0.1.12 does not offer dictation style in Setup",
         "open <strong>Settings</strong>, select <strong>Press to toggle</strong> under <strong>Trigger</strong>",
         "<strong>Upcoming 0.1.13 (not yet published):</strong> Setup also offers",
+        "<strong>Set Up Later</strong> defers completing setup, not that download.",
+        "A new profile starts with <strong>Start Presspeech with Windows</strong> off",
+        "<strong>Set Up Later</strong>, or closing Setup if you do not want the app at sign-in",
     ),
     DOCS / "llms-full.txt": (
         "Only after the user decides to launch published 0.3.8 despite the model-download warning above:",
@@ -880,8 +896,7 @@ COMPATIBILITY_OVERALL_RESULTS = (
 COMPATIBILITY_EVIDENCE_GUIDANCE = {
     ROOT / "README.md": (
         "Help qualify target apps",
-        "five steady-focus attempts",
-        "three focus-change attempts",
+        "five steady-focus and three focus-change slots",
         "live coverage links separate native, browser, and Electron/Chromium",
         "Browse existing compatibility",
     ),
@@ -908,7 +923,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Focus-change recovery is expected",
         "keyboard layout/input source only when it differs from your usual layout",
         "Manual-paste recovery occurred during steady focus",
-        "including its seven counts and Overall result",
+        "including its eight counts and Overall result",
         *COMPATIBILITY_OVERALL_RESULTS,
     ),
     DOCS / "index.html": (
@@ -928,7 +943,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "manual-paste recovery occurred while the original target stayed focused",
-        "worksheet's seven counts and Overall result",
+        "worksheet's eight counts and Overall result",
         "Download report draft",
         "blank prompts for public versions and generic target context",
         "keyboard layout/input source only if it differs from your",
@@ -945,7 +960,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
         "manual-recovery option only when it occurred while the original target stayed focused",
-        "worksheet's seven counts and Overall result",
+        "worksheet's eight counts and Overall result",
         "Download report draft",
         "blank prompts for public version and generic target context",
         "keyboard layout/input source only if it differs from your",
@@ -1298,7 +1313,7 @@ Once the checksum succeeds and any requested attestation check also succeeds—o
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button, then finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button. Before choosing Finish Setup, Set Up Later, or closing Setup, explain that a new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off; upcoming 0.1.13 defaults it off. Published 0.1.12 offers Press to toggle in Settings, not Setup; upcoming 0.1.13 offers it in Setup. If the user chooses Set Up Later, leave setup incomplete; in 0.1.12 this does not defer an already-started model download. Otherwise, finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
@@ -3333,11 +3348,12 @@ def check_compatibility_worksheet_contract(
     noscript = re.search(r"<noscript\b[^>]*>(.*?)</noscript>", page, flags=re.I | re.S)
     if (
         noscript is None
-        or "four focus-change categories across three attempts" not in noscript.group(1)
+        or "four steady-focus categories across five slots" not in noscript.group(1)
+        or "four focus-change categories across three slots" not in noscript.group(1)
     ):
         errors.append(
             "docs/app-compatibility.html: no-JavaScript guidance must count "
-            "four focus-change categories across three attempts"
+            "four categories in each group, including unrun slots"
         )
 
     form_match = re.search(
@@ -3364,7 +3380,7 @@ def check_compatibility_worksheet_contract(
             *(
                 (f"steady-{index}", outcome)
                 for index in range(1, 6)
-                for outcome in ("pasted", "recovered", "unsafe")
+                for outcome in ("pasted", "recovered", "unsafe", "notrun")
             ),
             *(
                 (f"focus-{index}", outcome)
@@ -3377,7 +3393,7 @@ def check_compatibility_worksheet_contract(
             or sorted(options) != sorted(expected_options)
         ):
             errors.append(
-                "docs/app-compatibility.html: worksheet must expose three steady-focus "
+                "docs/app-compatibility.html: worksheet must expose four steady-focus "
                 "and four focus-change categories for each attempt"
             )
         textareas = re.findall(r"<textarea\b[^>]*>", form, flags=re.I)
@@ -3894,6 +3910,23 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
         errors.append(
             "Windows assistant prompt: keep package installation distinct from the launch-triggered model request; missing "
             + ", ".join(repr(phrase) for phrase in missing_windows_launch_choice)
+        )
+
+    required_windows_setup_choice = (
+        "Before choosing Finish Setup, Set Up Later, or closing Setup",
+        "new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off",
+        "Published 0.1.12 offers Press to toggle in Settings, not Setup",
+        "upcoming 0.1.13 offers it in Setup",
+        "If the user chooses Set Up Later, leave setup incomplete",
+    )
+    missing_windows_setup_choice = [
+        phrase for phrase in required_windows_setup_choice
+        if phrase not in WINDOWS_INSTALL_PROMPT
+    ]
+    if missing_windows_setup_choice:
+        errors.append(
+            "Windows assistant prompt: keep setup choices tied to the published build; missing "
+            + ", ".join(repr(phrase) for phrase in missing_windows_setup_choice)
         )
 
     required_windows_proxy_notice = (
@@ -5332,7 +5365,7 @@ def run_self_test() -> None:
         worksheet_inputs = "".join(
             f'<input type="radio" name="steady-{index}" value="{outcome}">'
             for index in range(1, 6)
-            for outcome in ("pasted", "recovered", "unsafe")
+            for outcome in ("pasted", "recovered", "unsafe", "notrun")
         ) + "".join(
             f'<input type="radio" name="focus-{index}" value="{outcome}">'
             for index in range(1, 4)
@@ -5340,7 +5373,8 @@ def run_self_test() -> None:
         )
         worksheet_page.write_text(
             '<script src="compatibility-worksheet.js" defer></script>'
-            '<noscript>four focus-change categories across three attempts</noscript>'
+            '<noscript>four steady-focus categories across five slots; '
+            'four focus-change categories across three slots</noscript>'
             '<form id="compatibility-worksheet">'
             + worksheet_inputs
             + '<textarea id="worksheet-summary" readonly></textarea>'
@@ -5375,8 +5409,8 @@ def run_self_test() -> None:
         valid_worksheet_script = worksheet_script.read_text(encoding="utf-8")
         worksheet_page.write_text(
             valid_worksheet_page.replace(
-                "four focus-change categories across three attempts",
-                "three focus-change categories across three attempts",
+                "four steady-focus categories across five slots",
+                "three steady-focus categories across five slots",
                 1,
             ),
             encoding="utf-8",

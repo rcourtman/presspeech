@@ -41,6 +41,7 @@ function makeDocument() {
     "steady-pasted-count",
     "steady-recovered-count",
     "steady-unsafe-count",
+    "steady-notrun-count",
     "focus-copied-count",
     "focus-inserted-count",
     "focus-failed-count",
@@ -135,6 +136,8 @@ async function main() {
     assert.match(summary.value, /Pasted once: 2/);
     assert.match(summary.value, /Recovered safely: 2/);
     assert.match(summary.value, /Incorrect or unsafe: 1/);
+    assert.match(summary.value, /Incorrect or unsafe: 1\nNot completed: 0/);
+    assert.equal(doc.getElementById("steady-notrun-count").textContent, "0");
     assert.match(summary.value, /Copied for manual paste without inserting anywhere: 1/);
     assert.match(summary.value, /Inserted into any field: 1/);
     assert.match(summary.value, /No insertion, but recovery failed: 1/);
@@ -210,8 +213,24 @@ async function main() {
     await save.listeners.click();
     assert.equal(blobs.length, 2, "incomplete worksheets must not be downloaded");
 
-    doc.outcomes.set("focus-3", "notrun");
+    ["unsafe", "notrun", "notrun", "notrun", "notrun"].forEach(
+      (value, index) => doc.outcomes.set(`steady-${index + 1}`, value),
+    );
+    ["notrun", "notrun", "notrun"].forEach((value, index) =>
+      doc.outcomes.set(`focus-${index + 1}`, value),
+    );
     form.listeners.change();
+    assert.equal(save.disabled, false, "an early safety stop must be reportable");
+    assert.equal(doc.getElementById("steady-notrun-count").textContent, "4");
+    assert.match(summary.value, /Incorrect or unsafe: 1\nNot completed: 4/);
+    assert.match(summary.value, /Overall result: An incorrect or unsafe result occurred/);
+    assert.match(worksheet.formatReportDraft(summary.value), /Not completed: 4/);
+    await save.listeners.click();
+    assert.equal(blobs.length, 3, "an early safety stop must be downloadable");
+    assert.match(blobs[2].parts[0], /Incorrect or unsafe: 1\nNot completed: 4/);
+    assert.match(blobs[2].parts[0], /Overall result: An incorrect or unsafe result occurred/);
+    assert.doesNotMatch(blobs[2].parts[0], /amber rabbit|blue otter|dictated text/i);
+
     globalThis.Blob = undefined;
     await save.listeners.click();
     assert.equal(summary.focused, true);
@@ -231,6 +250,18 @@ async function main() {
     assert.equal(
       worksheet.summarise(allPasted, ["copied", "notrun", "copied"]).overall,
       "Testing could not be completed",
+    );
+    assert.equal(
+      worksheet.summarise(["pasted", "notrun", "notrun", "notrun", "notrun"],
+        Array(3).fill("notrun")).overall,
+      "Testing could not be completed",
+      "unrun steady-focus slots without a completed failure are not a pass",
+    );
+    assert.equal(
+      worksheet.summarise(["unsafe", ...Array(4).fill("notrun")],
+        Array(3).fill("notrun")).overall,
+      "An incorrect or unsafe result occurred",
+      "a stopped safety failure takes precedence over unrun slots",
     );
     assert.equal(
       worksheet.summarise(allPasted, ["failed", "notrun", "notrun"]).overall,

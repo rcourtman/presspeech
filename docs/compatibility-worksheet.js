@@ -9,7 +9,7 @@
     worksheet.mount(document);
   }
 })(function createWorksheet() {
-  const STEADY_OUTCOMES = ["pasted", "recovered", "unsafe"];
+  const STEADY_OUTCOMES = ["pasted", "recovered", "unsafe", "notrun"];
   const FOCUS_OUTCOMES = ["copied", "inserted", "failed", "notrun"];
 
   function countsFor(values, allowed) {
@@ -39,7 +39,7 @@
     if (remaining === 0) {
       if (steadyCounts.unsafe > 0 || focusCounts.inserted > 0 || focusCounts.failed > 0) {
         overall = "An incorrect or unsafe result occurred";
-      } else if (focusCounts.notrun > 0) {
+      } else if (steadyCounts.notrun > 0 || focusCounts.notrun > 0) {
         overall = "Testing could not be completed";
       } else if (steadyCounts.recovered > 0) {
         overall = "Manual-paste recovery occurred during steady focus; no incorrect or unsafe result occurred";
@@ -64,6 +64,7 @@
       `Pasted once: ${result.steady.pasted}`,
       `Recovered safely: ${result.steady.recovered}`,
       `Incorrect or unsafe: ${result.steady.unsafe}`,
+      `Not completed: ${result.steady.notrun}`,
       "",
       "Three focus-change results",
       `Copied for manual paste without inserting anywhere: ${result.focus.copied}`,
@@ -117,6 +118,7 @@
       "steady-pasted-count": ["steady", "pasted"],
       "steady-recovered-count": ["steady", "recovered"],
       "steady-unsafe-count": ["steady", "unsafe"],
+      "steady-notrun-count": ["steady", "notrun"],
       "focus-copied-count": ["focus", "copied"],
       "focus-inserted-count": ["focus", "inserted"],
       "focus-failed-count": ["focus", "failed"],

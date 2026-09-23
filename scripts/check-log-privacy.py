@@ -11,6 +11,8 @@ keycodes are forbidden because they can reveal typed characters.
 Swift error objects and localized descriptions are forbidden because NSError
 domains/userInfo and upstream errors can contain private paths or input. Only
 the reviewed privacySafeErrorLogDetail(error) category wrapper is allowed.
+Python exception bindings are treated the same way regardless of the name
+chosen after `except ... as`; exception class names remain safe categories.
 Counts and other bounded metadata are allowed.
 
 The whole argument expression of each `log(...)` call is scanned —
@@ -144,6 +146,7 @@ PYTHON_PRIVATE_IDENTIFIERS = {
 
 # Reading these properties exposes only bounded metadata, not the private value.
 PYTHON_SAFE_METADATA_ATTRIBUTES = {"count", "is_empty", "ndim", "shape", "size"}
+PYTHON_EXCEPTION_IDENTIFIERS = {"exc", "exception", "error", "err"}
 
 
 class Finding(Exception):
@@ -270,22 +273,35 @@ def is_python_log_call(node: ast.Call) -> bool:
     return isinstance(node.func, ast.Attribute) and node.func.attr == "_log"
 
 
-def contains_raw_exception_details(node: ast.AST) -> bool:
+def contains_raw_exception_details(
+    node: ast.AST, exception_names: frozenset[str] = frozenset()
+) -> bool:
     """Reject common unbounded exception renderings in persistent logs."""
+    exception_identifiers = PYTHON_EXCEPTION_IDENTIFIERS | exception_names
     for current in ast.walk(node):
         if (isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute)
-                and current.func.attr in {"format_exc", "format_exception"}):
+                and current.func.attr in {"format_exc", "format_exception",
+                                          "format_exception_only"}):
+            return True
+        if (isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute)
+                and isinstance(current.func.value, ast.Name)
+                and current.func.value.id == "sys"
+                and current.func.attr in {"exception", "exc_info"}):
             return True
         if (isinstance(current, ast.Call) and isinstance(current.func, ast.Name)
                 and current.func.id == "str" and current.args and
                 isinstance(current.args[0], ast.Name) and
-                current.args[0].id in {"exc", "exception", "error", "err"}):
+                current.args[0].id in exception_identifiers):
             return True
     return False
 
 
-def python_private_identifiers(node: ast.AST) -> list[str]:
+def python_private_identifiers(
+    node: ast.AST, exception_names: frozenset[str] = frozenset()
+) -> list[str]:
     identifiers: set[str] = set()
+    private_identifiers = PYTHON_PRIVATE_IDENTIFIERS | exception_names
+    exception_identifiers = PYTHON_EXCEPTION_IDENTIFIERS | exception_names
 
     def visit(current: ast.AST) -> None:
         # Exception class names are bounded diagnostic categories; the
@@ -297,7 +313,7 @@ def python_private_identifiers(node: ast.AST) -> list[str]:
                 and current.value.func.id == "type"
                 and len(current.value.args) == 1
                 and isinstance(current.value.args[0], ast.Name)
-                and current.value.args[0].id in {"err", "error", "exception", "exc"}
+                and current.value.args[0].id in exception_identifiers
                 and not current.value.keywords):
             return
 
@@ -313,7 +329,8 @@ def python_private_identifiers(node: ast.AST) -> list[str]:
                 and current.attr in PYTHON_SAFE_METADATA_ATTRIBUTES):
             return
 
-        if isinstance(current, ast.Name) and current.id in PYTHON_PRIVATE_IDENTIFIERS:
+        if (isinstance(current, ast.Name)
+                and current.id in private_identifiers):
             identifiers.add(current.id)
         elif (isinstance(current, ast.Attribute)
               and current.attr in PYTHON_PRIVATE_IDENTIFIERS):
@@ -332,6 +349,36 @@ def python_private_identifiers(node: ast.AST) -> list[str]:
     return sorted(identifiers)
 
 
+class PythonLogCallCollector(ast.NodeVisitor):
+    """Remember exception bindings only inside their handler suites.
+
+    `except ... as e` exposes the same unbounded error details as `exc`; a
+    name-based denylist cannot cover it. The binding is cleared when the
+    handler exits, so do not flag an unrelated `e` in later code.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[ast.Call, frozenset[str]]] = []
+        self.exception_names: frozenset[str] = frozenset()
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.type is not None:
+            self.visit(node.type)
+        previous = self.exception_names
+        if node.name:
+            self.exception_names = previous | {node.name}
+        try:
+            for statement in node.body:
+                self.visit(statement)
+        finally:
+            self.exception_names = previous
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if is_python_log_call(node):
+            self.calls.append((node, self.exception_names))
+        self.generic_visit(node)
+
+
 def scan_python_text(path: Path, text: str) -> list[str]:
     try:
         tree = ast.parse(text, filename=str(path))
@@ -339,19 +386,16 @@ def scan_python_text(path: Path, text: str) -> list[str]:
         return [f"{path}:{exc.lineno or 1}: could not parse Python log calls"]
 
     findings: list[str] = []
-    log_calls = sorted(
-        (
-            node for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and is_python_log_call(node)
-        ),
-        key=lambda node: (node.lineno, node.col_offset),
-    )
-    for node in log_calls:
+    collector = PythonLogCallCollector()
+    collector.visit(tree)
+    for node, exception_names in sorted(
+        collector.calls, key=lambda item: (item[0].lineno, item[0].col_offset)
+    ):
         identifiers: set[str] = set()
         raw_exception_details = False
         for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
-            identifiers.update(python_private_identifiers(argument))
-            raw_exception_details |= contains_raw_exception_details(argument)
+            identifiers.update(python_private_identifiers(argument, exception_names))
+            raw_exception_details |= contains_raw_exception_details(argument, exception_names)
         if identifiers or raw_exception_details:
             if raw_exception_details:
                 identifiers.add("raw exception details")
@@ -429,17 +473,55 @@ self._log("failed: %s" % err)
 self._log("failed: %s" % exception)
 self._log("paste target: %s" % paste_target.process_name)
 """
+    python_exception_alias_clean = """
+try:
+    work()
+except Exception as e:
+    self._log("failure category: %s" % type(e).__name__)
+e = "safe status after the handler"
+self._log(e)
+try:
+    work()
+except* ValueError as fault:
+    self._log(type(fault).__name__)
+"""
+    python_exception_alias_dirty = """
+try:
+    work()
+except Exception as e:
+    self._log(f"failed: {e}")
+    self._log(str(e))
+    self._log(e.args)
+    try:
+        work()
+    except RuntimeError as cause:
+        self._log(cause)
+        self._log(type(e).__name__)
+try:
+    work()
+except* ValueError as fault:
+    self._log(f"failed: {fault}")
+self._log(sys.exception())
+self._log(sys.exc_info())
+self._log(traceback.format_exception_only(ValueError("private path")))
+"""
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
         dirty_path = Path(tmp) / "dirty.swift"
         non_log_path = Path(tmp) / "non-log.swift"
         python_clean_path = Path(tmp) / "clean.py"
         python_dirty_path = Path(tmp) / "dirty.py"
+        python_exception_alias_clean_path = Path(tmp) / "exception-alias-clean.py"
+        python_exception_alias_dirty_path = Path(tmp) / "exception-alias-dirty.py"
         clean_path.write_text(clean, encoding="utf-8")
         dirty_path.write_text(dirty, encoding="utf-8")
         non_log_path.write_text(non_log_calls, encoding="utf-8")
         python_clean_path.write_text(python_clean, encoding="utf-8")
         python_dirty_path.write_text(python_dirty, encoding="utf-8")
+        python_exception_alias_clean_path.write_text(
+            python_exception_alias_clean, encoding="utf-8")
+        python_exception_alias_dirty_path.write_text(
+            python_exception_alias_dirty, encoding="utf-8")
         findings = scan_paths([clean_path])
         if findings:
             raise SystemExit(f"self-test rejected clean log calls: {findings}")
@@ -476,6 +558,19 @@ self._log("paste target: %s" % paste_target.process_name)
             if not any(identifier in finding for finding in findings):
                 raise SystemExit(
                     f"self-test did not catch Python private identifier {identifier!r}"
+                )
+        findings = scan_paths([python_exception_alias_clean_path])
+        if findings:
+            raise SystemExit(f"self-test rejected safe exception-category logs: {findings}")
+        findings = scan_paths([python_exception_alias_dirty_path])
+        if len(findings) != 8:
+            raise SystemExit(
+                f"self-test expected 8 alias/exception findings, got {len(findings)}: {findings}"
+            )
+        for identifier in ("e", "cause", "fault", "raw exception details"):
+            if not any(identifier in finding for finding in findings):
+                raise SystemExit(
+                    f"self-test did not catch exception alias/detail {identifier!r}"
                 )
 
 
