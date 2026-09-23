@@ -54,7 +54,12 @@ checks, use the worksheet's counts-only download above.
 - **macOS install or permissions:** check the [macOS install guide](https://rcourtman.github.io/presspeech/install.html), [FAQ](https://rcourtman.github.io/presspeech/faq.html), and [troubleshooting guide](https://rcourtman.github.io/presspeech/troubleshooting.html).
 - **Windows install or model setup:** check the [Windows install guide](https://rcourtman.github.io/presspeech/windows.html) and [Windows technical guide](windows/README.md).
 
-If the problem remains, search the [existing issues](https://github.com/rcourtman/presspeech/issues), then choose the closest route when GitHub permits it:
+If the problem remains, search the [existing issues](https://github.com/rcourtman/presspeech/issues). A matching open thread may still accept a comment; check before preparing a public reply. New issue forms are not a usable route while GitHub restricts issue creation, so keep the draft private if no suitable thread is available.
+
+<details>
+<summary>Issue forms to use only when GitHub reopens issue creation</summary>
+
+These links are retained for later. They do not bypass the current restriction.
 
 - [Report a bug](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml). In Presspeech, choose **Copy Diagnostics** first and paste that privacy-safe summary into the form.
 - [Browse existing target-app compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22), then [share a report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml) after running the [short privacy-safe protocol](https://rcourtman.github.io/presspeech/app-compatibility.html). Passing reports are useful as well as failures because they show how often automatic paste and focus-change recovery worked across repeated attempts.
@@ -63,6 +68,8 @@ If the problem remains, search the [existing issues](https://github.com/rcourtma
   can choose an unrepresented target class.
 - [Suggest an improvement](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml). Describe the recurring problem and a measurable result.
 - [Ask a usage question](https://github.com/rcourtman/presspeech/issues/new/choose) by selecting **Open a blank issue**. Include the platform, Presspeech version, and what you already tried.
+
+</details>
 
 Issues are public. Never include dictated text, audio, dictionary or shortcut
 contents, credentials, private paths, or other sensitive data. Diagnostics are

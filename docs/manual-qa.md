@@ -160,11 +160,12 @@ keyboard access testing in addition to assistive-technology testing.
 - On a clean Windows x64 profile with usable NVIDIA CUDA and no cached pinned
   Parakeet snapshot, confirm Setup identifies the multilingual path and its
   approximate 2.5 GB first download. With keyboard-only navigation and Narrator,
-  verify the **Download Parakeet model**, **Use English-only CPU model**,
-  and **Choose another model in Settings** actions have useful names, appear
-  before the microphone controls in visual and Tab order, and can be activated.
-  Confirm initial focus lands on **Download Parakeet model**; Tab should reach
-  the other model choices before the microphone selector. Confirm the choices
+  verify the **Download Parakeet model (up to ~2.5 GB)**, **Select and download
+  English-only CPU model (~141 MiB)**, and **Choose another model in
+  Settings…** actions have useful names, appear before the microphone controls
+  in visual and Tab order, and can be activated. Confirm initial focus lands on
+  **Download Parakeet model (up to ~2.5 GB)**; Tab should reach the other model
+  choices before the microphone selector. Confirm the choices
   are absent and initial focus lands on the microphone selector when the model
   is already cached. Before the choice appears, confirm its Alt+D, Alt+U, and
   Alt+M shortcuts cannot activate hidden choices; once the choice appears,
@@ -183,11 +184,12 @@ keyboard access testing in addition to assistive-technology testing.
 - On a clean Windows x64 profile without usable NVIDIA CUDA and no cached
   Whisper base.en snapshot, confirm Setup reports the English-only CPU model
   and its approximate 141 MiB download, and that no model download starts
-  before **Download English-only CPU model** is activated. With keyboard-only
-  navigation and Narrator, verify the size and the download, defer, and
+  before **Download English-only CPU model (~141 MiB)** is activated. With
+  keyboard-only navigation and Narrator, verify the size and download, defer, and
   alternate-model choices are clear. Confirm initial focus lands on
-  **Download English-only CPU model**; Tab should reach the alternate-model
-  choice and then the microphone selector. Choose **Set Up Later** and confirm
+  **Download English-only CPU model (~141 MiB)**; Tab should reach the
+  alternate-model choice and then the microphone selector. Choose **Set Up
+  Later** and confirm
   no download continues; reopen Setup and verify the choice remains available.
   In another
   clean profile, accept the download and confirm fetching begins only after
@@ -247,9 +249,11 @@ keyboard access testing in addition to assistive-technology testing.
 - Press **Escape** in Setup, Settings, and Try Dictation and confirm only the
   current window closes. Start an update download, press **Escape**, and confirm
   the prompt closes and its partial download is cancelled and cleaned up.
-- Confirm initial keyboard focus lands on the microphone selector in Setup, the
-  hotkey selector in Settings, Download Update in the update prompt, and the
-  text area in Try Dictation.
+- Confirm initial keyboard focus lands on the first required model-download
+  choice in Setup when a missing first-run model needs consent; otherwise it
+  lands on the microphone selector. In Settings it lands on the hotkey
+  selector, in the update prompt on Download Update, and in Try Dictation on
+  the text area.
 - In Settings, confirm the warning beside **After pasting** explains that a
   newline may submit dictated text in shells or terminals and recommends
   reviewing commands outside a shell. With Narrator, focus the selector and
