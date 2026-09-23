@@ -267,9 +267,12 @@ Local Mac comparison ("why not FluidVoice?"):
 
 Windows comparison:
 
-> Windows has two built-in choices that are easy to confuse: Win+H Voice
-> Typing uses online speech recognition, while Windows 11 Voice Access can
-> dictate offline as part of a full voice-control workflow. If you specifically
+> Windows has two built-in choices that are easy to confuse: Windows documents
+> Voice Typing with online speech recognition, while its privacy statement says
+> Windows 11 Voice Typing may use both device-based and online recognition.
+> Copilot+ PCs also offer on-device Fluid dictation corrections, which alone
+> doesn't establish that the whole recognition path is offline. Voice Access
+> can dictate offline as part of a full voice-control workflow. If you specifically
 > want local push-to-talk, Presspeech and Handy are free open-source options
 > with different model and packaging tradeoffs. I maintain Presspeech; the
 > sourced comparison is here:

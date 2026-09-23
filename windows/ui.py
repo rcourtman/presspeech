@@ -690,6 +690,13 @@ class DictationIndicator:
             root.title("Presspeech Indicator")
             root.overrideredirect(True)
             root.attributes("-topmost", True)
+            # The indicator is a separate Tk interpreter from the interactive
+            # window host. Install its accessibility proxy as well so its
+            # changing status label has a useful UI Automation name.
+            try:
+                tk_uia.enable(root)
+            except Exception:
+                _accessibility_failed()
 
             pixels_per_inch = root.winfo_fpixels("1i")
             horizontal_padding = _scaled_pixels(12, pixels_per_inch)
@@ -707,6 +714,7 @@ class DictationIndicator:
                              padx=_scaled_pixels(7, pixels_per_inch))
             label.pack(side="left")
             root.update_idletasks()
+            _mark_live_region(label)
 
             user32 = ctypes.windll.user32
             user32.GetParent.argtypes = [ctypes.c_void_p]
@@ -795,13 +803,22 @@ class DictationIndicator:
                     visible_state = None
                     user32.ShowWindow(hwnd, 0)  # SW_HIDE
                     return True
-                label.configure(text=self._STATES[command][0])
+                changed = visible_state != command
+                # Notify after the overlay is visible; screen readers may
+                # discard live-region events from a hidden window.
+                _set_accessible_text(
+                    label, self._STATES[command][0], announce=False)
                 # Refresh even if the colours are otherwise unchanged because
                 # the default accent is specific to the current state.
                 apply_palette(command, force=True)
                 apply_text_scale(force=True)
                 visible_state = command
                 position_visible_indicator()
+                if changed and getattr(label, "_presspeech_live_region", False):
+                    try:
+                        _LIVE_REGIONS.announce(label.winfo_id())
+                    except Exception:
+                        _accessibility_failed()
                 return True
 
             def poll():

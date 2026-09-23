@@ -173,6 +173,16 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertEqual(ui._scaled_pixels(42, 192), 84)
         self.assertEqual(ui._scaled_pixels(42, 0), 42)
 
+    def test_indicator_status_is_a_screen_reader_live_region(self):
+        source = inspect.getsource(ui.DictationIndicator._run)
+        self.assertIn("tk_uia.enable(root)", source)
+        self.assertIn("_mark_live_region(label)", source)
+        self.assertIn("label, self._STATES[command][0], announce=False", source)
+        self.assertIn("changed = visible_state != command", source)
+        self.assertIn('if changed and getattr(label, "_presspeech_live_region", False)', source)
+        self.assertLess(source.index("position_visible_indicator()\n                if changed"),
+                        source.index("_LIVE_REGIONS.announce(label.winfo_id())"))
+
     def test_windows_accessibility_text_scale_is_read_independently(self):
         registry = mock.MagicMock()
         registry.HKEY_CURRENT_USER = object()

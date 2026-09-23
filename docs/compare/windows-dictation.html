@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Local Dictation for Windows - Presspeech and Alternatives</title>
-    <meta name="description" content="Compare Windows dictation options: local Presspeech, online Windows Voice Typing, offline Voice Access, open-source Handy and Scribe AI, and cloud-based Aqua Voice.">
+    <meta name="description" content="Compare Windows dictation options: local Presspeech, Windows Voice Typing's documented processing modes, offline Voice Access, open-source Handy and Scribe AI, and cloud-based Aqua Voice.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/windows-dictation.html">
     <link rel="icon" href="../favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
@@ -45,7 +45,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare on Windows</span>
         <h1>Built-in, local, and cloud dictation are different choices</h1>
-        <p>Windows includes both cloud-based Voice Typing and a separate offline Voice Access feature. Dedicated apps add push-to-talk workflows, local model choice, or AI rewriting. This table separates those tradeoffs; it does not rank accuracy or speed because there is no controlled head-to-head benchmark across these products.</p>
+        <p>Windows includes Voice Typing and a separate offline Voice Access feature. Microsoft's current documentation describes Voice Typing's processing in more than one way, and Copilot+ PCs can add on-device Fluid dictation corrections. Dedicated apps add push-to-talk workflows, local model choice, or AI rewriting. This table separates those tradeoffs; it does not rank accuracy or speed because there is no controlled head-to-head benchmark across these products.</p>
       </div>
 
       <section>
@@ -75,7 +75,7 @@
                 <tr>
                   <th scope="row">Where speech is processed</th>
                   <td>On the PC. Model downloads and optional release checks use the network, but the app has no cloud transcription path.</td>
-                  <td>Microsoft says Voice Typing uses online speech recognition powered by Azure Speech and requires an internet connection.</td>
+                  <td>Microsoft's Voice Typing support page says it uses online Azure Speech; Microsoft's privacy statement says Windows 11 Voice Typing may use both device-based and online recognition. Copilot+ PCs can add on-device Fluid dictation corrections after its model is installed. That correction feature alone does not establish that all speech recognition is offline; check the current Windows settings and documentation for your device.</td>
                   <td>On the PC after its speech language files are installed; Microsoft documents that Voice Access works without an internet connection.</td>
                   <td>Core transcription runs on the computer. Models download during setup; optional post-processing can use a configured local or cloud provider.</td>
                   <td>In the cloud, with no offline mode. Aqua's Privacy Mode controls transcript retention but does not move recognition onto the PC.</td>
@@ -117,12 +117,12 @@
           </div>
 
           <div class="note">
-            <p>Start with Voice Typing if zero installation matters and online processing is acceptable. Try Voice Access if you need offline dictation as part of full hands-free Windows control and it supports your language. Compare Presspeech and Handy when local push-to-talk and open source matter: Presspeech keeps a fixed per-platform path and no transcript library, while Handy prioritises model choice, one cross-platform app, and history. Aqua Voice is the different trade: cloud processing and a subscription in exchange for AI refinement and a shared commercial service across devices.</p>
+            <p>Start with Voice Typing if zero installation matters, but check the processing behavior available on your Windows version and device before dictating sensitive material. Its optional Copilot+ Fluid dictation feature applies on-device corrections; do not assume this means the entire voice-typing recognition path is offline. Try Voice Access if you need documented offline dictation as part of full hands-free Windows control and it supports your language. Compare Presspeech and Handy when local push-to-talk and open source matter: Presspeech keeps a fixed per-platform path and no transcript library, while Handy prioritises model choice, one cross-platform app, and history. Aqua Voice is the different trade: cloud processing and a subscription in exchange for AI refinement and a shared commercial service across devices.</p>
           </div>
 
           <p><strong>Another native open-source option:</strong> <a href="scribe.html">Scribe AI</a> is the closest Windows-only peer: it bundles local multilingual Parakeet, supports x64 and Arm, and has a Microsoft-signed Store install. It also deliberately offers a broader product surface than Presspeech, including persistent local history, per-app profiles, usage views, and optional local or user-configured cloud AI cleanup (Scribe sources checked 22 September 2026).</p>
 
-          <p>Sources: <a href="https://rcourtman.github.io/presspeech/windows.html">Presspeech Windows guide</a> and <a href="https://github.com/rcourtman/presspeech/tree/main/windows">source</a>; Microsoft documentation for <a href="https://support.microsoft.com/en-us/accessibility/windows/use-voice-typing-to-talk-instead-of-type-on-your-pc">Voice Typing usage and languages</a>, <a href="https://support.microsoft.com/en-us/windows/privacy/speech-voice-activation-inking-typing-and-privacy">online speech processing</a>, and <a href="https://support.microsoft.com/en-us/accessibility/windows/voice-access/voice-access-command-list">Voice Access scope, requirements, and languages</a>; <a href="https://github.com/cjpais/Handy">Handy source and documentation</a>; Aqua Voice's <a href="https://aquavoice.com/windows">Windows, pricing, processing, and language page</a> and <a href="https://aquavoice.com/privacy">privacy policy</a> (checked 1 September 2026); and Scribe AI's <a href="https://github.com/ChrisMcKee1/scribe">source and documentation</a>, <a href="https://github.com/ChrisMcKee1/scribe/blob/main/PRIVACY.md">privacy policy</a>, and <a href="https://apps.microsoft.com/detail/9N2P0SG059TJ">Microsoft Store listing</a> (checked 22 September 2026). Vendor accuracy claims are deliberately omitted because the products do not publish a controlled benchmark against one another.</p>
+          <p>Sources: <a href="https://rcourtman.github.io/presspeech/windows.html">Presspeech Windows guide</a> and <a href="https://github.com/rcourtman/presspeech/tree/main/windows">source</a>; Microsoft documentation for <a href="https://support.microsoft.com/en-us/accessibility/windows/use-voice-typing-to-talk-instead-of-type-on-your-pc">Voice Typing usage, languages, and Copilot+ Fluid dictation</a>, <a href="https://support.microsoft.com/en-us/windows/privacy/speech-voice-activation-inking-typing-and-privacy">speech processing and privacy</a>, <a href="https://www.microsoft.com/en-us/privacy/privacystatement">the Windows privacy statement</a>, and <a href="https://support.microsoft.com/en-us/accessibility/windows/voice-access/voice-access-command-list">Voice Access scope, requirements, and languages</a> (checked 23 September 2026); <a href="https://github.com/cjpais/Handy">Handy source and documentation</a>; Aqua Voice's <a href="https://aquavoice.com/windows">Windows, pricing, processing, and language page</a> and <a href="https://aquavoice.com/privacy">privacy policy</a> (checked 1 September 2026); and Scribe AI's <a href="https://github.com/ChrisMcKee1/scribe">source and documentation</a>, <a href="https://github.com/ChrisMcKee1/scribe/blob/main/PRIVACY.md">privacy policy</a>, and <a href="https://apps.microsoft.com/detail/9N2P0SG059TJ">Microsoft Store listing</a> (checked 22 September 2026). Vendor accuracy claims are deliberately omitted because the products do not publish a controlled benchmark against one another.</p>
         </div>
       </section>
     </main>

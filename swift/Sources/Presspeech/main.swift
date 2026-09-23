@@ -3429,7 +3429,7 @@ private func permissionSetupDetail(_ permission: Permission,
         let renameNote = paneName == permission.rawValue
             ? ""
             : " This is the permission called Accessibility on earlier macOS versions."
-        return "Verifies the focused window and sends the paste shortcut. Choose Grant to open System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
+        return "Verifies the focused window and sends the paste shortcut. Apple's grant can control your Mac; its scope is broader than Presspeech's use. Choose Grant to open System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
     case .inputMonitoring:
         return "Lets Presspeech detect the dictation hotkey. Choose Grant to open System Settings → Privacy & Security → Input Monitoring, then enable the toggle next to Presspeech."
     }
@@ -15974,6 +15974,13 @@ private enum PresspeechSelfTest {
                 .contains("System Settings → Privacy & Security → Device Control and Data Access"),
             equals: true,
             "accessibility setup should use the current macOS privacy-pane label"
+        )
+        try expect(
+            permissionSetupDetail(.accessibility,
+                                  microphoneAuthorizationStatus: .notDetermined)
+                .contains("its scope is broader than Presspeech's use"),
+            equals: true,
+            "accessibility setup should disclose the broad system grant at the decision point"
         )
         let setupPermission = SetupChecklistPermissionState(
             permission: .microphone,
