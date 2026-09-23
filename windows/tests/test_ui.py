@@ -1146,6 +1146,20 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
         window._waiting = waiting
         return window
 
+    def test_recovery_actions_match_safe_tab_and_visual_order(self):
+        body = inspect.getsource(ui.DeliveryRecoveryWindow._build_window)
+
+        # Creation order is Tk's default tab order. With right-packed controls,
+        # packing Discard before Copy puts Copy visually before Discard too.
+        self.assertLess(
+            body.index('text="Copy for Manual Paste"'),
+            body.index('text="Discard Dictation"'),
+        )
+        self.assertLess(
+            body.index('self.discard_button.pack(side="right"'),
+            body.index('self.copy_button.pack(side="right")'),
+        )
+
     def test_async_build_failure_restores_tray_fallback(self):
         window = self.make_window()
         window._build_failed = False

@@ -1907,13 +1907,13 @@ class DeliveryRecoveryWindow:
         self.leave_button.pack(side="left")
         self.copy_button = ttk.Button(
             buttons, text="Copy for Manual Paste", command=self._copy)
-        self.copy_button.pack(side="right")
         # Construct Copy before Discard so keyboard traversal reaches the
-        # recoverable action before the destructive one. Packing from the
-        # right keeps Copy in the conventional primary-command position.
+        # recoverable action before the destructive one. Pack the right-side
+        # buttons in reverse so their visual order matches that tab sequence.
         self.discard_button = ttk.Button(
             buttons, text="Discard Dictation", command=self._discard)
         self.discard_button.pack(side="right", padx=(0, 8))
+        self.copy_button.pack(side="right")
 
         ttk.Label(
             frame,
