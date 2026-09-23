@@ -97,10 +97,17 @@ confirm a missing first-run default-model download, pinned files are fetched int
 `%USERPROFILE%\.cache\huggingface` and loaded and warmed in the background.
 Each Presspeech release pins every Windows Hugging Face model to an exact
 repository commit reviewed for that app version, so a fresh install cannot
-silently receive a different snapshot. Windows relies on the immutable Hugging
-Face snapshot identity; unlike the macOS model cache, it does not independently
-verify every downloaded model file against a SHA-256 manifest. Upcoming 0.1.13
-applies the following policy before any model library imports: it fixes downloads to the public
+silently receive a different snapshot. Published Windows 0.1.12 does not
+independently verify model-file contents against SHA-256. Upcoming 0.1.13
+verifies every allowed inference file—including present optional configuration—against its
+in-app SHA-256 manifest before loading the model. A mismatch stops loading;
+review network and proxy trust before clearing this model's cache and retrying.
+For unchanged files, a local verification record avoids hashing them again on
+each launch; a changed file identity or metadata requires another hash check.
+The standard HTTPX proxy and CA settings still apply, so a proxy
+can observe model-request metadata and block a download, but modified model
+bytes fail verification. Upcoming 0.1.13 also applies the following privacy
+policy before any model library imports: it fixes downloads to the public
 `https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
 disables the hf-xet transfer client, disables implicit authentication and
 inherited endpoint/staging/User-Agent-origin settings, and prevents
@@ -121,8 +128,10 @@ local defaults; it does not itself trigger a fetch. Present optional JSON is
 validated, and required alternative feature-extractor layouts are recognized.
 `HF_HUB_OFFLINE=1` and
 `TRANSFORMERS_OFFLINE=1` prevent that fallback. Invalid cached JSON, empty files,
-permission failures and backend parsing errors are reported without turning them
-into network retries. This checks completeness, not independent model-file hashes.
+permission failures, checksum mismatches and backend parsing errors are reported
+without turning them into network retries. In 0.1.13, present required and
+optional inference files are SHA-256-verified against the pinned manifest before
+they reach a model backend; published 0.1.12 does not have this check.
 
 Whisper loads copied tokenizer/configuration files from a private temporary
 folder, preventing an ordinary Hub-cache reset from triggering the library's

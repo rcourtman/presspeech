@@ -387,6 +387,8 @@ def _model_loading_feedback(app):
         label, phase = "Downloading model files…", "downloading"
         label += _format_download_progress(
             getattr(app, "model_download_progress", None))
+    elif detail.startswith("Verifying model files"):
+        label, phase = "Verifying model files…", "verifying"
     elif detail.startswith("Loading speech model"):
         label, phase = "Loading speech model…", "loading"
     elif detail.startswith("Warming speech model"):

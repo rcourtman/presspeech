@@ -164,6 +164,7 @@ PACKAGE_SMOKE_IMPORTS = (
     )),
     ("huggingface_hub.utils", ("build_hf_headers",)),
     ("huggingface_hub.file_download", ("is_xet_available",)),
+    ("model_integrity", ("MODEL_FILE_SHA256",)),
     ("transformers", (
         "AutoModelForRNNT",
         "AutoModelForTDT",
@@ -2872,6 +2873,9 @@ class PresspeechApp:
                     self.model_status_detail = "Downloading model files…"
                     if done is not None:
                         self.model_download_progress = (done, total)
+                elif phase == "verifying":
+                    self.model_status_detail = "Verifying model files…"
+                    self.model_download_progress = None
                 elif phase == "loading":
                     self.model_status_detail = "Loading speech model…"
                     self.model_download_progress = None
@@ -2927,13 +2931,17 @@ class PresspeechApp:
             except Exception:
                 pass
             self._last_model_use = time.perf_counter()
-        except Exception:
+        except Exception as exc:
+            integrity_failure = isinstance(
+                exc, engine.model_cache.ModelCacheIntegrityError)
             with model_state_lock:
                 if (request_generation == self._model_load_generation and
                         self.settings["model"] == model_name):
                     self.model_status = "error"
                     self.model_download_progress = None
                     self.model_status_detail = (
+                        "Model integrity check failed; do not use these files"
+                        if integrity_failure else
                         "Model load failed; use Retry Speech Model")
                 if (request_generation == self._model_load_generation and
                         getattr(self, "_model_load_target", None) == model_name):
@@ -2941,9 +2949,17 @@ class PresspeechApp:
             self._log("speech model load failed; error details suppressed")
             if (request_generation == self._model_load_generation and
                     self.settings["model"] == model_name):
-                self.notify(
-                    "Model load failed",
-                    "%s can be retried in Settings or Setup." % model_name)
+                if integrity_failure:
+                    self.notify(
+                        "Model integrity check failed",
+                        "Presspeech refused model files that did not match its "
+                        "pinned SHA-256 manifest. Do not use them. Review your "
+                        "network and proxy trust before clearing this model's "
+                        "cache and retrying.")
+                else:
+                    self.notify(
+                        "Model load failed",
+                        "%s can be retried in Settings or Setup." % model_name)
                 self._set_indicator(None)
             return
         model_dtype = getattr(self.transcriber.model, "dtype", "unknown")

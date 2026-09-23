@@ -8,6 +8,11 @@ APP_NAME = "Presspeech"
 VERSION = "0.1.12"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
+LOCAL_APP_DATA_DIR = os.environ.get(
+    "LOCALAPPDATA",
+    os.path.join(os.path.expanduser("~"), "AppData", "Local"))
+MODEL_INTEGRITY_CACHE_DIR = os.path.join(
+    LOCAL_APP_DATA_DIR, APP_NAME, "model-integrity")
 
 # Match the macOS dictionary boundary. Every rule becomes a regex scan over
 # each transcript, so persisted input must not make text processing unbounded.

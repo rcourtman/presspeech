@@ -3248,6 +3248,9 @@ class StartupTests(unittest.TestCase):
             progress_callback("downloading", 3 * 1024 * 1024, 8 * 1024 * 1024)
             phases.append((instance.model_status_detail,
                            instance.model_download_progress))
+            progress_callback("verifying")
+            phases.append((instance.model_status_detail,
+                           instance.model_download_progress))
             progress_callback("loading")
             phases.append((instance.model_status_detail,
                            instance.model_download_progress))
@@ -3263,6 +3266,7 @@ class StartupTests(unittest.TestCase):
 
         self.assertEqual(phases, [
             ("Downloading model files…", (3 * 1024 * 1024, 8 * 1024 * 1024)),
+            ("Verifying model files…", None),
             ("Loading speech model…", None),
             ("Warming speech model…", None),
         ])

@@ -6,6 +6,7 @@ not become network retries. Backend construction remains local-only afterward.
 """
 import json
 import errno
+import hashlib
 from contextlib import contextmanager
 import os
 from pathlib import Path, PurePosixPath
@@ -25,6 +26,10 @@ class ModelCacheMissingError(FileNotFoundError):
 
 class ModelCacheCorruptError(ValueError):
     """Present cached input cannot be used; do not silently download around it."""
+
+
+class ModelCacheIntegrityError(ModelCacheCorruptError):
+    """A pinned model file did not match Presspeech's SHA-256 manifest."""
 
 
 def _download_progress_class(callback):
@@ -71,7 +76,144 @@ def offline_requested():
     return bool(getattr(constants, "HF_HUB_OFFLINE", False))
 
 
-def _validate_snapshot(snapshot, revision, required_files, optional_files=(), required_any=()):
+def _file_fingerprint(path, metadata):
+    """Capture stable file identity for the local post-verification cache."""
+    return {
+        "path": str(path.resolve(strict=True)),
+        "device": int(metadata.st_dev),
+        "inode": int(metadata.st_ino),
+        "size": int(metadata.st_size),
+        "mtime_ns": int(getattr(
+            metadata, "st_mtime_ns", metadata.st_mtime * 1_000_000_000)),
+        "ctime_ns": int(getattr(
+            metadata, "st_ctime_ns", metadata.st_ctime * 1_000_000_000)),
+    }
+
+
+def _file_stat_identity(metadata):
+    return tuple(int(getattr(metadata, name)) for name in
+                 ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+                 if hasattr(metadata, name))
+
+
+def _calculate_sha256(path, name):
+    """Hash a regular file and reject changes during the verification read."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode):
+                raise ModelCacheIntegrityError(
+                    "pinned model file is not a regular file: " + name)
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+            after = os.fstat(stream.fileno())
+        current = path.stat()
+    except ModelCacheIntegrityError:
+        raise
+    except OSError as exc:
+        raise ModelCacheIntegrityError(
+            "pinned model file could not be verified: " + name) from exc
+
+    if (_file_stat_identity(before) != _file_stat_identity(after) or
+            _file_stat_identity(after) != _file_stat_identity(current)):
+        raise ModelCacheIntegrityError(
+            "pinned model file changed while being verified: " + name)
+    return digest.hexdigest(), _file_fingerprint(path, current)
+
+
+def _integrity_marker_path(integrity_cache_dir, repository, revision):
+    identity = hashlib.sha256(
+        (repository + "\0" + revision).encode("utf-8")).hexdigest()
+    return Path(integrity_cache_dir) / (identity + ".json")
+
+
+def _manifest_digest(expected_sha256s):
+    encoded = json.dumps(
+        expected_sha256s, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=True).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _integrity_marker_matches(marker_path, snapshot, manifest_digest, files):
+    try:
+        with marker_path.open(encoding="utf-8") as stream:
+            marker = json.load(stream)
+    except (OSError, ValueError, UnicodeError):
+        return False
+    return (
+        isinstance(marker, dict) and
+        marker.get("schema_version") == 1 and
+        marker.get("snapshot") == str(snapshot.resolve(strict=True)) and
+        marker.get("manifest_sha256") == manifest_digest and
+        marker.get("files") == files
+    )
+
+
+def _write_integrity_marker(marker_path, snapshot, manifest_digest, files):
+    """Persist only a performance hint; missing/unwritable markers re-hash."""
+    temporary = None
+    try:
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", newline="\n",
+                prefix=".presspeech-integrity-", suffix=".tmp",
+                dir=str(marker_path.parent), delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump({
+                "schema_version": 1,
+                "snapshot": str(snapshot.resolve(strict=True)),
+                "manifest_sha256": manifest_digest,
+                "files": files,
+            }, stream, sort_keys=True, separators=(",", ":"))
+            stream.write("\n")
+        os.replace(temporary, marker_path)
+    except OSError:
+        # Verification remains authoritative. A read-only or unavailable
+        # marker directory only means the next launch must hash the files again.
+        pass
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _verify_snapshot_integrity(
+        path, present, expected_sha256s, repository, revision,
+        integrity_cache_dir):
+    files = {}
+    for name in expected_sha256s:
+        if name not in present:
+            continue  # Optional files may be absent at their reviewed revision.
+        item = path / name
+        files[name] = _file_fingerprint(item, item.stat())
+
+    manifest_digest = _manifest_digest(expected_sha256s)
+    marker_path = (
+        _integrity_marker_path(integrity_cache_dir, repository, revision)
+        if integrity_cache_dir is not None else None)
+    if (marker_path is not None and
+            _integrity_marker_matches(marker_path, path, manifest_digest, files)):
+        return
+
+    for name, expected in expected_sha256s.items():
+        if name not in present:
+            continue
+        actual, fingerprint = _calculate_sha256(path / name, name)
+        if actual != expected:
+            raise ModelCacheIntegrityError(
+                "pinned model SHA-256 mismatch: " + name)
+        files[name] = fingerprint
+
+    if marker_path is not None:
+        _write_integrity_marker(marker_path, path, manifest_digest, files)
+
+
+def _validate_snapshot(
+        snapshot, revision, required_files, optional_files=(), required_any=(),
+        expected_sha256s=None, repository=None, integrity_cache_dir=None):
     path = Path(snapshot)
     if path.name != revision:
         raise ModelCacheCorruptError("model cache is not the requested pinned snapshot")
@@ -90,7 +232,14 @@ def _validate_snapshot(snapshot, revision, required_files, optional_files=(), re
         present.add(name)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_size == 0:
             raise ModelCacheCorruptError("cached model input is empty or not a file: " + name)
+    if expected_sha256s is not None:
+        _verify_snapshot_integrity(
+            path, present, expected_sha256s, repository, revision,
+            integrity_cache_dir)
+
+    for name in present:
         if name.endswith(".json"):
+            item = path / name
             try:
                 with item.open(encoding="utf-8") as stream:
                     value = json.load(stream)
@@ -108,7 +257,8 @@ def _validate_snapshot(snapshot, revision, required_files, optional_files=(), re
 
 def resolve_snapshot(
         repository, revision, required_files, *, optional_files=(),
-        required_any=(), local_only=False, progress=None):
+        required_any=(), local_only=False, progress=None,
+        expected_sha256s=None, integrity_cache_dir=None):
     """Resolve only the reviewed inference files; never fetch alternative weights."""
     if not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("model revision must be an immutable commit")
@@ -120,6 +270,15 @@ def resolve_snapshot(
         raise ValueError("model inference file contract must be nonempty and unique")
     if any(not group or not set(group).issubset(all_files) for group in required_any):
         raise ValueError("alternative requirements must name reviewed inference files")
+    if expected_sha256s is not None:
+        if (not isinstance(expected_sha256s, dict) or
+                set(expected_sha256s) != set(all_files) or
+                any(not isinstance(name, str) or
+                    not isinstance(digest, str) or
+                    not re.fullmatch(r"[0-9a-f]{64}", digest)
+                    for name, digest in expected_sha256s.items())):
+            raise ValueError(
+                "SHA-256 manifest must cover every reviewed inference file")
     for name in all_files:
         parsed = PurePosixPath(name)
         if (parsed.is_absolute() or ".." in parsed.parts or "\\" in name or
@@ -139,7 +298,12 @@ def resolve_snapshot(
             repository, revision=revision, token=False,
             local_files_only=local_only, allow_patterns=list(all_files),
             **options)
-        return _validate_snapshot(snapshot, revision, required_files, optional_files, required_any)
+        if expected_sha256s is not None:
+            _report_progress(progress, "verifying")
+        return _validate_snapshot(
+            snapshot, revision, required_files, optional_files, required_any,
+            expected_sha256s=expected_sha256s, repository=repository,
+            integrity_cache_dir=integrity_cache_dir)
 
     try:
         snapshot = attempt(True)

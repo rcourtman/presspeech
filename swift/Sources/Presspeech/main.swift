@@ -3551,7 +3551,7 @@ private func firstSpeechModelDownloadSetupDetail(profile: SpeechModelProfile) ->
         "The public model needs no account token; Presspeech removes inherited Hugging Face tokens before downloading. " +
         "Dictation audio and transcripts stay on your Mac. " +
         "Allow about \(requiredFreeSpace) free to download and prepare it with CoreML. " +
-        "Choose Download Model to begin, or close setup to defer."
+        "Choose Download Model to begin, or Set Up Later to defer."
 }
 
 private func speechModelSetupRowState(profile: SpeechModelProfile,
@@ -3668,6 +3668,12 @@ private func setupChecklistCompletionState(isSpeechModelReady: Bool,
     isSpeechModelReady && isReady && permissionsGranted && hotkeyTestSucceeded
 }
 
+private func setupChecklistFooterButtonTitle(isComplete: Bool,
+                                             requiresInitialDownloadChoice: Bool) -> String {
+    if isComplete { return "Done" }
+    return requiresInitialDownloadChoice ? "Set Up Later" : "Close"
+}
+
 /// The scratchpad can use the menu's Start/Stop Dictation actions, so a
 /// successful physical-hotkey test must not be a prerequisite for trying the
 /// accessible, menu-driven path. Keep the checklist's Done state stricter: it
@@ -3687,7 +3693,7 @@ private func setupChecklistTipText(snapshot: SetupChecklistSnapshot,
 
     switch snapshot.speechModel.status {
     case "Not downloaded":
-        return "Choose Download Model beside Speech model to review the download and begin, or Close setup to defer."
+        return "Choose Download Model beside Speech model to review the download and begin, or Set Up Later to defer."
     case "Needs retry":
         return "Choose Retry beside Speech model to try model setup again."
     default:
@@ -11730,7 +11736,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
               ) as? NSButton else { return false }
 
         dockAccess.state = snapshot.showInDock ? .on : .off
-        close.title = snapshot.isComplete ? "Done" : "Close"
+        close.title = setupChecklistFooterButtonTitle(
+            isComplete: snapshot.isComplete,
+            requiresInitialDownloadChoice: snapshot.speechModel.buttonTitle == "Download Model"
+        )
         if snapshot.canTryDictation {
             guard setupChecklistView(
                 identifiedBy: NSUserInterfaceItemIdentifier("setup-try-dictation"),
@@ -11893,7 +11902,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         dockAccess.identifier = NSUserInterfaceItemIdentifier("setup-show-in-dock")
         dockAccess.toolTip = "Right-click the Dock icon to open Presspeech controls."
         dockAccess.setAccessibilityHelp("Provides another way to reach Presspeech if its menu-bar item is hidden.")
-        let close = NSButton(title: snapshot.isComplete ? "Done" : "Close",
+        let close = NSButton(title: setupChecklistFooterButtonTitle(
+                                 isComplete: snapshot.isComplete,
+                                 requiresInitialDownloadChoice: snapshot.speechModel.buttonTitle == "Download Model"),
                              target: self,
                              action: #selector(closeSetupChecklistClicked(_:)))
         close.bezelStyle = .rounded
@@ -17066,7 +17077,7 @@ private enum PresspeechSelfTest {
             setupChecklistTipText(snapshot: tip(model: SetupChecklistRowState(
                 detail: "Download required", status: "Not downloaded", buttonTitle: "Download Model"
             ), permissionStatus: "Missing", action: "Continue"), triggerMode: .hold),
-            equals: "Choose Download Model beside Speech model to review the download and begin, or Close setup to defer.",
+            equals: "Choose Download Model beside Speech model to review the download and begin, or Set Up Later to defer.",
             "first-run tip should lead with the model-download choice"
         )
         try expect(
@@ -20023,6 +20034,24 @@ private enum PresspeechSelfTest {
     }
 
     private static func testSpeechModelStartupStatus() throws {
+        try expect(
+            setupChecklistFooterButtonTitle(isComplete: false,
+                                            requiresInitialDownloadChoice: true),
+            equals: "Set Up Later",
+            "the clean-install consent choice should expose an explicit defer action"
+        )
+        try expect(
+            setupChecklistFooterButtonTitle(isComplete: false,
+                                            requiresInitialDownloadChoice: false),
+            equals: "Close",
+            "incomplete setup without a pending model choice should retain its ordinary close action"
+        )
+        try expect(
+            setupChecklistFooterButtonTitle(isComplete: true,
+                                            requiresInitialDownloadChoice: true),
+            equals: "Done",
+            "completed setup should retain Done even if a stale download-choice flag is supplied"
+        )
         try expect(
             requiresInitialSpeechModelDownloadChoice(downloadApproved: false,
                                                      cacheExists: false),

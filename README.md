@@ -172,8 +172,8 @@ Requirements:
 
 The macOS 0.3.8 release starts its first local speech-model download
 (about 500–600 MB) on launch. In 0.3.9, a clean install must choose
-**Download Model** in Setup; close Setup to defer. CoreML also needs free space
-to prepare the model, and Setup shows the current estimated space needed before
+**Download Model** in Setup; choose **Set Up Later** to defer. CoreML also needs
+free space to prepare the model. Setup shows the current estimated space before
 the download starts. Existing installs and cached models continue loading
 automatically. Use **Setup Checklist…** to finish the
 model, permission, and hotkey checks. The checklist stays incomplete until the
@@ -457,7 +457,14 @@ Presspeech is local-first:
   TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token
   it receives. Upcoming 0.1.13 still honors these proxy and CA settings but does
   not send account tokens. A proxy that only tunnels HTTPS sees connection
-  metadata, not request contents; see the [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+  metadata, not request contents. Upcoming 0.1.13 also verifies every allowed
+  inference file before model loading using its pinned SHA-256 manifest. A
+  local verification record is reused only while file identity and metadata
+  remain unchanged; files without a matching record are rehashed, and
+  mismatches fail closed. Published Windows 0.1.12 does not independently
+  verify model-file contents against SHA-256. A proxy can still observe request
+  metadata or block a download; see the
+  [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.

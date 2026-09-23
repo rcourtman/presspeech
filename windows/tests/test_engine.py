@@ -64,6 +64,18 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.resolve_snapshot.assert_called_once()
         self.assertTrue(self.resolve_snapshot.call_args.kwargs["local_only"])
 
+    def test_model_file_manifest_covers_every_inference_file(self):
+        self.assertEqual(set(engine.MODEL_FILE_SHA256), set(engine.MODEL_CACHE_FILES))
+        for name, required in engine.MODEL_CACHE_FILES.items():
+            expected = (set(required) |
+                        set(engine.MODEL_CACHE_OPTIONAL_FILES.get(name, ())))
+            with self.subTest(model=name):
+                self.assertEqual(set(engine.MODEL_FILE_SHA256[name]), expected)
+                self.assertTrue(all(
+                    len(digest) == 64 and
+                    all(character in "0123456789abcdef" for character in digest)
+                    for digest in engine.MODEL_FILE_SHA256[name].values()))
+
     def test_whisper_load_can_check_its_pinned_cache_without_network(self):
         faster_whisper = types.ModuleType("faster_whisper")
         faster_whisper.WhisperModel = mock.Mock()
@@ -90,6 +102,9 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 "parakeet-tdt-0.6b-v3"],
             required_any=engine.MODEL_CACHE_ALTERNATIVES[
                 "parakeet-tdt-0.6b-v3"],
+            expected_sha256s=engine.MODEL_FILE_SHA256[
+                "parakeet-tdt-0.6b-v3"],
+            integrity_cache_dir=engine.cfg.MODEL_INTEGRITY_CACHE_DIR,
             progress=progress)
 
     def test_parakeet_uses_smallest_pre_warmed_audio_bucket(self):
@@ -659,7 +674,9 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 self.resolve_snapshot.assert_called_with(
                     snapshot["repository"], snapshot["revision"], files,
                     optional_files=engine.MODEL_CACHE_OPTIONAL_FILES.get(name, ()),
-                    required_any=engine.MODEL_CACHE_ALTERNATIVES.get(name, ()))
+                    required_any=engine.MODEL_CACHE_ALTERNATIVES.get(name, ()),
+                    expected_sha256s=engine.MODEL_FILE_SHA256[name],
+                    integrity_cache_dir=engine.cfg.MODEL_INTEGRITY_CACHE_DIR)
 
     def test_supplemental_configs_do_not_become_required_downloads(self):
         for name in ("parakeet-tdt-0.6b-v3", engine.NEMOTRON_NAME, engine.MOONSHINE_NAME):

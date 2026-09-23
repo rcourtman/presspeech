@@ -1,4 +1,5 @@
 """Synthetic Hub snapshots only: no model downloads or real cache mutation."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -39,6 +40,20 @@ class CacheFirstTests(unittest.TestCase):
 
     def resolve(self):
         return model_cache.resolve_snapshot('fixture/public', self.revision, self.files)
+
+    def checksums(self):
+        return {
+            name: hashlib.sha256(
+                (b'{}' if name.endswith('.json') else b'synthetic weights')
+            ).hexdigest()
+            for name in self.files
+        }
+
+    def resolve_verified(self):
+        return model_cache.resolve_snapshot(
+            'fixture/public', self.revision, self.files,
+            expected_sha256s=self.checksums(),
+            integrity_cache_dir=Path(self.temp.name) / 'integrity-cache')
 
     def flags(self):
         return [call.kwargs['local_files_only'] for call in self.download.call_args_list]
@@ -259,6 +274,54 @@ class CacheFirstTests(unittest.TestCase):
             with self.subTest(options=options), self.assertRaises(ValueError):
                 model_cache.resolve_snapshot('fixture/public', self.revision, self.files, **options)
         self.download.assert_not_called()
+
+    def test_sha256_manifest_is_checked_before_hub_access(self):
+        for manifest in (
+                {'config.json': 'a' * 64},
+                dict(self.checksums(), **{'model.safetensors': 'A' * 64})):
+            with self.subTest(manifest=manifest), self.assertRaises(ValueError):
+                model_cache.resolve_snapshot(
+                    'fixture/public', self.revision, self.files,
+                    expected_sha256s=manifest)
+        self.download.assert_not_called()
+
+    def test_valid_snapshot_is_hashed_then_marker_avoids_repeat_reads(self):
+        self.assertEqual(self.resolve_verified(), str(self.snapshot))
+        marker_files = list((Path(self.temp.name) / 'integrity-cache').glob('*.json'))
+        self.assertEqual(len(marker_files), 1)
+        with mock.patch.object(
+                model_cache, '_calculate_sha256',
+                wraps=model_cache._calculate_sha256) as calculate:
+            self.assertEqual(self.resolve_verified(), str(self.snapshot))
+        calculate.assert_not_called()
+
+    def test_changed_file_invalidates_marker_and_fails_closed_without_retry(self):
+        self.assertEqual(self.resolve_verified(), str(self.snapshot))
+        (self.snapshot / 'model.safetensors').write_bytes(b'X' * len(b'synthetic weights'))
+        with self.assertRaises(model_cache.ModelCacheIntegrityError):
+            self.resolve_verified()
+        self.assertEqual(self.flags(), [True, True])
+        self.assertNotIn(False, self.flags())
+
+    def test_downloaded_snapshot_must_match_the_manifest_before_return(self):
+        self.download.side_effect = [self.missing('no cache'), str(self.snapshot)]
+        (self.snapshot / 'model.safetensors').write_bytes(b'X' * len(b'synthetic weights'))
+        with self.assertRaises(model_cache.ModelCacheIntegrityError):
+            model_cache.resolve_snapshot(
+                'fixture/public', self.revision, self.files,
+                expected_sha256s=self.checksums(),
+                integrity_cache_dir=Path(self.temp.name) / 'integrity-cache')
+        self.assertEqual(self.flags(), [True, False])
+
+    def test_corrupt_verification_marker_is_only_a_cache_miss(self):
+        self.assertEqual(self.resolve_verified(), str(self.snapshot))
+        marker = next((Path(self.temp.name) / 'integrity-cache').glob('*.json'))
+        marker.write_text('{broken', encoding='utf-8')
+        with mock.patch.object(
+                model_cache, '_calculate_sha256',
+                wraps=model_cache._calculate_sha256) as calculate:
+            self.assertEqual(self.resolve_verified(), str(self.snapshot))
+        self.assertEqual(calculate.call_count, len(self.files))
 
 
 class WhisperPrivateSnapshotTests(unittest.TestCase):

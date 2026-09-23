@@ -1133,6 +1133,20 @@ class SetupWindowTests(unittest.TestCase):
                 "Preparing speech model — downloading or loading…"),
         )
 
+    def test_model_integrity_verification_has_an_explicit_loading_phase(self):
+        window = self.make_window("loading", "Verifying model files…")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertEqual(
+            set_text.call_args_list[0],
+            mock.call(window.model_label, "Verifying model files…"),
+        )
+        self.assertIn(
+            mock.call(mode="indeterminate"),
+            window.progress.config.call_args_list)
+
     def test_setup_labels_bytes_as_current_file_progress(self):
         window = self.make_window("loading", "Downloading model files…")
         window.app.model_download_progress = (2 * 1024 * 1024, 8 * 1024 * 1024)

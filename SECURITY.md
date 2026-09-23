@@ -179,9 +179,16 @@ per-process request ID with the fixed non-unique value `telemetry-off`. Model
 calls explicitly decline account tokens and remote model code, and Transformers
 backends require safetensors weights. The packaged-app self-test verifies the
 policy values cached by the actual bundled libraries so an incompatible
-dependency change fails the release build. Windows currently trusts the
-pinned Hub snapshot and HTTPS storage path rather than independently hashing
-every model file.
+dependency change fails the release build. Published Windows 0.1.12 does not
+independently verify model-file contents against SHA-256 and trusts the pinned
+Hub snapshot and HTTPS storage path. Upcoming Windows 0.1.13 verifies every
+allowed required and present optional inference file against a SHA-256 manifest tied to the pinned
+repository revisions before backend loading. A mismatch fails closed, including
+when the response has the expected size; no alternate or unpinned model is
+loaded. Successful verification is reused only while the recorded local file
+identity and metadata remain unchanged. Proxy and CA overrides remain active:
+they can observe request metadata or deny service, while altered model bytes are
+rejected by the manifest check.
 
 The pinned hf-xet 1.6.0 source has no verified telemetry opt-out, so Windows
 0.1.13 instead sets `HF_HUB_DISABLE_XET=1` before Hub imports. The packaged-app
@@ -198,5 +205,6 @@ initiate download retries. Model construction uses local paths with local-only,
 no-token and existing remote-code/safetensors restrictions. Whisper's tokenizer
 and configuration are copied into a private model-lifetime directory so cache
 path deletion cannot select its upstream unpinned tokenizer fallback. Weight hard
-links isolate path deletion, not in-place modification; Windows still does not
-independently hash every model file.
+links isolate path deletion, not in-place modification. The SHA-256 manifest
+check is new in the upcoming 0.1.13 candidate and is not present in published
+0.1.12.

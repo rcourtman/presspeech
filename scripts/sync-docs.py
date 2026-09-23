@@ -662,6 +662,26 @@ WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
     )
 }
 
+# Model-download integrity is now enforced only by the Windows 0.1.13
+# candidate. Keep the published/candidate split on each public trust surface.
+WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE = {
+    path: (
+        "Published Windows 0.1.12 does not independently verify",
+        "SHA-256",
+        "verifies every allowed",
+    )
+    for path in (
+        ROOT / "SECURITY.md",
+        ROOT / "README.md",
+        ROOT / "windows" / "README.md",
+        DOCS / "privacy.html",
+        DOCS / "privacy" / "network-calls.json",
+        DOCS / "windows.html",
+        DOCS / "llms.txt",
+        DOCS / "llms-full.txt",
+    )
+}
+
 # Published 0.1.12 and the unreleased 0.1.13 candidate have different
 # authentication behavior. Keep each claim attached to the affected version.
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_SCOPE_SURFACES = (
@@ -696,24 +716,24 @@ DELIVERY_BOUNDARY_GUIDANCE = {
 # the user's choice. Vague "depending on the build" copy hides the behavior
 # that matters most to someone deciding whether to start a 500+ MB download.
 MAC_MODEL_DOWNLOAD_GUIDANCE = {
-    ROOT / "README.md": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
-    DOCS / "index.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
+    ROOT / "README.md": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
+    DOCS / "index.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
     DOCS / "getting-started.html": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
     ),
-    DOCS / "install.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
-    DOCS / "faq.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"),
+    DOCS / "install.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
+    DOCS / "faq.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
     DOCS / "privacy.html": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
     ),
     DOCS / "privacy" / "network-calls.json": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
     ),
     DOCS / "llms-full.txt": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
     ),
     DOCS / "install" / "agents.md": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
     ),
 }
 
@@ -1086,7 +1106,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
@@ -1491,13 +1511,13 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:The Presspeech icon appears in the menu bar|Homebrew is the easiest path if you already use it or want command-line updates)\..*?</p>",
-        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; close Setup to defer. Existing installs and cached models load automatically. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
+        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; choose <strong>Set Up Later</strong> to defer. Existing installs and cached models load automatically. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
         path=path,
     )
     text = replace_regex(
         text,
         r'<div class="fact"><strong>(?:Model download|First model download)</strong><span>.*?</span></div>',
-        '<div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts the first download on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models load automatically.</span></div>',
+        '<div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts the first download on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models load automatically.</span></div>',
         path=path,
     )
     text = replace_regex(
@@ -1699,7 +1719,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "HUGGINGFACE_CO_STAGING settings can change its destination, and HF_HUB_USER_AGENT_ORIGIN "
         "is included in request metadata if set; the token may accompany a request to that configured "
         "endpoint. These public models do not need an account token. Upcoming Windows 0.1.13 fixes "
-        "these inherited settings but is not yet published. Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Dictation audio "
+        "these inherited settings but is not yet published. Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file before model loading: it checks each against its pinned SHA-256 manifest and reuses a local verification record only while file identity and metadata remain unchanged. Files without a matching record are rehashed, and mismatches fail closed; a proxy can still observe request metadata or block a download. Dictation audio "
         "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
         "itemised (see the privacy inventory)."
     )
@@ -1803,6 +1823,29 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         marker = "Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published."
         if marker in privacy_paragraph:
             text = text.replace(marker, marker + proxy_summary, 1)
+    privacy_paragraph = text.partition("## Privacy")[2].lstrip().partition("\n\n")[0]
+    legacy_integrity_summary = (
+        "Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file "
+        "against its pinned SHA-256 manifest before model loading; modified model bytes fail closed, "
+        "although a proxy can still observe request metadata or block a download."
+    )
+    integrity_detail = (
+        "Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file "
+        "before model loading by checking each against its pinned SHA-256 manifest; it reuses a local "
+        "verification record only while file identity and metadata remain unchanged. Files without a "
+        "matching record are rehashed, and mismatches fail closed, although a proxy can still observe "
+        "request metadata or block a download."
+    )
+    if legacy_integrity_summary in privacy_paragraph:
+        text = text.replace(legacy_integrity_summary, integrity_detail, 1)
+    elif "does not independently verify model-file contents against SHA-256" not in privacy_paragraph:
+        integrity_summary = (
+            " Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. "
+            + integrity_detail
+        )
+        marker = "Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published."
+        if marker in privacy_paragraph:
+            text = text.replace(marker, marker + integrity_summary, 1)
     calls_marker = "1. Speech model downloads normally"
     before_calls, marker, calls_text = text.partition(calls_marker)
     if marker and "agent-harnesses" not in calls_text:
@@ -1837,7 +1880,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     download_sentence = (
         "The macOS 0.3.8 release starts its first speech-model download (about 500-600 MB) "
         "on launch. In 0.3.9, a clean install must choose Download Model in Setup; "
-        "closing Setup defers it. Existing installations and cached models load automatically. "
+        "choosing Set Up Later defers it. Existing installations and cached models load automatically. "
         "The model is stored under `~/Library/Application Support/FluidAudio/`.\n"
     )
     old_mac_download_copy = (
@@ -2353,7 +2396,7 @@ MODEL_DOWNLOAD_SCHEMA_DESCRIPTION = (
 
 MODEL_DOWNLOAD_FIRST_RUN_GUIDANCE = (
     "macOS 0.3.8 and Windows 0.1.12 start a missing-model download automatically",
-    "a clean install in upcoming macOS 0.3.9 asks you to choose Download Model or close Setup to defer",
+    "a clean install in upcoming macOS 0.3.9 asks you to choose Download Model or Set Up Later to defer",
     "upcoming Windows 0.1.13 asks before fetching missing files for either first-run default",
     "cached models load without a prompt",
     "Existing macOS installs keep automatic startup",
@@ -2702,6 +2745,8 @@ def check_getting_started_preflight_order(
         "send the request",
         "any token it carries",
         "to another destination",
+        "A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives",
+        "if a TLS-inspecting proxy is in use and its trust is unclear, do not launch 0.1.12 while it is in use",
         "prefer to avoid possible telemetry",
         "token or custom route may be configured",
         "wait until Windows 0.1.13 is published",
@@ -4474,6 +4519,8 @@ def run_self_test() -> None:
             '0.3.9 is published. <a href="#macos-model-download-privacy">macOS</a></li>'
             '<li>Windows 0.1.12: the request may send Hugging Face usage telemetry and include a saved token. '
             'Custom routing can send the request and any token it carries to another destination. '
+            'A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives; '
+            'if a TLS-inspecting proxy is in use and its trust is unclear, do not launch 0.1.12 while it is in use. '
             'If you prefer to avoid possible telemetry, or if a token or custom route may be configured—or '
             'you are unsure—wait until Windows 0.1.13 is published. If you installed 0.1.12 but choose to '
             'wait, leave <strong>Launch Presspeech</strong> unchecked. '
@@ -4822,6 +4869,7 @@ def main() -> int:
             errors.extend(check_user_triggered_support_guide())
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
+            errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE))
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_readme_windows_install_decision_order())
@@ -4874,6 +4922,7 @@ def main() -> int:
         errors.extend(check_user_triggered_support_guide())
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
+        errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE))
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_readme_windows_install_decision_order())

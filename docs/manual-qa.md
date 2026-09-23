@@ -572,13 +572,15 @@ item after the development-wrapper launch check.
   transfer needs no account token, disclose that inherited Hugging Face tokens
   are removed before download, give the free-space estimate for download plus
   CoreML preparation, state the local-audio/transcript boundary, and expose
-  **Download Model**. Confirm that
+  **Download Model**. Confirm the footer exposes **Set Up Later** as a separate
+  defer action. Confirm that
   this estimate is visible before activating the action, not only after a
   failed disk-space check. With VoiceOver and keyboard-only navigation, confirm
-  the action has a useful name and is reachable. Close the
-  checklist without activating it; confirm no model download starts and the app
-  remains not ready. Reopen Presspeech and confirm the choice is still offered
-  without starting a download. Activate **Download Model** and confirm the
+  **Download Model** and **Set Up Later** actions have useful names and are
+  reachable. Choose **Set Up Later** and confirm Setup closes without a model
+  download; the app remains not ready. Reopen Presspeech and confirm both
+  choices are still offered without starting a download. Activate
+  **Download Model** and confirm the
   transfer starts only then, the changing progress value remains available in
   its row without replacing the VoiceOver reading element, and readiness
   proceeds normally. Progress-only refreshes should not trigger repeated
@@ -615,7 +617,7 @@ item after the development-wrapper launch check.
   nearby remaining control) when the granted row's button disappears.
   Continue through the complete loop in both directions after each redraw;
   confirm no removed action retains focus and no current permission, Dock,
-  Try Dictation, or Close/Done control is skipped.
+  Try Dictation, or Set Up Later/Close/Done control is skipped.
 - With VoiceOver enabled, confirm permission actions describe their route and
   target: **Continue to request Microphone access** before the first microphone
   prompt, **Open Settings for Microphone** after a denial, and **Open Settings

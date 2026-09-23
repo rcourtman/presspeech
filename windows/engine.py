@@ -17,8 +17,10 @@ import math
 import threading
 import time
 
+import config as cfg
 import model_network
 import model_cache
+from model_integrity import MODEL_FILE_SHA256
 
 PARAKEET_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 NEMOTRON_MODEL = "nvidia/nemotron-speech-streaming-en-0.6b"
@@ -89,6 +91,24 @@ MODEL_CACHE_ALTERNATIVES = {
 }
 
 
+def _validate_model_integrity_manifests():
+    if set(MODEL_FILE_SHA256) != set(MODEL_CACHE_FILES):
+        raise RuntimeError("speech-model SHA-256 manifest coverage is incomplete")
+    for name, required_files in MODEL_CACHE_FILES.items():
+        allowed = set(required_files) | set(MODEL_CACHE_OPTIONAL_FILES.get(name, ()))
+        manifest = MODEL_FILE_SHA256[name]
+        if (set(manifest) != allowed or
+                any(not isinstance(digest, str) or
+                    len(digest) != 64 or
+                    any(char not in "0123456789abcdef" for char in digest)
+                    for digest in manifest.values())):
+            raise RuntimeError(
+                "speech-model SHA-256 manifest is invalid: " + name)
+
+
+_validate_model_integrity_manifests()
+
+
 def _cached_model_path(model_name, *, local_only=False, progress_callback=None):
     snapshot = model_snapshot(model_name)
     options = {}
@@ -100,6 +120,8 @@ def _cached_model_path(model_name, *, local_only=False, progress_callback=None):
         snapshot["repository"], snapshot["revision"], MODEL_CACHE_FILES[model_name],
         optional_files=MODEL_CACHE_OPTIONAL_FILES.get(model_name, ()),
         required_any=MODEL_CACHE_ALTERNATIVES.get(model_name, ()),
+        expected_sha256s=MODEL_FILE_SHA256[model_name],
+        integrity_cache_dir=cfg.MODEL_INTEGRITY_CACHE_DIR,
         **options)
 
 
