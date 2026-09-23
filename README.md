@@ -128,6 +128,8 @@ needs no account token. If a token may be present in the environment that
 launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published.
 Dictation audio and transcripts are not sent in these requests. See the
 [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+Already used macOS 0.3.8? See the
+[follow-up guidance before another model download](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).
 
 Download the notarised app:
 
@@ -409,7 +411,9 @@ Presspeech is local-first:
   downloads even though its public model needs no account token. Upcoming
   macOS 0.3.9 removes those inherited credentials from its own download
   process; do not attribute that change to 0.3.8. Dictation audio and
-  transcripts are not sent in model downloads.
+  transcripts are not sent in model downloads. For an existing 0.3.8 install,
+  leave a working model cache in place and use 0.3.9 before a planned download;
+  see the [follow-up guidance](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).
 - Published Windows 0.1.12 may include a locally available Hugging Face account
   token in model-download requests and honors inherited `HF_ENDPOINT` and
   `HUGGINGFACE_CO_STAGING` settings; a configured endpoint may therefore

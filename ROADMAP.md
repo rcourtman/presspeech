@@ -165,14 +165,20 @@ old clipboard contents; a macOS [Codex Desktop report](https://github.com/openai
 describes completed transcription intermittently missing from an external field
 without a failure notice or recovery copy, leaving the prior clipboard as the
 available paste, and requests explicit copy/retry actions; a Windows
-[Codex Desktop report](https://github.com/openai/codex/issues/37593) likewise
-separates successful transcription from silent failure in external fields; and
-the [HyperVoice changelog](https://hypervoice.app/changelog) documents clipboard
-restoration arriving before slower target apps read the dictation. These are
-product-specific issues and maintainer reports, not a comparable sample or
-prevalence estimate. They reinforce measuring delivery separately from
-recognition and testing more than one app class; they do not justify broader
-scope or product-to-product quality claims.
+[Codex Desktop report](https://github.com/openai/codex/issues/37593) describes
+a held shortcut repeatedly starting and cancelling roughly 200 ms sessions,
+as well as silent external-field insertion failures after successful
+transcription; and the [HyperVoice changelog](https://hypervoice.app/changelog)
+documents clipboard restoration arriving before slower target apps read the
+dictation. These are product-specific issues and maintainer reports, not a
+comparable sample or prevalence estimate. They reinforce measuring delivery
+separately from recognition and testing more than one app class; they do not
+justify broader scope or product-to-product quality claims. Presspeech already
+has a Windows unit test for repeated-keydown suppression, but the report
+supports naming the corresponding physical-hold invariant in native
+qualification: one held key must remain one capture until release. This tests
+Presspeech's own behavior without assuming Codex's implementation or claiming
+a Presspeech defect.
 
 A recent [Handy Windows issue](https://github.com/cjpais/Handy/issues/1879)
 describes one user's loss of opening words or syllables at recording start

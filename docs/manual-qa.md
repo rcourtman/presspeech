@@ -96,6 +96,7 @@ For each configuration, also record this release-gate matrix:
 | First model preparation through first successful dictation | |
 | Ten consecutive dictations into Notepad | |
 | Ten short-phrase onset checks across hold/toggle; first word or syllable retained | |
+| A physical hold across the OS key-repeat interval remains one capture until release | |
 | Dictation into a current Chromium browser text field | |
 | Dictation into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
@@ -261,6 +262,13 @@ keyboard access testing in addition to assistive-technology testing.
   Dictation** and confirm one hotkey press starts and the next stops. Switch to
   **Hold to talk** in Setup and confirm the next dictation stops on release.
   Repeat both radio buttons with Narrator and keyboard-only navigation.
+- On each required CPU and NVIDIA configuration, use hold mode with a physical
+  key press held beyond the Windows key-repeat delay. Confirm exactly one
+  **Listening…** session remains active until physical release and then stops
+  once; no autorepeat may restart or cancel the capture. Test the configured
+  default key and, on a layout where Right Alt acts as AltGr, the selected
+  alternative key. Record only pass/fail, not dictated content. The model-free
+  autorepeat test does not replace this native input check.
 - On each clean CPU and NVIDIA configuration, use **Try Dictation** to repeat
   one short, harmless phrase ten times, alternating five hold-mode and five
   toggle-mode attempts. Begin speaking immediately after the visible
@@ -415,6 +423,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Clean first model download with synthetic values in all inherited Hugging Face token variables | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
+| Automatic insertion and clipboard-only Command-V recovery with a non-US keyboard layout | |
 | Electron issue #33: steady-focus paste once; a switch between two windows of the same app must use clipboard recovery | |
 | Ten TextEdit and ten slow Electron manual-restore trials for issue #36 | |
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
@@ -440,6 +449,17 @@ transcript once, while switching to a second window of that same app before
 delivery inserts nothing and leaves the complete transcript available for
 manual paste. A matching process identifier alone does not authorize paste;
 any insertion after the window switch is a failure.
+
+For the non-US keyboard-layout row, compare an English/US input source with at
+least one non-US source (preferably one with different character mappings, such
+as Russian, when available). In TextEdit and a current Electron/Chromium target,
+confirm a steady-focus dictation inserts once under each layout. Then cause a
+clipboard-only recovery by changing focus before delivery and confirm physical
+Command-V pastes that transcript once under each layout. A displayed hotkey
+label or successful physical-hotkey test alone does not establish that
+synthetic paste and manual recovery work. Record only the input-source names
+and aggregate outcomes; do not retain dictated phrases, transcripts, or field
+contents.
 
 For the keyboard-only delivery-recovery check, use a harmless test transcript
 and create a clipboard-only delivery outcome, then open each menu using the

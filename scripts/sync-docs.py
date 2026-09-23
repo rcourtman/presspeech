@@ -437,6 +437,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until macOS 0.3.9 is published",
         "Dictation audio and transcripts are not sent",
         "version-specific network inventory",
+        "follow-up guidance before another model download",
         "Do not inspect or display token values",
     ),
     DOCS / "index.html": (
@@ -446,6 +447,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until macOS 0.3.9 is published",
         "Dictation audio and transcripts are not sent",
         "version-specific network inventory",
+        "Already used macOS 0.3.8?",
+        "macos-0-3-8-after-use",
     ),
     DOCS / "getting-started.html": (
         "Before installing or launching",
@@ -455,6 +458,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until macOS 0.3.9 is published",
         "Dictation audio and transcripts are not sent",
         "version-specific network inventory",
+        "Already used macOS 0.3.8?",
+        "macos-0-3-8-after-use",
     ),
     DOCS / "install.html": (
         'id="model-download-privacy"',
@@ -464,6 +469,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until macOS 0.3.9 is published",
         "Dictation audio and transcripts are not sent",
         "version-specific network inventory",
+        "Already used macOS 0.3.8?",
+        "macos-0-3-8-after-use",
     ),
     DOCS / "install" / "agents.md": (
         "macOS 0.3.8",
@@ -478,6 +485,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "public model needs no account token",
         "wait until macOS 0.3.9 is published",
         "dictation audio and transcripts are not sent",
+        "leave a working model cache in place",
+        "macos-0-3-8-after-use",
     ),
     DOCS / "llms-full.txt": (
         "macOS 0.3.8 can attach an inherited `HF_TOKEN`",
@@ -486,6 +495,10 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until macOS 0.3.9 is published",
         "removes those credentials from its own process",
         "Dictation audio and transcripts are not sent in these requests",
+        "If macOS 0.3.8 is already in use",
+        "leave a working local model cache in place",
+        "cache reset or integrity retry",
+        "macos-0-3-8-after-use",
     ),
     DOCS / "privacy.html": (
         "Before installing or launching macOS 0.3.8",
@@ -497,6 +510,10 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "HUGGING_FACE_HUB_TOKEN",
         "HUGGINGFACEHUB_API_TOKEN",
         "removes those credentials from its own process",
+        'id="macos-0-3-8-after-use"',
+        "leave its cache in place",
+        "integrity retry or cache reset",
+        "wait until 0.3.9 is installed",
     ),
 }
 
@@ -1561,7 +1578,9 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "macOS 0.3.8 may attach an inherited Hugging Face token to model-download requests, "
         "although the public model needs no account token. If a token may be present in the environment "
         "that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published; dictation audio "
-        "and transcripts are not sent in those requests. "
+        "and transcripts are not sent in those requests. If macOS 0.3.8 is already in use, leave a working "
+        "model cache in place and wait for 0.3.9 before a planned re-download; see "
+        "https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use. "
         "During Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
         "Hugging Face, model-request metadata includes a random per-process session ID, and pinned Hub "
         "1.29.0 may request /api/agent-harnesses and add an agent/<id> label based on inherited "
@@ -2811,6 +2830,8 @@ def run_self_test() -> None:
             or "random per-process session ID" not in synced_llms
             or "macOS 0.3.8 may attach an inherited Hugging Face token" not in synced_llms
             or "wait until macOS 0.3.9 is published" not in synced_llms
+            or "leave a working model cache in place" not in synced_llms
+            or "macos-0-3-8-after-use" not in synced_llms
         ):
             raise SyncError("self-test: inaccurate llms privacy claim was not corrected")
         legacy_llms.write_text(synced_llms, encoding="utf-8")
