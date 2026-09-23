@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presspeech vs Superscribe Lite - Local Dictation for Mac and Windows</title>
+    <meta name="description" content="Compare Presspeech and Superscribe Lite: offline Mac and Windows dictation with different streaming, model, cleanup, privacy, and text-delivery choices.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/superscribe-lite.html">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Presspeech vs Superscribe Lite - Local Dictation for Mac and Windows">
+    <meta property="og:description" content="A sourced comparison of two local-first Mac and Windows dictation apps with different streaming and text-delivery workflows.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/compare/superscribe-lite.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="640">
+    <meta property="og:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="../site-navigation.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>
+        <div class="nav-links" id="primary-navigation-links">
+          <a href="../getting-started.html">Get started</a>
+          <a href="../install.html">macOS</a>
+          <a href="../windows.html">Windows</a>
+          <a href="../privacy.html">Privacy</a>
+          <a href="../troubleshooting.html">Help</a>
+          <a href="./" aria-current="page">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Compare</span>
+        <h1>Presspeech vs Superscribe Lite</h1>
+        <p>Both offer no-subscription, local dictation for Mac and Windows. Superscribe Lite emphasizes streaming words into the target field while you speak and offers optional cleanup through a provider you configure. Presspeech transcribes after recording, checks the original paste destination, and keeps a manual recovery path when it cannot verify that destination. These are workflow tradeoffs, not measured claims about accuracy or reliability.</p>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <div class="table-scroll">
+            <table>
+              <caption>Presspeech and Superscribe Lite compared</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Superscribe Lite</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Dictation workflow</th>
+                  <td>Hold a hotkey or use toggle mode, speak, then transcribe after stopping. It normally pastes only after confirming the same window is still focused; otherwise it leaves the complete transcript for manual paste.</td>
+                  <td>Hold a shortcut or tap it for hands-free recording; its September 2026 launch note describes words streaming into the current field while speaking. Mac defaults to Option+Space and Windows to F9.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Recognition</th>
+                  <td>Local recognition on each platform: multilingual Parakeet TDT v3 on macOS; Windows defaults to multilingual Parakeet when usable NVIDIA CUDA is available, otherwise English-only Whisper base.en. Other Windows models are selectable.</td>
+                  <td>Choose a supported local speech model for the language you speak. The vendor's September 4, 2026 launch note for version 0.3.1 listed ten on-device language options at launch; check its current download and setup details for the latest selection.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Text handling</th>
+                  <td>Deterministic dictionary corrections, shortcuts, filler removal, and opt-in spoken formatting. There is no generative rewrite or provider-cleanup path.</td>
+                  <td>Local recognition is the default. Optional cleanup can remove filler words, change punctuation, or rewrite text using an API key the user supplies to a provider; the cleanup request sends text to that provider.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Privacy and network</th>
+                  <td>No account or cloud transcription path. Model downloads and optional release checks use the network, and bundled-library behavior can differ by release. Review the <a href="../privacy.html#network-calls">version-specific network inventory</a> and platform-specific <a href="../install.html#model-download-privacy">macOS</a> and <a href="../windows.html#model-download-privacy">Windows</a> notices before choosing a build.</td>
+                  <td>The vendor says Lite has no Superscribe account connection and keeps audio and transcripts on-device when optional cleanup is not used. Model downloads require an internet connection; optional cleanup sends text to the provider configured by the user.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Platforms and release status</th>
+                  <td>At the 23 September 2026 check, the Mac release was 0.3.8 (signed and notarised for Apple Silicon); the Windows build was 0.1.12, an unsigned x64 prerelease.</td>
+                  <td>The vendor offers separate Mac and Windows downloads. Its September 4, 2026 launch post identifies version 0.3.1; the inspected public materials do not establish a directly comparable signing or notarization status.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Published performance evidence</th>
+                  <td>Publishes model-only p50 latency on four synthetic Mac clips; microphone capture, transcription startup, and paste are outside that measurement.</td>
+                  <td>No directly comparable latency or accuracy benchmark was identified in the reviewed public materials. This does not establish a speed or accuracy winner.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Price</th>
+                  <td>Free and MIT licensed.</td>
+                  <td>Free; no account or subscription is required for Lite, according to the vendor.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p>Choose Superscribe Lite if you want to see text arrive during speech, select a local model for your language, or optionally clean up text with a provider you configure. Choose Presspeech if you prefer a fixed, after-recording workflow, deterministic text handling, and explicit same-window checks with clipboard recovery when automatic paste is unsafe. Test either app in the target fields and languages you depend on; these public materials do not provide a controlled comparison of recognition or delivery quality.</p>
+          </div>
+          <p>Sources: Presspeech's <a href="https://github.com/rcourtman/presspeech">source and platform documentation</a>, <a href="../privacy.html#network-calls">version-specific privacy inventory</a>, <a href="../benchmarks.html">benchmark methodology</a>, and <a href="../app-compatibility.html">target-app protocol</a>; Superscribe's <a href="https://superscribe.io/blog/2026/09/04/superscribe-lite-free-offline-dictation/">September 4, 2026 Lite launch note</a> and <a href="https://superscribe.io/">official site</a> (checked 23 September 2026). Superscribe feature and privacy statements above are the vendor's claims, not independent verification. No cross-product latency or accuracy winner is inferred.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>Presspeech and Superscribe Lite comparison.</span>
+        <span><a href="./">Compare index</a> · <a href="../install.html">Install Presspeech</a></span>
+      </div>
+    </footer>
+  </body>
+</html>

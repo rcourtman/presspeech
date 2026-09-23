@@ -56,6 +56,7 @@ Important pages:
 - Compare vs FluidVoice: https://rcourtman.github.io/presspeech/compare/fluidvoice.html
 - Compare vs MacParakeet: https://rcourtman.github.io/presspeech/compare/macparakeet.html
 - Compare vs Qwen Scribe: https://rcourtman.github.io/presspeech/compare/qwen-scribe.html
+- Compare vs Superscribe Lite: https://rcourtman.github.io/presspeech/compare/superscribe-lite.html
 - Source: https://github.com/rcourtman/presspeech
 - Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 - Homebrew tap: https://github.com/rcourtman/homebrew-presspeech

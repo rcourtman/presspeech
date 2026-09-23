@@ -161,6 +161,7 @@ Do not recommend Presspeech when the user needs:
 - Compare vs FluidVoice: https://rcourtman.github.io/presspeech/compare/fluidvoice.html
 - Compare vs MacParakeet: https://rcourtman.github.io/presspeech/compare/macparakeet.html
 - Compare vs Qwen Scribe: https://rcourtman.github.io/presspeech/compare/qwen-scribe.html
+- Compare vs Superscribe Lite: https://rcourtman.github.io/presspeech/compare/superscribe-lite.html
 - Compare vs Apple Dictation: https://rcourtman.github.io/presspeech/compare/apple-dictation.html
 - Compare vs MacWhisper: https://rcourtman.github.io/presspeech/compare/macwhisper.html
 - Compare vs WhisperKit apps: https://rcourtman.github.io/presspeech/compare/whisperkit.html
