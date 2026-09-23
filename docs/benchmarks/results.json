@@ -263,7 +263,7 @@
       "presspeech_production_pin": "FluidAudio v0.15.6",
       "presspeech_evaluation_status": "not_measured",
       "release_gate_coverage": "English LibriSpeech and German FLEURS long-form are required; no Spanish-specific quality corpus is required.",
-      "recommended_probe": "On the production pin, compare identical pinned FLEURS es_419 test clips with v3 auto and es script-filter hint; evaluate private spontaneous Spanish locally as separate evidence.",
+      "recommended_probe": "./run-spanish-language-probe.sh compares the same pinned FLEURS es_419 test clips with v3 auto and es script-filter hint; evaluate private spontaneous Spanish locally as separate evidence.",
       "limitations": [
         "A single upstream report is not a Presspeech reproduction.",
         "NVIDIA's model card describes automatic language detection; the reported explanation is the issue author's corrected hypothesis.",

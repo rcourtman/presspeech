@@ -248,6 +248,7 @@ assert_not_contains() {
 
 run_self_test() {
     python3 ./benchmark-inputs.py --self-test
+    ./run-spanish-language-probe.sh --self-test
     # Long-form fixtures are a default release-gate precondition, not an
     # optional candidate helper. Keep their composition and validation tests
     # inside this wrapper's self-test so CI cannot report the release boundary
@@ -729,6 +730,7 @@ python3 ./compose-public-context-fixtures.py --self-test
 python3 ./analyze-context-variation.py --self-test
 ./run-real-dictation-regression.sh --self-test
 ./run-real-model-comparison.sh --self-test
+./run-spanish-language-probe.sh --self-test
 ./run-vocabulary-bias-regression.sh --self-test
 ./run-public-model-comparison.sh --self-test
 ./bench-power.sh --self-test

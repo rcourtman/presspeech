@@ -129,33 +129,34 @@ The upstream report of errors on spontaneous Latin-American Spanish motivates
 checking a second language, but the report is not a Presspeech result and its
 corrected explanation is model-level behavior rather than a CoreML-specific
 bug. The release gate does not currently require a Spanish-specific corpus.
-For a reproducible read-speech probe on the current production pin, fetch a bounded
-FLEURS test set and run the same frozen audio once with automatic selection
-and once with the Spanish hint:
+For a reproducible, report-only read-speech probe on the current production
+pin, fetch a bounded FLEURS test set and run the paired diagnostic:
 
 ```sh
 ./fetch-public-speech-fixtures.sh \
   --source fleurs --language es_419 --split test --count 60
 
-./run-real-dictation-regression.sh \
+./run-spanish-language-probe.sh \
   --input-dir public-audio/fleurs-es_419-test \
-  --out-dir public-results/fleurs-es_419-test-auto \
-  --backend v3 --language auto --public-corpus --trials 3
-./run-real-dictation-regression.sh \
-  --input-dir public-audio/fleurs-es_419-test \
-  --out-dir public-results/fleurs-es_419-test-spanish-hint \
-  --backend v3 --language es --public-corpus --trials 3
+  --out-dir public-results/fleurs-es_419-test-probe \
+  --trials 3
 ```
 
-Compare the input digest, aggregate and worst WER, final-word failures, and
-latency in the two reports. In Presspeech, `--language es` is a decoder
-script-filter hint, not language forcing; it is not evidence that v3 can
-reliably identify or transcribe Spanish. FLEURS is read speech and does not
-exercise the conversational speech described in the upstream report. A
-separate local-only test with naturally spoken Spanish clips is needed for
-that question. Keep those recordings, references, and raw logs private; do
-not commit or share them. The redacted summary is evaluation evidence only,
-not a product gate or an approval to change the model.
+The helper requires at least 60 matched clips from the pinned FLEURS
+`es_419` test split, checks locale/license/revision and sidecar provenance,
+then writes separate automatic-selection and Spanish-hint reports plus a
+pair summary. Before interpreting results it verifies matching frozen-input
+digests, app and benchmark SDK revisions, clip counts, and trial counts.
+Compare aggregate and worst WER, final-word failures, and p50 latency; there is
+no Spanish pass threshold. Reports redact transcripts by default; use
+`--show-transcripts` only when local error inspection is needed. In
+Presspeech, `--language es` is a decoder script-filter hint, not language
+forcing; it is not evidence that v3 can reliably identify or transcribe
+Spanish. FLEURS is read speech and does not exercise the conversational speech
+described in the upstream report. A separate local-only test with naturally
+spoken Spanish clips is needed for that question. Keep those recordings,
+references, and raw logs private; do not commit or share them. This diagnostic
+is evidence gathering only, not a product gate or approval to change the model.
 
 ## Context-variation fixtures
 

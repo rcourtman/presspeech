@@ -775,6 +775,10 @@ fast conversational Spanish to Parakeet v3 itself and the issue was closed as
 not planned. This is upstream evidence, not a Presspeech reproduction or a
 reason by itself to replace the shipped model. Presspeech's Spanish language
 hint filters the decoder's script; it does not language-condition Parakeet.
+The bounded public read-speech check is separate: see
+[`public-audio/README.md`](public-audio/README.md#spanish-language-behavior-probe)
+for a paired FLEURS auto-vs-hint diagnostic that verifies identical inputs
+and SDK revisions. It cannot answer the spontaneous-speech question below.
 
 If a real Presspeech report or a model/runtime update makes conversational
 Spanish relevant, use consented, locally held speech and human-checked

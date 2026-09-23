@@ -2623,12 +2623,16 @@ def check_getting_started_preflight_order(
         else contents[preflight_start:preflight_end]
     )
     required = (
-        "Before the first model download",
+        "Before launching",
         "macOS 0.3.8",
         "Windows 0.1.12",
+        "may carry a Hugging Face token inherited by Presspeech",
+        "may send telemetry or include a saved token",
+        "custom route can send the request and token elsewhere",
         "public models need no account token",
-        "Downloading the app package from GitHub does not make a model request",
-        "wait for the relevant fixed release before launching the app",
+        "not when you download the installer",
+        "wait for the fixed release",
+        "do not need to inspect or share token values",
         "leave <strong>Launch Presspeech</strong> unchecked",
         'href="#macos-model-download-privacy"',
         'href="#windows-model-download-privacy"',
@@ -4332,10 +4336,12 @@ def run_self_test() -> None:
 
         getting_started = Path(tmp) / "getting-started.html"
         safe_getting_started = (
-            '<div id="model-download-preflight"><p>Before the first model download '
-            'on macOS 0.3.8 and Windows 0.1.12. These public models need no account token. '
-            'Downloading the app package from GitHub does not make a model request; '
-            'wait for the relevant fixed release before launching the app. '
+            '<div id="model-download-preflight"><p>Before launching: macOS 0.3.8 model '
+            'requests may carry a Hugging Face token inherited by Presspeech. Windows 0.1.12 '
+            'may send telemetry or include a saved token. A custom route can send the request '
+            'and token elsewhere.</p><p>The public models need no account token. '
+            'A missing-model request starts when Presspeech launches, not when you download the installer. '
+            'If unsure, wait for the fixed release; you do not need to inspect or share token values. '
             'leave <strong>Launch Presspeech</strong> unchecked. '
             '<a href="#macos-model-download-privacy">macOS</a> '
             '<a href="#windows-model-download-privacy">Windows</a></p></div>'
