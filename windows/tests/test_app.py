@@ -1861,7 +1861,7 @@ class TextRegressionTests(unittest.TestCase):
                     app.keyboard_delivery, "Controller") as controller:
             self.assertFalse(instance._paste("private transcript", original))
 
-        copy.assert_called_once_with("private transcript")
+        copy.assert_not_called()
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         self.assertIn("focused control could not be verified",
