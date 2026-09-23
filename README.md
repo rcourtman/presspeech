@@ -101,10 +101,13 @@ before downloading if you need another language.
 
 **Windows 0.1.12 privacy note:** during model downloads, bundled Hugging Face
 Hub/Transformers libraries may send default usage telemetry to Hugging Face;
-model-request metadata also includes a random per-process session ID. This is
-separate from dictation: audio and transcripts are not sent in model downloads.
-The exact telemetry fields for this build are not independently itemised. See
-the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+model-request metadata also includes a random per-process session ID. If
+`HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or a locally cached Hugging Face token is
+available, it may accompany a public model request. These models do not require
+an account token; upcoming 0.1.13 disables this implicit authentication. This
+is separate from dictation: audio and transcripts are not sent in model
+downloads. The exact telemetry fields for this build are not independently
+itemised. See the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.

@@ -162,7 +162,11 @@ anywhere**, **inserted into a field**, or **other/not completed**. The three
 counts should total three.
 
 Text reaching either test window or any unrelated destination is a safety
-failure. Stop testing and report it; do not retry in a real document.
+failure. Stop testing; do not retry in a real document. If the behavior could
+expose or execute sensitive content, use the private reporting route in
+[`SECURITY.md`](../SECURITY.md). Otherwise, report only privacy-safe outcomes
+through a public route when one is available; if intake is restricted, retain
+the aggregate locally and retry later.
 
 ## Record categories without recording words
 
@@ -224,20 +228,24 @@ completed**.
 
 ## Share the result
 
-First [browse existing compatibility
+When public reporting is available, first [browse existing compatibility
 reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22),
 then submit one
 [target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml)
-per platform, target app, version, and generic field type. Reports in which
-every attempt passed are useful: they provide the denominator that failure-only
-bug reports cannot. For a new report, put the platform, public app name/version,
+per platform, target app, version, and generic field type. If issue creation is
+restricted, check whether comments are enabled on a matching report; otherwise,
+retain the result locally and retry when a public route returns. Do not send
+reports or private data elsewhere as a workaround. Reports in which every
+attempt passed are useful: they provide the denominator that failure-only bug
+reports cannot. For a new report, put the platform, public app name/version,
 and generic field type after the fixed `[Compatibility]:` title prefix; include
 no private document, tab, account, server, form, or window name. Paste the
 worksheet output into **Eight-check outcome counts** and select the overall
 result it shows, or enter the same counts manually.
 
 If the same platform, app version, and field type already has a compatibility
-report, add a comment there instead of opening a duplicate. Paste the
+report and comments are enabled, add a comment there instead of opening a
+duplicate. Paste the
 worksheet block, then add the Presspeech and operating-system versions,
 generic hardware if useful, and relevant conditions. Do not repeat the target
 app or field type unless the existing report is ambiguous. Add your counts

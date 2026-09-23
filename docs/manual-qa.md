@@ -105,6 +105,7 @@ For each configuration, also record this release-gate matrix:
 | In-place candidate install over the preceding public Windows release | |
 | In-app update, cancelled/failed update recovery, uninstall, and reinstall | |
 | Keyboard-only, Narrator, and Accessibility Insights checks | |
+| High-contrast themes across Setup, Settings, Update, Delivery Recovery, and Try Dictation | |
 
 A **Fail**, **Blocked**, or **Not run** result in either table blocks promotion
 from prerelease to stable. An unsigned candidate also remains a prerelease.
@@ -262,6 +263,13 @@ keyboard access testing in addition to assistive-technology testing.
   contrast theme during an active recording and confirm the visible indicator
   updates without another hotkey press; its text must continue to distinguish
   **Listening…** from **Transcribing…** without relying on colour.
+- With each Windows contrast theme, inspect Setup, Settings, Update, Delivery
+  Recovery, and Try Dictation. Confirm text, controls, focus, selection, and
+  disabled states remain discernible, and that status or error meaning is not
+  conveyed by colour alone. Change the theme while each window is open and
+  confirm it repaints legibly; repeat keyboard-only and Narrator navigation.
+  Record any inaccessible or ambiguous state as a failure rather than
+  inferring support from the indicator's custom palette.
 - While the model is preparing, confirm **Try Dictation** and **Finish Setup**
   remain disabled. Choose **Set Up Later**, restart, and confirm setup opens
   again with the selected microphone, dictation style, and Start with Windows

@@ -105,7 +105,7 @@
                   <p>The installer is unsigned. Follow the <a href="windows.html#download-verify-run">SHA-256 verification steps</a>. After checking the source and hash, you may choose <strong>More info → Run anyway</strong> for a SmartScreen warning. If Smart App Control or managed policy blocks it, stop—do not try to circumvent the block.</p>
                 </li>
               </ol>
-              <p class="quiet"><strong>Privacy note for Windows 0.1.12:</strong> during model downloads, Hugging Face libraries may send default usage telemetry; model-request metadata also includes a random per-process session ID. Dictation audio and transcripts are not sent with model downloads. Exact telemetry fields are not itemised. See the <a href="privacy.html#network-calls">version-specific network-call inventory</a>.</p>
+              <p class="quiet"><strong>Privacy note for Windows 0.1.12:</strong> during model downloads, Hugging Face libraries may send default usage telemetry; model-request metadata also includes a random per-process session ID. If <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or a saved Hugging Face token is available, it may accompany a public model request. These models do not require an account token; upcoming 0.1.13 disables implicit authentication. Dictation audio and transcripts are not sent with model downloads. Exact telemetry fields are not itemised. See the <a href="privacy.html#network-calls">version-specific network-call inventory</a>.</p>
               <p><a href="windows.html#language-support">Check requirements and install the Windows prerelease</a></p>
             </article>
           </div>
