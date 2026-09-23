@@ -3617,7 +3617,7 @@ private func permissionSetupDetail(_ permission: Permission,
             : " This is the permission called Accessibility on earlier macOS versions."
         return "Verifies the focused window and sends the paste shortcut. Apple's grant can control your Mac; its scope is broader than Presspeech's use. Choose Open Settings to review System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
     case .inputMonitoring:
-        return "macOS's Input Monitoring grant allows apps to monitor input, including typed keys. Presspeech receives keyboard events to detect the configured hotkey and Escape only to cancel an active recording; it doesn't inspect mouse or trackpad events, and other keys pass through without their values being saved, logged, or sent. Choose Open Settings to review System Settings → Privacy & Security → Input Monitoring, then enable Presspeech."
+        return "macOS's Input Monitoring grant allows apps to monitor input, including typed keys. Presspeech receives keyboard events to detect the configured hotkey and Escape to cancel an active recording; it doesn't inspect mouse or trackpad events, and other keys pass through without their values being saved, logged, or sent. Choose Open Settings to review System Settings → Privacy & Security → Input Monitoring, then enable Presspeech."
     }
 }
 
