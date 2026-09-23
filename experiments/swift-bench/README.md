@@ -698,15 +698,18 @@ require the composed multi-window corpus for the absolute long-form screen:
   --max-reference-deletion-run 6 --max-corpus-wer 10 --trials 3
 ```
 
-On the production pin, `--include-candidate-models` on
-`run-release-asr-checks.sh` also adds this same-pin comparison for any
-available short, public, private, and long-form corpora. Review both the
-relative paired comparison and the absolute long-form WER/deletion-run checks;
-neither a speed win nor a corpus average can
-hide a seam regression. A candidate comparison is evidence only, not approval
-to change the app's explicit production setting. Upstream has reported both
-quiet-speech recovery and distinct window-context/seam failures, so retain
-short, multilingual, and human-dictation controls.
+On the production pin, the normal `run-release-asr-checks.sh` run compares
+production `v3` with `v3-no-mel` on the required long-form corpus. This is
+report-only candidate evidence: it does not select the candidate, apply a
+candidate-pass threshold, or change the production release verdict. The
+`--include-candidate-models` option additionally compares the same-pin policy
+on any available short, public, and private corpora, and applies the absolute
+long-form WER/deletion-run checks to the no-mel candidate. Review relative and
+absolute results; neither a speed win nor a corpus average can hide a seam
+regression. A candidate comparison is evidence only, not approval to change
+the app's explicit production setting. Upstream has reported both quiet-speech
+recovery and distinct window-context/seam failures, so retain short,
+multilingual, and human-dictation controls.
 
 ## FluidAudio SDK-default chunking regression
 
@@ -999,10 +1002,14 @@ For a lightweight helper run that is explicitly not release evidence, use
 
 The wrapper also requires the benchmark package and app to pin the exact same
 FluidAudio revision. A mismatch fails before corpus output can be labelled
-production evidence. With the normal matching pins,
-`--include-candidate-models` compares candidate engines available in the
-released SDK while preserving a production release verdict; it skips the
-unavailable linear-int8 encoder.
+production evidence. With the normal matching pins, the default check reports
+a same-pin production `v3` versus explicit `v3-no-mel` comparison on the
+required long-form corpus. This comparison is candidate-only and report-only:
+it does not apply a candidate-pass threshold or change the production release
+verdict. `--include-candidate-models` extends the no-mel comparison to available
+private and short public corpora, applies the absolute long-form quality screen
+to no-mel, and compares other candidate engines available in the released SDK;
+it skips the unavailable linear-int8 encoder.
 
 On a committed candidate branch using the encoder revision documented above,
 run the dependency-mismatched suite explicitly with both flags:

@@ -54,10 +54,12 @@ Options:
                             this percentage (default: 10)
   --include-candidate-models
                             on the production pin, also run explicit no-mel v3
-                            chunking, Parakeet v2, Unified, and current Nemotron
-                            candidate checks; a candidate dependency run also
-                            compares its SDK-default v3 chunking and includes
-                            the opt-in linear-int8 v3 encoder
+                            checks on available private and short public clips,
+                            plus Parakeet v2, Unified, and current Nemotron;
+                            the required long-form no-mel comparison runs by
+                            default. A candidate dependency run also compares
+                            its SDK-default v3 chunking and includes the
+                            opt-in linear-int8 v3 encoder
   --sdk-upgrade-only        with a candidate dependency, compare explicit
                             released v3 chunking with that SDK's v3 default;
                             skip unrelated model and encoder candidates
@@ -74,7 +76,9 @@ The default run performs:
   1. helper parser/self-tests,
   2. production v3 regression if private real-dictation fixtures exist,
   3. production v3 regression if public speech fixtures exist,
-  4. required production v3 multi-window regression over validated composed fixtures.
+  4. required production v3 multi-window regression over validated composed fixtures,
+  5. non-gating same-pin production-v3 vs explicit no-mel comparison over those
+     multi-window fixtures.
 
 Candidate models and chunking policies are not shipped by the app. Use
 --include-candidate-models only for explicit candidate evaluation. Use
@@ -760,6 +764,18 @@ else
         --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
         --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
 
+    if [[ "$DEPENDENCY_MODE" == "production" ]]; then
+        echo
+        echo "running long-form public production-v3 vs same-pin explicit no-mel chunking comparison (candidate evidence only)..."
+        if ! ./run-public-model-comparison.sh \
+            --fixture-dir "$LONG_PUBLIC_AUDIO_DIR" \
+            --out-dir public-results/long-form \
+            --candidate-backend v3-no-mel \
+            --trials "$TRIALS"; then
+            echo "warning: no-mel candidate comparison failed; production release verdict is unchanged" >&2
+        fi
+    fi
+
     if [[ "$DEPENDENCY_MODE" == "production" && \
           "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
         echo
@@ -774,14 +790,6 @@ else
             --show-paths \
             --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
             --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
-
-        echo
-        echo "running long-form public released-v3 vs explicit no-mel chunking comparison..."
-        ./run-public-model-comparison.sh \
-            --fixture-dir "$LONG_PUBLIC_AUDIO_DIR" \
-            --out-dir public-results/long-form \
-            --candidate-backend v3-no-mel \
-            --trials "$TRIALS"
     fi
 
     if [[ ( "$INCLUDE_CANDIDATE_MODELS" -eq 1 || "$SDK_UPGRADE_ONLY" -eq 1 ) && \

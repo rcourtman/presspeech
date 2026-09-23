@@ -100,15 +100,16 @@ local models remain selectable in Settings; review the [Windows language and har
 split](https://rcourtman.github.io/presspeech/windows.html#language-support)
 before downloading if you need another language.
 
-**Windows 0.1.12 privacy note:** during model downloads, bundled Hugging Face
-Hub/Transformers libraries may send default usage telemetry to Hugging Face;
-model-request metadata also includes a random per-process session ID. If
-`HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or a locally cached Hugging Face token is
-available, it may accompany a model request. These models do not require
-an account token; upcoming 0.1.13 disables this implicit authentication. This
-is separate from dictation: audio and transcripts are not sent in model
-downloads. The exact telemetry fields for this build are not independently
-itemised. Published Windows 0.1.12 also honors inherited `HF_ENDPOINT` and `HUGGINGFACE_CO_STAGING` settings, which can change the request destination; `HF_HUB_USER_AGENT_ORIGIN`, if set, is added to request metadata. An available token may accompany a request to that configured endpoint. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published. See the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+**Before installing or launching Windows 0.1.12:** its model downloads may send
+Hugging Face usage telemetry and include an already-configured or locally saved
+Hugging Face token. Custom download routing can change where the model
+request—and a token it carries—goes.
+If a Hugging Face token or custom download route is configured on this PC—or
+you are unsure—wait until Windows 0.1.13 is published. The public models need
+no account token; dictation audio and transcripts are not sent in model
+downloads. See the
+[Windows privacy decision and technical details](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
+and the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.

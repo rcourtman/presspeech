@@ -321,18 +321,9 @@ CLIPBOARD_SERVICE_GUIDANCE = {
 }
 
 # Windows 0.1.12's public-model loader did not disable Hub's default implicit
-# token behavior. Keep this version-specific account-token disclosure aligned
-# across the privacy page, structured inventory, and release-facing guides.
+# token behavior. Keep technical details on the privacy/release reference
+# surfaces, while discovery pages use a short decision-oriented summary.
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
-    ROOT / "README.md": (
-        "Windows 0.1.12 privacy note",
-        "HF_ENDPOINT",
-        "HUGGINGFACE_CO_STAGING",
-        "HF_HUB_USER_AGENT_ORIGIN",
-        "configured endpoint",
-        "may accompany a request",
-        "Upcoming Windows 0.1.13",
-    ),
     ROOT / "SECURITY.md": (
         "published Windows 0.1.12 prerelease",
         "HF_ENDPOINT",
@@ -388,21 +379,38 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "Upcoming 0.1.13",
         "disables implicit authentication",
     ),
-    DOCS / "getting-started.html": (
-        "Privacy note for Windows 0.1.12",
-        "HF_ENDPOINT",
-        "HUGGINGFACE_CO_STAGING",
-        "HF_HUB_USER_AGENT_ORIGIN",
-        "configured endpoint",
-        "Upcoming 0.1.13",
+}
+
+WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
+    ROOT / "README.md": (
+        "Before installing or launching Windows 0.1.12",
+        "usage telemetry",
+        "already-configured or locally saved Hugging Face token",
+        "Custom download routing can change where the model request",
+        "if a Hugging Face token or custom download route is configured on this PC",
+        "wait until Windows 0.1.13 is published",
+        "public models need no account token",
+        "Windows privacy decision and technical details",
     ),
     DOCS / "index.html": (
-        "Windows 0.1.12 leaves Hugging Face libraries",
-        "HF_ENDPOINT",
-        "HUGGINGFACE_CO_STAGING",
-        "HF_HUB_USER_AGENT_ORIGIN",
-        "configured endpoint",
-        "Upcoming 0.1.13",
+        "Before installing or launching Windows 0.1.12",
+        "usage telemetry",
+        "already-configured or locally saved Hugging Face token",
+        "Custom download routing can change where the model request",
+        "if a Hugging Face token or custom download route is configured on this PC",
+        "wait until Windows 0.1.13 is published",
+        "public models need no account token",
+        "Windows privacy decision and technical details",
+    ),
+    DOCS / "getting-started.html": (
+        "Before installing or launching Windows 0.1.12",
+        "usage telemetry",
+        "already-configured or locally saved Hugging Face token",
+        "Custom download routing can change where the model request",
+        "if a Hugging Face token or custom download route is configured on this PC",
+        "wait until Windows 0.1.13 is published",
+        "public models need no account token",
+        "Windows privacy decision and technical details",
     ),
 }
 
@@ -1837,6 +1845,26 @@ def check_windows_model_download_privacy_guidance(
     return errors
 
 
+def check_windows_model_download_privacy_summary(
+    surfaces: dict[Path, tuple[str, ...]] = WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY,
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing Windows model-download privacy summary")
+            continue
+        contents = " ".join(read_text(path).split()).casefold()
+        missing = [phrase for phrase in required if phrase.casefold() not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete decision-oriented Windows model-download privacy "
+                "summary — missing "
+                + ", ".join(repr(phrase) for phrase in missing)
+            )
+    return errors
+
+
 def check_delivery_boundary_guidance(
     surfaces: dict[Path, tuple[str, ...]] = DELIVERY_BOUNDARY_GUIDANCE,
 ) -> list[str]:
@@ -2964,6 +2992,36 @@ def run_self_test() -> None:
         if check_windows_model_download_privacy_guidance(required_token_guidance):
             raise SyncError("self-test: complete version-scoped account-token disclosure was rejected")
 
+        summary_guidance = Path(tmp) / "windows-privacy-summary.html"
+        required_summary_guidance = {
+            summary_guidance: (
+                "Before installing or launching Windows 0.1.12",
+                "usage telemetry",
+                "already-configured or locally saved Hugging Face token",
+                "Custom download routing can change where the model request",
+                "if a Hugging Face token or custom download route is configured on this PC",
+                "wait until Windows 0.1.13 is published",
+                "public models need no account token",
+                "Windows privacy decision and technical details",
+            )
+        }
+        summary_guidance.write_text(
+            "Windows downloads public models.\n", encoding="utf-8"
+        )
+        if not check_windows_model_download_privacy_summary(required_summary_guidance):
+            raise SyncError("self-test: missing Windows privacy decision was not flagged")
+        summary_guidance.write_text(
+            "Before installing or launching Windows 0.1.12, usage telemetry and an already-configured "
+            "or locally saved Hugging Face token may be sent; custom download routing "
+            "can change where the model request goes. If a Hugging Face token or "
+            "custom download route is configured on this PC, wait until Windows 0.1.13 is published. "
+            "The public models need no account token; see the Windows privacy decision "
+            "and technical details.\n",
+            encoding="utf-8",
+        )
+        if check_windows_model_download_privacy_summary(required_summary_guidance):
+            raise SyncError("self-test: complete Windows privacy decision was rejected")
+
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {
             delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
@@ -3217,6 +3275,7 @@ def main() -> int:
             errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_windows_model_download_privacy_guidance())
+            errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_compatibility_worksheet_contract())
@@ -3256,6 +3315,7 @@ def main() -> int:
         errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_windows_model_download_privacy_guidance())
+        errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_compatibility_worksheet_contract())

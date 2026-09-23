@@ -152,6 +152,13 @@
       "requires_long_form_public_corpus": true,
       "max_conservative_long_form_corpus_wer_percent": 10,
       "max_long_form_consecutive_reference_deletion_run": 6,
+      "default_same_pin_no_mel_comparison": {
+        "candidate_backend": "v3-no-mel",
+        "corpus": "required validated composed multi-window public corpus",
+        "candidate_only": true,
+        "report_only": true,
+        "changes_production_selection": false
+      },
       "candidate_models_require_flag": "--include-candidate-models",
       "model_candidate_minimum_hand_audited_non_speech_controls": 5,
       "model_candidate_allowed_non_speech_false_positive_trials": 0,
