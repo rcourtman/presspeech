@@ -3340,6 +3340,66 @@ private struct SetupChecklistSnapshot: Equatable {
     let isComplete: Bool
 }
 
+/// Return a nearby surviving keyboard control when a live setup update removes
+/// the control that currently owns first-responder status. Keep this order in
+/// sync with the arranged rows and footer in `makeSetupChecklistView`.
+private func setupChecklistFocusableControlIdentifiers(
+    for snapshot: SetupChecklistSnapshot
+) -> [String] {
+    var identifiers: [String] = []
+    if snapshot.speechModel.buttonTitle != nil {
+        identifiers.append("setup-speech-model-action")
+    }
+    if snapshot.audioInput.buttonTitle != nil {
+        identifiers.append("setup-audio-input-action")
+    }
+    for permission in snapshot.permissions where permission.buttonTitle != nil {
+        identifiers.append("setup-permission-\(permission.permission.rawValue.lowercased())-action")
+    }
+    if snapshot.hotkey.buttonTitle != nil {
+        identifiers.append("setup-hotkey-action")
+    }
+    identifiers.append("setup-show-in-dock")
+    if snapshot.canTryDictation {
+        identifiers.append("setup-try-dictation")
+    }
+    identifiers.append("setup-close")
+    return identifiers
+}
+
+private func replacementSetupChecklistFocusIdentifier(
+    for focusedIdentifier: NSUserInterfaceItemIdentifier,
+    previousSnapshot: SetupChecklistSnapshot,
+    currentSnapshot: SetupChecklistSnapshot
+) -> NSUserInterfaceItemIdentifier? {
+    let order = ["setup-speech-model-action", "setup-audio-input-action"]
+        + Permission.allCases.map {
+            "setup-permission-\($0.rawValue.lowercased())-action"
+        }
+        + ["setup-hotkey-action", "setup-show-in-dock", "setup-try-dictation", "setup-close"]
+    let focusedValue = focusedIdentifier.rawValue
+    guard let previousIndex = order.firstIndex(of: focusedValue) else { return nil }
+
+    let previousTargets = Set(setupChecklistFocusableControlIdentifiers(for: previousSnapshot))
+    let currentTargets = Set(setupChecklistFocusableControlIdentifiers(for: currentSnapshot))
+    guard previousTargets.contains(focusedValue), !currentTargets.contains(focusedValue) else {
+        return nil
+    }
+
+    if let next = order.dropFirst(previousIndex + 1).first(where: {
+        currentTargets.contains($0)
+    }) {
+        return NSUserInterfaceItemIdentifier(next)
+    }
+    if previousIndex > 0,
+       let previous = order.prefix(previousIndex).reversed().first(where: {
+           currentTargets.contains($0)
+       }) {
+        return NSUserInterfaceItemIdentifier(previous)
+    }
+    return nil
+}
+
 /// Value-only updates can retain the existing AppKit/Accessibility objects.
 /// A button or completion-state transition changes the arranged subviews and
 /// still uses the full rebuild path.
@@ -11315,6 +11375,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
 
+        let previousSnapshot = renderedSetupChecklistSnapshot
         let previousContentView = window.contentView
         let focusedIdentifier = (window.firstResponder as? NSView)?.identifier
         let scrollIdentifier = NSUserInterfaceItemIdentifier("setup-checklist-scroll")
@@ -11343,11 +11404,24 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                                   y: restoredOriginY))
             scroll.reflectScrolledClipView(scroll.contentView)
         }
-        if let focusedIdentifier,
-           let replacement = setupChecklistView(
-               identifiedBy: focusedIdentifier,
-               in: window.contentView) {
-            window.makeFirstResponder(replacement)
+        if let focusedIdentifier {
+            let replacement = setupChecklistView(
+                identifiedBy: focusedIdentifier,
+                in: window.contentView
+            ) ?? previousSnapshot.flatMap { previous in
+                guard let fallbackIdentifier = replacementSetupChecklistFocusIdentifier(
+                    for: focusedIdentifier,
+                    previousSnapshot: previous,
+                    currentSnapshot: snapshot
+                ) else { return nil }
+                return setupChecklistView(
+                    identifiedBy: fallbackIdentifier,
+                    in: window.contentView
+                )
+            }
+            if let replacement {
+                window.makeFirstResponder(replacement)
+            }
         }
         rebuildMenu()
         announceSetupChecklistChangesIfNeeded(in: window)
@@ -16975,6 +17049,98 @@ private enum PresspeechSelfTest {
             setupChecklistSnapshotsHaveSameStructure(setupValueUpdate, setupStructureUpdate),
             equals: false,
             "adding or removing setup controls should retain the full rebuild path"
+        )
+        let setupDownloadChoice = SetupChecklistSnapshot(
+            speechModel: SetupChecklistRowState(
+                detail: "The first download needs approval.",
+                status: "Not downloaded",
+                buttonTitle: "Download Model"
+            ),
+            audioInput: setupBefore.audioInput,
+            permissions: [setupPermission],
+            hotkey: setupBefore.hotkey,
+            showInDock: false,
+            canTryDictation: false,
+            isComplete: false
+        )
+        let setupDownloadStarted = SetupChecklistSnapshot(
+            speechModel: SetupChecklistRowState(
+                detail: "Downloading speech model…",
+                status: "Loading",
+                buttonTitle: nil
+            ),
+            audioInput: setupBefore.audioInput,
+            permissions: [setupPermission],
+            hotkey: setupBefore.hotkey,
+            showInDock: false,
+            canTryDictation: false,
+            isComplete: false
+        )
+        try expect(
+            replacementSetupChecklistFocusIdentifier(
+                for: NSUserInterfaceItemIdentifier("setup-speech-model-action"),
+                previousSnapshot: setupDownloadChoice,
+                currentSnapshot: setupDownloadStarted
+            )?.rawValue,
+            equals: String?("setup-permission-microphone-action"),
+            "starting the first model download should move keyboard focus to the next available action"
+        )
+        let setupPermissionGranted = SetupChecklistSnapshot(
+            speechModel: setupValueUpdate.speechModel,
+            audioInput: setupValueUpdate.audioInput,
+            permissions: [
+                SetupChecklistPermissionState(
+                    permission: .microphone,
+                    detail: "Access granted.",
+                    status: "Granted",
+                    buttonTitle: nil
+                ),
+                SetupChecklistPermissionState(
+                    permission: .accessibility,
+                    detail: "Access is missing.",
+                    status: "Missing",
+                    buttonTitle: "Open Settings"
+                ),
+            ],
+            hotkey: setupValueUpdate.hotkey,
+            showInDock: true,
+            canTryDictation: false,
+            isComplete: false
+        )
+        let setupPermissionsBeforeGrant = SetupChecklistSnapshot(
+            speechModel: setupValueUpdate.speechModel,
+            audioInput: setupValueUpdate.audioInput,
+            permissions: [
+                setupPermission,
+                SetupChecklistPermissionState(
+                    permission: .accessibility,
+                    detail: "Access is missing.",
+                    status: "Missing",
+                    buttonTitle: "Open Settings"
+                ),
+            ],
+            hotkey: setupValueUpdate.hotkey,
+            showInDock: true,
+            canTryDictation: false,
+            isComplete: false
+        )
+        try expect(
+            replacementSetupChecklistFocusIdentifier(
+                for: NSUserInterfaceItemIdentifier("setup-permission-microphone-action"),
+                previousSnapshot: setupPermissionsBeforeGrant,
+                currentSnapshot: setupPermissionGranted
+            )?.rawValue,
+            equals: String?("setup-permission-accessibility-action"),
+            "granting a permission should move keyboard focus to the next remaining permission action"
+        )
+        try expect(
+            replacementSetupChecklistFocusIdentifier(
+                for: NSUserInterfaceItemIdentifier("setup-speech-model-action"),
+                previousSnapshot: setupDownloadChoice,
+                currentSnapshot: setupDownloadChoice
+            )?.rawValue,
+            equals: String?.none,
+            "an unchanged focused setup action should not receive a replacement focus target"
         )
         let setupScratchpadAvailabilityUpdate = SetupChecklistSnapshot(
             speechModel: setupValueUpdate.speechModel,

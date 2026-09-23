@@ -550,6 +550,11 @@ item after the development-wrapper launch check.
   action that remains missing and changes to **Try Again**;
   confirm keyboard focus remains on that replacement action when the row is
   redrawn.
+  With focus on **Download Model**, activate it and confirm focus moves to the
+  next available checklist control when the download action disappears. In a
+  separate permission check, leave focus on a grant action until that grant is
+  confirmed; verify focus moves to the next available permission action (or a
+  nearby remaining control) when the granted row's button disappears.
   Continue through the complete loop in both directions after each redraw;
   confirm no removed action retains focus and no current permission, Dock,
   Try Dictation, or Close/Done control is skipped.
