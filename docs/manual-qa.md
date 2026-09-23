@@ -40,9 +40,10 @@ collaborator where noted:
   only when complete. Copy must contain only the six aggregate counts and
   overall classification; the downloaded plain-text draft must add blank
   prompts for public versions and generic target context without prefilled app
-  identity or version values. Neither action may include phrases or
-  transcripts. Reset the worksheet and confirm selections are not restored
-  after reload.
+  identity or version values. It must also say it was not submitted or
+  monitored and link back to current support guidance. Neither action may
+  include phrases or transcripts. Reset the worksheet and confirm selections
+  are not restored after reload.
 - In a signed-out browser, confirm the repository About description and topics
   expose both the released macOS app and Windows prerelease instead of
   presenting a Mac-only project. Confirm the Pages home page, Get started,

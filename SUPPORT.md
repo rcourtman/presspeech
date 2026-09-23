@@ -23,7 +23,9 @@ For a completed target-app compatibility check, the worksheet's **Download
 report draft** saves its six aggregate counts and overall classification with
 blank prompts for public versions and generic target context. The worksheet
 does not collect or prefill those details; the draft contains no test phrases
-or transcripts. Keep it privately while no public route is available.
+or transcripts. The downloaded file also explains that it is not submitted or
+monitored, points back to this guide for current reporting routes, and says to
+keep it private and retry later if no suitable route is available.
 
 While issue creation is restricted, you can prepare an unsent private draft
 instead of losing the details. Record only what will help reproduce or measure

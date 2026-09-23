@@ -147,6 +147,18 @@ async function main() {
       worksheet.formatReportDraft(summary.value),
       /Target app and public version:\nTarget class:\nGeneric field type:\nHardware \(optional; generic model only\):\nClipboard preservation during steady-focus check:/,
     );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /does not submit a report or notify maintainers; saved drafts are not monitored/,
+    );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /https:\/\/github\.com\/rcourtman\/presspeech\/blob\/main\/SUPPORT\.md/,
+    );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /keep this draft private and retry later/,
+    );
 
     await save.listeners.click();
     assert.equal(blobs.length, 1);
@@ -159,6 +171,8 @@ async function main() {
       blobs[0].parts[0],
       /Target app and public version:\nTarget class:\nGeneric field type:/,
     );
+    assert.match(blobs[0].parts[0], /saved drafts are not monitored/);
+    assert.match(blobs[0].parts[0], /SUPPORT\.md/);
     assert.match(blobs[0].parts[0], /Five steady-focus results[\s\S]*Overall result:/);
     assert.doesNotMatch(blobs[0].parts[0], /amber rabbit|blue otter|dictated text/i);
     assert.equal(doc.downloadLink.download, "presspeech-compatibility-report-draft.txt");

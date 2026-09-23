@@ -81,6 +81,12 @@
       "Fill in public or generic context only. Do not add dictated or recognized text, audio, " +
         "clipboard contents, document/account/window names, private paths, credentials, or device serial numbers.",
       "",
+      "This download does not submit a report or notify maintainers; saved drafts are not monitored. " +
+        "Your browser or operating system controls the downloaded file.",
+      "Before sharing, check the current reporting guidance and search for a matching report:",
+      "https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md",
+      "If no suitable route is available, keep this draft private and retry later. Do not post private data elsewhere to work around a restriction.",
+      "",
       "Test date (optional):",
       "Platform (macOS or Windows):",
       "Presspeech version:",

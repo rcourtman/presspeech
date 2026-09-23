@@ -188,11 +188,14 @@ report block** places only the labelled six counts and overall classification
 on the clipboard. **Download report draft** saves those counts with blank
 prompts for public versions and generic target context; the worksheet does not
 collect or prefill those details. The plain-text draft contains no phrases or
-transcripts, and the user decides what to share. It can preserve a completed
-result and a reminder of useful context while no public reporting route is
-available. Once all eight outcomes are selected, the worksheet reveals the
-existing-report search and a link to check whether GitHub currently accepts a
-new report. Selections are not submitted; if intake is restricted, keep the
+transcripts, and the user decides what to share. It also says the download is
+not submitted or monitored, points to the support guide for current reporting
+routes, and advises keeping the file private if no suitable route is available.
+The browser or operating system controls the downloaded file. It can preserve
+a completed result and a reminder of useful context while no public reporting
+route is available. Once all eight outcomes are selected, the worksheet reveals
+the existing-report search and a link to check whether GitHub currently accepts
+a new report. Selections are not submitted; if intake is restricted, keep the
 draft locally and retry later.
 
 Without the worksheet, tally the same six categories manually:
