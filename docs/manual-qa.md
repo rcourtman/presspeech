@@ -768,6 +768,12 @@ item after the development-wrapper launch check.
   that renamed pane.
 - Confirm each granted permission removes or updates its setup row after the
   app is reopened if macOS requires it.
+- On a managed test Mac where microphone access is restricted by macOS or
+  device policy, confirm Setup Checklist labels the microphone **Restricted**,
+  explains that an administrator may need to change the policy, and offers no
+  Grant/Try Again action. The status menu should show a disabled restriction
+  notice instead of resetting or re-requesting microphone access; other
+  missing permission rows should remain actionable.
 - On a disposable test account, independently reset the Presspeech `PostEvent`
   TCC service while leaving focused-window Accessibility available. Confirm the
   Accessibility row returns to **Missing**, dictation cannot start, and **Copy

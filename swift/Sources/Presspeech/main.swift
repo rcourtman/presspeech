@@ -3448,6 +3448,41 @@ private func permissionSetupDetail(_ permission: Permission,
     }
 }
 
+private struct SetupPermissionPresentation: Equatable {
+    let status: String
+    let buttonTitle: String?
+    let isRestricted: Bool
+}
+
+private func setupPermissionPresentation(permission: Permission,
+                                         isGranted: Bool,
+                                         microphoneAuthorizationStatus: AVAuthorizationStatus,
+                                         grantRequestCount: Int) -> SetupPermissionPresentation {
+    let isRestricted = permission == .microphone
+        && microphoneAuthorizationStatus == .restricted
+    if isGranted {
+        return SetupPermissionPresentation(status: "Granted",
+                                           buttonTitle: nil,
+                                           isRestricted: false)
+    }
+    if isRestricted {
+        return SetupPermissionPresentation(status: "Restricted",
+                                           buttonTitle: nil,
+                                           isRestricted: true)
+    }
+    return SetupPermissionPresentation(status: "Missing",
+                                       buttonTitle: grantRequestCount >= 1 ? "Try Again" : "Grant",
+                                       isRestricted: false)
+}
+
+private func permissionReadinessMenuStatusTitle(missingPermissions: [Permission],
+                                                microphoneAuthorizationStatus: AVAuthorizationStatus) -> String {
+    if missingPermissions.contains(.microphone), microphoneAuthorizationStatus == .restricted {
+        return "Microphone access is restricted"
+    }
+    return "Grant permissions to finish setup"
+}
+
 @MainActor
 final class Permissions {
     static func isGranted(_ p: Permission) -> Bool {
@@ -10729,8 +10764,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if startupTask != nil || isRestartingAudioInput || isSwitchingSpeechModel {
             return startupStatusTitle
         }
-        if !missingPermissions().isEmpty {
-            return "Grant permissions to finish setup"
+        let missing = missingPermissions()
+        if !missing.isEmpty {
+            return permissionReadinessMenuStatusTitle(
+                missingPermissions: missing,
+                microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio)
+            )
         }
         if isCoreRuntimeReady {
             return "Starting hotkey listener…"
@@ -11010,11 +11049,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let permissions = Permission.allCases.map { permission in
             let granted = Permissions.isGranted(permission)
             let clicks = permClickCount[permission] ?? 0
+            let presentation = setupPermissionPresentation(
+                permission: permission,
+                isGranted: granted,
+                microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio),
+                grantRequestCount: clicks
+            )
             return SetupChecklistPermissionState(
                 permission: permission,
                 detail: setupDetail(for: permission),
-                status: granted ? "Granted" : "Missing",
-                buttonTitle: granted ? nil : (clicks >= 1 ? "Try Again" : "Grant"))
+                status: presentation.status,
+                buttonTitle: presentation.buttonTitle)
         }
         return SetupChecklistSnapshot(
             speechModel: speechModelSetupRowState(
@@ -11183,6 +11228,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func setupChecklistTipText(snapshot: SetupChecklistSnapshot) -> String {
+        if snapshot.permissions.contains(where: { $0.permission == .microphone && $0.status == "Restricted" }) {
+            return "Microphone access is restricted by macOS or device policy. A Grant or Try Again action cannot change it; contact your administrator if you need access."
+        }
         if snapshot.hotkey.status == "Ready to test" {
             return "Test the hotkey before choosing Done. If you prefer menu controls, choose Try Dictation and use Start Dictation in the menu. If the hotkey controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
         }
@@ -11435,7 +11483,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         switch status {
         case "Granted", "Ready", "Detected", "Set":
             return .systemGreen
-        case "Missing", "Needs retry", "Required", "Check input", "Using default":
+        case "Missing", "Restricted", "Needs retry", "Required", "Check input", "Using default":
             return .systemOrange
         default:
             return .secondaryLabelColor
@@ -11608,6 +11656,21 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private func buildPermissionItem(_ p: Permission) -> NSMenuItem {
         let clicks = permClickCount[p] ?? 0
         let permissionName = p.displayName()
+        let presentation = setupPermissionPresentation(
+            permission: p,
+            isGranted: false,
+            microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio),
+            grantRequestCount: clicks
+        )
+        if presentation.isRestricted {
+            let item = NSMenuItem(title: "Microphone access is restricted",
+                                  action: nil,
+                                  keyEquivalent: "")
+            item.isEnabled = false
+            item.toolTip = microphoneSetupDetail(authorizationStatus: .restricted)
+            return item
+        }
+
         let title: String
         if clicks >= 1 {
             // First click already happened; permission still denied,
@@ -11639,6 +11702,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
 
+        if p == .microphone,
+           AVCaptureDevice.authorizationStatus(for: .audio) == .restricted {
+            log("permission request skipped: Microphone is restricted")
+            updateSetupChecklist()
+            rebuildMenu()
+            return
+        }
+
         let clicks = (permClickCount[p] ?? 0) + 1
         permClickCount[p] = clicks
         log("perm click #\(clicks): \(p.rawValue)")
@@ -11654,6 +11725,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             let bundleID = Bundle.main.bundleIdentifier ?? "com.local.presspeech"
             let retry: @MainActor @Sendable () -> Void = { [weak self] in
                 guard let self, !self.isTerminating else { return }
+                if p == .microphone,
+                   AVCaptureDevice.authorizationStatus(for: .audio) == .restricted {
+                    log("permission retry skipped: Microphone became restricted")
+                    self.updateSetupChecklist()
+                    self.rebuildMenu()
+                    return
+                }
                 Permissions.request(p)
                 self.startPermissionReadinessMonitor(reason: "permission grant")
                 self.updateSetupChecklist()
@@ -16067,6 +16145,52 @@ private enum PresspeechSelfTest {
             microphoneSetupDetail(authorizationStatus: .restricted),
             equals: "Microphone access is restricted by macOS or device management. Contact your administrator if you need access.",
             "restricted microphone access should not imply that a user can grant it"
+        )
+        try expect(
+            setupPermissionPresentation(permission: .microphone,
+                                        isGranted: false,
+                                        microphoneAuthorizationStatus: .restricted,
+                                        grantRequestCount: 1),
+            equals: SetupPermissionPresentation(status: "Restricted",
+                                                buttonTitle: nil,
+                                                isRestricted: true),
+            "restricted microphone access should not offer Grant or TCC-reset retry actions"
+        )
+        try expect(
+            setupPermissionPresentation(permission: .microphone,
+                                        isGranted: false,
+                                        microphoneAuthorizationStatus: .denied,
+                                        grantRequestCount: 1),
+            equals: SetupPermissionPresentation(status: "Missing",
+                                                buttonTitle: "Try Again",
+                                                isRestricted: false),
+            "a user-denied microphone permission should retain its Settings recovery action"
+        )
+        try expect(
+            setupPermissionPresentation(permission: .accessibility,
+                                        isGranted: false,
+                                        microphoneAuthorizationStatus: .restricted,
+                                        grantRequestCount: 1),
+            equals: SetupPermissionPresentation(status: "Missing",
+                                                buttonTitle: "Try Again",
+                                                isRestricted: false),
+            "a restricted microphone must not suppress recovery for a different permission"
+        )
+        try expect(
+            permissionReadinessMenuStatusTitle(
+                missingPermissions: [.microphone],
+                microphoneAuthorizationStatus: .restricted
+            ),
+            equals: "Microphone access is restricted",
+            "the menu status should not claim a restricted microphone can be granted"
+        )
+        try expect(
+            permissionReadinessMenuStatusTitle(
+                missingPermissions: [.microphone, .accessibility],
+                microphoneAuthorizationStatus: .denied
+            ),
+            equals: "Grant permissions to finish setup",
+            "ordinary missing permissions should retain the grant guidance"
         )
         for permission in Permission.allCases {
             let detail = permissionSetupDetail(

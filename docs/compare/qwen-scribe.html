@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presspeech vs Qwen Scribe - Local Mac Dictation</title>
+    <meta name="description" content="Compare Presspeech and Qwen Scribe for local Mac dictation: model choices, file transcription, history, paste behavior, release maturity, and privacy.">
+    <link rel="canonical" href="https://rcourtman.github.io/presspeech/compare/qwen-scribe.html">
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#0d7f5f">
+    <meta property="og:title" content="Presspeech vs Qwen Scribe - Local Mac Dictation">
+    <meta property="og:description" content="A sourced comparison of two local Apple Silicon dictation apps with different speech models, workflows, history, and release maturity.">
+    <meta property="og:url" content="https://rcourtman.github.io/presspeech/compare/qwen-scribe.html">
+    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="640">
+    <meta property="og:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
+    <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="../site-navigation.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>
+        <div class="nav-links" id="primary-navigation-links">
+          <a href="../getting-started.html">Get started</a>
+          <a href="../install.html">macOS</a>
+          <a href="../windows.html">Windows</a>
+          <a href="../privacy.html">Privacy</a>
+          <a href="../troubleshooting.html">Help</a>
+          <a href="./" aria-current="page">Compare</a>
+          <a href="https://github.com/rcourtman/presspeech">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="wrap page-title">
+        <span class="section-eyebrow">Compare</span>
+        <h1>Presspeech vs Qwen Scribe</h1>
+        <p>Both are free, open-source Apple Silicon apps that run speech recognition locally. Presspeech is a released, focused dictation app with a fixed Parakeet path and explicit paste-destination recovery. Qwen Scribe is a beta voice workspace that combines push-to-talk with local audio/video transcription, Qwen model choices, and searchable transcript history.</p>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <div class="table-scroll">
+            <table>
+              <caption>Presspeech and Qwen Scribe compared</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Presspeech</th>
+                  <th scope="col">Qwen Scribe</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Dictation and delivery</th>
+                  <td>Hold-to-talk or toggle, then normally paste only after confirming the same window is still focused. If it cannot verify that destination, Presspeech keeps the complete transcript on the clipboard for manual paste.</td>
+                  <td>Hold a configurable push-to-talk key and release to transcribe locally and paste at the cursor; a press-to-start, press-to-stop mode is also available. Its README does not describe a same-window verification contract comparable to Presspeech's.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Speech model</th>
+                  <td>One fixed multilingual Parakeet TDT v3 path through FluidAudio and CoreML on the Apple Neural Engine.</td>
+                  <td>Qwen3-ASR through MLX on the Mac's Metal GPU, with 1.7B and 0.6B model variants. The project documents fourteen supported languages, automatic or forced language selection, and vocabulary hints.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Beyond live dictation</th>
+                  <td>Deterministic dictionary corrections, exact voice shortcuts, filler removal, and opt-in spoken formatting. It does not transcribe audio or video files.</td>
+                  <td>Drag-and-drop audio/video transcription, word timestamps, SRT export, vocabulary hints, and a local web interface alongside desktop dictation. Non-WAV media requires ffmpeg.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Transcript history</th>
+                  <td>Recent transcript history is in memory only and clears on quit; Presspeech has no persistent transcript archive.</td>
+                  <td>Can save dictations to a local, searchable history, with controls to reopen, export, or delete transcripts; history can be disabled.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Privacy and network</th>
+                  <td>Speech recognition is local, with no account, cloud transcription, or Presspeech-authored analytics. The documented network surface includes model downloads, optional update checks, and user-triggered links.</td>
+                  <td>The project describes local Qwen3-ASR processing with no account, API key, or Qwen Scribe cloud service. Model weights and runtime dependencies are downloaded for first use; its API is documented as localhost-only with host and browser-origin checks.</td>
+                </tr>
+                <tr>
+                  <th scope="row">System and setup</th>
+                  <td>Apple Silicon and macOS 14+. The signed, notarised app is about 8.4 MB; the model cache is about 500&ndash;600 MB.</td>
+                  <td>Apple Silicon and macOS 14+. The project lists native Python 3.12+ for its run/build setup; its packaged app installs Python dependencies and model weights on first use. ffmpeg is needed for non-WAV media.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Release maturity</th>
+                  <td>macOS 0.3.8 is the published, signed, and notarised release.</td>
+                  <td>The inspected release is v0.3.0-beta.1, published 4 September 2026 as an ad-hoc-signed, non-notarised build. macOS may require approving it in System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Price and license</th>
+                  <td>Free and MIT licensed.</td>
+                  <td>Free and Apache-2.0 licensed.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Performance evidence</th>
+                  <td>Publishes model-only p50 latency of 92&ndash;152 ms across documented M4 synthetic clips; clipboard and paste are not timed.</td>
+                  <td>No directly comparable Qwen latency or accuracy benchmark was identified; this does not establish an accuracy or end-to-end speed winner.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p>Choose Qwen Scribe if you want local file/video transcription, Qwen model variants, vocabulary hints, or a searchable transcript archive in one beta app. Choose Presspeech if you want the currently released and notarised Mac build, a small fixed dictation pipeline, no persistent transcript archive, or a documented fallback when the original paste destination cannot be verified. Both projects describe local recognition; their documented workflow, retention, and release maturity differ.</p>
+          </div>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, and <a href="../benchmarks.html">Presspeech benchmarks</a>; Qwen Scribe's <a href="https://github.com/VladUZH/qwen-scribe">source and README</a>, <a href="https://github.com/VladUZH/qwen-scribe/releases/tag/v0.3.0-beta.1">v0.3.0-beta.1 release and provenance</a>, and <a href="https://github.com/VladUZH/qwen-scribe/blob/main/PRIVACY.md">privacy notes</a> (checked 23 September 2026). No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <p>Presspeech is free and open source. <a href="../privacy.html">Privacy</a> &middot; <a href="../">Home</a> &middot; <a href="https://github.com/rcourtman/presspeech">Source</a></p>
+      </div>
+    </footer>
+  </body>
+</html>
