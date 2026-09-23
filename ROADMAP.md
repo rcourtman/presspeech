@@ -154,7 +154,11 @@ product milestone is not feature parity with macOS; it is a trustworthy,
 repeatable install-to-first-dictation path on supported Windows hardware.
 
 - Pursue code signing rather than teaching users to bypass managed security
-  policy.
+  policy. Microsoft's [current Smart App Control guidance](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions)
+  says an app without a valid signature can be blocked when its safety cannot be
+  confidently assessed, and there is no per-app exception. Signing is therefore
+  an install-compatibility gate for some supported PCs, not merely a cosmetic
+  trust signal.
 - Keep installation and update integrity verifiable, including exact release
   assets, bounded downloads, checksums, and a recoverable failed update.
 - Exercise CPU and supported NVIDIA paths on clean Windows installations,

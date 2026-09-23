@@ -139,13 +139,16 @@ Requirements:
 - Apple Silicon Mac
 - macOS 14 (Sonoma) or later
 
-The first local speech-model download is about 500–600 MB. Depending on the
-build, it starts on first launch or Setup asks you to choose **Download Model**;
-close Setup to defer when that choice appears. Existing installs and cached
-models continue loading automatically. Use **Setup Checklist…** to finish the
-model, permission, and hotkey checks. The checklist stays incomplete until the configured hotkey
-actually reaches Presspeech; if it does not respond or controls another Mac
-feature, choose a different key under Settings. Presspeech asks for Microphone,
+The first local speech-model download is about 500–600 MB. CoreML also needs
+free space to prepare it. Depending on the build, the download starts on first
+launch or Setup asks you to choose **Download Model**; when that choice appears,
+the checklist shows the current estimated space needed before the download
+starts, and you can close Setup to defer. Existing installs and cached models
+continue loading automatically. Use **Setup Checklist…** to finish the
+model, permission, and hotkey checks. The checklist stays incomplete until the
+configured hotkey actually reaches Presspeech; if it does not respond or
+controls another Mac feature, choose a different key under Settings.
+Presspeech asks for Microphone,
 Accessibility (shown as **Device Control and Data Access** on macOS 27 and
 later), and Input Monitoring because it records while the hotkey is active,
 observes the global hotkey, and pastes text at the cursor.

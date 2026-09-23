@@ -441,9 +441,12 @@ item after the development-wrapper launch check.
   audio input, and hotkey rows render.
 - On a clean user profile without a speech-model cache, launch Presspeech and
   confirm Setup Checklist appears before the first model request. The model row
-  must say **Not downloaded**, explain the ~500–600 MB size and local-audio
-  boundary, and expose **Download Model**. With VoiceOver and keyboard-only
-  navigation, confirm the action has a useful name and is reachable. Close the
+  must say **Not downloaded**, explain the ~500–600 MB transfer and the
+  free-space estimate for download plus CoreML preparation, state the
+  local-audio/transcript boundary, and expose **Download Model**. Confirm that
+  this estimate is visible before activating the action, not only after a
+  failed disk-space check. With VoiceOver and keyboard-only navigation, confirm
+  the action has a useful name and is reachable. Close the
   checklist without activating it; confirm no model download starts and the app
   remains not ready. Reopen Presspeech and confirm the choice is still offered
   without starting a download. Activate **Download Model** and confirm the

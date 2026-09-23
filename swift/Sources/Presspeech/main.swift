@@ -3334,6 +3334,13 @@ private func setupChecklistSnapshotsHaveSameStructure(_ lhs: SetupChecklistSnaps
     }
 }
 
+private func firstSpeechModelDownloadSetupDetail(profile: SpeechModelProfile) -> String {
+    let requiredFreeSpace = formattedByteCount(
+        UInt64(speechModelDownloadRequiredBytes(for: profile))
+    )
+    return "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. Allow about \(requiredFreeSpace) free to download and prepare it with CoreML. Dictation audio and transcripts stay on your Mac. Choose Download Model to begin, or close setup to defer."
+}
+
 private func speechModelSetupRowState(profile: SpeechModelProfile,
                                       isSpeechModelReady: Bool,
                                       isStartupInProgress: Bool,
@@ -3347,7 +3354,7 @@ private func speechModelSetupRowState(profile: SpeechModelProfile,
     }
     if requiresInitialDownloadChoice {
         return SetupChecklistRowState(
-            detail: "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. Dictation audio and transcripts stay on your Mac. Choose Download Model to begin, or close setup to defer.",
+            detail: firstSpeechModelDownloadSetupDetail(profile: profile),
             status: "Not downloaded",
             buttonTitle: "Download Model")
     }
@@ -16652,11 +16659,25 @@ private enum PresspeechSelfTest {
                                      failure: nil,
                                      requiresInitialDownloadChoice: true),
             equals: SetupChecklistRowState(
-                detail: "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. Dictation audio and transcripts stay on your Mac. Choose Download Model to begin, or close setup to defer.",
+                detail: firstSpeechModelDownloadSetupDetail(profile: .multilingualV3),
                 status: "Not downloaded",
                 buttonTitle: "Download Model"),
             "fresh setup should disclose the model size and wait for the user's action"
         )
+        let firstDownloadDetail = firstSpeechModelDownloadSetupDetail(profile: .multilingualV3)
+        try expect(firstDownloadDetail.contains("500–600 MB from Hugging Face"),
+                   equals: true,
+                   "first-download consent should identify the approximate transfer size and source")
+        try expect(firstDownloadDetail.contains(formattedByteCount(UInt64(
+                       speechModelDownloadRequiredBytes(for: .multilingualV3)))),
+                   equals: true,
+                   "first-download consent should disclose the free-space preflight threshold")
+        try expect(firstDownloadDetail.contains("prepare it with CoreML"),
+                   equals: true,
+                   "first-download consent should explain why free space exceeds the transfer size")
+        try expect(firstDownloadDetail.contains("Dictation audio and transcripts stay on your Mac"),
+                   equals: true,
+                   "first-download consent should preserve the local-audio and transcript boundary")
         try expect(
             speechModelSetupRowState(profile: .multilingualV3,
                                      isSpeechModelReady: false,
