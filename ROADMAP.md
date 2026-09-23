@@ -97,6 +97,20 @@ independent quality comparison. The implication is not to chase feature lists:
 Presspeech should earn distinction through a small, trustworthy dictation loop
 and evidence that text reaches the intended target or is recovered safely.
 
+Recent first-party positioning reinforces that distinction. The 4 September
+[Superscribe Lite launch](https://superscribe.io/blog/2026/09/04/superscribe-lite-free-offline-dictation/)
+frames local/no-account dictation as a separate product, explicitly notes the
+initial model download, and separates optional provider-based cleanup; [dybur](https://dybur.com/)
+markets local Mac/Windows dictation as requiring little setup but still lists
+about 700 MB for its model. These are promotional claims, not comparative
+tests or user-demand data. The current [Presspeech release list](https://github.com/rcourtman/presspeech/releases)
+still names macOS 0.3.8 and Windows 0.1.12 as published, so the inherited-token,
+routing, and telemetry controls described for 0.3.9/0.1.13 must not be presented
+as shipped. Keep the exact-version wait guidance beside download choices and
+refresh it only when the corrected model-download paths are actually published;
+the existing warnings already do this, so this is a release-readiness gate,
+not a reason to add more feature or reassurance copy.
+
 Public user evidence is thin and self-selected. A recent
 [FOSS discussion of Handy](https://www.reddit.com/r/foss/comments/1vxrgg5/a_free_open_source_speechtotext_tool_that_has/)
 includes anecdotal replies about reducing typing burden and one user's initial

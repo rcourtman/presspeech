@@ -302,7 +302,9 @@ each platform rather than identical.
   the model's 25 supported European languages to bias decoding toward that
   script and reduce wrong-script bleed-through; this is a hint, not a guarantee
   of language identification or translation. Bosnian, Belarusian, and Serbian
-  script hints are also available as script-filter aliases
+  script hints are also available as script-filter aliases. Supported-language
+  coverage does not guarantee uniform recognition accuracy; see the
+  [multilingual benchmark scope and caveat](docs/benchmarks.html#language-coverage)
 - **Settings → Text → After Pasting** — append space, append newline, or no
   suffix
 - **Settings → Text → Dictionary & Shortcuts** — correct recurring
