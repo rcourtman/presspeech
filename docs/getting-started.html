@@ -47,8 +47,12 @@
         <h1>From download to your first words</h1>
         <p>Choose your platform, finish the local setup checks, and try one private dictation before using Presspeech in another app. No account is required and dictation is transcribed on-device; speech-model downloads use the network. Check the current build's model-download warning before launching a build that still needs its model; the <a href="privacy.html#network-calls">version-specific privacy inventory</a> has the technical details.</p>
         <div class="note warn" id="model-download-preflight">
-          <p><strong>Before launching:</strong> macOS 0.3.8 model requests may carry a Hugging Face token inherited by Presspeech. Windows 0.1.12 may send telemetry or include a saved token. A custom route can send the request and token elsewhere.</p>
-          <p>The public models need no account token. A missing-model request starts when Presspeech launches, not when you download the installer. If you prefer to avoid this possible usage telemetry from Windows 0.1.12, are concerned that a token may be available or a Windows route may be set, or are unsure, wait for the fixed release; you do not need to inspect or share token values. If you install Windows 0.1.12 but choose to wait, leave <strong>Launch Presspeech</strong> unchecked. See the <a href="#macos-model-download-privacy">macOS</a> or <a href="#windows-model-download-privacy">Windows</a> details below.</p>
+          <p><strong>Before first launch:</strong> if a speech model is missing, Presspeech starts a model-download request when you open it—not when you download the installer. Check the current published build for your platform:</p>
+          <ul>
+            <li><strong>macOS 0.3.8:</strong> the request may include a Hugging Face token inherited by Presspeech. If a token might be available—or you are unsure—keep the app unopened and wait until macOS 0.3.9 is published. See the <a href="#macos-model-download-privacy">full macOS guidance</a>.</li>
+            <li><strong>Windows 0.1.12:</strong> the request may send Hugging Face usage telemetry and include a saved token. Custom routing can send the request and any token it carries to another destination. If you prefer to avoid possible telemetry, or if a token or custom route may be configured—or you are unsure—wait until Windows 0.1.13 is published. If you installed 0.1.12 but choose to wait, leave <strong>Launch Presspeech</strong> unchecked. See the <a href="#windows-model-download-privacy">full Windows guidance</a>.</li>
+          </ul>
+          <p>The public models need no account token, and dictation audio and transcripts are not sent in model downloads. Do not inspect or share token values. For technical details, see the <a href="privacy.html#network-calls">version-specific privacy inventory</a>.</p>
         </div>
         <div class="actions">
           <a class="button" href="install.html">Install on macOS</a>

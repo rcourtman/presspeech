@@ -2685,18 +2685,31 @@ def check_getting_started_preflight_order(
         else contents[preflight_start:preflight_end]
     )
     required = (
-        "Before launching",
-        "macOS 0.3.8",
-        "Windows 0.1.12",
-        "may carry a Hugging Face token inherited by Presspeech",
-        "may send telemetry or include a saved token",
-        "avoid this possible usage telemetry from Windows 0.1.12",
-        "custom route can send the request and token elsewhere",
-        "public models need no account token",
+        "Before first launch",
+        "if a speech model is missing",
+        "model-download request when you open it",
         "not when you download the installer",
-        "wait for the fixed release",
-        "do not need to inspect or share token values",
-        "leave <strong>Launch Presspeech</strong> unchecked",
+        "macOS 0.3.8",
+        "request may include a Hugging Face token inherited by Presspeech",
+        "a token might be available",
+        "you are unsure",
+        "keep the app unopened",
+        "wait until macOS 0.3.9 is published",
+        "Windows 0.1.12",
+        "send Hugging Face usage telemetry",
+        "include a saved token",
+        "Custom routing",
+        "send the request",
+        "any token it carries",
+        "to another destination",
+        "prefer to avoid possible telemetry",
+        "token or custom route may be configured",
+        "wait until Windows 0.1.13 is published",
+        "installed 0.1.12 but choose to wait",
+        "<strong>Launch Presspeech</strong> unchecked",
+        "public models need no account token",
+        "dictation audio and transcripts are not sent in model downloads",
+        "Do not inspect or share token values",
         'href="#macos-model-download-privacy"',
         'href="#windows-model-download-privacy"',
     )
@@ -4453,16 +4466,20 @@ def run_self_test() -> None:
 
         getting_started = Path(tmp) / "getting-started.html"
         safe_getting_started = (
-            '<div id="model-download-preflight"><p>Before launching: macOS 0.3.8 model '
-            'requests may carry a Hugging Face token inherited by Presspeech. Windows 0.1.12 '
-            'may send telemetry or include a saved token. A custom route can send the request '
-            'and token elsewhere.</p><p>The public models need no account token. '
-            'A missing-model request starts when Presspeech launches, not when you download the installer. '
-            'If you prefer to avoid this possible usage telemetry from Windows 0.1.12, or are unsure, '
-            'wait for the fixed release; you do not need to inspect or share token values. '
-            'leave <strong>Launch Presspeech</strong> unchecked. '
-            '<a href="#macos-model-download-privacy">macOS</a> '
-            '<a href="#windows-model-download-privacy">Windows</a></p></div>'
+            '<div id="model-download-preflight">'
+            '<p>Before first launch: if a speech model is missing, Presspeech starts a '
+            'model-download request when you open it—not when you download the installer.</p>'
+            '<ul><li>macOS 0.3.8: the request may include a Hugging Face token inherited by Presspeech. '
+            'If a token might be available—or you are unsure—keep the app unopened and wait until macOS '
+            '0.3.9 is published. <a href="#macos-model-download-privacy">macOS</a></li>'
+            '<li>Windows 0.1.12: the request may send Hugging Face usage telemetry and include a saved token. '
+            'Custom routing can send the request and any token it carries to another destination. '
+            'If you prefer to avoid possible telemetry, or if a token or custom route may be configured—or '
+            'you are unsure—wait until Windows 0.1.13 is published. If you installed 0.1.12 but choose to '
+            'wait, leave <strong>Launch Presspeech</strong> unchecked. '
+            '<a href="#windows-model-download-privacy">Windows</a></li></ul>'
+            '<p>The public models need no account token, and dictation audio and transcripts are not sent '
+            'in model downloads. Do not inspect or share token values.</p></div>'
             '<div class="actions"><a href="install.html">Install</a>'
             '<a href="#choose-platform">Already installed?</a></div>'
             '<section id="quick-path"><a href="#choose-platform">Check warning</a></section>'
@@ -4473,6 +4490,12 @@ def run_self_test() -> None:
         getting_started.write_text(safe_getting_started, encoding="utf-8")
         if check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: safe getting-started preflight was rejected")
+        getting_started.write_text(
+            safe_getting_started.replace("Do not inspect or share token values.", ""),
+            encoding="utf-8",
+        )
+        if not check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: missing token-handling guidance was accepted")
         getting_started.write_text(
             safe_getting_started.replace(
                 '<a href="#choose-platform">Already installed?</a>',
