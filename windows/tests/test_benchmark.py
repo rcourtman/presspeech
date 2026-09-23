@@ -18,6 +18,10 @@ class MetricTests(unittest.TestCase):
                 "trial_accuracy": {"trials": 2, "all_word_errors": [1, 0]},
                 "inference_seconds": {"all": [0.2, 0.4]},
                 "silence": None,
+                "first_word": {"retained": False, "failed_trials": 1,
+                               "trials": 2},
+                "final_word": {"retained": True, "failed_trials": 0,
+                               "trials": 2},
             },
             {
                 "task_group": "spontaneous-dictation",
@@ -26,6 +30,8 @@ class MetricTests(unittest.TestCase):
                 "silence": {"evaluated": True,
                             "trials": 2,
                             "false_positive_trials": 1},
+                "first_word": None,
+                "final_word": None,
             },
             {
                 "task_group": "spontaneous-dictation",
@@ -33,11 +39,16 @@ class MetricTests(unittest.TestCase):
                 "trial_accuracy": {"trials": 2, "all_word_errors": [2, 1]},
                 "inference_seconds": {"all": [0.8]},
                 "silence": None,
+                "first_word": {"retained": True, "failed_trials": 0,
+                               "trials": 2},
+                "final_word": {"retained": False, "failed_trials": 1,
+                               "trials": 2},
             },
             {"task_group": "read-speech", "accuracy": None,
-             "inference_seconds": {"all": [0.1]}, "silence": None},
+             "inference_seconds": {"all": [0.1]}, "silence": None,
+             "first_word": None, "final_word": None},
             {"accuracy": None, "inference_seconds": {"all": [9.0]},
-             "silence": None},
+             "silence": None, "first_word": None, "final_word": None},
         ]
 
         result = benchmark.task_group_metrics(samples)
@@ -54,6 +65,11 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(spontaneous["inference_seconds"]["measured_trials"], 4)
         self.assertEqual(spontaneous["reviewed_silence_trial_count"], 2)
         self.assertEqual(spontaneous["silence_false_positive_trial_count"], 1)
+        self.assertEqual(spontaneous["reviewed_first_word_trial_count"], 4)
+        self.assertEqual(spontaneous["first_word_failure_count"], 1)
+        self.assertEqual(spontaneous["first_word_failure_trial_count"], 1)
+        self.assertEqual(spontaneous["reviewed_final_word_trial_count"], 4)
+        self.assertEqual(spontaneous["final_word_failure_trial_count"], 1)
 
     def test_identical_text_has_zero_error(self):
         metrics = benchmark.accuracy_metrics("It works well.", "It works well.")
@@ -275,6 +291,31 @@ class MetricTests(unittest.TestCase):
         )
         self.assertIsNone(benchmark.final_word_metrics("", [""]))
 
+    def test_first_word_metrics_normalise_case_and_punctuation(self):
+        self.assertEqual(
+            benchmark.first_word_metrics(
+                "Hello, keep the ending.", ["hello! keep going", "HELLO keep"]),
+            {
+                "retained": True,
+                "retained_trials": 2,
+                "failed_trials": 0,
+                "trials": 2,
+            },
+        )
+
+    def test_first_word_metrics_expose_intermittent_loss(self):
+        self.assertEqual(
+            benchmark.first_word_metrics(
+                "Open settings now", ["Open settings now", "Settings now"]),
+            {
+                "retained": False,
+                "retained_trials": 1,
+                "failed_trials": 1,
+                "trials": 2,
+            },
+        )
+        self.assertIsNone(benchmark.first_word_metrics("...", [""]))
+
     def test_percentile_uses_observed_upper_value(self):
         self.assertEqual(benchmark._percentile([0.1, 0.2, 0.3, 0.4], 0.95), 0.4)
 
@@ -453,7 +494,7 @@ class MetricTests(unittest.TestCase):
             "Parakeet windows: 2-2 per trial; longest input 59.750s",
             output.getvalue(),
         )
-        self.assertEqual(result["benchmark_version"], 4)
+        self.assertEqual(result["benchmark_version"], 5)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,
@@ -508,6 +549,16 @@ class MetricTests(unittest.TestCase):
             result["samples"][0]["trial_accuracy"]["all_word_errors"],
             [0, 1],
         )
+        self.assertEqual(result["samples"][0]["first_word"], {
+            "retained": False,
+            "retained_trials": 1,
+            "failed_trials": 1,
+            "trials": 2,
+        })
+        self.assertEqual(result["reviewed_first_word_sample_count"], 2)
+        self.assertEqual(result["first_word_failure_count"], 1)
+        self.assertEqual(result["reviewed_first_word_trial_count"], 4)
+        self.assertEqual(result["first_word_failure_trial_count"], 1)
 
         output = io.StringIO()
         with redirect_stdout(output):
@@ -517,6 +568,11 @@ class MetricTests(unittest.TestCase):
         self.assertIn(
             "16.67% consensus | 33.33% all trials | "
             "16.67/50.00% best/worst trial envelope",
+            output.getvalue(),
+        )
+        self.assertIn(
+            "Reviewed edge words: first not retained 1/4 trials; "
+            "final not retained 0/4 trials",
             output.getvalue(),
         )
 
@@ -647,6 +703,16 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["final_word_failure_count"], 1)
         self.assertEqual(result["reviewed_final_word_trial_count"], 2)
         self.assertEqual(result["final_word_failure_trial_count"], 1)
+        self.assertEqual(result["reviewed_first_word_sample_count"], 1)
+        self.assertEqual(result["first_word_failure_count"], 1)
+        self.assertEqual(result["reviewed_first_word_trial_count"], 2)
+        self.assertEqual(result["first_word_failure_trial_count"], 1)
+        self.assertEqual(result["samples"][0]["first_word"], {
+            "retained": False,
+            "retained_trials": 1,
+            "failed_trials": 1,
+            "trials": 2,
+        })
         self.assertEqual(result["samples"][0]["final_word"], {
             "retained": False,
             "retained_trials": 1,

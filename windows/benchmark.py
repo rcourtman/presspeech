@@ -125,6 +125,25 @@ def final_word_metrics(reference, hypotheses):
     }
 
 
+def first_word_metrics(reference, hypotheses):
+    """Score first-word retention across every trial of a reviewed clip."""
+    reference_words = _normalise_words(reference)
+    if not reference_words:
+        return None
+    expected = reference_words[0]
+    retained_trials = sum(
+        bool(words := _normalise_words(hypothesis)) and words[0] == expected
+        for hypothesis in hypotheses
+    )
+    trials = len(hypotheses)
+    return {
+        "retained": retained_trials == trials,
+        "retained_trials": retained_trials,
+        "failed_trials": trials - retained_trials,
+        "trials": trials,
+    }
+
+
 def silence_metrics(expected_silence, reference_reviewed, hypotheses):
     """Score a human-reviewed non-speech fixture without inventing a WER."""
     if not expected_silence:
@@ -273,6 +292,10 @@ def task_group_metrics(samples):
         silences = [sample["silence"] for sample in members
                     if isinstance(sample.get("silence"), dict)
                     and sample["silence"].get("evaluated")]
+        first_words = [sample["first_word"] for sample in members
+                       if isinstance(sample.get("first_word"), dict)]
+        final_words = [sample["final_word"] for sample in members
+                       if isinstance(sample.get("final_word"), dict)]
         result[group] = {
             "sample_count": len(members),
             "reviewed_sample_count": len(reviewed),
@@ -296,6 +319,20 @@ def task_group_metrics(samples):
                 sample["trials"] for sample in silences),
             "silence_false_positive_trial_count": sum(
                 sample["false_positive_trials"] for sample in silences),
+            "reviewed_first_word_sample_count": len(first_words),
+            "reviewed_first_word_trial_count": sum(
+                sample["trials"] for sample in first_words),
+            "first_word_failure_count": sum(
+                not sample["retained"] for sample in first_words),
+            "first_word_failure_trial_count": sum(
+                sample["failed_trials"] for sample in first_words),
+            "reviewed_final_word_sample_count": len(final_words),
+            "reviewed_final_word_trial_count": sum(
+                sample["trials"] for sample in final_words),
+            "final_word_failure_count": sum(
+                not sample["retained"] for sample in final_words),
+            "final_word_failure_trial_count": sum(
+                sample["failed_trials"] for sample in final_words),
         }
     return result
 
@@ -478,10 +515,12 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                 result["reference"] = reference
                 result["accuracy"] = accuracy_metrics(reference, consensus)
                 result["trial_accuracy"] = trial_accuracy
+                result["first_word"] = first_word_metrics(reference, transcripts)
                 result["final_word"] = final_word_metrics(reference, transcripts)
             else:
                 result["accuracy"] = None
                 result["trial_accuracy"] = None
+                result["first_word"] = None
                 result["final_word"] = None
                 result["accuracy_note"] = (
                     "Reviewed reference contains no scoreable words."
@@ -489,6 +528,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         else:
             result["accuracy"] = None
             result["trial_accuracy"] = None
+            result["first_word"] = None
             result["final_word"] = None
             result["accuracy_note"] = "Reference transcript requires human review."
         sample_results.append(result)
@@ -506,6 +546,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     ]
     reviewed_final_words = [
         item for item in reviewed if item["final_word"] is not None
+    ]
+    reviewed_first_words = [
+        item for item in reviewed if item["first_word"] is not None
     ]
     total_trial_words = sum(
         item["accuracy"]["reference_words"] * item["trial_accuracy"]["trials"]
@@ -530,7 +573,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 4,
+        "benchmark_version": 5,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
         "model_snapshot": snapshot,
@@ -590,6 +633,15 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         "final_word_failure_trial_count": sum(
             item["final_word"]["failed_trials"]
             for item in reviewed_final_words),
+        "reviewed_first_word_sample_count": len(reviewed_first_words),
+        "first_word_failure_count": sum(
+            not item["first_word"]["retained"]
+            for item in reviewed_first_words),
+        "reviewed_first_word_trial_count": sum(
+            item["first_word"]["trials"] for item in reviewed_first_words),
+        "first_word_failure_trial_count": sum(
+            item["first_word"]["failed_trials"]
+            for item in reviewed_first_words),
         "task_groups": task_group_metrics(sample_results),
         "samples": sample_results,
     }
@@ -628,6 +680,13 @@ def _print_summary(result):
                   result["aggregate_best_trial_wer"] * 100,
                   result["aggregate_worst_trial_wer"] * 100,
               ))
+        print("Reviewed edge words: first not retained %d/%d trials; "
+              "final not retained %d/%d trials" % (
+                  result["first_word_failure_trial_count"],
+                  result["reviewed_first_word_trial_count"],
+                  result["final_word_failure_trial_count"],
+                  result["reviewed_final_word_trial_count"],
+              ))
     for group, metrics in result.get("task_groups", {}).items():
         def percentage(value):
             return "n/a" if value is None else "%.2f%%" % (value * 100)
@@ -638,6 +697,7 @@ def _print_summary(result):
         latency = metrics["inference_seconds"]
         print("Task group %s: %d samples, %d reviewed; WER %s consensus / "
               "%s all trials; inference %s median / %s p95 (%d trials); "
+              "edge-word failures first %d/%d, final %d/%d trials; "
               "reviewed silence false positives %d/%d trials" % (
                   group, metrics["sample_count"],
                   metrics["reviewed_sample_count"],
@@ -645,6 +705,10 @@ def _print_summary(result):
                   percentage(metrics["aggregate_trial_wer"]),
                   seconds(latency["median"]), seconds(latency["p95"]),
                   latency["measured_trials"],
+                  metrics["first_word_failure_trial_count"],
+                  metrics["reviewed_first_word_trial_count"],
+                  metrics["final_word_failure_trial_count"],
+                  metrics["reviewed_final_word_trial_count"],
                   metrics["silence_false_positive_trial_count"],
                   metrics["reviewed_silence_trial_count"]))
     for sample in result["samples"]:
@@ -712,6 +776,11 @@ def _print_summary(result):
                 trial_accuracy["worst_wer"] * 100,
                 trial_accuracy["trials"],
                 sample["accuracy"]["cer"] * 100,
+            ))
+            first_word = sample["first_word"]
+            print("  First word: %s (%d/%d trials retained)" % (
+                "retained" if first_word["retained"] else "FAILED",
+                first_word["retained_trials"], first_word["trials"],
             ))
             final_word = sample["final_word"]
             print("  Final word: %s (%d/%d trials retained)" % (

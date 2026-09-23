@@ -369,8 +369,10 @@ Use **Open Startup Settings** to review Presspeech under Windows
   record the VAD-retained speech duration for every trial and count reviewed
   speech clips that VAD rejected, so silence fixes cannot hide quiet-speech
   regressions behind aggregate WER. Reviewed speech clips score final-word
-  retention on every trial as well, so an intermittent clipped ending cannot
-  be hidden by the consensus transcript.
+  first- and final-word retention on every reviewed trial as well, so
+  intermittent differences at either dictation boundary cannot be hidden by
+  the consensus transcript. Inspect the audio to distinguish clipping from
+  substitutions or insertions.
 - If you see missing-DLL errors, install the Visual C++ Redistributable
   (x64) from Microsoft.
 

@@ -2,8 +2,8 @@
 
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER,
-lowercase-normalized CER, case-sensitive CER, final-word retention, silence false positives, and Whisper VAD speech retention.
-Version 4 reports identify the loader's pinned model repository/revision,
+lowercase-normalized CER, first- and final-word retention, silence false positives, and Whisper VAD speech retention.
+Version 5 reports identify the loader's pinned model repository/revision,
 retain historical consensus WER alongside all-trial WER and a per-clip
 best/worst error envelope, record the bounded Parakeet window count and longest
 model input for each clip, and add the requested language policy plus detected
@@ -27,8 +27,8 @@ per clip. Other sample rates and channel layouts are accepted and converted,
 but canonical fixtures make runs easier to compare.
 
 - Listen to each speech clip and correct its reference before setting
-  `"reference_reviewed": true`. WER, CER, and final-word retention are not
-  reported for unreviewed references.
+  `"reference_reviewed": true`. WER, CER, and first-/final-word retention are
+  not reported for unreviewed references.
 - Lowercase-normalized CER remains comparable with prior reports;
   case-sensitive CER additionally counts capitalization differences while
   applying the same whitespace normalization. Inspect per-sample `accuracy.case_sensitive_cer`
@@ -77,6 +77,11 @@ but canonical fixtures make runs easier to compare.
   Best/worst envelopes can combine different repetitions across clips; they are
   neither an observed whole-corpus run nor confidence intervals. Their extremes
   also depend on run count, so compare candidates with the same number of runs.
+- Inspect first- and final-word retention alongside WER. Each reviewed trial
+  must begin with the reference's first word and end with its final word;
+  per-sample and corpus/task-group failure counts expose intermittent boundary
+  differences that aggregate WER can dilute. These checks complement WER and do
+  not replace listening review; a mismatch does not by itself prove clipping.
 - `aggregate_trial_wer` divides every reviewed trial's word errors by the total
   repeated reference-word count. It weights words, not clips. The report retains
   those numerator/denominator counts and each clip's ordered per-trial errors.
