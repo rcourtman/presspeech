@@ -4,11 +4,21 @@ User support happens in public on GitHub. You need a GitHub account to
 open or comment on an issue. Before posting, use the recovery guide that
 matches the problem:
 
+**Feedback availability checked 23 September 2026:** GitHub currently reports
+that issue creation is restricted for this repository. The report forms linked
+below may therefore be unavailable even though existing issues can be read.
+Do not keep retrying a blocked form or include private data elsewhere as a
+workaround. Check the [issue list](https://github.com/rcourtman/presspeech/issues)
+for a matching discussion and whether GitHub permits commenting; if no usable
+public route is available, keep the privacy-safe aggregate locally and retry
+after issue creation is restored. Security reports must use the private route
+in [SECURITY.md](SECURITY.md).
+
 - **First dictation or setup:** follow [Getting started](https://rcourtman.github.io/presspeech/getting-started.html).
 - **macOS install or permissions:** check the [macOS install guide](https://rcourtman.github.io/presspeech/install.html), [FAQ](https://rcourtman.github.io/presspeech/faq.html), and [troubleshooting guide](https://rcourtman.github.io/presspeech/troubleshooting.html).
 - **Windows install or model setup:** check the [Windows install guide](https://rcourtman.github.io/presspeech/windows.html) and [Windows technical guide](windows/README.md).
 
-If the problem remains, search the [existing issues](https://github.com/rcourtman/presspeech/issues), then choose the closest route:
+If the problem remains, search the [existing issues](https://github.com/rcourtman/presspeech/issues), then choose the closest route when GitHub permits it:
 
 - [Report a bug](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml). In Presspeech, choose **Copy Diagnostics** first and paste that privacy-safe summary into the form.
 - [Browse existing target-app compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22), then [share a report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml) after running the [short privacy-safe protocol](https://rcourtman.github.io/presspeech/app-compatibility.html). Passing reports are useful as well as failures because they show how often automatic paste and focus-change recovery worked across repeated attempts.

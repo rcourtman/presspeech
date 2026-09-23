@@ -40,6 +40,17 @@ but canonical fixtures make runs easier to compare.
   release corpus should also include human-reviewed speech longer than 60
   seconds, with words spoken continuously across several likely window seams;
   inspect both WER and the reported window plan for duplication or loss.
+- Keep spontaneous dictation distinct from read-speech benchmark clips when
+  comparing models. Include unscripted sentences with ordinary disfluencies,
+  self-corrections, contractions, names, and dictated numbers/punctuation;
+  report results by these recording/task groups as well as in aggregate. Read
+  speech remains useful for reproducibility, but alone does not establish
+  performance on push-to-talk dictation. Use privately recorded, consented
+  clips for this stratum and keep audio and references out of version control.
+- For model or decoding changes, use the same reviewed clips and repeat count
+  across conditions. Compare error rates and intermittent failures within each
+  speech/task group, plus latency; a corpus-wide WER improvement must not hide
+  a regression on short commands, noisy/quiet input, final words, or silence.
 - Keep the same clips, references, run count, model precision, and hardware when
   comparing a decoding or VAD change. Reports record the effective Whisper VAD
   policy and per-trial VAD-retained duration. `speech_detection.trials` is the

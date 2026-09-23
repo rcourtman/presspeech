@@ -3,6 +3,14 @@
 The public, navigable version of this protocol is at
 <https://rcourtman.github.io/presspeech/app-compatibility.html>.
 
+**Reporting availability checked 23 September 2026:** GitHub currently reports
+that issue creation is restricted for this repository. You can still run the
+protocol and keep its aggregate counts locally, but a new-report link may not
+accept a submission. Check for a comparable open report and whether comments
+are enabled before sharing; if no route is available, retain the result
+privately and retry when issue creation is restored. Do not post transcripts,
+clipboard contents, or other private data elsewhere as a workaround.
+
 Presspeech binds each recording to the window where it began. It should paste
 only when it can still verify that destination. A focus change normally leaves
 the transcript available for manual paste. On macOS, if Presspeech detects another copy replacing
