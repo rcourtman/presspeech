@@ -74,7 +74,7 @@
                 </tr>
                 <tr>
                   <th scope="row">Where speech is processed</th>
-                  <td>On the PC. Model downloads and optional release checks use the network, but the app has no cloud transcription path.</td>
+                  <td>On the PC; the app has no cloud transcription path. Model downloads and optional release checks use the network. Published Windows 0.1.12 may send bundled Hugging Face library telemetry or a locally available token with a model request; see the <a href="../privacy.html#network-calls">version-specific network inventory</a>.</td>
                   <td>Microsoft's Voice Typing support page says it uses online Azure Speech; Microsoft's privacy statement says Windows 11 Voice Typing may use both device-based and online recognition. Copilot+ PCs can add on-device Fluid dictation corrections after its model is installed. That correction feature alone does not establish that all speech recognition is offline; check the current Windows settings and documentation for your device.</td>
                   <td>On the PC after its speech language files are installed; Microsoft documents that Voice Access works without an internet connection.</td>
                   <td>Core transcription runs on the computer. Models download during setup; optional post-processing can use a configured local or cloud provider.</td>

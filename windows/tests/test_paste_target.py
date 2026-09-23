@@ -73,11 +73,15 @@ class PasteTargetMatchTests(unittest.TestCase):
         self.assertFalse(paste_target.matches(expected, self.target(process=42)))
         self.assertFalse(paste_target.matches(expected, self.target(window=200)))
 
-    def test_unknown_original_focus_preserves_window_level_policy(self):
+    def test_both_unknown_focus_handles_preserve_window_level_policy(self):
         expected = self.target(0)
-        self.assertTrue(paste_target.matches(expected, self.target(101)))
         self.assertTrue(paste_target.matches(expected, self.target(0)))
         self.assertFalse(paste_target.matches(expected, self.target(window=200)))
+
+    def test_focus_identity_available_only_after_capture_fails_closed(self):
+        expected = self.target(0)
+        self.assertFalse(paste_target.matches(expected, self.target(101)))
+        self.assertFalse(paste_target.matches(self.target(101), self.target(0)))
 
     def test_executable_fallback_and_unidentified_owner(self):
         expected = self.target(process=0)

@@ -82,10 +82,11 @@ def same_window(expected, current):
 def matches(expected, current):
     """Match window owner and any child control observed when capture began.
 
-    Some toolkits do not expose a useful focus HWND. In that case the prior
-    exact top-level-window policy remains in force, rather than disabling
-    automatic paste for those apps. This is not a DOM-field identity check.
+    Some toolkits never expose a useful focus HWND. When both observations
+    lack one, retain the exact top-level-window policy. If only the later
+    observation has a focus HWND, however, we cannot prove it was the control
+    focused at recording start: recover instead of adopting that new identity.
+    This is not a DOM-field identity check.
     """
     return (same_window(expected, current) and
-            (not expected.focus_handle or
-             current.focus_handle == expected.focus_handle))
+            current.focus_handle == expected.focus_handle)

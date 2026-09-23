@@ -84,12 +84,14 @@ row remains Missing if either focused-window access or keyboard-event posting
 is unavailable, even when System Settings already shows Presspeech enabled; use
 **Try Again** in that case. If the HUD or menu says
 **Copied — press Command-V to paste**, the finished transcript is already on
-the clipboard. Return to the intended field and paste it manually instead of
-dictating it again.
+the clipboard. In builds with a separate starting-window warning,
+**Can’t verify window — use Command-V** means Presspeech could not identify the
+exact window when recording began; the transcript is likewise copied. Return
+to the intended field and paste it manually instead of dictating it again.
 
 Presspeech also uses this fallback when it cannot verify the same destination.
 Some Electron/Chromium-based apps do not consistently expose the focused-window
-information the current Mac app checks, so the notice can appear even if the
+information the current Mac app checks, so either notice can appear even if the
 window looks unchanged. A failed input event does not prove that no text reached
 the field. If Presspeech says **Couldn't paste — use Copy Last Transcript** in
 0.3.8, or **Delivery uncertain** in builds with the revised notice, inspect the

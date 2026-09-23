@@ -2485,7 +2485,9 @@ class PresspeechApp:
             "clipboard-unavailable": "The clipboard write could not be verified. ",
             "clipboard-changed": "The clipboard changed; no paste shortcut was sent. ",
             "target-unavailable": "The original input window could not be identified. ",
-            "focus-changed": "The focused window changed; no paste shortcut was sent. ",
+            "focus-changed": (
+                "The original window or focused control could not be "
+                "verified; no paste shortcut was sent. "),
             "target-elevated": "Windows blocks simulated input into this elevated app. ",
             "modifier-held": (
                 "A Ctrl, Shift, Alt, Windows, or V key was held; no paste "
@@ -2657,7 +2659,7 @@ class PresspeechApp:
             return True
         # Executable basenames can contain user or workplace names. Window
         # identity is enough to decide delivery; logs need only the outcome.
-        self._log("paste skipped; focus changed")
+        self._log("paste skipped; original target could not be verified")
         return False
 
     # ---------------- windows ----------------

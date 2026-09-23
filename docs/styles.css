@@ -677,6 +677,34 @@ section p:last-child,
   border-left-color: #b8932a;
 }
 
+.note .decision-lead,
+.page-title .note .decision-lead {
+  margin-top: 0;
+  color: var(--text);
+  font-weight: 600;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dfca80;
+}
+
+#model-download-preflight ul {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+#model-download-preflight li {
+  padding: 12px;
+  border: 1px solid #dfca80;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+#model-download-preflight li > strong:first-child {
+  display: block;
+  margin-bottom: 4px;
+}
+
 .facts + .note,
 .grid + .note {
   margin-top: 18px;

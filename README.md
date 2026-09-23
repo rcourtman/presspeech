@@ -292,9 +292,12 @@ you change windows while Presspeech is transcribing—or the destination does no
 expose enough focused-window information—it copies the transcript instead of
 risking delivery to the wrong place. The latter can happen in some
 Electron/Chromium-based apps even when the window appears unchanged. macOS
-shows **Copied — press ⌘V to paste** and keeps that recovery instruction in the
-Presspeech menu until the next dictation. Windows shows a **Transcript copied,
-not pasted** notification. Return to the intended field and paste manually with
+shows **Copied — press ⌘V to paste** after a focus change or a later window
+verification failure. If it could not verify the window when recording began,
+it instead shows **Can’t verify window — use ⌘V**. The menu keeps
+**Can’t verify window — press ⌘V to paste** until the next dictation. Windows
+shows a **Transcript copied, not pasted**
+notification. Return to the intended field and paste manually with
 ⌘V on macOS or Ctrl+V on Windows; do not dictate the same text again first.
 
 Treat a command shell as an execution surface, not an ordinary text field.

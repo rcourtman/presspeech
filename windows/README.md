@@ -329,6 +329,8 @@ one window then uses Delivery Recovery instead of automatic paste. Custom-drawn
 browser and Electron fields can share one Win32 control handle, so this is not
 a guarantee of field identity within those apps. Keep the intended field
 focused until delivery finishes, and review where the text landed.
+If a control is identifiable only at the later delivery check, Presspeech
+cannot confirm it was focused when recording began and uses Delivery Recovery.
 [Windows prevents](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput#remarks)
 a standard app from sending simulated input into an app running as administrator.
 Presspeech detects that boundary, leaves the transcript on the clipboard, and

@@ -274,6 +274,7 @@ func shouldNotifyAssistiveAppsOfMenuBarState(_ state: MenuBarState,
 
 enum DictationNotice: Equatable {
     case copiedToClipboard
+    case pasteTargetUnavailable
     case insertionFailed
     case insertionFailedWithoutHistory
     case transcriptionFailed
@@ -285,6 +286,8 @@ enum DictationNotice: Equatable {
         switch self {
         case .copiedToClipboard:
             return "Transcript copied — press ⌘V to paste"
+        case .pasteTargetUnavailable:
+            return "Can’t verify window — press ⌘V to paste"
         case .insertionFailed:
             return "Delivery uncertain — check field before retrying"
         case .insertionFailedWithoutHistory:
@@ -304,6 +307,8 @@ enum DictationNotice: Equatable {
         switch self {
         case .copiedToClipboard:
             return "Copied — press ⌘V to paste"
+        case .pasteTargetUnavailable:
+            return "Can’t verify window — use ⌘V"
         case .insertionFailed:
             return "Check field; copy from menu if needed"
         case .insertionFailedWithoutHistory:
@@ -323,6 +328,8 @@ enum DictationNotice: Equatable {
         switch self {
         case .copiedToClipboard:
             return "Transcript copied. Press Command V to paste."
+        case .pasteTargetUnavailable:
+            return "Presspeech couldn't verify the window for automatic paste. Transcript copied. Press Command V to paste in the intended field."
         case .insertionFailed:
             return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu."
         case .insertionFailedWithoutHistory:
@@ -5754,14 +5761,17 @@ enum TextInsertionOutcome: Equatable {
     var allowsFallback: Bool { self == .failed }
 }
 
+/// Attribute a successful clipboard-only recovery to missing initial window
+/// evidence only when no permission interruption superseded that diagnosis.
 func dictationCompletionNotice(processedText: String,
                                 insertionOutcome: TextInsertionOutcome?,
-                                keepsRecentTranscripts: Bool) -> DictationNotice? {
+                                keepsRecentTranscripts: Bool,
+                                pasteTargetUnavailableAtStart: Bool = false) -> DictationNotice? {
     guard !processedText.isEmpty else { return .noSpeechDetected }
     guard let insertionOutcome else { return nil }
     switch insertionOutcome {
     case .copiedWithoutPasting:
-        return .copiedToClipboard
+        return pasteTargetUnavailableAtStart ? .pasteTargetUnavailable : .copiedToClipboard
     case .failed, .deliveryUncertain, .clipboardChanged:
         return keepsRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
     case .inserted:
@@ -8265,7 +8275,7 @@ private final class RecordingHUDView: NSView {
             accentColor = .systemRed
         case .transcribing:
             accentColor = .systemBlue
-        case .notice(.copiedToClipboard):
+        case .notice(.copiedToClipboard), .notice(.pasteTargetUnavailable):
             accentColor = .systemOrange
         case .notice:
             accentColor = .systemYellow
@@ -10277,7 +10287,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                         completionNotice = dictationCompletionNotice(
                             processedText: cleaned,
                             insertionOutcome: insertionOutcome,
-                            keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0
+                            keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0,
+                            pasteTargetUnavailableAtStart: recordingPasteTarget == nil
+                                && !permissionInterruptionObserved
+                                && missing.isEmpty
                         )
                         addToHistory(cleaned)
                     }
@@ -19313,6 +19326,12 @@ private enum PresspeechSelfTest {
             equals: .copiedToClipboard,
             "history changes must not hide an available manual-paste notice"
         )
+        try expect(
+            dictationNoticeAfterHistoryChange(.pasteTargetUnavailable,
+                                              hasRecentTranscripts: false),
+            equals: .pasteTargetUnavailable,
+            "history changes must not hide an unverified-window manual-paste notice"
+        )
 
         try expect(
             limitedRecentTranscripts(transcripts, limit: .off),
@@ -21731,6 +21750,12 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.copiedToClipboard.statusTitle,
                    equals: "Transcript copied — press ⌘V to paste",
                    "focus-safe delivery should explain immediate clipboard recovery")
+        try expect(DictationNotice.pasteTargetUnavailable.statusTitle,
+                   equals: "Can’t verify window — press ⌘V to paste",
+                   "an unverified destination should not look like an ordinary focus change")
+        try expect(DictationNotice.pasteTargetUnavailable.hudTitle,
+                   equals: "Can’t verify window — use ⌘V",
+                   "the transient recovery HUD should identify the unverified window")
         try expect(DictationNotice.insertionFailed.statusTitle,
                    equals: "Delivery uncertain — check field before retrying",
                    "failed insertion should prompt a destination check before retrying")
@@ -21758,6 +21783,9 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.copiedToClipboard.accessibilityValue,
                    equals: "Transcript copied. Press Command V to paste.",
                    "clipboard recovery should be explicit without relying on the Command glyph")
+        try expect(DictationNotice.pasteTargetUnavailable.accessibilityValue,
+                   equals: "Presspeech couldn't verify the window for automatic paste. Transcript copied. Press Command V to paste in the intended field.",
+                   "VoiceOver should explain both the safety fallback and manual paste action")
         try expect(DictationNotice.insertionFailed.accessibilityValue,
                    equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu.",
                    "uncertain delivery should prevent duplicate insertion during in-memory recovery")
@@ -21770,10 +21798,28 @@ private enum PresspeechSelfTest {
                    equals: .copiedToClipboard,
                    "focus-safe clipboard delivery should produce the recovery notice")
         try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .copiedWithoutPasting,
+                                              keepsRecentTranscripts: false,
+                                              pasteTargetUnavailableAtStart: true),
+                   equals: .pasteTargetUnavailable,
+                   "an unverified initial window should name the reason without promising menu history")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .failed,
+                                              keepsRecentTranscripts: false,
+                                              pasteTargetUnavailableAtStart: true),
+                   equals: .insertionFailedWithoutHistory,
+                   "a failed clipboard copy must not claim the transcript is available to paste")
+        try expect(dictationCompletionNotice(processedText: "hello",
                                               insertionOutcome: .inserted,
                                               keepsRecentTranscripts: true),
                    equals: DictationNotice?.none,
                    "successful insertion should not leave a stale notice")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .inserted,
+                                              keepsRecentTranscripts: true,
+                                              pasteTargetUnavailableAtStart: true),
+                   equals: DictationNotice?.none,
+                   "an inserted result must never claim that automatic paste was unavailable")
         try expect(dictationCompletionNotice(processedText: "",
                                               insertionOutcome: nil,
                                               keepsRecentTranscripts: false),

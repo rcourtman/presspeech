@@ -851,6 +851,11 @@ item after the development-wrapper launch check.
   provide usable exact-window evidence, while `frontmost application changed
   during focused-window query` means window-server focus changed during the
   bounded lookup. Other categories must be retained verbatim for triage.
+  When the target was unavailable at recording start, confirm the HUD says
+  **Can’t verify window — use ⌘V**, the menu keeps **Can’t verify window — press
+  ⌘V to paste**, and VoiceOver explains that the window could not be verified
+  and the transcript was copied for manual paste. A focus change after a valid
+  capture must retain the ordinary **Copied — press ⌘V to paste** recovery.
   Do not add the target name, window title, field contents, or transcript to
   that log extract. Every fallback is still an automatic-paste failure.
 - Confirm Settings → Text → Recent Transcripts labels **Off — No Copy Last
@@ -1126,8 +1131,8 @@ clipboard.
   shortcut and retain text without replacing the newer copy automatically.
   A change during or after SendInput remains an unguarded race.
 - Switch to a different target window before delivery. Confirm the recovery
-  notice appears and the Presspeech-authored focus-change log message is the
-  fixed status `paste skipped; focus changed`, not either executable
+  notice appears and the Presspeech-authored target-verification log message is
+  the fixed status `paste skipped; original target could not be verified`, not either executable
   name, window title, or dictated text. Record only pass/fail, not the raw log.
 - With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt, Windows and V in
   turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
@@ -1179,4 +1184,7 @@ clipboard.
   confirm the first control receives one paste. Also try a browser or Electron
   window with two fields and record what happens: those fields may share one
   Win32 focus HWND, so passing the native-control check does not establish
-  field-level identity for custom-rendered apps. Do not claim it does.
+  field-level identity for custom-rendered apps. Do not claim it does. If a
+  target exposes a focus HWND at delivery but not at recording start, confirm
+  Presspeech uses Delivery Recovery rather than treating that later identity
+  as proof of the original control.

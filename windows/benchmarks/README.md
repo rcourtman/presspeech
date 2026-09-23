@@ -44,6 +44,15 @@ that two runs used identical inputs.
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
+Before downloading or loading a model, the runner now requires at least one
+fixture with a unique non-empty ID and readable, non-empty, finite audio. It
+decodes and resamples each clip once for preflight, retaining only the effective
+audio digest, duration, and source rate—not a second corpus of audio in memory.
+It reads each clip again just before inference and aborts if those values have
+changed during model setup. Preflight is not a human reference review and does
+not establish that the corpus is representative; it also adds an untimed read
+and resample pass to benchmark startup, not to reported inference latency.
+
 For a local Whisper pause-policy experiment, compare the release's 160 ms
 minimum silence split with explicit alternatives without editing product code:
 

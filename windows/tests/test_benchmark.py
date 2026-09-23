@@ -9,6 +9,8 @@ import unicodedata
 from contextlib import redirect_stdout
 from unittest import mock
 
+import numpy as np
+
 import benchmark
 
 
@@ -427,6 +429,112 @@ class MetricTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, "language"):
                             benchmark.run_benchmark(path)
                         constructor.assert_not_called()
+
+    def test_empty_corpus_is_rejected_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"samples": []}, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "at least one audio fixture"):
+                    benchmark.run_benchmark(path)
+                constructor.assert_not_called()
+
+    def test_sample_identity_and_path_are_checked_before_model_loading(self):
+        cases = (
+            ([{"audio": "ignored.wav"}], "sample id"),
+            ([{"id": "  ", "audio": "ignored.wav"}], "sample id"),
+            ([{"id": "one"}], "sample audio"),
+            ([{"id": "one", "audio": "  "}], "sample audio"),
+            ([{"id": "one", "audio": "a.wav"},
+              {"id": "one", "audio": "b.wav"}], "unique"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            for samples, error in cases:
+                with self.subTest(samples=samples):
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump({"samples": samples}, handle)
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, error):
+                            benchmark.run_benchmark(path)
+                        constructor.assert_not_called()
+
+    def test_all_audio_is_preflighted_before_model_loading(self):
+        manifest = {"samples": [
+            {"id": "first", "audio": "first.wav"},
+            {"id": "second", "audio": "broken.wav"},
+        ]}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor, \
+                    mock.patch.object(benchmark, "load_audio", side_effect=[
+                        (mock.sentinel.audio, 1.0, 16000, "0" * 64),
+                        ValueError("broken fixture"),
+                    ]) as load_audio:
+                with self.assertRaisesRegex(ValueError, "broken fixture"):
+                    benchmark.run_benchmark(path)
+                constructor.assert_not_called()
+                self.assertEqual(load_audio.call_count, 2)
+
+    def test_invalid_precision_is_rejected_before_model_loading(self):
+        manifest = {"model": "base.en", "samples": [
+            {"id": "speech", "audio": "speech.wav"}]}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            for precision in ("invalid", "fp16"):
+                with self.subTest(precision=precision):
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(
+                                ValueError, "precision|Parakeet"):
+                            benchmark.run_benchmark(path, precision=precision)
+                        constructor.assert_not_called()
+
+    def test_audio_changed_after_preflight_aborts_before_inference(self):
+        manifest = {"samples": [{"id": "speech", "audio": "speech.wav"}]}
+        transcriber = mock.Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(benchmark, "load_audio", side_effect=[
+                        (mock.sentinel.audio, 1.0, 16000, "0" * 64),
+                        (mock.sentinel.audio, 1.0, 16000, "1" * 64),
+                    ]):
+                with self.assertRaisesRegex(RuntimeError, "changed after preflight"):
+                    benchmark.run_benchmark(path)
+        transcriber.load.assert_called_once()
+        transcriber.transcribe.assert_not_called()
+
+    def test_audio_decoder_rejects_empty_and_nonfinite_fixtures(self):
+        for audio in (np.zeros(0, dtype=np.float32),
+                      np.array([float("nan")], dtype=np.float32),
+                      np.array([float("inf")], dtype=np.float32)):
+            with self.subTest(audio=audio):
+                with mock.patch.object(benchmark.sf, "read", return_value=(audio, 16000)):
+                    with self.assertRaisesRegex(ValueError, "positive duration|non-finite"):
+                        benchmark.load_audio("ignored.wav")
+        with mock.patch.object(
+                benchmark.sf, "read",
+                return_value=(np.array([0.1], dtype=np.float32), 0)):
+            with self.assertRaisesRegex(ValueError, "positive duration and sample rate"):
+                benchmark.load_audio("ignored.wav")
+        with mock.patch.object(
+                benchmark.sf, "read",
+                return_value=(np.array([0.1, 0.2], dtype=np.float32), 48000)), \
+                mock.patch.object(
+                    benchmark.app, "_resample_to_16k",
+                    return_value=np.array([float("nan")], dtype=np.float32)):
+            with self.assertRaisesRegex(ValueError, "resampled benchmark audio"):
+                benchmark.load_audio("ignored.wav")
 
     def test_auto_language_reaches_backend_and_records_detected_code(self):
         manifest = {

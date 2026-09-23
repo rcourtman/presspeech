@@ -400,16 +400,39 @@ def language_group_metrics(samples):
 
 def load_audio(path):
     audio, sample_rate = sf.read(path, dtype="float32", always_2d=False)
+    if sample_rate <= 0 or len(audio) == 0:
+        raise ValueError("benchmark audio must have a positive duration and sample rate")
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
     audio = np.asarray(audio, dtype=np.float32)
+    if not np.isfinite(audio).all():
+        raise ValueError("benchmark audio contains non-finite samples")
     original_seconds = len(audio) / float(sample_rate)
     if sample_rate != 16000:
         audio = app._resample_to_16k(audio, sample_rate)
+    if len(audio) == 0 or not np.isfinite(audio).all():
+        raise ValueError("resampled benchmark audio is empty or non-finite")
     # Hash the exact mono, resampled signal used for inference, not the file
     # container. A changed recording cannot masquerade as a model regression.
     audio = np.ascontiguousarray(audio, dtype=np.float32)
     return audio, original_seconds, sample_rate, asr_audio_sha256(audio)
+
+
+def _preflight_audio(manifest_dir, samples):
+    """Decode every fixture before costly model setup without retaining audio.
+
+    The second read for inference must match the exact signal checked here;
+    otherwise an edited fixture could make a partially paired report appear
+    valid. Only digests and non-sensitive audio metadata remain in memory.
+    """
+    checked = []
+    for sample in samples:
+        path = sample["audio"]
+        if not os.path.isabs(path):
+            path = os.path.join(manifest_dir, path)
+        _, seconds, source_rate, digest = load_audio(path)
+        checked.append((path, seconds, source_rate, digest))
+    return checked
 
 
 def _sync_cuda():
@@ -488,6 +511,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     samples = manifest.get("samples", [])
     if not isinstance(samples, list):
         raise ValueError("samples must be a list")
+    sample_ids = set()
     for sample in samples:
         if not isinstance(sample, dict):
             raise ValueError("each sample must be an object")
@@ -509,6 +533,15 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                 raise ValueError("silence sample must not have reference text")
         elif sample.get("reference_reviewed", False) and not reference.strip():
             raise ValueError("reviewed speech sample needs reference text")
+        sample_id = sample.get("id")
+        if not isinstance(sample_id, str) or not sample_id.strip():
+            raise ValueError("sample id must be a non-empty string")
+        if sample_id in sample_ids:
+            raise ValueError("sample ids must be unique")
+        sample_ids.add(sample_id)
+        audio_path = sample.get("audio")
+        if not isinstance(audio_path, str) or not audio_path.strip():
+            raise ValueError("sample audio must be a non-empty path")
     # Validate and freeze report provenance before loading any model. This
     # describes the requested pinned source, not a fresh integrity attestation.
     snapshot = engine.model_snapshot(model_name)
@@ -520,6 +553,13 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         engine.whisper_vad_parameters(whisper_vad_min_silence_ms)
         if model_name in engine.WHISPER_MODELS else None
     )
+    if not samples:
+        raise ValueError("samples must contain at least one audio fixture")
+    if precision not in ("auto", "tf32", "fp16", "bf16"):
+        raise ValueError("unsupported benchmark precision")
+    if precision != "auto" and not engine.is_parakeet(model_name):
+        raise ValueError("precision experiments currently support Parakeet only")
+    checked_audio = _preflight_audio(manifest_dir, samples)
 
     # Stage barriers are benchmark-only: they make CUDA timings factual while
     # keeping synchronization overhead out of interactive dictation.
@@ -544,13 +584,14 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
 
     sample_results = []
     input_rows = []
-    for sample in samples:
+    for sample, (audio_path, checked_seconds, checked_rate, checked_digest) in zip(
+            samples, checked_audio):
         task_group = sample.get("task_group")
         language_group = sample.get("language_group")
-        audio_path = sample["audio"]
-        if not os.path.isabs(audio_path):
-            audio_path = os.path.join(manifest_dir, audio_path)
         audio, audio_seconds, source_rate, audio_digest = load_audio(audio_path)
+        if (audio_seconds, source_rate, audio_digest) != (
+                checked_seconds, checked_rate, checked_digest):
+            raise RuntimeError("benchmark audio changed after preflight")
         input_rows.append({
             "asr_audio_sha256": audio_digest,
             "audio_seconds": audio_seconds,

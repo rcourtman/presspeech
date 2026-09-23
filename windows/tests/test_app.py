@@ -1777,7 +1777,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
         logged = str(instance._log.mock_calls)
-        self.assertIn("paste skipped; focus changed", logged)
+        self.assertIn("paste skipped; original target could not be verified", logged)
         self.assertNotIn("notepad.exe", logged)
         self.assertNotIn("calculator.exe", logged)
 
@@ -1844,6 +1844,29 @@ class TextRegressionTests(unittest.TestCase):
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
+
+    def test_later_focus_identity_cannot_authorize_uncaptured_control(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        original = app.PasteTarget("notepad.exe", 1234, 41, 0, 0)
+        later_control = app.PasteTarget("notepad.exe", 1234, 41, 0, 501)
+
+        with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
+                mock.patch.object(app.time, "sleep"), \
+                mock.patch.object(
+                    app, "_foreground_paste_target", return_value=later_control), \
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
+            self.assertFalse(instance._paste("private transcript", original))
+
+        copy.assert_called_once_with("private transcript")
+        controller.assert_not_called()
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        self.assertIn("focused control could not be verified",
+                      str(instance.notify.mock_calls))
+        self.assertNotIn("notepad.exe", str(instance._log.mock_calls))
 
     def test_focus_change_before_shortcut_never_emits_paste_key(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
