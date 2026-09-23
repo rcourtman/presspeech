@@ -2966,15 +2966,15 @@ enum Permission: String, CaseIterable, Equatable {
 func microphoneSetupDetail(authorizationStatus: AVAuthorizationStatus) -> String {
     switch authorizationStatus {
     case .notDetermined:
-        return "Captures your voice while dictating. Choose Continue to open the macOS microphone prompt, then choose OK."
+        return "Records audio only while dictation is active and transcribes locally on your Mac. Choose Continue to open the macOS microphone prompt, then choose OK."
     case .denied:
-        return "Microphone access was previously denied. Choose Open Settings to review System Settings → Privacy & Security → Microphone, then enable Presspeech."
+        return "Microphone access was previously denied. Audio is recorded only during dictation and transcribed locally. Choose Open Settings to review System Settings → Privacy & Security → Microphone, then enable Presspeech."
     case .restricted:
         return "Microphone access is restricted by macOS or device management. Contact your administrator if you need access."
     case .authorized:
-        return "Captures your voice while dictating."
+        return "Records audio only while dictation is active; speech is transcribed on your Mac."
     @unknown default:
-        return "Captures your voice while dictating. Choose Open Settings to review microphone access."
+        return "Records audio only during dictation and transcribes locally on your Mac. Choose Open Settings to review microphone access."
     }
 }
 
@@ -17098,18 +17098,23 @@ private enum PresspeechSelfTest {
         )
         try expect(
             microphoneSetupDetail(authorizationStatus: .notDetermined),
-            equals: "Captures your voice while dictating. Choose Continue to open the macOS microphone prompt, then choose OK.",
-            "first-time microphone authorization should explain the system prompt"
+            equals: "Records audio only while dictation is active and transcribes locally on your Mac. Choose Continue to open the macOS microphone prompt, then choose OK.",
+            "first-time microphone authorization should explain local use and the system prompt"
         )
         try expect(
             microphoneSetupDetail(authorizationStatus: .denied),
-            equals: "Microphone access was previously denied. Choose Open Settings to review System Settings → Privacy & Security → Microphone, then enable Presspeech.",
-            "a previous microphone denial should direct users to the persistent Settings control"
+            equals: "Microphone access was previously denied. Audio is recorded only during dictation and transcribed locally. Choose Open Settings to review System Settings → Privacy & Security → Microphone, then enable Presspeech.",
+            "a previous microphone denial should disclose local use and direct users to Settings"
         )
         try expect(
             microphoneSetupDetail(authorizationStatus: .restricted),
             equals: "Microphone access is restricted by macOS or device management. Contact your administrator if you need access.",
             "restricted microphone access should not imply that a user can grant it"
+        )
+        try expect(
+            microphoneSetupDetail(authorizationStatus: .authorized),
+            equals: "Records audio only while dictation is active; speech is transcribed on your Mac.",
+            "granted microphone guidance should keep its use and local processing clear"
         )
         try expect(
             setupPermissionPresentation(permission: .microphone,
