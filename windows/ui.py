@@ -1519,6 +1519,7 @@ class SettingsWindow:
             f, text="Press to toggle", value="toggle", variable=self.var_trigger)
         toggle_trigger.grid(
             row=row, column=2, sticky="w")
+        _label_trigger_choices(trigger_label, hold_trigger, toggle_trigger)
         row += 1
 
         recording_length_label = ttk.Label(f, text="Maximum recording length")
@@ -1690,7 +1691,6 @@ class SettingsWindow:
         _bind_window_command(root, "<Control-s>", self._save)
         _bind_window_command(root, "<Escape>", self._close)
         root.update_idletasks()
-        _label_trigger_choices(trigger_label, hold_trigger, toggle_trigger)
         for label, control in (
                 (hotkey_label, self.var_hotkey),
                 (recording_length_label, self.var_recording_length),
