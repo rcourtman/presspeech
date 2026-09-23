@@ -2883,7 +2883,8 @@ class PresspeechApp:
                 if (request_generation == self._model_load_generation and
                         self.settings["model"] == model_name):
                     self.model_status = "error"
-                    self.model_status_detail = "Model load failed; retry in Settings"
+                    self.model_status_detail = (
+                        "Model load failed; use Retry Speech Model")
                 if (request_generation == self._model_load_generation and
                         getattr(self, "_model_load_target", None) == model_name):
                     self._model_load_target = None

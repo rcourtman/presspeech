@@ -3276,7 +3276,8 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(instance.model_status, "error")
         self.assertNotIn("model unavailable", instance.model_status_detail)
         self.assertEqual(
-            instance.model_status_detail, "Model load failed; retry in Settings")
+            instance.model_status_detail,
+            "Model load failed; use Retry Speech Model")
         self.assertTrue(all("model unavailable" not in str(call)
                             for call in log.call_args_list))
         self.assertEqual(

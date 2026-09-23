@@ -811,6 +811,21 @@ class SetupWindowTests(unittest.TestCase):
             mode="determinate", value=0)
         window.root.after.assert_called_once_with(300, window._poll_model)
 
+    def test_model_load_error_points_to_the_retry_action_in_setup(self):
+        window = self.make_window(
+            "error", "Model load failed; use Retry Speech Model")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertIn(
+            mock.call(
+                window.model_label,
+                "Needs attention — Model load failed; use Retry Speech Model"),
+            set_text.call_args_list,
+        )
+        window.retry_button.config.assert_called_once_with(state="normal")
+
     def test_first_run_model_consent_shows_choices_without_progress_claim(self):
         window = self.make_window("awaiting_download_consent")
 
