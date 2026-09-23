@@ -105,6 +105,7 @@ def _calculate_sha256(path, name):
             if not stat.S_ISREG(before.st_mode):
                 raise ModelCacheIntegrityError(
                     "pinned model file is not a regular file: " + name)
+            before_path = path.stat()
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(chunk)
             after = os.fstat(stream.fileno())
@@ -115,8 +116,10 @@ def _calculate_sha256(path, name):
         raise ModelCacheIntegrityError(
             "pinned model file could not be verified: " + name) from exc
 
+    # Windows can report different metadata for fstat(handle) and stat(path)
+    # on the same unchanged file. Compare each API with itself instead.
     if (_file_stat_identity(before) != _file_stat_identity(after) or
-            _file_stat_identity(after) != _file_stat_identity(current)):
+            _file_stat_identity(before_path) != _file_stat_identity(current)):
         raise ModelCacheIntegrityError(
             "pinned model file changed while being verified: " + name)
     return digest.hexdigest(), _file_fingerprint(path, current)

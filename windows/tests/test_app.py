@@ -1428,6 +1428,7 @@ class TextRegressionTests(unittest.TestCase):
             "comtypes", "ctranslate2", "faster_whisper", "librosa",
             "hf_xet", "huggingface_hub.constants", "huggingface_hub.utils",
             "huggingface_hub.file_download",
+            "model_integrity",
             "onnxruntime",
             "pycaw.constants", "pycaw.pycaw", "safetensors", "sentencepiece",
             "soundfile", "soxr", "tokenizers", "torch", "tk_uia",
