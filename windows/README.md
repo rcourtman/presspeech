@@ -173,11 +173,13 @@ so it does not show a percentage or time estimate. Screen readers are notified
 of phase changes, not each changing byte count.
 Before recording, open Windows microphone privacy settings and turn on
 **Microphone access**, **Let apps access your microphone**, and **Let desktop
-apps access your microphone**. Presspeech is an unpackaged desktop app, so
-Windows uses the shared desktop-app control rather than an app-specific
-Presspeech permission prompt. If Windows says these settings are managed by
-your organization, contact your administrator; Presspeech cannot override that
-policy. Also confirm the selected device under
+apps access your microphone**. On Windows 11 builds that offer individual
+microphone controls for desktop apps, also allow Presspeech there if that
+control is shown. Windows may ask for microphone permission on first access;
+approve it only if you want Presspeech to use the microphone. If Windows says
+the shared settings are managed by your organization, contact your
+administrator; Presspeech cannot override that policy. Also confirm the
+selected device under
 **Settings → System → Sound → Input**.
 
 On keyboard layouts where **Right Alt** enters `@`, `€`, or accented letters,

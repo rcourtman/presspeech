@@ -497,7 +497,10 @@ class AccessibleWindowTests(unittest.TestCase):
                 "enable Microphone ",
                 "access, Let apps access your microphone",
                 "Let desktop ",
-                "apps access your microphone"):
+                "apps access your microphone",
+                "Windows 11 builds also ",
+                "per-app microphone access for desktop apps",
+                "allow Presspeech there too"):
             self.assertIn(switch, body)
 
     def test_setup_makes_microphone_probe_explicit_and_discloses_handling(self):
@@ -512,7 +515,11 @@ class AccessibleWindowTests(unittest.TestCase):
                 "when you choose Check Microphone",
                 "Check Microphone",
                 "microphone-use ",
-                "indicator. Audio samples are used only",
+                "indicator. On some Windows 11 builds, the first check may ",
+                "also show a Windows microphone-permission prompt",
+                "approve ",
+                "only if you want to run the check.",
+                "Audio samples are ",
                 "measure input ",
                 "level in memory, then discarded",
                 "discarded",

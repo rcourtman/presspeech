@@ -149,7 +149,11 @@ in 0.1.13. If the input cannot open, use Setup's links to Windows Microphone
 Privacy and Sound Input settings. Turn on **Microphone access** and **Let
 desktop apps access your microphone**, then confirm the input under
 **Settings -> System -> Sound -> Input**. Windows does not show a separate
-Presspeech toggle for this unpackaged desktop app. If a USB or Bluetooth input
+Presspeech toggle for this unpackaged desktop app on standard Windows builds.
+Some Windows 11 Experimental builds also offer per-app microphone controls for
+desktop apps; if that setting is present, allow Presspeech there too. Windows
+may ask for permission on first access; approve it only if you want Presspeech
+to use the microphone. If a USB or Bluetooth input
 was disconnected, reconnect it and choose **Check Again** in 0.1.12 or **Check
 Microphone** in 0.1.13; the check refreshes microphone discovery without
 requiring an app restart. Presspeech keeps an

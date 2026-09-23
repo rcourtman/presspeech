@@ -1574,7 +1574,7 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:<strong>macOS:</strong> )?Microphone, Accessibility(?: \(shown as Device Control and Data Access on macOS 27 and later\))?, and Input Monitoring\..*?</p>",
-        "<p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access and Let desktop apps access your microphone; Windows does not provide a separate Presspeech toggle for an unpackaged desktop app.</p>",
+        "<p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access and Let desktop apps access your microphone. Some Windows 11 Experimental builds also provide per-app microphone controls for desktop apps; if shown, allow Presspeech there too. Windows may ask for microphone permission on first access; approve it only if you want Presspeech to use the microphone.</p>",
         path=path,
     )
     diagnostics_card = """            <article class="card">

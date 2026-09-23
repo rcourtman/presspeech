@@ -1572,7 +1572,9 @@ class PresspeechApp:
                     self.notify("No microphone found",
                                 "Check Settings > System > Sound > Input, then enable "
                                 "microphone access for desktop apps in Windows privacy "
-                                "settings and try again.")
+                                "settings and try again. On Windows 11 builds with "
+                                "per-app desktop microphone controls, also allow "
+                                "Presspeech there.")
                     return
                 with self.lock:
                     if not self.recording or epoch != self._rec_epoch:
@@ -1634,7 +1636,9 @@ class PresspeechApp:
                 "Microphone error",
                 "Presspeech couldn't open the selected input. Check Settings > "
                 "System > Sound > Input and Windows microphone privacy settings, "
-                "including 'Let desktop apps access your microphone', then try "
+                "including 'Let desktop apps access your microphone'. On Windows "
+                "11 builds with per-app desktop microphone controls, also allow "
+                "Presspeech there. Then try "
                 "again. Details: %s" % str(exc))
             return
         self._log("mic open ok: %s" % (chosen,))

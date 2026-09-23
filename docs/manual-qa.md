@@ -220,6 +220,15 @@ keyboard access testing in addition to assistive-technology testing.
 - Turn off **Let desktop apps access your microphone**, choose **Check
   Microphone**, and confirm setup reports that the microphone could not be
   opened without exposing raw device or PortAudio errors.
+- On a Windows 11 Experimental build that exposes per-app desktop microphone
+  permissions, use a clean test profile to check the first-access flow. Confirm
+  Windows asks for access only when Presspeech first opens the microphone,
+  allow Presspeech and confirm the check completes, then revoke that permission
+  and confirm the check reports failure with a usable route back to privacy
+  settings. Restore permission and check again. If the OS build or prompt is
+  unavailable, record this supplemental check as **Not run**; it is not a
+  substitute for or a default release gate for the supported Windows 11
+  configurations above.
 - Using only Tab, Shift-Tab, and Enter, open **Microphone Privacy Settings** and
   **Sound Input Settings** from setup. Confirm each button opens the expected
   Windows Settings page, then restore access and rerun the check successfully.

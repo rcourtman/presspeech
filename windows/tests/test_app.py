@@ -2396,7 +2396,9 @@ class TextRegressionTests(unittest.TestCase):
             "Microphone error",
             "Presspeech couldn't open the selected input. Check Settings > "
             "System > Sound > Input and Windows microphone privacy settings, "
-            "including 'Let desktop apps access your microphone', then try "
+            "including 'Let desktop apps access your microphone'. On Windows "
+            "11 builds with per-app desktop microphone controls, also allow "
+            "Presspeech there. Then try "
             "again. Details: device disconnected")
 
     def test_recording_rate_is_bound_before_native_stream_starts(self):
@@ -2449,7 +2451,9 @@ class TextRegressionTests(unittest.TestCase):
         instance.notify.assert_called_once_with(
             "No microphone found",
             "Check Settings > System > Sound > Input, then enable microphone "
-            "access for desktop apps in Windows privacy settings and try again.")
+            "access for desktop apps in Windows privacy settings and try again. "
+            "On Windows 11 builds with per-app desktop microphone controls, "
+            "also allow Presspeech there.")
 
     def test_stale_microphone_error_does_not_cancel_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
