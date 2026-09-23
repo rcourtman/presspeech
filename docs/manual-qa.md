@@ -147,7 +147,9 @@ keyboard access testing in addition to assistive-technology testing.
   no separate Python installation is needed.
 - On a clean Windows profile, launch the packaged app and confirm the setup
   window automatically checks the selected microphone without blocking model
-  status updates.
+  status updates. Confirm **Start Presspeech with Windows** is initially
+  unchecked. Opt in, defer setup, and verify the saved choice is registered;
+  then turn it off and confirm the choice remains off after completing setup.
 - On a clean Windows x64 profile with usable NVIDIA CUDA and no cached pinned
   Parakeet snapshot, confirm Setup identifies the multilingual path and its
   approximate 2.5 GB first download. With keyboard-only navigation and Narrator,

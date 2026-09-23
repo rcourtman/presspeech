@@ -41,7 +41,9 @@ DEFAULTS = {
     "mute_playback_while_recording": True,
     "visual_indicator": True,
     "dictionary": [],
-    "autostart": True,
+    # Starting a background hotkey app at sign-in is an explicit opt-in for
+    # new profiles. Existing saved preferences are retained by load().
+    "autostart": False,
     "setup_complete": False,
     "check_updates": True,
     "last_update_check_epoch": 0,

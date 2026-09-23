@@ -1081,7 +1081,7 @@ class SetupWindow:
         self.repair_hotkey_button.pack(side="right", padx=(12, 0))
 
         self.autostart = tk.BooleanVar(
-            value=self.app.settings.get("autostart", True))
+            value=self.app.settings.get("autostart", cfg.DEFAULTS["autostart"]))
         ttk.Checkbutton(frame, text="Start Presspeech with Windows",
                         variable=self.autostart).grid(
                             row=14, column=0, columnspan=2, sticky="w", pady=(2, 6))

@@ -147,6 +147,15 @@ class ConfigLoadTests(unittest.TestCase):
 
         self.assertEqual(config.load(), config.DEFAULTS)
 
+    def test_saved_autostart_choice_survives_default_change(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                self.write({"autostart": enabled})
+                self.assertIs(config.load()["autostart"], enabled)
+
+    def test_new_profile_autostart_is_opt_in(self):
+        self.assertFalse(config.load()["autostart"])
+
     def test_default_dictionary_is_not_shared_between_loads(self):
         first = config.load()
         first["dictionary"].append(["local", "mutation"])

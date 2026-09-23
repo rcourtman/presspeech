@@ -2034,10 +2034,10 @@ class TextRegressionTests(unittest.TestCase):
     def test_visual_indicator_defaults_on(self):
         self.assertTrue(config.DEFAULTS["visual_indicator"])
 
-    def test_update_checks_default_on_and_first_run_setup_is_incomplete(self):
+    def test_update_checks_default_on_and_first_run_autostart_is_opt_in(self):
         self.assertTrue(config.DEFAULTS["check_updates"])
         self.assertFalse(config.DEFAULTS["setup_complete"])
-        self.assertTrue(config.DEFAULTS["autostart"])
+        self.assertFalse(config.DEFAULTS["autostart"])
 
     def test_daily_update_check_interval(self):
         day = app.UPDATE_CHECK_INTERVAL_SEC

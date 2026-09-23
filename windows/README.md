@@ -122,8 +122,10 @@ cleanup is performed.
 The first-run readiness window shows model loading, microphone selection and a
 live microphone check, a selectable dictation hotkey, hold-to-talk or
 press-to-toggle style, global-listener status, and Start with Windows in one
-place. The hotkey and style apply immediately and remain selected if setup is
-deferred. Speak while the check runs. It briefly opens the selected input,
+place. Start with Windows is off for a new profile; select it if you want
+Presspeech ready after sign-in. Existing saved choices are retained. The hotkey
+and style apply immediately and remain selected if setup is deferred. Speak
+while the check runs. It briefly opens the selected input,
 discards its samples in memory, and distinguishes an input level from a
 connected-but-silent device or one that cannot be opened. If it is silent,
 unmute it and choose **Check Again**; if it cannot be opened, use the window's
