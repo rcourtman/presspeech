@@ -324,10 +324,31 @@ CLIPBOARD_SERVICE_GUIDANCE = {
 # token behavior. Keep this version-specific account-token disclosure aligned
 # across the privacy page, structured inventory, and release-facing guides.
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
+    ROOT / "README.md": (
+        "Windows 0.1.12 privacy note",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
+        "may accompany a request",
+        "Upcoming Windows 0.1.13",
+    ),
+    ROOT / "SECURITY.md": (
+        "published Windows 0.1.12 prerelease",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
+        "Upcoming Windows 0.1.13",
+    ),
     DOCS / "privacy.html": (
         "published Windows 0.1.12",
         "HF_TOKEN",
         "local Hugging Face cache",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
         "These models do not require an account token",
         "Upcoming Windows 0.1.13",
         "disables implicit authentication",
@@ -336,6 +357,10 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "Published Windows 0.1.12",
         "HF_TOKEN",
         "local Hugging Face cache",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
         "public models do not require an account token",
         "Upcoming Windows 0.1.13",
         "implicit authentication",
@@ -344,6 +369,10 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "Privacy for published Windows 0.1.12",
         "HF_TOKEN",
         "local Hugging Face cache",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
         "These models do not require an account token",
         "upcoming 0.1.13",
     ),
@@ -351,8 +380,29 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
         "0.1.12 loader also leaves implicit authentication enabled",
         "HF_TOKEN",
         "local Hugging Face cache",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
         "These public models do not require an account token",
-        "Upcoming 0.1.13 disables implicit authentication",
+        "Upcoming 0.1.13",
+        "disables implicit authentication",
+    ),
+    DOCS / "getting-started.html": (
+        "Privacy note for Windows 0.1.12",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
+        "Upcoming 0.1.13",
+    ),
+    DOCS / "index.html": (
+        "Windows 0.1.12 leaves Hugging Face libraries",
+        "HF_ENDPOINT",
+        "HUGGINGFACE_CO_STAGING",
+        "HF_HUB_USER_AGENT_ORIGIN",
+        "configured endpoint",
+        "Upcoming 0.1.13",
     ),
 }
 
@@ -579,6 +629,13 @@ STALE_PATTERNS = [
     (
         re.compile(
             r"\b(?:the )?apps? ship with no account, subscription, telemetry\b",
+            re.IGNORECASE,
+        ),
+        "unqualified no-telemetry claim conflicts with published Windows dependencies",
+    ),
+    (
+        re.compile(
+            r"\bthere is no account, subscription, telemetry\b",
             re.IGNORECASE,
         ),
         "unqualified no-telemetry claim conflicts with published Windows dependencies",
@@ -1295,7 +1352,11 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
         "during Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
         "Hugging Face, model-request metadata includes a random per-process session ID, and an available "
-        "Hugging Face token may accompany a public model request. Dictation audio "
+        "Hugging Face token may accompany a model request. Inherited HF_ENDPOINT and "
+        "HUGGINGFACE_CO_STAGING settings can change its destination, and HF_HUB_USER_AGENT_ORIGIN "
+        "is included in request metadata if set; the token may accompany a request to that configured "
+        "endpoint. These public models do not need an account token. Upcoming Windows 0.1.13 fixes "
+        "these inherited settings but is not yet published. Dictation audio "
         "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
         "itemised (see the privacy inventory)."
     )
@@ -1325,7 +1386,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             "The apps have no account or cloud transcription endpoint and Presspeech does not operate first-party analytics. "
             "Published Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads; "
             "the libraries may send usage data, and model-request metadata includes a random per-process session ID. "
-            "It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a public model request; these models do not require an account token. "
+            "It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a model request. Inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. These models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published. "
             "Dictation audio and transcripts are not sent in model downloads; see the version-specific privacy inventory for details and limits.",
             path=path,
         )
@@ -1333,12 +1394,23 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "Published Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads; "
         "the libraries may send usage data, and model-request metadata includes a random per-process session ID."
     )
-    if (old_windows_privacy in text
-            and old_windows_privacy + " It also leaves implicit authentication enabled" not in text):
+    old_windows_privacy_with_token = old_windows_privacy + (
+        " It also leaves implicit authentication enabled, so an available HF_TOKEN, "
+        "HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a public model request; "
+        "these models do not require an account token."
+    )
+    if old_windows_privacy_with_token in text and "HF_ENDPOINT" not in text:
+        text = replace_literal(
+            text,
+            old_windows_privacy_with_token,
+            old_windows_privacy + " It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token may accompany a request to that configured endpoint; these models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
+            path=path,
+        )
+    if old_windows_privacy in text and "HF_ENDPOINT" not in text:
         text = replace_literal(
             text,
             old_windows_privacy,
-            old_windows_privacy + " It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a public model request; these models do not require an account token.",
+            old_windows_privacy + " The 0.1.12 loader also honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change the request destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a request to that configured endpoint; these models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
             path=path,
         )
     windows_page = "- Windows install: https://rcourtman.github.io/presspeech/windows.html\n"
@@ -1371,7 +1443,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             "Hugging Face libraries' default usage telemetry enabled. They may send usage data "
             "to Hugging Face, and model-request metadata includes a random per-process session ID. "
             "Dictation audio and transcripts are not sent in model downloads; exact telemetry "
-            "fields are not independently itemised. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or token in the local Hugging Face cache may accompany a public model request; these models do not require an account token. Audio is captured while the hotkey is "
+            "fields are not independently itemised. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or token in the local Hugging Face cache may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. These models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published. Audio is captured while the hotkey is "
             "active, transcribed locally, then discarded.",
             path=path,
         )
@@ -1403,12 +1475,23 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         "Published Windows 0.1.12 leaves the bundled Hugging Face libraries' default usage telemetry enabled. "
         "The libraries may send library-defined usage data to Hugging Face, and Transformers includes a random per-process session identifier in model-request metadata; the exact telemetry fields are not independently itemised."
     )
-    if (old_model_privacy in text
-            and old_model_privacy + " It also leaves default implicit authentication enabled" not in text):
+    old_model_privacy_with_token = old_model_privacy + (
+        " It also leaves default implicit authentication enabled, so a token from HF_TOKEN, "
+        "HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a public model request; "
+        "these public models do not require an account token."
+    )
+    if old_model_privacy_with_token in text and "HF_ENDPOINT" not in text:
+        text = replace_literal(
+            text,
+            old_model_privacy_with_token,
+            old_model_privacy + " It also leaves default implicit authentication enabled, so a token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token may accompany a request to that configured endpoint; these public models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
+            path=path,
+        )
+    if old_model_privacy in text and "HF_ENDPOINT" not in text:
         text = replace_literal(
             text,
             old_model_privacy,
-            old_model_privacy + " It also leaves default implicit authentication enabled, so a token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a public model request; these public models do not require an account token.",
+            old_model_privacy + " The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change the request destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. A token from HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or the local Hugging Face token cache may accompany a request to that configured endpoint; these public models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published.",
             path=path,
         )
     diagnostics_sentence = (
@@ -2585,10 +2668,11 @@ def run_self_test() -> None:
         telemetry_copy = Path(tmp) / "telemetry.txt"
         telemetry_copy.write_text(
             "The apps ship with no account, subscription, telemetry, or cloud transcription endpoint.\n"
-            "Presspeech has no analytics, event tracking, crash reporter, account system.\n",
+            "Presspeech has no analytics, event tracking, crash reporter, account system.\n"
+            '"description": "There is no account, subscription, telemetry, or cloud transcription."\n',
             encoding="utf-8",
         )
-        if len(stale_copy_errors([telemetry_copy])) != 2:
+        if len(stale_copy_errors([telemetry_copy])) != 3:
             raise SyncError("self-test: unqualified telemetry claims were not flagged")
         telemetry_copy.write_text(
             "Presspeech does not operate first-party analytics. Published Windows 0.1.12 "
@@ -2855,6 +2939,10 @@ def run_self_test() -> None:
                 "Published Windows 0.1.12",
                 "HF_TOKEN",
                 "local Hugging Face cache",
+                "HF_ENDPOINT",
+                "HUGGINGFACE_CO_STAGING",
+                "HF_HUB_USER_AGENT_ORIGIN",
+                "configured endpoint",
                 "do not require an account token",
                 "Upcoming Windows 0.1.13",
                 "implicit authentication",
@@ -2867,8 +2955,10 @@ def run_self_test() -> None:
             raise SyncError("self-test: missing version-scoped account-token disclosure was accepted")
         token_guidance.write_text(
             "Published Windows 0.1.12 may use HF_TOKEN or the local Hugging Face cache. "
+            "It honors HF_ENDPOINT and HUGGINGFACE_CO_STAGING and may add "
+            "HF_HUB_USER_AGENT_ORIGIN; a token may accompany a request to the configured endpoint. "
             "Those public models do not require an account token. Upcoming Windows 0.1.13 "
-            "disables implicit authentication.\n",
+            "clears these settings and disables implicit authentication.\n",
             encoding="utf-8",
         )
         if check_windows_model_download_privacy_guidance(required_token_guidance):

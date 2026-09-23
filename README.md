@@ -104,11 +104,11 @@ before downloading if you need another language.
 Hub/Transformers libraries may send default usage telemetry to Hugging Face;
 model-request metadata also includes a random per-process session ID. If
 `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or a locally cached Hugging Face token is
-available, it may accompany a public model request. These models do not require
+available, it may accompany a model request. These models do not require
 an account token; upcoming 0.1.13 disables this implicit authentication. This
 is separate from dictation: audio and transcripts are not sent in model
 downloads. The exact telemetry fields for this build are not independently
-itemised. See the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+itemised. Published Windows 0.1.12 also honors inherited `HF_ENDPOINT` and `HUGGINGFACE_CO_STAGING` settings, which can change the request destination; `HF_HUB_USER_AGENT_ORIGIN`, if set, is added to request metadata. An available token may accompany a request to that configured endpoint. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published. See the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
 See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
 source-build details.
@@ -371,8 +371,11 @@ Presspeech is local-first:
   speech-library network behavior differs by published version; see the
   [privacy inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 - Published Windows 0.1.12 may include a locally available Hugging Face account
-  token in public model-download requests; upcoming 0.1.13 disables this
-  implicit authentication. See the version-scoped [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+  token in model-download requests and honors inherited `HF_ENDPOINT` and
+  `HUGGINGFACE_CO_STAGING` settings; a configured endpoint may therefore
+  receive that token. An inherited `HF_HUB_USER_AGENT_ORIGIN` is also added to
+  request metadata. Upcoming 0.1.13 fixes the endpoint and removes these
+  inherited values. See the version-scoped [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
@@ -390,7 +393,7 @@ Presspeech is local-first:
 
 Network calls made by Presspeech are limited to:
 
-- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 asks new installs before the first model download and removes inherited Hugging Face account tokens from its own download process. Published Windows 0.1.12 may include a configured or cached Hugging Face token, while upcoming Windows 0.1.13 disables implicit authentication,
+- speech model downloads normally from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 asks new installs before the first download and removes inherited Hugging Face account tokens from its own download process. Published Windows 0.1.12 honors inherited `HF_ENDPOINT`/`HUGGINGFACE_CO_STAGING` routing and `HF_HUB_USER_AGENT_ORIGIN` metadata, and may send a configured or cached Hugging Face token to the configured endpoint. Upcoming Windows 0.1.13 fixes those settings and disables implicit authentication,
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, plus the compatibility
   guide link in macOS 0.3.8 / upcoming Windows 0.1.13 or builds containing that

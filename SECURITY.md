@@ -6,8 +6,12 @@ not disable the bundled Hugging Face libraries' default usage telemetry during
 model downloads; those dependency-generated events are distinct from audio or
 transcript upload. It also leaves default implicit authentication enabled, so
 an available Hugging Face token from `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or
-the local token cache may accompany a public model request; those models do not
-require an account token. Upcoming Windows 0.1.13 adds runtime-verified
+the local token cache may accompany a model request; those models do not
+require an account token. The 0.1.12 loader also honors inherited
+`HF_ENDPOINT`/`HUGGINGFACE_CO_STAGING` settings, which can change the request
+destination, and may add `HF_HUB_USER_AGENT_ORIGIN` to request metadata. A
+locally available token may therefore accompany a request to a configured
+endpoint. Upcoming Windows 0.1.13 fixes those settings and adds runtime-verified
 telemetry and authentication opt-outs.
 Finished text does enter the
 shared system clipboard for paste and recovery. macOS 0.3.8 can make
@@ -143,7 +147,8 @@ repository commit. Upcoming Windows 0.1.13 applies its network policy before imp
 Transformers, faster-whisper, or huggingface_hub: it fixes the public
 `https://huggingface.co` endpoint, disables Hub telemetry and request debug
 logging, disables the hf-xet transfer client and implicit authentication,
-removes inherited User-Agent origin data, and replaces Transformers' random
+resets inherited staging state, removes inherited User-Agent origin data, and
+replaces Transformers' random
 per-process request ID with the fixed non-unique value `telemetry-off`. Model
 calls explicitly decline account tokens and remote model code, and Transformers
 backends require safetensors weights. The packaged-app self-test verifies the

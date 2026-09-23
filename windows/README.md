@@ -9,7 +9,16 @@ telemetry enabled during model downloads. These libraries may send usage data
 to Hugging Face, and model-request metadata includes a random per-process
 session ID. Model downloads do not send dictation audio or transcripts; the
 exact telemetry fields are not independently itemised. Its pinned `hf-xet` 1.6.0
-predates the later, separate Xet transfer-telemetry implementation. The 0.1.12 loader also leaves implicit authentication enabled: an available `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or token in the local Hugging Face cache may accompany a public model request. These public models do not require an account token. Upcoming 0.1.13 disables implicit authentication and explicitly sends no account token; see the
+predates the later, separate Xet transfer-telemetry implementation. The 0.1.12
+loader also leaves implicit authentication enabled: an available `HF_TOKEN`,
+`HUGGING_FACE_HUB_TOKEN`, or token in the local Hugging Face cache may accompany
+a model request. It honors inherited `HF_ENDPOINT` and
+`HUGGINGFACE_CO_STAGING` settings, so requests can go to a configured endpoint
+instead of the public Hub; an available token may accompany the request there.
+If `HF_HUB_USER_AGENT_ORIGIN` is set, its value is also added to request
+metadata. These public models do not require an account token. Upcoming 0.1.13
+pins the public endpoint, clears the staging/origin settings, disables implicit
+authentication, and explicitly sends no account token; see the
 [version-scoped
 network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
@@ -74,7 +83,7 @@ verify every downloaded model file against a SHA-256 manifest. Upcoming 0.1.13
 applies the following policy before any model library imports: it fixes downloads to the public
 `https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
 disables the hf-xet transfer client, disables implicit authentication and
-inherited User-Agent origin data, and prevents
+inherited endpoint/staging/User-Agent-origin settings, and prevents
 Transformers from adding a random per-launch session identifier. The pinned
 `hf-xet` 1.6.0 build has no verified telemetry opt-out, so Presspeech sets
 `HF_HUB_DISABLE_XET=1` before imports and checks the bundled Hub's cached
