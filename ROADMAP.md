@@ -97,6 +97,20 @@ independent quality comparison. The implication is not to chase feature lists:
 Presspeech should earn distinction through a small, trustworthy dictation loop
 and evidence that text reaches the intended target or is recovered safely.
 
+A closer cross-platform peer is documented in the current
+[Dictámelo project README](https://github.com/sarrazola/dictamelo): it
+describes hold-to-talk on macOS and Windows, downloadable local Whisper,
+Parakeet, and Canary models, personal-key and hosted plans, optional cloud
+cleanup, file transcription, and local history/retry. Its README presents a
+1.0.0 download, notes macOS signing and notarization, and says its Windows
+installers lack Authenticode. These are the project's own product and
+distribution claims, not independent quality, uptake, or user-demand evidence.
+This shows that at least one adjacent project bundles those optional workflows;
+it does not show that Presspeech users want them. Keep comparisons explicit
+about model and processing choices, while requiring repeated Presspeech-specific
+evidence before widening scope beyond the focused local loop and safe text
+delivery.
+
 Recent first-party positioning reinforces that distinction. The 4 September
 [Superscribe Lite launch](https://superscribe.io/blog/2026/09/04/superscribe-lite-free-offline-dictation/)
 frames local/no-account dictation as a separate product, explicitly notes the

@@ -45,11 +45,14 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">First dictation</span>
         <h1>From download to your first words</h1>
-        <p>Choose your platform, finish the local setup checks, and try one private dictation before using Presspeech in another app. No account is required and dictation is transcribed on-device; speech-model downloads use the network. Review the <a href="privacy.html#network-calls">version-specific privacy inventory</a> before installing.</p>
+        <p>Choose your platform, finish the local setup checks, and try one private dictation before using Presspeech in another app. No account is required and dictation is transcribed on-device; speech-model downloads use the network. Check the current build's model-download warning before installing or starting setup; the <a href="privacy.html#network-calls">version-specific privacy inventory</a> has the technical details.</p>
+        <div class="note warn" id="model-download-preflight">
+          <p><strong>Before installing or opening an app that still needs its model:</strong> macOS 0.3.8 may include an inherited Hugging Face token in model-download requests. Windows 0.1.12 may send usage telemetry or an available token, and inherited routing can change the destination. These public models need no account token. Check the <a href="#macos-model-download-privacy">macOS</a> or <a href="#windows-model-download-privacy">Windows</a> warning below first; if a token may be available, a custom Windows route may be set, or you are unsure, wait for the relevant fixed release before downloading.</p>
+        </div>
         <div class="actions">
           <a class="button" href="install.html">Install on macOS</a>
           <a class="button secondary" href="windows.html">Review the Windows install guide</a>
-          <a class="button secondary" href="#finish-setup">Already installed? Finish setup</a>
+          <a class="button secondary" href="#choose-platform">Already installed? Check launch notes</a>
         </div>
       </div>
 
@@ -64,7 +67,7 @@
             </li>
             <li>
               <strong>Installed, not Ready</strong>
-              <span><a href="#finish-setup">Finish the visible setup checks</a>. Wait for the local model before testing the hotkey.</span>
+              <span><a href="#choose-platform">Check the model-download warning for your platform first</a>, then continue to Finish Setup below. Wait for the local model before testing the hotkey.</span>
             </li>
             <li>
               <strong>Ready, not tested</strong>
@@ -122,6 +125,7 @@
               <p><a href="windows.html#language-support">Check requirements and install the Windows prerelease</a></p>
             </article>
           </div>
+          <p class="quiet">Already installed? After checking the warning for your platform above, <a href="#finish-setup">continue to finish setup</a>.</p>
           <div class="note"><p><strong>Not supported:</strong> Intel Macs and Windows on Arm. For Windows 10, follow the support qualification above; see the <a href="windows.html">Windows install guide</a> before downloading.</p></div>
         </div>
       </section>

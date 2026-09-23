@@ -2571,6 +2571,63 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
     return errors
 
 
+def check_getting_started_preflight_order(
+    path: Path = DOCS / "getting-started.html",
+) -> list[str]:
+    """Keep launch/setup shortcuts behind the current model-download warnings."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing getting-started model-download preflight"]
+
+    contents = read_text(path)
+    preflight_start = contents.find('id="model-download-preflight"')
+    if preflight_start < 0:
+        return [f"{display}: missing model-download preflight before onboarding actions"]
+    preflight_end = contents.find("</div>", preflight_start)
+    preflight = (
+        contents[preflight_start:]
+        if preflight_end < 0
+        else contents[preflight_start:preflight_end]
+    )
+    required = (
+        "Before installing or opening",
+        "macOS 0.3.8",
+        "Windows 0.1.12",
+        "public models need no account token",
+        'href="#macos-model-download-privacy"',
+        'href="#windows-model-download-privacy"',
+    )
+    missing = [phrase for phrase in required if phrase not in preflight]
+    if missing:
+        return [
+            f"{display}: incomplete model-download preflight — missing "
+            + ", ".join(repr(phrase) for phrase in missing)
+        ]
+
+    actions = contents.find('<div class="actions">')
+    if actions < 0 or preflight_start > actions:
+        return [
+            f"{display}: model-download preflight must precede the first onboarding actions"
+        ]
+
+    warning_positions = [
+        contents.find('id="macos-model-download-privacy"'),
+        contents.find('id="windows-model-download-privacy"'),
+    ]
+    if any(position < 0 for position in warning_positions):
+        return [f"{display}: missing a platform-specific model-download warning"]
+
+    first_setup_warning = max(warning_positions)
+    setup_actions = [
+        match.start() for match in re.finditer(r'href="#finish-setup"', contents)
+    ]
+    if not setup_actions or any(position < first_setup_warning for position in setup_actions):
+        return [
+            f"{display}: setup shortcuts must follow both platform-specific model-download warnings"
+        ]
+    return []
+
+
 def check_windows_agent_install_privacy_order(
     path: Path = DOCS / "install" / "agents.md",
 ) -> list[str]:
@@ -4204,6 +4261,38 @@ def run_self_test() -> None:
         if not check_faq_install_privacy_order(faq_install):
             raise SyncError("self-test: FAQ direct download shortcut was accepted")
 
+        getting_started = Path(tmp) / "getting-started.html"
+        safe_getting_started = (
+            '<div id="model-download-preflight"><p>Before installing or opening '
+            'macOS 0.3.8 and Windows 0.1.12. These public models need no account token. '
+            '<a href="#macos-model-download-privacy">macOS</a> '
+            '<a href="#windows-model-download-privacy">Windows</a></p></div>'
+            '<div class="actions"><a href="install.html">Install</a>'
+            '<a href="#choose-platform">Already installed?</a></div>'
+            '<section id="quick-path"><a href="#choose-platform">Check warning</a></section>'
+            '<div id="macos-model-download-privacy">Mac warning</div>'
+            '<div id="windows-model-download-privacy">Windows warning</div>'
+            '<a href="#finish-setup">Continue to setup</a>'
+        )
+        getting_started.write_text(safe_getting_started, encoding="utf-8")
+        if check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: safe getting-started preflight was rejected")
+        getting_started.write_text(
+            safe_getting_started.replace(
+                '<a href="#choose-platform">Already installed?</a>',
+                '<a href="#finish-setup">Already installed?</a>',
+            ),
+            encoding="utf-8",
+        )
+        if not check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: setup shortcut before platform warnings was accepted")
+        getting_started.write_text(
+            safe_getting_started.replace('id="model-download-preflight"', 'id="removed"'),
+            encoding="utf-8",
+        )
+        if not check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: missing getting-started preflight was accepted")
+
         windows_agent_prompt = Path(tmp) / "agents.md"
         agent_warning = (
             "Before installing or launching published Windows 0.1.12, disclose "
@@ -4516,6 +4605,7 @@ def main() -> int:
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
+            errors.extend(check_getting_started_preflight_order())
             errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
@@ -4565,6 +4655,7 @@ def main() -> int:
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())
+        errors.extend(check_getting_started_preflight_order())
         errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())
