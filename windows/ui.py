@@ -954,10 +954,18 @@ class SetupWindow:
     def _build(self):
         root = _interactive_window("Welcome to Presspeech")
         self.root = root
+        self._setup_interacted = False
+        self._initial_focus_pending = True
         root.resizable(True, True)
         root.lift()
         root.attributes("-topmost", True)
         root.after(500, lambda: root.attributes("-topmost", False))
+        # If the model cache check finishes while Setup is open, do not steal
+        # focus after the user has started navigating or configuring devices.
+        root.bind("<KeyPress>", self._mark_setup_interacted, add="+")
+        root.bind("<ButtonPress>", self._mark_setup_interacted, add="+")
+        root.bind("<MouseWheel>", self._mark_setup_interacted, add="+")
+        root.bind("<FocusIn>", self._mark_setup_focus_interacted, add="+")
         self.scrollable_body = _ScrollableDialogBody(root, padding=20)
         frame = self.scrollable_body.content
 
@@ -995,76 +1003,12 @@ class SetupWindow:
             wraplength=560,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        microphone_label = ttk.Label(frame, text="Microphone")
-        microphone_label.grid(row=5, column=0, sticky="w")
-        options = self.app.input_device_options()
-        self.device_values = {label: value for label, value in options}
-        current = self.app.settings.get("input_device", cfg.DEFAULTS["input_device"])
-        selected = next((label for label, value in options if value == current),
-                        options[0][0])
-        self.device = ttk.Combobox(
-            frame, values=[label for label, _value in options],
-            state="readonly", width=48)
-        self.device.set(selected)
-        self.device.grid(row=5, column=1, sticky="w", padx=(12, 0), pady=3)
-        self.device.bind("<<ComboboxSelected>>", self._microphone_changed)
-
-        microphone_check_label = ttk.Label(frame, text="Microphone check")
-        microphone_check_label.grid(row=6, column=0, sticky="w", pady=(5, 3))
-        microphone_check = ttk.Frame(frame)
-        microphone_check.grid(row=6, column=1, sticky="ew", padx=(12, 0), pady=(5, 3))
-        self.microphone_status = ttk.Label(microphone_check, text="Not checked")
-        self.microphone_status.pack(side="left")
-        self.check_microphone_button = ttk.Button(
-            microphone_check,
-            text="Check Microphone",
-            command=self._check_microphone,
-        )
-        self.check_microphone_button.pack(side="right", padx=(12, 0))
-
-        ttk.Label(
-            frame,
-            text=("The microphone check is optional: you can finish Setup "
-                  "without running it; select or connect a microphone in "
-                  "Settings later. The local microphone check opens the "
-                  "selected input only when you choose Check Microphone; "
-                  "Windows may show its microphone-use "
-                  "indicator. On some Windows 11 builds, the first check may "
-                  "also show a Windows microphone-permission prompt; approve "
-                  "it only if you want to run the check. Audio samples are "
-                  "used only to measure input "
-                  "level in memory, then discarded — they are not saved, "
-                  "sent, or transcribed. Speak while the check runs. If it "
-                  "fails, enable Microphone "
-                  "access, Let apps access your microphone, and Let desktop "
-                  "apps access your microphone. Some Windows 11 builds also "
-                  "offer per-app microphone access for desktop apps; if that "
-                  "control appears, allow Presspeech there too. If Windows "
-                  "says these settings "
-                  "are managed by your organization, contact your administrator; "
-                  "Presspeech cannot override that policy."),
-            justify="left",
-            wraplength=560,
-        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 3))
-        microphone_actions = ttk.Frame(frame)
-        microphone_actions.grid(row=8, column=0, columnspan=2, sticky="w")
-        privacy_button = ttk.Button(
-            microphone_actions, text="Open Microphone Privacy Settings",
-            command=self.app.open_microphone_privacy_settings,
-        )
-        privacy_button.pack(side="left")
-        sound_button = ttk.Button(
-            microphone_actions, text="Open Sound Input Settings",
-            command=self.app.open_default_input_settings,
-        )
-        sound_button.pack(side="left", padx=(8, 0))
-
-        # Put the optional download choices after the microphone controls so
-        # forward Tab order matches their visual order from Setup's initial
-        # microphone focus.
+        # A first-run model choice gates dictation and may approve a large
+        # download, so keep it beside model status and ahead of optional
+        # microphone setup in both visual and keyboard traversal order.
         self.model_consent_frame = ttk.Frame(frame)
         self.model_consent_frame.grid(
-            row=9, column=0, columnspan=2, sticky="ew", pady=(4, 8))
+            row=5, column=0, columnspan=2, sticky="ew", pady=(4, 8))
         self.model_consent_label = ttk.Label(
             self.model_consent_frame,
             text=("A full multilingual Parakeet model download is about 2.5 GB "
@@ -1099,12 +1043,80 @@ class SetupWindow:
         self.other_model_button.pack(anchor="w", pady=(4, 0))
         self.model_consent_frame.grid_remove()
 
+        microphone_label = ttk.Label(frame, text="Microphone")
+        microphone_label.grid(row=6, column=0, sticky="w")
+        options = self.app.input_device_options()
+        self.device_values = {label: value for label, value in options}
+        current = self.app.settings.get("input_device", cfg.DEFAULTS["input_device"])
+        selected = next((label for label, value in options if value == current),
+                        options[0][0])
+        self.device = ttk.Combobox(
+            frame, values=[label for label, _value in options],
+            state="readonly", width=48)
+        self.device.set(selected)
+        self.device.grid(row=6, column=1, sticky="w", padx=(12, 0), pady=3)
+        self.device.bind(
+            "<KeyPress>", self._mark_setup_interacted, add="+")
+        self.device.bind("<<ComboboxSelected>>", self._microphone_changed)
+
+        microphone_check_label = ttk.Label(frame, text="Microphone check")
+        microphone_check_label.grid(row=7, column=0, sticky="w", pady=(5, 3))
+        microphone_check = ttk.Frame(frame)
+        microphone_check.grid(row=7, column=1, sticky="ew", padx=(12, 0), pady=(5, 3))
+        self.microphone_status = ttk.Label(microphone_check, text="Not checked")
+        self.microphone_status.pack(side="left")
+        self.check_microphone_button = ttk.Button(
+            microphone_check,
+            text="Check Microphone",
+            command=self._check_microphone,
+        )
+        self.check_microphone_button.pack(side="right", padx=(12, 0))
+
+        ttk.Label(
+            frame,
+            text=("The microphone check is optional: you can finish Setup "
+                  "without running it; select or connect a microphone in "
+                  "Settings later. The local microphone check opens the "
+                  "selected input only when you choose Check Microphone; "
+                  "Windows may show its microphone-use "
+                  "indicator. On some Windows 11 builds, the first check may "
+                  "also show a Windows microphone-permission prompt; approve "
+                  "it only if you want to run the check. Audio samples are "
+                  "used only to measure input "
+                  "level in memory, then discarded — they are not saved, "
+                  "sent, or transcribed. Speak while the check runs. If it "
+                  "fails, enable Microphone "
+                  "access, Let apps access your microphone, and Let desktop "
+                  "apps access your microphone. Some Windows 11 builds also "
+                  "offer per-app microphone access for desktop apps; if that "
+                  "control appears, allow Presspeech there too. If Windows "
+                  "says these settings "
+                  "are managed by your organization, contact your administrator; "
+                  "Presspeech cannot override that policy."),
+            justify="left",
+            wraplength=560,
+        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 3))
+        microphone_actions = ttk.Frame(frame)
+        microphone_actions.grid(row=9, column=0, columnspan=2, sticky="w")
+        privacy_button = ttk.Button(
+            microphone_actions, text="Open Microphone Privacy Settings",
+            command=self.app.open_microphone_privacy_settings,
+        )
+        privacy_button.pack(side="left")
+        sound_button = ttk.Button(
+            microphone_actions, text="Open Sound Input Settings",
+            command=self.app.open_default_input_settings,
+        )
+        sound_button.pack(side="left", padx=(8, 0))
+
         hotkey_label = ttk.Label(frame, text="Dictation hotkey")
         hotkey_label.grid(row=10, column=0, sticky="w")
         self.hotkey = ttk.Combobox(
             frame, values=cfg.HOTKEYS, state="readonly", width=18)
         self.hotkey.set(self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]))
         self.hotkey.grid(row=10, column=1, sticky="w", padx=(12, 0), pady=3)
+        self.hotkey.bind(
+            "<KeyPress>", self._mark_setup_interacted, add="+")
         self.hotkey.bind("<<ComboboxSelected>>", self._hotkey_changed)
         ttk.Label(
             frame,
@@ -1192,6 +1204,11 @@ class SetupWindow:
                 (self.other_model_button, "m"),
                 (self.finish_button, "f"),
                 (self.later_button, "l")):
+            root.bind(
+                "<Alt-KeyPress-%s>" % key,
+                self._mark_setup_interacted,
+                add="+",
+            )
             _add_access_key(root, button, key)
         _bind_window_command(root, "<Escape>", self._defer)
         root.update_idletasks()
@@ -1207,14 +1224,50 @@ class SetupWindow:
                 self.hotkey_status, self.autostart_status):
             _mark_live_region(status)
         self.scrollable_body.fit_to_screen()
-        root.after_idle(self.device.focus_set)
-        root.after(100, self._poll_model)
+        self._poll_model()
+        root.after_idle(self._focus_initial_setup_control)
+
+    def _mark_setup_interacted(self, _event=None):
+        """Remember user navigation before asynchronous readiness changes."""
+        self._setup_interacted = True
+
+    def _mark_setup_focus_interacted(self, event=None):
+        """Count focus movement as input, except the chosen initial target."""
+        if getattr(self, "_initial_focus_pending", False):
+            return
+        widget = getattr(event, "widget", None)
+        if (widget is None or widget is self.root or
+                widget is getattr(self, "_initial_focus_widget", None)):
+            return
+        try:
+            if self.root.focus_get() is not widget:
+                return
+        except (AttributeError, tk.TclError):
+            return
+        self._mark_setup_interacted(event)
+
+    def _focus_initial_setup_control(self):
+        """Start at the required model choice when first-run consent is needed."""
+        if self.root is None:
+            return
+        if self._setup_interacted:
+            self._initial_focus_pending = False
+            return
+        if (getattr(self.app, "model_status", "pending") ==
+                "awaiting_download_consent"):
+            target = self.download_model_button
+        else:
+            target = self.device
+        self._initial_focus_widget = target
+        self._initial_focus_pending = False
+        target.focus_set()
 
     def _poll_model(self):
         if self.root is None:
             return
         self._poll_microphone_events()
         status = getattr(self.app, "model_status", "pending")
+        previous_status = getattr(self, "_last_model_status", None)
         detail = getattr(self.app, "model_status_detail", "")
         model_name = self.app.settings.get("model", cfg.DEFAULTS["model"])
         consent_detail = detail or (
@@ -1240,9 +1293,10 @@ class SetupWindow:
             _set_accessible_text(self.model_label, model_text)
             self._last_model_phase = model_phase
         consent_required = status == "awaiting_download_consent"
-        # Readiness changes arrive asynchronously. If a choice becomes
-        # unavailable while focused, continue at the next live setup control
-        # instead of unexpectedly sending keyboard users back to the mic.
+        self._last_model_status = status
+        # If readiness changes make a choice unavailable while focused, move
+        # to the first live follow-on control instead of leaving focus on a
+        # disabled button.
         for button in (
                 self.download_model_button, self.cpu_model_button,
                 self.other_model_button):
@@ -1250,7 +1304,7 @@ class SetupWindow:
                 self.root, button,
                 ("normal" if consent_required and
                  (button is not self.cpu_model_button or
-                  model_name != "base.en") else "disabled"), self.hotkey)
+                  model_name != "base.en") else "disabled"), self.device)
         if consent_required:
             if model_name == "base.en":
                 _set_accessible_text(
@@ -1284,6 +1338,18 @@ class SetupWindow:
             self.model_consent_frame.grid()
         else:
             self.model_consent_frame.grid_remove()
+        if (consent_required and previous_status != status and
+                not getattr(self, "_initial_focus_pending", False) and
+                not getattr(self, "_setup_interacted", False)):
+            try:
+                focused = self.root.focus_get()
+            except (AttributeError, tk.TclError):
+                focused = None
+            if focused is None or focused is getattr(self, "device", None):
+                # A slow local-cache check can reach consent after Setup opens.
+                # Bring the required choice into focus only if the user has
+                # not begun navigating the microphone or other controls.
+                self.download_model_button.focus_set()
         hotkey_state, hotkey_detail = _hotkey_readiness(self.app)
         _set_accessible_text(self.hotkey_status, hotkey_detail)
         self.repair_hotkey_button.config(state="normal")
@@ -1313,6 +1379,7 @@ class SetupWindow:
         self.root.after(300, self._poll_model)
 
     def _microphone_changed(self, _event=None):
+        self._mark_setup_interacted(_event)
         selected = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])
         settings = self.app.settings
@@ -1342,6 +1409,7 @@ class SetupWindow:
                 "text at your cursor.")
 
     def _hotkey_changed(self, _event=None):
+        self._mark_setup_interacted(_event)
         selected = self.hotkey.get()
         if selected not in cfg.HOTKEYS:
             self.hotkey.set(
@@ -1356,6 +1424,7 @@ class SetupWindow:
         _set_accessible_text(self.instructions, self._dictation_instructions())
 
     def _trigger_changed(self):
+        self._mark_setup_interacted()
         selected = self.trigger.get()
         if selected not in ("hold", "toggle"):
             self.trigger.set(

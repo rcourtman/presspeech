@@ -464,14 +464,19 @@ class AccessibleWindowTests(unittest.TestCase):
                 'text="Choose another model in Settings…"'):
             self.assertIn(button, body)
         self.assertLess(
-            body.index('text="Microphone"'),
             body.index('text="Download Parakeet model (up to ~2.5 GB)"'),
+            body.index('text="Microphone"'),
         )
         self.assertLess(
             body.index('text="Choose another model in Settings…"'),
             body.index('text="Dictation hotkey"'),
         )
         self.assertIn("self.model_consent_frame.grid_remove()", body)
+        self.assertIn("root.after_idle(self._focus_initial_setup_control)", body)
+        self.assertLess(
+            body.index("self._poll_model()"),
+            body.index("root.after_idle(self._focus_initial_setup_control)"),
+        )
 
     def test_hidden_first_run_model_choices_start_disabled_before_first_poll(self):
         body = inspect.getsource(ui.SetupWindow._build)
@@ -485,10 +490,8 @@ class AccessibleWindowTests(unittest.TestCase):
                         "\n        )", 1)[0]
                 self.assertIn('state="disabled"', construction)
 
-        self.assertLess(
-            body.index('state="disabled"'),
-            body.index("root.after(100, self._poll_model)"),
-        )
+        self.assertLess(body.index('state="disabled"'),
+                        body.index("self._poll_model()"))
 
     def test_setup_names_all_windows_microphone_privacy_switches(self):
         body = inspect.getsource(ui.SetupWindow._build)
@@ -799,6 +802,7 @@ class SetupWindowTests(unittest.TestCase):
         window = ui.SetupWindow.__new__(ui.SetupWindow)
         window.app = mock.Mock(
             model_status=status, model_status_detail=detail)
+        window._setup_interacted = False
         window.app.settings = {"model": "parakeet-tdt-0.6b-v3"}
         window.root = mock.Mock()
         window.model_label = mock.Mock()
@@ -959,10 +963,101 @@ class SetupWindowTests(unittest.TestCase):
                 with mock.patch.object(ui, "_set_accessible_text"):
                     window._poll_model()
 
-                window.hotkey.focus_set.assert_called_once_with()
-                window.device.focus_set.assert_not_called()
+                window.device.focus_set.assert_called_once_with()
                 focused_control.config.assert_called_once_with(
                     state="disabled")
+
+    def test_initial_setup_focus_starts_at_required_model_choice_when_needed(self):
+        for model, expected_label in (
+                ("parakeet-tdt-0.6b-v3", "Download Parakeet"),
+                ("base.en", "Download English-only CPU")):
+            with self.subTest(model=model):
+                window = self.make_window("awaiting_download_consent")
+                window.app.settings["model"] = model
+
+                with mock.patch.object(ui, "_set_accessible_text") as set_text:
+                    window._poll_model()
+                window._focus_initial_setup_control()
+
+                window.download_model_button.focus_set.assert_called_once_with()
+                window.device.focus_set.assert_not_called()
+                set_text.assert_any_call(
+                    window.download_model_button,
+                    expected_label + (
+                        " model (~141 MiB)" if model == "base.en" else
+                        " model (up to ~2.5 GB)"), announce=False)
+
+    def test_initial_setup_focus_uses_microphone_when_model_choice_not_needed(self):
+        for status in ("pending", "loading", "ready", "error"):
+            with self.subTest(status=status):
+                window = self.make_window(status)
+                window._focus_initial_setup_control()
+
+                window.device.focus_set.assert_called_once_with()
+                window.download_model_button.focus_set.assert_not_called()
+
+    def test_setup_focus_navigation_counts_as_interaction_except_initial_focus(self):
+        window = ui.SetupWindow.__new__(ui.SetupWindow)
+        window._setup_interacted = False
+        window._initial_focus_pending = False
+        window.root = mock.Mock()
+        initial = object()
+        window._initial_focus_widget = initial
+
+        window._mark_setup_focus_interacted(
+            types.SimpleNamespace(widget=initial))
+        self.assertFalse(window._setup_interacted)
+
+        window._mark_setup_focus_interacted(
+            types.SimpleNamespace(widget=window.root))
+        self.assertFalse(window._setup_interacted)
+
+        window._mark_setup_focus_interacted(
+            types.SimpleNamespace(widget=object()))
+        self.assertFalse(window._setup_interacted)
+
+        focused = object()
+        window.root.focus_get.return_value = focused
+        window._mark_setup_focus_interacted(
+            types.SimpleNamespace(widget=focused))
+        self.assertTrue(window._setup_interacted)
+
+    def test_initial_focus_does_not_override_early_setup_interaction(self):
+        window = self.make_window("awaiting_download_consent")
+        window._setup_interacted = True
+        window._initial_focus_pending = True
+
+        window._focus_initial_setup_control()
+
+        self.assertFalse(window._initial_focus_pending)
+        window.download_model_button.focus_set.assert_not_called()
+        window.device.focus_set.assert_not_called()
+
+    def test_model_choice_arriving_later_moves_untouched_initial_focus(self):
+        window = self.make_window("loading")
+        window._initial_focus_pending = False
+        window._setup_interacted = False
+        window.root.focus_get.return_value = window.device
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+            window.app.model_status = "awaiting_download_consent"
+            window._poll_model()
+
+        window.download_model_button.focus_set.assert_called_once_with()
+
+    def test_model_choice_arriving_later_does_not_steal_active_focus(self):
+        window = self.make_window("loading")
+        window._initial_focus_pending = False
+        window._setup_interacted = True
+        window.root.focus_get.return_value = window.device
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+            window.app.model_status = "awaiting_download_consent"
+            window._poll_model()
+
+        window.download_model_button.focus_set.assert_not_called()
 
     def test_finish_gate_closing_keeps_focus_on_adjacent_defer_action(self):
         window = self.make_window("ready", "base.en on cpu")

@@ -162,10 +162,15 @@ keyboard access testing in addition to assistive-technology testing.
   approximate 2.5 GB first download. With keyboard-only navigation and Narrator,
   verify the **Download Parakeet model**, **Use English-only CPU model**,
   and **Choose another model in Settings** actions have useful names, appear
-  after the microphone controls in Tab order, and can be activated. Confirm
-  they are absent when the model is already cached. Before the choice appears,
-  confirm its Alt+D, Alt+U, and Alt+M shortcuts cannot activate hidden choices;
-  once the choice appears, verify the matching shortcuts work. Before
+  before the microphone controls in visual and Tab order, and can be activated.
+  Confirm initial focus lands on **Download Parakeet model**; Tab should reach
+  the other model choices before the microphone selector. Confirm the choices
+  are absent and initial focus lands on the microphone selector when the model
+  is already cached. Before the choice appears, confirm its Alt+D, Alt+U, and
+  Alt+M shortcuts cannot activate hidden choices; once the choice appears,
+  verify the matching shortcuts work. If the local-cache check reaches the
+  consent state after Setup opens, confirm focus moves to the download choice
+  only when the user has not started interacting with Setup. Before
   activating any model choice, confirm no model download has started. Choose
   **Set Up Later** and
   confirm setup remains incomplete and no model download continues; reopen
@@ -179,9 +184,12 @@ keyboard access testing in addition to assistive-technology testing.
   Whisper base.en snapshot, confirm Setup reports the English-only CPU model
   and its approximate 141 MiB download, and that no model download starts
   before **Download English-only CPU model** is activated. With keyboard-only
-  navigation and Narrator, verify the size and the download/defer/alternate
-  model actions are clear. Choose **Set Up Later** and confirm no download
-  continues; reopen Setup and verify the choice remains available. In another
+  navigation and Narrator, verify the size and the download, defer, and
+  alternate-model choices are clear. Confirm initial focus lands on
+  **Download English-only CPU model**; Tab should reach the alternate-model
+  choice and then the microphone selector. Choose **Set Up Later** and confirm
+  no download continues; reopen Setup and verify the choice remains available.
+  In another
   clean profile, accept the download and confirm fetching begins only after
   that action and Setup reports its progress. With a complete local base.en
   snapshot, confirm startup loads it without asking again.
