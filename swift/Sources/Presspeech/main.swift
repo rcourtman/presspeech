@@ -5292,6 +5292,17 @@ enum SpokenFormattingCommandProcessor {
     }
 }
 
+private func spokenFormattingScratchpadHint(language: DictationLanguage) -> String {
+    switch language {
+    case .french:
+        return "Tip: enable Text → Spoken formatting commands to say “nouveau paragraphe” or “virgule”."
+    case .auto, .english:
+        return "Tip: enable Text → Spoken formatting commands to say “new paragraph” or “bullet point”."
+    default:
+        return "Tip: enable Text → Spoken formatting commands. English here; French if hint is French."
+    }
+}
+
 // MARK: - Filler word removal
 //
 // Deterministic regex pass that strips standalone non-word fillers
@@ -12136,10 +12147,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         footer.spacing = 10
         footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let formattingExamples = settings.dictationLanguage == .french
-            ? "“nouveau paragraphe” or “virgule”"
-            : "“new paragraph” or “bullet point”"
-        let hint = setupLabel("Tip: enable Text → Spoken formatting commands to say \(formattingExamples).",
+        let hint = setupLabel(spokenFormattingScratchpadHint(language: settings.dictationLanguage),
                               font: .systemFont(ofSize: 11),
                               color: .secondaryLabelColor)
         let clear = NSButton(title: "Clear", target: self, action: #selector(clearDictationScratchpadClicked(_:)))
@@ -15868,6 +15876,30 @@ private enum PresspeechSelfTest {
     }
 
     private static func testDictationLanguageHints() throws {
+        try expect(
+            spokenFormattingScratchpadHint(language: .auto),
+            equals: "Tip: enable Text → Spoken formatting commands to say “new paragraph” or “bullet point”.",
+            "auto-detect scratchpad guidance should show the default English commands"
+        )
+        try expect(
+            spokenFormattingScratchpadHint(language: .english),
+            equals: "Tip: enable Text → Spoken formatting commands to say “new paragraph” or “bullet point”.",
+            "English scratchpad guidance should show English commands"
+        )
+        try expect(
+            spokenFormattingScratchpadHint(language: .french),
+            equals: "Tip: enable Text → Spoken formatting commands to say “nouveau paragraphe” or “virgule”.",
+            "French scratchpad guidance should show French commands"
+        )
+        for language in DictationLanguage.allCases
+            where language != .auto && language != .english && language != .french {
+            try expect(
+                spokenFormattingScratchpadHint(language: language),
+                equals: "Tip: enable Text → Spoken formatting commands. English here; French if hint is French.",
+                "\(language.rawValue) guidance should disclose the available command languages"
+            )
+        }
+
         let dependencyCodes = Set(Language.allCases.map(\.rawValue))
         let selectableCodes = Set(
             DictationLanguage.allCases

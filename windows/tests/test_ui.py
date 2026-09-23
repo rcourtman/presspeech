@@ -459,9 +459,11 @@ class AccessibleWindowTests(unittest.TestCase):
             self.assertIn(disclosure, body)
         for button in (
                 'text="Download Parakeet model (up to ~2.5 GB)"',
-                'text="Use English-only CPU model (~141 MiB)"',
+                'text="Select and download English-only CPU model (~141 MiB)"',
                 'text="Choose another model in Settings…"'):
             self.assertIn(button, body)
+        self.assertIn(
+            'command=self.app.select_cpu_model_after_download_declined', body)
         self.assertLess(
             body.index('text="Download Parakeet model (up to ~2.5 GB)"'),
             body.index('text="Microphone"'),

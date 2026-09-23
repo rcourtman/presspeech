@@ -1040,7 +1040,7 @@ class SetupWindow:
         self.download_model_button.pack(anchor="w", pady=(6, 0))
         self.cpu_model_button = ttk.Button(
             self.model_consent_frame,
-            text="Use English-only CPU model (~141 MiB)",
+            text="Select and download English-only CPU model (~141 MiB)",
             command=self.app.select_cpu_model_after_download_declined,
             state="disabled",
         )
