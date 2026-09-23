@@ -3334,9 +3334,9 @@ private func setupChecklistSnapshotsHaveSameStructure(_ lhs: SetupChecklistSnaps
     }
 }
 
-/// Summarize only actionable setup changes for assistive technology. Model
-/// download details include frequent progress updates, so comparing row
-/// details (or announcing every checklist refresh) would interrupt users.
+/// Summarize only actionable setup changes for assistive technology. Ignore
+/// routine model progress; announce changed details only when a row remains in
+/// a recovery state, so a failed retry is not silent.
 private func setupChecklistAnnouncement(
     from previous: SetupChecklistSnapshot?,
     to current: SetupChecklistSnapshot,
@@ -3354,7 +3354,10 @@ private func setupChecklistAnnouncement(
         let actionChangedWhileMissing = !statusChanged
             && current.status == "Missing"
             && previous.buttonTitle != current.buttonTitle
-        guard statusChanged || actionChangedWhileMissing else { return nil }
+        let recoveryDetailsChanged = !statusChanged
+            && current.status == "Needs retry"
+            && previous.detail != current.detail
+        guard statusChanged || actionChangedWhileMissing || recoveryDetailsChanged else { return nil }
 
         switch current.status {
         case "Granted":
@@ -3375,6 +3378,9 @@ private func setupChecklistAnnouncement(
         case "Restricted":
             return "Microphone access is restricted. Contact your administrator if you need access."
         case "Needs retry":
+            if recoveryDetailsChanged {
+                return "\(title) still needs attention. Recovery details changed; review them and choose \(current.buttonTitle ?? "Retry") in Setup Checklist."
+            }
             return "\(title) needs attention. Choose \(current.buttonTitle ?? "Retry") in Setup Checklist."
         case "Check input":
             return "No microphone audio reached Presspeech. Choose another input in Setup Checklist."
@@ -16592,6 +16598,28 @@ private enum PresspeechSelfTest {
             ),
             equals: "Speech model needs attention. Choose Retry in Setup Checklist.",
             "recovery announcements should offer the available action without reading raw error details"
+        )
+        let firstModelFailure = snapshot(model: SetupChecklistRowState(
+            detail: "The speech model could not be downloaded.",
+            status: "Needs retry",
+            buttonTitle: "Retry"
+        ))
+        try expect(
+            setupChecklistAnnouncement(
+                from: firstModelFailure,
+                to: snapshot(model: SetupChecklistRowState(
+                    detail: "The verified model cache could not be prepared.",
+                    status: "Needs retry",
+                    buttonTitle: "Retry"
+                ))
+            ),
+            equals: "Speech model still needs attention. Recovery details changed; review them and choose Retry in Setup Checklist.",
+            "VoiceOver should signal changed retry guidance without automatically reading error details"
+        )
+        try expect(
+            setupChecklistAnnouncement(from: firstModelFailure, to: firstModelFailure),
+            equals: String?.none,
+            "unchanged retry details should not repeat an accessibility announcement"
         )
         try expect(
             setupChecklistAnnouncement(

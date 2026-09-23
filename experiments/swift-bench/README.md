@@ -75,8 +75,13 @@ swift build
 The Swift benchmark pins FluidAudio to the same exact revision as the
 production app (currently the released v0.15.6 commit). The default benchmark
 and `run-release-asr-checks.sh` therefore use the app's speech-library revision.
-The production app and `v3` benchmark also explicitly retain the released
-mel-context chunking behavior. `v3-sdk-default` is the deliberate exception:
+As checked on 2026-09-23, upstream's latest release is v0.16.1; v0.15.7 and
+v0.15.8 contain Parakeet v3 long-form, final-window, seam, and blank-window
+recovery changes, while v0.16.1 itself is a Mac Catalyst packaging fix with
+no API changes. These notes justify an evaluation, not a claim that Presspeech's
+quality or latency improves. The production app and `v3` benchmark also
+explicitly retain the released mel-context chunking behavior. `v3-sdk-default`
+is the deliberate exception:
 it exposes the pinned SDK's default so a changed default can be measured as a
 candidate instead of arriving silently with a dependency bump. The remaining
 qualification limits are below.
@@ -88,9 +93,13 @@ explicit backend; an ordinary production-pinned build rejects it. Commit the
 candidate pin before using a clean-checkout product gate, and do not move the
 app pin until the candidate checks below have passed.
 
-For a FluidAudio SDK upgrade that keeps Parakeet v3 unchanged, run the focused
-release wrapper after moving only this benchmark package and lock file to the
-candidate revision:
+For a FluidAudio SDK upgrade that keeps Parakeet v3 unchanged, first run and
+retain the normal release-gate report on the current production pin. Then move
+only this benchmark package and lock file to the candidate revision and run the
+focused wrapper below. Keep the corpus, individual clips, and trial count the
+same; compare candidate `v3` (the explicit production chunking config) with the
+saved production-pin `v3` results, and assess `v3-sdk-default` separately as a
+chunking-policy candidate:
 
 ```sh
 ./run-release-asr-checks.sh \

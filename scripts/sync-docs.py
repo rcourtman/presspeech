@@ -692,6 +692,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "worksheet's six counts and Overall result",
         "Download report draft",
         "blank prompts for public version and generic target context",
+        "Check new-report availability",
     ),
 }
 
@@ -2353,6 +2354,11 @@ def check_compatibility_worksheet_contract(
                 errors.append(
                     "docs/app-compatibility.html: worksheet handoff must check "
                     "matching reports before opening a new report"
+                )
+            if "Check new-report availability" not in actions:
+                errors.append(
+                    "docs/app-compatibility.html: new-report link must not imply "
+                    "that issue creation is currently available"
                 )
         save_button = re.search(
             r'<button\b(?=[^>]*\bid="save-worksheet-summary")(?=[^>]*\btype="button")'

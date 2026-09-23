@@ -199,6 +199,14 @@ that issue creation is restricted for this repository, so the public bug form
 may not accept a new report. Check for a matching issue and whether comments
 are available. If there is no usable public route, keep the privacy-safe report
 locally and retry later; do not post private data elsewhere as a workaround.
+An unsent draft is not sent or monitored. It can record the Presspeech and
+operating-system versions, affected stage, expected and observed result,
+smallest safe reproduction steps or frequency, generic target-app context if
+relevant, recovery tried and
+whether it worked, and attempt/failure counts. For text delivery, use harmless
+test text and record only whether complete text was recovered—never the phrase
+itself. Keep diagnostics private until reviewed; do not include audio,
+transcripts, raw logs, credentials, private paths, or identifying names.
 
 GitHub issues are public. Diagnostics omit transcript text, audio, dictionary
 contents, exact microphone names, raw error details, and raw log lines. Review

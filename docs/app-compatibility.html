@@ -295,17 +295,17 @@
                 <button class="button secondary" type="reset">Reset worksheet</button>
               </div>
               <div class="note" id="worksheet-report-actions" hidden>
-                <p><strong>All eight outcomes are ready.</strong> Copy or download the aggregate block above, then check for the same platform, app version, and field type before opening a new report. Add your counts to a matching report even when your result differs.</p>
+                <p><strong>All eight outcomes are ready.</strong> Copy or download the aggregate block above, then check for the same platform, app version, and field type. Add your counts to a matching report if comments are enabled; open a new one only if GitHub currently accepts submissions. If not, keep the draft locally and retry later.</p>
                 <div class="actions">
                   <a class="button" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22">Check matching reports</a>
-                  <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Open a new report</a>
+                  <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Check new-report availability</a>
                 </div>
               </div>
             </div>
           </form>
 
           <noscript>
-            <div class="note warn"><p>This optional calculator needs JavaScript. The protocol itself does not: tally the three steady-focus categories to five and the three focus-change categories to three, then use the report form below.</p></div>
+            <div class="note warn"><p>This optional calculator needs JavaScript. The protocol itself does not: tally the three steady-focus categories to five and the three focus-change categories to three, then check the matching reports and current reporting-availability note below.</p></div>
           </noscript>
         </div>
       </section>
@@ -357,8 +357,8 @@ assistive technology, or a minimal reproduction; omit private context]</code></p
               </details>
             </li>
             <li>
-              <strong>Submit one target-app report</strong>
-              <p>If no matching report exists, open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and select the same overall result in the form, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot.</p>
+              <strong>If GitHub accepts new reports, submit one target-app report</strong>
+              <p>If no matching report exists and GitHub currently accepts submissions, open the <a href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">compatibility report form</a>. Paste the worksheet's report-ready block into <strong>Eight-check outcome counts</strong> and select the same overall result in the form, or enter the same values manually. For a new report, put the platform, public app name/version, and generic field type after the fixed <code>[Compatibility]:</code> title prefix. Passing results are useful because they provide the denominator that failure-only reports cannot. If issue creation is restricted, keep the draft locally and retry later rather than repeatedly opening the blocked form.</p>
               <p>For <strong>Overall result</strong>, a complete automatic-paste pass means all five steady-focus attempts pasted once and all three focus-change attempts recovered safely. Focus-change recovery is expected; choose the manual-recovery option only when it occurred while the original target stayed focused. Any incorrect or unsafe result takes precedence.</p>
             </li>
             <li>
@@ -367,7 +367,7 @@ assistive technology, or a minimal reproduction; omit private context]</code></p
             </li>
           </ol>
           <div class="actions">
-            <a class="button" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Open the compatibility form</a>
+            <a class="button" href="https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml">Check new-report availability</a>
             <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%3A%22">Browse compatibility reports</a>
             <a class="button secondary" href="troubleshooting.html">Troubleshoot first</a>
           </div>

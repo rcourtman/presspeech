@@ -1101,6 +1101,34 @@ class SetupWindowTests(unittest.TestCase):
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
 
+    def test_deferred_setup_exposes_autostart_failure_without_claiming_success(self):
+        window = self.make_window("loading")
+        window.app.settings = {
+            "input_device": "auto",
+            "autostart": False,
+            "setup_complete": False,
+        }
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = True
+        window.app.apply_autostart.return_value = False
+        window._close = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._defer()
+
+        self.assertFalse(window.app.settings["setup_complete"])
+        self.assertTrue(window.app.settings["autostart"])
+        save.assert_called_once_with(window.app.settings)
+        window.app.apply_autostart.assert_called_once_with()
+        set_text.assert_called_once_with(
+            window.autostart_status,
+            "Setup is still open, but Start with Windows was not updated. "
+            "Open Startup Settings or turn it off, then choose Set Up Later "
+            "again.",
+        )
+        window._close.assert_not_called()
+
     def test_setup_instructions_respect_existing_toggle_mode(self):
         window = self.make_window("ready")
         window.app.settings = {"hotkey": "f9", "trigger": "toggle"}

@@ -1391,8 +1391,15 @@ class SetupWindow:
         settings["input_device"] = selected
         settings["autostart"] = bool(self.autostart.get())
         cfg.save(settings)
-        self.app.apply_autostart()
-        self._close()
+        if self.app.apply_autostart():
+            self._close()
+        else:
+            _set_accessible_text(
+                self.autostart_status,
+                "Setup is still open, but Start with Windows was not updated. "
+                "Open Startup Settings or turn it off, then choose Set Up "
+                "Later again.",
+            )
 
     def _close(self):
         try:

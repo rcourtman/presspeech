@@ -221,7 +221,13 @@ repeatable install-to-first-dictation path on supported Windows hardware.
   says an app without a valid signature can be blocked when its safety cannot be
   confidently assessed, and there is no per-app exception. Signing is therefore
   an install-compatibility gate for some supported PCs, not merely a cosmetic
-  trust signal.
+  trust signal. Signing does not guarantee a warning-free first run: Microsoft's
+  [SmartScreen reputation guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
+  says a new signed binary may still prompt until its hash or publisher builds
+  reputation, and a consistent publisher identity can carry reputation across
+  releases. Qualify the exact signed artifact and keep user guidance clear that
+  signature verification is not permission to override Smart App Control or
+  managed policy.
 - Keep installation and update integrity verifiable, including exact release
   assets, bounded downloads, checksums, and a recoverable failed update.
 - Exercise CPU and supported NVIDIA paths on clean Windows installations,

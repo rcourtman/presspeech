@@ -539,9 +539,10 @@ item after the development-wrapper launch check.
   permission becomes granted, then return to Presspeech from System Settings.
   Confirm the status change is announced once when Setup Checklist is active;
   **Ready to test**, recovery-needed, and completed-setup transitions should
-  each have concise, useful announcements. Confirm these announcements do not
-  read raw error details, repeat on unchanged refreshes, or interrupt the user
-  while System Settings is in front.
+  each have concise, useful announcements. Retry a failing model or audio setup
+  with different recovery details and confirm the change is announced without
+  reading the raw details aloud. Confirm announcements do not repeat on
+  unchanged refreshes or interrupt the user while System Settings is in front.
 - During a speech-model download, leave the VoiceOver cursor on a lower row's
   title, detail, and status in turn while the progress text changes. Confirm
   routine live refreshes keep the cursor on that element instead of resetting

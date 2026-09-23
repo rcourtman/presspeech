@@ -149,6 +149,57 @@
         }
       ]
     },
+    "upstream_sdk_review_2026_09_23": {
+      "production_pin": {
+        "version": "v0.15.6",
+        "revision": "4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b",
+        "used_by_app_and_benchmark": true
+      },
+      "latest_upstream_release_reviewed": {
+        "version": "v0.16.1",
+        "revision": "b811a61",
+        "release_date": "2026-09-21",
+        "url": "https://github.com/FluidInference/FluidAudio/releases/tag/v0.16.1",
+        "release_scope": "Mac Catalyst packaging fix; release notes say no API changes"
+      },
+      "relevant_intermediate_asr_releases": [
+        {
+          "version": "v0.15.7",
+          "url": "https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.7",
+          "changes": [
+            "Parakeet v3 long-form default changed to silence-aligned no-mel chunking",
+            "final-window re-decode and seam-reconciliation fixes"
+          ]
+        },
+        {
+          "version": "v0.15.8",
+          "url": "https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.8",
+          "changes": [
+            "fresh decoder state per window and final-window alignment",
+            "recovery for all-blank windows",
+            "word-text seam reconciliation"
+          ]
+        }
+      ],
+      "evaluation_status": "not_measured",
+      "recommended_check": "./run-release-asr-checks.sh --sdk-upgrade-only --allow-candidate-dependency",
+      "comparison_controls": "Save current-pin v0.15.6 release-gate results first; compare candidate explicit production-config v3 against the same clips, corpus, and trial count, and review candidate SDK-default chunking separately.",
+      "broader_evaluation_context": {
+        "nvidia_model_card": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
+        "reported_wer_percent_by_corpus": {
+          "LibriSpeech test-clean": 1.93,
+          "AMI meetings test": 11.31,
+          "Earnings-22 test": 11.42
+        },
+        "interpretation": "These are results on distinct datasets, not a Presspeech comparison; they caution against treating the clean 25-clip model-selection corpus as broad product evidence.",
+        "multi_corpus_asr_evaluation_research": {
+          "title": "Rethinking Evaluation in ASR: Are Our Models Robust Enough?",
+          "url": "https://arxiv.org/abs/2010.11745",
+          "finding": "The study reports that average WER over a sufficiently broad benchmark set is a better proxy for real-world noisy data than a single-dataset score."
+        }
+      },
+      "evidence_scope": "Upstream release notes motivate an SDK comparison only; they do not establish a Presspeech quality or latency improvement."
+    },
     "release_gate": {
       "script": "experiments/swift-bench/run-release-asr-checks.sh",
       "runs_private_real_audio_when_present": true,
@@ -184,6 +235,7 @@
     "Both tested backends produced essentially identical transcripts on the synthetic audio.",
     "Unified and Nemotron models are candidate-only and are not exposed in the app unless future benchmarks and real dictation tests prove they improve on v3.",
     "The 2026-07-22 FluidAudio v0.15.5 recheck retained Parakeet TDT v3 because both Nemotron candidates had higher average and worst-case WER.",
-    "The current v0.15.6 production dependency still requires same-pin corpus evidence before an ASR release gate can pass."
+    "The current v0.15.6 production dependency still requires same-pin corpus evidence before an ASR release gate can pass.",
+    "Upstream v0.15.7-v0.15.8 ASR fixes warrant a v0.16.1 SDK comparison, but no Presspeech performance result is available for that candidate."
   ]
 }
