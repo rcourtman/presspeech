@@ -36,11 +36,13 @@ collaborator where noted:
   Confirm each opens the documented fixed destination without app, version,
   diagnostics, or user data in the URL.
 - On the target-app compatibility page, complete all eight worksheet outcomes.
-  Confirm **Copy report block** and **Download report block** become available
-  only when complete; the downloaded plain-text file must contain only the six
-  aggregate counts and overall classification, with no phrases, transcripts,
-  app identity, or version metadata. Reset the worksheet and confirm selections
-  are not restored after reload.
+  Confirm **Copy report block** and **Download report draft** become available
+  only when complete. Copy must contain only the six aggregate counts and
+  overall classification; the downloaded plain-text draft must add blank
+  prompts for public versions and generic target context without prefilled app
+  identity or version values. Neither action may include phrases or
+  transcripts. Reset the worksheet and confirm selections are not restored
+  after reload.
 - In a signed-out browser, confirm the repository About description and topics
   expose both the released macOS app and Windows prerelease instead of
   presenting a Mac-only project. Confirm the Pages home page, Get started,

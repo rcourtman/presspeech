@@ -980,8 +980,11 @@ class SetupWindow:
 
         ttk.Label(
             frame,
-            text=("The local microphone check opens the selected input only "
-                  "when you choose Check Microphone; Windows may show its microphone-use "
+            text=("The microphone check is optional: you can finish Setup "
+                  "without running it; select or connect a microphone in "
+                  "Settings later. The local microphone check opens the "
+                  "selected input only when you choose Check Microphone; "
+                  "Windows may show its microphone-use "
                   "indicator. Audio samples are used only to measure input "
                   "level in memory, then discarded — they are not saved, "
                   "sent, or transcribed. Speak while the check runs. If it "

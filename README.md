@@ -369,11 +369,11 @@ reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitl
 before opening the focused [compatibility report
 form](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml).
 GitHub reported issue creation as restricted on 23 September 2026, so verify
-the route accepts reports first; if it does not, keep the aggregate counts
-private and retry later rather than posting sensitive data elsewhere. The
-worksheet's **Download report block** saves only those six counts and their
-overall classification as a plain-text file; it does not save phrases or
-transcripts.
+the route accepts reports first; if it does not, keep the report draft
+privately and retry later rather than posting sensitive data elsewhere. The
+worksheet's **Download report draft** saves those six counts and their overall
+classification with blank prompts for public versions and generic target
+context; it does not collect or save phrases or transcripts.
 If the same platform, app version, and generic field type already has a report,
 add the worksheet's counts and overall result there with your Presspeech/OS
 versions and relevant conditions—even when your outcome differs—instead of

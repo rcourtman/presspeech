@@ -618,7 +618,8 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Focus-change recovery is expected",
         "manual-paste recovery occurred while the original target stayed focused",
         "worksheet's six counts and Overall result",
-        "Download report block",
+        "Download report draft",
+        "blank prompts for public versions and generic target context",
     ),
     DOCS / "app-compatibility.html": (
         "generic field type",
@@ -633,7 +634,8 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Focus-change recovery is expected",
         "manual-recovery option only when it occurred while the original target stayed focused",
         "worksheet's six counts and Overall result",
-        "Download report block",
+        "Download report draft",
+        "blank prompts for public version and generic target context",
     ),
 }
 
@@ -959,7 +961,19 @@ Download the installer and its checksum from the same official release, then ver
   }
   "SHA-256 verified: $actual"
 
-After verification succeeds, show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
+If GitHub CLI is already installed and the user is already signed in, offer an optional provenance check. Run it only with the user's approval; do not inspect or display credentials, install GitHub CLI, or sign in for this check:
+  $tag = "windows-v$version"
+  gh release verify $tag --repo rcourtman/presspeech
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Release attestation verification failed; do not run the installer.'
+  }
+  gh release verify-asset $tag $installer --repo rcourtman/presspeech
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Installer attestation verification failed; do not run the installer.'
+  }
+This checks the immutable release and the installer's signed GitHub release attestation. It is stronger provenance evidence than the checksum served beside the installer, but it does not code-sign the installer or prove the program is safe. If the user agrees to the check and either command fails, stop; do not run the installer. If the user declines or gh is unavailable, say clearly that provenance was not verified; do not claim otherwise. Let the user decide whether the repository source and matching checksum are enough, and never launch without explicit confirmation.
+
+Once the checksum succeeds and any requested attestation check also succeeds—or the user explicitly chooses checksum-only trust—show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
   Start-Process -FilePath $installer
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
@@ -2286,7 +2300,7 @@ def check_compatibility_worksheet_contract(
                 )
         save_button = re.search(
             r'<button\b(?=[^>]*\bid="save-worksheet-summary")(?=[^>]*\btype="button")'
-            r'(?=[^>]*\bdisabled\b)[^>]*>Download report block</button>',
+            r'(?=[^>]*\bdisabled\b)[^>]*>Download report draft</button>',
             form,
             flags=re.I,
         )
@@ -2326,13 +2340,17 @@ def check_compatibility_worksheet_contract(
         )
     if (
         'save.addEventListener("click", saveSummary)' not in script
-        or "new Blob([`${summary.value}\\n`]" not in script
-        or 'link.download = "presspeech-compatibility-report.txt"' not in script
+        or "new Blob([`${formatReportDraft(summary.value)}\\n`]" not in script
+        or 'link.download = "presspeech-compatibility-report-draft.txt"' not in script
         or "URL.createObjectURL(file)" not in script
+        or "function formatReportDraft(summaryText)" not in script
+        or '"Platform (macOS or Windows):"' not in script
+        or '"Target app and public version:"' not in script
+        or '"Generic field type:"' not in script
     ):
         errors.append(
-            "docs/compatibility-worksheet.js: report download must save only the "
-            "aggregate summary in a named text file"
+            "docs/compatibility-worksheet.js: report download must save aggregate "
+            "counts with blank context prompts in a named text file"
         )
     return errors
 
@@ -2628,6 +2646,25 @@ def check_compare_freshness(
 
 def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     errors: list[str] = []
+    required_windows_provenance = (
+        "gh release verify $tag --repo rcourtman/presspeech",
+        "gh release verify-asset $tag $installer --repo rcourtman/presspeech",
+        "do not inspect or display credentials",
+        "If the user agrees to the check and either command fails, stop",
+        "user explicitly chooses checksum-only trust",
+        "never launch without explicit confirmation",
+    )
+    missing_windows_provenance = [
+        phrase for phrase in required_windows_provenance
+        if phrase not in WINDOWS_INSTALL_PROMPT
+    ]
+    if missing_windows_provenance:
+        errors.append(
+            "Windows assistant prompt: optional attestation verification must "
+            "remain explicit and credential-safe; missing "
+            + ", ".join(repr(phrase) for phrase in missing_windows_provenance)
+        )
+
     agents = read_text(DOCS / "install" / "agents.md")
     if agents != agents_markdown(metadata):
         errors.append("docs/install/agents.md: canonical install prompts are out of sync")
@@ -2837,6 +2874,19 @@ def run_self_test() -> None:
             or "9.8.7" in synced_agents
             or "Do not inspect or display token values" not in MAC_INSTALL_PROMPT
             or "launch 0.3.8 without the user's informed choice" not in MAC_INSTALL_PROMPT
+            or (
+                "gh release verify $tag --repo rcourtman/presspeech"
+                not in WINDOWS_INSTALL_PROMPT
+            )
+            or (
+                "gh release verify-asset $tag $installer --repo rcourtman/presspeech"
+                not in WINDOWS_INSTALL_PROMPT
+            )
+            or "do not inspect or display credentials" not in WINDOWS_INSTALL_PROMPT
+            or (
+                "If the user agrees to the check and either command fails, stop"
+                not in WINDOWS_INSTALL_PROMPT
+            )
         ):
             raise SyncError("self-test: cross-platform assistant prompts were not generated")
 
@@ -3450,7 +3500,7 @@ def run_self_test() -> None:
             + '<textarea id="worksheet-summary" readonly></textarea>'
             '<button type="button">Copy</button>'
             '<button id="save-worksheet-summary" type="button" disabled>'
-            'Download report block</button><button type="reset">Reset</button>'
+            'Download report draft</button><button type="reset">Reset</button>'
             '<div id="worksheet-report-actions" hidden>'
             '<a href="https://github.com/example/issues?q=matching">Browse</a>'
             '<a href="https://github.com/example/issues/new?template=compatibility_report.yml">New</a>'
@@ -3463,8 +3513,11 @@ def run_self_test() -> None:
             'reportActions.hidden = !result.complete;\n'
             'save.disabled = !result.complete;\n'
             'save.addEventListener("click", saveSummary);\n'
-            'const file = new Blob([`${summary.value}\\n`]);\n'
-            'link.download = "presspeech-compatibility-report.txt";\n'
+            'function formatReportDraft(summaryText) { return ['
+            '"Platform (macOS or Windows):", "Target app and public version:", '
+            '"Generic field type:", summaryText].join("\\n"); }\n'
+            'const file = new Blob([`${formatReportDraft(summary.value)}\\n`]);\n'
+            'link.download = "presspeech-compatibility-report-draft.txt";\n'
             'URL.createObjectURL(file);\n'
             '`Overall result: ${result.overall}`\n'
             + "\n".join(COMPATIBILITY_OVERALL_RESULTS)

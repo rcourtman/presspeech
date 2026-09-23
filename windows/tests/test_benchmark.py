@@ -15,7 +15,10 @@ class MetricTests(unittest.TestCase):
             {
                 "task_group": "spontaneous-dictation",
                 "accuracy": {"reference_words": 4, "word_errors": 1},
-                "trial_accuracy": {"trials": 2, "all_word_errors": [1, 0]},
+                "trial_accuracy": {
+                    "trials": 2, "all_word_errors": [1, 0],
+                    "worst_word_errors": 1,
+                },
                 "inference_seconds": {"all": [0.2, 0.4]},
                 "silence": None,
                 "first_word": {"retained": False, "failed_trials": 1,
@@ -36,7 +39,10 @@ class MetricTests(unittest.TestCase):
             {
                 "task_group": "spontaneous-dictation",
                 "accuracy": {"reference_words": 2, "word_errors": 2},
-                "trial_accuracy": {"trials": 2, "all_word_errors": [2, 1]},
+                "trial_accuracy": {
+                    "trials": 2, "all_word_errors": [2, 1],
+                    "worst_word_errors": 2,
+                },
                 "inference_seconds": {"all": [0.8]},
                 "silence": None,
                 "first_word": {"retained": True, "failed_trials": 0,
@@ -60,6 +66,7 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(spontaneous["reviewed_reference_word_count"], 6)
         self.assertEqual(spontaneous["aggregate_wer"], 0.5)
         self.assertEqual(spontaneous["aggregate_trial_wer"], 4 / 12)
+        self.assertEqual(spontaneous["aggregate_worst_trial_wer"], 3 / 6)
         self.assertEqual(spontaneous["inference_seconds"]["median"], 0.5)
         self.assertEqual(spontaneous["inference_seconds"]["p95"], 0.8)
         self.assertEqual(spontaneous["inference_seconds"]["measured_trials"], 4)
@@ -70,6 +77,56 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(spontaneous["first_word_failure_trial_count"], 1)
         self.assertEqual(spontaneous["reviewed_final_word_trial_count"], 4)
         self.assertEqual(spontaneous["final_word_failure_trial_count"], 1)
+
+    def test_language_group_metrics_are_independent_of_task_groups(self):
+        samples = [
+            {
+                "language_group": "pl",
+                "task_group": "read-speech",
+                "accuracy": {"reference_words": 2, "word_errors": 1},
+                "trial_accuracy": {
+                    "trials": 2, "all_word_errors": [1, 0],
+                    "worst_word_errors": 1,
+                },
+                "inference_seconds": {"all": [0.2, 0.4]},
+                "silence": None,
+                "first_word": None,
+                "final_word": None,
+            },
+            {
+                "language_group": "pl",
+                "task_group": "spontaneous-dictation",
+                "accuracy": {"reference_words": 3, "word_errors": 1},
+                "trial_accuracy": {
+                    "trials": 1, "all_word_errors": [1],
+                    "worst_word_errors": 1,
+                },
+                "inference_seconds": {"all": [0.5]},
+                "silence": None,
+                "first_word": None,
+                "final_word": None,
+            },
+            {
+                "language_group": "en-GB",
+                "task_group": "read-speech",
+                "accuracy": None,
+                "inference_seconds": {"all": [0.7]},
+                "silence": None,
+                "first_word": None,
+                "final_word": None,
+            },
+        ]
+
+        result = benchmark.language_group_metrics(samples)
+
+        self.assertEqual(set(result), {"en-GB", "pl"})
+        polish = result["pl"]
+        self.assertEqual(polish["sample_count"], 2)
+        self.assertEqual(polish["reviewed_sample_count"], 2)
+        self.assertEqual(polish["aggregate_wer"], 2 / 5)
+        self.assertEqual(polish["aggregate_trial_wer"], 2 / 7)
+        self.assertEqual(polish["aggregate_worst_trial_wer"], 2 / 5)
+        self.assertEqual(polish["inference_seconds"]["median"], 0.4)
 
     def test_identical_text_has_zero_error(self):
         metrics = benchmark.accuracy_metrics("It works well.", "It works well.")
@@ -153,10 +210,23 @@ class MetricTests(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as handle:
                 json.dump({"samples": [{"task_group": "  "}]}, handle)
             with mock.patch.object(
-                    benchmark.engine, "Transcriber") as constructor:
+                benchmark.engine, "Transcriber") as constructor:
                 with self.assertRaisesRegex(ValueError, "task_group"):
                     benchmark.run_benchmark(path)
                 constructor.assert_not_called()
+
+    def test_invalid_language_group_is_rejected_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            for invalid in ("  ", True, 3):
+                with self.subTest(language_group=invalid):
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump({"samples": [{"language_group": invalid}]}, handle)
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, "language_group"):
+                            benchmark.run_benchmark(path)
+                        constructor.assert_not_called()
 
     def test_non_object_sample_is_rejected_before_model_loading(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -494,7 +564,7 @@ class MetricTests(unittest.TestCase):
             "Parakeet windows: 2-2 per trial; longest input 59.750s",
             output.getvalue(),
         )
-        self.assertEqual(result["benchmark_version"], 5)
+        self.assertEqual(result["benchmark_version"], 6)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,
@@ -507,12 +577,16 @@ class MetricTests(unittest.TestCase):
                 {
                     "id": "short",
                     "audio": "short.wav",
+                    "language_group": "en-GB",
+                    "task_group": "short-command",
                     "reference": "alpha beta",
                     "reference_reviewed": True,
                 },
                 {
                     "id": "longer",
                     "audio": "longer.wav",
+                    "language_group": "en-GB",
+                    "task_group": "spontaneous-dictation",
                     "reference": "one two three four",
                     "reference_reviewed": True,
                 },
@@ -559,12 +633,28 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["first_word_failure_count"], 1)
         self.assertEqual(result["reviewed_first_word_trial_count"], 4)
         self.assertEqual(result["first_word_failure_trial_count"], 1)
+        self.assertAlmostEqual(
+            result["language_groups"]["en-GB"]["aggregate_worst_trial_wer"],
+            3 / 6,
+        )
+        self.assertEqual(result["samples"][0]["language_group"], "en-GB")
+        self.assertEqual(
+            set(result["task_groups"]),
+            {"short-command", "spontaneous-dictation"},
+        )
 
         output = io.StringIO()
         with redirect_stdout(output):
             benchmark._print_summary(result)
         self.assertIn(
             "Snapshot: nvidia/parakeet-tdt-0.6b-v3@", output.getvalue())
+        self.assertIn("Language group en-GB:", output.getvalue())
+        self.assertIn(
+            "WER 16.67% consensus / 33.33% all trials / "
+            "50.00% worst-trial envelope",
+            output.getvalue(),
+        )
+        self.assertIn("Task group short-command:", output.getvalue())
         self.assertIn(
             "16.67% consensus | 33.33% all trials | "
             "16.67/50.00% best/worst trial envelope",

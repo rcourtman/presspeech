@@ -176,9 +176,12 @@ cannot be treated as evidence of low demand or few compatibility failures.
 The local compatibility worksheet preserves aggregate counts without sending
 them; if a comparable open report accepts comments, users can add their result
 there, otherwise they should keep it privately and retry when intake returns.
-Do not route around the restriction by soliciting transcripts, diagnostics,
-or reports on unrelated public services. Reassess the community signal after
-the project has a working, privacy-safe intake path.
+Its opt-in **Download report draft** now pairs those counts with blank prompts
+for public versions and generic target context, so a tester can keep a more
+useful record without the page collecting those details. Do not route around
+the restriction by soliciting transcripts, diagnostics, or reports on unrelated
+public services. Reassess the community signal after the project has a working,
+privacy-safe intake path.
 
 ## Next: earn a stable Windows release
 

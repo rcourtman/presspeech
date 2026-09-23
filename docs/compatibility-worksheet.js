@@ -74,6 +74,29 @@
     ].join("\n");
   }
 
+  function formatReportDraft(summaryText) {
+    if (!summaryText) return "";
+    return [
+      "Presspeech target-app compatibility report draft",
+      "Fill in public or generic context only. Do not add dictated or recognized text, audio, " +
+        "clipboard contents, document/account/window names, private paths, credentials, or device serial numbers.",
+      "",
+      "Test date (optional):",
+      "Platform (macOS or Windows):",
+      "Presspeech version:",
+      "Operating-system version:",
+      "Target app and public version:",
+      "Target class:",
+      "Generic field type:",
+      "Hardware (optional; generic model only):",
+      "Clipboard preservation during steady-focus check:",
+      "Relevant conditions:",
+      "Known clipboard-change interruptions excluded:",
+      "",
+      summaryText,
+    ].join("\n");
+  }
+
   function mount(doc) {
     const form = doc.getElementById("compatibility-worksheet");
     if (!form) return;
@@ -143,19 +166,21 @@
       let link;
       let downloadUrl;
       try {
-        const file = new Blob([`${summary.value}\n`], {
+        const file = new Blob([`${formatReportDraft(summary.value)}\n`], {
           type: "text/plain;charset=utf-8",
         });
         downloadUrl = URL.createObjectURL(file);
         link = doc.createElement("a");
         link.href = downloadUrl;
-        link.download = "presspeech-compatibility-report.txt";
+        link.download = "presspeech-compatibility-report-draft.txt";
         link.hidden = true;
         doc.body.appendChild(link);
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-        status.textContent = "Aggregate-only download requested. The file contains no phrases or transcript.";
+        status.textContent =
+          "Report draft download requested with aggregate counts and blank context fields. " +
+          "It contains no phrases or transcript.";
       } catch (_error) {
         if (link && link.parentNode) link.remove();
         if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -173,5 +198,5 @@
     render();
   }
 
-  return { formatSummary, mount, summarise };
+  return { formatReportDraft, formatSummary, mount, summarise };
 });

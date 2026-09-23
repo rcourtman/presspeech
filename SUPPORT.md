@@ -11,13 +11,15 @@ below may therefore be unavailable even though existing issues can be read.
 Do not keep retrying a blocked form or include private data elsewhere as a
 workaround. Check the [issue list](https://github.com/rcourtman/presspeech/issues)
 for a matching discussion and whether GitHub permits commenting; if no usable
-public route is available, keep the privacy-safe aggregate locally and retry
+public route is available, keep the privacy-safe report draft locally and retry
 after issue creation is restored. Security reports must use the private route
 in [SECURITY.md](SECURITY.md).
 
 For a completed target-app compatibility check, the worksheet's **Download
-report block** saves only its six aggregate counts and overall classification
-as a plain-text file. It does not include test phrases or transcripts.
+report draft** saves its six aggregate counts and overall classification with
+blank prompts for public versions and generic target context. The worksheet
+does not collect or prefill those details; the draft contains no test phrases
+or transcripts. Keep it privately while no public route is available.
 
 While issue creation is restricted, you can prepare an unsent private draft
 instead of losing the details. Record only what will help reproduce or measure

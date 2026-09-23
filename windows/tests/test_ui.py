@@ -485,7 +485,11 @@ class AccessibleWindowTests(unittest.TestCase):
         body = inspect.getsource(ui.SetupWindow._build)
 
         for disclosure in (
-                "check opens the selected input only ",
+                "The microphone check is optional",
+                "finish Setup ",
+                "without running it; select or connect a microphone in ",
+                "Settings later. The local microphone check opens the ",
+                "selected input only when you choose Check Microphone; ",
                 "when you choose Check Microphone",
                 "Check Microphone",
                 "microphone-use ",

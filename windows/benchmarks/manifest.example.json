@@ -6,6 +6,7 @@
     {
       "id": "short-command-001",
       "task_group": "short-command",
+      "language_group": "en",
       "audio": "audio/short-command-001.wav",
       "reference": "Replace this with a human-reviewed reference.",
       "reference_reviewed": false

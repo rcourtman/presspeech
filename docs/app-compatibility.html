@@ -201,8 +201,8 @@
         <div class="wrap">
           <span class="section-eyebrow">Local worksheet</span>
           <h2>Record categories, not words</h2>
-          <p>Use this optional worksheet as you complete the checks above. It records only the outcome category selected for each attempt, calculates the two sets of aggregate counts, and prepares the exact count and overall-result block used by the compatibility report. There is nowhere to enter a phrase or transcript.</p>
-          <div class="note" id="worksheet-privacy"><p><strong>Local and temporary:</strong> selections stay in this page's controls. The worksheet does not send selections or write them to browser storage. Choose <strong>Reset worksheet</strong> to clear them. <strong>Copy report block</strong> puts only the labelled six counts and overall classification on your clipboard. <strong>Download report block</strong> saves just that aggregate as a plain-text file for your own records. Neither action includes phrases or transcripts; you decide what to share.</p></div>
+          <p>Use this optional worksheet as you complete the checks above. It records only the outcome category selected for each attempt, calculates the two sets of aggregate counts, and prepares the exact count and overall-result block used by the compatibility report. There is nowhere to enter a phrase, transcript, or report context.</p>
+          <div class="note" id="worksheet-privacy"><p><strong>Local and temporary:</strong> selections stay in this page's controls. The worksheet does not send selections or write them to browser storage. Choose <strong>Reset worksheet</strong> to clear them. <strong>Copy report block</strong> puts only the labelled six counts and overall classification on your clipboard. <strong>Download report draft</strong> saves those counts with blank prompts for public version and generic target context; the worksheet does not collect or prefill those details. The plain-text draft contains no phrases or transcripts. If intake is unavailable, keep it privately and decide later what, if anything, to share.</p></div>
 
           <form class="compatibility-worksheet" id="compatibility-worksheet" autocomplete="off" hidden>
             <div class="worksheet-group" aria-labelledby="steady-worksheet-heading">
@@ -290,7 +290,7 @@
               <textarea class="worksheet-summary" id="worksheet-summary" rows="11" readonly aria-describedby="worksheet-privacy worksheet-status" placeholder="Complete all eight category selections to generate the report block."></textarea>
               <div class="actions">
                 <button class="button" id="copy-worksheet-summary" type="button" disabled>Copy report block</button>
-                <button class="button secondary" id="save-worksheet-summary" type="button" disabled>Download report block</button>
+                <button class="button secondary" id="save-worksheet-summary" type="button" disabled>Download report draft</button>
                 <a class="button secondary" href="#share-result">Continue to reporting steps</a>
                 <button class="button secondary" type="reset">Reset worksheet</button>
               </div>
@@ -339,7 +339,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Community evidence</span>
           <h2>Share counts, not content</h2>
-          <div class="note warn"><p><strong>Reporting availability checked 23 September 2026:</strong> GitHub currently reports that issue creation is restricted for this repository. You can still run this protocol and keep aggregate counts locally, but a new-report link may not accept a submission. Use <strong>Download report block</strong> above to save the six counts and classification while no public route is available, then check for a comparable open report and whether comments are enabled before sharing. Do not post transcripts, clipboard contents, or other private data elsewhere as a workaround.</p></div>
+          <div class="note warn"><p><strong>Reporting availability checked 23 September 2026:</strong> GitHub currently reports that issue creation is restricted for this repository. You can still run this protocol and keep a report draft locally, but a new-report link may not accept a submission. Use <strong>Download report draft</strong> above to save the six counts and classification with blank context prompts, then check for a comparable open report and whether comments are enabled before sharing. Do not post transcripts, clipboard contents, or other private data elsewhere as a workaround.</p></div>
           <ol class="steps">
             <li>
               <strong>Find the same platform, app, version, and field type</strong>

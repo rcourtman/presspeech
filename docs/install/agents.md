@@ -71,7 +71,19 @@ Download the installer and its checksum from the same official release, then ver
   }
   "SHA-256 verified: $actual"
 
-After verification succeeds, show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
+If GitHub CLI is already installed and the user is already signed in, offer an optional provenance check. Run it only with the user's approval; do not inspect or display credentials, install GitHub CLI, or sign in for this check:
+  $tag = "windows-v$version"
+  gh release verify $tag --repo rcourtman/presspeech
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Release attestation verification failed; do not run the installer.'
+  }
+  gh release verify-asset $tag $installer --repo rcourtman/presspeech
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Installer attestation verification failed; do not run the installer.'
+  }
+This checks the immutable release and the installer's signed GitHub release attestation. It is stronger provenance evidence than the checksum served beside the installer, but it does not code-sign the installer or prove the program is safe. If the user agrees to the check and either command fails, stop; do not run the installer. If the user declines or gh is unavailable, say clearly that provenance was not verified; do not claim otherwise. Let the user decide whether the repository source and matching checksum are enough, and never launch without explicit confirmation.
+
+Once the checksum succeeds and any requested attestation check also succeeds—or the user explicitly chooses checksum-only trust—show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
   Start-Process -FilePath $installer
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.

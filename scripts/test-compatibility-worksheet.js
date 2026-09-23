@@ -138,13 +138,30 @@ async function main() {
     assert.match(summary.value, /Inserted into any field: 1/);
     assert.match(summary.value, /Other or not completed: 1/);
     assert.match(summary.value, /Overall result: An incorrect or unsafe result occurred/);
+    assert.doesNotMatch(summary.value, /Platform|Target app|Operating-system version/);
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /Platform \(macOS or Windows\):\nPresspeech version:\nOperating-system version:/,
+    );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /Target app and public version:\nTarget class:\nGeneric field type:\nHardware \(optional; generic model only\):\nClipboard preservation during steady-focus check:/,
+    );
 
     await save.listeners.click();
     assert.equal(blobs.length, 1);
-    assert.deepEqual(blobs[0].parts, [`${summary.value}\n`]);
+    assert.deepEqual(
+      blobs[0].parts,
+      [`${worksheet.formatReportDraft(summary.value)}\n`],
+    );
     assert.equal(blobs[0].options.type, "text/plain;charset=utf-8");
-    assert.doesNotMatch(blobs[0].parts[0], /transcript|phrase|window|version/i);
-    assert.equal(doc.downloadLink.download, "presspeech-compatibility-report.txt");
+    assert.match(
+      blobs[0].parts[0],
+      /Target app and public version:\nTarget class:\nGeneric field type:/,
+    );
+    assert.match(blobs[0].parts[0], /Five steady-focus results[\s\S]*Overall result:/);
+    assert.doesNotMatch(blobs[0].parts[0], /amber rabbit|blue otter|dictated text/i);
+    assert.equal(doc.downloadLink.download, "presspeech-compatibility-report-draft.txt");
     assert.equal(doc.downloadLink.href, "blob:compatibility-report");
     assert.equal(doc.downloadLink.clicked, true);
     assert.equal(doc.downloadLink.removed, true);

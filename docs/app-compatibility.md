@@ -175,15 +175,17 @@ includes an optional in-page worksheet for the eight outcome categories. It
 calculates the two aggregate count sets and prepares a report-ready block with
 the canonical overall classification.
 Selections stay only in the page controls: the worksheet does not send
-selections, write them to browser storage, or provide a field for a phrase or
-transcript. Use **Reset worksheet** to clear them. **Copy report block**
-places only the labelled six counts and overall classification on the
-clipboard; **Download report block** saves only that same aggregate as a
-plain-text file for your own records. Neither action includes phrases or
-transcripts, and the user decides what to share. The download can preserve a
-completed result while no public reporting route is available. Once all eight outcomes
-are selected, the worksheet also reveals the existing-report search and new
-report form beside the result, with duplicate-checking first.
+selections, write them to browser storage, or provide a field for a phrase,
+transcript, or report context. Use **Reset worksheet** to clear them. **Copy
+report block** places only the labelled six counts and overall classification
+on the clipboard. **Download report draft** saves those counts with blank
+prompts for public versions and generic target context; the worksheet does not
+collect or prefill those details. The plain-text draft contains no phrases or
+transcripts, and the user decides what to share. It can preserve a completed
+result and a reminder of useful context while no public reporting route is
+available. Once all eight outcomes are selected, the worksheet also reveals
+the existing-report search and new report form beside the result, with
+duplicate-checking first.
 
 Without the worksheet, tally the same six categories manually:
 
