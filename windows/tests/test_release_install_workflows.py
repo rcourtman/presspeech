@@ -13,6 +13,49 @@ ROOT = Path(__file__).resolve().parents[2]
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
 
+class PackagedRuntimePrivacyTests(unittest.TestCase):
+    def test_package_selftest_overrides_a_synthetic_hostile_environment(self):
+        script = (ROOT / "windows" / "build-release.ps1").read_text(
+            encoding="utf-8")
+        start = script.index("function Invoke-PresspeechPackageSelfTest")
+        end = script.index("\nif (-not $ReusePackage)", start)
+        block = script[start:end]
+
+        self.assertIn(
+            "$startInfo = New-Object System.Diagnostics.ProcessStartInfo",
+            block,
+        )
+        self.assertIn("$startInfo.UseShellExecute = $false", block)
+        self.assertIn(
+            "$startInfo.EnvironmentVariables[$name] = $hostileEnvironment[$name]",
+            block,
+        )
+        # These values deliberately oppose the app policy. Synthetic token
+        # markers make it possible to test secret-removal behavior without
+        # inspecting, logging, or changing the build runner's credentials.
+        hostile_values = {
+            "HF_DEBUG": '"1"',
+            "HF_ENDPOINT": '"https://presspeech.invalid"',
+            "HUGGINGFACE_CO_STAGING": '"1"',
+            "HF_HUB_DISABLE_TELEMETRY": '"0"',
+            "HF_HUB_DISABLE_XET": '"0"',
+            "HF_XET_TELEMETRY_ENABLED": '"1"',
+            "DISABLE_TELEMETRY": '"0"',
+            "DO_NOT_TRACK": '"0"',
+            "HF_HUB_DISABLE_IMPLICIT_TOKEN": '"0"',
+            "HF_HUB_DISABLE_UPDATE_CHECK": '"0"',
+            "HF_HUB_USER_AGENT_ORIGIN": '"synthetic-private-origin"',
+        }
+        for name, value in hostile_values.items():
+            with self.subTest(variable=name):
+                self.assertIn(f'{name} = {value}', block)
+        self.assertEqual(block.count('= "presspeech-synthetic-token-marker"'), 3)
+        self.assertIn(
+            'Write-Output "Packaged executable privacy self-test passed under hostile inherited settings."',
+            block,
+        )
+
+
 def install_block(filename):
     text = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
     marker = "      - name: Install "

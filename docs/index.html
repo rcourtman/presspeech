@@ -135,6 +135,13 @@
           <h1>Private push-to-talk dictation for Mac and Windows.</h1>
           <p>Hold a key to speak and release by default, or choose <strong>Press to toggle</strong> to start and stop with separate presses. Presspeech transcribes locally, then pastes at the cursor or keeps a copy for manual paste when it cannot safely verify the destination. No account is required and dictation is not sent for cloud transcription. Speech-model downloads use the network; read the <a href="privacy.html#network-calls">version-specific privacy inventory</a> before installing.</p>
           <p class="quiet"><strong>macOS 0.3.8:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.12:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
+          <div class="note warn">
+            <p><strong>Before downloading:</strong> these public models need no Hugging Face account token, but requests from the current builds have version-specific warnings:</p>
+            <ul>
+              <li><strong>macOS:</strong> Model requests may include a token inherited from the environment that launches Presspeech. If one may be present—or you are unsure—wait for the version named in the <a href="getting-started.html#macos-model-download-privacy">macOS warning</a>.</li>
+              <li><strong>Windows:</strong> Model downloads may send usage telemetry and may include a configured or saved token; custom routing can change the destination. If a token may be available to Presspeech or a custom route may be configured—or you are unsure—wait for the version named in the <a href="getting-started.html#windows-model-download-privacy">Windows warning</a>.</li>
+            </ul>
+          </div>
           <div class="actions">
             <a class="button" href="#macos">Check the macOS release</a>
             <a class="button secondary" href="#windows">Check the Windows prerelease</a>

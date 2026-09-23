@@ -97,13 +97,38 @@ function Invoke-PresspeechSign([string]$Path) {
 function Invoke-PresspeechPackageSelfTest([string]$Executable) {
     $resultPath = Join-Path $stageBuildDir "package-selftest.txt"
     Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
-    $env:PRESSPEECH_PACKAGE_SELFTEST_RESULT = $resultPath
+    # Qualify the frozen app under hostile inherited Hugging Face settings,
+    # without changing the builder's environment or reading real token values.
+    # The app must replace the endpoint/opt-ins and remove these synthetic
+    # credentials before importing its bundled clients.
+    $hostileEnvironment = [ordered]@{
+        HF_DEBUG = "1"
+        HF_ENDPOINT = "https://presspeech.invalid"
+        HUGGINGFACE_CO_STAGING = "1"
+        HF_HUB_DISABLE_TELEMETRY = "0"
+        HF_HUB_DISABLE_XET = "0"
+        HF_XET_TELEMETRY_ENABLED = "1"
+        DISABLE_TELEMETRY = "0"
+        DO_NOT_TRACK = "0"
+        HF_HUB_DISABLE_IMPLICIT_TOKEN = "0"
+        HF_HUB_DISABLE_UPDATE_CHECK = "0"
+        HF_HUB_USER_AGENT_ORIGIN = "synthetic-private-origin"
+        HF_TOKEN = "presspeech-synthetic-token-marker"
+        HUGGING_FACE_HUB_TOKEN = "presspeech-synthetic-token-marker"
+        HUGGINGFACEHUB_API_TOKEN = "presspeech-synthetic-token-marker"
+    }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Executable
+    $startInfo.Arguments = "--package-selftest"
+    $startInfo.WorkingDirectory = Split-Path -Parent $Executable
+    $startInfo.UseShellExecute = $false
+    $startInfo.EnvironmentVariables["PRESSPEECH_PACKAGE_SELFTEST_RESULT"] = $resultPath
+    foreach ($name in $hostileEnvironment.Keys) {
+        $startInfo.EnvironmentVariables[$name] = $hostileEnvironment[$name]
+    }
+    $process = $null
     try {
-        $process = Start-Process `
-            -FilePath $Executable `
-            -ArgumentList "--package-selftest" `
-            -WorkingDirectory (Split-Path -Parent $Executable) `
-            -PassThru
+        $process = [System.Diagnostics.Process]::Start($startInfo)
         if (-not $process.WaitForExit(120000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             throw "Packaged executable self-test timed out."
@@ -125,11 +150,12 @@ function Invoke-PresspeechPackageSelfTest([string]$Executable) {
             throw "Packaged executable returned an invalid self-test result."
         }
     } finally {
-        Remove-Item Env:PRESSPEECH_PACKAGE_SELFTEST_RESULT `
-            -ErrorAction SilentlyContinue
+        if ($process) {
+            $process.Dispose()
+        }
         Remove-Item -LiteralPath $resultPath -Force -ErrorAction SilentlyContinue
     }
-    Write-Output "Packaged executable self-test passed."
+    Write-Output "Packaged executable privacy self-test passed under hostile inherited settings."
 }
 
 if (-not $ReusePackage) {
