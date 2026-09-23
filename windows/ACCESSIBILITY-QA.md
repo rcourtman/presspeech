@@ -48,7 +48,12 @@ Windows UI, UIA integration, or Tk version.
    announces **Connecting microphone…** before **Listening…**, and Try
    Dictation's status does not invite speech until that change. A quick release
    before readiness should announce **Microphone was not ready — try again**
-   without leaving a stale Listening status.
+   without leaving a stale Listening status. While Try Dictation is actively
+   recording, confirm Setup disables its microphone selector and Check
+   Microphone command, moves focus off either if needed, and announces a
+   blocked racing action without claiming that another input was checked.
+   A microphone check in progress must also keep Try Dictation unavailable
+   until the check ends.
 
 4. **Text size and contrast.** Test Setup, Settings, Try Dictation, Delivery
    Recovery, and the update window individually at Windows Accessibility

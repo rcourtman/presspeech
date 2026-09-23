@@ -1010,6 +1010,7 @@ class SetupWindow:
         self.root = root
         self._setup_interacted = False
         self._initial_focus_pending = True
+        self._microphone_busy_feedback = False
         root.resizable(True, True)
         root.lift()
         root.attributes("-topmost", True)
@@ -1418,12 +1419,28 @@ class SetupWindow:
         hotkey_state, hotkey_detail = _hotkey_readiness(self.app)
         _set_accessible_text(self.hotkey_status, hotkey_detail)
         self.repair_hotkey_button.config(state="normal")
+        capture_busy = bool(_settings_save_block_reason(self.app))
+        if (not capture_busy and
+                getattr(self, "_microphone_busy_feedback", False)):
+            self._microphone_busy_feedback = False
+            _set_accessible_text(
+                self.microphone_status,
+                "You can now choose Check Microphone to test the selected input.")
+        _set_control_state(
+            self.root, self.device,
+            "disabled" if capture_busy else "readonly", self.later_button)
+        _set_control_state(
+            self.root, self.check_microphone_button,
+            ("disabled" if capture_busy or self.microphone_checking else
+             "normal"), self.later_button)
         _set_control_state(
             self.root, self.retry_button,
             "normal" if status == "error" else "disabled", self.later_button)
         _set_control_state(
             self.root, self.try_button,
-            "normal" if status == "ready" else "disabled", self.later_button)
+            ("normal" if status == "ready" and not self.microphone_checking
+             and getattr(self.app, "_microphone_check_in_progress", False) is not True
+             else "disabled"), self.later_button)
         _set_control_state(
             self.root, self.finish_button,
             ("normal" if status == "ready" and
@@ -1452,15 +1469,30 @@ class SetupWindow:
         selected = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])
         settings = self.app.settings
-        if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
-            # Try Dictation uses the app's live capture configuration. Apply and
-            # persist the selected device now so setup can be resumed later.
-            settings["input_device"] = selected
-            self.app.input_device = None
-            self.app._cached_input_selector = None
-            self.app._cached_input_topology = None
-            cfg.save(settings)
-            _set_accessible_text(self.microphone_status, "Not checked")
+        with self.app.lock:
+            configured = settings.get("input_device", cfg.DEFAULTS["input_device"])
+            if selected == configured:
+                return
+            if _settings_save_block_reason(self.app):
+                # A picker event can race the poll that disables it.
+                label = next(
+                    (label for label, value in self.device_values.items()
+                     if value == configured), None)
+                if label is not None:
+                    self.device.set(label)
+                blocked = True
+            else:
+                settings["input_device"] = selected
+                self.app.input_device = None
+                self.app._cached_input_selector = None
+                self.app._cached_input_topology = None
+                cfg.save(settings)
+                blocked = False
+        self._microphone_busy_feedback = blocked
+        _set_accessible_text(
+            self.microphone_status,
+            ("Finish or cancel the current dictation before changing microphones."
+             if blocked else "Not checked"))
 
     def _dictation_instructions(self):
         hotkey = self.app.settings.get("hotkey", cfg.DEFAULTS["hotkey"]).title()
@@ -1515,8 +1547,16 @@ class SetupWindow:
     def _check_microphone(self):
         if self.microphone_checking or self.root is None:
             return
+        with self.app.lock:
+            if _settings_save_block_reason(self.app):
+                self._microphone_busy_feedback = True
+                _set_accessible_text(
+                    self.microphone_status,
+                    "Finish or cancel the current dictation before checking the microphone.")
+                return
         selected = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])
+        self._microphone_busy_feedback = False
         self.microphone_checking = True
         _set_control_state(
             self.root, self.check_microphone_button, "disabled", self.device)
@@ -1539,10 +1579,12 @@ class SetupWindow:
             result = "check_error"
         # Query again after the check: it may have refreshed PortAudio after a
         # reconnect. Do this on the worker so a slow driver never blocks Tk.
-        try:
-            options = self.app.input_device_options()
-        except Exception:
-            options = None
+        options = None
+        if result != "busy":
+            try:
+                options = self.app.input_device_options()
+            except Exception:
+                pass
         self.microphone_events.put((selected, result, options))
 
     def _refresh_microphone_options(self, options, selected):
@@ -1574,7 +1616,10 @@ class SetupWindow:
             return
         selected, result, options = latest
         self.microphone_checking = False
-        self.check_microphone_button.config(state="normal")
+        _set_control_state(
+            self.root, self.check_microphone_button,
+            ("disabled" if _settings_save_block_reason(self.app) else
+             "normal"), self.later_button)
         current = self.device_values.get(
             self.device.get(), cfg.DEFAULTS["input_device"])
         self._refresh_microphone_options(options, current)
@@ -1594,8 +1639,15 @@ class SetupWindow:
                 "choose Check Microphone again")
         elif result == "check_error":
             text = "Microphone check failed — choose Check Microphone to retry"
+        elif result == "busy":
+            self._microphone_busy_feedback = True
+            text = (
+                "Microphone check postponed — finish or cancel dictation, "
+                "then choose Check Microphone")
         else:
             text = "Needs attention — microphone could not be opened"
+        if result != "busy":
+            self._microphone_busy_feedback = False
         _set_accessible_text(self.microphone_status, text)
 
     def _retry_model(self):
@@ -1611,17 +1663,25 @@ class SetupWindow:
             _set_control_state(
                 self.root, self.finish_button, "disabled", self.device)
             return
-        settings = self.app.settings
-        selected = self.device_values.get(
-            self.device.get(), cfg.DEFAULTS["input_device"])
-        if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
-            self.app.input_device = None
-            self.app._cached_input_selector = None
-            self.app._cached_input_topology = None
-        settings["input_device"] = selected
-        settings["autostart"] = bool(self.autostart.get())
-        settings["setup_complete"] = True
-        cfg.save(settings)
+        with self.app.lock:
+            settings = self.app.settings
+            selected = self.device_values.get(
+                self.device.get(), cfg.DEFAULTS["input_device"])
+            if (selected != settings.get("input_device", cfg.DEFAULTS["input_device"])
+                    and _settings_save_block_reason(self.app)):
+                self._microphone_busy_feedback = True
+                _set_accessible_text(
+                    self.microphone_status,
+                    "Finish or cancel the current dictation before changing microphones.")
+                return
+            if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
+                self.app.input_device = None
+                self.app._cached_input_selector = None
+                self.app._cached_input_topology = None
+            settings["input_device"] = selected
+            settings["autostart"] = bool(self.autostart.get())
+            settings["setup_complete"] = True
+            cfg.save(settings)
         if self.app.apply_autostart():
             self._close()
         else:
@@ -1631,16 +1691,24 @@ class SetupWindow:
 
     def _defer(self):
         """Keep first-run choices without claiming setup is complete."""
-        settings = self.app.settings
-        selected = self.device_values.get(
-            self.device.get(), cfg.DEFAULTS["input_device"])
-        if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
-            self.app.input_device = None
-            self.app._cached_input_selector = None
-            self.app._cached_input_topology = None
-        settings["input_device"] = selected
-        settings["autostart"] = bool(self.autostart.get())
-        cfg.save(settings)
+        with self.app.lock:
+            settings = self.app.settings
+            selected = self.device_values.get(
+                self.device.get(), cfg.DEFAULTS["input_device"])
+            if (selected != settings.get("input_device", cfg.DEFAULTS["input_device"])
+                    and _settings_save_block_reason(self.app)):
+                self._microphone_busy_feedback = True
+                _set_accessible_text(
+                    self.microphone_status,
+                    "Finish or cancel the current dictation before changing microphones.")
+                return
+            if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
+                self.app.input_device = None
+                self.app._cached_input_selector = None
+                self.app._cached_input_topology = None
+            settings["input_device"] = selected
+            settings["autostart"] = bool(self.autostart.get())
+            cfg.save(settings)
         if self.app.apply_autostart():
             self._close()
         else:
@@ -2611,6 +2679,11 @@ class ScratchpadWindow:
             return (
                 "Dictate (or use the hotkey)", "disabled",
                 "An undelivered dictation needs review before recording again.",
+            )
+        if getattr(self.app, "_microphone_check_in_progress", False) is True:
+            return (
+                "Dictate (or use the hotkey)", "disabled",
+                "Microphone check in progress… Wait for it to finish before dictating.",
             )
         model_status = getattr(self.app, "model_status", "pending")
         if model_status == "error":

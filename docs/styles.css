@@ -686,6 +686,21 @@ section p:last-child,
   border-bottom: 1px solid #dfca80;
 }
 
+.launch-decision h2 {
+  margin: 0 0 10px;
+  font-size: 1.12rem;
+  line-height: 1.3;
+}
+
+.launch-decision ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.launch-decision li + li {
+  margin-top: 10px;
+}
+
 #model-download-preflight ul {
   display: grid;
   gap: 10px;

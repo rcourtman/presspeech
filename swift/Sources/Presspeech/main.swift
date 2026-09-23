@@ -4374,6 +4374,23 @@ final class HotkeyListener {
             log("HotkeyListener: first keyboard event received — tap is delivering")
         }
 
+        // A saved Command binding can become Paste after an input-source
+        // switch (or have been stored by an older build). Let that key-down
+        // through before the transition state can latch/suppress it. Its
+        // unmatched key-up then passes normally too, including our own
+        // layout-resolved synthetic Command-V delivery.
+        if event.typeRawValue == CGEventType.keyDown.rawValue,
+           event.keycode == hotkey.keycode,
+           hotkey.requiredModifiers == .maskCommand,
+           event.flags.intersection(HOTKEY_COMBINATION_MODIFIERS) == .maskCommand,
+           pasteRecoveryHotkeyConflict(
+               keycode: hotkey.keycode,
+               modifiers: hotkey.requiredModifiers,
+               pasteKeyResolution: currentCommandVPasteKeyResolution()
+           ) != nil {
+            return false
+        }
+
         if NSApp.isActive,
            let settingsMenuAvailable = applicationSettingsMenuIsAvailable?(),
            event.typeRawValue == CGEventType.keyDown.rawValue,
@@ -5954,6 +5971,35 @@ private enum ClipboardPasteKeyResolution: Equatable {
 private func clipboardPasteKeyResolution(layoutKey: CGKeyCode?) -> ClipboardPasteKeyResolution {
     guard let layoutKey else { return .unavailable }
     return .virtualKey(layoutKey)
+}
+
+private enum PasteRecoveryHotkeyConflict: Equatable {
+    case pasteChord
+    case unknownPasteKey
+
+    var guidance: String {
+        switch self {
+        case .pasteChord:
+            return "Command-V must remain available for pasting and dictation recovery. Choose another hotkey."
+        case .unknownPasteKey:
+            return "Presspeech cannot verify the Paste key for this input source. Choose Control, Option, or an F-key."
+        }
+    }
+}
+
+/// A Command-only hotkey must never consume the active layout's Paste chord.
+/// When the layout cannot be read, fail closed for Command-only bindings:
+/// manual Paste is the recovery path for clipboard-only dictation.
+private func pasteRecoveryHotkeyConflict(keycode: CGKeyCode,
+                                         modifiers: CGEventFlags,
+                                         pasteKeyResolution: ClipboardPasteKeyResolution) -> PasteRecoveryHotkeyConflict? {
+    guard modifiers == .maskCommand else { return nil }
+    switch pasteKeyResolution {
+    case .virtualKey(let pasteKey):
+        return keycode == pasteKey ? .pasteChord : nil
+    case .unavailable:
+        return .unknownPasteKey
+    }
 }
 
 /// Read the active Unicode keyboard layout on the main thread and resolve
@@ -14354,6 +14400,16 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return false
         }
 
+        if recordable.requiredModifiers == .maskCommand,
+           let conflict = pasteRecoveryHotkeyConflict(
+            keycode: recordable.keycode,
+            modifiers: recordable.requiredModifiers,
+            pasteKeyResolution: currentCommandVPasteKeyResolution()
+        ) {
+            showHotkeyRecordError(conflict.guidance)
+            return false
+        }
+
         settings.hotkeyBinding = recordable
         hotkey.setHotkey(recordable)
         hotkeyTestSucceeded = false
@@ -14385,7 +14441,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let alert = NSAlert()
         alert.messageText = "Record Hotkey"
-        alert.informativeText = "Press a right-side modifier, an F-key, or a key with Command, Control or Option (Shift is optional), then confirm. A custom combination takes precedence over the same shortcut in other apps. When Show in Dock is enabled, Presspeech's Command-comma Settings shortcut takes precedence while Presspeech is active. Conflicts cannot all be detected. On Apple keyboards, F-keys may require Fn."
+        alert.informativeText = "Press a right-side modifier, an F-key, or a key with Command, Control or Option (Shift is optional), then confirm. Command-V stays available for Paste recovery. A custom combination takes precedence over the same shortcut in other apps. When Show in Dock is enabled, Presspeech's Command-comma Settings shortcut takes precedence while Presspeech is active. Conflicts cannot all be detected. On Apple keyboards, F-keys may require Fn."
         alert.addButton(withTitle: "Use Selected")
         alert.addButton(withTitle: "Cancel")
         let useButton = alert.buttons[0]
@@ -14413,6 +14469,21 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             }
             switch hotkeyRecordingDecision(for: snapshot) {
             case .accept(let choice):
+                if choice.requiredModifiers == .maskCommand,
+                   let conflict = pasteRecoveryHotkeyConflict(
+                    keycode: choice.keycode,
+                    modifiers: choice.requiredModifiers,
+                    pasteKeyResolution: currentCommandVPasteKeyResolution()
+                ) {
+                    selected = nil
+                    useButton.isEnabled = false
+                    status.stringValue = conflict.guidance
+                    NSAccessibility.post(element: alert.window as Any, notification: .announcementRequested,
+                                         userInfo: [.announcement: conflict.guidance,
+                                                    .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+                    NSSound.beep()
+                    return nil
+                }
                 selected = choice
                 status.stringValue = "Selected: \(choice.name). Choose Use Selected to save it."
                 NSAccessibility.post(element: alert.window as Any, notification: .announcementRequested,
@@ -16618,6 +16689,36 @@ private enum PresspeechSelfTest {
               let shifted = recordableHotkeyChoice(forKeycode: 43, modifiers: [.maskCommand, .maskShift]) else {
             throw SelfTestFailure.failed("Command combinations should be recordable")
         }
+        try expect(pasteRecoveryHotkeyConflict(
+            keycode: 0x09, modifiers: .maskCommand,
+            pasteKeyResolution: .virtualKey(0x09)
+        ), equals: Optional(PasteRecoveryHotkeyConflict.pasteChord),
+                   "US Command-V must remain available for manual and automatic paste")
+        try expect(pasteRecoveryHotkeyConflict(
+            keycode: 0x2f, modifiers: .maskCommand,
+            pasteKeyResolution: .virtualKey(0x2f)
+        ), equals: Optional(PasteRecoveryHotkeyConflict.pasteChord),
+                   "a layout switch must also protect Dvorak's physical Command-V key")
+        try expect(pasteRecoveryHotkeyConflict(
+            keycode: 0x2f, modifiers: .maskCommand,
+            pasteKeyResolution: .virtualKey(0x09)
+        ), equals: PasteRecoveryHotkeyConflict?.none,
+                   "a non-Paste Command binding should remain available on its original layout")
+        try expect(pasteRecoveryHotkeyConflict(
+            keycode: 0x09, modifiers: [.maskCommand, .maskShift],
+            pasteKeyResolution: .virtualKey(0x09)
+        ), equals: PasteRecoveryHotkeyConflict?.none,
+                   "a modified Command binding must not block ordinary Command-V")
+        try expect(pasteRecoveryHotkeyConflict(
+            keycode: 43, modifiers: .maskCommand,
+            pasteKeyResolution: .unavailable
+        ), equals: Optional(PasteRecoveryHotkeyConflict.unknownPasteKey),
+                   "an unreadable layout must keep all Command-only bindings from consuming recovery")
+        try expect(pasteRecoveryHotkeyConflict(
+            keycode: 43, modifiers: .maskControl,
+            pasteKeyResolution: .unavailable
+        ), equals: PasteRecoveryHotkeyConflict?.none,
+                   "unreadable layouts must not disable Control or Option alternatives")
         try expect(combination.requiredModifiers, equals: .maskCommand,
                    "recording a combination must retain its modifier mask")
         try expect(combination.name.hasPrefix("Command + "), equals: true,

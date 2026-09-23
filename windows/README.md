@@ -185,7 +185,11 @@ open again on the next launch. Microphone, hotkey, dictation style, and Start
 with Windows choices are kept when setup is deferred, and a newly selected
 microphone is used immediately by **Try Dictation**. A microphone can still be
 connected later and does not block **Finish Setup** once the speech model is
-ready. If the dictation hotkey is pressed before readiness, Presspeech keeps
+ready. During an active or starting dictation, Setup holds its microphone
+selection and **Check Microphone** action until dictation finishes or is
+canceled; a check already in progress also postpones a new recording. This
+prevents the setup probe and recording from opening microphone streams at the
+same time. If the dictation hotkey is pressed before readiness, Presspeech keeps
 showing **Preparing speech model…** and does not open the microphone, play
 recording cues, mute playback, or claim to be listening. Release and press
 again once the preparation indicator disappears.
@@ -227,6 +231,12 @@ If Presspeech already knows that the original window is missing, no longer
 focused, or elevated, it also leaves the previous clipboard item unchanged
 and waits for an explicit recovery choice. A change after that check may still
 leave the dictated text on the current clipboard.
+
+If a clipboard write fails after replacement begins, Windows cannot restore
+the previous item. Presspeech clears its partial item while it still owns the
+clipboard and keeps the dictation for explicit recovery. If Windows rejects
+that cleanup, text may remain on the current clipboard; check it before copying
+the recovery text.
 
 The keyboard-accessible **Delivery Recovery** window opens without displaying
 or copying the dictated words. Check the intended field first, then choose

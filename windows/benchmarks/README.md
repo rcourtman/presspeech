@@ -45,6 +45,11 @@ quality, speaker diversity, hardware equality, or a native release pass. The
 report exposes only one aggregate digest, not individual audio hashes.
 Versions 9 and earlier have no input digest and cannot retrospectively prove
 that two runs used identical inputs.
+Version 12 adds an optional Parakeet short-speech tail-silence probe. Its
+`parakeet_tail_silence_ms` setting is reported separately and is **not** part
+of `benchmark_inputs_sha256`; matching digests with different probe settings
+do not describe the same inference workload. Without the option, ordinary
+benchmark inference and scoring are unchanged.
 
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
@@ -79,6 +84,40 @@ natural pauses, quiet speech, short commands, and silence controls. Compare WER,
 per-trial errors, VAD-retained duration, rejected-speech trials, boundary-word
 retention, silence false positives, and latency by task group before proposing
 any product-policy change.
+
+## Parakeet trailing-silence probe
+
+The Windows app captures at least 80 ms and at most 400 ms after hotkey
+release. An [upstream Parakeet v3 report](https://github.com/NVIDIA-NeMo/Speech/issues/15757)
+reproduced a short utterance decoding to an empty string after appending
+400 ms of zeros. That report used NeMo on CPU, **not** Presspeech's pinned
+Transformers loader or Windows capture path, so it is a risk to test rather
+than evidence that Presspeech has the same defect.
+
+Build a small, private manifest of short speech clips cropped at the spoken
+endpoint, with listened-to references and `reference_reviewed: true`; include
+short commands and quiet speech. At 400 ms, keep original clips below 14.6 s
+so both variants use Presspeech's same 15 s Parakeet feature bucket. Run a
+paired probe on the same loaded Parakeet model:
+
+```bat
+.venv\Scripts\python benchmark.py --manifest benchmarks\short-speech.json --model parakeet-tdt-0.6b-v3 --runs 5 --parakeet-tail-silence-ms 400 --output benchmarks\tail-400ms.json
+```
+
+The option accepts 1–400 ms and affects only this benchmark. For each scored
+speech clip, each trial transcribes the original and then the same samples
+with zero-valued 16 kHz samples appended. Reviewed silence, unreviewed audio,
+and unscoreable references receive only the ordinary transcription. The JSON
+keeps ordered transcript pairs, paired word-error counts, blank regressions,
+and separate tailed inference times; the console reports aggregate and
+per-clip counts. Review `nonempty_to_empty_trial_count`, worsened word errors,
+and first/final-word failures by task group, not just pooled WER. A tailed
+output that differs from an already-wrong baseline is not automatically a
+regression. Fixed baseline-then-tailed order can affect latency through cache
+warming, so these times are diagnostics, not a release-to-paste comparison.
+Synthetic zeros also do not represent microphone room tone or prove the live
+post-roll behavior. Any product trim/retry policy still needs paired native
+Windows dictation, silence controls, and a latency check before adoption.
 
 ## Candidate watch: multilingual CPU recognition
 

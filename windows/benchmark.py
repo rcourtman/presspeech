@@ -126,6 +126,75 @@ def trial_accuracy_metrics(reference, hypotheses):
     }
 
 
+def paired_tail_silence_metrics(reference, baseline, tailed):
+    """Score each clean/tailed Parakeet trial against the same reviewed words.
+
+    Preserve pair order: a modal transcript can conceal an intermittent blank
+    final decode, and comparing independent aggregate WERs loses that signal.
+    """
+    if not baseline or len(baseline) != len(tailed):
+        raise ValueError("tail-silence probe needs matching non-empty trials")
+    if not _normalise_words(reference):
+        raise ValueError("tail-silence probe needs a scoreable reference")
+    pairs = []
+    for clean_text, tailed_text in zip(baseline, tailed):
+        clean_errors = accuracy_metrics(reference, clean_text)["word_errors"]
+        tailed_errors = accuracy_metrics(reference, tailed_text)["word_errors"]
+        pairs.append({
+            "baseline_transcript": clean_text,
+            "tailed_transcript": tailed_text,
+            "baseline_word_errors": clean_errors,
+            "tailed_word_errors": tailed_errors,
+            "nonempty_to_empty": bool(clean_text.strip()) and not tailed_text.strip(),
+        })
+    return {
+        "trial_count": len(pairs),
+        "baseline_empty_trial_count": sum(not text.strip() for text in baseline),
+        "tailed_empty_trial_count": sum(not text.strip() for text in tailed),
+        "nonempty_to_empty_trial_count": sum(
+            pair["nonempty_to_empty"] for pair in pairs),
+        "changed_text_trial_count": sum(
+            _canonical_text(clean_text) != _canonical_text(tailed_text)
+            for clean_text, tailed_text in zip(baseline, tailed)),
+        "baseline_word_error_count": sum(
+            pair["baseline_word_errors"] for pair in pairs),
+        "tailed_word_error_count": sum(
+            pair["tailed_word_errors"] for pair in pairs),
+        "worsened_word_error_trial_count": sum(
+            pair["tailed_word_errors"] > pair["baseline_word_errors"]
+            for pair in pairs),
+        "improved_word_error_trial_count": sum(
+            pair["tailed_word_errors"] < pair["baseline_word_errors"]
+            for pair in pairs),
+        "tailed_first_word_failure_trial_count": first_word_metrics(
+            reference, tailed)["failed_trials"],
+        "tailed_final_word_failure_trial_count": final_word_metrics(
+            reference, tailed)["failed_trials"],
+        "pairs": pairs,
+    }
+
+
+def summarise_tail_silence_probe(samples):
+    """Aggregate only explicitly probed, reviewed speech; never count silence."""
+    probes = [sample["tail_silence_probe"] for sample in samples
+              if sample.get("tail_silence_probe") is not None]
+    return {
+        "sample_count": len(probes),
+        **{
+            key: sum(probe[key] for probe in probes)
+            for key in (
+                "trial_count", "baseline_empty_trial_count",
+                "tailed_empty_trial_count", "nonempty_to_empty_trial_count",
+                "changed_text_trial_count", "baseline_word_error_count",
+                "tailed_word_error_count", "worsened_word_error_trial_count",
+                "improved_word_error_trial_count",
+                "tailed_first_word_failure_trial_count",
+                "tailed_final_word_failure_trial_count",
+            )
+        },
+    }
+
+
 def final_word_metrics(reference, hypotheses):
     """Score final-word retention across every trial of a reviewed clip."""
     reference_words = _normalise_words(reference)
@@ -540,7 +609,8 @@ def _benchmark_language(manifest, override):
 
 
 def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
-                  language=None, whisper_vad_min_silence_ms=None):
+                  language=None, whisper_vad_min_silence_ms=None,
+                  parakeet_tail_silence_ms=None):
     manifest_path = os.path.abspath(manifest_path)
     manifest_dir = os.path.dirname(manifest_path)
     with open(manifest_path, "r", encoding="utf-8") as handle:
@@ -591,6 +661,22 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             and model_name not in engine.WHISPER_MODELS):
         raise ValueError(
             "Whisper VAD experiments require a faster-whisper model")
+    if parakeet_tail_silence_ms is not None:
+        maximum_ms = int(app.POST_ROLL_MAX_SEC * 1000)
+        if (isinstance(parakeet_tail_silence_ms, bool)
+                or not isinstance(parakeet_tail_silence_ms, int)
+                or not 1 <= parakeet_tail_silence_ms <= maximum_ms):
+            raise ValueError(
+                "Parakeet tail-silence probe needs an integer from 1 to %d ms"
+                % maximum_ms)
+        if not engine.is_parakeet(model_name):
+            raise ValueError("tail-silence probe requires a Parakeet model")
+        if not any(sample.get("reference_reviewed", False)
+                   and not sample.get("expected_silence", False)
+                   and _normalise_words(sample.get("reference", ""))
+                   for sample in samples):
+            raise ValueError(
+                "tail-silence probe needs reviewed speech with scoreable words")
     whisper_vad_policy = (
         engine.whisper_vad_parameters(whisper_vad_min_silence_ms)
         if model_name in engine.WHISPER_MODELS else None
@@ -648,6 +734,19 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         timings = []
         transcripts = []
         backend_timings = []
+        reference = sample.get("reference", "")
+        probe_this_sample = (
+            parakeet_tail_silence_ms is not None
+            and sample.get("reference_reviewed", False)
+            and not sample.get("expected_silence", False)
+            and bool(_normalise_words(reference))
+        )
+        tail_audio = (np.concatenate((audio, np.zeros(
+            parakeet_tail_silence_ms * engine.PARAKEET_SAMPLE_RATE // 1000,
+            dtype=np.float32)))
+            if probe_this_sample else None)
+        tail_timings = []
+        tail_transcripts = []
         for _run in range(runs):
             _sync_cuda()
             started = time.perf_counter()
@@ -658,6 +757,13 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             backend_timing = getattr(transcriber, "last_timing", {})
             backend_timings.append(
                 dict(backend_timing) if isinstance(backend_timing, dict) else {})
+            if probe_this_sample:
+                _sync_cuda()
+                started = time.perf_counter()
+                tail_transcripts.append(
+                    transcriber.transcribe(tail_audio, language=language_hint))
+                _sync_cuda()
+                tail_timings.append(time.perf_counter() - started)
         consensus = collections.Counter(transcripts).most_common(1)[0][0]
         median_seconds = statistics.median(timings)
         result = {
@@ -691,6 +797,18 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             "backend_stages": backend_stage_metrics(backend_timings),
             "parakeet_windowing": parakeet_window_metrics(backend_timings),
         }
+        if probe_this_sample:
+            result["tail_silence_probe"] = {
+                "appended_silence_ms": parakeet_tail_silence_ms,
+                **paired_tail_silence_metrics(
+                    reference, transcripts, tail_transcripts),
+                "tailed_inference_seconds": {
+                    "min": min(tail_timings),
+                    "median": statistics.median(tail_timings),
+                    "p95": _percentile(tail_timings, 0.95),
+                    "all": tail_timings,
+                },
+            }
         if task_group is not None:
             result["task_group"] = task_group.strip()
         if language_group is not None:
@@ -700,7 +818,6 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             result["reference_reviewed"],
             transcripts,
         )
-        reference = sample.get("reference", "")
         if reference and result["reference_reviewed"]:
             trial_accuracy = trial_accuracy_metrics(reference, transcripts)
             if trial_accuracy is not None:
@@ -761,7 +878,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 11,
+        "benchmark_version": 12,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "model": model_name,
@@ -777,6 +894,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             if whisper_vad_min_silence_ms is not None
             else "Presspeech product default"
         ) if whisper_vad_policy is not None else None,
+        "parakeet_tail_silence_ms": parakeet_tail_silence_ms,
+        "tail_silence_probe": (
+            summarise_tail_silence_probe(sample_results)
+            if parakeet_tail_silence_ms is not None else None),
         "precision": precision,
         "model_dtype": model_dtype,
         "cuda_allocated_mib": cuda_allocated_mib,
@@ -864,6 +985,20 @@ def _print_summary(result):
         print("CUDA tensors: %.1f MiB" % result["cuda_allocated_mib"])
     print("Load: %.3fs | warm-up: %.3fs" %
           (result["load_seconds"], result["warmup_seconds"]))
+    tail_probe = result.get("tail_silence_probe")
+    if tail_probe is not None:
+        print("Parakeet +%d ms silence (benchmark-only): nonempty-to-empty "
+              "%d/%d paired trials; word errors %d -> %d; worsened %d, "
+              "improved %d trials across %d reviewed clips" % (
+                  result["parakeet_tail_silence_ms"],
+                  tail_probe["nonempty_to_empty_trial_count"],
+                  tail_probe["trial_count"],
+                  tail_probe["baseline_word_error_count"],
+                  tail_probe["tailed_word_error_count"],
+                  tail_probe["worsened_word_error_trial_count"],
+                  tail_probe["improved_word_error_trial_count"],
+                  tail_probe["sample_count"],
+              ))
     if result["aggregate_wer"] is not None:
         print("Reviewed corpus WER: %.2f%% consensus | %.2f%% all trials | "
               "%.2f/%.2f%% best/worst trial envelope" % (
@@ -962,6 +1097,17 @@ def _print_summary(result):
             sample["estimated_release_to_paste_seconds"],
         ))
         print("  %s" % sample["transcript"])
+        sample_tail_probe = sample.get("tail_silence_probe")
+        if sample_tail_probe is not None:
+            print("  +%d ms silence: nonempty-to-empty %d/%d paired trials; "
+                  "word errors %d -> %d; tailed inference %.3fs median" % (
+                      sample_tail_probe["appended_silence_ms"],
+                      sample_tail_probe["nonempty_to_empty_trial_count"],
+                      sample_tail_probe["trial_count"],
+                      sample_tail_probe["baseline_word_error_count"],
+                      sample_tail_probe["tailed_word_error_count"],
+                      sample_tail_probe["tailed_inference_seconds"]["median"],
+                  ))
         stages = sample.get("backend_stages")
         if stages is not None:
             print("  Model stages (median): %s" % " | ".join(
@@ -1046,12 +1192,18 @@ def main():
         "--whisper-vad-min-silence-ms", type=int,
         help=("benchmark-only Whisper VAD pause threshold override in "
               "milliseconds; does not change the app policy"))
+    parser.add_argument(
+        "--parakeet-tail-silence-ms", type=int,
+        help=("benchmark-only paired speech probe: append up to the app's "
+              "maximum post-roll duration of zero-valued samples; does not "
+              "change capture or recognition"))
     parser.add_argument("--output", help="JSON output path")
     args = parser.parse_args()
     result = run_benchmark(
         args.manifest, model_name=args.model, runs=args.runs,
         precision=args.precision, language=args.language,
-        whisper_vad_min_silence_ms=args.whisper_vad_min_silence_ms)
+        whisper_vad_min_silence_ms=args.whisper_vad_min_silence_ms,
+        parakeet_tail_silence_ms=args.parakeet_tail_silence_ms)
     _print_summary(result)
     if args.output:
         output_path = os.path.abspath(args.output)

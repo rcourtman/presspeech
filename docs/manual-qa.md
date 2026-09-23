@@ -116,8 +116,8 @@ For each configuration, also record this release-gate matrix:
 | Ten consecutive dictations into Notepad | |
 | Ten short-phrase onset checks across hold/toggle; first word or syllable retained | |
 | A physical hold across the OS key-repeat interval remains one capture until release | |
-| Dictation into a current Chromium browser text field | |
-| Dictation into a current Electron application text field | |
+| Five consecutive dictations into a current Chromium browser text field | |
+| Five consecutive dictations into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
 | Held-modifier shortcut guard and manual recovery | |
 | Locked/replaced clipboard recovery with notifications disabled and tray icon in overflow | |
@@ -131,6 +131,25 @@ For each configuration, also record this release-gate matrix:
 | Keyboard-only, Narrator, and Accessibility Insights checks | |
 | Windows 11 Voice Access operation of named controls and menu-based dictation | |
 | High-contrast themes across Setup, Settings, Update, Delivery Recovery, and Try Dictation | |
+
+For the Notepad, browser, and Electron delivery rows, use distinct harmless
+phrases in blank, non-submitting fields, with a harmless baseline clipboard
+item before each attempt. After each attempt, inspect the target and paste the
+current clipboard into a separate disposable local scratch field before
+anything else copies to it. Compare the complete finished transcript,
+including any configured suffix: stale, partial, duplicate, misdirected, or
+missing text fails the automatic-delivery row. Record pasted-once, safe manual
+recovery, and incorrect/unsafe counts separately; a recovery Copy after a
+failure does not turn that attempt into an automatic-paste pass. Mark each
+automatic-delivery row **Pass** only when every required attempt pasted once;
+the three counts must sum to the required attempt count. A successful
+`SendInput` call or unchanged clipboard sequence is not evidence that the
+target consumed the text. Inspect the original field before retrying or using
+recovery because it may already contain all or part of the transcript. If a
+known external copy interrupted an attempt, record the interruption and rerun
+with a fresh phrase; never exclude an unexplained failure. Retain only
+aggregate counts, app versions, and generic field types, not the phrases,
+clipboard contents, or screenshots.
 
 A **Fail**, **Blocked**, or **Not run** result in either table blocks promotion
 from prerelease to stable. An unsigned candidate also remains a prerelease.
@@ -527,6 +546,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Ten consecutive dictations into a current browser text field, plus three two-window focus-change recoveries, with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
 | Automatic insertion and clipboard-only Command-V recovery with a non-US keyboard layout | |
+| Active-layout Command-V hotkey conflict: recorder rejects it; an older binding that becomes Paste after a layout switch passes through | |
 | Electron issue #33: steady-focus paste once; a switch between two windows of the same app must use clipboard recovery | |
 | Ten TextEdit and ten slow Electron manual-restore trials for issue #36 | |
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
@@ -614,6 +634,19 @@ shortcut; try physical Command-V, switching to a known input source first if
 needed, and verify the retained transcript pastes once. Do not install an
 untrusted layout solely to create this condition. Mark this conditional check
 **Not applicable** when no such source is available.
+
+For the hotkey/Paste conflict row, in a disposable test profile try recording
+the physical Command-V chord under US and, if installed, a layout such as
+Dvorak that moves V. The recorder must reject the active Paste chord without
+changing the saved hotkey; physical Command-V must still paste a harmless
+clipboard marker. Then save Command plus the physical key that is **not** Paste
+under the first layout but becomes Paste under the second, switch layouts,
+and verify physical Command-V passes through rather than starting dictation.
+Use the menu to reset the hotkey before checking that a fresh dictation still
+pastes automatically under the second layout. If the source exposes no usable
+Paste-key mapping, Command-only hotkeys must be refused while Control, Option,
+and F-key choices remain available. Record only input-source names and outcomes,
+not markers or field contents.
 
 For the keyboard-only delivery-recovery check, use a harmless test transcript
 and create a clipboard-only delivery outcome, then open each menu using the

@@ -155,7 +155,7 @@ class ClipboardTransactionTests(unittest.TestCase):
         api.CloseClipboard.side_effect = close
         self.assert_rejected_without_rewrite(api)
 
-    def test_set_failure_frees_only_untransferred_memory_without_rollback(self):
+    def test_set_failure_clears_partial_item_and_frees_untransferred_memory(self):
         for failed_write in (1, 2, 3):
             with self.subTest(failed_write=failed_write):
                 api = self.backend(); original = api.SetClipboardData.side_effect
@@ -163,10 +163,57 @@ class ClipboardTransactionTests(unittest.TestCase):
                 with self.assertRaises(delivery.ClipboardError):
                     delivery.write_text("synthetic transcript", api=api)
                 self.assertEqual(api.GlobalFree.call_count, 4 - failed_write)
-                api.EmptyClipboard.assert_called_once()
+                self.assertEqual(api.EmptyClipboard.call_count, 2)
                 self.assertEqual(api.SetClipboardData.call_count, failed_write)
+                self.assertEqual(self.state['formats'], {})
                 api.CloseClipboard.assert_called_once()
                 api.DestroyWindow.assert_called_once_with(51)
+
+    def test_set_exception_clears_text_before_releasing_clipboard(self):
+        api = self.backend(); original = api.SetClipboardData.side_effect
+        def write(format_id, memory):
+            if format_id == 0xC001:
+                raise OSError("synthetic write failure")
+            return original(format_id, memory)
+        api.SetClipboardData.side_effect = write
+        with self.assertRaises(OSError):
+            delivery.write_text("synthetic transcript", api=api)
+        self.assertEqual(self.state['formats'], {})
+        self.assertEqual(api.EmptyClipboard.call_count, 2)
+        calls = api.mock_calls
+        cleanup_index = max(
+            index for index, call in enumerate(calls)
+            if call == mock.call.EmptyClipboard())
+        self.assertLess(
+            cleanup_index, calls.index(mock.call.CloseClipboard()))
+
+    def test_set_failure_does_not_clear_a_different_owner(self):
+        api = self.backend()
+        def replaced_owner(_format_id, _memory):
+            self.state['owner'] = 99
+            return 0
+        api.SetClipboardData.side_effect = replaced_owner
+        with self.assertRaises(delivery.ClipboardError):
+            delivery.write_text("synthetic transcript", api=api)
+        api.EmptyClipboard.assert_called_once()
+        api.GetClipboardOwner.assert_called_once()
+
+    def test_failed_cleanup_keeps_original_error_and_privacy_marker(self):
+        api = self.backend()
+        original_empty = api.EmptyClipboard.side_effect
+        original_write = api.SetClipboardData.side_effect
+        def empty():
+            return original_empty() if api.EmptyClipboard.call_count == 1 else False
+        def write(format_id, memory):
+            return 0 if format_id == 0xC001 else original_write(format_id, memory)
+        api.EmptyClipboard.side_effect = empty
+        api.SetClipboardData.side_effect = write
+        with self.assertRaisesRegex(delivery.ClipboardError, "clipboard write failed"):
+            delivery.write_text("synthetic transcript", api=api)
+        self.assertEqual(api.EmptyClipboard.call_count, 2)
+        self.assertIn(13, self.state['formats'])
+        self.assertIn(0xC002, self.state['formats'])
+        self.assertNotIn(0xC001, self.state['formats'])
 
     def test_privacy_marker_failure_never_publishes_transcript_text(self):
         api = self.backend()
@@ -174,6 +221,7 @@ class ClipboardTransactionTests(unittest.TestCase):
         with self.assertRaises(delivery.ClipboardError):
             delivery.write_text("synthetic transcript", api=api)
         self.assertNotIn(13, self.state['formats'])
+        self.assertEqual(self.state['formats'], {})
         self.assertEqual(api.SetClipboardData.call_args_list,
                          [mock.call(0xC002, 71)])
 
@@ -304,3 +352,28 @@ class NativeClipboardTransactionTests(unittest.TestCase):
         # owner window created by write_text has already been destroyed, so
         # this also proves non-delayed clipboard data remains available.
         self.assertTrue(delivery.is_current(receipt))
+
+    def test_native_rejected_receipt_clears_partial_transcript(self):
+        # A disposable CI desktop can exercise the real second EmptyClipboard
+        # call without relying on a rare native allocation or format failure.
+        api = delivery._WindowsAPI()
+        receipt_format = api.RegisterClipboardFormatW(delivery._RECEIPT_FORMAT)
+        self.assertNotEqual(receipt_format, 0)
+
+        class RejectReceipt:
+            def __getattr__(self, name):
+                return getattr(api, name)
+
+            def SetClipboardData(self, format_id, memory):
+                if format_id == receipt_format:
+                    return 0
+                return api.SetClipboardData(format_id, memory)
+
+        with self.assertRaises(delivery.ClipboardError):
+            delivery.write_text("Presspeech CI partial probe", api=RejectReceipt())
+
+        self.assertTrue(api.OpenClipboard(None))
+        try:
+            self.assertFalse(api.GetClipboardData(13))
+        finally:
+            self.assertTrue(api.CloseClipboard())

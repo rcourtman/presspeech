@@ -152,13 +152,27 @@ def write_text(text, *, api=None, sleep=time.sleep, monotonic=time.monotonic):
         acquire(deadline)
         if not api.EmptyClipboard():
             raise ClipboardError("clipboard could not be emptied")
-        for format_id, memory in (
-                (private_format, private_memory),
-                (13, text_memory),
-                (token_format, token_memory)):
-            if not api.SetClipboardData(format_id, memory):
-                raise ClipboardError("clipboard write failed")
-            allocations.remove(memory)  # Windows owns this block now.
+        try:
+            for format_id, memory in (
+                    (private_format, private_memory),
+                    (13, text_memory),
+                    (token_format, token_memory)):
+                if not api.SetClipboardData(format_id, memory):
+                    raise ClipboardError("clipboard write failed")
+                allocations.remove(memory)  # Windows owns this block now.
+        except Exception:
+            # A failed receipt write can otherwise leave unverified transcript
+            # text on the current clipboard. We still hold the clipboard lock:
+            # clear only our own partial item, never a newer owner's copy.
+            # The previous item was already discarded by EmptyClipboard and
+            # cannot be restored here. If cleanup itself fails, the privacy
+            # marker was published before any transcript text.
+            try:
+                if api.GetClipboardOwner() == window:
+                    api.EmptyClipboard()
+            except Exception:
+                pass
+            raise
         close()  # Windows finalizes text formats and advances the serial here.
         acquire(deadline)
         if (api.GetClipboardOwner() != window or

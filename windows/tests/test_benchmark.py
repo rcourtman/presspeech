@@ -359,6 +359,122 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["exact_match_trials"], 0)
         self.assertIsNone(benchmark.trial_accuracy_metrics("one", []))
 
+    def test_paired_tail_silence_metrics_expose_intermittent_blank_decode(self):
+        metrics = benchmark.paired_tail_silence_metrics(
+            "alpha beta", ["alpha beta", "alpha beta", ""],
+            ["", "alpha beta gamma", ""])
+
+        self.assertEqual(metrics["trial_count"], 3)
+        self.assertEqual(metrics["baseline_empty_trial_count"], 1)
+        self.assertEqual(metrics["tailed_empty_trial_count"], 2)
+        self.assertEqual(metrics["nonempty_to_empty_trial_count"], 1)
+        self.assertEqual(metrics["changed_text_trial_count"], 2)
+        self.assertEqual(metrics["baseline_word_error_count"], 2)
+        self.assertEqual(metrics["tailed_word_error_count"], 5)
+        self.assertEqual(metrics["worsened_word_error_trial_count"], 2)
+        self.assertEqual(metrics["improved_word_error_trial_count"], 0)
+        self.assertEqual(metrics["tailed_first_word_failure_trial_count"], 2)
+        self.assertEqual(metrics["tailed_final_word_failure_trial_count"], 3)
+        self.assertEqual(
+            [pair["nonempty_to_empty"] for pair in metrics["pairs"]],
+            [True, False, False])
+        with self.assertRaisesRegex(ValueError, "matching non-empty trials"):
+            benchmark.paired_tail_silence_metrics("alpha", ["alpha"], [])
+
+    def test_tail_probe_aggregate_counts_only_probed_samples(self):
+        probe = benchmark.paired_tail_silence_metrics(
+            "spoken words", ["spoken words"], [""])
+        summary = benchmark.summarise_tail_silence_probe([
+            {"tail_silence_probe": probe},
+            {"silence": {"evaluated": True}},
+            {"tail_silence_probe": None},
+        ])
+        self.assertEqual(summary["sample_count"], 1)
+        self.assertEqual(summary["nonempty_to_empty_trial_count"], 1)
+        self.assertEqual(summary["trial_count"], 1)
+
+    def test_tail_probe_rejects_invalid_settings_before_model_loading(self):
+        sample = {"id": "speech", "audio": "ignored.wav",
+                  "reference": "spoken words", "reference_reviewed": True}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            for model, samples, duration, error in (
+                    ("parakeet-tdt-0.6b-v3", [sample], 0, "integer"),
+                    ("parakeet-tdt-0.6b-v3", [sample], 401, "integer"),
+                    ("parakeet-tdt-0.6b-v3", [sample], True, "integer"),
+                    ("parakeet-tdt-0.6b-v3", [sample], 1.5, "integer"),
+                    ("base.en", [sample], 400, "Parakeet"),
+                    ("parakeet-tdt-0.6b-v3", [
+                        {"id": "silence", "audio": "ignored.wav",
+                         "expected_silence": True, "reference_reviewed": True}],
+                     400, "reviewed speech"),
+            ):
+                with self.subTest(model=model, duration=duration, samples=samples):
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump({"model": model, "samples": samples}, handle)
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, error):
+                            benchmark.run_benchmark(
+                                path, parakeet_tail_silence_ms=duration)
+                        constructor.assert_not_called()
+
+    def test_tail_probe_pairs_clean_and_tailed_parakeet_without_changing_wer(self):
+        manifest = {"model": "parakeet-tdt-0.6b-v3", "runs": 2, "samples": [
+            {"id": "short", "audio": "short.wav", "reference": "hello world",
+             "reference_reviewed": True, "task_group": "short-command"},
+            {"id": "silence", "audio": "silence.wav",
+             "expected_silence": True, "reference_reviewed": True},
+        ]}
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+        transcriber.transcribe.side_effect = [
+            "hello world", "", "hello world", "hello world", "", ""]
+        audio = np.ones(16000, dtype=np.float32)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                result = benchmark.run_benchmark(
+                    path, parakeet_tail_silence_ms=400)
+                calls = list(transcriber.transcribe.call_args_list)
+                transcriber.transcribe.reset_mock()
+                transcriber.transcribe.side_effect = [
+                    "hello world", "hello world", "", ""]
+                plain_result = benchmark.run_benchmark(path)
+
+        self.assertEqual(len(calls), 6)
+        self.assertIs(calls[0].args[0], audio)
+        self.assertIs(calls[2].args[0], audio)
+        self.assertEqual(len(calls[1].args[0]), 22400)
+        self.assertEqual(len(calls[3].args[0]), 22400)
+        np.testing.assert_array_equal(calls[1].args[0][:16000], audio)
+        np.testing.assert_array_equal(
+            calls[1].args[0][16000:], np.zeros(6400, dtype=np.float32))
+        self.assertEqual(result["aggregate_trial_wer"], 0)
+        self.assertEqual(result["benchmark_inputs_sha256"],
+                         plain_result["benchmark_inputs_sha256"])
+        self.assertEqual(result["aggregate_trial_wer"],
+                         plain_result["aggregate_trial_wer"])
+        self.assertIsNone(plain_result["tail_silence_probe"])
+        self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
+        self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
+        self.assertEqual(
+            result["tail_silence_probe"]["nonempty_to_empty_trial_count"], 1)
+        self.assertEqual(result["tail_silence_probe"]["tailed_word_error_count"], 2)
+        self.assertNotIn("tail_silence_probe", result["samples"][1])
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn("Parakeet +400 ms silence (benchmark-only)",
+                      output.getvalue())
+        json.dumps(result, allow_nan=False)
+
     def test_invalid_run_counts_are_rejected_before_model_loading(self):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "manifest.json")
@@ -952,7 +1068,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 11)
+        self.assertEqual(result["benchmark_version"], 12)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

@@ -862,10 +862,50 @@ class InputSelectionTests(unittest.TestCase):
 
         self.assertEqual(
             instance.check_input_device("auto"),
-            app.MICROPHONE_CHECK_UNAVAILABLE)
+            app.MICROPHONE_CHECK_BUSY)
 
         self.assertEqual(instance.input_device, (4, 44100))
+        instance._find_input_device.assert_not_called()
         instance._rescan_audio_devices.assert_not_called()
+
+    def test_microphone_check_claim_defers_hotkey_capture_until_probe_finishes(self):
+        instance = self.make_app()
+        instance.notify = mock.Mock()
+        entered = threading.Event()
+        finish = threading.Event()
+        result = []
+
+        def slow_probe(_selected, probe=None):
+            entered.set()
+            self.assertTrue(finish.wait(2))
+            return (1, 16000)
+
+        instance._find_input_device = mock.Mock(side_effect=slow_probe)
+        worker = threading.Thread(
+            target=lambda: result.append(instance.check_input_device("auto")))
+        worker.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            self.assertFalse(instance.start_recording())
+            instance.notify.assert_called_once_with(
+                "Microphone check in progress",
+                "Wait for the microphone check to finish, then start dictation.")
+            self.assertFalse(getattr(instance, "_starting_recording", False))
+        finally:
+            finish.set()
+            worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(result, [app.MICROPHONE_CHECK_SILENT])
+        self.assertFalse(instance._microphone_check_in_progress)
+
+    def test_microphone_check_does_not_start_during_recording_transition(self):
+        instance = self.make_app()
+        instance._starting_recording = True
+        instance._find_input_device = mock.Mock()
+
+        self.assertEqual(
+            instance.check_input_device("auto"), app.MICROPHONE_CHECK_BUSY)
+        instance._find_input_device.assert_not_called()
 
     def test_setup_check_reports_device_enumeration_failure_safely(self):
         instance = self.make_app()

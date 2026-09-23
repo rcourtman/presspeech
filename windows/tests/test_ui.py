@@ -832,6 +832,8 @@ class SetupWindowTests(unittest.TestCase):
         window = ui.SetupWindow.__new__(ui.SetupWindow)
         window.app = mock.Mock(
             model_status=status, model_status_detail=detail)
+        window.app.lock = threading.Lock()
+        window.app._microphone_check_in_progress = False
         window._setup_interacted = False
         window.app.settings = {"model": "parakeet-tdt-0.6b-v3"}
         window.root = mock.Mock()
@@ -1431,6 +1433,50 @@ class SetupWindowTests(unittest.TestCase):
             window.microphone_status, "Not checked")
         window.root.after.assert_not_called()
 
+    def test_setup_does_not_switch_microphones_during_recording(self):
+        window = self.make_window("ready")
+        window.app.recording = True
+        window.app.settings = {"input_device": "auto"}
+        window.app.input_device = (4, 48000)
+        window.app._cached_input_selector = "auto"
+        window.device_values["Desk microphone"] = "MME::Desk microphone"
+        window.device.get.return_value = "Desk microphone"
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._microphone_changed()
+
+        self.assertEqual(window.app.settings["input_device"], "auto")
+        self.assertEqual(window.app.input_device, (4, 48000))
+        self.assertEqual(window.app._cached_input_selector, "auto")
+        window.device.set.assert_called_once_with("Automatic (recommended)")
+        save.assert_not_called()
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Finish or cancel the current dictation before changing microphones.")
+
+    def test_setup_close_cannot_commit_a_racing_microphone_change(self):
+        window = self.make_window("loading")
+        window.app.recording = True
+        window.app.settings = {"input_device": "auto", "autostart": False}
+        window.device_values["Desk microphone"] = "MME::Desk microphone"
+        window.device.get.return_value = "Desk microphone"
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = True
+        window._close = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save") as save, \
+                mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._defer()
+
+        self.assertEqual(window.app.settings["input_device"], "auto")
+        self.assertFalse(window.app.settings["autostart"])
+        save.assert_not_called()
+        window._close.assert_not_called()
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Finish or cancel the current dictation before changing microphones.")
+
     def test_deferred_setup_keeps_choices_and_applies_autostart(self):
         window = self.make_window("loading")
         window.app.settings = {
@@ -1533,6 +1579,72 @@ class SetupWindowTests(unittest.TestCase):
             daemon=True,
         )
         thread.return_value.start.assert_called_once_with()
+
+    def test_setup_does_not_start_microphone_check_during_recording(self):
+        window = self.make_window("ready")
+        window.app.recording = True
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text, \
+                mock.patch.object(ui.threading, "Thread") as thread:
+            window._check_microphone()
+
+        self.assertFalse(window.microphone_checking)
+        thread.assert_not_called()
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Finish or cancel the current dictation before checking the microphone.")
+
+    def test_racing_hotkey_postpones_check_without_enumerating_devices(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.app.recording = True
+        window.app.check_input_device.return_value = "busy"
+
+        window._check_microphone_worker("auto")
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        window.app.input_device_options.assert_not_called()
+        window.check_microphone_button.config.assert_called_once_with(
+            state="disabled")
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Microphone check postponed — finish or cancel dictation, "
+            "then choose Check Microphone")
+
+    def test_busy_setup_controls_move_focus_and_block_microphone_actions(self):
+        window = self.make_window("ready")
+        window.app.recording = True
+        window.root.focus_get.return_value = window.device
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+
+        window.later_button.focus_set.assert_called_once_with()
+        window.device.config.assert_called_once_with(state="disabled")
+        window.check_microphone_button.config.assert_called_once_with(
+            state="disabled")
+
+    def test_busy_microphone_guidance_clears_when_dictation_finishes(self):
+        window = self.make_window("ready")
+        window.app.recording = True
+        window._microphone_busy_feedback = True
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+            window.app.recording = False
+            window._poll_model()
+
+        self.assertFalse(window._microphone_busy_feedback)
+        self.assertIn(
+            mock.call(
+                window.microphone_status,
+                "You can now choose Check Microphone to test the selected input."),
+            set_text.call_args_list)
+        self.assertEqual(window.device.config.call_args, mock.call(state="readonly"))
+        self.assertEqual(
+            window.check_microphone_button.config.call_args,
+            mock.call(state="normal"))
 
     def test_ready_microphone_result_is_exposed_accessibly(self):
         window = self.make_window("ready")
@@ -1823,6 +1935,24 @@ class ScratchpadWindowTests(unittest.TestCase):
                 "Transcribing… Dictation will be available when this finishes."),
             set_text.call_args_list,
         )
+
+    def test_microphone_check_disables_scratchpad_dictate_until_it_finishes(self):
+        window = self.make_window()
+        window.app._microphone_check_in_progress = True
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_controls()
+            window.app._microphone_check_in_progress = False
+            window._refresh_controls()
+
+        self.assertEqual(
+            window.btn.config.call_args_list,
+            [mock.call(state="disabled"), mock.call(state="normal")])
+        self.assertIn(
+            mock.call(
+                window.status,
+                "Microphone check in progress… Wait for it to finish before dictating."),
+            set_text.call_args_list)
 
     def test_model_failure_exposes_recovery_in_live_status(self):
         window = self.make_window(model_status="error")

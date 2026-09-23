@@ -358,8 +358,10 @@ each platform rather than identical.
   combinations take precedence over the same shortcut in other apps; conflicts
   cannot all be detected. Presspeech's Command-comma Settings command takes
   precedence while Presspeech is active and **Show in Dock** is enabled.
-  Escape remains reserved for cancellation. Bindings track physical keys, and
-  their labels follow the current keyboard layout.
+  Escape remains reserved for cancellation, and the active layout's Command-V
+  remains available for Paste recovery. A saved binding that becomes Paste
+  after an input-source change yields to Paste. Bindings track physical keys,
+  and their labels follow the current keyboard layout.
   Hold mode ends when the trigger key is released, even if its modifiers were
   released first. Apple keyboards may require **Fn** to send an F-key
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
@@ -450,20 +452,19 @@ Never publish the phrases or transcripts.
 Passing reports matter as much as failures because they provide the denominator
 for platform/app/version/field combinations. If no app is already in mind, the
 protocol's live coverage links separate native, browser, and Electron/Chromium
-reports so an unrepresented target class is easy to choose. [Browse existing compatibility
-reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
-before opening the focused [compatibility report
+reports so an unrepresented target class is easy to choose. GitHub still
+reported new issue creation as restricted on 24 September 2026. [Browse existing
+compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22);
+if one matches the platform, app version, and generic field type and accepts
+comments, add the worksheet's eight counts and overall result with your
+Presspeech/OS versions and relevant conditions—even when your outcome differs.
+Otherwise, the worksheet's **Download report draft** saves those counts and
+their overall classification with blank prompts for public versions and generic
+target context; it does not collect or save phrases or transcripts. Keep the
+draft private and retry later rather than posting sensitive data elsewhere.
+Only when GitHub accepts new issues, check for a matching report first, then
+use the focused [compatibility report
 form](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml).
-GitHub still reported issue creation as restricted on 24 September 2026, so verify
-the route accepts reports first; if it does not, keep the report draft
-privately and retry later rather than posting sensitive data elsewhere. The
-worksheet's **Download report draft** saves those eight counts and their overall
-classification with blank prompts for public versions and generic target
-context; it does not collect or save phrases or transcripts.
-If the same platform, app version, and generic field type already has a report,
-add the worksheet's counts and overall result there with your Presspeech/OS
-versions and relevant conditions—even when your outcome differs—instead of
-opening a duplicate.
 Community observations are exploratory evidence, not a promise of universal
 support or a substitute for native release qualification.
 

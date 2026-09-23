@@ -91,6 +91,7 @@ MICROPHONE_CHECK_AUDIO_RMS = POST_ROLL_ABS_SILENCE_RMS
 MICROPHONE_CHECK_LEVEL = "level"
 MICROPHONE_CHECK_SILENT = "silent"
 MICROPHONE_CHECK_UNAVAILABLE = "unavailable"
+MICROPHONE_CHECK_BUSY = "busy"
 MICROPHONE_START_TIMEOUT_SEC = 5.0
 MODEL_WARMUP_SEC = 8.0
 MODEL_IDLE_WAKE_SEC = 60.0
@@ -657,6 +658,7 @@ class PresspeechApp:
         # through that start transition.
         self._starting_recording = False
         self._canceling_recording = False
+        self._microphone_check_in_progress = False
         self.transcribing = False
         self.lock = threading.Lock()
         self.scratchpad = None
@@ -1432,10 +1434,19 @@ class PresspeechApp:
         # Claim the transition before model and foreground discovery. The
         # Settings window uses this same lock and lifecycle flag when saving.
         with self.lock:
-            if getattr(self, "_starting_recording", False):
-                self._log("dictation ignored; another recording is starting")
-                return False
-            self._starting_recording = True
+            if getattr(self, "_microphone_check_in_progress", False):
+                check_running = True
+            else:
+                check_running = False
+                if getattr(self, "_starting_recording", False):
+                    self._log("dictation ignored; another recording is starting")
+                    return False
+                self._starting_recording = True
+        if check_running:
+            self.notify(
+                "Microphone check in progress",
+                "Wait for the microphone check to finish, then start dictation.")
+            return False
         try:
             return self._start_recording_claimed()
         finally:
@@ -2236,6 +2247,26 @@ class PresspeechApp:
 
     def check_input_device(self, selected):
         """Open an input and distinguish audible samples from silent buffers."""
+        # The explicit Setup probe and dictation must never open inputs at the
+        # same time. Claim this operation before taking the audio-backend lease;
+        # a hotkey press during the probe is deferred rather than opening a
+        # second microphone stream.
+        with self.lock:
+            if (getattr(self, "_starting_recording", False) or
+                    getattr(self, "recording", False) or
+                    getattr(self, "_canceling_recording", False) or
+                    getattr(self, "transcribing", False) or
+                    getattr(self, "_microphone_check_in_progress", False)):
+                return MICROPHONE_CHECK_BUSY
+            self._microphone_check_in_progress = True
+        try:
+            return self._check_input_device_claimed(selected)
+        finally:
+            with self.lock:
+                self._microphone_check_in_progress = False
+
+    def _check_input_device_claimed(self, selected):
+        """Probe a microphone after claiming the exclusive check lifecycle."""
         levels = []
 
         def probe(idx, rate):
@@ -2528,7 +2559,9 @@ class PresspeechApp:
         # Callers supply fixed status codes, never exception messages.
         self._log("dictation retained in memory; delivery status: %s" % reason)
         prefix = {
-            "clipboard-unavailable": "The clipboard write could not be verified. ",
+            "clipboard-unavailable": (
+                "The clipboard write could not be verified; the previous "
+                "clipboard item may have changed. "),
             "clipboard-changed": "The clipboard changed; no paste shortcut was sent. ",
             "target-unavailable": "The original input window could not be identified. ",
             "focus-changed": (
@@ -2593,7 +2626,8 @@ class PresspeechApp:
             except Exception:
                 self._log("clipboard recovery unavailable; dictation retained")
                 self.notify("Clipboard unavailable", "The dictation is still kept in memory. "
-                            "Try Copy Undelivered Dictation again, or choose Discard.")
+                            "Check the current clipboard, then try Copy "
+                            "Undelivered Dictation again or choose Discard.")
                 return False
             if not clipboard_delivery.is_current(receipt):
                 self._log("clipboard changed during recovery; dictation retained")

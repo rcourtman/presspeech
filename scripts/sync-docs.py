@@ -3000,6 +3000,42 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
     return errors
 
 
+def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str]:
+    """Keep the first-launch choice scannable and ahead of homepage actions."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing homepage launch decision"]
+
+    contents = read_text(path)
+    start = contents.find('<div class="note warn launch-decision" role="region"')
+    end = contents.find("</div>", start) if start >= 0 else -1
+    actions = contents.find('<div class="actions">')
+    if start < 0 or end < 0 or actions < 0 or end > actions:
+        return [f"{display}: first-launch decision must precede homepage actions"]
+
+    panel = contents[start:end]
+    required = (
+        'aria-labelledby="launch-decision-title"',
+        '<h2 id="launch-decision-title">Before opening a current build</h2>',
+        '<strong>Unsure? Leave it unopened.</strong>',
+        "Downloading the ZIP or installer does not start a speech-model request",
+        "first launch with a missing model does",
+        "macOS 0.3.8 — inherited token",
+        "wait until macOS 0.3.9 is published",
+        'href="install.html#model-download-privacy"',
+        "Windows 0.1.12 — telemetry or token",
+        "wait until Windows 0.1.13 is published",
+        'href="windows.html#model-download-privacy"',
+    )
+    missing = [phrase for phrase in required if phrase not in panel]
+    if missing:
+        return [
+            f"{display}: incomplete homepage first-launch decision — missing "
+            + ", ".join(repr(phrase) for phrase in missing)
+        ]
+    return []
+
+
 def check_getting_started_preflight_order(
     path: Path = DOCS / "getting-started.html",
 ) -> list[str]:
@@ -4010,6 +4046,34 @@ def run_self_test() -> None:
         "release_zip_size": "7.6 MB",
     }
     with tempfile.TemporaryDirectory() as tmp:
+        homepage = Path(tmp) / "homepage.html"
+        safe_homepage = read_text(DOCS / "index.html")
+        homepage.write_text(safe_homepage, encoding="utf-8")
+        if check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: safe homepage launch decision was rejected")
+        homepage.write_text(
+            safe_homepage.replace("Unsure? Leave it unopened.", "", 1),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: missing homepage stop action was accepted")
+        homepage.write_text(
+            safe_homepage.replace(
+                '<div class="note warn launch-decision"',
+                '<div class="actions"></div><div class="note warn launch-decision"',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: homepage action before launch decision was accepted")
+        homepage.write_text(
+            safe_homepage.replace('href="windows.html#model-download-privacy"', 'href="windows.html"', 1),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: missing Windows privacy link was accepted")
+
         preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.12"}
         preflight_surfaces = []
         for surface in ANCHORED_INSTALL_PREFLIGHTS:
@@ -5707,6 +5771,7 @@ def main() -> int:
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
+            errors.extend(check_homepage_launch_decision())
             errors.extend(check_getting_started_preflight_order())
             errors.extend(check_getting_started_entry_links())
             errors.extend(check_model_recovery_privacy_order())
@@ -5766,6 +5831,7 @@ def main() -> int:
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())
+        errors.extend(check_homepage_launch_decision())
         errors.extend(check_getting_started_preflight_order())
         errors.extend(check_getting_started_entry_links())
         errors.extend(check_model_recovery_privacy_order())
