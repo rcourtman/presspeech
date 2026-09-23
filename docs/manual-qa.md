@@ -488,8 +488,10 @@ manual paste. A matching process identifier alone does not authorize paste;
 any insertion after the window switch is a failure.
 
 For the non-US keyboard-layout row, compare an English/US input source with at
-least one non-US source (preferably one with different character mappings, such
-as Russian, when available). In TextEdit and a current Electron/Chromium target,
+least one non-US source. When available, include Dvorak (or another layout that
+moves the letter V to a different key position), not only a non-Latin source
+such as Russian: this exercises layout-aware synthetic Command-V rather than
+only character labeling. In TextEdit and a current Electron/Chromium target,
 confirm a steady-focus dictation inserts once under each layout. Then cause a
 clipboard-only recovery by changing focus before delivery and confirm physical
 Command-V pastes that transcript once under each layout. A displayed hotkey

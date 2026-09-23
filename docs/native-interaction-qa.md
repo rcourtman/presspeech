@@ -64,11 +64,11 @@ The fixture checks:
 - Toggle mode rejects an unavailable start without changing its toggle state,
   starts/stops on subsequent presses, and suppresses Escape while cancelling.
 - In macOS 0.3.8 and later, the manual-restore fixture uses production
-  Command+V to insert a fixed marker into the owned text view. After
-  observing that exact field consume it, the fixture leaves the transcript on
-  the clipboard beyond the retired setting's maximum three-second timer window,
-  then explicitly requests the guarded manual restoration. Posting alone never
-  schedules restoration.
+  Command+V, resolved through the active keyboard layout, to insert a fixed
+  marker into the owned text view. After observing that exact field consume it,
+  the fixture leaves the transcript on the clipboard beyond the retired
+  setting's maximum three-second timer window, then explicitly requests the
+  guarded manual restoration. Posting alone never schedules restoration.
 - A newer fixture copy survives an explicit request using an older restore token.
 - Focusing the second owned window makes a target captured from the first window
   fall back to copy-only without posting paste events.
@@ -107,12 +107,13 @@ or third-party event-tap failure. A cleanup timeout fails acceptance.
 
 Saved hotkey keycodes are read without migrations or writes from both current
 and legacy preference suites. Every posted keycode is screened: sentinel A (0),
-paste V (9), Escape (53), left Command (55), and the selected punctuation,
-regardless of modifier mask. A conflict aborts preflight. No right-side modifier
-or F-key event is posted. This is defense in addition to the running-app refusal,
-not a substitute for proving that another instance cannot be recording. A
-third-party application with a conflicting global shortcut can still interfere;
-interference is a failure, not a reason to weaken the guards.
+the active-layout Command+V key, Escape (53), left Command (55), and the
+selected punctuation, regardless of modifier mask. A conflict aborts preflight.
+No right-side modifier or F-key event is posted. This is defense in addition to
+the running-app refusal, not a substitute for proving that another instance
+cannot be recording. A third-party application with a conflicting global
+shortcut can still interfere; interference is a failure, not a reason to weaken
+the guards.
 
 Afterward the fixture closes only its own windows and reactivates the previous
 application only if the fixture still owns foreground focus. It does not inspect

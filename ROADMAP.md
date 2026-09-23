@@ -60,7 +60,11 @@ passed.
   hold and toggle modes, conflict cases, and keyboard/VoiceOver navigation.
   That is the remaining evidence gate for [issue
   #34](https://github.com/rcourtman/presspeech/issues/34), not a reason to
-  widen the binding grammar further.
+  widen the binding grammar further. Separately qualify automatic paste and
+  physical Command-V recovery on a layout that moves V to another key position
+  (such as Dvorak); hotkey labels alone do not exercise the paste chord. The
+  current source resolves synthetic Command-V through the active layout, but
+  this still needs the native release checks below.
 - Qualify the Windows 0.1.13 retained-dictation recovery and audio-device
   rescan on clean CPU and NVIDIA installations. A failed or uncertain delivery
   must keep reviewable text in process memory without silently replacing a

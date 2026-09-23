@@ -5861,6 +5861,64 @@ private struct KeyboardEventStep: Equatable {
     let flags: CGEventFlags
 }
 
+private let ANSI_PASTE_VIRTUAL_KEY: CGKeyCode = 0x09
+
+/// Resolve the key whose current-layout Command translation is the lowercase
+/// `v` used by macOS Paste. Keeping the search independent of Carbon makes the
+/// layout-selection policy deterministic in model-free self-tests.
+private func keyboardLayoutVirtualKey(for character: UniChar,
+                                      translatedCharacter: (CGKeyCode) -> UniChar?) -> CGKeyCode? {
+    for rawKeycode in 0..<128 {
+        let keycode = CGKeyCode(rawKeycode)
+        if translatedCharacter(keycode) == character { return keycode }
+    }
+    return nil
+}
+
+private func resolvedCommandVPasteVirtualKey(layoutKey: CGKeyCode?) -> CGKeyCode {
+    layoutKey ?? ANSI_PASTE_VIRTUAL_KEY
+}
+
+/// Read the active Unicode keyboard layout on the main thread and resolve
+/// Command-V using the Command modifier state. Layouts such as Dvorak can map
+/// Command shortcuts differently from the ANSI physical V position. If macOS
+/// exposes no usable layout data, retain the prior ANSI behavior.
+@MainActor
+private func currentCommandVPasteVirtualKey() -> CGKeyCode {
+    guard let copiedSource = TISCopyCurrentKeyboardLayoutInputSource() else {
+        return ANSI_PASTE_VIRTUAL_KEY
+    }
+    let source = copiedSource.takeRetainedValue()
+    guard let layoutPointer = TISGetInputSourceProperty(source,
+                                                        kTISPropertyUnicodeKeyLayoutData) else {
+        return ANSI_PASTE_VIRTUAL_KEY
+    }
+    let data = Unmanaged<CFData>.fromOpaque(layoutPointer).takeUnretainedValue()
+    guard let layoutBytes = CFDataGetBytePtr(data) else {
+        return ANSI_PASTE_VIRTUAL_KEY
+    }
+    let layout = UnsafeRawPointer(layoutBytes).assumingMemoryBound(to: UCKeyboardLayout.self)
+    let commandModifierState: UInt32 = 1 // Carbon cmdKey shifted right by 8.
+    let keycode = keyboardLayoutVirtualKey(for: UniChar(0x0076)) { keycode in
+        var deadKeyState: UInt32 = 0
+        var characters = [UniChar](repeating: 0, count: 4)
+        var length = 0
+        let status = UCKeyTranslate(layout,
+                                    keycode,
+                                    UInt16(kUCKeyActionDisplay),
+                                    commandModifierState,
+                                    UInt32(LMGetKbdType()),
+                                    OptionBits(kUCKeyTranslateNoDeadKeysMask),
+                                    &deadKeyState,
+                                    characters.count,
+                                    &length,
+                                    &characters)
+        guard status == noErr, length == 1 else { return nil }
+        return characters[0]
+    }
+    return resolvedCommandVPasteVirtualKey(layoutKey: keycode)
+}
+
 private func clipboardPasteKeyboardEventSteps(commandKey: CGKeyCode,
                                               pasteKey: CGKeyCode) -> [KeyboardEventStep] {
     [
@@ -6003,7 +6061,6 @@ func clipboardOnlyOutcomeAfterOwnedWrite(
 @MainActor
 private enum ClipboardPasteInserter {
     private static let virtualKeyCommand: CGKeyCode = 0x37  // left Command
-    private static let virtualKeyV: CGKeyCode = 0x09  // ANSI 'v'
 
     /// A faithful copy of a pasteboard's contents: every item with all
     /// of its representation types and data. Copied into fresh
@@ -6638,11 +6695,12 @@ private enum ClipboardPasteInserter {
             return outcome
         }
 
+        let pasteKey = currentCommandVPasteVirtualKey()
         let steps = clipboardPasteKeyboardEventSteps(commandKey: virtualKeyCommand,
-                                                     pasteKey: virtualKeyV)
+                                                     pasteKey: pasteKey)
         let postOutcome = post(
             steps,
-            pasteKey: virtualKeyV,
+            pasteKey: pasteKey,
             targetStillFocused: {
                 dictationPasteTargetMatches(expectedTarget,
                                              currentDictationPasteTarget())
@@ -15038,10 +15096,13 @@ private enum NativeInteractionPolicy {
             || ["presspeech", "parakey"].contains(executableName?.lowercased() ?? "")
     }
 
-    static func postedKeysAreDisjoint(saved: [CGKeyCode], punctuation: CGKeyCode) -> Bool {
-        // Plain sentinel key-up, paste V, Escape cancellation, left Command,
-        // and every modifier variant of the selected punctuation all count.
-        Set(saved).isDisjoint(with: [0, 9, 53, 55, punctuation])
+    static func postedKeysAreDisjoint(saved: [CGKeyCode],
+                                      punctuation: CGKeyCode,
+                                      pasteKey: CGKeyCode = ANSI_PASTE_VIRTUAL_KEY) -> Bool {
+        // Plain sentinel key-up, the current-layout paste V, Escape
+        // cancellation, left Command, and every modifier variant of the
+        // selected punctuation all count.
+        Set(saved).isDisjoint(with: [0, pasteKey, 53, 55, punctuation])
     }
 
     static func permits(foreground: pid_t?, owner: pid_t, ownsWindow: Bool,
@@ -15082,9 +15143,11 @@ private enum NativeInteractionPolicy {
                                            executableName: "Other"), "unrelated app is allowed")
         try require(postedKeysAreDisjoint(saved: [DEFAULT_HOTKEY_KEYCODE], punctuation: 43),
                     "fixed right modifier is never posted")
+        try require(!postedKeysAreDisjoint(saved: [0x2f], punctuation: 43, pasteKey: 0x2f),
+                    "layout-resolved Command-V key must be screened against saved hotkeys")
         for key: CGKeyCode in [0, 9, 53, 55, 43] {
             try require(!postedKeysAreDisjoint(saved: [key], punctuation: 43),
-                        "every posted keycode is screened")
+                       "every posted keycode is screened")
         }
         for invalid in [Array(arguments.prefix(2)), arguments + ["extra"],
                         ["--self-test", "all", "--allow-native-input"], []] {
@@ -15372,11 +15435,14 @@ private final class NativeInteractionFixture {
             }
             return keys
         }
+        let pasteKey = currentCommandVPasteVirtualKey()
         let modifiers: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate]
         guard let binding = [CGKeyCode(43), 47, 44].compactMap({
             recordableHotkeyChoice(forKeycode: $0, modifiers: modifiers)
         }).first(where: {
-            NativeInteractionPolicy.postedKeysAreDisjoint(saved: savedKeycodes, punctuation: $0.keycode)
+            NativeInteractionPolicy.postedKeysAreDisjoint(saved: savedKeycodes,
+                                                          punctuation: $0.keycode,
+                                                          pasteKey: pasteKey)
         }) else {
             throw SelfTestFailure.failed("no nonconflicting fixture binding")
         }
@@ -15429,6 +15495,11 @@ private final class NativeInteractionFixture {
         while NSWorkspace.shared.frontmostApplication?.processIdentifier != owner,
               Date() < activationDeadline { pump() }
         try check()
+        try require(NativeInteractionPolicy.postedKeysAreDisjoint(
+                        saved: savedKeycodes,
+                        punctuation: binding.keycode,
+                        pasteKey: currentCommandVPasteVirtualKey()),
+                    "active-layout paste key conflicts with a saved hotkey")
         NativeInteractionHooks.permitEvent = { [weak self] in self?.prepare($0) ?? false }
         NativeInteractionHooks.permitClipboardWrite = { [weak self] in self?.safety() ?? false }
         NativeInteractionHooks.didRestoreClipboard = { [weak self] in self?.restorations += 1 }
@@ -18252,6 +18323,37 @@ private enum PresspeechSelfTest {
             equals: true,
             "an interrupted Direct Unicode fallback should preserve the transcript on the clipboard"
         )
+
+        // Dvorak maps the physical ANSI-V position to `k` while Command is
+        // held; its `v` key is the ANSI period position. Exercise the exact
+        // layout-translation policy without depending on the host Mac's input
+        // source or changing its keyboard settings.
+        let dvorakPasteKey = keyboardLayoutVirtualKey(for: UniChar(0x0076)) { keycode in
+            switch keycode {
+            case 0x09: return UniChar(0x006b) // ANSI V position -> Dvorak K
+            case 0x2f: return UniChar(0x0076) // ANSI period position -> Dvorak V
+            default: return nil
+            }
+        }
+        try expect(dvorakPasteKey, equals: Optional(CGKeyCode(0x2f)),
+                   "Command-V resolution should follow the active Dvorak mapping")
+        let dvorakPasteSteps = clipboardPasteKeyboardEventSteps(
+            commandKey: 0x37,
+            pasteKey: dvorakPasteKey ?? ANSI_PASTE_VIRTUAL_KEY
+        )
+        try expect(dvorakPasteSteps.map(\.virtualKey), equals: [0x37, 0x2f, 0x2f, 0x37],
+                   "the synthesized paste chord should use the layout-resolved key for both edges")
+        let unavailableLayoutKey = keyboardLayoutVirtualKey(
+            for: UniChar(0x0076),
+            translatedCharacter: { _ in nil }
+        )
+        try expect(unavailableLayoutKey,
+                   equals: nil,
+                   "unavailable layout translations should be distinguishable for fallback")
+        try expect(resolvedCommandVPasteVirtualKey(layoutKey: unavailableLayoutKey),
+                   equals: ANSI_PASTE_VIRTUAL_KEY,
+                   "an unreadable layout should retain the legacy ANSI paste fallback")
+
         let failedUnicodePostProbe = MainActor.assumeIsolated {
             var attempts = 0
             return directUnicodeInsertionOutcome(
