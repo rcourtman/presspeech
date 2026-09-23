@@ -106,6 +106,12 @@ ALTGR_HOTKEY_GUIDANCE = (
     "that key will not start dictation. Choose F8 or another key."
 )
 
+MODEL_DOWNLOAD_PRIVACY_NOTICE = (
+    "Hugging Face receives a request for the selected model and revision. "
+    "Presspeech disables Hugging Face model-library telemetry and sends no "
+    "account token; audio and transcripts stay on this PC."
+)
+
 
 def _window_host():
     global _WINDOW_HOST
@@ -1013,8 +1019,7 @@ class SetupWindow:
             self.model_consent_frame,
             text=("A full multilingual Parakeet model download is about 2.5 GB "
                   "from huggingface.co; a partial local cache may need less. "
-                  "Hugging Face receives the model request; audio and "
-                  "transcripts stay on this PC. Or choose English-only "
+                  + MODEL_DOWNLOAD_PRIVACY_NOTICE + " Or choose English-only "
                   "Whisper base.en on CPU (~141 MiB)."),
             justify="left",
             wraplength=560,
@@ -1311,7 +1316,7 @@ class SetupWindow:
                     self.model_consent_label,
                     "The English-only Whisper base.en speech model is about "
                     "141 MiB. Choose Download to fetch its pinned files from "
-                    "huggingface.co. Audio and transcripts stay on this PC.",
+                    "huggingface.co. " + MODEL_DOWNLOAD_PRIVACY_NOTICE,
                     announce=False)
                 _set_accessible_text(
                     self.download_model_button,
@@ -1329,8 +1334,7 @@ class SetupWindow:
                     self.model_consent_label,
                     "A full multilingual Parakeet model download is about "
                     "2.5 GB from huggingface.co; a partial local cache may "
-                    "need less. Hugging Face receives the model request; "
-                    "audio and transcripts stay on this PC. Or choose "
+                    "need less. " + MODEL_DOWNLOAD_PRIVACY_NOTICE + " Or choose "
                     "English-only Whisper base.en on CPU (~141 MiB).",
                     announce=False)
                 _set_accessible_text(

@@ -453,8 +453,7 @@ class AccessibleWindowTests(unittest.TestCase):
         for disclosure in (
                 "full multilingual Parakeet model download is about 2.5 GB",
                 "huggingface.co",
-                "Hugging Face receives the model request",
-                "transcripts stay on this PC",
+                "MODEL_DOWNLOAD_PRIVACY_NOTICE",
                 "English-only ",
                 "Whisper base.en on CPU (~141 MiB)"):
             self.assertIn(disclosure, body)
@@ -477,6 +476,19 @@ class AccessibleWindowTests(unittest.TestCase):
             body.index("self._poll_model()"),
             body.index("root.after_idle(self._focus_initial_setup_control)"),
         )
+
+    def test_model_download_consent_discloses_request_privacy_for_both_paths(self):
+        notice = (
+            "Hugging Face receives a request for the selected model and revision. "
+            "Presspeech disables Hugging Face model-library telemetry and sends "
+            "no account token; audio and transcripts stay on this PC.")
+        self.assertEqual(ui.MODEL_DOWNLOAD_PRIVACY_NOTICE, notice)
+        self.assertIn(
+            "MODEL_DOWNLOAD_PRIVACY_NOTICE",
+            inspect.getsource(ui.SetupWindow._build))
+        self.assertIn(
+            "MODEL_DOWNLOAD_PRIVACY_NOTICE",
+            inspect.getsource(ui.SetupWindow._poll_model))
 
     def test_hidden_first_run_model_choices_start_disabled_before_first_poll(self):
         body = inspect.getsource(ui.SetupWindow._build)
@@ -882,6 +894,12 @@ class SetupWindowTests(unittest.TestCase):
             set_text.call_args_list,
         )
         set_text.assert_any_call(
+            window.model_consent_label,
+            "A full multilingual Parakeet model download is about 2.5 GB "
+            "from huggingface.co; a partial local cache may need less. "
+            + ui.MODEL_DOWNLOAD_PRIVACY_NOTICE + " Or choose English-only "
+            "Whisper base.en on CPU (~141 MiB).", announce=False)
+        set_text.assert_any_call(
             window.download_model_button,
             "Download Parakeet model (up to ~2.5 GB)", announce=False)
         window.model_consent_frame.grid.assert_called_once_with()
@@ -943,7 +961,7 @@ class SetupWindowTests(unittest.TestCase):
             window.model_consent_label,
             "The English-only Whisper base.en speech model is about 141 MiB. "
             "Choose Download to fetch its pinned files from huggingface.co. "
-            "Audio and transcripts stay on this PC.", announce=False)
+            + ui.MODEL_DOWNLOAD_PRIVACY_NOTICE, announce=False)
         set_text.assert_any_call(
             window.download_model_button,
             "Download English-only CPU model (~141 MiB)", announce=False)
