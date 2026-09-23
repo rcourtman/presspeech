@@ -12,14 +12,16 @@ cd "$(dirname "$SCRIPT_PATH")"
 REAL_AUDIO_DIR="real-audio"
 PUBLIC_AUDIO_DIR="public-audio/librispeech-dev-clean"
 LONG_PUBLIC_AUDIO_DIR="public-audio/librispeech-dev-clean-long-form"
+MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR="public-audio/fleurs-de_de-test-long-form"
 TRIALS="3"
 REQUIRE_REAL_AUDIO=0
 REQUIRE_PUBLIC_AUDIO=0
-# Multi-window coverage is the one public corpus this release-oriented wrapper
-# requires by default. The app accepts recordings up to ten minutes, while the
-# production CoreML encoder operates on 15-second windows; silently reducing a
-# release check to short utterances would miss a distinct quality path.
+# Multi-window coverage is required by default. The app accepts recordings up
+# to ten minutes, while its production CoreML encoder operates on 15-second
+# windows; silently reducing a release check to short utterances would miss a
+# distinct quality path.
 REQUIRE_LONG_PUBLIC_AUDIO=1
+REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO=1
 INCLUDE_CANDIDATE_MODELS=0
 SDK_UPGRADE_ONLY=0
 ALLOW_CANDIDATE_DEPENDENCY=0
@@ -39,6 +41,9 @@ Options:
   --long-public-audio-dir <path>
                             composed multi-window public fixtures
                             (default: public-audio/librispeech-dev-clean-long-form)
+  --multilingual-long-public-audio-dir <path>
+                            composed German FLEURS test fixtures
+                            (default: public-audio/fleurs-de_de-test-long-form)
   --trials <n>              trials per clip/backend (default: 3)
   --require-real-audio      fail if no private real-dictation clips are present
   --require-public-audio    fail if no public speech clips are present
@@ -46,6 +51,8 @@ Options:
                             fail if no composed multi-window fixtures are present (default)
   --allow-missing-long-public-audio
                             allow a lightweight run to skip multi-window coverage
+  --allow-missing-multilingual-long-public-audio
+                            allow a lightweight run to skip German long-form coverage
   --long-public-max-reference-deletion-run <n>
                             fail the multi-window gate above this consecutive
                             dropped-reference-word count (default: 6)
@@ -79,7 +86,9 @@ The default run performs:
   3. production v3 regression if private real-dictation fixtures exist,
   4. production v3 regression if public speech fixtures exist,
   5. required production v3 multi-window regression over validated composed fixtures,
-  6. non-gating same-pin production-v3 vs explicit no-mel comparison over those
+  6. required production v3 German FLEURS multi-window regression over validated
+     German-source fixtures,
+  7. non-gating same-pin production-v3 vs explicit no-mel comparison over English
      multi-window fixtures.
 
 Candidate models and chunking policies are not shipped by the app. Use
@@ -191,9 +200,10 @@ final_verdict() {
     if [[ "$DEPENDENCY_MODE" != "production" ]]; then
         echo "candidate ASR evaluation completed"
         echo "not a production release-gate pass: benchmark and app FluidAudio pins differ"
-    elif [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -ne 1 ]]; then
+    elif [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -ne 1 || \
+            "$REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO" -ne 1 ]]; then
         echo "lightweight ASR checks completed"
-        echo "not a production release-gate pass: multi-window coverage was optional"
+        echo "not a production release-gate pass: English or German multi-window coverage was optional"
     else
         echo "release ASR checks passed"
     fi
@@ -318,10 +328,17 @@ run_self_test() {
 
     DEPENDENCY_MODE="production"
     REQUIRE_LONG_PUBLIC_AUDIO=1
+    REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO=1
     assert_eq "$(final_verdict)" "release ASR checks passed" "release verdict"
     REQUIRE_LONG_PUBLIC_AUDIO=0
     assert_contains <(final_verdict) \
-        "not a production release-gate pass: multi-window coverage was optional"
+        "not a production release-gate pass: English or German multi-window coverage was optional"
+    REQUIRE_LONG_PUBLIC_AUDIO=0
+    REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO=0
+    assert_contains <(final_verdict) \
+        "not a production release-gate pass: English or German multi-window coverage was optional"
+    REQUIRE_LONG_PUBLIC_AUDIO=1
+    REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO=0
     DEPENDENCY_MODE="candidate"
     assert_contains <(final_verdict) \
         "not a production release-gate pass: benchmark and app FluidAudio pins differ"
@@ -417,6 +434,21 @@ run_self_test() {
         "no long-form public speech clips found in $tmpdir/missing-long-public"
     assert_not_contains "$default_missing_long_public_log" "running helper self-tests"
 
+    local missing_multilingual_long_public_log="$tmpdir/missing-multilingual-long-public.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --multilingual-long-public-audio-dir "$tmpdir/missing-multilingual-long-public" \
+        --allow-missing-long-public-audio \
+        >"$missing_multilingual_long_public_log" 2>&1; then
+        echo "self-test expected default missing German long-form corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$missing_multilingual_long_public_log" \
+        "no German long-form FLEURS speech clips found in $tmpdir/missing-multilingual-long-public"
+    assert_not_contains "$missing_multilingual_long_public_log" "running helper self-tests"
+
     local invalid_long_public="$tmpdir/invalid-long-public"
     mkdir -p "$invalid_long_public"
     touch "$invalid_long_public/not-a-composite.wav"
@@ -425,6 +457,7 @@ run_self_test() {
         --real-audio-dir "$tmpdir/missing-real" \
         --public-audio-dir "$tmpdir/missing-public" \
         --long-public-audio-dir "$invalid_long_public" \
+        --allow-missing-multilingual-long-public-audio \
         >"$invalid_long_public_log" 2>&1; then
         echo "self-test expected invalid long-form public corpus to fail" >&2
         exit 1
@@ -464,6 +497,11 @@ while [[ $# -gt 0 ]]; do
             LONG_PUBLIC_AUDIO_DIR="$2"
             shift 2
             ;;
+        --multilingual-long-public-audio-dir)
+            need_value "$@"
+            MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR="$2"
+            shift 2
+            ;;
         --trials)
             need_value "$@"
             TRIALS="$2"
@@ -483,6 +521,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --allow-missing-long-public-audio)
             REQUIRE_LONG_PUBLIC_AUDIO=0
+            shift
+            ;;
+        --allow-missing-multilingual-long-public-audio)
+            REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO=0
             shift
             ;;
         --long-public-max-reference-deletion-run)
@@ -560,6 +602,7 @@ fi
 real_count="$(supported_audio_count "$REAL_AUDIO_DIR")"
 public_count="$(supported_audio_count "$PUBLIC_AUDIO_DIR")"
 long_public_count="$(supported_audio_count "$LONG_PUBLIC_AUDIO_DIR")"
+multilingual_long_public_count="$(supported_audio_count "$MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR")"
 if [[ "$REQUIRE_REAL_AUDIO" -eq 1 && "$real_count" -eq 0 ]]; then
     echo "no private real-dictation clips found in $REAL_AUDIO_DIR" >&2
     exit 1
@@ -572,6 +615,11 @@ if [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -eq 1 && "$long_public_count" -eq 0 ]]; then
     echo "no long-form public speech clips found in $LONG_PUBLIC_AUDIO_DIR" >&2
     exit 1
 fi
+if [[ "$REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO" -eq 1 && \
+      "$multilingual_long_public_count" -eq 0 ]]; then
+    echo "no German long-form FLEURS speech clips found in $MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR" >&2
+    exit 1
+fi
 if [[ "$long_public_count" -gt 0 ]]; then
     # Do not let a mislabeled short clip satisfy the multi-window gate. The
     # composer verifies ownership, paired references, manifest provenance,
@@ -579,6 +627,14 @@ if [[ "$long_public_count" -gt 0 ]]; then
     python3 ./compose-public-long-form-fixtures.py \
         --validate-output-dir \
         --output-dir "$LONG_PUBLIC_AUDIO_DIR"
+fi
+if [[ "$multilingual_long_public_count" -gt 0 ]]; then
+    # Multilingual chunks need separate coverage: validate both the long-form
+    # composition and the inherited checked-FLEURS locale/split provenance.
+    python3 ./compose-public-long-form-fixtures.py \
+        --validate-output-dir \
+        --output-dir "$MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR" \
+        --require-fleurs-locale de_de
 fi
 
 validate_fluid_dependency_alignment \
@@ -853,6 +909,25 @@ else
         echo
         echo "skipping linear-int8 encoder candidate (not exposed by the production FluidAudio pin)"
     fi
+fi
+
+if [[ "$multilingual_long_public_count" -eq 0 ]]; then
+    echo
+    echo "no German long-form FLEURS speech clips found in $MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR; skipped multilingual seam WER gate (--allow-missing-multilingual-long-public-audio)"
+else
+    echo
+    echo "running German FLEURS long-form $(v3_baseline_label) ASR regression on $multilingual_long_public_count composite clip(s)..."
+    ./run-real-dictation-regression.sh \
+        --input-dir "$MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR" \
+        --out-dir public-results/fleurs-de_de-long-form \
+        --backend v3 \
+        --language de \
+        --trials "$TRIALS" \
+        --public-corpus \
+        --show-transcripts \
+        --show-paths \
+        --max-reference-deletion-run "$LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN" \
+        --max-corpus-wer "$LONG_PUBLIC_MAX_CORPUS_WER"
 fi
 
 echo

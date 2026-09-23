@@ -106,6 +106,23 @@ Run it through `run-real-dictation-regression.sh`, or let
 wrapper requires this seam coverage by default; only explicitly lightweight
 helper runs should pass `--allow-missing-long-public-audio`.
 
+The release wrapper also requires a German multilingual seam probe. Fetch the
+pinned German FLEURS test rows and compose them into long-form clips:
+
+```sh
+./fetch-public-speech-fixtures.sh \
+  --source fleurs --language de_de --split test --count 50
+python3 ./compose-public-long-form-fixtures.py \
+  --input-dir public-audio/fleurs-de_de-test \
+  --output-dir public-audio/fleurs-de_de-test-long-form \
+  --target-seconds 45
+```
+
+The release wrapper validates the inherited German test manifest and runs the
+production v3 backend with `--language de`, applying the long-form WER and
+deletion-run screens. To omit this corpus for a lightweight, non-release check,
+pass `--allow-missing-multilingual-long-public-audio` explicitly.
+
 ## Context-variation fixtures
 
 For an encoder-precision comparison, generate probe/context/combined triplets

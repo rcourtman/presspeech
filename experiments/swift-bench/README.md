@@ -718,24 +718,26 @@ bound for an explicitly reviewed corpus with
 
 ### Multilingual long-form seam probe
 
-The required release-wrapper corpus above is English LibriSpeech, and the
-wrapper passes an English hint. It does not exercise multilingual long-form
-seams. This is a material gap: FluidAudio's [German v3 seam report (#825)](https://github.com/FluidInference/FluidAudio/issues/825)
+The English LibriSpeech release corpus exercises long-form chunking but not
+multilingual seams. FluidAudio's [German v3 seam report (#825)](https://github.com/FluidInference/FluidAudio/issues/825)
 documented token interleaving and word-order corruption with
 `melChunkContext: true` on v0.15.5; [PR #830](https://github.com/FluidInference/FluidAudio/pull/830)
 fixed that specific class by preserving merge order instead of re-sorting
 tokens by frame time. The v0.15.6 release notes include that fix, so Presspeech's
 current pin already contains it. The PR distinguishes this from first-chunk
 mel-context degradation, however, and the fix is not evidence that all
-multilingual seams are safe. The English-only gate still does not validate the
-German fix in Presspeech's configuration.
+multilingual seams are safe. The release wrapper therefore requires a second,
+German FLEURS long-form corpus by default and runs production v3 with a German
+hint through the same conservative WER and consecutive-deletion checks. This
+validates the pinned behavior without asserting a model improvement or changing
+production chunking.
 
-Use the existing pinned FLEURS importer and long-form composer to make a
-repeatable German read-speech seam probe:
+Use the existing pinned FLEURS importer and long-form composer to prepare the
+required German release-gate corpus:
 
 ```sh
 ./fetch-public-speech-fixtures.sh \
-  --source fleurs --language de_de --split test --count 25
+  --source fleurs --language de_de --split test --count 50
 python3 ./compose-public-long-form-fixtures.py \
   --input-dir public-audio/fleurs-de_de-test \
   --output-dir public-audio/fleurs-de_de-test-long-form \
@@ -747,10 +749,14 @@ python3 ./compose-public-long-form-fixtures.py \
   --show-transcripts --show-paths --trials 3
 ```
 
-Run this on the v0.15.6 baseline and candidate SDK with identical fixture bytes,
-then compare `Benchmark inputs SHA-256`, SDK revision, trial count, transcripts,
-deletion runs, WER, and latency. The composed FLEURS clips are a controlled
-read-speech probe, not spontaneous dictation or a product pass; retain private,
+The release wrapper now requires the generated directory above (default:
+`public-audio/fleurs-de_de-test-long-form`), validates its composed-corpus
+marker and its inherited FLEURS locale/split/license/revision/checksum metadata,
+then runs `v3 --language de --trials 3` with the existing long-form thresholds.
+Its `Benchmark inputs SHA-256` binds same-fixture comparisons across SDK pins;
+inspect the report's SDK revision, trial count, transcripts, deletion runs, WER,
+and latency as well. These composed FLEURS clips are a controlled read-speech
+probe, not spontaneous dictation or proof of product quality; retain private,
 consented German push-to-talk evidence as a separate check. Do not change
 production chunking or the SDK pin based on the upstream fix alone.
 
@@ -1084,8 +1090,11 @@ regressions if `public-audio/librispeech-dev-clean/` has been fetched. The
 validated `public-audio/librispeech-dev-clean-long-form/` corpus is required by
 default: release checks must not silently omit the production path used by
 recordings longer than one 15-second encoder window. Generate it using the
-composer instructions above. Private and ordinary short public corpora remain
-optional; require either explicitly when it is part of the intended evidence:
+composer instructions above. A provenance-checked German FLEURS long-form test
+corpus (`public-audio/fleurs-de_de-test-long-form/`) is also required by default
+to cover multilingual seams; prepare it using the instructions above. Private
+and ordinary short public corpora remain optional; require either explicitly
+when it is part of the intended evidence:
 
 ```sh
 ./run-release-asr-checks.sh --require-real-audio
@@ -1093,7 +1102,9 @@ optional; require either explicitly when it is part of the intended evidence:
 ```
 
 For a lightweight helper run that is explicitly not release evidence, use
-`--allow-missing-long-public-audio`.
+`--allow-missing-long-public-audio` and/or
+`--allow-missing-multilingual-long-public-audio`. Omitting either required
+multi-window corpus changes the final verdict to non-release evidence.
 
 The wrapper also requires the benchmark package and app to pin the exact same
 FluidAudio revision. A mismatch fails before corpus output can be labelled

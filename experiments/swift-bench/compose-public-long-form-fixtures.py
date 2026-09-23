@@ -9,6 +9,7 @@ import hashlib
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import struct
 import tempfile
@@ -111,6 +112,19 @@ def wave_payload_digest(fmt: bytes, data: bytes) -> str:
     digest.update(fmt)
     digest.update(data)
     return digest.hexdigest()
+
+
+def fleurs_dataset_revision() -> str:
+    """Read the single pinned revision used by the public FLEURS importer."""
+    fetcher = Path(__file__).with_name("fetch-public-speech-fixtures.sh")
+    try:
+        text = fetcher.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise FixtureError(f"cannot read the FLEURS importer pin: {fetcher}") from exc
+    revisions = re.findall(r'^FLEURS_REVISION="([0-9a-f]{40})"$', text, re.MULTILINE)
+    if len(revisions) != 1:
+        raise FixtureError("FLEURS importer must declare exactly one pinned dataset revision")
+    return revisions[0]
 
 
 def load_sources(input_dir: Path) -> list[dict[str, object]]:
@@ -407,6 +421,82 @@ def validate_output(output_dir: Path) -> list[Path]:
     return audio_paths
 
 
+def validate_fleurs_source(output_dir: Path, locale: str) -> None:
+    """Require the composed source IDs and provenance to match one FLEURS locale."""
+    source_manifest = output_dir / "source-manifest.tsv"
+    source_readme = output_dir / "SOURCE-README.txt"
+    for path, label in (
+        (source_manifest, "source manifest"),
+        (source_readme, "source README"),
+    ):
+        if path.is_symlink() or not path.is_file():
+            raise FixtureError(f"missing regular FLEURS {label}: {path}")
+
+    try:
+        readme = source_readme.read_text(encoding="utf-8")
+    except UnicodeError as exc:
+        raise FixtureError("FLEURS source README is not UTF-8") from exc
+    expected_source = f"Source: Google FLEURS speech corpus, locale {locale}, split test"
+    if expected_source not in readme:
+        raise FixtureError(f"FLEURS source README does not identify {locale} test speech")
+    revision_lines = [
+        line.removeprefix("Dataset revision: ")
+        for line in readme.splitlines()
+        if line.startswith("Dataset revision: ")
+    ]
+    if len(revision_lines) != 1 or revision_lines[0] != fleurs_dataset_revision():
+        raise FixtureError(
+            "FLEURS source README does not match the importer's pinned dataset revision"
+        )
+    checksum_lines = [
+        line.removeprefix("Archive SHA-256: ")
+        for line in readme.splitlines()
+        if line.startswith("Archive SHA-256: ")
+    ]
+    if len(checksum_lines) != 1 or not re.fullmatch(r"[0-9a-f]{64}", checksum_lines[0]):
+        raise FixtureError("FLEURS source README is missing the archive checksum")
+
+    expected_fields = [
+        "clip_id", "source", "split", "original_id", "original_audio", "license", "reference"
+    ]
+    try:
+        with source_manifest.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            if reader.fieldnames != expected_fields:
+                raise FixtureError("FLEURS source manifest has an unexpected schema")
+            source_rows = list(reader)
+    except UnicodeError as exc:
+        raise FixtureError("FLEURS source manifest is not UTF-8") from exc
+
+    source_references: dict[str, str] = {}
+    for row in source_rows:
+        source_id = row["clip_id"]
+        if not source_id or source_id in source_references:
+            raise FixtureError("FLEURS source manifest has an empty or duplicate clip ID")
+        if row["source"] != f"FLEURS-{locale}" or row["split"] != "test":
+            raise FixtureError(f"FLEURS source manifest contains a non-{locale} test clip")
+        if row["license"] != "CC BY 4.0":
+            raise FixtureError("FLEURS source manifest has an unexpected license")
+        if not row["original_id"] or not row["original_audio"] or not row["reference"]:
+            raise FixtureError("FLEURS source manifest has incomplete clip provenance")
+        source_references[source_id] = " ".join(row["reference"].split())
+
+    composite_manifest = output_dir / "manifest.tsv"
+    with composite_manifest.open("r", encoding="utf-8", newline="") as handle:
+        composite_rows = list(csv.DictReader(handle, delimiter="\t"))
+    composite_source_ids: set[str] = set()
+    for row in composite_rows:
+        source_ids = row["source_clips"].split(",")
+        if any(source_id not in source_references for source_id in source_ids):
+            raise FixtureError("FLEURS source manifest IDs do not match composed source clips")
+        composite_source_ids.update(source_ids)
+        expected_reference = " ".join(source_references[source_id] for source_id in source_ids)
+        if row["reference"] != expected_reference:
+            raise FixtureError("FLEURS source references do not match the composed transcript")
+    if not source_references or set(source_references) != composite_source_ids:
+        raise FixtureError("FLEURS source manifest IDs do not match composed source clips")
+
+
 def write_pcm16_fixture(path: Path, seconds: int, sample_rate: int, value: int) -> None:
     fmt = struct.pack("<HHIIHH", 1, 1, sample_rate, sample_rate * 2, 2, 16)
     data = struct.pack("<h", value) * (seconds * sample_rate)
@@ -440,6 +530,85 @@ def run_self_test() -> None:
             raise AssertionError("manifest omitted source/nominal boundary evidence")
         if len(validate_output(output)) != 2:
             raise AssertionError("valid long-form corpus did not pass release preflight")
+
+        source_manifest = output / "source-manifest.tsv"
+        with source_manifest.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "clip_id", "source", "split", "original_id", "original_audio",
+                    "license", "reference",
+                ],
+                delimiter="\t",
+            )
+            writer.writeheader()
+            for index in range(4):
+                writer.writerow(
+                    {
+                        "clip_id": f"clip-{index:02d}",
+                        "source": "FLEURS-de_de",
+                        "split": "test",
+                        "original_id": f"{index:03d}",
+                        "original_audio": f"test/{index:03d}.wav",
+                        "license": "CC BY 4.0",
+                        "reference": f"reference {index}",
+                    }
+                )
+        (output / "SOURCE-README.txt").write_text(
+            "Source: Google FLEURS speech corpus, locale de_de, split test\n"
+            "Dataset revision: " + fleurs_dataset_revision() + "\n"
+            "Archive SHA-256: " + "b" * 64 + "\n",
+            encoding="utf-8",
+        )
+        validate_fleurs_source(output, "de_de")
+        try:
+            validate_fleurs_source(output, "en_us")
+        except FixtureError as exc:
+            if "does not identify en_us" not in str(exc):
+                raise
+        else:
+            raise AssertionError("wrong FLEURS locale passed provenance validation")
+
+        source_readme = output / "SOURCE-README.txt"
+        source_readme_text = source_readme.read_text(encoding="utf-8")
+        source_readme.write_text(
+            source_readme_text.replace(fleurs_dataset_revision(), "a" * 40, 1),
+            encoding="utf-8",
+        )
+        try:
+            validate_fleurs_source(output, "de_de")
+        except FixtureError as exc:
+            if "does not match the importer's pinned dataset revision" not in str(exc):
+                raise
+        else:
+            raise AssertionError("un-pinned FLEURS revision passed provenance validation")
+        source_readme.write_text(source_readme_text, encoding="utf-8")
+
+        source_manifest_text = source_manifest.read_text(encoding="utf-8")
+        source_manifest.write_text(
+            source_manifest_text.replace("FLEURS-de_de", "FLEURS-en_us", 1),
+            encoding="utf-8",
+        )
+        try:
+            validate_fleurs_source(output, "de_de")
+        except FixtureError as exc:
+            if "non-de_de test clip" not in str(exc):
+                raise
+        else:
+            raise AssertionError("mixed-locale FLEURS source manifest passed validation")
+        source_manifest.write_text(source_manifest_text, encoding="utf-8")
+        source_manifest.write_text(
+            source_manifest_text.replace("\treference 0\n", "\tchanged reference\n", 1),
+            encoding="utf-8",
+        )
+        try:
+            validate_fleurs_source(output, "de_de")
+        except FixtureError as exc:
+            if "source references do not match" not in str(exc):
+                raise
+        else:
+            raise AssertionError("changed FLEURS source reference passed provenance validation")
+        source_manifest.write_text(source_manifest_text, encoding="utf-8")
 
         first_audio = output / "long-form-001.wav"
         second_audio = output / "long-form-002.wav"
@@ -553,6 +722,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="validate an existing generated corpus for release coverage",
     )
+    parser.add_argument(
+        "--require-fleurs-locale",
+        help="during release validation, require source provenance for this FLEURS test locale",
+    )
     parser.add_argument("--self-test", action="store_true", help="run local format/composition tests")
     return parser.parse_args()
 
@@ -564,9 +737,15 @@ def main() -> int:
         return 0
     if args.validate_output_dir:
         outputs = validate_output(Path(args.output_dir))
+        if args.require_fleurs_locale:
+            validate_fleurs_source(Path(args.output_dir), args.require_fleurs_locale)
         print(f"validated long-form fixtures: {args.output_dir}")
+        if args.require_fleurs_locale:
+            print(f"validated FLEURS source: {args.require_fleurs_locale} test")
         print(f"composites: {len(outputs)}")
         return 0
+    if args.require_fleurs_locale:
+        raise FixtureError("--require-fleurs-locale requires --validate-output-dir")
     if not math.isfinite(args.target_seconds) or args.target_seconds < MIN_TARGET_SECONDS:
         raise FixtureError(
             f"--target-seconds must be finite and at least {MIN_TARGET_SECONDS:g}"

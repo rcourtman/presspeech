@@ -188,8 +188,8 @@
         "fix_scope": "Preserves merge order instead of re-sorting by frame timestamps; first-chunk mel-context degradation is separate",
         "reported_version": "v0.15.5",
         "included_in_presspeech_production_pin": "v0.15.6",
-        "current_release_gate_coverage": "English LibriSpeech with English language hint; does not exercise this German failure class",
-        "recommended_probe": "Pinned FLEURS German long-form composite; compare identical input digest and trial count across SDK pins",
+        "current_release_gate_coverage": "Release wrapper requires English LibriSpeech long-form and provenance-validated FLEURS German test long-form with a German hint; quality and latency remain not measured",
+        "recommended_probe": "Run the release wrapper on the pinned FLEURS German long-form corpus; compare identical input digest, SDK revision, and trial count across SDK pins",
         "evaluation_status": "not_measured"
       },
       "evaluation_status": "not_measured",
