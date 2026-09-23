@@ -91,6 +91,9 @@ counted as completed protocol evidence.
    note whether the target is a native app, browser page, Electron/Chromium
    app, terminal, remote desktop, or elevated Windows app, plus the generic
    field type (for example, plain text, rich text, or browser content editor).
+   Note the active keyboard layout/input source only if it differs from your
+   usual layout or helps explain an outcome; record its public name, never
+   typed content.
 
 ## Check steady-focus delivery
 
@@ -275,8 +278,9 @@ Hardware (optional, no serial or device names): [generic model/chip]
 
 [paste the worksheet's six counts and Overall result]
 
-Relevant conditions: [trigger mode, suffix, clipboard manager/history,
-assistive technology, or a minimal reproduction; omit private context]
+Relevant conditions: [trigger mode, keyboard layout/input source when
+relevant, suffix, clipboard manager/history, assistive technology, or a minimal
+reproduction; omit private context]
 ```
 
 For the form's **Overall result**, a complete automatic-paste pass means all

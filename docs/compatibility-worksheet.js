@@ -95,7 +95,7 @@
       "Generic field type:",
       "Hardware (optional; generic model only):",
       "Clipboard preservation during steady-focus check:",
-      "Relevant conditions:",
+      "Relevant conditions (keyboard layout/input source if relevant):",
       "Known clipboard-change interruptions excluded:",
       "",
       summaryText,

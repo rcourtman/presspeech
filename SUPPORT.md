@@ -36,7 +36,8 @@ Presspeech version / operating-system version:
 Affected stage (setup, recording, recognition, delivery, or controls):
 Expected result / observed result:
 Smallest safe reproduction steps, or how often it occurs:
-Generic context if relevant (target-app class/version, language, or hardware):
+Generic context if relevant (target-app class/version, language, keyboard
+layout/input source, or hardware):
 Recovery or workaround tried; did it succeed?
 Attempts / failures, when countable:
 ```

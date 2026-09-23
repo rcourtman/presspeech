@@ -691,6 +691,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "Browse existing target-app compatibility reports",
         "live coverage",
         "generic field type",
+        "keyboard layout/input source",
     ),
     ROOT / "CONTRIBUTING.md": (
         "per platform/app/version/field type",
@@ -707,6 +708,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "after the fixed `[Compatibility]:` title prefix",
         "issues?q=is%3Aissue%20in%3Atitle",
         "Focus-change recovery is expected",
+        "keyboard layout/input source only when it differs from your usual layout",
         "Manual-paste recovery occurred during steady focus",
         "including its six counts and Overall result",
         *COMPATIBILITY_OVERALL_RESULTS,
@@ -731,6 +733,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "worksheet's six counts and Overall result",
         "Download report draft",
         "blank prompts for public versions and generic target context",
+        "keyboard layout/input source only if it differs from your",
     ),
     DOCS / "app-compatibility.html": (
         "generic field type",
@@ -747,6 +750,7 @@ COMPATIBILITY_EVIDENCE_GUIDANCE = {
         "worksheet's six counts and Overall result",
         "Download report draft",
         "blank prompts for public version and generic target context",
+        "keyboard layout/input source only if it differs from your",
         "Check new-report availability",
     ),
 }

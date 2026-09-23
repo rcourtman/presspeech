@@ -257,6 +257,17 @@ first-use copy, so that proportionate discovery step is in place; do not add
 another trigger mode based on this signal. Revisit only if Presspeech-specific
 reports show that the current choice or its controls fall short.
 
+One recent [Handy macOS report](https://github.com/cjpais/Handy/issues/1904)
+describes the active Dvorak layout turning the synthetic Command-V paste into
+Command-K, while QWERTY worked. This is a single report about Handy, not a
+Presspeech defect or a measure of prevalence. Presspeech's native macOS
+qualification already checks a non-US layout and physical Command-V recovery;
+the smaller community report form did not prompt for the active input source.
+The proportionate response is to capture that context only when it differs
+from the usual layout or helps explain a result, using the public
+layout/input-source name and never typed content. This improves comparability
+without expanding the protocol or inferring a new product requirement.
+
 Feedback intake is currently a measurement limitation: on 23 September,
 GitHub's [Presspeech issue list](https://github.com/rcourtman/presspeech/issues)
 shows issue creation restricted (and four open issues). New reports therefore

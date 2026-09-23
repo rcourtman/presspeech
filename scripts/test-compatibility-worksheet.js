@@ -152,6 +152,10 @@ async function main() {
       /does not submit a report or notify maintainers; saved drafts are not monitored/,
     );
     assert.match(worksheet.formatReportDraft(summary.value), /SUPPORT\.md guide/);
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /Relevant conditions \(keyboard layout\/input source if relevant\):/,
+    );
     assert.doesNotMatch(worksheet.formatReportDraft(summary.value), /https?:\/\//);
     assert.match(
       worksheet.formatReportDraft(summary.value),
