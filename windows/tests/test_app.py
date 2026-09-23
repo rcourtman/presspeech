@@ -2013,7 +2013,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertTrue(instance.prepare_configured_model())
 
         self.assertEqual(instance.model_status, "loading")
-        self.assertEqual(instance.model_status_detail, "Loading small.en")
+        self.assertEqual(instance.model_status_detail, "Checking local model files…")
         instance._model_executor.submit.assert_called_once_with(
             instance._preload_model_worker, "small.en", 1)
 
