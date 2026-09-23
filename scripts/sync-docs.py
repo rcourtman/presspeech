@@ -535,7 +535,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
 
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     ROOT / "windows" / "README.md": (
-        "published 0.1.12 build",
+        "published Windows 0.1.12 build",
         "usage telemetry enabled",
         "avoid this possible usage telemetry",
         "wait for 0.1.13",
@@ -548,6 +548,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Custom download routing can change where the model request",
         "avoid this possible usage telemetry",
         "concerned that a Hugging Face token or custom download route may be configured on this PC",
+        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
@@ -567,6 +568,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Custom download routing can change where the model request",
         "avoid this possible usage telemetry",
         "concerned that a Hugging Face token or custom download route may be configured on this PC",
+        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
@@ -586,6 +588,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Custom download routing can change where the model request",
         "avoid this possible usage telemetry",
         "concerned that a Hugging Face token or custom download route may be configured on this PC",
+        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
@@ -604,6 +607,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "include an available token",
         "custom routing can change where the token goes",
         "avoid this possible usage telemetry",
+        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
         "wait until Windows 0.1.13 is published",
         "dictation audio and transcripts are not sent",
         'id="faq-windows-install-privacy"',
@@ -629,12 +633,33 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "public models need no account token",
         "avoid this possible usage telemetry",
         "concerned that a Hugging Face token or custom download route may be configured",
+        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
         "wait until Windows 0.1.13 is published",
         "Do not inspect or display token values",
         "launch 0.1.12 without the user's informed choice",
         "Dictation audio and transcripts are not sent in model downloads",
         "privacy.html#network-calls",
     ),
+}
+
+# Standard HTTPX proxy/CA settings remain active in both Windows versions.
+WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
+    path: (
+        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+        "SSL_CERT_FILE", "SSL_CERT_DIR", "trust_env=True",
+        "TLS-inspecting HTTPS proxy", "published Windows 0.1.12",
+        "upcoming Windows 0.1.13",
+    )
+    for path in (
+        ROOT / "SECURITY.md",
+        ROOT / "README.md",
+        ROOT / "windows" / "README.md",
+        DOCS / "privacy.html",
+        DOCS / "privacy" / "network-calls.json",
+        DOCS / "windows.html",
+        DOCS / "llms.txt",
+        DOCS / "llms-full.txt",
+    )
 }
 
 # Published 0.1.12 and the unreleased 0.1.13 candidate have different
@@ -1065,7 +1090,7 @@ After launch, explain that macOS 0.3.8 starts its first local speech-model downl
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
-Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. These public models need no account token. Offer to wait until Windows 0.1.13 is published if the user prefers to avoid this possible usage telemetry, is concerned that a Hugging Face token or custom download route may be configured on this PC, or is unsure. Downloading the installer and checksum from GitHub does not make a model request; 0.1.12 starts its selected model download when Presspeech launches. If the user chooses to wait but still wants to install, tell them to uncheck the installer's final "Launch Presspeech" option; do not start the app. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. The bundled HTTP client also honors configured HTTPS proxies; a TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. Upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings. If the user cannot confirm that a TLS-inspection proxy is trusted, don't launch while it is in use. These public models need no account token. Offer to wait until Windows 0.1.13 is published if the user prefers to avoid this possible usage telemetry, is concerned that a Hugging Face token or custom download route may be configured on this PC, or is unsure. Downloading the installer and checksum from GitHub does not make a model request; 0.1.12 starts its selected model download when Presspeech launches. If the user chooses to wait but still wants to install, tell them to uncheck the installer's final "Launch Presspeech" option; do not start the app. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
   https://rcourtman.github.io/presspeech/windows.html#download-verify-run
@@ -1674,7 +1699,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "HUGGINGFACE_CO_STAGING settings can change its destination, and HF_HUB_USER_AGENT_ORIGIN "
         "is included in request metadata if set; the token may accompany a request to that configured "
         "endpoint. These public models do not need an account token. Upcoming Windows 0.1.13 fixes "
-        "these inherited settings but is not yet published. Dictation audio "
+        "these inherited settings but is not yet published. Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Dictation audio "
         "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
         "itemised (see the privacy inventory)."
     )
@@ -1770,6 +1795,14 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             privacy_marker + "The pinned Hub 1.29.0 client may request /api/agent-harnesses when its local registry cache is missing or stale and may add an agent/<id> label to model-request metadata based on inherited agent-related environment markers. Upcoming Windows 0.1.13 disables Hub telemetry before imports and checks that rendered headers contain no agent label; these controls are not in published 0.1.12. ",
             1,
         )
+    privacy_paragraph = text.partition("## Privacy")[2].lstrip().partition("\n\n")[0]
+    if "HTTP_PROXY" not in privacy_paragraph:
+        proxy_summary = (
+            " Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents."
+        )
+        marker = "Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published."
+        if marker in privacy_paragraph:
+            text = text.replace(marker, marker + proxy_summary, 1)
     calls_marker = "1. Speech model downloads normally"
     before_calls, marker, calls_text = text.partition(calls_marker)
     if marker and "agent-harnesses" not in calls_text:
@@ -3349,6 +3382,21 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
             + ", ".join(repr(phrase) for phrase in missing_windows_launch_choice)
         )
 
+    required_windows_proxy_notice = (
+        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
+        "still honors proxy and CA settings",
+        "cannot confirm that a TLS-inspection proxy is trusted",
+    )
+    missing_windows_proxy_notice = [
+        phrase for phrase in required_windows_proxy_notice
+        if phrase not in WINDOWS_INSTALL_PROMPT
+    ]
+    if missing_windows_proxy_notice:
+        errors.append(
+            "Windows assistant prompt: explain inherited proxy/TLS-inspection risk; missing "
+            + ", ".join(repr(phrase) for phrase in missing_windows_proxy_notice)
+        )
+
     required_windows_provenance = (
         "gh release verify $tag --repo rcourtman/presspeech",
         "gh release verify-asset $tag $installer --repo rcourtman/presspeech",
@@ -4210,6 +4258,31 @@ def run_self_test() -> None:
         if check_windows_model_download_privacy_guidance(required_agent_guidance):
             raise SyncError("self-test: complete agent disclosure was rejected")
 
+        proxy_guidance = Path(tmp) / "windows-proxy-disclosure.md"
+        required_proxy_guidance = {
+            proxy_guidance: (
+                "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+                "SSL_CERT_FILE", "SSL_CERT_DIR", "trust_env=True",
+                "TLS-inspecting HTTPS proxy", "published Windows 0.1.12",
+                "upcoming Windows 0.1.13",
+            )
+        }
+        proxy_guidance.write_text(
+            "Windows downloads use HTTPS.", encoding="utf-8"
+        )
+        if not check_windows_model_download_privacy_guidance(required_proxy_guidance):
+            raise SyncError("self-test: missing HTTPX proxy/CA disclosure was accepted")
+        proxy_guidance.write_text(
+            "The published Windows 0.1.12 client uses trust_env=True and honors "
+            "HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and "
+            "SSL_CERT_DIR. A TLS-inspecting HTTPS proxy whose CA is trusted can "
+            "see its token. Upcoming Windows 0.1.13 removes that token but still "
+            "honors proxy and CA settings.",
+            encoding="utf-8",
+        )
+        if check_windows_model_download_privacy_guidance(required_proxy_guidance):
+            raise SyncError("self-test: complete HTTPX proxy/CA disclosure was rejected")
+
         summary_guidance = Path(tmp) / "windows-privacy-summary.html"
         required_summary_guidance = {
             summary_guidance: (
@@ -4725,6 +4798,7 @@ def main() -> int:
             errors.extend(check_model_download_first_run_controls(metadata))
             errors.extend(check_user_triggered_support_guide())
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
+            errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_readme_windows_install_decision_order())
@@ -4776,6 +4850,7 @@ def main() -> int:
         errors.extend(check_model_download_first_run_controls(metadata))
         errors.extend(check_user_triggered_support_guide())
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
+        errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_readme_windows_install_decision_order())

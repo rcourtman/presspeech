@@ -4,7 +4,7 @@ Fast, private, local push-to-talk dictation for Windows — a Windows port of
 [presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
 speak, release, and the transcript is typed at the cursor. Speech recognition
 runs on your machine; Presspeech has no account or cloud transcription service.
-The published 0.1.12 build leaves Hugging Face Hub/Transformers default usage
+The published Windows 0.1.12 build leaves Hugging Face Hub/Transformers default usage
 telemetry enabled during model downloads. These libraries may send usage data
 to Hugging Face, and model-request metadata includes a random per-process
 session ID. Its pinned `huggingface-hub` 1.29.0 client may also make a
@@ -31,9 +31,11 @@ token or custom route may be configured, or are unsure, wait for 0.1.13 before
 launching 0.1.12. Installing the package alone does not start
 the model request; keep the app unopened if you choose to wait.
 
+Both published Windows 0.1.12 and upcoming Windows 0.1.13 use pinned `huggingface-hub` 1.29.0 and HTTPX 0.28.1 with the default `trust_env=True`: `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` affect proxy routing; `SSL_CERT_FILE` and `SSL_CERT_DIR` change TLS CA roots. Upcoming 0.1.13 still honors these proxy and CA settings. A proxy that only tunnels HTTPS sees connection metadata, not request contents. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives; upcoming 0.1.13 disables account-token authentication. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use.
+
 Already used Windows 0.1.12? If you ran a model download with a token available
 and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
-destination you do not trust, treat the token as disclosed to that destination.
+destination you do not trust—or an untrusted TLS-inspecting HTTPS proxy could read the request—treat the token as disclosed to that destination or proxy. A proxy that only tunnels HTTPS cannot read the token.
 Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
 Do not include token values in logs or support requests.
 

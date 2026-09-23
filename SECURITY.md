@@ -20,9 +20,22 @@ markers. The 0.1.13 candidate disables Hub telemetry before imports and checks
 that the rendered model-request headers contain no agent label; do not
 attribute those controls to 0.1.12.
 
+Both published Windows 0.1.12 and upcoming Windows 0.1.13 use the pinned
+`huggingface-hub` HTTPX client with its default `trust_env=True`. It honors
+inherited `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` routing, plus
+`SSL_CERT_FILE` and `SSL_CERT_DIR` CA overrides. These standard proxy and CA
+settings are not cleared in 0.1.13. A proxy that only tunnels HTTPS sees
+connection metadata, not request contents; a TLS-inspecting HTTPS proxy whose
+CA is trusted by the client can read request headers and any 0.1.12 token they
+carry. The 0.1.13 client disables account-token authentication, but users
+should still trust the proxy and certificate configuration used for model
+downloads.
+
 Already used Windows 0.1.12? If you ran a model download with a token available
 and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
-destination you do not trust, treat the token as disclosed to that destination.
+destination you do not trust—or an untrusted TLS-inspecting HTTPS proxy could
+read the request—treat the token as disclosed to that destination or proxy. A
+proxy that only tunnels HTTPS cannot read the token.
 Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
 Do not include token values in logs or support requests.
 

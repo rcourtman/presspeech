@@ -72,6 +72,11 @@ and the Apple Neural Engine. The default model is multilingual
 Hugging Face usage telemetry and include an already-configured or locally saved
 Hugging Face token. Custom download routing can change where the model
 request—and a token it carries—goes.
+The bundled Windows HTTP client also honors configured HTTPS proxies. A
+TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it
+receives; upcoming 0.1.13 removes account-token authentication but still honors
+proxy and CA settings. If a TLS-inspecting HTTPS proxy is in use and its trust
+is unclear, don't launch while it is in use.
 The Hugging Face request starts when Presspeech launches to fetch a missing
 model; downloading the installer and checksum from GitHub does not make that
 request. If you install 0.1.12 but choose to wait, leave **Launch Presspeech**
@@ -86,7 +91,9 @@ and the [version-specific network inventory](https://rcourtman.github.io/presspe
 
 Already used Windows 0.1.12? If you ran a model download with a token available
 and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
-destination you do not trust, treat the token as disclosed to that destination.
+destination you do not trust—or a TLS-inspecting HTTPS proxy you do not trust
+could read the HTTPS request—treat the token as disclosed to that destination
+or proxy. A proxy that only tunnels HTTPS cannot read the token.
 Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
 Do not include token values in logs or support requests.
 
@@ -444,6 +451,13 @@ Presspeech is local-first:
   markers. Upcoming 0.1.13 disables Hub telemetry before imports, checks for
   agent attribution, fixes the endpoint, and removes inherited values. See the
   version-scoped [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+- Windows 0.1.12 and upcoming Windows 0.1.13 honor inherited HTTPX proxy and CA
+  configuration (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`,
+  `SSL_CERT_FILE`, `SSL_CERT_DIR`; the Hub client uses `trust_env=True`). A
+  TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token
+  it receives. Upcoming 0.1.13 still honors these proxy and CA settings but does
+  not send account tokens. A proxy that only tunnels HTTPS sees connection
+  metadata, not request contents; see the [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.
