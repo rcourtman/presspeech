@@ -864,6 +864,12 @@ item after the development-wrapper launch check.
   later, confirm the app and System Settings both call the Accessibility pane
   **Device Control and Data Access** and that the legacy deep link still opens
   that renamed pane.
+- Close Setup Checklist while a permission is still missing, then choose its
+  permission action from the menu-bar menu. Confirm the checklist comes forward
+  before the system prompt or Settings pane opens, stays available while that
+  system UI is in front, and shows the updated permission state when you return
+  to Presspeech. Repeat with the first microphone **Continue** action and an
+  **Open Settings** action in a clean/reset profile.
 - Confirm each granted permission removes or updates its setup row after the
   app is reopened if macOS requires it.
 - On a managed test Mac where microphone access is restricted by macOS or

@@ -12003,6 +12003,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
 
+        // Menu-bar permission actions can leave the app in System Settings
+        // without a visible recovery surface. Keep the actionable checklist
+        // open before handing control to a system prompt or Settings pane.
+        showSetupChecklist()
+
         let clicks = (permClickCount[p] ?? 0) + 1
         permClickCount[p] = clicks
         log("perm click #\(clicks): \(p.rawValue)")
