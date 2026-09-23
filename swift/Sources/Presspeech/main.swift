@@ -16146,6 +16146,7 @@ private enum PresspeechSelfTest {
                 && !safeErrorCategory.contains(privateErrorValue)
                 && !safeErrorCategory.contains("medical-notes")
                 && !safeErrorCategory.contains("spoken words"),
+            equals: true,
             "persistent error categories must omit domains, descriptions and paths"
         )
         let posixCategory = privacySafeErrorLogDetail(
@@ -16153,6 +16154,7 @@ private enum PresspeechSelfTest {
         )
         try expect(
             posixCategory.contains("POSIX code \(EACCES)"),
+            equals: true,
             "known error domains should retain a useful bounded category"
         )
         try expect(
