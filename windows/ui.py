@@ -1116,13 +1116,13 @@ class SetupWindow:
         # before the primary action so Tab follows the visible left-to-right
         # order (Try, Retry, Later, Finish). Pack Finish first only because
         # successive side="right" widgets are laid out right-to-left.
-        later_button = ttk.Button(
+        self.later_button = ttk.Button(
             buttons, text="Set Up Later", command=self._defer)
         self.finish_button = ttk.Button(
             buttons, text="Finish Setup", command=self._finish,
             state="disabled")
         self.finish_button.pack(side="right")
-        later_button.pack(side="right", padx=(0, 8))
+        self.later_button.pack(side="right", padx=(0, 8))
 
         root.protocol("WM_DELETE_WINDOW", self._defer)
         for button, key in (
@@ -1137,7 +1137,7 @@ class SetupWindow:
                 (self.cpu_model_button, "u"),
                 (self.other_model_button, "m"),
                 (self.finish_button, "f"),
-                (later_button, "l")):
+                (self.later_button, "l")):
             _add_access_key(root, button, key)
         _bind_window_command(root, "<Escape>", self._defer)
         root.update_idletasks()
@@ -1177,12 +1177,15 @@ class SetupWindow:
         _set_accessible_text(
             self.model_label, labels.get(status, detail or status))
         consent_required = status == "awaiting_download_consent"
+        # Readiness changes arrive asynchronously. If a choice becomes
+        # unavailable while focused, continue at the next live setup control
+        # instead of unexpectedly sending keyboard users back to the mic.
         for button in (
                 self.download_model_button, self.cpu_model_button,
                 self.other_model_button):
             _set_control_state(
                 self.root, button,
-                "normal" if consent_required else "disabled", self.device)
+                "normal" if consent_required else "disabled", self.hotkey)
         if consent_required:
             self.model_consent_frame.grid()
         else:
@@ -1192,14 +1195,14 @@ class SetupWindow:
         self.repair_hotkey_button.config(state="normal")
         _set_control_state(
             self.root, self.retry_button,
-            "normal" if status == "error" else "disabled", self.device)
+            "normal" if status == "error" else "disabled", self.later_button)
         _set_control_state(
             self.root, self.try_button,
-            "normal" if status == "ready" else "disabled", self.device)
+            "normal" if status == "ready" else "disabled", self.later_button)
         _set_control_state(
             self.root, self.finish_button,
             ("normal" if status == "ready" and
-             hotkey_state == "ready" else "disabled"), self.device)
+             hotkey_state == "ready" else "disabled"), self.later_button)
         if status in ("ready", "error", "awaiting_download_consent"):
             if getattr(self, "_progress_active", False):
                 self.progress.stop()

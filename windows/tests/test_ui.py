@@ -757,6 +757,8 @@ class SetupWindowTests(unittest.TestCase):
         window.microphone_checking = False
         window.check_microphone_button = mock.Mock()
         window.microphone_status = mock.Mock()
+        window.hotkey = mock.Mock()
+        window.later_button = mock.Mock()
         window.device_values = {"Automatic (recommended)": "auto"}
         window.device = mock.Mock()
         window.device.get.return_value = "Automatic (recommended)"
@@ -827,10 +829,41 @@ class SetupWindowTests(unittest.TestCase):
         with mock.patch.object(ui, "_set_accessible_text"):
             window._poll_model()
 
-        window.device.focus_set.assert_called_once_with()
+        window.later_button.focus_set.assert_called_once_with()
+        window.device.focus_set.assert_not_called()
         window.progress.config.assert_called_once_with(mode="indeterminate")
         window.progress.start.assert_called_once_with(12)
         self.assertTrue(window._progress_active)
+
+    def test_model_consent_disabling_preserves_forward_setup_focus(self):
+        for action in (
+                "download_model_button", "cpu_model_button",
+                "other_model_button"):
+            with self.subTest(action=action):
+                window = self.make_window("loading", "Downloading model")
+                focused_control = getattr(window, action)
+                window.root.focus_get.return_value = focused_control
+
+                with mock.patch.object(ui, "_set_accessible_text"):
+                    window._poll_model()
+
+                window.hotkey.focus_set.assert_called_once_with()
+                window.device.focus_set.assert_not_called()
+                focused_control.config.assert_called_once_with(
+                    state="disabled")
+
+    def test_finish_gate_closing_keeps_focus_on_adjacent_defer_action(self):
+        window = self.make_window("ready", "base.en on cpu")
+        window.app.hotkey_listener_status.return_value = (
+            "error", "Global hotkey stopped. Choose Repair Global Hotkey.")
+        window.root.focus_get.return_value = window.finish_button
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+
+        window.later_button.focus_set.assert_called_once_with()
+        window.device.focus_set.assert_not_called()
+        window.finish_button.config.assert_called_once_with(state="disabled")
 
     def test_loading_status_does_not_mislabel_download_as_load_only(self):
         window = self.make_window("loading", "Loading parakeet")

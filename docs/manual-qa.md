@@ -304,6 +304,12 @@ keyboard access testing in addition to assistive-technology testing.
   confirm it repaints legibly; repeat keyboard-only and Narrator navigation.
   Record any inaccessible or ambiguous state as a failure rather than
   inferring support from the indicator's custom palette.
+- In Setup, focus each Parakeet/CPU/other-model choice and let its state move
+  from awaiting consent to preparing; focus should advance to **Dictation
+  hotkey**, not jump back to the microphone picker. Focus **Retry Speech Model**,
+  **Try Dictation**, or **Finish Setup** before each becomes unavailable and
+  confirm focus moves to adjacent **Set Up Later**. Repeat keyboard-only and
+  with Narrator; verify the destination control and status remain understandable.
 - While the model is preparing, confirm **Try Dictation** and **Finish Setup**
   remain disabled. Choose **Set Up Later**, restart, and confirm setup opens
   again with the selected microphone, dictation style, and Start with Windows

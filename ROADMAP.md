@@ -131,6 +131,19 @@ to qualify, not as a mandate for a new shortcut or persistent archive. Do not
 infer adoption, unmet demand, or roadmap priority from discussion activity or
 competitor feature lists.
 
+A separate side effect is clipboard-history capture after a successful paste.
+In a March 2026 Handy discussion, one Windows 10 user reported that Handy's
+clipboard-based insertion appeared in Ditto's history; the maintainer replied
+that other paste methods are available ([discussion
+#1189](https://github.com/cjpais/Handy/discussions/1189)). This is one
+product- and configuration-specific report, not evidence about Presspeech or
+prevalence, but it shows that paste success and clipboard privacy are separate
+outcomes. Presspeech's [privacy documentation](docs/privacy.html#operating-system-clipboard-services)
+already distinguishes OS clipboard history/sync controls from third-party
+local readers. Keep that version-specific boundary explicit and qualify the
+supported behavior; this signal alone does not justify a different paste
+architecture.
+
 A wider check finds the same handoff class in other products: an individual
 macOS [OmniVoice Studio report](https://github.com/debpalash/VoiceStudio/issues/287)
 describes a focus-stealing widget and failed clipboard write that could insert
