@@ -211,6 +211,26 @@
       },
       "evidence_scope": "Upstream release notes and issue/PR evidence motivate English and multilingual long-form SDK comparisons only; they do not establish a Presspeech quality or latency improvement."
     },
+    "upstream_spanish_behavior_2026_09_23": {
+      "report": "https://github.com/FluidInference/FluidAudio/issues/842",
+      "reported_on": "2026-08-08",
+      "correction_on": "2026-08-09",
+      "status": "closed as not planned",
+      "reported_dependency": "FluidAudio v0.15.5",
+      "reported_input": "14-second conversational Latin-American Spanish clip in one model window",
+      "corrected_finding": "The author corrected the initial CoreML/translation interpretation: the behavior was also reproduced, worse, with upstream full-precision Parakeet v3; the author attributed it to model behavior on spontaneous speech and an English prior.",
+      "presspeech_production_pin": "FluidAudio v0.15.6",
+      "presspeech_evaluation_status": "not_measured",
+      "release_gate_coverage": "English LibriSpeech and German FLEURS long-form are required; no Spanish-specific quality corpus is required.",
+      "recommended_probe": "On the production pin, compare identical pinned FLEURS es_419 test clips with v3 auto and es script-filter hint; evaluate private spontaneous Spanish locally as separate evidence.",
+      "limitations": [
+        "A single upstream report is not a Presspeech reproduction.",
+        "NVIDIA's model card describes automatic language detection; the reported explanation is the issue author's corrected hypothesis.",
+        "FLEURS is read speech and does not reproduce spontaneous dictation.",
+        "Presspeech's language hint filters output script and does not force a language."
+      ],
+      "evidence_scope": "Motivates a bounded Spanish evaluation only; no Presspeech WER, latency, or model-selection result is available."
+    },
     "release_gate": {
       "script": "experiments/swift-bench/run-release-asr-checks.sh",
       "runs_private_real_audio_when_present": true,

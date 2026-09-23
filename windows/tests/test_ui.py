@@ -471,6 +471,23 @@ class AccessibleWindowTests(unittest.TestCase):
         )
         self.assertIn("self.model_consent_frame.grid_remove()", body)
 
+    def test_hidden_first_run_model_choices_start_disabled_before_first_poll(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        for button_name in (
+                "download_model_button", "cpu_model_button",
+                "other_model_button"):
+            with self.subTest(button=button_name):
+                construction = body.split(
+                    "self.%s = ttk.Button(" % button_name, 1)[1].split(
+                        "\n        )", 1)[0]
+                self.assertIn('state="disabled"', construction)
+
+        self.assertLess(
+            body.index('state="disabled"'),
+            body.index("root.after(100, self._poll_model)"),
+        )
+
     def test_setup_names_all_windows_microphone_privacy_switches(self):
         body = inspect.getsource(ui.SetupWindow._build)
 

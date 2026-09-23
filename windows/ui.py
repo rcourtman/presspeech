@@ -1029,18 +1029,21 @@ class SetupWindow:
             self.model_consent_frame,
             text="Download Parakeet model (up to ~2.5 GB)",
             command=self.app.confirm_initial_model_download,
+            state="disabled",
         )
         self.download_model_button.pack(anchor="w", pady=(6, 0))
         self.cpu_model_button = ttk.Button(
             self.model_consent_frame,
             text="Use English-only CPU model (~141 MiB)",
             command=self.app.select_cpu_model_after_download_declined,
+            state="disabled",
         )
         self.cpu_model_button.pack(anchor="w", pady=(4, 0))
         self.other_model_button = ttk.Button(
             self.model_consent_frame,
             text="Choose another model in Settings…",
             command=self.app.open_settings,
+            state="disabled",
         )
         self.other_model_button.pack(anchor="w", pady=(4, 0))
         self.model_consent_frame.grid_remove()

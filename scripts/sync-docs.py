@@ -2230,6 +2230,209 @@ def check_windows_model_download_privacy_scopes(
     return errors
 
 
+MODEL_DOWNLOAD_FIRST_RUN_CONTROL_EXPECTATIONS = {
+    "macos_first_launch_model_download": {
+        "version_key": "version",
+        "published": [
+            {
+                "model": "Parakeet TDT v3 CoreML",
+                "trigger": "automatic_on_launch",
+                "can_defer": False,
+            }
+        ],
+        "upcoming": [
+            {
+                "model": "Parakeet TDT v3 CoreML",
+                "trigger": "explicit_setup_choice_before_download",
+                "can_defer": True,
+            }
+        ],
+    },
+    "windows_first_launch_model_download": {
+        "version_key": "windows_version",
+        "published": [
+            {
+                "model": "Selected local model",
+                "trigger": "automatic_on_first_launch",
+                "can_defer": False,
+            }
+        ],
+        "upcoming": [
+            {
+                "model": "Multilingual Parakeet TDT v3",
+                "trigger": "explicit_setup_choice_before_download",
+                "can_defer": True,
+            },
+            {
+                "model": "CPU-default Whisper base.en",
+                "trigger": "automatic_on_first_run",
+                "can_defer": False,
+            },
+        ],
+    },
+}
+
+# Revisit this matrix whenever the current or candidate release changes. The
+# CI gate deliberately requires a policy review instead of inferring consent
+# behavior from version numbers or generic call-level flags.
+MODEL_DOWNLOAD_SCHEMA_DESCRIPTION = (
+    "first_run_controls_by_release lists the missing-model action for each release. "
+    "can_defer applies only to that model's first-run path, not to later integrity "
+    "retries, cache resets, or existing-install startup"
+)
+
+MODEL_DOWNLOAD_FIRST_RUN_GUIDANCE = (
+    "macOS 0.3.8 and Windows 0.1.12 start a missing-model download automatically",
+    "a clean install in upcoming macOS 0.3.9 asks you to choose Download Model or close Setup to defer",
+    "upcoming Windows 0.1.13 asks before fetching missing Parakeet files",
+    "the CPU-default Whisper base.en download remains automatic",
+    "Existing macOS installs keep automatic startup",
+    "The machine-readable inventory lists these controls per release and model",
+    "Schema 1 lists model-download choices by release and missing model",
+    "Its can_defer flag covers only that model's first-run path",
+)
+
+
+def check_model_download_first_run_controls(
+    metadata: dict[str, object],
+    inventory_path: Path = DOCS / "privacy" / "network-calls.json",
+    privacy_page_path: Path = DOCS / "privacy.html",
+) -> list[str]:
+    """Keep model-download consent metadata release- and model-specific."""
+    errors: list[str] = []
+    inventory_display = (
+        inventory_path.relative_to(ROOT)
+        if inventory_path.is_relative_to(ROOT)
+        else inventory_path.name
+    )
+    try:
+        inventory = json.loads(read_text(inventory_path))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"{inventory_display}: cannot read model-download controls: {exc}"]
+    if (
+        not isinstance(inventory, dict)
+        or type(inventory.get("schema_version")) is not int
+        or inventory.get("schema_version") != 1
+    ):
+        errors.append(f"{inventory_display}: expected network inventory schema_version 1")
+        return errors
+    if inventory.get("schema_description") != MODEL_DOWNLOAD_SCHEMA_DESCRIPTION:
+        errors.append(f"{inventory_display}: missing model-control schema semantics")
+
+    calls = inventory.get("network_calls")
+    if not isinstance(calls, list):
+        return [f"{inventory_display}: network_calls must be a list"]
+
+    for call_name, expectation in MODEL_DOWNLOAD_FIRST_RUN_CONTROL_EXPECTATIONS.items():
+        matches = [
+            call for call in calls
+            if isinstance(call, dict) and call.get("name") == call_name
+        ]
+        if len(matches) != 1:
+            errors.append(
+                f"{inventory_display}: expected one {call_name} entry, found {len(matches)}"
+            )
+            continue
+        call = matches[0]
+        if "user_triggered" in call or "can_disable" in call:
+            errors.append(
+                f"{inventory_display}: {call_name} must use per-release controls, not blanket booleans"
+            )
+        controls = call.get("first_run_controls_by_release")
+        if not isinstance(controls, list) or len(controls) != 2:
+            errors.append(
+                f"{inventory_display}: {call_name} must list published and upcoming controls"
+            )
+            continue
+
+        expected_current = metadata.get(str(expectation["version_key"]))
+        if not isinstance(expected_current, str) or not re.fullmatch(
+            r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", expected_current
+        ):
+            errors.append(
+                f"{inventory_display}: missing canonical current version for {call_name}"
+            )
+            continue
+        try:
+            current_parts = tuple(int(part) for part in expected_current.split("."))
+        except ValueError:
+            errors.append(
+                f"{inventory_display}: invalid current version for {call_name}"
+            )
+            continue
+
+        by_status: dict[str, dict[str, object]] = {}
+        for control in controls:
+            if not isinstance(control, dict):
+                continue
+            status = control.get("status")
+            if not isinstance(status, str):
+                continue
+            if status in by_status:
+                errors.append(
+                    f"{inventory_display}: duplicate {status} control for {call_name}"
+                )
+            elif status in ("published", "upcoming"):
+                by_status[str(status)] = control
+        if set(by_status) != {"published", "upcoming"}:
+            errors.append(
+                f"{inventory_display}: {call_name} needs one published and one upcoming release"
+            )
+            continue
+
+        published = by_status["published"]
+        upcoming = by_status["upcoming"]
+        if published.get("version") != expected_current:
+            errors.append(
+                f"{inventory_display}: {call_name} published controls must match "
+                f"current version {expected_current}"
+            )
+        upcoming_version = upcoming.get("version")
+        if not isinstance(upcoming_version, str) or not re.fullmatch(
+            r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", upcoming_version
+        ):
+            errors.append(
+                f"{inventory_display}: {call_name} upcoming version is not canonical"
+            )
+        elif tuple(int(part) for part in upcoming_version.split(".")) <= current_parts:
+            errors.append(
+                f"{inventory_display}: {call_name} upcoming controls must be newer than "
+                f"{expected_current}"
+            )
+
+        for status in ("published", "upcoming"):
+            actual = by_status[status].get("missing_model_controls")
+            expected = expectation[status]
+            if actual != expected:
+                errors.append(
+                    f"{inventory_display}: {call_name} {status} first-run model controls "
+                    "do not match the documented release behavior"
+                )
+
+    privacy_display = (
+        privacy_page_path.relative_to(ROOT)
+        if privacy_page_path.is_relative_to(ROOT)
+        else privacy_page_path.name
+    )
+    try:
+        page = read_text(privacy_page_path)
+    except OSError as exc:
+        return errors + [f"{privacy_display}: cannot read model-download controls: {exc}"]
+    visible_copy = " ".join(
+        html.unescape(re.sub(r"<[^>]*>", " ", page)).split()
+    ).casefold()
+    missing_guidance = [
+        phrase for phrase in MODEL_DOWNLOAD_FIRST_RUN_GUIDANCE
+        if phrase.casefold() not in visible_copy
+    ]
+    if missing_guidance:
+        errors.append(
+            f"{privacy_display}: missing release-specific model-download control guidance — "
+            + ", ".join(repr(phrase) for phrase in missing_guidance)
+        )
+    return errors
+
+
 def check_mac_model_download_guidance(
     surfaces: dict[Path, tuple[str, ...]] = MAC_MODEL_DOWNLOAD_GUIDANCE,
 ) -> list[str]:
@@ -3011,6 +3214,89 @@ def run_self_test() -> None:
             or generated_metadata["release_zip_sha256"] != expected_digest
         ):
             raise SyncError("self-test: release archive size or SHA-256 did not sync")
+
+        inventory_path = Path(tmp) / "network-calls.json"
+        privacy_page_path = Path(tmp) / "privacy.html"
+        fixture_calls = []
+        for call_name, expectation in MODEL_DOWNLOAD_FIRST_RUN_CONTROL_EXPECTATIONS.items():
+            current_version = str(metadata[str(expectation["version_key"])])
+            major, minor, patch = (int(part) for part in current_version.split("."))
+            next_version = f"{major}.{minor}.{patch + 1}"
+            fixture_calls.append({
+                "name": call_name,
+                "first_run_controls_by_release": [
+                    {
+                        "version": current_version,
+                        "status": "published",
+                        "missing_model_controls": expectation["published"],
+                    },
+                    {
+                        "version": next_version,
+                        "status": "upcoming",
+                        "missing_model_controls": expectation["upcoming"],
+                    },
+                ],
+            })
+        inventory_path.write_text(
+            json.dumps({
+                "schema_version": 1,
+                "schema_description": MODEL_DOWNLOAD_SCHEMA_DESCRIPTION,
+                "network_calls": fixture_calls,
+            }),
+            encoding="utf-8",
+        )
+        privacy_page_path.write_text(
+            " ".join(MODEL_DOWNLOAD_FIRST_RUN_GUIDANCE), encoding="utf-8"
+        )
+        if check_model_download_first_run_controls(
+            metadata, inventory_path, privacy_page_path
+        ):
+            raise SyncError("self-test: valid per-release model controls were rejected")
+
+        incorrect_controls = json.loads(inventory_path.read_text(encoding="utf-8"))
+        incorrect_controls["network_calls"][0]["first_run_controls_by_release"][1][
+            "missing_model_controls"
+        ][0]["can_defer"] = False
+        inventory_path.write_text(json.dumps(incorrect_controls), encoding="utf-8")
+        if not any(
+            "do not match the documented release behavior" in error
+            for error in check_model_download_first_run_controls(
+                metadata, inventory_path, privacy_page_path
+            )
+        ):
+            raise SyncError("self-test: contradictory defer control was accepted")
+
+        incorrect_controls["network_calls"][0]["first_run_controls_by_release"][1][
+            "missing_model_controls"
+        ][0]["can_defer"] = True
+        incorrect_controls["network_calls"][0]["first_run_controls_by_release"][0][
+            "version"
+        ] = "0.0.0"
+        inventory_path.write_text(json.dumps(incorrect_controls), encoding="utf-8")
+        if not any(
+            "published controls must match" in error
+            for error in check_model_download_first_run_controls(
+                metadata, inventory_path, privacy_page_path
+            )
+        ):
+            raise SyncError("self-test: stale published model-control version was accepted")
+
+        inventory_path.write_text(
+            json.dumps({
+                "schema_version": 1,
+                "schema_description": MODEL_DOWNLOAD_SCHEMA_DESCRIPTION,
+                "network_calls": fixture_calls,
+            }),
+            encoding="utf-8",
+        )
+        privacy_page_path.write_text("Model downloads happen automatically.", encoding="utf-8")
+        if not any(
+            "missing release-specific model-download control guidance" in error
+            for error in check_model_download_first_run_controls(
+                metadata, inventory_path, privacy_page_path
+            )
+        ):
+            raise SyncError("self-test: missing visible model-control guidance was accepted")
 
         stale_svg = Path(tmp) / "stale.svg"
         stale_svg.write_text(
@@ -4153,6 +4439,7 @@ def main() -> int:
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_windows_model_download_privacy_guidance())
             errors.extend(check_windows_model_download_privacy_scopes())
+            errors.extend(check_model_download_first_run_controls(metadata))
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
@@ -4200,6 +4487,7 @@ def main() -> int:
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_windows_model_download_privacy_guidance())
         errors.extend(check_windows_model_download_privacy_scopes())
+        errors.extend(check_model_download_first_run_controls(metadata))
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())

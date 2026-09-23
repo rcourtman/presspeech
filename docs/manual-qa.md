@@ -162,8 +162,11 @@ keyboard access testing in addition to assistive-technology testing.
   verify the **Download Parakeet model**, **Use English-only CPU model**,
   and **Choose another model in Settings** actions have useful names, appear
   after the microphone controls in Tab order, and can be activated. Confirm
-  they are absent when the model is already cached. Before activating any model
-  choice, confirm no model download has started. Choose **Set Up Later** and
+  they are absent when the model is already cached. Before the choice appears,
+  confirm its Alt+D, Alt+U, and Alt+M shortcuts cannot activate hidden choices;
+  once the choice appears, verify the matching shortcuts work. Before
+  activating any model choice, confirm no model download has started. Choose
+  **Set Up Later** and
   confirm setup remains incomplete and no model download continues; reopen
   Setup and verify the decision is offered
   again. In a separate clean test profile, choose the CPU option and confirm

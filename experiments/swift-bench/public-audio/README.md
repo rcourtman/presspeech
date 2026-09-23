@@ -123,6 +123,40 @@ production v3 backend with `--language de`, applying the long-form WER and
 deletion-run screens. To omit this corpus for a lightweight, non-release check,
 pass `--allow-missing-multilingual-long-public-audio` explicitly.
 
+## Spanish language-behavior probe
+
+The upstream report of errors on spontaneous Latin-American Spanish motivates
+checking a second language, but the report is not a Presspeech result and its
+corrected explanation is model-level behavior rather than a CoreML-specific
+bug. The release gate does not currently require a Spanish-specific corpus.
+For a reproducible read-speech probe on the current production pin, fetch a bounded
+FLEURS test set and run the same frozen audio once with automatic selection
+and once with the Spanish hint:
+
+```sh
+./fetch-public-speech-fixtures.sh \
+  --source fleurs --language es_419 --split test --count 60
+
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/fleurs-es_419-test \
+  --out-dir public-results/fleurs-es_419-test-auto \
+  --backend v3 --language auto --public-corpus --trials 3
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/fleurs-es_419-test \
+  --out-dir public-results/fleurs-es_419-test-spanish-hint \
+  --backend v3 --language es --public-corpus --trials 3
+```
+
+Compare the input digest, aggregate and worst WER, final-word failures, and
+latency in the two reports. In Presspeech, `--language es` is a decoder
+script-filter hint, not language forcing; it is not evidence that v3 can
+reliably identify or transcribe Spanish. FLEURS is read speech and does not
+exercise the conversational speech described in the upstream report. A
+separate local-only test with naturally spoken Spanish clips is needed for
+that question. Keep those recordings, references, and raw logs private; do
+not commit or share them. The redacted summary is evaluation evidence only,
+not a product gate or an approval to change the model.
+
 ## Context-variation fixtures
 
 For an encoder-precision comparison, generate probe/context/combined triplets
