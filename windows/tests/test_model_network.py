@@ -18,6 +18,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
             "HUGGINGFACE_CO_STAGING": "1",
             "HF_HUB_DISABLE_TELEMETRY": "0",
             "HF_HUB_DISABLE_XET": "0",
+            "HF_XET_TELEMETRY_ENABLED": "1",
             "DISABLE_TELEMETRY": "false",
             "DO_NOT_TRACK": "no",
             "HF_HUB_DISABLE_IMPLICIT_TOKEN": "0",
@@ -46,6 +47,7 @@ class ModelNetworkPolicyTests(unittest.TestCase):
                 "HF_HUB_DISABLE_IMPLICIT_TOKEN",
                 "HF_HUB_DISABLE_UPDATE_CHECK"):
             self.assertEqual(environment[name], "1")
+        self.assertEqual(environment["HF_XET_TELEMETRY_ENABLED"], "0")
         self.assertEqual(environment["HF_HUB_DISABLE_XET"], "1")
         for name in model_network.REMOVED_ENVIRONMENT:
             self.assertNotIn(name, environment)
@@ -175,12 +177,13 @@ class ModelNetworkPolicyTests(unittest.TestCase):
             model_network.harden_loaded_runtime({}, require_loaded=True)
 
     def test_runtime_rejects_policy_environment_changed_after_startup(self):
-        with mock.patch.dict(
-                os.environ, {"HF_HUB_DISABLE_XET": "0"}), \
-                self.assertRaisesRegex(
-                    model_network.ModelNetworkPolicyError,
-                    "environment changed"):
-            model_network.harden_loaded_runtime({})
+        for name, value in (("HF_HUB_DISABLE_XET", "0"),
+                            ("HF_XET_TELEMETRY_ENABLED", "1")):
+            with self.subTest(name=name), mock.patch.dict(
+                    os.environ, {name: value}), self.assertRaisesRegex(
+                        model_network.ModelNetworkPolicyError,
+                        "environment changed"):
+                model_network.harden_loaded_runtime({})
 
     def test_runtime_rejects_a_token_added_after_startup(self):
         with mock.patch.dict(os.environ, {"HF_TOKEN": "late-token"}), \

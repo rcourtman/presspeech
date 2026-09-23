@@ -107,17 +107,23 @@ focus and interfere with paste, while
 separate users describe focus changes leaving a transcript undelivered and ask
 for a last-transcript recovery path ([discussion
 #211](https://github.com/cjpais/Handy/discussions/211), [discussion
-#1379](https://github.com/cjpais/Handy/discussions/1379)); another reports
-occasional stale clipboard content being pasted ([issue
+#1379](https://github.com/cjpais/Handy/discussions/1379)). In #1379, a later
+commenter says the copy-to-clipboard workaround replaces their prior clipboard
+contents and prefers a dedicated recovery action that preserves them. Another
+user reports occasional stale clipboard content being pasted ([issue
 #502](https://github.com/cjpais/Handy/issues/502)). These are Handy-specific
 observations, not evidence of their prevalence across products or of a
-Presspeech defect or request. They do, however, independently reinforce that
-destination focus, safe delivery, and recovery are consequential risks in
-this workflow, consistent with Presspeech's open issues #33 and #36. Keep
-testing those risks ahead of scope growth; do not import another product's UI
-remedy without matching Presspeech evidence. Do not infer adoption, unmet
-demand, or roadmap priority from discussion activity or competitor feature
-lists.
+Presspeech defect or request. They reinforce that destination focus, safe
+delivery, and recovery are consequential risks in this workflow, consistent
+with Presspeech's open issues #33 and #36. They also identify a concrete
+recovery trade-off: making the transcript available without displacing unrelated
+clipboard content. Presspeech already offers configurable, bounded macOS
+transcript history in memory, cleared on quit; upcoming Windows delivery
+recovery keeps failed text in process memory for an explicit user decision.
+Treat discoverability and reliability of these transient controls as evidence
+to qualify, not as a mandate for a new shortcut or persistent archive. Do not
+infer adoption, unmet demand, or roadmap priority from discussion activity or
+competitor feature lists.
 
 A separate [RSI-community discussion about a Windows push-to-talk tool](https://www.reddit.com/r/RSI/comments/1tl9vxw/i_built_a_free_fully_offline_pushtotalk_dictation/)
 raised sustained key-holding as a possible added physical burden and suggested

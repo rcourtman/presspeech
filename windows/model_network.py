@@ -28,6 +28,11 @@ FORCED_ENVIRONMENT = {
     # opt-out support is not assumed. huggingface_hub falls back to regular
     # file downloads when this is disabled.
     "HF_HUB_DISABLE_XET": "1",
+    # Defense in depth for future dependency changes: hf-xet has its own
+    # transfer telemetry switch, independent of Hub telemetry. Xet transfers
+    # remain disabled above; keep their telemetry off as well if a later
+    # runtime enables that transport.
+    "HF_XET_TELEMETRY_ENABLED": "0",
     "DISABLE_TELEMETRY": "1",
     "DO_NOT_TRACK": "1",
     "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",

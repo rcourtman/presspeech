@@ -973,12 +973,18 @@ class SetupWindow:
 
         ttk.Label(
             frame,
-            text=("Speak while the check runs. If it fails, enable Microphone "
+            text=("Setup briefly opens the selected microphone automatically "
+                  "to check for an input level; Windows may show its "
+                  "microphone-use indicator. Audio samples are used only to "
+                  "measure input level in memory, then discarded — they are "
+                  "not saved, sent, or transcribed. "
+                  "Speak while the check runs. If it fails, enable Microphone "
                   "access, Let apps access your microphone, and Let desktop "
                   "apps access your microphone. If Windows says these settings "
                   "are managed by your organization, contact your administrator; "
                   "Presspeech cannot override that policy."),
             justify="left",
+            wraplength=560,
         ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 3))
         microphone_actions = ttk.Frame(frame)
         microphone_actions.grid(row=8, column=0, columnspan=2, sticky="w")

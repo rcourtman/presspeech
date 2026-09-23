@@ -476,6 +476,18 @@ class AccessibleWindowTests(unittest.TestCase):
                 "apps access your microphone"):
             self.assertIn(switch, body)
 
+    def test_setup_discloses_automatic_microphone_probe_handling(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        for disclosure in (
+                "opens the selected microphone automatically",
+                "microphone-use indicator",
+                "measure input level in memory",
+                "discarded",
+                "not saved, sent, or transcribed"):
+            self.assertIn(disclosure, body)
+        self.assertIn("wraplength=560", body)
+
     def test_setup_escalates_managed_microphone_privacy_to_administrator(self):
         body = inspect.getsource(ui.SetupWindow._build)
 
