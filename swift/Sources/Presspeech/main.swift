@@ -5639,6 +5639,16 @@ func speechModelStartupProgressValue(_ progress: DownloadProgress) -> Double? {
     }
 }
 
+struct SpeechModelProgressAccessibility: Equatable {
+    let label: String
+    let help: String
+}
+
+func speechModelProgressAccessibility(statusTitle: String) -> SpeechModelProgressAccessibility {
+    SpeechModelProgressAccessibility(label: "Speech model progress",
+                                     help: statusTitle)
+}
+
 enum TextInsertionStrategy: String {
     case clipboardPaste
     case directUnicode
@@ -11221,6 +11231,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         progress.maxValue = 1
         progress.usesThreadedAnimation = true
         progress.toolTip = startupStatusTitle
+        let accessibility = speechModelProgressAccessibility(statusTitle: startupStatusTitle)
+        progress.setAccessibilityLabel(accessibility.label)
+        progress.setAccessibilityHelp(accessibility.help)
 
         if let speechModelStartupProgressFraction {
             progress.isIndeterminate = false
@@ -20061,6 +20074,12 @@ private enum PresspeechSelfTest {
                                                   phase: .compiling(modelName: "Encoder.mlmodelc"))),
             equals: nil,
             "compile phase should show indeterminate model progress"
+        )
+        try expect(
+            speechModelProgressAccessibility(statusTitle: "Downloading speech model… 50% (2/4)"),
+            equals: SpeechModelProgressAccessibility(label: "Speech model progress",
+                                                     help: "Downloading speech model… 50% (2/4)"),
+            "menu progress should have a useful accessible name and current phase help"
         )
         let requiredBytes = speechModelDownloadRequiredBytes(for: .multilingualV3,
                                                              headroomBytes: 100)

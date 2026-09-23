@@ -250,6 +250,11 @@ keyboard access testing in addition to assistive-technology testing.
 - Confirm initial keyboard focus lands on the microphone selector in Setup, the
   hotkey selector in Settings, Download Update in the update prompt, and the
   text area in Try Dictation.
+- In Settings, confirm the warning beside **After pasting** explains that a
+  newline may submit dictated text in shells or terminals and recommends
+  reviewing commands outside a shell. With Narrator, focus the selector and
+  confirm its accessible name includes the same guidance. Restore **space**
+  without testing a transcript in a command shell.
 - From each initial focus, traverse every enabled control with Tab and then
   Shift-Tab. Confirm focus follows the visible reading order in both directions;
   in Setup's final row it must move through **Try Dictation**, **Retry Speech
@@ -575,6 +580,10 @@ item after the development-wrapper launch check.
   proceeds normally. Progress-only refreshes should not trigger repeated
   app-wide announcements. Interrupt an approved download and relaunch; confirm
   it resumes without asking again.
+- While a model load or download is in progress, open the menu-bar menu and
+  navigate to its progress indicator with VoiceOver. Confirm it is named
+  **Speech model progress**, exposes the current determinate percentage as its
+  value, and provides the current model phase as accessibility help.
 - Upgrade a profile from the preceding public macOS build with a valid cached
   model and confirm it loads automatically without a first-download prompt.
 - Select a specific USB or Bluetooth microphone, disconnect it while Presspeech

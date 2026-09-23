@@ -105,6 +105,12 @@ ALTGR_HOTKEY_GUIDANCE = (
     "If Right Alt types @, €, or accented letters, Windows is using AltGr and "
     "that key will not start dictation. Choose F8 or another key."
 )
+PASTE_SUFFIX_GUIDANCE = (
+    "A newline can submit dictated text in shells and terminals. Dictate "
+    "commands into Try Dictation or a plain-text editor and review before "
+    "pasting into a shell. Space is the default, not a safety barrier."
+)
+PASTE_SUFFIX_ACCESSIBLE_NAME = "After pasting. " + PASTE_SUFFIX_GUIDANCE
 
 MODEL_DOWNLOAD_PRIVACY_NOTICE = (
     "Hugging Face receives a request for the selected model and revision. "
@@ -1962,6 +1968,10 @@ class SettingsWindow:
         self.var_suffix.set(s["suffix"])
         self.var_suffix.grid(row=row, column=1, sticky="w", padx=10, pady=2)
         row += 1
+        ttk.Label(
+            f, text=PASTE_SUFFIX_GUIDANCE, justify="left", wraplength=620,
+        ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
+        row += 1
 
         self.var_fillers = tk.BooleanVar(value=s["remove_fillers"])
         ttk.Checkbutton(f, text="Remove filler words (um, uh, er\u2026)",
@@ -2085,6 +2095,7 @@ class SettingsWindow:
             _label_control(label, control)
         _name_control(
             self.var_hotkey, "Dictation hotkey. " + ALTGR_HOTKEY_GUIDANCE)
+        _name_control(self.var_suffix, PASTE_SUFFIX_ACCESSIBLE_NAME)
         _name_control(self.listbox, "Dictionary rules")
         _mark_live_region(self.model_status)
         _mark_live_region(self.hotkey_status)

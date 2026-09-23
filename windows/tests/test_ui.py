@@ -1974,6 +1974,27 @@ class ScratchpadCloseTests(unittest.TestCase):
         window.app.cancel_recording.assert_not_called()
 
 
+class PasteSuffixGuidanceTests(unittest.TestCase):
+    def test_newline_submission_risk_is_visible_and_in_the_control_name(self):
+        source = inspect.getsource(ui.SettingsWindow._build)
+
+        self.assertIn(
+            "A newline can submit dictated text in shells and terminals",
+            ui.PASTE_SUFFIX_GUIDANCE,
+        )
+        self.assertIn(
+            "Space is the default, not a safety barrier",
+            ui.PASTE_SUFFIX_GUIDANCE,
+        )
+        self.assertTrue(
+            ui.PASTE_SUFFIX_ACCESSIBLE_NAME.startswith("After pasting. "))
+        self.assertIn("text=PASTE_SUFFIX_GUIDANCE", source)
+        self.assertIn(
+            "_name_control(self.var_suffix, PASTE_SUFFIX_ACCESSIBLE_NAME)",
+            source,
+        )
+
+
 class DictionarySettingsTests(unittest.TestCase):
     def make_window(self, rules=None):
         window = ui.SettingsWindow.__new__(ui.SettingsWindow)
