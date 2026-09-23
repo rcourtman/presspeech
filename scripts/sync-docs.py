@@ -597,6 +597,19 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "dictation audio and transcripts are not sent",
         'id="faq-windows-install-privacy"',
     ),
+    DOCS / "install" / "agents.md": (
+        "Before installing or launching published Windows 0.1.12",
+        "Hugging Face usage telemetry",
+        "already-configured or locally saved Hugging Face token",
+        "custom download routing can change where a request",
+        "public models need no account token",
+        "if a Hugging Face token or custom download route may be configured",
+        "wait until Windows 0.1.13 is published",
+        "Do not inspect or display token values",
+        "launch 0.1.12 without the user's informed choice",
+        "Dictation audio and transcripts are not sent in model downloads",
+        "privacy.html#network-calls",
+    ),
 }
 
 # Published 0.1.12 and the unreleased 0.1.13 candidate have different
@@ -1020,6 +1033,8 @@ Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; close Setup to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
+
+Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. These public models need no account token. If a Hugging Face token or custom download route may be configured on this PC—or the user is unsure—offer to wait until Windows 0.1.13 is published. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
   https://rcourtman.github.io/presspeech/windows.html#download-verify-run
@@ -2302,6 +2317,38 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
             "with a direct download"
         )
     return errors
+
+
+def check_windows_agent_install_privacy_order(
+    path: Path = DOCS / "install" / "agents.md",
+) -> list[str]:
+    """Keep the Windows privacy decision ahead of assistant install actions."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing Windows assistant install guidance"]
+
+    contents = read_text(path)
+    section_start = contents.find("## Windows")
+    if section_start < 0:
+        return [f"{display}: missing Windows assistant install prompt"]
+    section_end = contents.find("\n## ", section_start + len("## Windows"))
+    section = contents[section_start:] if section_end < 0 else contents[section_start:section_end]
+    warning = section.find("Before installing or launching published Windows 0.1.12")
+    actions = (
+        "Use only the published Windows prerelease",
+        "Download the installer and its checksum",
+        "Start-Process -FilePath $installer",
+    )
+    missing_actions = [action for action in actions if section.find(action) < 0]
+    if warning < 0:
+        return [f"{display}: missing Windows assistant model-download privacy warning"]
+    if missing_actions:
+        return [f"{display}: incomplete Windows assistant install prompt"]
+    if any(warning > section.find(action) for action in actions):
+        return [
+            f"{display}: Windows model-download privacy warning must precede every assistant install action"
+        ]
+    return []
 
 
 def check_macos_model_download_privacy_summary(
@@ -3723,6 +3770,34 @@ def run_self_test() -> None:
         if not check_faq_install_privacy_order(faq_install):
             raise SyncError("self-test: FAQ direct download shortcut was accepted")
 
+        windows_agent_prompt = Path(tmp) / "agents.md"
+        agent_warning = (
+            "Before installing or launching published Windows 0.1.12, disclose "
+            "the model-download privacy behavior."
+        )
+        agent_actions = (
+            "Install Presspeech from https://github.com/rcourtman/presspeech",
+            "Use only the published Windows prerelease",
+            "Download the installer and its checksum",
+            "Start-Process -FilePath $installer",
+        )
+        windows_agent_prompt.write_text(
+            "## Windows\n```text\n" + agent_actions[0] + "\n" + agent_warning + "\n"
+            + "\n".join(agent_actions[1:]) + "\n```\n",
+            encoding="utf-8",
+        )
+        if check_windows_agent_install_privacy_order(windows_agent_prompt):
+            raise SyncError("self-test: ordered Windows assistant privacy warning was rejected")
+        windows_agent_prompt.write_text(
+            "## Windows\n```text\n" + agent_actions[0] + "\n" + agent_actions[1] + "\n"
+            + agent_warning + "\n" + "\n".join(agent_actions[2:]) + "\n```\n",
+            encoding="utf-8",
+        )
+        agent_order_errors = check_windows_agent_install_privacy_order(windows_agent_prompt)
+        if not any("must precede every assistant install action" in error
+                   for error in agent_order_errors):
+            raise SyncError("self-test: Windows assistant install before privacy warning was accepted")
+
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {
             delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
@@ -4005,6 +4080,7 @@ def main() -> int:
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_faq_install_privacy_order())
+            errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_compatibility_worksheet_contract())
@@ -4050,6 +4126,7 @@ def main() -> int:
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_faq_install_privacy_order())
+        errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_compatibility_worksheet_contract())

@@ -32,6 +32,8 @@ After launch, explain that macOS 0.3.8 starts its first local speech-model downl
 ```text
 Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
+Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. These public models need no account token. If a Hugging Face token or custom download route may be configured on this PC—or the user is unsure—offer to wait until Windows 0.1.13 is published. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+
 Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
   https://rcourtman.github.io/presspeech/windows.html#download-verify-run
 

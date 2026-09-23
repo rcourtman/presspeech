@@ -580,6 +580,22 @@ class AccessibleWindowTests(unittest.TestCase):
             body.index("_label_trigger_choices(trigger_label"),
         )
 
+    def test_settings_disclose_model_download_before_save(self):
+        body = inspect.getsource(ui.SettingsWindow._build)
+
+        self.assertIn(
+            "Saving a different model starts preparation immediately.", body)
+        self.assertIn("huggingface.co", body)
+        self.assertIn("first Parakeet download can be about", body)
+        self.assertIn("Audio and transcripts stay on this PC", body)
+        self.assertIn("dictation is unavailable until the model is ready.", body)
+        self.assertIn("English-only CPU option (~141 MiB)", body)
+        self.assertIn("wraplength=620", body)
+        self.assertLess(
+            body.index("Saving a different model"),
+            body.index("self.save_button"),
+        )
+
     def test_changed_visible_text_refreshes_its_accessible_name(self):
         widget = mock.Mock()
         widget.cget.return_value = "Ready to download"

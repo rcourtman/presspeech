@@ -1708,8 +1708,20 @@ class SettingsWindow:
                                       state="readonly", width=42)
         self.var_model.set(cfg.MODEL_LABELS.get(s["model"], cfg.MODEL_LABELS[cfg.MODELS[0]]))
         self.var_model.grid(row=row, column=1, sticky="w", padx=10, pady=2)
-        ttk.Label(f, text="No CUDA? First setup uses English-only base.en on CPU").grid(
-            row=row, column=2, sticky="w")
+        row += 1
+
+        ttk.Label(
+            f,
+            text=(
+                "Saving a different model starts preparation immediately. "
+                "If its files are missing, Presspeech downloads them from "
+                "huggingface.co; a first Parakeet download can be about "
+                "2.5 GB. Audio and transcripts stay on this PC, and "
+                "dictation is unavailable until the model is ready. "
+                "Without usable NVIDIA CUDA, Whisper base.en is the "
+                "English-only CPU option (~141 MiB)."),
+            justify="left", wraplength=620,
+        ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
         row += 1
 
         self.model_status = ttk.Label(

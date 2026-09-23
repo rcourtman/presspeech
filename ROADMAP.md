@@ -111,19 +111,31 @@ refresh it only when the corrected model-download paths are actually published;
 the existing warnings already do this, so this is a release-readiness gate,
 not a reason to add more feature or reassurance copy.
 
-Streaming text is a visible adjacent use case, but not yet a Presspeech priority.
-Superscribe Lite's launch page markets words appearing in the target field while
-the user is speaking. A May 2026 [r/macapps discussion](https://www.reddit.com/r/macapps/comments/1tb0dv7/dictation_app_that_inserts_text_in_real_time/)
+Live-at-cursor speech is a distinct adjacent workflow, not yet a Presspeech
+priority. Superscribe Lite's launch page markets words appearing in the target
+field while the user is speaking. A May 2026
+[r/macapps discussion](https://www.reddit.com/r/macapps/comments/1tb0dv7/dictation_app_that_inserts_text_in_real_time/)
 includes one participant who follows live words to keep track of technical
 paragraphs; another describes live text as distracting, and a developer notes
 that provisional words can change after insertion, making correction in an
-arbitrary target field difficult. These are promotional positioning and
-self-selected comments, not a representative demand sample or controlled
-comparison. Keep Presspeech's transcription-after-recording behavior explicit,
-but do not add streaming on this evidence alone. Revisit only after privacy-safe
-intake returns and repeated Presspeech reports establish the need and a native
-prototype demonstrates safe handling of revisions, cancellation, and target-app
-editing behavior.
+arbitrary target field difficult. A more explicit accessibility positioning
+appears on [Soink's site](https://www.soink.ai/), which frames live, hands-free
+dictation and voice editing around wrist pain. Soink's
+[privacy policy](https://www.soink.ai/privacy-policy) says voice audio is sent
+to its servers for real-time transcription and deleted afterwards; its
+[changelog](https://www.soink.ai/changelog) records iterative fixes for cursor
+placement, interruption handling, and recording startup. These are the
+vendor's claims and product history, not independent performance evidence. A
+September 2026 [Cursor community report](https://forum.cursor.com/t/feedback-bugs-with-new-audio-transcription/171400)
+describes live dictation cancellation losing text typed during the session and
+cursor-placement problems; that report concerns Cursor, not Presspeech or
+Soink. Together, these sources point to a potentially distinct low-keyboard-use
+case and real revision/recovery hazards, not evidence that Presspeech users
+need streaming. Keep Presspeech's transcription-after-recording behavior
+explicit and do not add streaming on competitor positioning or isolated reports
+alone. Revisit only after privacy-safe intake returns and repeated Presspeech
+reports establish an unmet need, and a native prototype demonstrates safe
+handling of revisions, cancellation, undo, and target-app editing behavior.
 
 Public user evidence is thin and self-selected. A recent
 [FOSS discussion of Handy](https://www.reddit.com/r/foss/comments/1vxrgg5/a_free_open_source_speechtotext_tool_that_has/)
