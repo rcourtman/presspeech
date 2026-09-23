@@ -441,6 +441,13 @@ class AccessibleWindowTests(unittest.TestCase):
             mock.call(toggle, "Dictation style: Press to toggle"),
         ])
 
+    def test_settings_trigger_names_are_registered_after_layout(self):
+        body = inspect.getsource(ui.SettingsWindow._build)
+        self.assertLess(
+            body.index("root.update_idletasks()"),
+            body.index("_label_trigger_choices(trigger_label"),
+        )
+
     def test_changed_visible_text_refreshes_its_accessible_name(self):
         widget = mock.Mock()
         widget.cget.return_value = "Ready to download"
