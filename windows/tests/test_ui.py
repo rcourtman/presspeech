@@ -401,6 +401,13 @@ class AccessibleWindowTests(unittest.TestCase):
                 "apps access your microphone"):
             self.assertIn(switch, body)
 
+    def test_setup_escalates_managed_microphone_privacy_to_administrator(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        self.assertIn("managed by your organization", body)
+        self.assertIn("contact your administrator", body)
+        self.assertIn("cannot override that policy", body)
+
     def test_scrollable_dialog_routes_wheel_and_shift_wheel(self):
         body = ui._ScrollableDialogBody.__new__(ui._ScrollableDialogBody)
         body.canvas = mock.Mock()

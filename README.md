@@ -234,9 +234,10 @@ each platform rather than identical.
   released first. Apple keyboards may require **Fn** to send an F-key
 - **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
 - **Settings → Dictation → Language Hint** — auto-detect (default) or pin to one of
-  the model's 25 supported European languages to prevent wrong-script
-  bleed-through; Bosnian, Belarusian, and Serbian script hints are also
-  available as script-filter aliases
+  the model's 25 supported European languages to bias decoding toward that
+  script and reduce wrong-script bleed-through; this is a hint, not a guarantee
+  of language identification or translation. Bosnian, Belarusian, and Serbian
+  script hints are also available as script-filter aliases
 - **Settings → Text → After Pasting** — append space, append newline, or no
   suffix
 - **Settings → Text → Dictionary & Shortcuts** — correct recurring

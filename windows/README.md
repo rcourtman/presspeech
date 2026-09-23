@@ -61,7 +61,12 @@ applies the following policy before any model library imports: it fixes download
 `https://huggingface.co` endpoint, disables Hugging Face Hub telemetry,
 disables implicit
 authentication and inherited User-Agent origin data, and prevents
-Transformers from adding a random per-launch session identifier. Every model
+Transformers from adding a random per-launch session identifier. The packaged
+runtime check covers Hub and Transformers behavior; it does not establish an
+opt-out for separate `hf-xet` transfer-performance telemetry. The
+pinned `hf-xet` 1.6.0 build has no runtime-verified telemetry switch;
+setting `HF_XET_TELEMETRY_ENABLED=0` is forward-compatible only, and
+Presspeech does not claim that it disables that telemetry. Every model
 call also declines account tokens and remote model code; Transformers weights
 are required to use safetensors. Inherited Hugging Face endpoint or staging
 settings therefore cannot redirect the app's pinned model request.
@@ -121,7 +126,9 @@ Before recording, open Windows microphone privacy settings and turn on
 **Microphone access**, **Let apps access your microphone**, and **Let desktop
 apps access your microphone**. Presspeech is an unpackaged desktop app, so
 Windows uses the shared desktop-app control rather than an app-specific
-Presspeech permission prompt. Also confirm the selected device under
+Presspeech permission prompt. If Windows says these settings are managed by
+your organization, contact your administrator; Presspeech cannot override that
+policy. Also confirm the selected device under
 **Settings → System → Sound → Input**.
 
 On keyboard layouts where **Right Alt** enters `@`, `€`, or accented letters,

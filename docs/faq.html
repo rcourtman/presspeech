@@ -78,6 +78,10 @@
               <p><strong>macOS:</strong> FluidAudio with multilingual Parakeet TDT v3 CoreML on the Apple Neural Engine. <strong>Windows:</strong> Fresh PCs with usable NVIDIA CUDA select multilingual Parakeet TDT v3; CPU-only PCs select the smaller English-only Whisper base.en model. Other local Windows models remain selectable.</p>
             </article>
             <article class="card">
+              <h3>Does the macOS Language Hint force a language?</h3>
+              <p>No. Auto-detect (the default) leaves the decoder unrestricted. Selecting a language biases decoding toward its script and can reduce wrong-script output, but it does not translate speech or guarantee that the spoken language is identified correctly. Presspeech does not report a detected language.</p>
+            </article>
+            <article class="card">
               <h3>Is it a file transcription app?</h3>
               <p>No. Presspeech is focused on live push-to-talk dictation into the app you are already using.</p>
             </article>

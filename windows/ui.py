@@ -926,7 +926,9 @@ class SetupWindow:
             frame,
             text=("Speak while the check runs. If it fails, enable Microphone "
                   "access, Let apps access your microphone, and Let desktop "
-                  "apps access your microphone."),
+                  "apps access your microphone. If Windows says these settings "
+                  "are managed by your organization, contact your administrator; "
+                  "Presspeech cannot override that policy."),
             justify="left",
         ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 3))
         microphone_actions = ttk.Frame(frame)

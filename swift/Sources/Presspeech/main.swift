@@ -11857,6 +11857,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func buildDictationLanguageSettingsItem() -> NSMenuItem {
         let langParent = NSMenuItem(title: "Language Hint", action: nil, keyEquivalent: "")
+        langParent.toolTip = "Auto-detect leaves decoding unrestricted. A selected language biases decoding toward its script to reduce wrong-script output; it does not translate speech or guarantee language identification."
         let langSub = NSMenu()
         langSub.autoenablesItems = false
         for lang in DictationLanguage.allCases {
