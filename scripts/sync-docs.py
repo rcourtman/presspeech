@@ -3697,8 +3697,8 @@ def run_self_test() -> None:
             '<button id="save-worksheet-summary" type="button" disabled>'
             'Download report draft</button><button type="reset">Reset</button>'
             '<div id="worksheet-report-actions" hidden>'
-            '<a href="https://github.com/example/issues?q=matching">Browse</a>'
-            '<a href="https://github.com/example/issues/new?template=compatibility_report.yml">New</a>'
+            '<a href="https://github.com/example/issues?q=matching">Check matching reports</a>'
+            '<a href="https://github.com/example/issues/new?template=compatibility_report.yml">Check new-report availability</a>'
             '</div>'
             '</form>',
             encoding="utf-8",
