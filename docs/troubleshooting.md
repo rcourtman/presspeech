@@ -92,8 +92,10 @@ to the intended field and paste it manually instead of dictating it again.
 Presspeech also uses this fallback when it cannot verify the same destination.
 Some Electron/Chromium-based apps do not consistently expose the focused-window
 information the current Mac app checks, so either notice can appear even if the
-window looks unchanged. A failed input event does not prove that no text reached
-the field. If Presspeech says **Couldn't paste — use Copy Last Transcript** in
+window looks unchanged. Keep the original field and browser tab focused until
+insertion or a recovery notice appears: the Mac check identifies the window,
+not the field or tab within it. A failed input event does not prove that no text
+reached the field. If Presspeech says **Couldn't paste — use Copy Last Transcript** in
 0.3.8, or **Delivery uncertain** in builds with the revised notice, inspect the
 destination before trying again. If text is missing, choose **Copy Last
 Transcript** when offered, but remove any partial text before pasting the full
@@ -200,8 +202,9 @@ modifier or F-key and retry in **Try Dictation**.
 ### Try Dictation Works But Text Is Not Inserted
 
 Click the destination text field before pressing the hotkey and keep that window
-focused until transcription finishes. If the notification says **Transcript
-copied, not pasted**, the finished transcript is already on the clipboard.
+focused until transcription finishes. In published Windows 0.1.12, if the
+notification says **Transcript copied, not pasted**, the finished transcript
+is already on the clipboard.
 Return to the intended field and press **Ctrl+V** instead of dictating it again.
 This fallback is used when focus changed, the original window could not be
 identified, or the target runs as administrator. Reopen an elevated target
@@ -263,6 +266,11 @@ recovery actions, clipboard failure, a newer clipboard copy, an unavailable
 original target, or uncertain keyboard delivery keeps the finished dictation in
 memory and pauses new recording. Check the intended field before retrying: a
 shortcut error does not prove that nothing was pasted.
+
+If the original target is already missing, unfocused, or elevated before
+delivery, Presspeech retains the dictation without replacing the prior
+clipboard item. A later change can still leave the dictated text on the
+current clipboard.
 
 The **Delivery Recovery** window opens without showing or copying the dictated
 words. Choose **Copy for Manual Paste** to copy explicitly, **Discard

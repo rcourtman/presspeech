@@ -216,6 +216,10 @@ If the hotkey hook detects a held Ctrl, Shift, Alt, Windows, or V key before
 writing, the previous clipboard item remains unchanged. Release the key and
 use Delivery Recovery to copy or discard the waiting text. Check the intended field
 first: an input error can happen after part or all of the paste has completed.
+If Presspeech already knows that the original window is missing, no longer
+focused, or elevated, it also leaves the previous clipboard item unchanged
+and waits for an explicit recovery choice. A change after that check may still
+leave the dictated text on the current clipboard.
 
 The keyboard-accessible **Delivery Recovery** window opens without displaying
 or copying the dictated words. Check the intended field first, then choose
@@ -264,8 +268,10 @@ run.bat
 1. Hold **Right Alt** (configurable).
 2. Speak.
 3. Release — Presspeech normally pastes the punctuated transcript into the
-   window where the recording began. If it cannot verify that destination, it
-   leaves the text on the clipboard for manual paste instead.
+   window where the recording began. Published 0.1.12 leaves text on the
+   clipboard for manual paste if it cannot verify that destination. Upcoming
+   0.1.13 keeps an undelivered transcript in memory for explicit Copy or
+   Discard; an already-known invalid destination does not change the clipboard.
 
 If using the configured key is inconvenient, select **Dictate** from the
 Presspeech notification-area menu to start recording, then select it again to
@@ -321,8 +327,10 @@ clipboard-typing shortcut so transcripts reach the remote host, including macOS.
 Microsoft Remote Desktop is also detected automatically and uses its redirected
 clipboard with a small reliability delay. Normal Windows apps retain fast Ctrl+V.
 Each recording is bound to the window that was focused when it began. If focus
-changes while the model is transcribing, Presspeech leaves the transcript on the
-clipboard and notifies you instead of pasting private text into the wrong window.
+changes while the model is transcribing, Presspeech does not paste private text
+into the wrong window. Published 0.1.12 leaves it on the clipboard; upcoming
+0.1.13 keeps it in Delivery Recovery without replacing the prior clipboard
+item when the changed focus is known before the write.
 Where Windows exposes a separate focused child control, Presspeech also checks
 that control before sending Ctrl+V; moving between two native edit controls in
 one window then uses Delivery Recovery instead of automatic paste. Custom-drawn
@@ -333,9 +341,11 @@ If a control is identifiable only at the later delivery check, Presspeech
 cannot confirm it was focused when recording began and uses Delivery Recovery.
 [Windows prevents](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput#remarks)
 a standard app from sending simulated input into an app running as administrator.
-Presspeech detects that boundary, leaves the transcript on the clipboard, and
-tells you to paste it manually or reopen the target without **Run as
-administrator**. Do not run Presspeech as administrator to work around it.
+Presspeech detects that boundary. Published 0.1.12 leaves the transcript on
+the clipboard for manual paste; upcoming 0.1.13 preserves the previous
+clipboard item and offers explicit Copy or Discard. You can also reopen the
+target without **Run as administrator**. Do not elevate Presspeech to work
+around it.
 
 Treat command shells as execution surfaces, not ordinary text fields.
 PowerShell, Command Prompt, Windows Terminal, and remote consoles can run

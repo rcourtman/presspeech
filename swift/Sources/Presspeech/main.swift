@@ -5850,6 +5850,8 @@ func currentDictationPasteTarget(reportFailure: Bool = false) -> DictationPasteT
 @MainActor
 func dictationPasteTargetMatches(_ expected: DictationPasteTarget,
                                  _ current: DictationPasteTarget?) -> Bool {
+    // This guards the window, not the focused field or browser tab within it.
+    // Keep that limitation explicit in user guidance and native QA.
     guard let current,
           expected.processIdentifier == current.processIdentifier else { return false }
     return CFEqual(expected.focusedWindow, current.focusedWindow)
@@ -5995,6 +5997,22 @@ private func clipboardPasteKeyboardEventSteps(commandKey: CGKeyCode,
         KeyboardEventStep(virtualKey: pasteKey, keyDown: false, flags: .maskCommand),
         KeyboardEventStep(virtualKey: commandKey, keyDown: false, flags: []),
     ]
+}
+
+/// Prepare both the normal chord and the flag-cleared key-ups used if posting
+/// stops partway through. In particular, normal V-up carries Command while
+/// cleanup V-up does not; exact event lookup must be able to post either one.
+private func clipboardPastePostableSteps(_ steps: [KeyboardEventStep]) -> [KeyboardEventStep] {
+    var prepared = steps
+    for step in steps where step.keyDown {
+        let release = KeyboardEventStep(virtualKey: step.virtualKey,
+                                        keyDown: false,
+                                        flags: [])
+        if !prepared.contains(release) {
+            prepared.append(release)
+        }
+    }
+    return prepared
 }
 
 private enum ClipboardPasteEventOutcome: Equatable {
@@ -6865,7 +6883,8 @@ private enum ClipboardPasteInserter {
         clipboardStillOwned: () -> Bool
     ) -> ClipboardPasteEventOutcome {
         let source = CGEventSource(stateID: .hidSystemState)
-        let events = steps.compactMap { step -> (KeyboardEventStep, CGEvent)? in
+        let postableSteps = clipboardPastePostableSteps(steps)
+        let events = postableSteps.compactMap { step -> (KeyboardEventStep, CGEvent)? in
             guard let event = CGEvent(keyboardEventSource: source,
                                       virtualKey: step.virtualKey,
                                       keyDown: step.keyDown) else {
@@ -6874,7 +6893,7 @@ private enum ClipboardPasteInserter {
             event.flags = step.flags
             return (step, event)
         }
-        guard events.count == steps.count else { return .failed }
+        guard events.count == postableSteps.count else { return .failed }
 
         // Post Command as real key events instead of only tagging the V
         // events with .maskCommand. Sleep/wake can leave session modifier
@@ -15284,15 +15303,24 @@ private enum NativeInteractionPolicy {
 
     struct EventGate {
         private var commandDownForwarded = false
+        private var pasteDownForwarded = false
 
-        mutating func permitsOwnedEvent(command: Bool, commandDown: Bool, safe: Bool) -> Bool {
+        mutating func permitsOwnedEvent(command: Bool, commandDown: Bool,
+                                       paste: Bool = false, pasteDown: Bool = false,
+                                       safe: Bool) -> Bool {
             if command && !commandDown {
                 guard commandDownForwarded else { return false }
                 commandDownForwarded = false
                 return true // Release only our paired modifier, even after abort.
             }
+            if paste && !pasteDown {
+                guard pasteDownForwarded else { return false }
+                pasteDownForwarded = false
+                return true // A posted paste key must not remain held after abort.
+            }
             guard safe else { return false }
             if command && commandDown { commandDownForwarded = true }
+            if paste && pasteDown { pasteDownForwarded = true }
             return true
         }
     }
@@ -15347,6 +15375,18 @@ private enum NativeInteractionPolicy {
                     "modifier cleanup is single use")
         try require(!gate.permitsOwnedEvent(command: true, commandDown: true, safe: false),
                     "abort never presses a modifier")
+        try require(!gate.permitsOwnedEvent(command: false, commandDown: false,
+                                            paste: true, pasteDown: false, safe: false),
+                    "abort never releases an unpaired paste key")
+        try require(gate.permitsOwnedEvent(command: false, commandDown: false,
+                                           paste: true, pasteDown: true, safe: true),
+                    "owned paste key down")
+        try require(gate.permitsOwnedEvent(command: false, commandDown: false,
+                                           paste: true, pasteDown: false, safe: false),
+                    "abort permits paired paste key cleanup")
+        try require(!gate.permitsOwnedEvent(command: false, commandDown: false,
+                                            paste: true, pasteDown: false, safe: false),
+                    "paste key cleanup is single use")
         let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .privateState),
                             virtualKey: 0, keyDown: false)
         try require(event?.getIntegerValueField(.eventSourceUnixProcessID) == Int64(getpid()),
@@ -15457,11 +15497,13 @@ private final class NativeInteractionFixture {
     }
 
     private func prepare(_ event: CGEvent) -> Bool {
-        // Release a previously posted left Command even during abort cleanup;
-        // this is the only event allowed to leave the fixture after focus loss.
+        // Let the upstream gate release only paired Command/V keys after an
+        // abort. It rejects unpaired key-ups before they reach another app.
         let commandRelease = event.getIntegerValueField(.keyboardEventKeycode) == 55
             && !event.flags.contains(.maskCommand)
-        guard safety() || commandRelease else { return false }
+        let pasteRelease = event.getIntegerValueField(.keyboardEventKeycode) == Int64(pasteKey)
+            && event.typeRawValue == CGEventType.keyUp.rawValue
+        guard safety() || commandRelease || pasteRelease else { return false }
         guard event.getIntegerValueField(.eventSourceUnixProcessID) == Int64(owner) else {
             abort("native event source ownership unavailable")
             return false
@@ -15496,7 +15538,10 @@ private final class NativeInteractionFixture {
                     let safe = fixture.safety()
                     return fixture.eventGate.permitsOwnedEvent(
                         command: event.getIntegerValueField(.keyboardEventKeycode) == 55,
-                        commandDown: event.flags.contains(.maskCommand), safe: safe)
+                        commandDown: event.flags.contains(.maskCommand),
+                        paste: event.getIntegerValueField(.keyboardEventKeycode) == Int64(fixture.pasteKey),
+                        pasteDown: type == .keyDown,
+                        safe: safe)
                 }
                 return pass ? Unmanaged.passUnretained(event) : nil
             }, userInfo: Unmanaged.passUnretained(self).toOpaque()),
@@ -15828,10 +15873,14 @@ private final class NativeInteractionFixture {
     private func cleanup() {
         ClipboardPasteInserter.discardPendingRestore(on: pasteboard)
         // Drain already queued events while the guard is still installed. An
-        // abort blocks further key-downs but releases only our paired Command.
+        // abort blocks further key-downs but releases our paired paste key and
+        // Command, in that order. Unpaired releases are filtered by the gate.
         if !taps.isEmpty {
-            if let release = CGEvent(keyboardEventSource: CGEventSource(stateID: .privateState),
-                                     virtualKey: 55, keyDown: false) {
+            for key in [pasteKey, CGKeyCode(55)] {
+                guard let release = CGEvent(
+                    keyboardEventSource: CGEventSource(stateID: .privateState),
+                    virtualKey: key, keyDown: false
+                ) else { continue }
                 release.flags = []
                 sequence += 1
                 release.setIntegerValueField(.eventSourceUserData, value: tagBase + sequence)
@@ -18744,6 +18793,42 @@ private enum PresspeechSelfTest {
             ],
             "clipboard paste should synthesize a full Command+V key sequence"
         )
+        let interruptedKeyUpProbe = MainActor.assumeIsolated {
+            let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
+                                                         pasteKey: 0x09)
+            let postable = clipboardPastePostableSteps(steps)
+            var normalKeyUpFailed = false
+            var posted: [KeyboardEventStep] = []
+            let outcome = postFocusBoundClipboardPasteSteps(
+                steps,
+                pasteKey: 0x09,
+                targetStillFocused: { true },
+                clipboardStillOwned: { true },
+                postStep: { step in
+                    // Model the exact-match lookup used by the real event
+                    // poster, not an unconditionally successful test double.
+                    guard postable.contains(step) else { return false }
+                    if step.virtualKey == 0x09, !step.keyDown,
+                       step.flags == .maskCommand, !normalKeyUpFailed {
+                        normalKeyUpFailed = true
+                        return false
+                    }
+                    posted.append(step)
+                    return true
+                }
+            )
+            return (outcome: outcome, failed: normalKeyUpFailed, posted: posted)
+        }
+        try expect(interruptedKeyUpProbe.failed, equals: true,
+                   "the interrupted paste fixture must fail its normal V key-up")
+        try expect(interruptedKeyUpProbe.outcome, equals: .deliveryUncertain,
+                   "a failed V key-up after V-down must not attempt another insertion")
+        try expect(interruptedKeyUpProbe.posted, equals: [
+            KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
+            KeyboardEventStep(virtualKey: 0x09, keyDown: true, flags: .maskCommand),
+            KeyboardEventStep(virtualKey: 0x09, keyDown: false, flags: []),
+            KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
+        ], "an interrupted paste must release V without Command before releasing Command")
         let focusBoundPasteProbe = MainActor.assumeIsolated {
             let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
                                                          pasteKey: 0x09)

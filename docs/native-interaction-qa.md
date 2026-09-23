@@ -97,11 +97,12 @@ production listener is installed at the session head after existing listeners.
 Thus the test establishes delivery and suppression at those observation points,
 not the internal behavior of every third-party global listener.
 
-A narrow exception permits a paired **left Command key-up** after a focus abort
-if the guard already forwarded that fixture's Command-down. Dropping this release
-could leave a synthetic modifier held. No unpaired Command-up or new key-down is
-allowed by the guard after abort. Cleanup drains queued fixture events while the
-guard remains installed. Quartz input is asynchronous; this fixture cannot offer
+A narrow exception permits paired **left Command and layout-resolved paste-key
+key-ups** after a focus abort if the guard already forwarded those fixture
+key-downs. Dropping either release could leave a synthetic key held. No
+unpaired key-up or new key-down is allowed by the guard after abort. Cleanup
+drains queued fixture events while the guard remains installed. Quartz input is
+asynchronous; this fixture cannot offer
 an atomic focus-and-event-delivery transaction or prevent every operating-system
 or third-party event-tap failure. A cleanup timeout fails acceptance.
 

@@ -456,9 +456,11 @@ keyboard access testing in addition to assistive-technology testing.
   with the visual indicator disabled and confirm the notification remains.
 - Open Notepad normally and confirm dictation pastes automatically. Then open a
   separate Notepad instance with **Run as administrator**, dictate into it, and
-  confirm Presspeech leaves the transcript on the clipboard, sends no simulated
-  paste shortcut, and reports the Windows administrator boundary. Paste manually
-  and confirm the complete transcript is available. Do not elevate Presspeech.
+  confirm Presspeech sends no simulated paste shortcut and reports the Windows
+  administrator boundary. Published 0.1.12 leaves the transcript on the
+  clipboard for manual paste. In the upcoming 0.1.13 build, the existing
+  clipboard item remains current and the transcript waits in Delivery Recovery
+  until explicit Copy or Discard. Do not elevate Presspeech.
 
 ## Windows Install and Removal
 
@@ -517,6 +519,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
+| Screen Sharing shared-clipboard path: consecutive remote pastes stay fresh; a focus change recovers safely | |
 | Sleep/resume, microphone route change, and first dictation afterward | |
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
@@ -540,6 +543,35 @@ transcript once, while switching to a second window of that same app before
 delivery inserts nothing and leaves the complete transcript available for
 manual paste. A matching process identifier alone does not authorize paste;
 any insertion after the window switch is a failure.
+
+Separately observe a same-window focus move using two harmless, non-submitting
+fields in one native or browser window. Start in the first field, move to the
+second before transcription finishes, and record whether text reaches either
+field and whether a recovery notice appears. If available, repeat across two
+tabs of one browser window. This is a diagnostic observation, not a substitute
+for the required two-window focus gate: the current macOS target identity is
+the focused window, not the field or tab inside it. Do not mark exact-field or
+same-window tab safety as qualified from a passing two-window result. Record
+only aggregate outcomes and generic field types, never text or tab names.
+
+For the Screen Sharing row, use a disposable remote Mac with a blank,
+non-executing text field, not a shell, message composer, or real document.
+In Apple's [Screen Sharing app](https://support.apple.com/guide/mac-help/mh14066/mac),
+note whether **Edit → Use Shared Clipboard**
+is enabled; run the shared-clipboard path with it enabled. Dictate at least
+five distinct harmless phrases into the same remote field, clearing it
+between attempts. Compare each result with a local scratch paste before
+copying anything else. Each attempt must either insert that attempt's complete
+transcript once or show a clipboard-recovery notice without inserting stale,
+partial, duplicated, or misdirected text. Then begin a dictation in the
+remote field, move focus to a blank local window before stopping, and verify
+neither window receives text automatically and the complete transcript can be
+pasted deliberately. A stale earlier phrase, silent failure, or insertion
+after the focus change fails this row. Record only aggregate outcomes, the
+Screen Sharing and remote macOS versions, and the shared-clipboard setting;
+do not retain phrases, hostnames, remote clipboard contents, or screenshots.
+This qualifies only the tested configuration, not all remote desktop apps or
+clipboard-sharing modes.
 
 For the non-US keyboard-layout row, compare an English/US input source with at
 least one non-US source. When available, include Dvorak (or another layout that
@@ -1133,7 +1165,14 @@ clipboard.
 - Switch to a different target window before delivery. Confirm the recovery
   notice appears and the Presspeech-authored target-verification log message is
   the fixed status `paste skipped; original target could not be verified`, not either executable
-  name, window title, or dictated text. Record only pass/fail, not the raw log.
+  name, window title, or dictated text. Seed a harmless prior clipboard item:
+  when the changed focus is known before delivery, it must remain current until
+  Copy is chosen in Delivery Recovery. Repeat with the original window closed,
+  a different process reusing its HWND if reproducible, a different child edit
+  control, and an elevated target. A focus or clipboard change after the
+  preflight may still leave transcript text on the current clipboard; inspect
+  the field before deciding to Copy or Discard. Record only pass/fail, not the
+  raw log or clipboard content.
 - With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt, Windows and V in
   turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
   does not release the physically held key, explains the retained dictation,

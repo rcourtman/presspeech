@@ -32,6 +32,12 @@ the clipboard during delivery, it stops and preserves that newer copy;
 the destination, so inspect the target before retrying or using **Copy Last
 Transcript**.
 
+On macOS, this is a window-level identity check, not a field- or tab-level
+check. Moving to another field or browser tab within that same window while
+dictation is finishing can send the transcript to the new focus. Keep the
+original field and tab focused until insertion or a recovery notice appears.
+The separate-window checks below do not establish safety for same-window moves.
+
 Target apps expose focus and paste behavior differently. A result from one app
 version, operating-system version, and Presspeech build is therefore evidence
 for that exact combination, not a promise that every field in the app works.
@@ -98,11 +104,15 @@ counted as completed protocol evidence.
    macOS 0.3.8 can expose transcript entries to Universal Clipboard;
    disable Handoff if that test text must stay on the Mac. Builds containing
    local-only transcript clipboard writes prevent Universal Clipboard transfer
-   while preserving local Command-V. On every platform, disable third-party
-   clipboard managers if you do not want even that test text retained outside
-   Presspeech. If macOS Clipboard
-   History in Spotlight is enabled on macOS 26 or later, clear it after the
-   check if you do not want the harmless text retained there.
+   while preserving local Command-V. Apple's
+   [Screen Sharing](https://support.apple.com/guide/mac-help/mh14066/mac) has a separate
+   **Edit → Use Shared Clipboard** setting; those transcript writes are not a
+   tested guarantee against that remote transfer. Turn shared clipboard off
+   if you do not intend to transfer test text to the remote Mac. On every
+   platform, disable third-party clipboard managers if you do not want even
+   that test text retained outside Presspeech. If macOS Clipboard History in
+   Spotlight is enabled on macOS 26 or later, clear it after the check if you
+   do not want the harmless text retained there.
 5. Note the exact Presspeech, operating-system, and target-app versions. Also
    note whether the target is a native app, browser page, Electron/Chromium
    app, terminal, remote desktop, or elevated Windows app, plus the generic

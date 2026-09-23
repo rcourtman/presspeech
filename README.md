@@ -289,16 +289,23 @@ The defaults and control surfaces differ:
 
 Each recording stays bound to the window that was focused when it began. If
 you change windows while Presspeech is transcribing—or the destination does not
-expose enough focused-window information—it copies the transcript instead of
-risking delivery to the wrong place. The latter can happen in some
-Electron/Chromium-based apps even when the window appears unchanged. macOS
-shows **Copied — press ⌘V to paste** after a focus change or a later window
-verification failure. If it could not verify the window when recording began,
-it instead shows **Can’t verify window — use ⌘V**. The menu keeps
-**Can’t verify window — press ⌘V to paste** until the next dictation. Windows
-shows a **Transcript copied, not pasted**
-notification. Return to the intended field and paste manually with
-⌘V on macOS or Ctrl+V on Windows; do not dictate the same text again first.
+expose enough focused-window information—it avoids automatic paste. The latter
+can happen in some Electron/Chromium-based apps even when the window appears
+unchanged. macOS copies the transcript and shows **Copied — press ⌘V to paste**
+after a focus change or a later window-verification failure. If it could not
+verify the window when recording began, it instead shows **Can’t verify window
+— use ⌘V**. The menu keeps **Can’t verify window — press ⌘V to paste** until
+the next dictation. Published Windows 0.1.12 copies the transcript and shows
+**Transcript copied, not pasted**. For these copied-transcript notices, return
+to the intended field and paste manually with ⌘V on macOS or Ctrl+V on Windows.
+Upcoming Windows 0.1.13 retains uncertain delivery for an explicit **Delivery
+Recovery** Copy or Discard. Check the field before copying, and do not dictate
+the same text again first.
+
+On macOS, the delivery check identifies the window, not the field or browser
+tab within it. Keep the original field and tab focused until insertion or the
+recovery notice appears: moving to another field or tab in the same window can
+send the transcript there without triggering clipboard-only recovery.
 
 Treat a command shell as an execution surface, not an ordinary text field.
 Terminal, PowerShell, Command Prompt, and remote consoles may run pasted text
@@ -499,13 +506,18 @@ Presspeech is local-first:
 - Text corrections stay local unless you choose a sync file yourself.
 - Completed transcripts pass through the operating-system clipboard. macOS
   0.3.8 can expose those entries to macOS Universal Clipboard. Builds containing
-  local-only transcript clipboard writes keep every Presspeech transcript on
-  the current Mac and add standard transient, auto-generated, and concealed
-  markers for cooperating clipboard managers while preserving local Command-V.
-  They also republish a restored previous clipboard on the current Mac only. macOS Clipboard History in
-  Spotlight on macOS 26 or later and other local clipboard readers remain
-  separate boundaries. Published Windows 0.1.12 Windows clipboard writes can be
-  retained or synced; Upcoming Windows 0.1.13 asks Windows to exclude every
+  local-only transcript clipboard writes prevent Universal Clipboard transfer
+  for Presspeech transcripts and add standard transient, auto-generated, and
+  concealed markers for cooperating clipboard managers while preserving local
+  Command-V. They also republish a restored previous clipboard on the current
+  Mac only. macOS Clipboard History in Spotlight on macOS 26 or later and other
+  local clipboard readers remain separate boundaries. Apple's
+  [Screen Sharing](https://support.apple.com/guide/mac-help/mh14066/mac) has a
+  separate shared-clipboard setting that can transfer copied text to a remote
+  Mac; local-only transcript writes are not a tested guarantee against that
+  feature. Turn shared clipboard off when remote transfer is not intended.
+  Published Windows 0.1.12 writes to the Windows clipboard can be retained or synced.
+  Upcoming Windows 0.1.13 asks Windows to exclude every
   dictation write from Clipboard History and Cloud Clipboard while preserving
   local Ctrl-V.
 

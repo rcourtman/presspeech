@@ -1,6 +1,6 @@
 # Presspeech product roadmap
 
-Last reviewed: 23 September 2026
+Last reviewed: 24 September 2026
 
 Presspeech is the small, private dictation tool: hold or toggle a key, speak,
 and put locally transcribed text into the app you were using. The roadmap
@@ -93,7 +93,7 @@ denominator. Treat missing public reports as missing evidence—not evidence of
 low demand or reliable delivery—and keep direct native qualification in force
 until a usable reporting route returns.
 
-### Product intelligence and community evidence (23 September 2026)
+### Product intelligence and community evidence (23–24 September 2026)
 
 A small scan of public project pages shows that offline recognition,
 shortcut-driven dictation, and cross-app insertion recur as category claims:
@@ -221,6 +221,20 @@ already distinguishes OS clipboard history/sync controls from third-party
 local readers. Keep that version-specific boundary explicit and qualify the
 supported behavior; this signal alone does not justify a different paste
 architecture.
+
+Remote desktop introduces another clipboard handoff. Apple's
+[Screen Sharing guide](https://support.apple.com/guide/mac-help/mh14066/mac)
+documents a shared-clipboard option between Macs and says Universal Clipboard
+is unavailable during an active Screen Sharing session. The
+[CouchVox changelog](https://couchvox.com/changelog/) describes its own fix for
+later remote dictations re-inserting the first sentence. This is a vendor's
+release-note account, not evidence of a Presspeech defect or of prevalence.
+It does expose a missing check against the roadmap's already-stated remote
+desktop success condition: the macOS release checklist now tests consecutive,
+distinct phrases and focus-change recovery in a disposable Screen Sharing
+field with shared clipboard enabled. Presspeech's current-device-only transcript writes
+are not a demonstrated control for Screen Sharing's separate transfer path;
+keep that boundary explicit until native testing establishes behavior.
 
 A wider check finds the same handoff class in other products: an individual
 macOS [OmniVoice Studio report](https://github.com/debpalash/VoiceStudio/issues/287)

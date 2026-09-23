@@ -2574,6 +2574,20 @@ class PresspeechApp:
         if self._paste_keys_held_in_hook():
             self._remember_undelivered_dictation(text, "modifier-held")
             return False
+        if not isinstance(paste_target, PasteTarget):
+            paste_target = PasteTarget(str(paste_target or ""), 0)
+        # Known-invalid destinations must not replace the user's clipboard.
+        # The later checks still catch focus, integrity and clipboard changes
+        # that occur after this point-in-time preflight.
+        if not paste_target.window_handle:
+            self._remember_undelivered_dictation(text, "target-unavailable")
+            return False
+        if not self._paste_target_still_focused(paste_target):
+            self._remember_undelivered_dictation(text, "focus-changed")
+            return False
+        if _paste_target_blocks_simulated_input(paste_target):
+            self._remember_undelivered_dictation(text, "target-elevated")
+            return False
         try:
             receipt = clipboard_delivery.write_text(text)
         except Exception:
@@ -2581,11 +2595,6 @@ class PresspeechApp:
             return False
         if not clipboard_delivery.is_current(receipt):
             self._remember_undelivered_dictation(text, "clipboard-changed")
-            return False
-        if not isinstance(paste_target, PasteTarget):
-            paste_target = PasteTarget(str(paste_target or ""), 0)
-        if not paste_target.window_handle:
-            self._remember_undelivered_dictation(text, "target-unavailable")
             return False
         process_name = paste_target.process_name
         route = _paste_route(process_name)

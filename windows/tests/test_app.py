@@ -1756,7 +1756,7 @@ class TextRegressionTests(unittest.TestCase):
             "normal transcript", target)
         instance.scratchpad.append_text.assert_not_called()
 
-    def test_focus_change_copies_transcript_without_pasting(self):
+    def test_known_focus_change_retains_without_replacing_clipboard(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
@@ -1772,7 +1772,7 @@ class TextRegressionTests(unittest.TestCase):
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
 
-        copy.assert_called_once_with("private transcript")
+        copy.assert_not_called()
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
@@ -1781,7 +1781,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertNotIn("notepad.exe", logged)
         self.assertNotIn("calculator.exe", logged)
 
-    def test_missing_recording_target_copies_without_pasting(self):
+    def test_missing_recording_target_retains_without_replacing_clipboard(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
@@ -1795,7 +1795,7 @@ class TextRegressionTests(unittest.TestCase):
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", app.PasteTarget("", 0))
 
-        copy.assert_called_once_with("private transcript")
+        copy.assert_not_called()
         sleep.assert_not_called()
         foreground.assert_not_called()
         controller.assert_not_called()
@@ -1819,7 +1819,7 @@ class TextRegressionTests(unittest.TestCase):
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
 
-        copy.assert_called_once_with("private transcript")
+        copy.assert_not_called()
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
@@ -1840,7 +1840,7 @@ class TextRegressionTests(unittest.TestCase):
                     app.keyboard_delivery, "Controller") as controller:
             self.assertFalse(instance._paste("private transcript", original))
 
-        copy.assert_called_once_with("private transcript")
+        copy.assert_not_called()
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
@@ -1916,7 +1916,7 @@ class TextRegressionTests(unittest.TestCase):
             [app.keyboard_delivery.VK_LCONTROL], app.keyboard_delivery.VK_V)
         keyboard.release.assert_not_called()
 
-    def test_higher_integrity_target_copies_without_claiming_to_paste(self):
+    def test_higher_integrity_target_retains_without_replacing_clipboard(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
@@ -1933,7 +1933,7 @@ class TextRegressionTests(unittest.TestCase):
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
 
-        copy.assert_called_once_with("private transcript")
+        copy.assert_not_called()
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
         instance.notify.assert_called_once()
@@ -3813,8 +3813,10 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.controller = patch(app.keyboard_delivery, "Controller")
         self.keyboard = self.controller.return_value
         self.sleep = patch(app.time, "sleep")
-        patch(app, "_foreground_paste_target", return_value=self.target)
-        patch(app, "_paste_target_blocks_simulated_input", return_value=False)
+        self.foreground = patch(
+            app, "_foreground_paste_target", return_value=self.target)
+        self.blocked = patch(
+            app, "_paste_target_blocks_simulated_input", return_value=False)
 
     def paste(self):
         return self.instance._paste("private transcript", self.target)
@@ -3871,6 +3873,15 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.keyboard.shortcut.assert_not_called()
         self.keyboard.release.assert_not_called()
         self.assertFalse(self.instance._injecting_keys)
+        self.assert_retained_without_content_logs()
+
+    def test_target_becomes_elevated_after_preflight_still_blocks_paste(self):
+        self.blocked.side_effect = [False, True]
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_called_once_with("private transcript")
+        self.controller.assert_not_called()
         self.assert_retained_without_content_logs()
 
     def test_controller_failure_does_not_claim_current_clipboard_contains_text(self):
@@ -3945,6 +3956,7 @@ class DeliveryRecoveryTests(unittest.TestCase):
 
     def test_moonlight_shortcut_is_submitted_as_one_complete_chord(self):
         self.target = app.PasteTarget("moonlight.exe", 1234, 41)
+        self.foreground.return_value = self.target
 
         self.assertTrue(self.paste())
 
