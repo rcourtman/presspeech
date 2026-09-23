@@ -3145,6 +3145,51 @@ def check_compare_freshness(
     return errors
 
 
+def check_cross_platform_compare_privacy(
+    path: Path = COMPARE_DIR / "handy.html",
+) -> list[str]:
+    """Keep the Handy comparison scoped to the published Windows privacy behavior."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing cross-platform Presspeech privacy comparison"]
+
+    contents = read_text(path)
+    marker = '<th scope="row">Privacy posture</th>'
+    start = contents.find(marker)
+    end = contents.find("</tr>", start + len(marker)) if start >= 0 else -1
+    if start < 0 or end < 0:
+        return [f"{display}: missing Presspeech privacy comparison row"]
+    row = contents[start:end]
+    cell_start = row.find("<td>")
+    cell_end = row.find("</td>", cell_start + 4) if cell_start >= 0 else -1
+    if cell_start < 0 or cell_end < 0:
+        return [f"{display}: missing Presspeech privacy comparison cell"]
+    cell = row[cell_start + 4:cell_end]
+
+    required = (
+        "Presspeech-authored analytics",
+        "Windows 0.1.12",
+        "default usage telemetry",
+        "model downloads",
+        "../privacy.html#network-calls",
+    )
+    missing = [phrase for phrase in required if phrase.casefold() not in cell.casefold()]
+    if missing:
+        return [
+            f"{display}: cross-platform privacy comparison must qualify Windows model-download telemetry; missing "
+            + ", ".join(repr(phrase) for phrase in missing)
+        ]
+    if re.search(
+        r"\bno cloud transcription(?:\s+or(?:\s+[\w-]+){1,5})?,\s*account,\s*telemetry\b",
+        cell,
+        re.IGNORECASE,
+    ):
+        return [
+            f"{display}: unqualified no-telemetry claim conflicts with published Windows dependencies"
+        ]
+    return []
+
+
 def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     errors: list[str] = []
     required_windows_provenance = (
@@ -3628,6 +3673,32 @@ def run_self_test() -> None:
         page.write_text("<p>Sources: example.</p>", encoding="utf-8")
         if not check_compare_freshness(today=date(2026, 3, 1), compare_dir=compare_dir):
             raise SyncError("self-test: missing compare stamp was not flagged")
+
+        compare_privacy = Path(tmp) / "handy.html"
+        compare_privacy.write_text(
+            '<tr><th scope="row">Privacy posture</th>'
+            '<td>No cloud transcription, Presspeech-authored analytics, account, or crash reporter. '
+            'Windows 0.1.12 leaves default usage telemetry enabled during model downloads. '
+            '<a href="../privacy.html#network-calls">Network-call inventory</a></td>'
+            '<td>Competitor content</td></tr>',
+            encoding="utf-8",
+        )
+        if check_cross_platform_compare_privacy(compare_privacy):
+            raise SyncError("self-test: correctly scoped comparison privacy claim was rejected")
+        compare_privacy.write_text(
+            '<tr><th scope="row">Privacy posture</th>'
+            '<td>No cloud transcription, account, telemetry, or crash reporter. '
+            'No Presspeech-authored analytics. '
+            'Windows 0.1.12 leaves default usage telemetry enabled during model downloads. '
+            '<a href="../privacy.html#network-calls">Network-call inventory</a></td>'
+            '<td>Competitor content</td></tr>',
+            encoding="utf-8",
+        )
+        if not any(
+            "unqualified no-telemetry claim" in error
+            for error in check_cross_platform_compare_privacy(compare_privacy)
+        ):
+            raise SyncError("self-test: unqualified cross-platform telemetry claim was accepted")
 
         stale = Path(tmp) / "privacy.txt"
         stale.write_text(
@@ -4452,6 +4523,7 @@ def main() -> int:
             errors.extend(check_command_shell_guidance())
             errors.extend(check_repository_install_guidance())
             errors.extend(check_compare_freshness())
+            errors.extend(check_cross_platform_compare_privacy())
             for path, want in expected.items():
                 have = read_text(path) if path.exists() else ""
                 if have != want:
@@ -4500,6 +4572,7 @@ def main() -> int:
         errors.extend(check_command_shell_guidance())
         errors.extend(check_repository_install_guidance())
         errors.extend(check_compare_freshness())
+        errors.extend(check_cross_platform_compare_privacy())
         errors.extend(check_install_prompt_sync(metadata))
         if errors:
             for error in errors:

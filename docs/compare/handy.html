@@ -83,7 +83,7 @@
                 </tr>
                 <tr>
                   <th scope="row">Privacy posture</th>
-                  <td>No cloud transcription, account, telemetry, or crash reporter. Audio is held in memory and discarded; the documented network surface is model downloads and optional release checks.</td>
+                  <td>No cloud transcription, Presspeech-authored analytics, account, or crash reporter. Speech-library network behavior varies by published platform build: Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads. See the <a href="../privacy.html#network-calls">version-specific network-call inventory</a>. Dictation audio is held in memory and discarded.</td>
                   <td>Core transcription happens on the computer without uploading audio. Model downloads and update checks use the network; optional post-processing can call a configured local or cloud LLM provider.</td>
                 </tr>
                 <tr>
