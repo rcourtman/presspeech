@@ -66,15 +66,25 @@ Record enough context to make each result reproducible:
 Complete the full **Windows First Run** checklist across these configurations
 and identify which configuration supplied every result. For a 0.1.13 candidate
 or later build containing retained-dictation recovery, also complete the full
-**Windows delivery recovery** checklist on both configurations. Repeat the
+**Windows delivery recovery** checklist on every required configuration. Repeat the
 install, model, microphone, hotkey, core delivery, recovery, and sleep/resume
-paths on both. A run may cover only one row; do not combine partial results from
+paths on each. A run may cover only one row; do not combine partial results from
 different artifacts or machines into a claimed end-to-end pass.
+
+Windows 10 remains a documented compatibility path only for editions that
+still receive security updates, including devices covered by active Extended
+Security Updates where required. Microsoft ended general Windows 10 support
+on [14 October 2025](https://support.microsoft.com/en-us/windows/deployment/updates-lifecycle/windows-10-support-has-ended-on-october-14-2025).
+To retain the Windows 10 compatibility claim, qualify both Windows 10
+configurations below as well as both Windows 11 configurations; otherwise
+explicitly narrow the supported scope before promotion.
 
 | Required configuration | Install state | Inference path | Result |
 | --- | --- | --- | --- |
 | Windows 11 x64 without usable CUDA | clean profile | `base.en` on CPU | |
 | Windows 11 x64 with a supported NVIDIA GPU | clean profile | default Parakeet model on CUDA | |
+| Windows 10 x64 without usable CUDA, on an edition still receiving security updates | clean profile | `base.en` on CPU | |
+| Windows 10 x64 with a supported NVIDIA GPU, on an edition still receiving security updates | clean profile | default Parakeet model on CUDA | |
 
 For each configuration, also record this release-gate matrix:
 

@@ -48,6 +48,12 @@ class ReleaseCheckError(RuntimeError):
     pass
 
 
+class GithubHTTPError(ReleaseCheckError):
+    def __init__(self, status: int, url: str, detail: str = "") -> None:
+        self.status = status
+        super().__init__(f"GitHub returned HTTP {status} for {url}{detail}")
+
+
 def parse_version(value: object, label: str) -> tuple[int, int, int]:
     if not isinstance(value, str) or not SEMVER.fullmatch(value):
         raise ReleaseCheckError(f"{label} is not a canonical X.Y.Z version: {value!r}")
@@ -124,16 +130,55 @@ def validate_checksum(
         raise ReleaseCheckError(f"{tag} checksum download disagrees with its published digest")
 
 
+def release_asset_api_url(asset: dict[str, object], tag: str, name: str) -> str:
+    asset_id = asset.get("id")
+    if not isinstance(asset_id, int) or isinstance(asset_id, bool) or asset_id <= 0:
+        raise ReleaseCheckError(f"{tag} asset {name} has no valid GitHub asset ID")
+    expected = f"{API_ROOT}/releases/assets/{asset_id}"
+    if asset.get("url") != expected:
+        raise ReleaseCheckError(f"{tag} asset {name} has an unexpected GitHub API URL")
+    return expected
+
+
+def load_release_checksum(
+    asset: dict[str, object],
+    *,
+    tag: str,
+    name: str,
+    loader: Callable[[str], bytes],
+) -> tuple[bytes, int | None]:
+    download_url = f"{DOWNLOAD_ROOT}/{tag}/{name}"
+    validate_asset(asset, tag, name)
+    if asset.get("browser_download_url") != download_url:
+        raise ReleaseCheckError(f"{tag} asset {name} has an unexpected download URL")
+    try:
+        return loader(download_url), None
+    except GithubHTTPError as exc:
+        # GitHub can fail the public browser-download route even while the
+        # immutable asset remains available through its release-asset API.
+        # Retry only server failures, against the same API-identified asset;
+        # checksum content and API digest are still verified below.
+        if not 500 <= exc.status < 600:
+            raise
+        api_url = release_asset_api_url(asset, tag, name)
+        try:
+            return loader(api_url), exc.status
+        except ReleaseCheckError as fallback_error:
+            raise ReleaseCheckError(
+                f"{exc}; GitHub asset API fallback failed: {fallback_error}"
+            ) from fallback_error
+
+
 def validate_release(
     release: dict[str, object],
     *,
     tag: str,
     prerelease: bool,
     package_name: str,
-    checksum: bytes,
+    checksum_loader: Callable[[str], bytes],
     expected_package_size: int | None = None,
     expected_package_digest: str | None = None,
-) -> None:
+) -> int | None:
     if release.get("tag_name") != tag or release.get("draft") is not False:
         raise ReleaseCheckError(f"public metadata does not describe published release {tag}")
     if release.get("prerelease") is not prerelease:
@@ -154,6 +199,12 @@ def validate_release(
         raise ReleaseCheckError(f"{tag} {package_name} size disagrees with site metadata")
     if expected_package_digest is not None and package_digest != expected_package_digest:
         raise ReleaseCheckError(f"{tag} {package_name} digest disagrees with site metadata")
+    checksum, fallback_status = load_release_checksum(
+        assets[checksum_name],
+        tag=tag,
+        name=checksum_name,
+        loader=checksum_loader,
+    )
     validate_checksum(
         checksum,
         tag=tag,
@@ -161,6 +212,7 @@ def validate_release(
         package_digest=package_digest,
         checksum_asset=assets[checksum_name],
     )
+    return fallback_status
 
 
 def compare_versions(
@@ -183,12 +235,18 @@ class GithubRedirectHandler(urllib.request.HTTPRedirectHandler):
         return redirected
 
 
-def github_request(url: str, *, token: str = "", limit: int = MAX_API_BYTES) -> bytes:
+def github_request(
+    url: str,
+    *,
+    token: str = "",
+    limit: int = MAX_API_BYTES,
+    accept: str | None = None,
+) -> bytes:
     headers = {"User-Agent": "presspeech-public-release-check"}
     if url.startswith(API_ROOT):
         headers.update(
             {
-                "Accept": "application/vnd.github+json",
+                "Accept": accept or "application/vnd.github+json",
                 "X-GitHub-Api-Version": API_VERSION,
             }
         )
@@ -206,12 +264,26 @@ def github_request(url: str, *, token: str = "", limit: int = MAX_API_BYTES) -> 
                 detail += " or supply a read-only GITHUB_TOKEN or use --github-api-via-gh"
         elif exc.code in {401, 403}:
             detail = "; request denied; check public access and any configured token permissions"
-        raise ReleaseCheckError(f"GitHub returned HTTP {exc.code} for {url}{detail}") from exc
+        raise GithubHTTPError(exc.code, url, detail) from exc
     except urllib.error.URLError as exc:
         raise ReleaseCheckError(f"could not reach GitHub for {url}: {exc.reason}") from exc
     if len(data) > limit:
         raise ReleaseCheckError(f"GitHub response exceeded {limit} bytes for {url}")
     return data
+
+
+def github_checksum_request(
+    url: str, *, token: str = "", limit: int = MAX_CHECKSUM_BYTES
+) -> bytes:
+    if url.startswith(f"{API_ROOT}/releases/assets/"):
+        return github_request(
+            url,
+            token=token,
+            limit=limit,
+            accept="application/octet-stream",
+        )
+    # Do not send an API credential to the browser-download host.
+    return github_request(url, limit=limit)
 
 
 def github_api_via_gh(url: str, *, limit: int = MAX_API_BYTES, timeout: float = 30) -> bytes:
@@ -333,17 +405,24 @@ def public_release_errors(
                 raise ReleaseCheckError("site metadata has no valid macOS release digest")
             if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
                 raise ReleaseCheckError("site metadata has no valid macOS release size")
-            checksum_url = f"{DOWNLOAD_ROOT}/v{mac_version}/Presspeech.zip.sha256"
-            validate_release(
+            fallback_status = validate_release(
                 mac_release,
                 tag=f"v{mac_version}",
                 prerelease=False,
                 package_name="Presspeech.zip",
-                checksum=checksum_loader(checksum_url),
+                checksum_loader=checksum_loader,
                 expected_package_size=size,
                 expected_package_digest=digest,
             )
-            status.append(f"macOS {mac_version} matches its public immutable release")
+            fallback_note = ""
+            if fallback_status is not None:
+                fallback_note = (
+                    " (checksum fetched via GitHub asset API after browser download "
+                    f"HTTP {fallback_status})"
+                )
+            status.append(
+                f"macOS {mac_version} matches its public immutable release{fallback_note}"
+            )
         else:
             if require_published:
                 raise ReleaseCheckError(f"configured macOS {mac_version} is not published; keep the current site until publication completes")
@@ -378,17 +457,22 @@ def public_release_errors(
         disposition = compare_versions(windows_version, published_windows, "Windows")
         if disposition == "current":
             package_name = f"Presspeech-Setup-{windows_version}-x64.exe"
-            checksum_url = (
-                f"{DOWNLOAD_ROOT}/windows-v{windows_version}/{package_name}.sha256"
-            )
-            validate_release(
+            fallback_status = validate_release(
                 windows_release,
                 tag=f"windows-v{windows_version}",
                 prerelease=True,
                 package_name=package_name,
-                checksum=checksum_loader(checksum_url),
+                checksum_loader=checksum_loader,
             )
-            status.append(f"Windows {windows_version} matches its public immutable release")
+            fallback_note = ""
+            if fallback_status is not None:
+                fallback_note = (
+                    " (checksum fetched via GitHub asset API after browser download "
+                    f"HTTP {fallback_status})"
+                )
+            status.append(
+                f"Windows {windows_version} matches its public immutable release{fallback_note}"
+            )
         else:
             if require_published:
                 raise ReleaseCheckError(f"configured Windows {windows_version} is not published; keep the current site until publication completes")
@@ -489,6 +573,74 @@ def run_self_test() -> None:
     if len(errors) != 1 or "does not exactly bind" not in errors[0]:
         raise ReleaseCheckError("self-test did not reject a mismatched checksum")
 
+    api_fallback_mac = json.loads(json.dumps(mac))
+    mac_checksum_asset = api_fallback_mac["assets"][1]
+    mac_checksum_asset["id"] = 12345
+    mac_checksum_asset["url"] = f"{API_ROOT}/releases/assets/12345"
+    mac_download_url = f"{DOWNLOAD_ROOT}/v1.2.3/Presspeech.zip.sha256"
+    api_asset_url = mac_checksum_asset["url"]
+    fallback_calls: list[str] = []
+
+    def fallback_loader(url: str) -> bytes:
+        fallback_calls.append(url)
+        if url == mac_download_url:
+            raise GithubHTTPError(500, url)
+        if url == api_asset_url:
+            return mac_checksum
+        return checksums[url]
+
+    errors, status = public_release_errors(
+        metadata, api_fallback_mac, [api_fallback_mac, windows], fallback_loader
+    )
+    if (
+        errors
+        or len(status) != 2
+        or "API after browser download HTTP 500" not in status[0]
+        or fallback_calls[:2] != [mac_download_url, api_asset_url]
+    ):
+        raise ReleaseCheckError(
+            "self-test did not verify a checksum via the same API asset after HTTP 5xx"
+        )
+
+    mismatched_api_mac = json.loads(json.dumps(api_fallback_mac))
+    mismatched_api_mac["assets"][1]["url"] = (
+        "https://api.github.com/repos/other/project/releases/assets/12345"
+    )
+    attempted: list[str] = []
+
+    def mismatched_api_loader(url: str) -> bytes:
+        attempted.append(url)
+        if url == mac_download_url:
+            raise GithubHTTPError(503, url)
+        return checksums[url]
+
+    errors, _ = public_release_errors(
+        metadata, mismatched_api_mac, [mismatched_api_mac, windows], mismatched_api_loader
+    )
+    windows_download_url = f"{DOWNLOAD_ROOT}/windows-v4.5.6/{windows_name}.sha256"
+    if (
+        len(errors) != 1
+        or "unexpected GitHub API URL" not in errors[0]
+        or attempted != [mac_download_url, windows_download_url]
+    ):
+        raise ReleaseCheckError(
+            "self-test allowed a checksum fallback outside the expected API asset"
+        )
+
+    not_found_calls: list[str] = []
+
+    def not_found_loader(url: str) -> bytes:
+        not_found_calls.append(url)
+        if url == mac_download_url:
+            raise GithubHTTPError(404, url)
+        return checksums[url]
+
+    errors, _ = public_release_errors(
+        metadata, api_fallback_mac, [api_fallback_mac, windows], not_found_loader
+    )
+    if len(errors) != 1 or "HTTP 404" not in errors[0] or api_asset_url in not_found_calls:
+        raise ReleaseCheckError("self-test retried a non-server checksum failure")
+
     from unittest import mock
 
     with mock.patch(__name__ + ".github_json", side_effect=[[mac] * 100, [windows]]) as loader:
@@ -535,7 +687,9 @@ def main() -> int:
             metadata,
             mac_release,
             releases,
-            lambda url: github_request(url, limit=MAX_CHECKSUM_BYTES),
+            lambda url: github_checksum_request(
+                url, token=token, limit=MAX_CHECKSUM_BYTES
+            ),
             require_published=args.require_published,
         )
         for line in status:

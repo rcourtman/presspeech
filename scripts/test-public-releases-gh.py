@@ -107,6 +107,42 @@ class GhTransportTests(unittest.TestCase):
             https.assert_called_once_with(self.url, token='test-token')
             gh.assert_not_called()
 
+    def test_checksum_asset_api_fallback_uses_octet_stream_without_cross_host_auth(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read(_limit):
+                return b'checksum'
+
+        requests = []
+
+        class Opener:
+            @staticmethod
+            def open(request, timeout):
+                self.assertEqual(timeout, 30)
+                requests.append(request)
+                return Response()
+
+        api_asset_url = check.API_ROOT + '/releases/assets/12345'
+        download_url = check.DOWNLOAD_ROOT + '/v1.2.3/Presspeech.zip.sha256'
+        with patch.object(check.urllib.request, 'build_opener', return_value=Opener()):
+            self.assertEqual(
+                check.github_checksum_request(api_asset_url, token='fixture-token'),
+                b'checksum',
+            )
+            self.assertEqual(check.github_checksum_request(download_url, token='fixture-token'),
+                             b'checksum')
+
+        self.assertEqual(requests[0].get_header('Accept'), 'application/octet-stream')
+        self.assertEqual(requests[0].get_header('Authorization'), 'Bearer fixture-token')
+        self.assertIsNone(requests[1].get_header('Authorization'))
+        self.assertIsNone(requests[1].get_header('Accept'))
+
     def test_gh_pagination_uses_backend_for_every_page(self):
         with patch.object(check, 'github_api_via_gh', side_effect=[json.dumps([{}]*100).encode(), b'[]']) as gh:
             self.assertEqual(len(check.github_releases('', via_gh=True)), 100)

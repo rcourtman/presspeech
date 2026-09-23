@@ -58,7 +58,12 @@ the hood, speech recognition runs locally through
 and the Apple Neural Engine. The default model is multilingual
 [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3).
 
-> **~100 ms transcription** · **8.4 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
+> **~90–150 ms warm ASR inference** · **8.4 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
+
+> Measured p50 is 92–152 ms across four synthetic TTS clips (2.5–9.5 s) on a
+> Mac mini M4; the first inference after model load is excluded. This excludes
+> microphone capture and paste, so it is not end-to-end dictation latency. See
+> the [benchmark methodology and results](docs/benchmarks.html).
 
 ## Install on Windows
 
