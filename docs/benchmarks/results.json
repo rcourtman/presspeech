@@ -76,7 +76,10 @@
     "tail_word_regression": {
       "script": "experiments/swift-bench/run-tail-word-regression.sh",
       "purpose": "Synthetic final-word retention regression for short push-to-talk clips",
-      "candidate_unified_padding_ms": 250
+      "candidate_unified_padding_ms": 250,
+      "release_mode": "production-v3-only",
+      "release_capture_grace_ms": [80, 400],
+      "release_mode_report_only": true
     },
     "private_real_dictation_comparison": {
       "script": "experiments/swift-bench/run-real-model-comparison.sh",
@@ -149,6 +152,8 @@
     "release_gate": {
       "script": "experiments/swift-bench/run-release-asr-checks.sh",
       "runs_private_real_audio_when_present": true,
+      "runs_production_v3_short_clip_tail_diagnostic": true,
+      "short_clip_tail_diagnostic_report_only": true,
       "requires_long_form_public_corpus": true,
       "max_conservative_long_form_corpus_wer_percent": 10,
       "max_long_form_consecutive_reference_deletion_run": 6,

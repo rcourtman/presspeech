@@ -68,16 +68,18 @@ Options:
                             production app pin; requires --include-candidate-models
                             or --sdk-upgrade-only and produces candidate
                             evidence, not a release pass
-  --skip-tail               with --include-candidate-models, skip the synthetic tail-word gate
+  --skip-tail               skip the short-clip tail diagnostic (and candidate gate when enabled)
   --self-test               run wrapper parser/detection tests only
   -h, --help                show this help
 
 The default run performs:
   1. helper parser/self-tests,
-  2. production v3 regression if private real-dictation fixtures exist,
-  3. production v3 regression if public speech fixtures exist,
-  4. required production v3 multi-window regression over validated composed fixtures,
-  5. non-gating same-pin production-v3 vs explicit no-mel comparison over those
+  2. a report-only production-v3 short-clip tail diagnostic at 80 and 400 ms
+     synthetic capture grace,
+  3. production v3 regression if private real-dictation fixtures exist,
+  4. production v3 regression if public speech fixtures exist,
+  5. required production v3 multi-window regression over validated composed fixtures,
+  6. non-gating same-pin production-v3 vs explicit no-mel comparison over those
      multi-window fixtures.
 
 Candidate models and chunking policies are not shipped by the app. Use
@@ -174,6 +176,14 @@ v3_baseline_label() {
         printf 'production v3'
     else
         printf 'candidate-revision v3 baseline'
+    fi
+}
+
+tail_word_check_mode() {
+    if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
+        printf 'candidate'
+    else
+        printf 'production-v3-only'
     fi
 }
 
@@ -423,6 +433,15 @@ run_self_test() {
         "long-form output is not owned by this composer"
     assert_not_contains "$invalid_long_public_log" "running helper self-tests"
 
+    local original_candidate_models="$INCLUDE_CANDIDATE_MODELS"
+    INCLUDE_CANDIDATE_MODELS=0
+    assert_eq "$(tail_word_check_mode)" "production-v3-only" \
+        "default short-clip tail diagnostic mode"
+    INCLUDE_CANDIDATE_MODELS=1
+    assert_eq "$(tail_word_check_mode)" "candidate" \
+        "candidate short-clip tail gate mode"
+    INCLUDE_CANDIDATE_MODELS="$original_candidate_models"
+
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
     echo "release ASR checks self-test passed"
@@ -580,15 +599,21 @@ python3 ./analyze-context-variation.py --self-test
 ./run-public-model-comparison.sh --self-test
 ./bench-power.sh --self-test
 
-if [[ "$INCLUDE_CANDIDATE_MODELS" -eq 1 ]]; then
-    if [[ "$RUN_TAIL" -eq 1 ]]; then
-        echo
-        echo "running candidate synthetic tail-word ASR gate..."
-        ./run-tail-word-regression.sh
-    else
-        echo
-        echo "skipping candidate synthetic tail-word ASR gate (--skip-tail)"
-    fi
+if [[ "$RUN_TAIL" -eq 1 ]]; then
+    echo
+    case "$(tail_word_check_mode)" in
+        candidate)
+            echo "running candidate synthetic tail-word ASR gate..."
+            ./run-tail-word-regression.sh
+            ;;
+        production-v3-only)
+            echo "recording production-v3 short-clip tail baseline (report-only)..."
+            ./run-tail-word-regression.sh --production-v3-only
+            ;;
+    esac
+else
+    echo
+    echo "skipping short-clip tail diagnostic (--skip-tail)"
 fi
 
 if [[ "$real_count" -eq 0 ]]; then

@@ -4,7 +4,7 @@
 # The script uses synthetic local TTS so the report can be shared without
 # private dictation audio. It trims trailing silence, cuts the end of each
 # phrase to simulate an early key release, then runs presspeech-bench with
-# configurable Unified trailing-silence padding.
+# configurable backends, capture grace, and Unified trailing-silence padding.
 
 set -euo pipefail
 
@@ -24,10 +24,16 @@ CAPTURE_GRACE_MS_LIST="0"
 UNIFIED_TRAILING_MS_LIST="0 250"
 INCLUDE_V3_BASELINE=1
 REQUIRE_CANDIDATE_PASS=1
+PRODUCTION_V3_ONLY=0
 CANDIDATE_UNIFIED_TRAILING_MS="250"
 MAX_CANDIDATE_WER="20.0"
 SELF_TEST=0
 EXPERIMENT_ENVIRONMENT_STATE="unreported"
+CAPTURE_GRACE_MS_LIST_SET=0
+CLIPS=(
+    "why|Why would anyone be not sure."
+    "done|Okay, let's get that done."
+)
 KEEP_TEMP=0
 tmpdir=""
 stage_dir=""
@@ -45,6 +51,8 @@ Options:
                                 post-release capture grace to simulate, comma or space separated (default: 0)
   --unified-trailing-ms-list <list>
                                 Unified silence padding sweep, comma or space separated (default: 0 250)
+  --production-v3-only          record the production-v3 short-clip baseline only;
+                                defaults capture-grace coverage to 80 and 400 ms
   --skip-v3-baseline            do not run the v3 baseline rows
   --no-threshold                write the report but do not fail on candidate-threshold misses
   --keep-temp                   keep generated audio and raw bench logs
@@ -54,6 +62,9 @@ Options:
 The candidate threshold is checked for the Unified evaluation setting:
 250 ms synthetic trailing silence, 0 ms capture grace, final word retained,
 and max WER <= 20.0% on the known regression cases.
+The production-v3-only mode checks evidence completeness and SDK environment,
+but is report-only for WER and final-word retention; it does not qualify the
+model or reproduce the app's live RMS endpointer.
 USAGE
 }
 
@@ -73,6 +84,10 @@ validate_ms_list() {
     local label="$1"
     local raw="$2"
     local value
+    if [[ -z "$(normalize_list "$raw" | tr -d '[:space:]')" ]]; then
+        echo "$label must contain at least one non-negative integer millisecond value" >&2
+        exit 2
+    fi
     for value in $(normalize_list "$raw"); do
         if ! [[ "$value" =~ ^[0-9]+$ ]]; then
             echo "$label must contain only non-negative integer millisecond values" >&2
@@ -302,6 +317,45 @@ append_candidate_gate() {
     [[ -z "$blockers" ]]
 }
 
+append_production_v3_baseline() {
+    local report="$1"
+    local results="$2"
+    local -a blockers=()
+    local entry phrase cut_ms grace_ms count
+
+    for entry in "${CLIPS[@]}"; do
+        phrase="${entry%%|*}"
+        for cut_ms in $(normalize_list "$CUT_MS_LIST"); do
+            for grace_ms in $(normalize_list "$CAPTURE_GRACE_MS_LIST"); do
+                count="$(awk -F '\t' -v phrase="$phrase" -v cut="$cut_ms" \
+                    -v grace="$grace_ms" \
+                    '$1 == phrase && $2 == cut && $3 == grace && $5 == "v3" && $6 == "na" { n++ }
+                     END { print n + 0 }' "$results")"
+                if [[ "$count" != "1" ]]; then
+                    blockers+=("expected one production-v3 row for $phrase cut=$cut_ms grace=$grace_ms; found $count")
+                fi
+            done
+        done
+    done
+    if [[ "$EXPERIMENT_ENVIRONMENT_STATE" != "default" ]]; then
+        blockers+=("inherited SDK environment is $EXPERIMENT_ENVIRONMENT_STATE")
+    fi
+
+    {
+        echo
+        echo "## Production-v3 short-clip baseline"
+        echo
+        echo "This diagnostic records production-v3 WER, final-word retention, and p50 latency. It asserts complete requested coverage and a default inherited SDK environment, but applies no WER or retention threshold. It models retained audio with fixed grace values, not the app's live RMS endpointer."
+        if [[ "${#blockers[@]}" -gt 0 ]]; then
+            echo "Baseline evidence incomplete:"
+            printf '%s\n' "${blockers[@]}" | sed 's/^/- /'
+        else
+            echo "Baseline evidence complete; report-only, not a model qualification pass."
+        fi
+    } >>"$report"
+    [[ "${#blockers[@]}" -eq 0 ]]
+}
+
 run_self_test() {
     local self_tmp
     self_tmp="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-tail-self-test.XXXXXX")"
@@ -417,6 +471,41 @@ run_self_test() {
         exit 1
     fi
 
+    local baseline_tsv="$self_tmp/baseline.tsv"
+    local baseline_report="$self_tmp/baseline.md"
+    printf 'phrase\tcut_ms\tcapture_grace_ms\teffective_cut_ms\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\n' >"$baseline_tsv"
+    local entry phrase cut_ms grace_ms effective
+    for entry in "${CLIPS[@]}"; do
+        phrase="${entry%%|*}"
+        for cut_ms in 100 150 200; do
+            for grace_ms in 80 400; do
+                effective="$(effective_cut_ms "$cut_ms" "$grace_ms")"
+                printf '%s\t%s\t%s\t%s\tv3\tna\t0.0\ttrue\t1\n' \
+                    "$phrase" "$cut_ms" "$grace_ms" "$effective" >>"$baseline_tsv"
+            done
+        done
+    done
+    CUT_MS_LIST="100 150 200"
+    CAPTURE_GRACE_MS_LIST="80 400"
+    EXPERIMENT_ENVIRONMENT_STATE="default"
+    : >"$baseline_report"
+    if ! append_production_v3_baseline "$baseline_report" "$baseline_tsv" ||
+        ! grep -Fq 'Baseline evidence complete; report-only' "$baseline_report"; then
+        echo "self-test expected complete production-v3 baseline evidence to pass" >&2
+        exit 1
+    fi
+    sed '$d' "$baseline_tsv" >"$self_tmp/incomplete-baseline.tsv"
+    if append_production_v3_baseline "$baseline_report" "$self_tmp/incomplete-baseline.tsv"; then
+        echo "self-test accepted incomplete production-v3 baseline coverage" >&2
+        exit 1
+    fi
+    EXPERIMENT_ENVIRONMENT_STATE="configured"
+    if append_production_v3_baseline "$baseline_report" "$baseline_tsv"; then
+        echo "self-test accepted configured SDK environment for production-v3 baseline" >&2
+        exit 1
+    fi
+    EXPERIMENT_ENVIRONMENT_STATE="unreported"
+
     rm -rf "$self_tmp"
     trap - EXIT INT TERM
     echo "tail-word regression self-test passed"
@@ -458,6 +547,7 @@ while [[ $# -gt 0 ]]; do
         --capture-grace-ms-list)
             need_value "$@"
             CAPTURE_GRACE_MS_LIST="$2"
+            CAPTURE_GRACE_MS_LIST_SET=1
             shift 2
             ;;
         --unified-trailing-ms-list)
@@ -467,6 +557,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-v3-baseline)
             INCLUDE_V3_BASELINE=0
+            shift
+            ;;
+        --production-v3-only)
+            PRODUCTION_V3_ONLY=1
             shift
             ;;
         --no-threshold)
@@ -492,6 +586,16 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
+    if [[ "$INCLUDE_V3_BASELINE" -eq 0 ]]; then
+        echo "--production-v3-only cannot be combined with --skip-v3-baseline" >&2
+        exit 2
+    fi
+    if [[ "$CAPTURE_GRACE_MS_LIST_SET" -eq 0 ]]; then
+        CAPTURE_GRACE_MS_LIST="80 400"
+    fi
+fi
 
 validate_ms_list "--cut-ms-list" "$CUT_MS_LIST"
 validate_ms_list "--capture-grace-ms-list" "$CAPTURE_GRACE_MS_LIST"
@@ -561,25 +665,31 @@ tsv="$stage_dir/results.tsv"
     echo "- Trials per case: $TRIALS"
     echo "- Cut ms list: $CUT_MS_LIST"
     echo "- Capture grace ms list: $CAPTURE_GRACE_MS_LIST"
-    echo "- Unified trailing silence ms list: $UNIFIED_TRAILING_MS_LIST"
+    if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
+        echo "- Unified trailing silence ms list: not evaluated"
+    else
+        echo "- Unified trailing silence ms list: $UNIFIED_TRAILING_MS_LIST"
+    fi
     echo "- v3 baseline: $([[ "$INCLUDE_V3_BASELINE" -eq 1 ]] && echo included || echo skipped)"
+    echo "- Run scope: $([[ "$PRODUCTION_V3_ONLY" -eq 1 ]] && echo production-v3-only || echo candidate comparison)"
     echo
     echo "The cut column simulates releasing the key before the phrase finishes."
     echo "Capture grace simulates Presspeech continuing to record briefly after release."
-    echo "Unified trailing silence is synthetic zero padding added before the Unified model sees the audio."
+    if [[ "$PRODUCTION_V3_ONLY" -eq 0 ]]; then
+        echo "Unified trailing silence is synthetic zero padding added before the Unified model sees the audio."
+    fi
     echo
-    echo "Candidate threshold: Unified @ ${CANDIDATE_UNIFIED_TRAILING_MS} ms, 0 ms capture grace, final word retained, max WER <= ${MAX_CANDIDATE_WER}% on the known regression cases."
+    if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
+        echo "Production-v3 baseline: requested cut/grace matrix, report-only for WER and final-word retention."
+    else
+        echo "Candidate threshold: Unified @ ${CANDIDATE_UNIFIED_TRAILING_MS} ms, 0 ms capture grace, final word retained, max WER <= ${MAX_CANDIDATE_WER}% on the known regression cases."
+    fi
     echo
     echo "| Phrase | Cut ms | Grace ms | Effective cut ms | Backend | Unified trailing ms | Max WER % | Final word retained | p50 ms |"
     echo "|---|---:|---:|---:|---|---:|---:|---|---:|"
 } >"$report"
 
 printf 'phrase\tcut_ms\tcapture_grace_ms\teffective_cut_ms\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\n' >"$tsv"
-
-declare -a CLIPS=(
-    "why|Why would anyone be not sure."
-    "done|Okay, let's get that done."
-)
 
 EXPERIMENT_ENVIRONMENT_STATE="pending"
 
@@ -603,12 +713,16 @@ for entry in "${CLIPS[@]}"; do
             python3 ./audio-input-evidence.py --audio "$case_wav" >/dev/null
 
             backends=()
-            if [[ "$INCLUDE_V3_BASELINE" -eq 1 ]]; then
+            if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
                 backends+=( "v3:na" )
+            else
+                if [[ "$INCLUDE_V3_BASELINE" -eq 1 ]]; then
+                    backends+=( "v3:na" )
+                fi
+                for trailing_ms in $(normalize_list "$UNIFIED_TRAILING_MS_LIST"); do
+                    backends+=( "unified:$trailing_ms" )
+                done
             fi
-            for trailing_ms in $(normalize_list "$UNIFIED_TRAILING_MS_LIST"); do
-                backends+=( "unified:$trailing_ms" )
-            done
 
             for backend_entry in "${backends[@]}"; do
                 backend="${backend_entry%%:*}"
@@ -649,7 +763,11 @@ for entry in "${CLIPS[@]}"; do
 done
 
 candidate_gate_passed=1
-if ! append_candidate_gate "$report" "$tsv"; then
+if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
+    if ! append_production_v3_baseline "$report" "$tsv"; then
+        candidate_gate_passed=0
+    fi
+elif ! append_candidate_gate "$report" "$tsv"; then
     candidate_gate_passed=0
 fi
 
@@ -664,7 +782,12 @@ stage_dir=""
 echo "report: $final_report"
 echo "tsv: $final_tsv"
 
-if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && "$candidate_gate_passed" -ne 1 ]]; then
-    echo "tail-word candidate prerequisite blocked; inspect the report" >&2
+if [[ "$candidate_gate_passed" -ne 1 &&
+      ( "$PRODUCTION_V3_ONLY" -eq 1 || "$REQUIRE_CANDIDATE_PASS" -eq 1 ) ]]; then
+    if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
+        echo "production-v3 tail baseline evidence incomplete; inspect the report" >&2
+    else
+        echo "tail-word candidate prerequisite blocked; inspect the report" >&2
+    fi
     exit 1
 fi

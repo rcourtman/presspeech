@@ -3553,17 +3553,53 @@ private func setupChecklistCanTryDictation(isReady: Bool,
 }
 
 private func setupChecklistTipText(snapshot: SetupChecklistSnapshot,
-                                   triggerMode: TriggerMode) -> String {
+                                   triggerMode: TriggerMode,
+                                   operatingSystemMajorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> String {
     if snapshot.permissions.contains(where: { $0.permission == .microphone && $0.status == "Restricted" }) {
         return "Microphone access is restricted by macOS or device policy. A Grant or Try Again action cannot change it; contact your administrator if you need access."
     }
+
+    switch snapshot.speechModel.status {
+    case "Not downloaded":
+        return "Choose Download Model beside Speech model to review the download and begin, or Close setup to defer."
+    case "Needs retry":
+        return "Choose Retry beside Speech model to try model setup again."
+    default:
+        break
+    }
+
+    switch snapshot.audioInput.status {
+    case "Needs retry":
+        return "Choose Retry beside Audio input to try audio setup again."
+    case "Check input":
+        return "Choose another microphone beside Audio input, then try again."
+    default:
+        break
+    }
+
+    if let missingPermission = snapshot.permissions.first(where: { $0.status == "Missing" }) {
+        let name = missingPermission.permission.displayName(
+            operatingSystemMajorVersion: operatingSystemMajorVersion
+        )
+        switch missingPermission.buttonTitle {
+        case .some("Continue"):
+            return "Choose Continue beside \(name) to open the macOS permission prompt."
+        case .some("Open Settings"):
+            return "Choose Open Settings beside \(name) to review its Privacy & Security setting and enable Presspeech."
+        case .some("Try Again"):
+            return "Choose Try Again beside \(name) to refresh a stuck permission request; Presspeech resets its permission entry and asks again."
+        default:
+            return "Resolve \(name) access using the action beside its row."
+        }
+    }
+
     if snapshot.hotkey.status == "Ready to test" {
         let triggerHint = triggerMode == .hold
             ? "Prefer not to hold the key? Choose Press to toggle in Settings → Dictation → Trigger."
             : "Press to toggle is active. Choose Press and hold in Settings → Dictation → Trigger to switch back."
         return "Test the hotkey before choosing Done. \(triggerHint) If you prefer menu controls, choose Try Dictation and use Start Dictation in the menu. If the hotkey controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
     }
-    return "Tip: If the permission prompt does not appear or Presspeech is missing from System Settings, choose Try Again. Presspeech will reset its permission entry and re-request, which can clear stuck macOS state."
+    return "Setup updates automatically as Presspeech checks the model, audio input, permissions, and hotkey."
 }
 
 private func permissionSetupDetail(_ permission: Permission,
@@ -16432,7 +16468,12 @@ private enum PresspeechSelfTest {
             equals: String?.none,
             "opening the checklist should not announce its entire initial state"
         )
-        let holdModeReady = snapshot(hotkey: SetupChecklistRowState(
+        let holdModeReady = snapshot(microphone: SetupChecklistPermissionState(
+            permission: .microphone,
+            detail: "Granted",
+            status: "Granted",
+            buttonTitle: nil
+        ), hotkey: SetupChecklistRowState(
             detail: "Hold Right Option briefly, then release.",
             status: "Ready to test",
             buttonTitle: nil
@@ -16567,6 +16608,62 @@ private enum PresspeechSelfTest {
 
     private static func testReadiness() throws {
         try testSetupChecklistAnnouncements()
+        let ready = SetupChecklistRowState(detail: "Ready", status: "Ready", buttonTitle: nil)
+        let waiting = SetupChecklistRowState(detail: "Waiting", status: "Waiting", buttonTitle: nil)
+        func tip(model: SetupChecklistRowState? = nil,
+                 audio: SetupChecklistRowState? = nil,
+                 permission: Permission = .microphone,
+                 permissionStatus: String = "Granted",
+                 action: String? = nil) -> SetupChecklistSnapshot {
+            SetupChecklistSnapshot(
+                speechModel: model ?? ready,
+                audioInput: audio ?? ready,
+                permissions: [SetupChecklistPermissionState(
+                    permission: permission,
+                    detail: permissionStatus,
+                    status: permissionStatus,
+                    buttonTitle: action
+                )],
+                hotkey: waiting,
+                showInDock: false,
+                canTryDictation: false,
+                isComplete: false
+            )
+        }
+        try expect(
+            setupChecklistTipText(snapshot: tip(model: SetupChecklistRowState(
+                detail: "Download required", status: "Not downloaded", buttonTitle: "Download Model"
+            ), permissionStatus: "Missing", action: "Continue"), triggerMode: .hold),
+            equals: "Choose Download Model beside Speech model to review the download and begin, or Close setup to defer.",
+            "first-run tip should lead with the model-download choice"
+        )
+        try expect(
+            setupChecklistTipText(snapshot: tip(permissionStatus: "Missing", action: "Continue"),
+                                  triggerMode: .hold),
+            equals: "Choose Continue beside Microphone to open the macOS permission prompt.",
+            "first microphone prompt should not be described as a retry"
+        )
+        try expect(
+            setupChecklistTipText(snapshot: tip(permission: .accessibility,
+                                                permissionStatus: "Missing", action: "Open Settings"),
+                                  triggerMode: .hold, operatingSystemMajorVersion: 27),
+            equals: "Choose Open Settings beside Device Control and Data Access to review its Privacy & Security setting and enable Presspeech.",
+            "permission tip should use the current system label and visible action"
+        )
+        try expect(
+            setupChecklistTipText(snapshot: tip(permission: .inputMonitoring,
+                                                permissionStatus: "Missing", action: "Try Again"),
+                                  triggerMode: .hold),
+            equals: "Choose Try Again beside Input Monitoring to refresh a stuck permission request; Presspeech resets its permission entry and asks again.",
+            "retry tip should describe the visible recovery action"
+        )
+        try expect(
+            setupChecklistTipText(snapshot: tip(audio: SetupChecklistRowState(
+                detail: "No samples", status: "Check input", buttonTitle: "Choose…"
+            )), triggerMode: .hold),
+            equals: "Choose another microphone beside Audio input, then try again.",
+            "empty input tip should point to the microphone chooser"
+        )
         try expect(
             microphoneSetupDetail(authorizationStatus: .notDetermined),
             equals: "Captures your voice while dictating. Choose Continue to open the macOS microphone prompt, then choose OK.",

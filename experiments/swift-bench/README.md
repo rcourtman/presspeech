@@ -1001,6 +1001,19 @@ models retained audio, not the app's live RMS decision.
 ./run-tail-word-regression.sh --capture-grace-ms-list 0,80,100,150,400 --unified-trailing-ms-list 250
 ```
 
+The release wrapper also records a production-v3-only short-clip baseline at
+80 ms and 400 ms synthetic capture grace. This brackets the app's minimum and
+maximum post-release windows without treating fixed grace as a simulation of
+the live RMS endpointer. The default release check records WER, final-word
+retention, and p50 latency but applies no short-clip quality threshold; the
+multi-window public regression remains the production quality gate. The
+candidate Unified acceptance gate still requires the explicit
+`--include-candidate-models` option.
+
+```sh
+./run-tail-word-regression.sh --production-v3-only
+```
+
 For a quick non-ASR check of parser and threshold logic:
 
 ```sh
@@ -1016,7 +1029,9 @@ capture, or transcription post-processing, run the release wrapper:
 ./run-release-asr-checks.sh
 ```
 
-After the exact-pin preflight, it runs helper self-tests, production v3 private
+After the exact-pin preflight, it runs helper self-tests and a report-only
+production-v3 short-clip tail diagnostic at 80 and 400 ms synthetic capture
+grace. It then runs production v3 private
 real-dictation regressions if `real-audio/` contains local clips, and production v3 public speech
 regressions if `public-audio/librispeech-dev-clean/` has been fetched. The
 validated `public-audio/librispeech-dev-clean-long-form/` corpus is required by
