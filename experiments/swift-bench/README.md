@@ -716,6 +716,44 @@ bound for an explicitly reviewed corpus with
 `--long-public-max-corpus-wer` or
 `--long-public-max-reference-deletion-run`.
 
+### Multilingual long-form seam probe
+
+The required release-wrapper corpus above is English LibriSpeech, and the
+wrapper passes an English hint. It does not exercise multilingual long-form
+seams. This is a material gap: FluidAudio's [German v3 seam report (#825)](https://github.com/FluidInference/FluidAudio/issues/825)
+documented token interleaving and word-order corruption with
+`melChunkContext: true` on v0.15.5; [PR #830](https://github.com/FluidInference/FluidAudio/pull/830)
+fixed that specific class by preserving merge order instead of re-sorting
+tokens by frame time. The v0.15.6 release notes include that fix, so Presspeech's
+current pin already contains it. The PR distinguishes this from first-chunk
+mel-context degradation, however, and the fix is not evidence that all
+multilingual seams are safe. The English-only gate still does not validate the
+German fix in Presspeech's configuration.
+
+Use the existing pinned FLEURS importer and long-form composer to make a
+repeatable German read-speech seam probe:
+
+```sh
+./fetch-public-speech-fixtures.sh \
+  --source fleurs --language de_de --split test --count 25
+python3 ./compose-public-long-form-fixtures.py \
+  --input-dir public-audio/fleurs-de_de-test \
+  --output-dir public-audio/fleurs-de_de-test-long-form \
+  --target-seconds 45
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/fleurs-de_de-test-long-form \
+  --out-dir public-results/fleurs-de_de-long-form \
+  --backend v3 --language de --public-corpus \
+  --show-transcripts --show-paths --trials 3
+```
+
+Run this on the v0.15.6 baseline and candidate SDK with identical fixture bytes,
+then compare `Benchmark inputs SHA-256`, SDK revision, trial count, transcripts,
+deletion runs, WER, and latency. The composed FLEURS clips are a controlled
+read-speech probe, not spontaneous dictation or a product pass; retain private,
+consented German push-to-talk evidence as a separate check. Do not change
+production chunking or the SDK pin based on the upstream fix alone.
+
 ## Same-pin explicit no-mel chunking comparison
 
 The `v3-no-mel` backend lets maintainers compare the released

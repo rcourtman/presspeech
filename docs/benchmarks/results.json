@@ -181,9 +181,20 @@
           ]
         }
       ],
+      "known_multilingual_long_form_case": {
+        "upstream_report": "https://github.com/FluidInference/FluidAudio/issues/825",
+        "upstream_fix": "https://github.com/FluidInference/FluidAudio/pull/830",
+        "failure": "German mel-context long-form token-order corruption at a chunk seam",
+        "fix_scope": "Preserves merge order instead of re-sorting by frame timestamps; first-chunk mel-context degradation is separate",
+        "reported_version": "v0.15.5",
+        "included_in_presspeech_production_pin": "v0.15.6",
+        "current_release_gate_coverage": "English LibriSpeech with English language hint; does not exercise this German failure class",
+        "recommended_probe": "Pinned FLEURS German long-form composite; compare identical input digest and trial count across SDK pins",
+        "evaluation_status": "not_measured"
+      },
       "evaluation_status": "not_measured",
       "recommended_check": "./run-release-asr-checks.sh --sdk-upgrade-only --allow-candidate-dependency",
-      "comparison_controls": "Save current-pin v0.15.6 release-gate results first; compare candidate explicit production-config v3 against the same clips, corpus, and trial count, and review candidate SDK-default chunking separately.",
+      "comparison_controls": "Save current-pin v0.15.6 results on both English release-gate and composed German FLEURS corpora; compare candidate explicit production-config v3 against identical clips, input digests, hints, and trial counts, and review candidate SDK-default chunking separately.",
       "broader_evaluation_context": {
         "nvidia_model_card": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
         "reported_wer_percent_by_corpus": {
@@ -198,7 +209,7 @@
           "finding": "The study reports that average WER over a sufficiently broad benchmark set is a better proxy for real-world noisy data than a single-dataset score."
         }
       },
-      "evidence_scope": "Upstream release notes motivate an SDK comparison only; they do not establish a Presspeech quality or latency improvement."
+      "evidence_scope": "Upstream release notes and issue/PR evidence motivate English and multilingual long-form SDK comparisons only; they do not establish a Presspeech quality or latency improvement."
     },
     "release_gate": {
       "script": "experiments/swift-bench/run-release-asr-checks.sh",
