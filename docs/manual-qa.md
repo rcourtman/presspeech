@@ -555,6 +555,10 @@ item after the development-wrapper launch check.
   for Accessibility** (macOS 14) or **Open Settings for Device Control and Data
   Access** (macOS 27 and later). A repeated attempt should be announced as
   **Try again for [permission]**, not as a grant that has already happened.
+- With VoiceOver enabled, navigate directly to each setup status field. Confirm
+  its announcement includes both the row context and current value (for example,
+  **Speech model status, Not downloaded** or **Microphone status, Missing**),
+  and that the context remains correct as the value changes after a refresh.
 - With VoiceOver enabled, leave focus on another checklist control while a
   permission becomes granted, then return to Presspeech from System Settings.
   Confirm the status change is announced once when Setup Checklist is active;

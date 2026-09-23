@@ -363,7 +363,9 @@ each platform rather than identical.
 - **Copy Diagnostics / Report a Problem… / Suggest an Improvement…** — copy a
   privacy-safe support report or open a focused GitHub form; upcoming 0.1.13 /
   builds containing **Test App Compatibility…** also open the repeated
-  target-app test. Never post dictated text, audio, or dictionary contents
+  target-app test. If a form is unavailable, keep the report private and follow
+  [SUPPORT.md](SUPPORT.md) for local-draft guidance. Never post dictated text,
+  audio, or dictionary contents
 
 See the [Windows guide](https://rcourtman.github.io/presspeech/windows.html#first-launch)
 for model readiness, AltGr-safe hotkey selection, and every Windows setting.

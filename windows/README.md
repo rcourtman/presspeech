@@ -292,7 +292,9 @@ The **Presspeech** icon in the Windows notification area (bottom-right) includes
 Improvement…**, **Repair Global Hotkey**, and **Exit**. Upcoming 0.1.13 / builds
 containing **Test App Compatibility…** also open the privacy-safe repeated
 target-app guide. The feedback actions open focused public GitHub forms. None
-adds app or user data to the URL. The icon turns red
+adds app or user data to the URL. If a form is unavailable, keep the report
+private and follow [SUPPORT.md](../SUPPORT.md) for local-draft guidance rather
+than posting elsewhere. The icon turns red
 while recording. Setup, settings, update, and scratchpad controls expose names,
 roles, values, and actions through Windows UI Automation for screen readers.
 Each window starts focus on its main working control. Use **Left Alt** plus a

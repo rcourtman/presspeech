@@ -3693,6 +3693,13 @@ private func setupActionAccessibilityLabel(buttonTitle: String,
     }
 }
 
+/// Status values are short and otherwise lose their meaning when VoiceOver
+/// lands on them directly. Keep the row context on the status element while
+/// leaving its changing value (for example, "Missing") as the static text.
+private func setupStatusAccessibilityLabel(rowTitle: String) -> String {
+    "\(rowTitle) status"
+}
+
 private func permissionReadinessMenuStatusTitle(missingPermissions: [Permission],
                                                 microphoneAuthorizationStatus: AVAuthorizationStatus) -> String {
     if missingPermissions.contains(.microphone), microphoneAuthorizationStatus == .restricted {
@@ -11491,6 +11498,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         detail.stringValue = state.detail
         detail.preferredMaxLayoutWidth = state.buttonTitle == nil ? 380 : 310
         status.stringValue = state.status
+        status.setAccessibilityLabel(setupStatusAccessibilityLabel(rowTitle: title))
         status.textColor = setupStatusColor(state.status)
 
         let buttonIdentifier = NSUserInterfaceItemIdentifier("setup-\(identifier)-action")
@@ -11732,6 +11740,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         statusLabel.identifier = NSUserInterfaceItemIdentifier("setup-\(identifier)-status")
         statusLabel.alignment = .right
         statusLabel.setContentHuggingPriority(.required, for: .horizontal)
+        statusLabel.setAccessibilityLabel(setupStatusAccessibilityLabel(rowTitle: title))
 
         row.addArrangedSubview(textStack)
         row.addArrangedSubview(NSView())
@@ -16807,6 +16816,11 @@ private enum PresspeechSelfTest {
                                           contextName: "Device Control and Data Access"),
             equals: "Open Settings for Device Control and Data Access",
             "VoiceOver should name the actual macOS Settings route"
+        )
+        try expect(
+            setupStatusAccessibilityLabel(rowTitle: "Speech model"),
+            equals: "Speech model status",
+            "a setup status should retain its row context when VoiceOver focuses it directly"
         )
         try expect(
             permissionReadinessMenuStatusTitle(
