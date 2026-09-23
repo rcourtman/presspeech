@@ -167,7 +167,10 @@ specifically selected microphone remains selected while unavailable instead of
 silently changing to Automatic or another input. Before opening the microphone
 for each recording, Presspeech also confirms that a cached Windows audio-device
 index still names the configured microphone, rejecting stale entries when
-re-enumeration shows device reordering after reconnect or resume. Wait
+re-enumeration shows device reordering after reconnect or resume. For
+**Automatic**, a changed device list causes a fresh selection instead of
+reusing the old index; indistinguishable duplicate device labels are not
+cached. Wait
 until it says the model is ready before the
 first dictation. **Try Dictation** remains disabled until then, and **Finish
 Setup** requires both the speech model and global hotkey to be ready. If

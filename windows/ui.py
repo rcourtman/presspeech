@@ -1458,6 +1458,7 @@ class SetupWindow:
             settings["input_device"] = selected
             self.app.input_device = None
             self.app._cached_input_selector = None
+            self.app._cached_input_topology = None
             cfg.save(settings)
             _set_accessible_text(self.microphone_status, "Not checked")
 
@@ -1616,6 +1617,7 @@ class SetupWindow:
         if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
             self.app.input_device = None
             self.app._cached_input_selector = None
+            self.app._cached_input_topology = None
         settings["input_device"] = selected
         settings["autostart"] = bool(self.autostart.get())
         settings["setup_complete"] = True
@@ -1635,6 +1637,7 @@ class SetupWindow:
         if selected != settings.get("input_device", cfg.DEFAULTS["input_device"]):
             self.app.input_device = None
             self.app._cached_input_selector = None
+            self.app._cached_input_topology = None
         settings["input_device"] = selected
         settings["autostart"] = bool(self.autostart.get())
         cfg.save(settings)
@@ -2280,6 +2283,7 @@ class SettingsWindow:
             if s["input_device"] != old_input_device:
                 self.app.input_device = None
                 self.app._cached_input_selector = None
+                self.app._cached_input_topology = None
             s["model"] = label_to_value.get(
                 self.var_model.get(), cfg.DEFAULTS["model"])
             s["model_explicit"] = True

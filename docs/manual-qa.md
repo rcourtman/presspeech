@@ -252,6 +252,13 @@ keyboard access testing in addition to assistive-technology testing.
   reorder device indexes, then try dictation. Confirm Presspeech does not
   capture from the substitute; reconnect the selected input and confirm the
   next dictation uses it.
+- With two distinct safe inputs, choose **Automatic** and make one dictation to
+  establish its device cache. While idle, reconnect or enable an input so the
+  PortAudio list changes and an old index can name a different usable input.
+  Make another harmless dictation and confirm Automatic selects from the new
+  list rather than reusing that stale index. Record the before/after device
+  mapping; if the test PC never reorders its list, mark this check **Not run**,
+  not Pass.
 - Turn off **Let desktop apps access your microphone**, choose **Check
   Microphone**, and confirm setup reports that the microphone could not be
   opened without exposing raw device or PortAudio errors.
@@ -512,6 +519,7 @@ Record this release-gate matrix against the exact installed candidate:
 | First launch through model, microphone, Accessibility / Device Control and Data Access, Input Monitoring, and keyboard-event-posting readiness | |
 | Clean first model download with synthetic values in all inherited Hugging Face token variables | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
+| Ten consecutive dictations into a current browser text field, plus three two-window focus-change recoveries, with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
 | Automatic insertion and clipboard-only Command-V recovery with a non-US keyboard layout | |
 | Electron issue #33: steady-focus paste once; a switch between two windows of the same app must use clipboard recovery | |
@@ -543,6 +551,14 @@ transcript once, while switching to a second window of that same app before
 delivery inserts nothing and leaves the complete transcript available for
 manual paste. A matching process identifier alone does not authorize paste;
 any insertion after the window switch is a failure.
+
+For the separate browser row, use a disposable, non-submitting field in a
+current browser. Keep its field and tab selected for ten steady-focus attempts
+with distinct harmless markers; count stale, partial, duplicate, or missing
+insertions as failures. Then switch between two browser windows during three
+dictations and require clipboard-only recovery with no insertion in either
+window. Record the browser version and generic field type, not page or tab
+names. This does not qualify a desktop Electron app or same-window tab moves.
 
 Separately observe a same-window focus move using two harmless, non-submitting
 fields in one native or browser window. Start in the first field, move to the

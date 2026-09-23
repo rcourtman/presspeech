@@ -225,6 +225,48 @@ class MetricTests(unittest.TestCase):
             0,
         )
 
+    def test_reviewed_speech_vad_metrics_keep_missing_trials_and_trial_ratios(self):
+        reviewed = [
+            {
+                "silence": None, "audio_seconds": 2.0,
+                "speech_detection": {
+                    "trials": 3, "measured_trials": 2, "missing_trials": 1,
+                    "rejected_trials": 1, "all_seconds": [1.0, 0.0],
+                },
+            },
+            {
+                "silence": None, "audio_seconds": 4.0,
+                "speech_detection": {
+                    "trials": 2, "measured_trials": 2, "missing_trials": 0,
+                    "rejected_trials": 0, "all_seconds": [3.0, 2.0],
+                },
+            },
+            {
+                "silence": {"evaluated": True}, "audio_seconds": 1.0,
+                "speech_detection": {
+                    "trials": 1, "measured_trials": 1, "missing_trials": 0,
+                    "rejected_trials": 1, "all_seconds": [0.0],
+                },
+            },
+        ]
+
+        metrics = benchmark._reviewed_speech_vad_metrics(reviewed)
+
+        self.assertEqual(metrics["reviewed_speech_vad_sample_count"], 2)
+        self.assertEqual(metrics["reviewed_speech_vad_trial_count"], 5)
+        self.assertEqual(metrics["reviewed_speech_vad_measured_trial_count"], 4)
+        self.assertEqual(metrics["reviewed_speech_vad_missing_trial_count"], 1)
+        self.assertFalse(metrics["reviewed_speech_vad_complete"])
+        self.assertEqual(metrics["reviewed_speech_vad_rejection_count"], 1)
+        self.assertEqual(metrics["reviewed_speech_vad_rejection_trial_count"], 1)
+        self.assertEqual(metrics["reviewed_speech_vad_retained_audio_ratio"], {
+            "min": 0.0, "median": 0.5, "max": 0.75,
+        })
+        self.assertIsNone(benchmark._reviewed_speech_vad_metrics([])[
+            "reviewed_speech_vad_retained_audio_ratio"]["median"])
+        self.assertIsNone(benchmark._reviewed_speech_vad_metrics([])[
+            "reviewed_speech_vad_complete"])
+
     def test_identical_text_has_zero_error(self):
         metrics = benchmark.accuracy_metrics("It works well.", "It works well.")
         self.assertEqual(metrics["wer"], 0)
@@ -910,7 +952,10 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 10)
+        self.assertEqual(result["benchmark_version"], 11)
+        self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
+        self.assertIsNone(
+            result["reviewed_speech_vad_retained_audio_ratio"]["median"])
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,
@@ -1104,6 +1149,8 @@ class MetricTests(unittest.TestCase):
             "samples": [{
                 "id": "quiet-speech",
                 "audio": "quiet.wav",
+                "task_group": "quiet-speech",
+                "language_group": "en-GB",
                 "reference": "quiet speech",
                 "reference_reviewed": True,
             }],
@@ -1143,6 +1190,27 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["reviewed_speech_vad_rejection_count"], 1)
         self.assertEqual(
             result["reviewed_speech_vad_rejection_trial_count"], 1)
+        self.assertEqual(result["reviewed_speech_vad_trial_count"], 2)
+        self.assertEqual(result["reviewed_speech_vad_measured_trial_count"], 2)
+        self.assertEqual(result["reviewed_speech_vad_missing_trial_count"], 0)
+        self.assertTrue(result["reviewed_speech_vad_complete"])
+        for group in (
+                result["task_groups"]["quiet-speech"],
+                result["language_groups"]["en-GB"],
+                result["language_task_groups"]["en-GB"]["quiet-speech"]):
+            self.assertEqual(group["reviewed_speech_vad_rejection_count"], 1)
+            self.assertEqual(
+                group["reviewed_speech_vad_rejection_trial_count"], 1)
+            self.assertEqual(
+                group["reviewed_speech_vad_retained_audio_ratio"]["median"],
+                0.3125)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn(
+            "Reviewed speech VAD: observed rejections 1/2 measured trials in 1/1 clips; "
+            "retained-audio median 31.25%; duration coverage 2/2 trials",
+            output.getvalue())
         self.assertEqual(result["reviewed_final_word_sample_count"], 1)
         self.assertEqual(result["final_word_failure_count"], 1)
         self.assertEqual(result["reviewed_final_word_trial_count"], 2)
@@ -1168,7 +1236,9 @@ class MetricTests(unittest.TestCase):
         manifest = {
             "model": "base.en",
             "runs": 2,
-            "samples": [{"id": "speech", "audio": "speech.wav"}],
+            "samples": [{"id": "speech", "audio": "speech.wav",
+                         "task_group": "quiet-speech", "reference": "speech",
+                         "reference_reviewed": True}],
         }
         transcriber = mock.Mock()
         transcriber.model.dtype = "int8"
@@ -1189,11 +1259,22 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(detection["trials"], 2)
         self.assertEqual(detection["measured_trials"], 0)
         self.assertEqual(detection["missing_trials"], 2)
+        group = result["task_groups"]["quiet-speech"]
+        self.assertEqual(group["reviewed_speech_vad_trial_count"], 2)
+        self.assertEqual(group["reviewed_speech_vad_measured_trial_count"], 0)
+        self.assertEqual(group["reviewed_speech_vad_missing_trial_count"], 2)
+        self.assertFalse(group["reviewed_speech_vad_complete"])
+        self.assertIsNone(
+            group["reviewed_speech_vad_retained_audio_ratio"]["median"])
         output = io.StringIO()
         with redirect_stdout(output):
             benchmark._print_summary(result)
         self.assertIn("VAD speech: not measured (0/2 trials; 2 missing)",
                       output.getvalue())
+        self.assertIn(
+            "Reviewed speech VAD: observed rejections 0/0 measured trials in 0/1 clips; "
+            "retained-audio median n/a; duration coverage 0/2 trials (2 missing)",
+            output.getvalue())
         json.dumps(result, allow_nan=False)
 
 

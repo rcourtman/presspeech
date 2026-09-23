@@ -834,6 +834,10 @@ FIRST_RUN_ACTION_COPY = {
         "<strong>Decide whether to launch 0.1.12</strong>",
         "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app",
         "a missing model starts downloading without another prompt",
+        "<strong>Published 0.1.12:</strong> Setup shows",
+        "0.1.12 does not offer dictation style in Setup",
+        "open <strong>Settings</strong>, select <strong>Press to toggle</strong> under <strong>Trigger</strong>",
+        "<strong>Upcoming 0.1.13 (not yet published):</strong> Setup also offers",
     ),
     DOCS / "llms-full.txt": (
         "Only after the user decides to launch published 0.3.8 despite the model-download warning above:",
@@ -850,6 +854,10 @@ FIRST_RUN_ACTION_FORBIDDEN = {
     ),
     DOCS / "windows.html": (
         re.compile(r"Choose <strong>Set Up Later</strong> to defer; the Parakeet path also offers the smaller CPU model"),
+        re.compile(
+            r"first-run window shows.{0,220}<strong>Press to toggle</strong> style",
+            re.IGNORECASE | re.DOTALL,
+        ),
     ),
     DOCS / "llms-full.txt": (
         re.compile(r"On first run it checks whether the default model is cached and asks before downloading missing files"),
@@ -3042,6 +3050,24 @@ def check_getting_started_preflight_order(
     return []
 
 
+def check_getting_started_entry_links(docs: Path = DOCS) -> list[str]:
+    """Other pages must not send a first-time reader past the launch decision."""
+    errors: list[str] = []
+    for path in sorted(docs.rglob("*.html")):
+        if path == docs / "getting-started.html":
+            continue
+        for match in re.finditer(r"""href\s*=\s*(["'])([^"']+)\1""", read_text(path)):
+            href = match.group(2)
+            if re.search(r"(?:^|/)getting-started\.html#", href) and not href.endswith(
+                "#model-download-preflight"
+            ):
+                errors.append(
+                    f"{path.relative_to(docs)}: onboarding link bypasses the "
+                    f"first-launch decision: {href}"
+                )
+    return errors
+
+
 def check_getting_started_scratchpad_privacy_order(
     path: Path = DOCS / "getting-started.html",
 ) -> list[str]:
@@ -3622,7 +3648,7 @@ def check_windows_release_phase_copy(
     patterns = (
         (
             re.compile(
-                rf"\bupcoming{separator}Windows{separator}{re.escape(version)}\b",
+                rf"\bupcoming(?:{separator}Windows)?{separator}v?{re.escape(version)}\b",
                 re.IGNORECASE,
             ),
             f"configured Windows {version} is still called upcoming",
@@ -5150,6 +5176,23 @@ def run_self_test() -> None:
         if not check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: missing getting-started preflight was accepted")
 
+        entry_docs = Path(tmp) / "entry-docs"
+        entry_docs.mkdir()
+        entry_page = entry_docs / "install.html"
+        entry_page.write_text(
+            '<a href="getting-started.html">First dictation</a>'
+            '<a href="getting-started.html#model-download-preflight">Launch decision</a>',
+            encoding="utf-8",
+        )
+        if check_getting_started_entry_links(entry_docs):
+            raise SyncError("self-test: safe onboarding entry links were rejected")
+        entry_page.write_text(
+            '<a href="getting-started.html#private-test">Try Dictation</a>',
+            encoding="utf-8",
+        )
+        if not check_getting_started_entry_links(entry_docs):
+            raise SyncError("self-test: first-launch decision bypass was accepted")
+
         scratchpad_guidance = Path(tmp) / "scratchpad.html"
         safe_scratchpad = (
             '<section id="private-test"><p>Practice</p>'
@@ -5528,7 +5571,10 @@ def run_self_test() -> None:
         action_copy = Path(tmp) / "first-run-copy.txt"
         required_action_copy = {action_copy: ("Published 0.1.12 starts without asking",)}
         forbidden_action_copy = {
-            action_copy: (re.compile(r"brew install --cask.*\nopen /Applications/Presspeech\.app"),)
+            action_copy: (
+                re.compile(r"brew install --cask.*\nopen /Applications/Presspeech\.app"),
+                FIRST_RUN_ACTION_FORBIDDEN[DOCS / "windows.html"][1],
+            )
         }
         action_copy.write_text("Published 0.1.12 starts without asking\n", encoding="utf-8")
         if check_first_run_action_copy(required_action_copy, forbidden_action_copy):
@@ -5544,6 +5590,12 @@ def run_self_test() -> None:
         )
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
             raise SyncError("self-test: combined install-and-launch command was accepted")
+        action_copy.write_text(
+            "Published 0.1.12 starts without asking. The first-run window shows "
+            "a <strong>Press to toggle</strong> style.\n", encoding="utf-8"
+        )
+        if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
+            raise SyncError("self-test: unreleased Setup trigger was attributed to 0.1.12")
 
         phase_copy.write_text(
             "Upcoming Windows **9.8.7** adds this behavior.\n",
@@ -5552,6 +5604,14 @@ def run_self_test() -> None:
         phase_errors = check_windows_release_phase_copy(metadata, [phase_copy])
         if len(phase_errors) != 1 or "called upcoming" not in phase_errors[0]:
             raise SyncError("self-test: phase-bound current Windows copy was not rejected")
+        for upcoming in (
+            "Upcoming 9.8.7 adds this behavior.\n",
+            "upcoming <strong>9.8.7</strong> adds this behavior.\n",
+            "Upcoming Windows v9.8.7 adds this behavior.\n",
+        ):
+            phase_copy.write_text(upcoming, encoding="utf-8")
+            if not check_windows_release_phase_copy(metadata, [phase_copy]):
+                raise SyncError("self-test: bare or marked-up upcoming Windows version was accepted")
         phase_copy.write_text(
             "Windows 9.8.7 candidate adds this behavior.\n", encoding="utf-8"
         )
@@ -5614,6 +5674,7 @@ def main() -> int:
             errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
             errors.extend(check_getting_started_preflight_order())
+            errors.extend(check_getting_started_entry_links())
             errors.extend(check_model_recovery_privacy_order())
             errors.extend(check_getting_started_scratchpad_privacy_order())
             errors.extend(check_windows_agent_install_privacy_order())
@@ -5672,6 +5733,7 @@ def main() -> int:
         errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())
         errors.extend(check_getting_started_preflight_order())
+        errors.extend(check_getting_started_entry_links())
         errors.extend(check_model_recovery_privacy_order())
         errors.extend(check_getting_started_scratchpad_privacy_order())
         errors.extend(check_windows_agent_install_privacy_order())

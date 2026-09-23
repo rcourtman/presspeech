@@ -565,6 +565,8 @@ class InputSelectionTests(unittest.TestCase):
         instance = self.make_app()
         instance.input_device = (1, 16000)
         instance._cached_input_selector = app.AUTO_INPUT_DEVICE
+        instance._cached_input_topology = instance._automatic_input_topology(
+            1, DEVICES, HOST_APIS)
         replaced = [dict(device) for device in DEVICES]
         replaced[1]["name"] = "Stereo Mix (loopback)"
         instance._find_input_device = mock.Mock(return_value=(0, 16000))
@@ -579,6 +581,85 @@ class InputSelectionTests(unittest.TestCase):
 
         instance._find_input_device.assert_called_once_with(
             app.AUTO_INPUT_DEVICE)
+
+    def test_automatic_cache_reuses_unchanged_unique_device(self):
+        instance = self.make_app()
+        instance._find_input_device = mock.Mock(return_value=(1, 16000))
+
+        with mock.patch.object(
+                app.sd, "query_devices", return_value=DEVICES), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None):
+            self.assertEqual(instance._get_input_device(), (1, 16000))
+            self.assertEqual(instance._get_input_device(), (1, 16000))
+
+        instance._find_input_device.assert_called_once_with(
+            app.AUTO_INPUT_DEVICE)
+        self.assertEqual(instance._cached_input_topology,
+                         instance._automatic_input_topology(1, DEVICES, HOST_APIS))
+
+    def test_automatic_cache_reprobes_usable_replacement_at_same_index(self):
+        instance = self.make_app()
+        instance.input_device = (1, 16000)
+        instance._cached_input_selector = app.AUTO_INPUT_DEVICE
+        instance._cached_input_topology = instance._automatic_input_topology(
+            1, DEVICES, HOST_APIS)
+        replaced = [dict(device) for device in DEVICES]
+        replaced[1]["name"] = "Built-in microphone"
+        instance._find_input_device = mock.Mock(return_value=(0, 16000))
+
+        with mock.patch.object(
+                app.sd, "query_devices", return_value=replaced), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None):
+            self.assertEqual(instance._get_input_device(), (0, 16000))
+
+        instance._find_input_device.assert_called_once_with(
+            app.AUTO_INPUT_DEVICE)
+        self.assertEqual(instance.input_device, (0, 16000))
+
+    def test_automatic_cache_reprobes_when_other_device_changes(self):
+        instance = self.make_app()
+        instance.input_device = (1, 16000)
+        instance._cached_input_selector = app.AUTO_INPUT_DEVICE
+        instance._cached_input_topology = instance._automatic_input_topology(
+            1, DEVICES, HOST_APIS)
+        changed = [dict(device) for device in DEVICES]
+        changed[0]["name"] = "New preferred microphone"
+        instance._find_input_device = mock.Mock(return_value=(0, 16000))
+
+        with mock.patch.object(
+                app.sd, "query_devices", return_value=changed), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None):
+            self.assertEqual(instance._get_input_device(), (0, 16000))
+
+        instance._find_input_device.assert_called_once_with(
+            app.AUTO_INPUT_DEVICE)
+
+    def test_automatic_cache_never_reuses_ambiguous_identical_labels(self):
+        instance = self.make_app()
+        instance._find_input_device = mock.Mock(return_value=(1, 16000))
+        duplicated = [dict(device) for device in DEVICES]
+        duplicated.append(dict(DEVICES[1]))
+
+        with mock.patch.object(
+                app.sd, "query_devices", return_value=duplicated), \
+                mock.patch.object(
+                    app.sd, "query_hostapis", return_value=HOST_APIS), \
+                mock.patch.object(
+                    app.sd, "check_input_settings", return_value=None):
+            self.assertEqual(instance._get_input_device(), (1, 16000))
+            self.assertEqual(instance._get_input_device(), (1, 16000))
+
+        self.assertIsNone(instance._cached_input_topology)
+        self.assertEqual(instance._find_input_device.call_count, 2)
 
     def test_failed_rescan_leaves_no_microphone(self):
         instance = self.make_app()
@@ -684,6 +765,8 @@ class InputSelectionTests(unittest.TestCase):
     def test_setup_check_recovers_a_reconnected_device_by_rescanning(self):
         instance = self.make_app("MME::USB microphone")
         instance.input_device = (9, 48000)
+        instance._cached_input_selector = "MME::USB microphone"
+        instance._cached_input_topology = ("old device list",)
         instance._probe_input_level = mock.Mock(return_value=0.02)
         attempts = []
 
@@ -705,6 +788,8 @@ class InputSelectionTests(unittest.TestCase):
         instance._rescan_audio_devices.assert_called_once_with(
             audio_lease=mock.ANY)
         self.assertIsNone(instance.input_device)
+        self.assertIsNone(instance._cached_input_selector)
+        self.assertIsNone(instance._cached_input_topology)
 
     def test_setup_check_refreshes_the_real_coordinated_backend(self):
         instance = self.make_app()

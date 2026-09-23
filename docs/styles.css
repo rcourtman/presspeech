@@ -705,6 +705,18 @@ section p:last-child,
   margin-bottom: 4px;
 }
 
+#model-download-preflight .decision-summary {
+  margin-top: 12px;
+  color: var(--text);
+}
+
+#model-download-preflight li p {
+  max-width: none;
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
 .facts + .note,
 .grid + .note {
   margin-top: 18px;

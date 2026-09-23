@@ -280,6 +280,47 @@ def parakeet_window_metrics(backend_timings):
     }
 
 
+def _reviewed_speech_vad_metrics(reviewed):
+    """Keep Whisper VAD coverage and rejection visible in every stratum.
+
+    A retained-audio ratio is a duration measure, not a speech-recall score:
+    natural pauses also lower it. Only scored, human-reviewed speech belongs
+    here; silence controls and unreviewed references have separate metrics.
+    """
+    detected = [sample for sample in reviewed
+                if sample.get("silence") is None
+                and isinstance(sample.get("speech_detection"), dict)]
+    missing = sum(sample["speech_detection"]["missing_trials"]
+                  for sample in detected)
+    ratios = [seconds / sample["audio_seconds"]
+              for sample in detected
+              for seconds in sample["speech_detection"]["all_seconds"]]
+    return {
+        "reviewed_speech_vad_sample_count": len(detected),
+        "reviewed_speech_vad_trial_count": sum(
+            sample["speech_detection"]["trials"] for sample in detected),
+        "reviewed_speech_vad_measured_trial_count": sum(
+            sample["speech_detection"]["measured_trials"]
+            for sample in detected),
+        "reviewed_speech_vad_missing_trial_count": sum(
+            sample["speech_detection"]["missing_trials"]
+            for sample in detected),
+        "reviewed_speech_vad_complete": (
+            missing == 0 if detected else None),
+        "reviewed_speech_vad_rejection_count": sum(
+            sample["speech_detection"]["rejected_trials"] > 0
+            for sample in detected),
+        "reviewed_speech_vad_rejection_trial_count": sum(
+            sample["speech_detection"]["rejected_trials"]
+            for sample in detected),
+        "reviewed_speech_vad_retained_audio_ratio": {
+            "min": min(ratios) if ratios else None,
+            "median": statistics.median(ratios) if ratios else None,
+            "max": max(ratios) if ratios else None,
+        },
+    }
+
+
 def _summarise_group(members):
     """Summarise accuracy, delivery boundaries, silence, and latency."""
     reviewed = [sample for sample in members
@@ -316,6 +357,7 @@ def _summarise_group(members):
     return {
         "sample_count": len(members),
         "reviewed_sample_count": len(reviewed),
+        **_reviewed_speech_vad_metrics(reviewed),
         "reviewed_reference_word_count": reference_words,
         "reviewed_word_error_count": word_errors,
         "aggregate_wer": (word_errors / reference_words
@@ -690,10 +732,6 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         item for item in sample_results
         if item["silence"] is not None and item["silence"]["evaluated"]
     ]
-    reviewed_speech_with_detection = [
-        item for item in reviewed
-        if item["silence"] is None and item["speech_detection"] is not None
-    ]
     reviewed_final_words = [
         item for item in reviewed if item["final_word"] is not None
     ]
@@ -723,7 +761,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 10,
+        "benchmark_version": 11,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "model": model_name,
@@ -771,12 +809,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         "silence_false_positive_trial_count": sum(
             item["silence"]["false_positive_trials"]
             for item in reviewed_silence),
-        "reviewed_speech_vad_rejection_count": sum(
-            item["speech_detection"]["rejected_trials"] > 0
-            for item in reviewed_speech_with_detection),
-        "reviewed_speech_vad_rejection_trial_count": sum(
-            item["speech_detection"]["rejected_trials"]
-            for item in reviewed_speech_with_detection),
+        **_reviewed_speech_vad_metrics(reviewed),
         "reviewed_final_word_sample_count": len(reviewed_final_words),
         "final_word_failure_count": sum(
             not item["final_word"]["retained"]
@@ -852,6 +885,27 @@ def _print_summary(result):
     def seconds(value):
         return "n/a" if value is None else "%.3fs" % value
 
+    def print_group_vad(metrics):
+        if not metrics["reviewed_speech_vad_sample_count"]:
+            return
+        print("  Reviewed speech VAD: observed rejections %d/%d measured "
+              "trials in %d/%d clips; retained-audio median %s; duration "
+              "coverage %d/%d trials (%d missing; %s)" % (
+                  metrics["reviewed_speech_vad_rejection_trial_count"],
+                  metrics["reviewed_speech_vad_measured_trial_count"],
+                  metrics["reviewed_speech_vad_rejection_count"],
+                  metrics["reviewed_speech_vad_sample_count"],
+                  percentage(metrics[
+                      "reviewed_speech_vad_retained_audio_ratio"]["median"]),
+                  metrics["reviewed_speech_vad_measured_trial_count"],
+                  metrics["reviewed_speech_vad_trial_count"],
+                  metrics["reviewed_speech_vad_missing_trial_count"],
+                  "complete" if metrics["reviewed_speech_vad_complete"]
+                  else "incomplete",
+              ))
+
+    print_group_vad(result)
+
     for dimension, groups in (
             ("Task group", result.get("task_groups", {})),
             ("Language group", result.get("language_groups", {}))):
@@ -875,6 +929,7 @@ def _print_summary(result):
                       metrics["reviewed_final_word_trial_count"],
                       metrics["silence_false_positive_trial_count"],
                       metrics["reviewed_silence_trial_count"]))
+            print_group_vad(metrics)
 
     for language, tasks in result.get("language_task_groups", {}).items():
         for task, metrics in tasks.items():
@@ -897,6 +952,7 @@ def _print_summary(result):
                       metrics["reviewed_final_word_trial_count"],
                       metrics["silence_false_positive_trial_count"],
                       metrics["reviewed_silence_trial_count"]))
+            print_group_vad(metrics)
     for sample in result["samples"]:
         timing = sample["inference_seconds"]
         print("\n%s: %.3fs median (%.1fx realtime; inference + min/max post-roll "

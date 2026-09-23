@@ -155,7 +155,10 @@ async function main() {
       worksheet.formatReportDraft(summary.value),
       /does not submit a report or notify maintainers; saved drafts are not monitored/,
     );
-    assert.match(worksheet.formatReportDraft(summary.value), /SUPPORT\.md guide/);
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /open the rcourtman\/presspeech repository on GitHub and read SUPPORT\.md for current reporting routes/,
+    );
     assert.match(
       worksheet.formatReportDraft(summary.value),
       /Relevant conditions \(keyboard layout\/input source if relevant\):/,
@@ -178,7 +181,10 @@ async function main() {
       /Target app and public version:\nTarget class:\nGeneric field type:/,
     );
     assert.match(blobs[0].parts[0], /saved drafts are not monitored/);
-    assert.match(blobs[0].parts[0], /SUPPORT\.md/);
+    assert.match(
+      blobs[0].parts[0],
+      /rcourtman\/presspeech repository on GitHub and read SUPPORT\.md/,
+    );
     assert.match(blobs[0].parts[0], /Five steady-focus results[\s\S]*Overall result:/);
     assert.doesNotMatch(blobs[0].parts[0], /amber rabbit|blue otter|dictated text/i);
     assert.equal(doc.downloadLink.download, "presspeech-compatibility-report-draft.txt");

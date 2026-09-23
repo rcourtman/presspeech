@@ -746,6 +746,7 @@ class PresspeechApp:
         # sample rate for post-roll analysis and resampling.
         self.input_device = None
         self._cached_input_selector = None
+        self._cached_input_topology = None
         self._recording_input_device = None
         self.idle_icon = _make_icon((140, 140, 140))
         self.rec_icon = _make_icon((225, 60, 60))
@@ -1561,6 +1562,7 @@ class PresspeechApp:
             self._recording_scratchpad = None
             self.input_device = None
             self._cached_input_selector = None
+            self._cached_input_topology = None
             self.buffer = []
             self._peak_rms = 0.0
         try:
@@ -1686,6 +1688,7 @@ class PresspeechApp:
                     stale = False
                     self.input_device = None
                     self._cached_input_selector = None
+                    self._cached_input_topology = None
                     self._recording_input_device = None
                     self.recording = False
                     self.stream = None
@@ -2120,14 +2123,47 @@ class PresspeechApp:
             host_name = host_apis[device["hostapi"]]["name"]
             if not self._safe_input_device(device, host_name):
                 return False
-            if (selected != AUTO_INPUT_DEVICE and
-                    self._device_selector(device, host_name) != selected):
+            if selected == AUTO_INPUT_DEVICE:
+                # An old index can now name a different *usable* microphone.
+                # Automatic has no configured selector to compare, so reuse
+                # only while the whole enumerated table still matches the
+                # table from discovery. Ambiguous identical labels are never
+                # cached: PortAudio offers no identity to distinguish them.
+                topology = self._automatic_input_topology(
+                    index, devices, host_apis)
+                if (topology is None or topology !=
+                        getattr(self, "_cached_input_topology", None)):
+                    return False
+            elif self._device_selector(device, host_name) != selected:
                 return False
             sd.check_input_settings(
                 device=index, samplerate=rate, channels=1, dtype="float32")
         except Exception:
             return False
         return True
+
+    @staticmethod
+    def _automatic_input_topology(index, devices=None, host_apis=None):
+        """Snapshot PortAudio's index mapping, or decline ambiguous caching."""
+        try:
+            if devices is None:
+                devices = sd.query_devices()
+            if host_apis is None:
+                host_apis = sd.query_hostapis()
+            topology = tuple(
+                (host_apis[device["hostapi"]]["name"], device["name"],
+                 device["max_input_channels"])
+                for device in devices
+            )
+            if (type(index) is not int or not 0 <= index < len(topology) or
+                    topology[index][2] < 1 or
+                    topology.count(topology[index]) != 1):
+                return None
+            return topology
+        except Exception:
+            # If enumeration or metadata cannot be trusted, pay for a fresh
+            # probe on the next recording rather than reusing the old index.
+            return None
 
     def _get_input_device(self, epoch=None, audio_lease=None):
         scope = (AUDIO_BACKEND.operation() if audio_lease is None
@@ -2137,8 +2173,9 @@ class PresspeechApp:
                 return None
             selected = self.settings.get("input_device", AUTO_INPUT_DEVICE)
             # A slow lookup for an earlier choice can finish after Settings
-            # invalidates the cache. Tag cached indexes with their stable
-            # selector so stale work is never reused by a later recording.
+            # invalidates the cache. Tag cached indexes with their configured
+            # selector (and Automatic's device table) so stale work is not
+            # reused by a later recording.
             cached_for = getattr(self, "_cached_input_selector", selected)
             if (self.input_device is not None and cached_for == selected and
                     self._cached_input_device_is_current(selected)):
@@ -2152,6 +2189,11 @@ class PresspeechApp:
             if chosen is None and self._rescan_audio_devices(
                     epoch=epoch, audio_lease=lease):
                 chosen = self._find_input_device(selected)
+            topology = (
+                self._automatic_input_topology(chosen[0])
+                if selected == AUTO_INPUT_DEVICE and chosen is not None
+                else None
+            )
             # A slow probe can finish after release/re-press. It must not reset
             # the backend or overwrite the newer recording's selected input.
             if epoch is not None:
@@ -2163,12 +2205,14 @@ class PresspeechApp:
                         self.input_device = chosen
                         self._cached_input_selector = (
                             selected if chosen is not None else None)
+                        self._cached_input_topology = topology
             else:
                 if self.settings.get(
                         "input_device", AUTO_INPUT_DEVICE) == selected:
                     self.input_device = chosen
                     self._cached_input_selector = (
                         selected if chosen is not None else None)
+                    self._cached_input_topology = topology
             return chosen
 
     def _rescan_audio_devices(self, epoch=None, audio_lease=None):
@@ -2226,6 +2270,8 @@ class PresspeechApp:
                         can_rescan = (not self.recording and self.stream is None)
                         if can_rescan:
                             self.input_device = None
+                            self._cached_input_selector = None
+                            self._cached_input_topology = None
                     if (can_rescan and self._rescan_audio_devices(
                             audio_lease=audio_lease)):
                         initial_error = None

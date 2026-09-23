@@ -20,7 +20,12 @@ Optional `task_group` labels add separately
 weighted consensus/all-trial WER, inference latency, and silence false-positive
 counts per stratum. Optional `language_group` labels add an independent set of
 language-stratified accuracy, worst-trial envelope, boundary-retention, silence,
-and latency metrics. When both labels are present, `language_task_groups` also
+and latency metrics. Version 11 also includes reviewed-speech Whisper VAD
+rejections, measured/missing trial counts, and min/median/max per-trial
+retained-audio ratios in the corpus and each of these strata. A retained-audio
+ratio measures how much audio passed VAD, not how much speech it retained;
+natural pauses can lower it. Non-Whisper models have no Whisper VAD coverage.
+When both labels are present, `language_task_groups` also
 reports the same metrics for each language/task intersection, so pooled
 language or task results cannot hide a regression in a paired stratum. These
 are human-assigned clip labels, distinct from the top-level `language` decoder
@@ -196,7 +201,14 @@ but canonical fixtures make runs easier to compare.
   policy and per-trial VAD-retained duration. `speech_detection.trials` is the
   expected run count; compare it with `measured_trials` and `missing_trials`.
   A missing duration is not evidence that VAD retained speech: investigate
-  incomplete timing before treating a run as a pass.
+  incomplete timing before treating a run as a pass. Check the corresponding
+  reviewed-speech VAD counts and retained-audio ratios in task, language, and
+  language/task groups; a pooled duration can hide a short-command or quiet-
+  speech failure. Compare those ratios only for paired clips with the same
+  run count, because pause lengths affect them independently of recognition.
+  `reviewed_speech_vad_complete` is `null` without reviewed Whisper VAD data,
+  false if any expected duration is missing, and true only with full coverage.
+  Rejections are observed counts, not clean passes for missing trials.
 - The manifest defaults to the historical `"language": "en"` policy. Use
   `"language": "auto"` (or `--language auto`) to exercise multilingual
   Whisper's per-dictation detection, matching Presspeech's Whisper turbo path.

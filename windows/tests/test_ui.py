@@ -1413,6 +1413,7 @@ class SetupWindowTests(unittest.TestCase):
         window.app.settings = {"input_device": "auto"}
         window.app.input_device = (4, 48000)
         window.app._cached_input_selector = "auto"
+        window.app._cached_input_topology = ("old device list",)
         window.device_values["Desk microphone"] = "MME::Desk microphone"
         window.device.get.return_value = "Desk microphone"
 
@@ -1424,6 +1425,7 @@ class SetupWindowTests(unittest.TestCase):
             window.app.settings["input_device"], "MME::Desk microphone")
         self.assertIsNone(window.app.input_device)
         self.assertIsNone(window.app._cached_input_selector)
+        self.assertIsNone(window.app._cached_input_topology)
         save.assert_called_once_with(window.app.settings)
         set_text.assert_called_once_with(
             window.microphone_status, "Not checked")
@@ -1438,6 +1440,7 @@ class SetupWindowTests(unittest.TestCase):
         }
         window.app.input_device = (2, 16000)
         window.app._cached_input_selector = "auto"
+        window.app._cached_input_topology = ("old device list",)
         window.device_values["Headset"] = "MME::Headset"
         window.device.get.return_value = "Headset"
         window.autostart = mock.Mock()
@@ -1452,6 +1455,7 @@ class SetupWindowTests(unittest.TestCase):
         self.assertFalse(window.app.settings["setup_complete"])
         self.assertIsNone(window.app.input_device)
         self.assertIsNone(window.app._cached_input_selector)
+        self.assertIsNone(window.app._cached_input_topology)
         save.assert_called_once_with(window.app.settings)
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
