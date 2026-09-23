@@ -1,7 +1,11 @@
 # Security
 
-Presspeech is a local-only dictation tool. The app does not send audio,
-transcripts, or telemetry to a network service. Finished text does enter the
+Presspeech is a local-only dictation tool. Presspeech does not send audio or
+transcripts to a network service. The published Windows 0.1.12 prerelease does
+not disable the bundled Hugging Face libraries' default usage telemetry during
+model downloads; those dependency-generated events are distinct from audio or
+transcript upload. Upcoming Windows 0.1.13 adds a runtime-verified opt-out.
+Finished text does enter the
 shared system clipboard for paste and recovery. macOS 0.3.8 can make
 those entries available through Universal Clipboard; builds containing the
 0.3.9 clipboard protection use AppKit's current-device-only option for every

@@ -2,8 +2,10 @@
 
 Fast, private, local push-to-talk dictation for Windows — a Windows port of
 [presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
-speak, release, and the transcript is typed at the cursor. No cloud, no
-accounts, no telemetry — speech recognition runs entirely on your machine.
+speak, release, and the transcript is typed at the cursor. Speech recognition
+runs on your machine; Presspeech has no account or cloud transcription service.
+The published 0.1.12 build does not disable bundled Hugging Face library
+telemetry during model downloads; see the [network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 
 Preferred engine: **NVIDIA Parakeet-TDT-0.6B-v3** — the same model family
 Presspeech uses on macOS. On an NVIDIA GPU (CUDA) it transcribes with
@@ -116,10 +118,11 @@ showing **Preparing speech model…** and does not open the microphone, play
 recording cues, mute playback, or claim to be listening. Release and press
 again once the preparation indicator disappears.
 Before recording, open Windows microphone privacy settings and turn on
-**Microphone access** and **Let desktop apps access your microphone**. Presspeech
-is an unpackaged desktop app, so Windows uses that shared desktop-app control
-rather than an app-specific Presspeech permission prompt. Also confirm the
-selected device under **Settings → System → Sound → Input**.
+**Microphone access**, **Let apps access your microphone**, and **Let desktop
+apps access your microphone**. Presspeech is an unpackaged desktop app, so
+Windows uses the shared desktop-app control rather than an app-specific
+Presspeech permission prompt. Also confirm the selected device under
+**Settings → System → Sound → Input**.
 
 On keyboard layouts where **Right Alt** enters `@`, `€`, or accented letters,
 Windows treats that key as **AltGr**. Presspeech leaves AltGr available for

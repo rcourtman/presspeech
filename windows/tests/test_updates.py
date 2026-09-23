@@ -501,12 +501,20 @@ class DownloadTests(unittest.TestCase):
         rejected = (
             "https://example.com/intermediate",
             "http://release-assets.githubusercontent.com/intermediate",
+            "https://user@release-assets.githubusercontent.com/intermediate",
+            "https://user:secret@release-assets.githubusercontent.com/intermediate",
+            "https://release-assets.githubusercontent.com:444/intermediate",
+            "https://release-assets.githubusercontent.com:not-a-port/intermediate",
         )
         for redirect_url in rejected:
             with self.subTest(redirect_url=redirect_url), \
                     self.assertRaises(updates.UpdateError):
                 handler.redirect_request(
                     request, None, 302, "Found", {}, redirect_url)
+
+        standard_port = "https://release-assets.githubusercontent.com:443/file"
+        self.assertEqual(
+            updates._checked_download_url(standard_port), standard_port)
 
     def test_installer_is_revalidated_before_launch(self):
         payload = b"safe installer"

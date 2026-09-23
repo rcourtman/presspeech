@@ -16,12 +16,14 @@ Core facts:
 - macOS setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
 - Windows install and requirements: https://rcourtman.github.io/presspeech/windows.html.
 - Windows installer trust: the prerelease is unsigned. Verify its published
-  SHA-256 before deciding whether to run it. Smart App Control or managed policy
-  may block it without an override; do not try to circumvent that policy.
+  SHA-256 before deciding whether to run it. SmartScreen may offer More info →
+  Run anyway after verification; a Smart App Control block is different and has
+  no per-app exception. If Smart App Control or managed policy blocks it, stop
+  and do not try to circumvent it.
 - First-use test: both apps provide a focused private scratchpad for verifying the hotkey and paste flow.
 - Target-app check: https://rcourtman.github.io/presspeech/app-compatibility.html provides five steady-focus and three focus-change attempts using disposable fields; report aggregate outcomes without the dictated or recognized text.
 - Deterministic voice tools: both apps map spoken phrases to exact text; macOS also offers optional spoken formatting for new lines, paragraphs, punctuation, quotes, and parentheses, using English commands by default and French commands when its Language Hint is French (English also includes bullets).
-- Privacy: no cloud transcription, no telemetry, no transcript persistence.
+- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; bundled-library network behavior is version-specific (see the privacy inventory).
 - Diagnostics: macOS Copy/Save Diagnostics and Windows Copy Diagnostics report runtime and microphone availability without transcript, dictionary, exact microphone names, raw error details, or raw log lines.
 - Delivery fallback: if macOS reports "Copied — press Command-V to paste" or Windows reports "Transcript copied, not pasted", the finished text is already on the clipboard. Paste manually rather than dictating it again.
 - Command-shell safety: Terminal, PowerShell, Command Prompt, and remote consoles are execution surfaces. The default paste suffix is a space; selecting Append newline on macOS or newline on Windows can execute pasted text before review. macOS spoken formatting can also insert line breaks. Recommend dictating command text into Try Dictation or a plain-text editor, reviewing the exact result, and only then pasting and running it deliberately.

@@ -454,6 +454,7 @@ candidate_assessment() {
         NR > 1 && $2 == "v3" {
             baseline_best[$1] = $9
             baseline_p50[$1] = $6
+            baseline_max[$1] = $13
             baseline_words[$1] = $8
             baseline_best_final_word[$1] = $10
             baseline_nonempty[$1] = $11
@@ -462,6 +463,7 @@ candidate_assessment() {
         NR > 1 && $2 == candidate {
             candidate_worst[$1] = $7
             candidate_p50[$1] = $6
+            candidate_max[$1] = $13
             candidate_words[$1] = $8
             candidate_worst_final_word[$1] = $5
             candidate_nonempty[$1] = $11
@@ -483,6 +485,8 @@ candidate_assessment() {
                 if (!(clip in candidate_worst) ||
                     baseline_best[clip] == "unknown" || candidate_worst[clip] == "unknown" ||
                     baseline_p50[clip] == "unknown" || candidate_p50[clip] == "unknown" ||
+                    baseline_max[clip] !~ /^[0-9]+([.][0-9]+)?$/ ||
+                    candidate_max[clip] !~ /^[0-9]+([.][0-9]+)?$/ ||
                     (baseline_best_final_word[clip] != "true" && baseline_best_final_word[clip] != "false") ||
                     (candidate_worst_final_word[clip] != "true" && candidate_worst_final_word[clip] != "false") ||
                     baseline_words[clip] != candidate_words[clip]) continue
@@ -492,15 +496,18 @@ candidate_assessment() {
                 candidate_errors += candidate_worst[clip]
                 baseline_latency += baseline_p50[clip]
                 candidate_latency += candidate_p50[clip]
+                baseline_max_latency += baseline_max[clip]
+                candidate_max_latency += candidate_max[clip]
                 if (candidate_worst[clip] < baseline_best[clip]) improved += 1
                 if (candidate_worst[clip] > baseline_best[clip]) regressed += 1
                 if (baseline_best_final_word[clip] == "true" &&
                     candidate_worst_final_word[clip] == "false") final_word_regressed += 1
             }
             ratio = baseline_latency > 0 ? candidate_latency / baseline_latency : 999
-            printf("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.3f\t%d\t%d\t%d\t%d\n",
+            max_ratio = baseline_max_latency > 0 ? candidate_max_latency / baseline_max_latency : 999
+            printf("%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.3f\t%.3f\t%d\t%d\t%d\t%d\n",
                    comparable, words, baseline_errors, candidate_errors,
-                   improved, regressed, final_word_regressed, ratio,
+                   improved, regressed, final_word_regressed, ratio, max_ratio,
                    silence_comparable, baseline_silence_nonempty,
                    candidate_silence_nonempty, silence_regressed)
         }
@@ -512,11 +519,11 @@ candidate_screen() {
     local source_state="$2"
     local candidate="$3"
     local comparable words baseline_errors candidate_errors improved regressed
-    local final_word_regressed latency_ratio
+    local final_word_regressed latency_ratio max_latency_ratio
     local silence_comparable baseline_silence_nonempty candidate_silence_nonempty
     local silence_regressed
     IFS=$'\t' read -r comparable words baseline_errors candidate_errors \
-        improved regressed final_word_regressed latency_ratio \
+        improved regressed final_word_regressed latency_ratio max_latency_ratio \
         silence_comparable baseline_silence_nonempty candidate_silence_nonempty \
         silence_regressed <<<"$assessment"
 
@@ -550,6 +557,8 @@ candidate_screen() {
         blockers+=("$final_word_regressed clip(s) introduced a final-word retention failure")
     awk -v ratio="$latency_ratio" -v max="$MAX_CANDIDATE_LATENCY_RATIO" \
         'BEGIN { exit !(ratio <= max) }' || blockers+=("latency exceeds ${MAX_CANDIDATE_LATENCY_RATIO}x baseline")
+    awk -v ratio="$max_latency_ratio" -v max="$MAX_CANDIDATE_LATENCY_RATIO" \
+        'BEGIN { exit !(ratio <= max) }' || blockers+=("average per-clip maximum latency exceeds ${MAX_CANDIDATE_LATENCY_RATIO}x baseline")
 
     if [[ "${#blockers[@]}" -eq 0 ]]; then
         printf 'passes\t'
@@ -760,24 +769,24 @@ run_self_test() {
     local precision_tsv="$tmpdir/precision.tsv"
     {
         printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors\tbest_final_word_retained\n'
-        printf '001\tv3\tna\t10.0\ttrue\t100.0\t2\t20\t1\ttrue\n'
-        printf '001\tv3-int8-v2\tna\t0.0\ttrue\t110.0\t0\t20\t0\ttrue\n'
-        printf '002\tv3\tna\t0.0\ttrue\t120.0\t0\t30\t0\ttrue\n'
-        printf '002\tv3-int8-v2\tna\t3.3\ttrue\t130.0\t1\t30\t1\ttrue\n'
+        printf '001\tv3\tna\t10.0\ttrue\t100.0\t2\t20\t1\ttrue\t0\t3\t120.0\n'
+        printf '001\tv3-int8-v2\tna\t0.0\ttrue\t110.0\t0\t20\t0\ttrue\t0\t3\t132.0\n'
+        printf '002\tv3\tna\t0.0\ttrue\t120.0\t0\t30\t0\ttrue\t0\t3\t140.0\n'
+        printf '002\tv3-int8-v2\tna\t3.3\ttrue\t130.0\t1\t30\t1\ttrue\t0\t3\t154.0\n'
     } >"$precision_tsv"
     assert_eq "$(candidate_assessment "$precision_tsv" v3-int8-v2)" \
-        $'2\t50\t1\t1\t1\t1\t0\t1.091\t0\t0\t0\t0' "encoder candidate conservative assessment"
+        $'2\t50\t1\t1\t1\t1\t0\t1.091\t1.100\t0\t0\t0\t0' "encoder candidate conservative assessment"
 
     local final_word_tsv="$tmpdir/final-word-results.tsv"
     {
         printf 'clip_id\tbackend\tbackend_setting\tmax_wer_percent\tfinal_word_retained\tp50_ms\tworst_word_errors\treference_words\tbest_word_errors\tbest_final_word_retained\n'
-        printf '001\tv3\tna\t5.0\tfalse\t100.0\t1\t20\t1\ttrue\n'
+        printf '001\tv3\tna\t5.0\tfalse\t100.0\t1\t20\t1\ttrue\t0\t3\t100.0\n'
         # Equal total errors and one unstable baseline trial must not hide
         # that the candidate traded an interior error for a dropped final word.
-        printf '001\tv2\tna\t5.0\tfalse\t105.0\t1\t20\t1\tfalse\n'
+        printf '001\tv2\tna\t5.0\tfalse\t105.0\t1\t20\t1\tfalse\t0\t3\t105.0\n'
     } >"$final_word_tsv"
     assert_eq "$(candidate_assessment "$final_word_tsv" v2)" \
-        $'1\t20\t1\t1\t0\t0\t1\t1.050\t0\t0\t0\t0' "equal-WER final-word regression assessment"
+        $'1\t20\t1\t1\t0\t0\t1\t1.050\t1.050\t0\t0\t0\t0' "equal-WER final-word regression assessment"
 
     local silence_tsv="$tmpdir/silence-results.tsv"
     {
@@ -789,7 +798,7 @@ run_self_test() {
         done
     } >"$silence_tsv"
     assert_eq "$(candidate_assessment "$silence_tsv" v2)" \
-        $'0\t0\t0\t0\t0\t0\t0\t999.000\t5\t0\t0\t0' \
+        $'0\t0\t0\t0\t0\t0\t0\t999.000\t999.000\t5\t0\t0\t0' \
         "reviewed non-speech assessment"
 
     local original_trials="$TRIALS"
@@ -803,31 +812,31 @@ run_self_test() {
     REFERENCES_HAND_AUDITED=0
     SILENCE_CONTROLS_HAND_AUDITED=1
     LANGUAGE=en
-    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t5\t0\t0\t0' clean v3-int8-v2)" \
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean v3-int8-v2)" \
         $'passes\t' "passing encoder candidate screen"
-    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t5\t0\t0\t0' clean v3-sdk-default)" \
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean v3-sdk-default)" \
         $'passes\t' "passing SDK-default chunking candidate screen"
-    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t5\t0\t0\t0' clean v2)" \
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean v2)" \
         $'passes\t' "passing English model candidate screen"
-    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t5\t0\t0\t0' clean unified)" \
+    assert_eq "$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean unified)" \
         $'passes\t' "passing Unified model candidate screen"
     local test_environment
     for test_environment in configured unreported pending; do
         EXPERIMENT_ENVIRONMENT_STATE="$test_environment"
         local environment_screen
-        environment_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t5\t0\t0\t0' clean v3-int8-v2)"
+        environment_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean v3-int8-v2)"
         assert_contains <(printf '%s' "$environment_screen") "blocked"
         assert_contains <(printf '%s' "$environment_screen") "inherited SDK environment is $test_environment"
     done
     EXPERIMENT_ENVIRONMENT_STATE="default"
     UNIFIED_TRAILING_SILENCE_MS=0
     local raw_unified_screen
-    raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t5\t0\t0\t0' clean unified)"
+    raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean unified)"
     assert_contains <(printf '%s' "$raw_unified_screen") \
         "Unified trailing silence must be 250 ms"
     UNIFIED_TRAILING_SILENCE_MS="$REQUIRED_UNIFIED_TRAILING_SILENCE_MS"
     LANGUAGE=auto
-    raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t5\t0\t0\t0' clean unified)"
+    raw_unified_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.100\t5\t0\t0\t0' clean unified)"
     assert_contains <(printf '%s' "$raw_unified_screen") \
         "English-only candidate requires an English unbiased baseline"
     local blocked_screen
@@ -837,6 +846,10 @@ run_self_test() {
     assert_contains <(printf '%s' "$blocked_screen") \
         "1 clip(s) introduced a final-word retention failure"
     assert_contains <(printf '%s' "$blocked_screen") "latency exceeds 1.25x baseline"
+    local tail_latency_screen
+    tail_latency_screen="$(candidate_screen $'25\t1200\t10\t9\t1\t0\t0\t1.100\t1.300\t5\t0\t0\t0' clean v3-int8-v2)"
+    assert_contains <(printf '%s' "$tail_latency_screen") \
+        "average per-clip maximum latency exceeds 1.25x baseline"
     assert_contains <(printf '%s' "$blocked_screen") \
         "candidate produced text in 1 non-speech trial(s)"
     SILENCE_CONTROLS_HAND_AUDITED=0
@@ -1342,7 +1355,7 @@ fi
 
 assessment="$(candidate_assessment "$tsv" "$CANDIDATE_BACKEND")"
 IFS=$'\t' read -r comparable reference_words baseline_errors candidate_errors \
-    improved regressed final_word_regressed latency_ratio \
+    improved regressed final_word_regressed latency_ratio max_latency_ratio \
     silence_comparable baseline_silence_nonempty candidate_silence_nonempty \
     silence_regressed <<<"$assessment"
 screen="$(candidate_screen "$assessment" "$BENCHMARK_SOURCE_STATE" "$CANDIDATE_BACKEND")"
@@ -1363,14 +1376,14 @@ IFS=$'\t' read -r verdict blockers <<<"$screen"
         echo
         echo "## Model Candidate Evidence Screen"
         echo
-        echo "The candidate's worst observed transcript is compared with baseline's best observed transcript on each speech clip; a noisy baseline trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, default inherited SDK controls in every native invocation, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} speech clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, no new final-word retention failure, at least ${MIN_SILENCE_CONTROL_CLIPS} independently recorded hand-audited non-speech controls with no candidate text in any trial, and average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x baseline. English-only candidates require an English unbiased baseline. Unified additionally requires ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms trailing silence and the separate tail-word gate. Private speech references must be hand-audited; licensed public speech references are accepted. This is a per-corpus prerequisite, not approval to ship."
+        echo "The candidate's worst observed transcript is compared with baseline's best observed transcript on each speech clip; a noisy baseline trial therefore cannot hide a candidate regression. Passing requires a clean benchmark source, default inherited SDK controls in every native invocation, at least ${MIN_CANDIDATE_TRIALS} trials, ${MIN_CANDIDATE_CLIPS} speech clips, ${MIN_CANDIDATE_REFERENCE_WORDS} reference words, at least one demonstrated improvement, no per-clip or corpus error increase, no new final-word retention failure, at least ${MIN_SILENCE_CONTROL_CLIPS} independently recorded hand-audited non-speech controls with no candidate text in any trial, average p50 latency within ${MAX_CANDIDATE_LATENCY_RATIO}x baseline, and average per-clip maximum observed latency within the same ratio. The max comparison is an observed-tail guard, not a statistical percentile guarantee. English-only candidates require an English unbiased baseline. Unified additionally requires ${REQUIRED_UNIFIED_TRAILING_SILENCE_MS} ms trailing silence and the separate tail-word gate. Private speech references must be hand-audited; licensed public speech references are accepted. This is a per-corpus prerequisite, not approval to ship."
         echo
-        echo "| Candidate | Comparable speech clips | Reference words | Baseline best errors | Candidate worst errors | Improved clips | Regressed clips | New final-word failures | Non-speech controls | Baseline / candidate false-positive trials | p50 / baseline | Verdict | Blockers |"
-        echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
-        printf '| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s / %s | %.3f | %s | %s |\n' \
+        echo "| Candidate | Comparable speech clips | Reference words | Baseline best errors | Candidate worst errors | Improved clips | Regressed clips | New final-word failures | Non-speech controls | Baseline / candidate false-positive trials | p50 / baseline | avg max / baseline | Verdict | Blockers |"
+        echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"
+        printf '| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s / %s | %.3f | %.3f | %s | %s |\n' \
             "$CANDIDATE_BACKEND" "$comparable" "$reference_words" "$baseline_errors" \
             "$candidate_errors" "$improved" "$regressed" "$final_word_regressed" \
-            "$silence_comparable" "$baseline_silence_nonempty" "$candidate_silence_nonempty" "$latency_ratio" \
+            "$silence_comparable" "$baseline_silence_nonempty" "$candidate_silence_nonempty" "$latency_ratio" "$max_latency_ratio" \
             "$verdict" "${blockers:-}"
     fi
     echo

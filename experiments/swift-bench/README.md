@@ -753,7 +753,12 @@ For a Unified, v2, SDK-default chunking, or encoder product-candidate gate, add
 trials, 25 comparable clips and 1,000 reference words, at least one
 demonstrated error reduction, no per-clip or aggregate word-error increase,
 no new final-word retention failure on any clip, and average p50 latency no
-more than 1.25× production. It also requires at least five independently
+more than 1.25× production. It additionally requires the average of each
+speech clip's maximum observed trial latency to stay within 1.25× production;
+this guards against a slower observed tail that a p50-only average could hide,
+but is not a statistical percentile guarantee. Both latency ratios use only
+comparable speech clips, and missing maximum-latency measurements block
+qualification. It also requires at least five independently
 recorded, hand-audited non-speech controls and rejects any candidate text on
 those controls. Final-word retention is evaluated conservatively
 and independently of total WER: the candidate's worst observed retention is

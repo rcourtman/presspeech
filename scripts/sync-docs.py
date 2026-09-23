@@ -1241,7 +1241,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         text = replace_literal(
             text,
             "- Privacy: no cloud transcription, no telemetry, no transcript persistence.\n",
-            "- Privacy: no cloud transcription, no telemetry, no transcript persistence.\n" + diagnostics_line,
+            "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; bundled-library network behavior is version-specific (see the privacy inventory).\n" + diagnostics_line,
             path=path,
         )
     text = text.replace(
@@ -1904,6 +1904,61 @@ def check_mac_release_phase_copy(
                 re.IGNORECASE,
             ),
             "phase-bound published-macOS wording",
+        ),
+    )
+    errors: list[str] = []
+    for path in paths if paths is not None else public_release_paths():
+        if not path.exists():
+            continue
+        text = read_text(path)
+        matches = [label for pattern, label in patterns if pattern.search(text)]
+        if not matches:
+            continue
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        errors.append(
+            f"{display}: release-phase copy will become stale — "
+            + ", ".join(matches)
+        )
+    return errors
+
+
+def check_windows_release_phase_copy(
+    metadata: dict[str, object], paths: list[Path] | None = None
+) -> list[str]:
+    """Reject Windows copy that becomes false when the configured build ships."""
+    version = str(metadata["windows_version"])
+    separator = r"(?:\s|[*_`]|<[^>]+>)*"
+    patterns = (
+        (
+            re.compile(
+                rf"\bupcoming{separator}Windows{separator}{re.escape(version)}\b",
+                re.IGNORECASE,
+            ),
+            f"configured Windows {version} is still called upcoming",
+        ),
+        (
+            re.compile(
+                rf"\bWindows{separator}{re.escape(version)}"
+                rf"{separator}(?:release\s+)?candidate\b",
+                re.IGNORECASE,
+            ),
+            f"configured Windows {version} is still called a candidate",
+        ),
+        (
+            re.compile(
+                rf"\bcurrently\s+published{separator}Windows{separator}"
+                r"v?\d+\.\d+\.\d+\b",
+                re.IGNORECASE,
+            ),
+            "phase-bound current-published Windows wording",
+        ),
+        (
+            re.compile(
+                rf"\bpublished{separator}Windows{separator}release"
+                rf"{separator}remains{separator}v?\d+\.\d+\.\d+\b",
+                re.IGNORECASE,
+            ),
+            "phase-bound published-Windows wording",
         ),
     )
     errors: list[str] = []
@@ -2774,6 +2829,29 @@ def run_self_test() -> None:
         )
         if check_mac_release_phase_copy(metadata, [phase_copy]):
             raise SyncError("self-test: release-stable Mac copy was rejected")
+        phase_copy.write_text(
+            "Upcoming Windows **9.8.7** adds this behavior.\n",
+            encoding="utf-8",
+        )
+        phase_errors = check_windows_release_phase_copy(metadata, [phase_copy])
+        if len(phase_errors) != 1 or "called upcoming" not in phase_errors[0]:
+            raise SyncError("self-test: phase-bound current Windows copy was not rejected")
+        phase_copy.write_text(
+            "Windows 9.8.7 candidate adds this behavior.\n", encoding="utf-8"
+        )
+        if not check_windows_release_phase_copy(metadata, [phase_copy]):
+            raise SyncError("self-test: Windows candidate copy was not rejected")
+        phase_copy.write_text(
+            "Published Windows release remains 9.8.6.\n", encoding="utf-8"
+        )
+        if not check_windows_release_phase_copy(metadata, [phase_copy]):
+            raise SyncError("self-test: phase-bound old Windows copy was not rejected")
+        phase_copy.write_text(
+            "Windows 9.8.7 and later contain this behavior; legacy 9.8.6 differs.\n",
+            encoding="utf-8",
+        )
+        if check_windows_release_phase_copy(metadata, [phase_copy]):
+            raise SyncError("self-test: release-stable Windows copy was rejected")
 
 
 def main() -> int:
@@ -2796,6 +2874,7 @@ def main() -> int:
         if args.check:
             errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
             errors.extend(check_mac_release_phase_copy(metadata))
+            errors.extend(check_windows_release_phase_copy(metadata))
             errors.extend(check_windows_release_references(metadata))
             errors.extend(check_icon_stats(metadata))
             errors.extend(check_platform_orientation())
@@ -2833,6 +2912,7 @@ def main() -> int:
 
         errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
         errors.extend(check_mac_release_phase_copy(metadata))
+        errors.extend(check_windows_release_phase_copy(metadata))
         errors.extend(check_windows_release_references(metadata))
         errors.extend(check_icon_stats(metadata))
         errors.extend(check_platform_orientation())

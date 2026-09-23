@@ -137,13 +137,14 @@ open /Applications/Presspeech.app</code></pre>
         </div>
       </section>
 
-      <section>
+      <section id="permissions">
         <div class="wrap">
           <span class="section-eyebrow">Three grants</span>
           <h2>Permissions</h2>
           <p>Presspeech needs Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist shows each grant, explains why it is needed, and opens the relevant macOS prompt or Settings pane.</p>
+          <div class="note warn"><p><strong>Review the scope before granting Accessibility.</strong> Apple describes this as access to control your Mac and advises granting it only to apps you trust; it may also expose contacts, calendar, and other information. Presspeech uses the grant to check the focused destination and send the paste shortcut. The system permission is broader than that use. If you leave it off, Presspeech cannot use its normal verified paste path. Read <a href="https://support.apple.com/en-gb/guide/mac-help/mh43185/mac">Apple’s accessibility-permission guidance</a> before deciding.</p></div>
           <div class="note">
-            <p>These are local macOS privacy grants, not an account permission model. Presspeech has no cloud transcription endpoint, no telemetry SDK, and no camera, contacts, calendar, location, file-provider, JIT, or unsigned-executable-memory entitlement.</p>
+            <p>These are local macOS privacy grants, not an account permission model. Presspeech has no cloud transcription endpoint or Presspeech-authored telemetry SDK, and no camera, contacts, calendar, location, file-provider, JIT, or unsigned-executable-memory entitlement. See the <a href="privacy.html#network-calls">network-call inventory</a> for bundled-library behavior by published version.</p>
           </div>
           <div class="table-scroll">
             <table>

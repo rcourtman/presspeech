@@ -77,10 +77,11 @@ Download the self-contained installer—Python is not required:
   asks before launch, and stops rather than weakening Windows security policy.
 
 The installer is currently unsigned, so SmartScreen may show **Unknown
-publisher**. Choose **More info → Run anyway** only if Windows offers that
-choice and the guide reports that SHA-256 verification succeeded. Windows 11
-Smart App Control or managed policy may block an unsigned app without offering
-an override; do not try to circumvent that policy. The installed app is about
+publisher**. Choose **More info → Run anyway** only after SHA-256 verification
+and if SmartScreen offers that choice. That option does not apply to a Smart
+App Control block, which has no per-app exception. If Smart App Control or
+managed policy blocks the installer, stop; do not try to circumvent the block.
+The installed app is about
 4.4 GB. On a fresh PC with NVIDIA CUDA, the default Parakeet model download is
 about 2.5 GB; without usable CUDA, Presspeech selects the smaller Whisper
 base.en CPU model (about 141 MiB), which is English-only. Other local models
@@ -124,6 +125,9 @@ feature, choose a different key under Settings. Presspeech asks for Microphone,
 Accessibility (shown as **Device Control and Data Access** on macOS 27 and
 later), and Input Monitoring because it records while the hotkey is active,
 observes the global hotkey, and pastes text at the cursor.
+Accessibility is a broad system-control grant; review its scope and Apple's
+guidance in the [macOS permission section](https://rcourtman.github.io/presspeech/install.html#permissions)
+before granting it.
 
 If the Presspeech item is hidden by a crowded or notched menu bar, open
 **Presspeech.app** again from Applications, Finder, or Spotlight. The running
@@ -324,7 +328,9 @@ Presspeech is local-first:
 
 - Audio is captured in memory, transcribed locally, then discarded.
 - No cloud transcription.
-- No telemetry, analytics, accounts, or crash reporter.
+- No Presspeech-authored analytics, accounts, or crash reporter. Bundled
+  speech-library network behavior differs by published version; see the
+  [privacy inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
 - Transcript content is never written to logs.
 - Recent transcript history is in-memory only and clears on quit.
 - Text corrections stay local unless you choose a sync file yourself.

@@ -908,7 +908,8 @@ class SetupWindow:
         ttk.Label(
             frame,
             text=("Speak while the check runs. If it fails, enable Microphone "
-                  "access and Let desktop apps access your microphone."),
+                  "access, Let apps access your microphone, and Let desktop "
+                  "apps access your microphone."),
             justify="left",
         ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4, 3))
         microphone_actions = ttk.Frame(frame)

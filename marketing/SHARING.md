@@ -40,7 +40,7 @@ GitHub's repository profile is a manual distribution surface and must match the
 two-platform README. Use this About description:
 
 > Private local push-to-talk dictation for Apple Silicon Macs, plus an x64
-> Windows preview — no account, subscription, cloud transcription, or telemetry.
+> Windows preview — no account, subscription, or cloud transcription; bundled-library network behavior is version-specific.
 
 Keep the existing topics and include `windows`, `offline`, and `on-device-ai`;
 otherwise GitHub search presents Presspeech as a Mac-only project even while a
@@ -52,7 +52,7 @@ Windows build is available.
   methodology included; clipboard and paste work are not part of that timing
 - **8.4 MB signed, notarised download** — release asset size; about 500-600 MB for the local speech model
 - **~80 MB RAM while idle, 0% CPU between dictations** — site stats
-- **100% local** — no cloud transcription, no telemetry, no account; the privacy page documents the full network surface
+- **100% local** — no cloud transcription or account; bundled-library network behavior is version-specific; the privacy page documents the full network surface
 - **Free, MIT, native Swift menu-bar app**
 - State the requirements up front (Apple Silicon, macOS 14+; Homebrew optional for updates) — it costs a sentence and buys trust.
 
@@ -76,8 +76,7 @@ recovery is part of the product contract rather than a universal-paste claim.
 
 I built it because I wanted dictation that feels like a keyboard
 shortcut rather than a mode you enter and leave. It is free and MIT
-licensed, with no account, subscription, telemetry, or cloud
-transcription.
+licensed, with no account, subscription, or cloud transcription. Bundled-library network behavior is version-specific.
 
 How it works: audio is captured in memory and decoded once on key
 release with the local Parakeet TDT v3 CoreML model through FluidAudio on the
@@ -121,8 +120,7 @@ cannot be verified, the text stays on the clipboard for manual paste instead.
   Neural Engine
 - about 100 ms for model transcription on the documented M4 benchmark clips;
   clipboard and paste work are not included
-- no account, subscription, telemetry, cloud transcription, or saved
-  audio
+- no account, subscription, cloud transcription, or saved audio; bundled-library network behavior is version-specific
 - 8.4 MB notarised app; the local speech model is about 500–600 MB on
   first launch
 - voice shortcuts for exact reusable text, plus optional deterministic
@@ -262,7 +260,7 @@ Local Mac comparison ("why not FluidVoice?"):
 > FluidVoice is the stronger choice if you want live preview, model switching,
 > Intel Mac support, optional audio history, or local AI rewriting. Presspeech
 > is narrower: one fixed model path, deterministic text handling, explicit
-> paste-destination recovery, and no telemetry or cloud-AI path. Both are free,
+> paste-destination recovery, and no Presspeech-authored analytics or cloud-AI path. Both are free,
 > local-first, and open source. Current factual comparison:
 > https://rcourtman.github.io/presspeech/compare/fluidvoice.html. I maintain
 > Presspeech, so read it with that in mind.
@@ -295,7 +293,7 @@ Local Mac workspace comparison ("why not MacParakeet?"):
 > MacParakeet is the stronger choice if you want file and meeting
 > transcription, broad model choice, persistent history, optional AI features,
 > or command-line automation in the same free Mac app. Presspeech is narrower:
-> dictation only, no persistent transcript archive or telemetry, deterministic
+> dictation only, no persistent transcript archive or Presspeech-authored analytics, deterministic
 > text handling, and explicit manual recovery when it cannot verify the
 > original paste window. Both run their core speech recognition locally. Current
 > sourced comparison: https://rcourtman.github.io/presspeech/compare/macparakeet.html.
@@ -309,7 +307,7 @@ For directories and "what is this" replies:
 > apps for Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release,
 > and the transcript normally returns to the window where recording began,
 > with a manual clipboard fallback when that destination cannot be verified.
-> There is no cloud transcription or telemetry. The published Mac benchmark
+> There is no cloud transcription or Presspeech-authored analytics; bundled-library network behavior is version-specific. The published Mac benchmark
 > measures about 100 ms for the local model call; it does not include clipboard
 > or paste work.
 

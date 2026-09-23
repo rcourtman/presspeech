@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Presspeech Privacy - Local Dictation, No Telemetry</title>
-    <meta name="description" content="Presspeech transcribes locally on macOS and Windows, stores no transcript history on disk, ships no telemetry, and documents its complete network surface.">
+    <title>Presspeech Privacy - Local Dictation and Network Details</title>
+    <meta name="description" content="Presspeech transcribes locally and documents its network surface, including Hugging Face library telemetry in the published Windows 0.1.12 prerelease.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/privacy.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
-    <meta property="og:title" content="Presspeech Privacy - Local Dictation, No Telemetry">
-    <meta property="og:description" content="Presspeech transcribes locally on macOS and Windows, stores no transcript history on disk, ships no telemetry, and documents its complete network surface.">
+    <meta property="og:title" content="Presspeech Privacy - Local Dictation and Network Details">
+    <meta property="og:description" content="Presspeech transcribes locally and documents its network surface, including Hugging Face library telemetry in the published Windows 0.1.12 prerelease.">
     <meta property="og:url" content="https://rcourtman.github.io/presspeech/privacy.html">
     <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:image:type" content="image/png">
@@ -45,7 +45,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Privacy</span>
         <h1>Privacy model</h1>
-        <p>Presspeech is local-first in the strict sense: no analytics SDK, no accounts, no crash reporter, no transcript sync, and no cloud transcription endpoint.</p>
+        <p>Presspeech transcribes locally: it has no Presspeech-operated analytics service, accounts, crash reporter, transcript sync, or cloud transcription endpoint. However, the published Windows 0.1.12 prerelease does not disable its Hugging Face libraries' default usage telemetry; see the model-download entry in the network inventory below. This telemetry is dependency-generated, not audio or transcript upload. The upcoming Windows 0.1.13 adds a runtime-verified telemetry opt-out; do not assume it is present in 0.1.12.</p>
       </div>
 
       <section>
@@ -77,7 +77,7 @@
         </div>
       </section>
 
-      <section>
+      <section id="network-calls">
         <div class="wrap">
           <span class="section-eyebrow">Five call types, fully listed</span>
           <h2>Network calls</h2>
@@ -98,7 +98,7 @@
                 <tr>
                   <th scope="row">Model download</th>
                   <td><code>huggingface.co</code> and its subdomains, plus Hugging Face model-storage/CDN hosts under <code>hf.co</code></td>
-                  <td>macOS downloads the FluidAudio Parakeet TDT v3 CoreML model (about 500-600 MB) on first launch, after an integrity failure, or after a user-triggered cache reset. Windows downloads its selected local model; fresh systems use multilingual Parakeet (about 2.5 GB) when CUDA is usable or English-only Whisper base.en (about 141 MiB) on CPU. No dictation audio is sent. Hugging Face necessarily observes and can count the requested model/revision fetch; Windows requests also identify bundled library/runtime versions in User-Agent fields. macOS 0.3.8 can attach an inherited <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> to a model request. Upcoming 0.3.9 removes those credentials from its own process before FluidAudio can read them, making the public model fetch unauthenticated without changing the user's shell or token store. Upcoming Windows 0.1.13 forces the public Hub endpoint before its model libraries import, disables Hugging Face telemetry, disables implicit authentication and inherited User-Agent origin data, passes no account token, and uses the fixed non-unique request-session value <code>telemetry-off</code> instead of Transformers' random identifier.</td>
+                  <td>macOS downloads the FluidAudio Parakeet TDT v3 CoreML model (about 500-600 MB) on first launch, after an integrity failure, or after a user-triggered cache reset. Windows downloads its selected local model; fresh systems use multilingual Parakeet (about 2.5 GB) when CUDA is usable or English-only Whisper base.en (about 141 MiB) on CPU. No dictation audio or transcript is sent. Hugging Face necessarily observes and can count the requested model/revision fetch; Windows requests also identify bundled library/runtime versions in User-Agent fields. Published Windows 0.1.12 does not disable Hugging Face libraries' default telemetry: those libraries may send library-defined usage telemetry, and Transformers includes a random per-process session identifier in model-request metadata. The exact telemetry event fields are defined by the bundled libraries and are not independently enumerated here. macOS 0.3.8 can attach an inherited <code>HF_TOKEN</code>, <code>HUGGING_FACE_HUB_TOKEN</code>, or <code>HUGGINGFACEHUB_API_TOKEN</code> to a model request. Upcoming 0.3.9 removes those credentials from its own process before FluidAudio can read them, making the public model fetch unauthenticated without changing the user's shell or token store. Upcoming Windows 0.1.13 forces the public Hub endpoint before its model libraries import, disables Hugging Face telemetry, disables implicit authentication and inherited User-Agent origin data, passes no account token, and uses the fixed non-unique request-session value <code>telemetry-off</code> instead of Transformers' random identifier.</td>
                   <td>Required for each platform's local transcription.</td>
                 </tr>
                 <tr>

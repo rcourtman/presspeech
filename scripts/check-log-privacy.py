@@ -228,6 +228,20 @@ def is_python_log_call(node: ast.Call) -> bool:
     return isinstance(node.func, ast.Attribute) and node.func.attr == "_log"
 
 
+def contains_raw_exception_details(node: ast.AST) -> bool:
+    """Reject common unbounded exception renderings in persistent logs."""
+    for current in ast.walk(node):
+        if (isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute)
+                and current.func.attr in {"format_exc", "format_exception"}):
+            return True
+        if (isinstance(current, ast.Call) and isinstance(current.func, ast.Name)
+                and current.func.id == "str" and current.args and
+                isinstance(current.args[0], ast.Name) and
+                current.args[0].id in {"exc", "exception", "error", "err"}):
+            return True
+    return False
+
+
 def python_private_identifiers(node: ast.AST) -> list[str]:
     identifiers: set[str] = set()
 
@@ -279,9 +293,13 @@ def scan_python_text(path: Path, text: str) -> list[str]:
     )
     for node in log_calls:
         identifiers: set[str] = set()
+        raw_exception_details = False
         for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
             identifiers.update(python_private_identifiers(argument))
-        if identifiers:
+            raw_exception_details |= contains_raw_exception_details(argument)
+        if identifiers or raw_exception_details:
+            if raw_exception_details:
+                identifiers.add("raw exception details")
             findings.append(
                 f"{path}:{node.lineno}: suspicious log argument references "
                 f"{', '.join(sorted(identifiers))}"
@@ -336,6 +354,9 @@ self._log(f"corrected: {corrected}")
 self._log("dictionary: %s" % self.settings["dictionary"])
 self._log(audio)
 self._log(text.upper())
+self._log(traceback.format_exc())
+self._log("failed: %s" % str(exc))
+self._log("failed: %s" % traceback.format_exception(*sys.exc_info()))
 """
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
@@ -371,9 +392,9 @@ self._log(text.upper())
         if findings:
             raise SystemExit(f"self-test rejected clean Python log calls: {findings}")
         findings = scan_paths([python_dirty_path])
-        if len(findings) != 6:
+        if len(findings) != 9:
             raise SystemExit(
-                f"self-test expected 6 dirty Python findings, got {len(findings)}: {findings}"
+                f"self-test expected 9 dirty Python findings, got {len(findings)}: {findings}"
             )
         for identifier in ("audio", "corrected", "dictionary", "text", "transcript"):
             if not any(identifier in finding for finding in findings):

@@ -1,6 +1,6 @@
 {
   "project": "Presspeech",
-  "privacy_model": "Local dictation, no telemetry, no cloud transcription endpoint",
+  "privacy_model": "Local dictation without Presspeech-authored analytics or cloud transcription; bundled-library network behavior varies by published version",
   "network_calls": [
     {
       "name": "macos_first_launch_model_download",
@@ -26,7 +26,7 @@
       "approximate_size": "About 2.5 GB for Parakeet TDT v3 or 141 MiB for Whisper base.en",
       "user_triggered": false,
       "can_disable": false,
-      "data_sent": "HTTPS request metadata, selected public model and revision, and bundled library/runtime versions in User-Agent fields; no dictation audio or transcript. Hugging Face necessarily observes and can count the model fetch itself. Upcoming Windows 0.1.13 additionally fixes the public huggingface.co endpoint, disables Hugging Face library telemetry, removes inherited User-Agent origin data and implicit authentication, explicitly declines account tokens, and replaces Transformers' random request session ID with the fixed non-unique value telemetry-off. These additional controls are not claimed for published 0.1.12."
+      "data_sent": "HTTPS request metadata, selected public model and revision, and bundled library/runtime versions in User-Agent fields; no dictation audio or transcript. Hugging Face necessarily observes and can count the model fetch itself. Published Windows 0.1.12 does not disable the Hugging Face libraries' default telemetry; those libraries may send library-defined usage telemetry, and Transformers includes a random per-process session identifier in model-request metadata. The exact telemetry event fields are defined by the bundled libraries and are not independently enumerated here. Upcoming Windows 0.1.13 additionally fixes the public huggingface.co endpoint, disables Hugging Face library telemetry, removes inherited User-Agent origin data and implicit authentication, explicitly declines account tokens, and replaces Transformers' random request session ID with the fixed non-unique value telemetry-off. These additional controls are not claimed for published 0.1.12."
     },
     {
       "name": "macos_update_check",

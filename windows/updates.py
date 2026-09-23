@@ -195,7 +195,14 @@ def _next_releases_page(link_header, expected_page):
 
 def _checked_download_url(url):
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme != "https" or parsed.hostname not in ALLOWED_DOWNLOAD_HOSTS:
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise UpdateError("release asset uses an unexpected download host") from exc
+    if (parsed.scheme != "https" or
+            parsed.hostname not in ALLOWED_DOWNLOAD_HOSTS or
+            parsed.username is not None or parsed.password is not None or
+            port not in (None, 443)):
         raise UpdateError("release asset uses an unexpected download host")
     return url
 

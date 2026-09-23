@@ -381,6 +381,16 @@ class AccessibleWindowTests(unittest.TestCase):
             body.index('text="Microphone"'),
         )
 
+    def test_setup_names_all_windows_microphone_privacy_switches(self):
+        body = inspect.getsource(ui.SetupWindow._build)
+
+        for switch in (
+                "enable Microphone ",
+                "access, Let apps access your microphone",
+                "Let desktop ",
+                "apps access your microphone"):
+            self.assertIn(switch, body)
+
     def test_scrollable_dialog_routes_wheel_and_shift_wheel(self):
         body = ui._ScrollableDialogBody.__new__(ui._ScrollableDialogBody)
         body.canvas = mock.Mock()

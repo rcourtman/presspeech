@@ -16,7 +16,6 @@ import struct
 import sys
 import threading
 import time
-import traceback
 import winsound
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
@@ -2208,7 +2207,9 @@ class PresspeechApp:
             # A missing/corrupt local model or constructor failure is not
             # permission to fetch a different model. Keep loading errors
             # separate from the existing fallback for a failed GPU decode.
-            self._log(traceback.format_exc())
+            # Third-party exception text/tracebacks can contain private input
+            # or local environment details, so persistent logs stay generic.
+            self._log("speech model load failed; error details suppressed")
             self.notify("Model load failed",
                         "The selected model could not load. Retry it in Settings "
                         "or choose another model before recording again.")
@@ -2813,16 +2814,16 @@ class PresspeechApp:
             except Exception:
                 pass
             self._last_model_use = time.perf_counter()
-        except Exception as exc:
+        except Exception:
             with model_state_lock:
                 if (request_generation == self._model_load_generation and
                         self.settings["model"] == model_name):
                     self.model_status = "error"
-                    self.model_status_detail = str(exc)[:160]
+                    self.model_status_detail = "Model load failed; retry in Settings"
                 if (request_generation == self._model_load_generation and
                         getattr(self, "_model_load_target", None) == model_name):
                     self._model_load_target = None
-            self._log("speech model load failed: %s\n%s" % (exc, traceback.format_exc()))
+            self._log("speech model load failed; error details suppressed")
             if (request_generation == self._model_load_generation and
                     self.settings["model"] == model_name):
                 self.notify(

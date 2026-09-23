@@ -37,7 +37,7 @@
             "@type": "SoftwareApplication",
             "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
             "name": "Presspeech for Windows",
-            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech pastes only when it can verify the original destination; otherwise it leaves the transcript on the clipboard for manual paste. There is no cloud transcription, account, subscription, or telemetry.",
+            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech pastes only when it can verify the original destination; otherwise it leaves the transcript on the clipboard for manual paste. There is no cloud transcription or account system; bundled-library network behavior is documented by version.",
             "operatingSystem": "Windows 11 x64 recommended; Windows 10 x64 only while the specific edition remains supported or is enrolled in applicable Extended Security Updates",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "Speech recognition, dictation, transcription",
@@ -85,7 +85,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Windows prerelease</span>
         <h1>Private dictation on your Windows PC</h1>
-        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it keeps the result on the clipboard for manual paste. There is no account, subscription, telemetry, or cloud transcription.</p>
+        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it keeps the result on the clipboard for manual paste. There is no account or cloud transcription. Published 0.1.12 does not disable bundled Hugging Face library telemetry during model downloads; see the <a href="privacy.html#network-calls">network-call inventory</a>.</p>
         <p class="quiet" data-release-status>Current published Windows prerelease: 0.1.12. Install metadata updated <time datetime="2026-09-22">22 September 2026</time>.</p>
         <div class="note">
           <p><strong>Check your language before downloading.</strong> Fresh systems with usable NVIDIA CUDA select multilingual Parakeet (~2.5 GB). Without usable CUDA, the fresh CPU default is English-only Whisper base.en (~141 MiB). Other local models remain selectable in Settings. <a href="#language-support">Compare the two first-run paths</a>.</p>
@@ -149,7 +149,7 @@ gh release verify-asset windows-v0.1.12 $installer --repo rcourtman/presspeech</
             </li>
             <li>
               <strong>Run the installer</strong>
-              <p>The current build is unsigned. If Microsoft Defender SmartScreen shows <strong>Windows protected your PC</strong>, confirm the filename and verified hash before choosing <strong>More info → Run anyway</strong>. If policy does not offer that choice, do not try to circumvent it.</p>
+              <p>The current build is unsigned. If Microsoft Defender SmartScreen shows <strong>Windows protected your PC</strong>, confirm the filename and verified hash before choosing <strong>More info → Run anyway</strong>. That choice applies to a SmartScreen reputation warning, not a Smart App Control block: <a href="https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions">Smart App Control has no per-app exception</a>. If Smart App Control or your administrator blocks the installer, stop; do not disable protection or work around the block.</p>
             </li>
             <li>
               <strong>Launch Presspeech</strong>
@@ -234,7 +234,7 @@ After the user completes the installer, launch Presspeech from the Start Menu. E
             </li>
             <li>
               <strong>Check microphone access</strong>
-              <p>If setup reports that the microphone is connected but no input level was detected, unmute it, speak, and choose <strong>Check Again</strong>. If the microphone cannot be opened, use the direct buttons to open Windows Microphone Privacy or Sound Input settings. Turn on <strong>Microphone access</strong> and <strong>Let desktop apps access your microphone</strong>, confirm the input, then check again. After reconnecting a USB or Bluetooth microphone, <strong>Check Again</strong> refreshes device discovery without an app restart; a specifically selected unavailable input remains selected instead of silently changing to another microphone. Before opening the microphone for each recording, Presspeech confirms that its cached Windows audio-device index still names the configured microphone and remains an allowed input, rejecting a stale entry when re-enumeration shows that indexes changed after reconnect or resume. Unpackaged desktop apps share this privacy control, so Windows does not provide a separate Presspeech toggle. Outside the brief readiness check, Presspeech captures audio only while dictation is active; all captured audio is discarded after local processing.</p>
+              <p>If setup reports that the microphone is connected but no input level was detected, unmute it, speak, and choose <strong>Check Again</strong>. If the microphone cannot be opened, use the direct buttons to open Windows Microphone Privacy or Sound Input settings. Turn on <strong>Microphone access</strong>, <strong>Let apps access your microphone</strong>, and <strong>Let desktop apps access your microphone</strong>, confirm the input, then check again. After reconnecting a USB or Bluetooth microphone, <strong>Check Again</strong> refreshes device discovery without an app restart; a specifically selected unavailable input remains selected instead of silently changing to another microphone. Before opening the microphone for each recording, Presspeech confirms that its cached Windows audio-device index still names the configured microphone and remains an allowed input, rejecting a stale entry when re-enumeration shows that indexes changed after reconnect or resume. Unpackaged desktop apps share this privacy control, so Windows does not provide a separate Presspeech toggle. Outside the brief readiness check, Presspeech captures audio only while dictation is active; all captured audio is discarded after local processing.</p>
             </li>
             <li>
               <strong>Try a private test</strong>

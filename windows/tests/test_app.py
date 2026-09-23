@@ -3139,10 +3139,14 @@ class StartupTests(unittest.TestCase):
         indicator_states = []
         instance._set_indicator.side_effect = lambda state: indicator_states.append(
             (state, instance.model_status))
-        with mock.patch.object(app.PresspeechApp, "_log"):
+        with mock.patch.object(app.PresspeechApp, "_log") as log:
             instance._preload_model_worker()
         self.assertEqual(instance.model_status, "error")
-        self.assertIn("model unavailable", instance.model_status_detail)
+        self.assertNotIn("model unavailable", instance.model_status_detail)
+        self.assertEqual(
+            instance.model_status_detail, "Model load failed; retry in Settings")
+        self.assertTrue(all("model unavailable" not in str(call)
+                            for call in log.call_args_list))
         self.assertEqual(
             indicator_states, [("loading", "loading"), (None, "error")])
 
