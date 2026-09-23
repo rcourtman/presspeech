@@ -19,15 +19,16 @@ thread accepts comments; keep privacy-safe results local if no public route
 accepts them. Do not use another public service as a workaround for a blocked
 form.
 
-Use the cross-platform [bug report
+When GitHub accepts new issues, use the cross-platform [bug report
 form](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml)
 and include the affected platform, app and operating-system versions,
-reproduction steps, and hardware. Choose **Copy Diagnostics** from the
-Presspeech menu and paste its privacy-safe summary when the app can open. The
-summary excludes transcript, audio, dictionary contents, exact microphone
-names, raw error details, and raw log lines. If a maintainer asks for local log
-lines, review them before sharing because device labels and dependency errors
-can contain private names or paths.
+reproduction steps, and hardware. The app's **Report a Problem** action opens
+the support guide; **Copy Diagnostics** copies a privacy-safe summary locally
+and does not submit it. Paste that summary into the form only when you choose
+to submit a report through an available public route. It excludes transcript,
+audio, dictionary contents, exact microphone names, raw error details, and raw
+log lines. If a maintainer asks for local log lines, review them before sharing
+because device labels and dependency errors can contain private names or paths.
 
 For macOS, also include:
 

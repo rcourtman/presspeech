@@ -278,10 +278,10 @@ each platform rather than identical.
   open the privacy-safe repeated test for automatic paste and focus-change
   recovery in one exact target app
 - **Support → Report a Problem… / Suggest an Improvement…** — open the
-  focused GitHub forms; copy the privacy-safe diagnostics first for a bug, and
-  never post dictated text, audio, or dictionary contents. GitHub reported
-  that issue creation is restricted on 23 September 2026; if a form is blocked,
-  keep the report private and retry later rather than posting elsewhere
+  repository's `SUPPORT.md` guide; neither action submits a report or sends
+  diagnostics. **Copy Diagnostics** stays local until you choose what to share.
+  GitHub reported that issue creation is restricted on 23 September 2026;
+  follow the guide and keep any draft private while no public route is available
 - **Presspeech → Settings…** or **Command-comma** — when **Show in Dock** is
   enabled, open the same settings hierarchy from the standard macOS app menu;
   if Command-comma is also the dictation hotkey, this Settings command wins
@@ -363,11 +363,12 @@ each platform rather than identical.
 - **Repair Global Hotkey** — replace the keyboard listener if menu-based
   Dictate still works but the configured key does not
 - **Copy Diagnostics / Report a Problem… / Suggest an Improvement…** — copy a
-  privacy-safe support report or open a focused GitHub form; upcoming 0.1.13 /
-  builds containing **Test App Compatibility…** also open the repeated
-  target-app test. If a form is unavailable, keep the report private and follow
-  [SUPPORT.md](SUPPORT.md) for local-draft guidance. Never post dictated text,
-  audio, or dictionary contents
+  privacy-safe report locally, or open the repository's `SUPPORT.md` guide;
+  these actions do not submit or attach anything. Upcoming 0.1.13 / builds
+  containing **Test App Compatibility…** also open the repeated target-app
+  test. GitHub reported issue creation restricted on 23 September 2026; follow
+  [SUPPORT.md](SUPPORT.md) for local-draft guidance and never post dictated
+  text, audio, or dictionary contents
 
 See the [Windows guide](https://rcourtman.github.io/presspeech/windows.html#first-launch)
 for model readiness, AltGr-safe hotkey selection, and every Windows setting.

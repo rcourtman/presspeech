@@ -193,17 +193,20 @@ Windows notification-area menu. Include short reproduction steps, platform and
 app version, whether the model reached ready, and whether Try Dictation worked.
 For Windows model failures, include CPU, GPU, and driver details when available.
 
-Use the [bug report
-form](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml),
-or the [private vulnerability-reporting
-form](https://github.com/rcourtman/presspeech/security/advisories/new) for a
-security issue.
+The app's **Report a Problem** and **Suggest an Improvement** actions open the
+[support guide](https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md);
+they do not submit a report or attach diagnostics. **Copy Diagnostics** copies
+the summary locally. Follow the support guide to check whether an existing
+thread accepts comments; when public issue creation is available, use the [bug
+report form](https://github.com/rcourtman/presspeech/issues/new?template=bug_report.yml).
+For a security issue, use the [private vulnerability-reporting form](https://github.com/rcourtman/presspeech/security/advisories/new).
 
 **Feedback availability checked 23 September 2026:** GitHub currently reports
-that issue creation is restricted for this repository, so the public bug form
-may not accept a new report. Check for a matching issue and whether comments
-are available. If there is no usable public route, keep the privacy-safe report
-locally and retry later; do not post private data elsewhere as a workaround.
+that issue creation is restricted for this repository, so a new public bug
+report cannot be submitted there. Check for a matching issue and whether
+comments are available. If there is no usable public route, keep the
+privacy-safe report locally and retry later; do not post private data elsewhere
+as a workaround.
 An unsent draft is not sent or monitored. It can record the Presspeech and
 operating-system versions, affected stage, expected and observed result,
 smallest safe reproduction steps or frequency, generic target-app context if

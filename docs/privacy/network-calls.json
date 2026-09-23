@@ -100,16 +100,13 @@
       "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; Presspeech adds no version, device, or user identifier and sends no transcript, microphone audio, settings, or usage counts. GitHub can observe the source IP address and request timing as ordinary connection metadata"
     },
     {
-      "name": "user_triggered_feedback_form",
+      "name": "user_triggered_support_guide",
       "when": "Only when the user chooses Report a Problem or Suggest an Improvement",
-      "destination": [
-        "github.com/rcourtman/presspeech/issues/new?template=bug_report.yml",
-        "github.com/rcourtman/presspeech/issues/new?template=feature_request.yml"
-      ],
-      "purpose": "Open a focused public GitHub issue form in the default browser",
+      "destination": "github.com/rcourtman/presspeech/blob/main/SUPPORT.md",
+      "purpose": "Open the public support guide in the default browser; the app does not submit a report or attach diagnostics",
       "user_triggered": true,
       "can_disable": true,
-      "data_sent": "The app adds no version, device, settings, transcript, diagnostics, or usage data to the fixed URL; the browser and GitHub handle normal request and account metadata"
+      "data_sent": "The app adds no version, device, settings, transcript, diagnostics, or usage data to the fixed guide URL; the browser and GitHub handle normal request and account metadata. The user may separately follow an issue link from the guide when GitHub accepts submissions"
     },
     {
       "name": "user_triggered_compatibility_guide",
