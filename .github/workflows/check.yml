@@ -320,6 +320,7 @@ jobs:
           PY
       - name: Docs integrity
         run: |
+          node scripts/test-compatibility-worksheet.js
           python3 scripts/check-docs-links.py --self-test
           python3 scripts/check-docs-links.py
           python3 scripts/check-docs-metadata.py --self-test
