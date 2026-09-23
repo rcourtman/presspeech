@@ -227,10 +227,11 @@ keyboard access testing in addition to assistive-technology testing.
 - Invoke **Check Microphone**, **Retry Speech Model**, and **Download Update**
   using the keyboard. While each operation is active, confirm focus moves to the
   microphone or model selector, or to **Later**, before the invoked command is
-  disabled. When model readiness changes with **Try Dictation** or **Finish
-  Setup** focused, confirm focus returns to the microphone selector rather than
-  remaining on an unavailable command. Repeat these transitions with Narrator
-  and confirm Tab and Shift-Tab continue from the announced usable control.
+  disabled. When model readiness changes with **Retry Speech Model**, **Try
+  Dictation**, or **Finish Setup** focused, confirm focus moves to **Set Up
+  Later** before the command becomes unavailable; focus must not remain on a
+  disabled command. Repeat these transitions with Narrator and confirm Tab and
+  Shift-Tab continue from the announced usable control.
 - With Narrator, confirm the microphone selector and both recovery buttons
   expose meaningful names. Leave focus on the selector while the microphone
   check finishes and while the model becomes ready; confirm each changed status
@@ -945,10 +946,12 @@ sudo -v
 ```
 
 The real `bench-power.sh` run requires interactive sudo because
-`powermetrics` requires it. `run-release-asr-checks.sh` runs private
-real-dictation regressions only when local clips exist under
-`experiments/swift-bench/real-audio/`; its generated multi-window public corpus
-is required so the release check cannot silently exercise only short speech.
+`powermetrics` requires it. `run-release-asr-checks.sh` requires private
+real-dictation clips under `experiments/swift-bench/real-audio/` by default;
+keep them and their references local. Use `--allow-missing-real-audio` only for
+a lightweight run, which cannot report a production release-gate pass. Its
+generated multi-window public corpus is also required so the release check
+cannot silently exercise only short speech.
 The wrapper also fails closed unless each package manifest matches its resolved
 lock and the app and benchmark pin the same FluidAudio revision. During an
 intentional candidate-API pin, use

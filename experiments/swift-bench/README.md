@@ -1082,29 +1082,34 @@ capture, or transcription post-processing, run the release wrapper:
 ./run-release-asr-checks.sh
 ```
 
-After the exact-pin preflight, it runs helper self-tests and a report-only
-production-v3 short-clip tail diagnostic at 80 and 400 ms synthetic capture
-grace. It then runs production v3 private
-real-dictation regressions if `real-audio/` contains local clips, and production v3 public speech
-regressions if `public-audio/librispeech-dev-clean/` has been fetched. The
+The release gate requires locally held private real-dictation clips by default;
+public read-speech results alone cannot establish push-to-talk quality. Keep
+private audio and references out of version control. After the preflight, it
+runs helper self-tests, the required production-v3 private real-dictation
+regression, and a report-only short-clip tail diagnostic at 80 and 400 ms
+synthetic capture grace. Production-v3 public speech regressions run when
+`public-audio/librispeech-dev-clean/` has been fetched. The
 validated `public-audio/librispeech-dev-clean-long-form/` corpus is required by
 default: release checks must not silently omit the production path used by
 recordings longer than one 15-second encoder window. Generate it using the
 composer instructions above. A provenance-checked German FLEURS long-form test
 corpus (`public-audio/fleurs-de_de-test-long-form/`) is also required by default
-to cover multilingual seams; prepare it using the instructions above. Private
-and ordinary short public corpora remain optional; require either explicitly
-when it is part of the intended evidence:
+to cover multilingual seams; prepare it using the instructions above. Ordinary
+short public clips remain optional. `--require-real-audio` is retained as an
+explicit spelling of the default requirement; `--require-public-audio` can
+additionally require the optional short public corpus:
 
 ```sh
 ./run-release-asr-checks.sh --require-real-audio
 ./run-release-asr-checks.sh --require-public-audio
 ```
 
-For a lightweight helper run that is explicitly not release evidence, use
-`--allow-missing-long-public-audio` and/or
-`--allow-missing-multilingual-long-public-audio`. Omitting either required
-multi-window corpus changes the final verdict to non-release evidence.
+For a lightweight run without private clips, use
+`--allow-missing-real-audio`; the wrapper marks it as non-release evidence.
+Likewise, `--allow-missing-long-public-audio` and/or
+`--allow-missing-multilingual-long-public-audio` explicitly downgrade a run;
+omitting any required human or multi-window corpus cannot produce a production
+release-gate pass.
 
 The wrapper also requires the benchmark package and app to pin the exact same
 FluidAudio revision. A mismatch fails before corpus output can be labelled

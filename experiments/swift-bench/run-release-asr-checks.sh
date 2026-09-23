@@ -14,7 +14,7 @@ PUBLIC_AUDIO_DIR="public-audio/librispeech-dev-clean"
 LONG_PUBLIC_AUDIO_DIR="public-audio/librispeech-dev-clean-long-form"
 MULTILINGUAL_LONG_PUBLIC_AUDIO_DIR="public-audio/fleurs-de_de-test-long-form"
 TRIALS="3"
-REQUIRE_REAL_AUDIO=0
+REQUIRE_REAL_AUDIO=1
 REQUIRE_PUBLIC_AUDIO=0
 # Multi-window coverage is required by default. The app accepts recordings up
 # to ten minutes, while its production CoreML encoder operates on 15-second
@@ -45,7 +45,10 @@ Options:
                             composed German FLEURS test fixtures
                             (default: public-audio/fleurs-de_de-test-long-form)
   --trials <n>              trials per clip/backend (default: 3)
-  --require-real-audio      fail if no private real-dictation clips are present
+  --require-real-audio      require private real-dictation clips (default)
+  --allow-missing-real-audio
+                            allow a lightweight run without private dictation;
+                            this cannot report a production release-gate pass
   --require-public-audio    fail if no public speech clips are present
   --require-long-public-audio
                             fail if no composed multi-window fixtures are present (default)
@@ -83,7 +86,7 @@ The default run performs:
   1. helper parser/self-tests,
   2. a report-only production-v3 short-clip tail diagnostic at 80 and 400 ms
      synthetic capture grace,
-  3. production v3 regression if private real-dictation fixtures exist,
+  3. required production v3 regression over private real-dictation fixtures,
   4. production v3 regression if public speech fixtures exist,
   5. required production v3 multi-window regression over validated composed fixtures,
   6. required production v3 German FLEURS multi-window regression over validated
@@ -200,6 +203,9 @@ final_verdict() {
     if [[ "$DEPENDENCY_MODE" != "production" ]]; then
         echo "candidate ASR evaluation completed"
         echo "not a production release-gate pass: benchmark and app FluidAudio pins differ"
+    elif [[ "$REQUIRE_REAL_AUDIO" -ne 1 ]]; then
+        echo "lightweight ASR checks completed"
+        echo "not a production release-gate pass: private real-dictation coverage was optional"
     elif [[ "$REQUIRE_LONG_PUBLIC_AUDIO" -ne 1 || \
             "$REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO" -ne 1 ]]; then
         echo "lightweight ASR checks completed"
@@ -327,9 +333,14 @@ run_self_test() {
         "Results from this run do not validate the production app's FluidAudio code."
 
     DEPENDENCY_MODE="production"
+    REQUIRE_REAL_AUDIO=1
     REQUIRE_LONG_PUBLIC_AUDIO=1
     REQUIRE_MULTILINGUAL_LONG_PUBLIC_AUDIO=1
     assert_eq "$(final_verdict)" "release ASR checks passed" "release verdict"
+    REQUIRE_REAL_AUDIO=0
+    assert_contains <(final_verdict) \
+        "not a production release-gate pass: private real-dictation coverage was optional"
+    REQUIRE_REAL_AUDIO=1
     REQUIRE_LONG_PUBLIC_AUDIO=0
     assert_contains <(final_verdict) \
         "not a production release-gate pass: English or German multi-window coverage was optional"
@@ -396,10 +407,37 @@ run_self_test() {
         "no private real-dictation clips found in $tmpdir/missing-real"
     assert_not_contains "$missing_real_log" "running helper self-tests"
 
+    local default_missing_real_log="$tmpdir/default-missing-real.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        >"$default_missing_real_log" 2>&1; then
+        echo "self-test expected the default missing private corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$default_missing_real_log" \
+        "no private real-dictation clips found in $tmpdir/missing-real"
+    assert_not_contains "$default_missing_real_log" "running helper self-tests"
+
+    local allowed_missing_real_log="$tmpdir/allowed-missing-real.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$tmpdir/missing-real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --allow-missing-real-audio >"$allowed_missing_real_log" 2>&1; then
+        echo "self-test expected the lightweight run to stop at its missing long-form corpus" >&2
+        exit 1
+    fi
+    assert_not_contains "$allowed_missing_real_log" \
+        "no private real-dictation clips found in $tmpdir/missing-real"
+    assert_contains "$allowed_missing_real_log" \
+        "no long-form public speech clips found in $tmpdir/missing-long-public"
+
     local missing_public_log="$tmpdir/missing-public.log"
     if bash "$SCRIPT_PATH" \
         --real-audio-dir "$tmpdir/missing-real" \
         --public-audio-dir "$tmpdir/missing-public" \
+        --allow-missing-real-audio \
         --require-public-audio >"$missing_public_log" 2>&1; then
         echo "self-test expected a required missing public corpus to fail" >&2
         exit 1
@@ -413,6 +451,7 @@ run_self_test() {
         --real-audio-dir "$tmpdir/missing-real" \
         --public-audio-dir "$tmpdir/missing-public" \
         --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --allow-missing-real-audio \
         --require-long-public-audio >"$missing_long_public_log" 2>&1; then
         echo "self-test expected required missing long-form public corpus to fail" >&2
         exit 1
@@ -426,6 +465,7 @@ run_self_test() {
         --real-audio-dir "$tmpdir/missing-real" \
         --public-audio-dir "$tmpdir/missing-public" \
         --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --allow-missing-real-audio \
         >"$default_missing_long_public_log" 2>&1; then
         echo "self-test expected default missing long-form public corpus to fail" >&2
         exit 1
@@ -440,6 +480,7 @@ run_self_test() {
         --public-audio-dir "$tmpdir/missing-public" \
         --long-public-audio-dir "$tmpdir/missing-long-public" \
         --multilingual-long-public-audio-dir "$tmpdir/missing-multilingual-long-public" \
+        --allow-missing-real-audio \
         --allow-missing-long-public-audio \
         >"$missing_multilingual_long_public_log" 2>&1; then
         echo "self-test expected default missing German long-form corpus to fail" >&2
@@ -457,6 +498,7 @@ run_self_test() {
         --real-audio-dir "$tmpdir/missing-real" \
         --public-audio-dir "$tmpdir/missing-public" \
         --long-public-audio-dir "$invalid_long_public" \
+        --allow-missing-real-audio \
         --allow-missing-multilingual-long-public-audio \
         >"$invalid_long_public_log" 2>&1; then
         echo "self-test expected invalid long-form public corpus to fail" >&2
@@ -509,6 +551,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --require-real-audio)
             REQUIRE_REAL_AUDIO=1
+            shift
+            ;;
+        --allow-missing-real-audio)
+            REQUIRE_REAL_AUDIO=0
             shift
             ;;
         --require-public-audio)
