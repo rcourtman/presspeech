@@ -14,6 +14,7 @@ import stat
 import shutil
 import tempfile
 import sys
+import time
 
 import model_network
 
@@ -24,6 +25,41 @@ class ModelCacheMissingError(FileNotFoundError):
 
 class ModelCacheCorruptError(ValueError):
     """Present cached input cannot be used; do not silently download around it."""
+
+
+def _download_progress_class(callback):
+    """Build a silent Hub progress bar that reports received bytes to the UI."""
+    from tqdm.auto import tqdm
+
+    class DownloadProgress(tqdm):
+        def __init__(self, *args, **kwargs):
+            self._presspeech_tracks_download = (
+                kwargs.get("unit") == "B" and
+                kwargs.get("desc") == "Downloading bytes")
+            self._presspeech_callback = callback
+            self._presspeech_last_report = None
+            # Hub passes this class to its transfer, reconstruction, and file
+            # count bars. Track only the transfer-byte bar and never render a
+            # second console bar in the windowed app.
+            super().__init__(*args, **kwargs)
+
+        def display(self, msg=None, pos=None):
+            if not self._presspeech_tracks_download:
+                return None
+            now = time.monotonic()
+            if (self._presspeech_last_report is not None and
+                    now - self._presspeech_last_report < 0.25):
+                return None
+            self._presspeech_last_report = now
+            try:
+                self._presspeech_callback(self.n, self.total)
+            except Exception:
+                # Progress is advisory; a UI observer must never abort a model
+                # download or change its cache/error handling.
+                pass
+            return None
+
+    return DownloadProgress
 
 
 def offline_requested():
@@ -72,7 +108,7 @@ def _validate_snapshot(snapshot, revision, required_files, optional_files=(), re
 
 def resolve_snapshot(
         repository, revision, required_files, *, optional_files=(),
-        required_any=(), local_only=False):
+        required_any=(), local_only=False, progress=None):
     """Resolve only the reviewed inference files; never fetch alternative weights."""
     if not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("model revision must be an immutable commit")
@@ -94,13 +130,21 @@ def resolve_snapshot(
 
     def attempt(local_only):
         model_network.harden_loaded_runtime()
+        options = {}
+        if progress is not None and not local_only:
+            options["tqdm_class"] = _download_progress_class(
+                lambda done, total: _report_progress(
+                    progress, "downloading", done, total))
         snapshot = snapshot_download(
             repository, revision=revision, token=False,
-            local_files_only=local_only, allow_patterns=list(all_files))
+            local_files_only=local_only, allow_patterns=list(all_files),
+            **options)
         return _validate_snapshot(snapshot, revision, required_files, optional_files, required_any)
 
     try:
-        return attempt(True)
+        snapshot = attempt(True)
+        _report_progress(progress, "loading")
+        return snapshot
     except (LocalEntryNotFoundError, ModelCacheMissingError) as exc:
         if local_only:
             if isinstance(exc, LocalEntryNotFoundError):
@@ -109,9 +153,22 @@ def resolve_snapshot(
             raise
         if offline_requested():
             raise
+    _report_progress(progress, "downloading")
     # Do not wrap this attempt or backend loading: a second miss, HTTP failure,
     # invalid file, incompatible model or native parsing error must stay visible.
-    return attempt(False)
+    snapshot = attempt(False)
+    _report_progress(progress, "loading")
+    return snapshot
+
+
+def _report_progress(callback, phase, done=None, total=None):
+    if callback is None:
+        return
+    try:
+        callback(phase, done, total)
+    except Exception:
+        # Progress is advisory and must not affect model-load correctness.
+        pass
 
 
 @contextmanager

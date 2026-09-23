@@ -1134,10 +1134,17 @@ capture, or transcription post-processing, run the release wrapper:
 
 The release gate requires locally held private real-dictation clips by default;
 public read-speech results alone cannot establish push-to-talk quality. Keep
-private audio and references out of version control. After the preflight, it
-runs helper self-tests, the required production-v3 private real-dictation
-regression, and a report-only short-clip tail diagnostic at 80 and 400 ms
-synthetic capture grace. Production-v3 public speech regressions run when
+private audio and references out of version control. Before any helper tests
+or model work, it requires at least 25 clips with non-empty references and
+1,000 normalized reference words, and rejects byte-identical source audio.
+These volume floors match the product-candidate screen; they do not establish speaker/category diversity, reference
+accuracy, or an acceptable WER. The references still need human review, and
+the private short-dictation WER/final-word/latency rows remain evidence for
+maintainer review rather than an absolute pass threshold. `--allow-missing-real-audio`
+explicitly downgrades the run and skips these private-corpus floors. After the
+preflight, it runs helper self-tests, the required production-v3 private
+real-dictation regression, and a report-only short-clip tail diagnostic at 80
+and 400 ms synthetic capture grace. Production-v3 public speech regressions run when
 `public-audio/librispeech-dev-clean/` has been fetched. The
 validated `public-audio/librispeech-dev-clean-long-form/` corpus is required by
 default: release checks must not silently omit the production path used by

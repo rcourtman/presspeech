@@ -321,6 +321,48 @@ def _hotkey_readiness(app):
     return result
 
 
+def _format_downloaded_bytes(value):
+    """Format one untrusted progress count without implying a download ETA."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return ""
+    try:
+        amount = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return ""
+    if not math.isfinite(amount) or amount <= 0:
+        return ""
+    units = ("KiB", "MiB", "GiB", "TiB")
+    if amount < 1024:
+        return "%d bytes downloaded" % int(amount)
+    for unit in units:
+        amount /= 1024
+        if amount < 1024:
+            return "%.1f %s downloaded" % (amount, unit)
+    return "%.1f TiB downloaded" % amount
+
+
+def _model_loading_feedback(app):
+    """Return a truthful loading phase and cumulative download amount."""
+    detail = str(getattr(app, "model_status_detail", ""))
+    if detail.startswith("Checking local model files"):
+        label, phase = "Checking local model files…", "checking"
+    elif detail.startswith("Downloading model files"):
+        label, phase = "Downloading model files…", "downloading"
+        progress = getattr(app, "model_download_progress", None)
+        if isinstance(progress, (tuple, list)) and progress:
+            downloaded = _format_downloaded_bytes(progress[0])
+            if downloaded:
+                label += " — " + downloaded
+    elif detail.startswith("Loading speech model"):
+        label, phase = "Loading speech model…", "loading"
+    elif detail.startswith("Warming speech model"):
+        label, phase = "Warming speech model…", "warming"
+    else:
+        label, phase = (
+            "Preparing speech model — downloading or loading…", "preparing")
+    return label, phase
+
+
 def _settings_save_block_reason(app):
     """Explain why mutable settings cannot be committed at this instant."""
     # The UI poll is advisory. SettingsWindow._save repeats this check while
@@ -1168,17 +1210,22 @@ class SetupWindow:
         detail = getattr(self.app, "model_status_detail", "")
         labels = {
             "pending": "Waiting to start…",
-            # A first launch can still be fetching files when the model
-            # loader reports "Loading …". Do not present that as a distinct
-            # load-only phase: setup may take time while downloading too.
-            "loading": "Preparing speech model — downloading or loading…",
             "awaiting_download_consent": (
                 "Needs your choice — full Parakeet model download is about 2.5 GB"),
             "ready": "Ready" + ((" — " + detail) if detail else ""),
             "error": "Needs attention" + ((" — " + detail) if detail else ""),
         }
-        _set_accessible_text(
-            self.model_label, labels.get(status, detail or status))
+        if status == "loading":
+            model_text, model_phase = _model_loading_feedback(self.app)
+        else:
+            model_text = labels.get(status, detail or status)
+            model_phase = status
+        previous_phase = getattr(self, "_last_model_phase", None)
+        if previous_phase == model_phase:
+            _set_accessible_text(self.model_label, model_text, announce=False)
+        else:
+            _set_accessible_text(self.model_label, model_text)
+            self._last_model_phase = model_phase
         consent_required = status == "awaiting_download_consent"
         # Readiness changes arrive asynchronously. If a choice becomes
         # unavailable while focused, continue at the next live setup control
@@ -1888,6 +1935,7 @@ class SettingsWindow:
         selected = self.app.settings.get("model", cfg.DEFAULTS["model"])
         status = getattr(self.app, "model_status", "pending")
         detail = getattr(self.app, "model_status_detail", "")
+        phase = status
         if status == "ready" and self.app.transcriber.loaded(selected):
             text = "Speech model ready" + ((" — " + detail) if detail else "")
         elif status == "error":
@@ -1897,11 +1945,20 @@ class SettingsWindow:
             text = (
                 "Parakeet model files aren't fully cached. Choose whether to "
                 "start the full download (~2.5 GB) in Setup.")
+        elif status == "loading":
+            text, phase = _model_loading_feedback(self.app)
+            text += " Dictation is unavailable until it is ready."
         else:
             text = (
                 "Preparing selected speech model… Dictation is unavailable "
                 "until it is ready.")
-        _set_accessible_text(self.model_status, text)
+            phase = status
+        previous_phase = getattr(self, "_last_model_phase", None)
+        if previous_phase == phase:
+            _set_accessible_text(self.model_status, text, announce=False)
+        else:
+            _set_accessible_text(self.model_status, text)
+            self._last_model_phase = phase
         hotkey_state, hotkey_detail = _hotkey_readiness(self.app)
         _set_accessible_text(
             self.hotkey_status, "Global hotkey status: " + hotkey_detail)

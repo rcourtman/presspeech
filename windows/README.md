@@ -163,6 +163,11 @@ ready. If the dictation hotkey is pressed before readiness, Presspeech keeps
 showing **Preparing speech model…** and does not open the microphone, play
 recording cues, mute playback, or claim to be listening. Release and press
 again once the preparation indicator disappears.
+Setup identifies local-cache checking, download, model loading, and warm-up as
+separate preparation phases. While files download it shows a cumulative count
+of model bytes downloaded; the total can grow as missing files are discovered,
+so it does not show a percentage or time estimate. Screen readers are notified
+of phase changes, not each changing byte count.
 Before recording, open Windows microphone privacy settings and turn on
 **Microphone access**, **Let apps access your microphone**, and **Let desktop
 apps access your microphone**. Presspeech is an unpackaged desktop app, so

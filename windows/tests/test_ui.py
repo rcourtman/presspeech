@@ -945,6 +945,48 @@ class SetupWindowTests(unittest.TestCase):
                 "Preparing speech model — downloading or loading…"),
         )
 
+    def test_setup_shows_received_bytes_without_reannouncing_each_update(self):
+        window = self.make_window("loading", "Downloading model files…")
+        window.app.model_download_progress = (2 * 1024 * 1024, 8 * 1024 * 1024)
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        first = mock.call(
+            window.model_label,
+            "Downloading model files… — 2.0 MiB downloaded")
+        self.assertEqual(set_text.call_args_list[0], first)
+
+        window.app.model_download_progress = (3 * 1024 * 1024, 8 * 1024 * 1024)
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertEqual(
+            set_text.call_args_list[0],
+            mock.call(
+                window.model_label,
+                "Downloading model files… — 3.0 MiB downloaded",
+                announce=False),
+        )
+
+        window.app.model_status_detail = "Loading speech model…"
+        window.app.model_download_progress = None
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertEqual(
+            set_text.call_args_list[0],
+            mock.call(window.model_label, "Loading speech model…"),
+        )
+
+    def test_download_progress_formatter_rejects_invalid_counts(self):
+        self.assertEqual(ui._format_downloaded_bytes(0), "")
+        self.assertEqual(ui._format_downloaded_bytes(True), "")
+        self.assertEqual(ui._format_downloaded_bytes(float("nan")), "")
+        self.assertEqual(ui._format_downloaded_bytes(512), "512 bytes downloaded")
+        self.assertEqual(
+            ui._format_downloaded_bytes(1024 * 1024), "1.0 MiB downloaded")
+
     def test_stopped_global_hotkey_exposes_repair_and_blocks_finish(self):
         window = self.make_window("ready", "base.en on cpu")
         window.app.hotkey_listener_status.return_value = (

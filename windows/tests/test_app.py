@@ -3083,7 +3083,8 @@ class StartupTests(unittest.TestCase):
             instance._preload_model_worker()
 
         instance.transcriber.load.assert_called_once_with(
-            "parakeet-tdt-0.6b-v3", notify=instance.notify, local_only=True)
+            "parakeet-tdt-0.6b-v3", notify=instance.notify, local_only=True,
+            progress_callback=mock.ANY)
         instance.transcriber.warmup.assert_not_called()
         self.assertEqual(instance.model_status, "awaiting_download_consent")
         self.assertIn("2.5 GB", instance.model_status_detail)
@@ -3113,7 +3114,8 @@ class StartupTests(unittest.TestCase):
             instance._preload_model_worker()
 
         instance.transcriber.load.assert_called_once_with(
-            "parakeet-tdt-0.6b-v3", notify=instance.notify, local_only=True)
+            "parakeet-tdt-0.6b-v3", notify=instance.notify, local_only=True,
+            progress_callback=mock.ANY)
         instance.transcriber.warmup.assert_called_once_with(
             seconds=app.MODEL_WARMUP_SEC, all_buckets=True)
         self.assertEqual(instance.model_status, "ready")
@@ -3154,7 +3156,48 @@ class StartupTests(unittest.TestCase):
             instance._preload_model_worker("parakeet-tdt-0.6b-v3", 1)
 
         instance.transcriber.load.assert_called_once_with(
-            "parakeet-tdt-0.6b-v3", notify=instance.notify)
+            "parakeet-tdt-0.6b-v3", notify=instance.notify,
+            progress_callback=mock.ANY)
+        self.assertEqual(instance.model_status, "ready")
+
+    def test_model_load_callback_exposes_download_and_load_phases(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "model": "parakeet-tdt-0.6b-v3",
+            "setup_complete": True,
+        }
+        instance.transcriber = mock.Mock()
+        instance.notify = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._model_retry_lock = __import__("threading").Lock()
+        instance._model_load_generation = 1
+        instance._model_load_target = "parakeet-tdt-0.6b-v3"
+        phases = []
+
+        def load(_model, *, progress_callback, **_kwargs):
+            progress_callback("downloading")
+            progress_callback("downloading", 3 * 1024 * 1024, 8 * 1024 * 1024)
+            phases.append((instance.model_status_detail,
+                           instance.model_download_progress))
+            progress_callback("loading")
+            phases.append((instance.model_status_detail,
+                           instance.model_download_progress))
+
+        def warmup(**_kwargs):
+            phases.append((instance.model_status_detail,
+                           instance.model_download_progress))
+
+        instance.transcriber.load.side_effect = load
+        instance.transcriber.warmup.side_effect = warmup
+        with mock.patch.object(app.PresspeechApp, "_log"):
+            instance._preload_model_worker("parakeet-tdt-0.6b-v3", 1)
+
+        self.assertEqual(phases, [
+            ("Downloading model files…", (3 * 1024 * 1024, 8 * 1024 * 1024)),
+            ("Loading speech model…", None),
+            ("Warming speech model…", None),
+        ])
         self.assertEqual(instance.model_status, "ready")
 
     def test_setup_can_choose_and_persist_the_smaller_cpu_model(self):
@@ -3207,7 +3250,7 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(instance.settings["model"], "base.en")
         save.assert_called_once_with(instance.settings)
         instance.transcriber.load.assert_called_once_with(
-            "base.en", notify=instance.notify)
+            "base.en", notify=instance.notify, progress_callback=mock.ANY)
         self.assertIn("Whisper base.en on CPU", instance.model_status_detail)
         self.assertIn("English-only", instance.model_status_detail)
         instance.notify.assert_any_call(
@@ -3250,7 +3293,8 @@ class StartupTests(unittest.TestCase):
         with mock.patch.object(app.PresspeechApp, "_log") as log:
             instance._preload_model_worker()
         instance.transcriber.load.assert_called_once_with(
-            "parakeet-tdt-0.6b-v3", notify=instance.notify)
+            "parakeet-tdt-0.6b-v3", notify=instance.notify,
+            progress_callback=mock.ANY)
         instance.transcriber.warmup.assert_called_once_with(
             seconds=app.MODEL_WARMUP_SEC, all_buckets=True)
         ready_logs = [call.args[0] for call in log.call_args_list

@@ -178,11 +178,14 @@ mouse or trackpad events, and other keys pass through without their values
 being saved, logged, or sent. See [Apple's description of Input
 Monitoring](https://support.apple.com/guide/mac-help/mchl4cedafb6/mac).
 
-If the Presspeech item is hidden by a crowded or notched menu bar, open
+To deliberately free menu-bar space, choose **Settings → Behavior → Show
+Presspeech in Menu Bar** to hide the item. Presspeech enables its Dock icon if
+needed, and the Dock menu can restore the menu-bar item. If macOS temporarily
+omits the item because the menu bar is crowded or notched, open
 **Presspeech.app** again from Applications, Finder, or Spotlight. The running
-app opens Setup Checklist instead of starting a second copy. Enable **Show in
-Dock** there for a persistent alternative; right-clicking its Dock icon
-exposes dictation controls, Settings, and Support.
+app opens Setup Checklist instead of starting a second copy; enable **Show in
+Dock** there for a persistent alternative. Right-clicking the Dock icon exposes
+dictation controls, Settings, and Support.
 
 ### Assistant Install Prompt
 
@@ -272,6 +275,9 @@ each platform rather than identical.
   menu without using the global hotkey; these named actions also work with
   macOS Voice Control
 - **Setup Checklist…** — model, permissions, and hotkey readiness
+- **Settings → Behavior → Show Presspeech in Menu Bar** — hide the status item
+  to free space; this enables Dock access when needed, and the Dock menu can
+  restore the item
 - **Support → Try Dictation…** — a private scratchpad for verifying the
   hotkey and first transcription without switching apps
 - **Support → Test App Compatibility… (macOS 0.3.8 and later)** —

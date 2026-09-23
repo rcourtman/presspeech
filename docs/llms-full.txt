@@ -43,7 +43,7 @@ https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 
 The macOS 0.3.8 release starts its first speech-model download (about 500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; closing Setup defers it. Existing installations and cached models load automatically. The model is stored under `~/Library/Application Support/FluidAudio/`.
 
-Use Setup Checklist from the Presspeech menu bar item to finish the speech model, Microphone, Accessibility (Device Control and Data Access on macOS 27+), Input Monitoring, and hotkey readiness checks.
+Use Setup Checklist from the Presspeech menu-bar item or Dock menu to finish the speech model, Microphone, Accessibility (Device Control and Data Access on macOS 27+), Input Monitoring, and hotkey readiness checks. Settings → Behavior → Show Presspeech in Menu Bar hides the status item and enables Dock access if needed; the Dock menu can restore it.
 
 Presspeech uses the bundle identifier and preferences suite `com.local.presspeech`. An identity-changing upgrade migrates saved settings, local rules, correction-sync paths, and recovery state automatically. Because macOS binds privacy grants to the bundle identifier, users must grant Microphone, Accessibility (Device Control and Data Access on macOS 27+), and Input Monitoring once to the current identity.
 

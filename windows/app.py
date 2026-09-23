@@ -661,6 +661,7 @@ class PresspeechApp:
         self.pending_update = None
         self.model_status = "pending"
         self.model_status_detail = "Waiting to load"
+        self.model_download_progress = None
         self._initial_model_download_consented = False
         self._model_retry_lock = threading.Lock()
         self._model_load_target = None
@@ -1341,7 +1342,8 @@ class PresspeechApp:
             # requests then observe the in-flight state and cannot enqueue
             # duplicate loads.
             self.model_status = "loading"
-            self.model_status_detail = "Loading %s" % model_name
+            self.model_status_detail = "Checking local model files…"
+            self.model_download_progress = None
             self._queue_model_load_locked(model_name)
             return True
 
@@ -1355,7 +1357,8 @@ class PresspeechApp:
             self._initial_model_download_consented = True
             model_name = self.settings["model"]
             self.model_status = "loading"
-            self.model_status_detail = "Loading %s" % model_name
+            self.model_status_detail = "Checking local model files…"
+            self.model_download_progress = None
             self._queue_model_load_locked(model_name)
             return True
 
@@ -1371,7 +1374,8 @@ class PresspeechApp:
             cfg.save(self.settings)
             model_name = self.settings["model"]
             self.model_status = "loading"
-            self.model_status_detail = "Loading %s" % model_name
+            self.model_status_detail = "Checking local model files…"
+            self.model_download_progress = None
             self._queue_model_load_locked(model_name)
             return True
 
@@ -1401,7 +1405,8 @@ class PresspeechApp:
             # lifecycle even if another model operation is ahead in the
             # single-thread executor.
             self.model_status = "loading"
-            self.model_status_detail = "Loading %s" % model_name
+            self.model_status_detail = "Checking local model files…"
+            self.model_download_progress = None
             self._queue_model_load_locked(model_name)
             return True
 
@@ -2831,7 +2836,22 @@ class PresspeechApp:
             if (request_generation == self._model_load_generation and
                     self.settings["model"] == model_name):
                 self.model_status = "loading"
-                self.model_status_detail = "Loading %s" % model_name
+                self.model_status_detail = "Checking local model files…"
+                self.model_download_progress = None
+
+        def report_model_progress(phase, done=None, total=None):
+            with model_state_lock:
+                if (request_generation != self._model_load_generation or
+                        self.settings.get("model") != model_name):
+                    return
+                if phase == "downloading":
+                    self.model_status_detail = "Downloading model files…"
+                    if done is not None:
+                        self.model_download_progress = (done, total)
+                elif phase == "loading":
+                    self.model_status_detail = "Loading speech model…"
+                    self.model_download_progress = None
+
         self._set_indicator("loading")
         self._log("loading speech model: %s" % model_name)
         try:
@@ -2844,13 +2864,15 @@ class PresspeechApp:
                     # The loader itself remains local-only until Setup gets an
                     # explicit choice. This avoids a cache-check/download race.
                     self.transcriber.load(
-                        model_name, notify=self.notify, local_only=True)
+                        model_name, notify=self.notify, local_only=True,
+                        progress_callback=report_model_progress)
                 except engine.model_cache.ModelCacheMissingError:
                     with model_state_lock:
                         if (request_generation != self._model_load_generation or
                                 self.settings.get("model") != model_name):
                             return
                         self.model_status = "awaiting_download_consent"
+                        self.model_download_progress = None
                         self.model_status_detail = (
                             "Parakeet model files need a choice; a full download "
                             "is about 2.5 GB")
@@ -2860,7 +2882,13 @@ class PresspeechApp:
                         "first-run Parakeet download deferred pending user choice")
                     return
             else:
-                self.transcriber.load(model_name, notify=self.notify)
+                self.transcriber.load(
+                    model_name, notify=self.notify,
+                    progress_callback=report_model_progress)
+            with model_state_lock:
+                if (request_generation == self._model_load_generation and
+                        self.settings.get("model") == model_name):
+                    self.model_status_detail = "Warming speech model…"
             self._log("warming speech model")
             self.transcriber.warmup(
                 seconds=MODEL_WARMUP_SEC, all_buckets=True)
@@ -2880,6 +2908,7 @@ class PresspeechApp:
                 if (request_generation == self._model_load_generation and
                         self.settings["model"] == model_name):
                     self.model_status = "error"
+                    self.model_download_progress = None
                     self.model_status_detail = (
                         "Model load failed; use Retry Speech Model")
                 if (request_generation == self._model_load_generation and
@@ -2903,6 +2932,7 @@ class PresspeechApp:
                 self._log("loaded model superseded by newer selection: %s" % model_name)
                 return
             self.model_status = "ready"
+            self.model_download_progress = None
             if cpu_first_run:
                 self.model_status_detail = (
                     "English-only Whisper base.en on CPU "

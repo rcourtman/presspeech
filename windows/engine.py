@@ -89,11 +89,13 @@ MODEL_CACHE_ALTERNATIVES = {
 }
 
 
-def _cached_model_path(model_name, *, local_only=False):
+def _cached_model_path(model_name, *, local_only=False, progress_callback=None):
     snapshot = model_snapshot(model_name)
     options = {}
     if local_only:
         options["local_only"] = True
+    if progress_callback is not None:
+        options["progress"] = progress_callback
     return model_cache.resolve_snapshot(
         snapshot["repository"], snapshot["revision"], MODEL_CACHE_FILES[model_name],
         optional_files=MODEL_CACHE_OPTIONAL_FILES.get(model_name, ()),
@@ -400,24 +402,28 @@ class Transcriber:
     def loaded(self, model_name):
         return self.model is not None and self.model_name == model_name
 
-    def load(self, model_name, notify=None, *, local_only=False):
+    def load(self, model_name, notify=None, *, local_only=False,
+             progress_callback=None):
         with self.lock:
             if self.loaded(model_name):
                 return
             self._unload_locked()
             if is_parakeet(model_name):
-                self._load_parakeet(notify, local_only=local_only)
+                self._load_parakeet(
+                    notify, local_only=local_only,
+                    progress_callback=progress_callback)
             elif is_nemotron(model_name):
-                self._load_nemotron(notify)
+                self._load_nemotron(notify, progress_callback)
             elif is_moonshine(model_name):
-                self._load_moonshine(notify)
+                self._load_moonshine(notify, progress_callback)
             else:
-                self._load_whisper(model_name, notify)
+                self._load_whisper(model_name, notify, progress_callback)
             self.model_name = model_name
             if notify is not None:
                 notify("Presspeech", "Model %s ready." % model_name)
 
-    def _load_parakeet(self, notify, *, local_only=False):
+    def _load_parakeet(self, notify, *, local_only=False,
+                       progress_callback=None):
         import torch
         from transformers import AutoModelForTDT, AutoProcessor
         model_network.harden_loaded_runtime()
@@ -426,7 +432,8 @@ class Transcriber:
             notify("Presspeech",
                    "Preparing Parakeet-TDT v3 on %s; a missing first-run model is about 2.5 GB." % device)
         model_path = _cached_model_path(
-            "parakeet-tdt-0.6b-v3", local_only=local_only)
+            "parakeet-tdt-0.6b-v3", local_only=local_only,
+            progress_callback=progress_callback)
         self.processor = _configure_parakeet_processor(
             AutoProcessor.from_pretrained(
                 model_path, local_files_only=True, revision=PARAKEET_REVISION,
@@ -457,7 +464,7 @@ class Transcriber:
         self.backend = "parakeet"
         self._device = device
 
-    def _load_nemotron(self, notify):
+    def _load_nemotron(self, notify, progress_callback=None):
         import torch
         from transformers import AutoModelForRNNT, AutoProcessor
         model_network.harden_loaded_runtime()
@@ -465,7 +472,9 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Nemotron English ASR on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
-        model_path = _cached_model_path("nemotron-speech-streaming-en-0.6b")
+        model_path = _cached_model_path(
+            "nemotron-speech-streaming-en-0.6b",
+            progress_callback=progress_callback)
         self.processor = AutoProcessor.from_pretrained(
             model_path, local_files_only=True, revision=NEMOTRON_REVISION,
             token=False, trust_remote_code=False)
@@ -476,7 +485,7 @@ class Transcriber:
         self.backend = "nemotron"
         self._device = device
 
-    def _load_moonshine(self, notify):
+    def _load_moonshine(self, notify, progress_callback=None):
         import torch
         from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
         model_network.harden_loaded_runtime()
@@ -484,7 +493,8 @@ class Transcriber:
         if notify is not None:
             notify("Presspeech", "Loading Moonshine Medium on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
-        model_path = _cached_model_path("moonshine-streaming-medium")
+        model_path = _cached_model_path(
+            "moonshine-streaming-medium", progress_callback=progress_callback)
         self.processor = AutoProcessor.from_pretrained(
             model_path, local_files_only=True, revision=MOONSHINE_REVISION,
             token=False, trust_remote_code=False)
@@ -495,7 +505,7 @@ class Transcriber:
         self.backend = "moonshine"
         self._device = device
 
-    def _load_whisper(self, model_name, notify):
+    def _load_whisper(self, model_name, notify, progress_callback=None):
         try:
             repository, revision = WHISPER_MODELS[model_name]
         except KeyError:
@@ -506,7 +516,8 @@ class Transcriber:
         compute = "float16" if device == "cuda" else "int8"
         if notify is not None:
             notify("Presspeech", "Loading Whisper %s on %s..." % (model_name, device))
-        model_path = _cached_model_path(model_name)
+        model_path = _cached_model_path(
+            model_name, progress_callback=progress_callback)
         # faster-whisper may otherwise download an unpinned tokenizer when a
         # cache reset removes tokenizer.json between validation and construction.
         with ExitStack() as staging:

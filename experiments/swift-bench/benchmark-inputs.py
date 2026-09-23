@@ -16,6 +16,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import unicodedata
 from typing import Optional
 
 
@@ -23,6 +24,7 @@ SCHEMA_VERSION = 1
 MARKER_NAME = ".presspeech-benchmark-inputs"
 MARKER_TEXT = "Presspeech frozen benchmark inputs\n"
 MANIFEST_NAME = "manifest.json"
+SUPPORTED_AUDIO_SUFFIXES = {".wav", ".aiff", ".aif", ".caf", ".m4a", ".mp3", ".flac"}
 
 
 class InputError(ValueError):
@@ -44,6 +46,74 @@ def require_regular_file(path: Path, label: str) -> None:
         raise InputError(f"{label} is missing or unreadable") from exc
     if path.is_symlink() or not stat.S_ISREG(mode):
         raise InputError(f"{label} must be a regular file, not a symbolic link")
+
+
+def wer_tokens(text: str) -> list[str]:
+    """Count reference words with the benchmark's Unicode letter/number rule."""
+    lowered = unicodedata.normalize("NFC", text.lower())
+    normalized = "".join(
+        character if unicodedata.category(character)[0] in "LN" else " "
+        for character in lowered
+    )
+    return normalized.split()
+
+
+def private_reference_evidence(directory: Path) -> tuple[int, int]:
+    """Return non-empty speech-reference count and normalized word count.
+
+    Read private sidecars only to calculate aggregate counts. Never include
+    their contents or paths in errors or output.
+    """
+    if directory.is_symlink() or not directory.is_dir():
+        raise InputError("private dictation fixture directory is missing or unsafe")
+    try:
+        clips = sorted(
+            path for path in directory.rglob("*")
+            if path.suffix.casefold() in SUPPORTED_AUDIO_SUFFIXES
+            and path.is_file() and not path.is_symlink()
+        )
+    except OSError as exc:
+        raise InputError("private dictation fixture directory cannot be scanned") from exc
+    if not clips:
+        raise InputError("private dictation corpus contains no supported audio fixtures")
+
+    speech_clips = 0
+    reference_words = 0
+    audio_digests: set[str] = set()
+    for clip in clips:
+        require_regular_file(clip, "private audio fixture")
+        try:
+            audio_digest = file_sha256(clip)
+        except OSError as exc:
+            raise InputError("private audio fixture is unreadable") from exc
+        if audio_digest in audio_digests:
+            raise InputError("private dictation corpus contains byte-identical audio fixtures")
+        audio_digests.add(audio_digest)
+        reference = clip.with_suffix(".txt")
+        require_regular_file(reference, "private reference sidecar")
+        try:
+            tokens = wer_tokens(reference.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as exc:
+            raise InputError("private reference sidecar is unreadable") from exc
+        if tokens:
+            speech_clips += 1
+            reference_words += len(tokens)
+    return speech_clips, reference_words
+
+
+def validate_private_reference_corpus(
+    directory: Path, minimum_clips: int, minimum_words: int
+) -> tuple[int, int]:
+    if minimum_clips < 1 or minimum_words < 1:
+        raise InputError("private corpus evidence floors must be positive integers")
+    clips, words = private_reference_evidence(directory)
+    if clips < minimum_clips or words < minimum_words:
+        raise InputError(
+            "private dictation corpus is below its evidence floor: "
+            f"{clips} non-empty references (minimum {minimum_clips}); "
+            f"{words} reference words (minimum {minimum_words})"
+        )
+    return clips, words
 
 
 def copy_stable(source: Path, destination: Path, label: str) -> str:
@@ -284,6 +354,53 @@ def run_self_test() -> None:
         if verify(root / "missing-allowed") != missing_digest:
             raise AssertionError("opt-in missing-reference snapshot did not verify")
 
+        private_corpus = root / "private-dictation"
+        private_corpus.mkdir()
+        for index in range(25):
+            audio = private_corpus / f"note-{index:02d}.wav"
+            audio.write_bytes(f"distinct audio fixture {index}".encode())
+            # Include punctuation and a decomposed accent to match the WER
+            # tokenizer's Unicode normalization without exposing text.
+            reference_copy = audio.with_suffix(".txt")
+            word_count = 41 if index == 0 else 40
+            reference_copy.write_text(
+                ("one " * (word_count - 1)) + "cafe\u0301!\n", encoding="utf-8"
+            )
+        empty_control = private_corpus / "empty-control.wav"
+        empty_control.write_bytes(b"separate non-speech fixture")
+        empty_control.with_suffix(".txt").write_text("\n", encoding="utf-8")
+        clips, words = validate_private_reference_corpus(private_corpus, 25, 1001)
+        if (clips, words) != (25, 1001):
+            raise AssertionError("private reference evidence did not meet exact floors")
+        try:
+            validate_private_reference_corpus(private_corpus, 26, 1001)
+        except InputError as exc:
+            if "25 non-empty references (minimum 26)" not in str(exc):
+                raise
+        else:
+            raise AssertionError("underfilled private clip corpus passed its evidence floor")
+        try:
+            validate_private_reference_corpus(private_corpus, 25, 1002)
+        except InputError as exc:
+            if "1001 reference words (minimum 1002)" not in str(exc):
+                raise
+        else:
+            raise AssertionError("underfilled private word corpus passed its evidence floor")
+
+        duplicate_corpus = root / "duplicate-private-dictation"
+        duplicate_corpus.mkdir()
+        for name in ("first", "renamed-copy"):
+            clip = duplicate_corpus / f"{name}.wav"
+            clip.write_bytes(b"identical source recording")
+            clip.with_suffix(".txt").write_text("a short reference\n", encoding="utf-8")
+        try:
+            private_reference_evidence(duplicate_corpus)
+        except InputError as exc:
+            if "byte-identical audio fixtures" not in str(exc):
+                raise
+        else:
+            raise AssertionError("byte-identical private audio inflated the clip count")
+
     print("benchmark input snapshot self-test passed")
 
 
@@ -299,6 +416,13 @@ def parse_args() -> argparse.Namespace:
 
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("--snapshot-dir", type=Path, required=True)
+    private_parser = subparsers.add_parser(
+        "validate-private-corpus",
+        help="validate aggregate private human-dictation reference volume",
+    )
+    private_parser.add_argument("--directory", type=Path, required=True)
+    private_parser.add_argument("--minimum-clips", type=int, required=True)
+    private_parser.add_argument("--minimum-words", type=int, required=True)
     return parser.parse_args()
 
 
@@ -316,9 +440,21 @@ def main() -> int:
         if args.command == "verify":
             print(verify(args.snapshot_dir))
             return 0
+        if args.command == "validate-private-corpus":
+            clips, words = validate_private_reference_corpus(
+                args.directory, args.minimum_clips, args.minimum_words
+            )
+            print(
+                "private speech corpus evidence: "
+                f"{clips} non-empty references, {words} reference words; floors met"
+            )
+            return 0
         raise InputError("choose snapshot, verify, or --self-test")
     except (InputError, OSError, UnicodeError) as exc:
-        print(f"benchmark input snapshot failed: {exc}", file=sys.stderr)
+        if args.command == "validate-private-corpus":
+            print(f"private speech corpus validation failed: {exc}", file=sys.stderr)
+        else:
+            print(f"benchmark input snapshot failed: {exc}", file=sys.stderr)
         return 1
 
 

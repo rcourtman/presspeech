@@ -22,8 +22,10 @@ macOS can temporarily omit third-party status items when a crowded or notched
 menu bar has too little space. Open `/Applications/Presspeech.app` again from
 Applications, Finder, or Spotlight. The existing process opens Setup Checklist.
 
-Enable **Show in Dock** there for a persistent alternative. Right-click the Dock
-icon to open dictation controls, Settings, Support, or Quit.
+Enable **Show in Dock** there for a persistent alternative. To hide the item
+deliberately, choose **Settings → Behavior → Show Presspeech in Menu Bar**;
+Presspeech enables Dock access if needed, and the Dock menu can restore the item.
+Right-click the Dock icon to open dictation controls, Settings, Support, or Quit.
 
 ### Permission Is Missing Or Will Not Appear
 

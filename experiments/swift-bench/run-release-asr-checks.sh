@@ -30,6 +30,8 @@ SELF_TEST=0
 LONG_PUBLIC_MAX_REFERENCE_DELETION_RUN="6"
 LONG_PUBLIC_MAX_CORPUS_WER="10"
 DEPENDENCY_MODE="production"
+MIN_PRIVATE_SPEECH_CLIPS=25
+MIN_PRIVATE_REFERENCE_WORDS=1000
 
 usage() {
     cat <<'USAGE'
@@ -45,7 +47,8 @@ Options:
                             composed German FLEURS test fixtures
                             (default: public-audio/fleurs-de_de-test-long-form)
   --trials <n>              trials per clip/backend (default: 3)
-  --require-real-audio      require private real-dictation clips (default)
+  --require-real-audio      require private dictation references, at least
+                            25 non-empty clips and 1,000 words (default)
   --allow-missing-real-audio
                             allow a lightweight run without private dictation;
                             this cannot report a production release-gate pass
@@ -419,6 +422,27 @@ run_self_test() {
         "no private real-dictation clips found in $tmpdir/missing-real"
     assert_not_contains "$default_missing_real_log" "running helper self-tests"
 
+    local underfilled_real="$tmpdir/underfilled-real"
+    mkdir -p "$underfilled_real"
+    touch "$underfilled_real/one.wav"
+    printf 'synthetic private fixture marker\n' >"$underfilled_real/one.txt"
+    local underfilled_real_log="$tmpdir/underfilled-real.log"
+    if bash "$SCRIPT_PATH" \
+        --real-audio-dir "$underfilled_real" \
+        --public-audio-dir "$tmpdir/missing-public" \
+        --long-public-audio-dir "$tmpdir/missing-long-public" \
+        --multilingual-long-public-audio-dir "$tmpdir/missing-multilingual-long-public" \
+        --allow-missing-long-public-audio \
+        --allow-missing-multilingual-long-public-audio \
+        >"$underfilled_real_log" 2>&1; then
+        echo "self-test expected an underfilled private speech corpus to fail" >&2
+        exit 1
+    fi
+    assert_contains "$underfilled_real_log" \
+        "private dictation corpus is below its evidence floor: 1 non-empty references (minimum 25)"
+    assert_not_contains "$underfilled_real_log" "synthetic private fixture marker"
+    assert_not_contains "$underfilled_real_log" "running helper self-tests"
+
     local allowed_missing_real_log="$tmpdir/allowed-missing-real.log"
     if bash "$SCRIPT_PATH" \
         --real-audio-dir "$tmpdir/missing-real" \
@@ -652,6 +676,14 @@ multilingual_long_public_count="$(supported_audio_count "$MULTILINGUAL_LONG_PUBL
 if [[ "$REQUIRE_REAL_AUDIO" -eq 1 && "$real_count" -eq 0 ]]; then
     echo "no private real-dictation clips found in $REAL_AUDIO_DIR" >&2
     exit 1
+fi
+if [[ "$REQUIRE_REAL_AUDIO" -eq 1 ]]; then
+    # Match the existing product-candidate sample floors. This checks corpus
+    # volume only; it does not attest reference quality or acceptable WER.
+    python3 ./benchmark-inputs.py validate-private-corpus \
+        --directory "$REAL_AUDIO_DIR" \
+        --minimum-clips "$MIN_PRIVATE_SPEECH_CLIPS" \
+        --minimum-words "$MIN_PRIVATE_REFERENCE_WORDS"
 fi
 if [[ "$REQUIRE_PUBLIC_AUDIO" -eq 1 && "$public_count" -eq 0 ]]; then
     echo "no public speech clips found in $PUBLIC_AUDIO_DIR" >&2

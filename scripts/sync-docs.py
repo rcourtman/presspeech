@@ -1788,9 +1788,11 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         count=1,
     )
     setup_sentence = (
-        "Use Setup Checklist from the Presspeech menu bar item to finish the speech model, "
-        "Microphone, Accessibility (Device Control and Data Access on macOS 27+), "
-        "Input Monitoring, and hotkey readiness checks.\n"
+        "Use Setup Checklist from the Presspeech menu-bar item or Dock menu to finish "
+        "the speech model, Microphone, Accessibility (Device Control and Data Access "
+        "on macOS 27+), Input Monitoring, and hotkey readiness checks. Settings → "
+        "Behavior → Show Presspeech in Menu Bar hides the status item and enables "
+        "Dock access if needed; the Dock menu can restore it.\n"
     )
     if setup_sentence not in text:
         text = replace_literal(
@@ -2430,6 +2432,31 @@ def check_model_download_first_run_controls(
             f"{privacy_display}: missing release-specific model-download control guidance — "
             + ", ".join(repr(phrase) for phrase in missing_guidance)
         )
+    return errors
+
+
+def check_user_triggered_support_guide() -> list[str]:
+    """Keep the disclosed feedback destination aligned with both app menus."""
+    errors: list[str] = []
+    destination = "github.com/rcourtman/presspeech/blob/main/SUPPORT.md"
+    inventory_path = DOCS / "privacy" / "network-calls.json"
+    inventory = json.loads(read_text(inventory_path))
+    calls = inventory.get("network_calls", [])
+    matches = [call for call in calls if call.get("name") == "user_triggered_support_guide"]
+    if len(matches) != 1 or matches[0].get("destination") != destination:
+        errors.append("docs/privacy/network-calls.json: support-guide destination is missing or mismatched")
+    swift = read_text(ROOT / "swift" / "Sources" / "Presspeech" / "main.swift")
+    windows = read_text(ROOT / "windows" / "app.py")
+    if (
+        f"https://{destination}" not in swift
+        or swift.count("NSWorkspace.shared.open(GITHUB_SUPPORT_GUIDE_PAGE)") < 2
+    ):
+        errors.append("macOS feedback actions no longer match the disclosed support guide")
+    if (
+        f"https://{destination}" not in windows
+        or windows.count("return self._open_support_page(SUPPORT_GUIDE_URL)") < 2
+    ):
+        errors.append("Windows feedback actions no longer match the disclosed support guide")
     return errors
 
 
@@ -4600,6 +4627,7 @@ def main() -> int:
             errors.extend(check_windows_model_download_privacy_guidance())
             errors.extend(check_windows_model_download_privacy_scopes())
             errors.extend(check_model_download_first_run_controls(metadata))
+            errors.extend(check_user_triggered_support_guide())
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
@@ -4650,6 +4678,7 @@ def main() -> int:
         errors.extend(check_windows_model_download_privacy_guidance())
         errors.extend(check_windows_model_download_privacy_scopes())
         errors.extend(check_model_download_first_run_controls(metadata))
+        errors.extend(check_user_triggered_support_guide())
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())

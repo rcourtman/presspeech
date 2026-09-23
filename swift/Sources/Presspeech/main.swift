@@ -216,6 +216,29 @@ enum MenuBarState {
     case error
 }
 
+/// Keep at least one user-facing control route available. The menu-bar item is
+/// the normal surface; hiding it opts the app into Dock access so its menu can
+/// restore the item. Conversely, turning Dock access off while the item is
+/// hidden restores the menu-bar route first.
+struct ControlSurfaceVisibility: Equatable {
+    let menuBar: Bool
+    let dock: Bool
+
+    static func normalized(menuBar: Bool, dock: Bool) -> ControlSurfaceVisibility {
+        menuBar || dock
+            ? ControlSurfaceVisibility(menuBar: menuBar, dock: dock)
+            : ControlSurfaceVisibility(menuBar: true, dock: false)
+    }
+
+    func selectingMenuBar(_ visible: Bool) -> ControlSurfaceVisibility {
+        ControlSurfaceVisibility(menuBar: visible, dock: dock || !visible)
+    }
+
+    func selectingDock(_ visible: Bool) -> ControlSurfaceVisibility {
+        ControlSurfaceVisibility(menuBar: menuBar || !visible, dock: visible)
+    }
+}
+
 func menuBarAccessibilityValue(for state: MenuBarState,
                               notice: DictationNotice? = nil) -> String {
     if let notice {
@@ -2468,6 +2491,7 @@ final class Settings: @unchecked Sendable {
     private static let keyPlayFeedbackSounds = "play_feedback_sounds"
     private static let keyPreserveClipboardForManualRestore = "preserve_clipboard_for_manual_restore"
     private static let keyShowInDock = "show_in_dock"
+    private static let keyShowInMenuBar = "show_in_menu_bar"
     private static let keyInputDevice = "input_device"
     private static let keyCheckForUpdates = "check_for_updates"
     private static let keyLastUpdateCheckAt = "last_update_check_at"
@@ -2627,6 +2651,14 @@ final class Settings: @unchecked Sendable {
     var showInDock: Bool {
         get { defaults.bool(forKey: Self.keyShowInDock) }
         set { defaults.set(newValue, forKey: Self.keyShowInDock) }
+    }
+
+    var showInMenuBar: Bool {
+        get {
+            guard defaults.object(forKey: Self.keyShowInMenuBar) != nil else { return true }
+            return defaults.bool(forKey: Self.keyShowInMenuBar)
+        }
+        set { defaults.set(newValue, forKey: Self.keyShowInMenuBar) }
     }
 
     var inputDevice: String {
@@ -8415,6 +8447,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         "com.local.presspeech.menu.launch-at-login"
     )
     private var statusItem: NSStatusItem!
+    private var statusItemVisibilityObservation: NSKeyValueObservation?
     private var lastMenuBarAccessibilityValue: String?
     private var templateImage: NSImage?
     private var recordingImage: NSImage?
@@ -8649,13 +8682,30 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         settings.hasActiveRunMarker = true
         restoreUpdateReminderPause()
 
-        NSApp.setActivationPolicy(settings.showInDock ? .regular : .accessory)
+        let savedControlSurfaces = ControlSurfaceVisibility.normalized(
+            menuBar: settings.showInMenuBar,
+            dock: settings.showInDock
+        )
+        if savedControlSurfaces.menuBar != settings.showInMenuBar
+            || savedControlSurfaces.dock != settings.showInDock {
+            settings.showInMenuBar = savedControlSurfaces.menuBar
+            settings.showInDock = savedControlSurfaces.dock
+            log("control surface recovery: restored menu-bar access")
+        }
+        NSApp.setActivationPolicy(savedControlSurfaces.dock ? .regular : .accessory)
         installApplicationMenu()
         hotkey.applicationSettingsMenuIsAvailable = { [weak self] in
             self?.settings.showInDock == true
         }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.isVisible = savedControlSurfaces.menuBar
+        statusItemVisibilityObservation = statusItem.observe(\.isVisible, options: [.new]) {
+            [weak self] _, _ in
+            Task { @MainActor in
+                self?.reconcileStatusItemVisibility()
+            }
+        }
         configureStatusItemImage()
         setMenuBarState(.loading)
         startCorrectionSyncIfConfigured()
@@ -8729,6 +8779,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     /// high-value controls needed as an alternative access route.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         buildDockMenu()
+    }
+
+    private func reconcileStatusItemVisibility() {
+        guard let statusItem else { return }
+        let visible = statusItem.isVisible
+        guard visible != settings.showInMenuBar else { return }
+        let current = ControlSurfaceVisibility.normalized(
+            menuBar: settings.showInMenuBar,
+            dock: settings.showInDock
+        )
+        setControlSurfaceVisibility(current.selectingMenuBar(visible))
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -10807,6 +10868,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         dictationControl.isEnabled = controlState.isEnabled
         dictationControl.toolTip = controlState.help
         menu.addItem(dictationControl)
+        menu.addItem(buildMenuBarVisibilityItem())
+        menu.addItem(.separator())
 
         if dictationNotice == .noAudioCaptured {
             menu.addItem(buildMicrophoneRecoveryItem())
@@ -10836,6 +10899,16 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         menu.addItem(buildSupportItem())
         // AppKit appends the standard Dock commands, including Quit.
         return menu
+    }
+
+    private func buildMenuBarVisibilityItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Show Presspeech in Menu Bar",
+                              action: #selector(toggleMenuBarVisibility(_:)),
+                              keyEquivalent: "")
+        item.target = self
+        item.state = settings.showInMenuBar ? .on : .off
+        item.toolTip = "Hiding this item turns on Dock access. Restore it from the Dock menu."
+        return item
     }
 
     private func buildMenu() -> NSMenu {
@@ -11244,6 +11317,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 "Mute while recording: \(settings.muteWhileRecording)",
                 "Feedback sounds: \(settings.playFeedbackSounds)",
                 "Show in Dock: \(settings.showInDock)",
+                "Show in Menu Bar: \(settings.showInMenuBar)",
                 "Launch at Login: \(launchAtLoginText)",
             ],
             updateLines: [
@@ -12304,6 +12378,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         dock.target = self
         dock.state = settings.showInDock ? .on : .off
         sub.addItem(dock)
+        sub.addItem(buildMenuBarVisibilityItem())
 
         parent.submenu = sub
         return parent
@@ -14208,12 +14283,36 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         setShowInDock(sender.state == .on)
     }
 
+    @objc private func toggleMenuBarVisibility(_ sender: NSMenuItem) {
+        setShowInMenuBar(!settings.showInMenuBar)
+    }
+
+    private func setShowInMenuBar(_ showInMenuBar: Bool) {
+        let current = ControlSurfaceVisibility.normalized(
+            menuBar: settings.showInMenuBar,
+            dock: settings.showInDock
+        )
+        setControlSurfaceVisibility(current.selectingMenuBar(showInMenuBar))
+    }
+
     private func setShowInDock(_ showInDock: Bool) {
-        guard settings.showInDock != showInDock else { return }
-        settings.showInDock = showInDock
-        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
-        log("Dock access \(showInDock ? "enabled" : "disabled")")
+        let current = ControlSurfaceVisibility.normalized(
+            menuBar: settings.showInMenuBar,
+            dock: settings.showInDock
+        )
+        setControlSurfaceVisibility(current.selectingDock(showInDock))
+    }
+
+    private func setControlSurfaceVisibility(_ visibility: ControlSurfaceVisibility) {
+        guard settings.showInMenuBar != visibility.menuBar
+                || settings.showInDock != visibility.dock else { return }
+        settings.showInMenuBar = visibility.menuBar
+        settings.showInDock = visibility.dock
+        NSApp.setActivationPolicy(visibility.dock ? .regular : .accessory)
+        statusItem?.isVisible = visibility.menuBar
+        log("control surfaces: menu bar \(visibility.menuBar ? "shown" : "hidden"), Dock \(visibility.dock ? "shown" : "hidden")")
         rebuildMenu()
+        updateSetupChecklist()
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
@@ -15608,6 +15707,8 @@ private enum PresspeechSelfTest {
             return runSuite("identity-migration", testIdentityMigration)
         case "launch-at-login":
             return runSuite("launch-at-login", testLaunchAtLogin)
+        case "control-surfaces":
+            return runSuite("control-surfaces", testControlSurfaceVisibility)
         case "all":
             return runSuite("all", testAll)
         default:
@@ -15657,6 +15758,7 @@ private enum PresspeechSelfTest {
         try testDiagnostics()
         try testIdentityMigration()
         try testLaunchAtLogin()
+        try testControlSurfaceVisibility()
     }
 
     private static func testSilentCaptureHint() throws {
@@ -15723,6 +15825,39 @@ private enum PresspeechSelfTest {
         try expect(launchAtLoginAction(for: .notFound),
                    equals: .register,
                    "a missing login item should retry registration and surface any error")
+    }
+
+    private static func testControlSurfaceVisibility() throws {
+        let defaultVisibility = ControlSurfaceVisibility.normalized(menuBar: true, dock: false)
+        try expect(defaultVisibility,
+                   equals: ControlSurfaceVisibility(menuBar: true, dock: false),
+                   "the existing menu-bar-first default should remain unchanged")
+
+        let dockFallback = defaultVisibility.selectingMenuBar(false)
+        try expect(dockFallback,
+                   equals: ControlSurfaceVisibility(menuBar: false, dock: true),
+                   "hiding the menu-bar item should enable Dock access")
+        try expect(dockFallback.selectingMenuBar(true),
+                   equals: ControlSurfaceVisibility(menuBar: true, dock: true),
+                   "the Dock menu should be able to restore the menu-bar item")
+        try expect(dockFallback.selectingDock(false),
+                   equals: ControlSurfaceVisibility(menuBar: true, dock: false),
+                   "disabling Dock access while hidden should restore menu-bar access first")
+        try expect(ControlSurfaceVisibility.normalized(menuBar: false, dock: false),
+                   equals: ControlSurfaceVisibility(menuBar: true, dock: false),
+                   "a corrupted no-surface preference must recover to the menu-bar route")
+
+        let suite = "com.local.presspeech.self-test.control-surfaces.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw SelfTestFailure.failed("control surface test defaults unavailable")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = Settings(testDefaults: defaults)
+        try expect(settings.showInMenuBar, equals: true,
+                   "existing installations should retain menu-bar access by default")
+        settings.showInMenuBar = false
+        try expect(Settings(testDefaults: defaults).showInMenuBar, equals: false,
+                   "the menu-bar visibility preference should persist")
     }
 
     private static func testRecordingHUDAccessibility() throws {
@@ -15943,6 +16078,7 @@ private enum PresspeechSelfTest {
                     "Recent transcripts: Last 5 (1 in memory)",
                     "Text corrections: 1 configured",
                     "Text correction sync: configured",
+                    "Show in Menu Bar: false",
                 ],
                 updateLines: ["Pending update: none"],
                 microphoneLines: microphoneLines,
@@ -15985,6 +16121,8 @@ private enum PresspeechSelfTest {
                    "diagnostics report should include correction counts")
         try expect(report.contains("Speech model: Multilingual (Parakeet TDT v3)"), equals: true,
                    "diagnostics report should include the speech model")
+        try expect(report.contains("Show in Menu Bar: false"), equals: true,
+                   "diagnostics should report menu-bar visibility without identifying user content")
         try expect(report.contains("Specific input (available; name omitted)"), equals: true,
                    "diagnostics report should retain microphone availability without its name")
         try expect(report.contains("raw log lines are not included"), equals: true,

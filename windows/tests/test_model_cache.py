@@ -75,6 +75,75 @@ class CacheFirstTests(unittest.TestCase):
         self.assertEqual(self.resolve(), str(self.snapshot))
         self.assertEqual(self.flags(), [True, False]); self.assert_pinned_anonymous()
 
+    def test_download_progress_reports_only_online_transfer_bytes(self):
+        events = []
+        class FakeTqdm:
+            def __init__(self, *args, **kwargs):
+                self.n = kwargs.get('initial', 0)
+                self.total = kwargs.get('total')
+                self.unit = kwargs.get('unit')
+                self.desc = kwargs.get('desc')
+                self.display()
+
+            def update(self, amount):
+                self.n += amount
+                self.display()
+
+            def display(self, *_args, **_kwargs):
+                pass
+
+            def close(self):
+                pass
+
+        tqdm_package = types.ModuleType('tqdm')
+        tqdm_package.__path__ = []
+        tqdm_auto = types.ModuleType('tqdm.auto')
+        tqdm_auto.tqdm = FakeTqdm
+
+        def download(*_args, **kwargs):
+            if kwargs['local_files_only']:
+                raise self.missing('no cache')
+            progress_class = kwargs['tqdm_class']
+            transfer = progress_class(
+                total=1024, initial=0, unit='B', desc='Downloading bytes',
+                mininterval=0)
+            transfer._presspeech_last_report = None
+            transfer.update(256)
+            transfer.close()
+            # The same class is used for other Hub progress bars; they must
+            # stay silent and not masquerade as downloaded model bytes.
+            other = progress_class(
+                total=4, initial=0, unit='it', desc='Downloading files',
+                mininterval=0)
+            other._presspeech_last_report = None
+            other.update(1)
+            other.close()
+            return str(self.snapshot)
+
+        self.download.side_effect = download
+        with mock.patch.dict(sys.modules, {
+                'tqdm': tqdm_package, 'tqdm.auto': tqdm_auto}):
+            self.assertEqual(model_cache.resolve_snapshot(
+                'fixture/public', self.revision, self.files,
+                progress=lambda *event: events.append(event)), str(self.snapshot))
+
+        self.assertEqual(events[0], ('downloading', None, None))
+        self.assertIn(('downloading', 256, 1024), events)
+        self.assertEqual(events[-1], ('loading', None, None))
+        self.assertEqual(self.flags(), [True, False])
+        self.assertIs(self.download.call_args_list[0].kwargs.get('tqdm_class'), None)
+        self.assertIn('tqdm_class', self.download.call_args_list[1].kwargs)
+        self.assert_pinned_anonymous()
+
+    def test_local_snapshot_reports_load_phase_without_network_progress_bar(self):
+        events = []
+        self.assertEqual(model_cache.resolve_snapshot(
+            'fixture/public', self.revision, self.files,
+            progress=lambda *event: events.append(event)), str(self.snapshot))
+        self.assertEqual(events, [('loading', None, None)])
+        self.assertEqual(self.flags(), [True])
+        self.assertNotIn('tqdm_class', self.download.call_args.kwargs)
+
     def test_partial_snapshot_without_tree_metadata_fetches_missing_files(self):
         (self.snapshot / 'tokenizer.json').unlink()
         def download(*args, **kwargs):

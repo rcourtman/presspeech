@@ -333,6 +333,11 @@ keyboard access testing in addition to assistive-technology testing.
   choice preserved. Confirm the chosen autostart state is reflected under Task
   Manager **Startup apps**. After the model reaches Ready, confirm both actions
   become available.
+- During a missing-model download, confirm Setup's status advances through
+  cache checking, downloading, loading, and warm-up. Verify the downloaded-byte
+  count increases during transfer without a percentage or ETA, then check with
+  Narrator that each phase is announced but byte-count refreshes do not
+  repeatedly interrupt speech.
 - Confirm **Finish Setup** remains available if the microphone will be connected
   later; microphone readiness is advisory rather than a completion gate.
 - Close every Presspeech window while leaving the notification-area process
@@ -441,7 +446,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Sleep/resume, microphone route change, and first dictation afterward | |
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
-| Menu-bar/Dock access and dictation recovery with VoiceOver and keyboard-only navigation | |
+| Menu-bar visibility preference, Dock fallback/restore, and dictation recovery with VoiceOver and keyboard-only navigation | |
 
 For the synthetic-credential row, use a disposable macOS profile or VM with no
 Hugging Face login/cache. Launch the installed candidate executable directly
@@ -592,6 +597,17 @@ item after the development-wrapper launch check.
   Dock icon, and confirm dictation controls, Settings, Support, and the standard
   macOS Quit command are all available. Disable the option and confirm the Dock
   icon is removed without closing Setup Checklist.
+- In **Settings → Behavior**, turn off **Show Presspeech in Menu Bar**. Confirm
+  Presspeech enables its Dock icon before hiding the status item and that the
+  Dock menu's **Show Presspeech in Menu Bar** action restores it. With the item
+  hidden, turn off **Show Presspeech in Dock** from the Dock menu's Settings;
+  confirm the status item returns before the Dock icon is removed. Repeat with
+  keyboard-only navigation and VoiceOver, checking the action name and checked
+  state. Relaunch after each saved visibility state and confirm it persists.
+  If the tested macOS version allows removing/restoring status items directly,
+  verify that Presspeech follows that change and retains an accessible control
+  route; temporary crowding/overflow alone must not be treated as the user's
+  persistent visibility choice.
 - Enable **Show in Dock**, minimize Setup Checklist, then reopen Presspeech from
   Finder or the Dock. Confirm the minimized window is restored and brought to
   the front rather than leaving Presspeech without a visible control surface.

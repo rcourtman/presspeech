@@ -64,6 +64,21 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.resolve_snapshot.assert_called_once()
         self.assertTrue(self.resolve_snapshot.call_args.kwargs["local_only"])
 
+    def test_model_cache_progress_callback_keeps_snapshot_pin_unchanged(self):
+        progress = mock.Mock()
+        self.assertEqual(engine._cached_model_path(
+            "parakeet-tdt-0.6b-v3", progress_callback=progress),
+            "synthetic-pinned-snapshot")
+        snapshot = engine.model_snapshot("parakeet-tdt-0.6b-v3")
+        self.resolve_snapshot.assert_called_once_with(
+            snapshot["repository"], snapshot["revision"],
+            engine.MODEL_CACHE_FILES["parakeet-tdt-0.6b-v3"],
+            optional_files=engine.MODEL_CACHE_OPTIONAL_FILES[
+                "parakeet-tdt-0.6b-v3"],
+            required_any=engine.MODEL_CACHE_ALTERNATIVES[
+                "parakeet-tdt-0.6b-v3"],
+            progress=progress)
+
     def test_parakeet_uses_smallest_pre_warmed_audio_bucket(self):
         self.assertEqual(engine._parakeet_bucket_seconds(1.0), 15)
         self.assertEqual(engine._parakeet_bucket_seconds(15.0), 15)
