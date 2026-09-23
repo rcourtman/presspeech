@@ -113,9 +113,15 @@ contents and prefers a dedicated recovery action that preserves them. Another
 user reports occasional stale clipboard content being pasted ([issue
 #502](https://github.com/cjpais/Handy/issues/502)). These are Handy-specific
 observations, not evidence of their prevalence across products or of a
-Presspeech defect or request. They reinforce that destination focus, safe
+Presspeech defect or request. Handy's current
+[troubleshooting note](https://github.com/cjpais/Handy/blob/main/README.md#previous-clipboard-content-is-pasted-instead-of-the-transcription)
+also describes fixed-delay clipboard restoration racing a slow target and labels
+its clipboard-read-notification alternative experimental. That is the project's
+own guidance, not an independent comparison; it reinforces the delivery race
+as a category risk, not a claim about Presspeech behavior or relative quality.
+This small, self-selected sample reinforces that destination focus, safe
 delivery, and recovery are consequential risks in this workflow, consistent
-with Presspeech's open issues #33 and #36. They also identify a concrete
+with Presspeech's open issues #33 and #36. It also identifies a concrete
 recovery trade-off: making the transcript available without displacing unrelated
 clipboard content. Presspeech already offers configurable, bounded macOS
 transcript history in memory, cleared on quit; upcoming Windows delivery

@@ -217,6 +217,10 @@ run.bat
    window where the recording began. If it cannot verify that destination, it
    leaves the text on the clipboard for manual paste instead.
 
+If using the configured key is inconvenient, select **Dictate** from the
+Presspeech notification-area menu to start recording, then select it again to
+stop. This menu action toggles recording in either dictation style.
+
 The configured key is reserved for Presspeech while it is running, so it does
 not also open a Windows surface or invoke an F8–F12 command in the focused app.
 Other keys and AltGr layout input continue to pass through normally.

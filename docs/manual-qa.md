@@ -105,6 +105,7 @@ For each configuration, also record this release-gate matrix:
 | In-place candidate install over the preceding public Windows release | |
 | In-app update, cancelled/failed update recovery, uninstall, and reinstall | |
 | Keyboard-only, Narrator, and Accessibility Insights checks | |
+| Windows 11 Voice Access operation of named controls and menu-based dictation | |
 | High-contrast themes across Setup, Settings, Update, Delivery Recovery, and Try Dictation | |
 
 A **Fail**, **Blocked**, or **Not run** result in either table blocks promotion
@@ -227,6 +228,20 @@ keyboard access testing in addition to assistive-technology testing.
   is announced once without moving focus. Repeat for an update completion or
   failure and a Settings save. During a download, confirm changing byte counts
   remain readable on demand but do not repeatedly interrupt Narrator.
+- With Voice Access running on Windows 11, separately test spoken interaction
+  with Setup, Settings, Try Dictation, and the notification-area **Dictate**
+  action. Use the controls' names or Voice Access number overlays; start and
+  stop a harmless scratchpad dictation through **Dictate**, and test whether
+  the action remains reachable when the Presspeech icon is in notification-area
+  overflow. Confirm the configured microphone and controls remain usable while
+  Voice Access is active, and that ordinary test text does not trigger an
+  unintended Voice Access command. The global hotkey deliberately ignores
+  Windows-injected key events, so a spoken **Press and hold [key]** command is
+  not a substitute for testing the menu/control route. Record any point Voice
+  Access cannot operate as a limitation; do not infer support from unit tests
+  or UI Automation names alone. Use Microsoft's [Voice Access overview](https://support.microsoft.com/en-us/accessibility/windows/voice-access/use-voice-access-to-control-your-pc-author-text-with-your-voice)
+  and [screen-item interaction guidance](https://support.microsoft.com/en-us/accessibility/windows/voice-access/use-voice-to-interact-with-items-on-the-screen)
+  for supported commands and alternatives.
 - On a layout with AltGr (for example Polish or German), confirm typing an
   AltGr character does not begin dictation. In Setup, select **F8**, confirm the
   instructions update and the key works immediately, choose **Set Up Later**,

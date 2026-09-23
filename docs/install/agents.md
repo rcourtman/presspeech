@@ -9,6 +9,8 @@ for the unsigned prerelease.
 ```text
 Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+
 Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. Use Homebrew when it is already installed because it also handles updates. If Homebrew is missing, offer the direct download instead of forcing the user to install Homebrew first.
 
 Run:

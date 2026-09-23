@@ -116,6 +116,13 @@ source-build details.
 
 ## Install on macOS
 
+**Before installing or launching macOS 0.3.8:** its model-download requests
+may include a Hugging Face token inherited by Presspeech. The public model
+needs no account token. If a token may be present in the environment that
+launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published.
+Dictation audio and transcripts are not sent in these requests. See the
+[version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+
 Download the notarised app:
 
 - [Download the latest published Presspeech.zip](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip).
@@ -169,6 +176,15 @@ exposes dictation controls, Settings, and Support.
 
 ```text
 Install Presspeech from https://github.com/rcourtman/presspeech.
+
+Before installing or launching macOS 0.3.8, disclose that a Hugging
+Face token inherited by Presspeech may be included in model-download requests;
+the public model needs no account token. If a token may be present in the
+environment that launches Presspeech—or the user is unsure—offer to wait until
+macOS 0.3.9 is published. Do not inspect or display token values, change
+credential settings, or launch 0.3.8 without the user's informed choice. Model
+downloads do not include dictation audio or transcripts. See
+https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Use either the direct notarised download or the Homebrew Cask.
 Homebrew is preferred when it is already installed because it also
@@ -374,6 +390,11 @@ Presspeech is local-first:
 - No Presspeech-authored analytics, accounts, or crash reporter. Bundled
   speech-library network behavior differs by published version; see the
   [privacy inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+- macOS 0.3.8 may attach an inherited Hugging Face token to model
+  downloads even though its public model needs no account token. Upcoming
+  macOS 0.3.9 removes those inherited credentials from its own download
+  process; do not attribute that change to 0.3.8. Dictation audio and
+  transcripts are not sent in model downloads.
 - Published Windows 0.1.12 may include a locally available Hugging Face account
   token in model-download requests and honors inherited `HF_ENDPOINT` and
   `HUGGINGFACE_CO_STAGING` settings; a configured endpoint may therefore

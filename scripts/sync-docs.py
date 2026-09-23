@@ -397,6 +397,77 @@ WINDOWS_AGENT_DISCLOSURE = {
     DOCS / "llms-full.txt": ("agent-harnesses", "agent-related environment markers"),
 }
 
+MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
+    ROOT / "README.md": (
+        "Before installing or launching macOS 0.3.8",
+        "Hugging Face token inherited by Presspeech",
+        "public model needs no account token",
+        "wait until macOS 0.3.9 is published",
+        "Dictation audio and transcripts are not sent",
+        "version-specific network inventory",
+        "Do not inspect or display token values",
+    ),
+    DOCS / "index.html": (
+        "Before installing or launching macOS 0.3.8",
+        "Hugging Face token inherited by Presspeech",
+        "public model needs no account token",
+        "wait until macOS 0.3.9 is published",
+        "Dictation audio and transcripts are not sent",
+        "version-specific network inventory",
+    ),
+    DOCS / "getting-started.html": (
+        "Before installing or launching",
+        "macOS 0.3.8 model-download requests",
+        "Hugging Face token inherited by Presspeech",
+        "public model needs no account token",
+        "wait until macOS 0.3.9 is published",
+        "Dictation audio and transcripts are not sent",
+        "version-specific network inventory",
+    ),
+    DOCS / "install.html": (
+        'id="model-download-privacy"',
+        "Before installing or launching macOS 0.3.8",
+        "Hugging Face token inherited by Presspeech",
+        "public model needs no account token",
+        "wait until macOS 0.3.9 is published",
+        "Dictation audio and transcripts are not sent",
+        "version-specific network inventory",
+    ),
+    DOCS / "install" / "agents.md": (
+        "macOS 0.3.8",
+        "Hugging Face token inherited by Presspeech",
+        "public model needs no account token",
+        "wait until macOS 0.3.9 is published",
+        "Do not inspect or display token values",
+        "informed choice",
+    ),
+    DOCS / "llms.txt": (
+        "macOS 0.3.8 may attach an inherited Hugging Face token",
+        "public model needs no account token",
+        "wait until macOS 0.3.9 is published",
+        "dictation audio and transcripts are not sent",
+    ),
+    DOCS / "llms-full.txt": (
+        "macOS 0.3.8 can attach an inherited `HF_TOKEN`",
+        "public model needs no account token",
+        "If a token may be inherited by Presspeech",
+        "wait until macOS 0.3.9 is published",
+        "removes those credentials from its own process",
+        "Dictation audio and transcripts are not sent in these requests",
+    ),
+    DOCS / "privacy.html": (
+        "Before installing or launching macOS 0.3.8",
+        "Hugging Face token inherited by Presspeech",
+        "public model needs no token",
+        "wait until macOS 0.3.9 is published",
+        "Dictation audio and transcripts are not sent",
+        "HF_TOKEN",
+        "HUGGING_FACE_HUB_TOKEN",
+        "HUGGINGFACEHUB_API_TOKEN",
+        "removes those credentials from its own process",
+    ),
+}
+
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     ROOT / "README.md": (
         "Before installing or launching Windows 0.1.12",
@@ -821,6 +892,8 @@ class SyncError(RuntimeError):
 
 
 MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
+
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Presspeech has two notarised install paths: a direct release zip and a Homebrew Cask. Use Homebrew when it is already installed because it also handles updates. If Homebrew is missing, offer the direct download instead of forcing the user to install Homebrew first.
 
@@ -1406,7 +1479,11 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         )
     privacy_line = (
         "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
-        "during Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
+        "macOS 0.3.8 may attach an inherited Hugging Face token to model-download requests, "
+        "although the public model needs no account token. If a token may be present in the environment "
+        "that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published; dictation audio "
+        "and transcripts are not sent in those requests. "
+        "During Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
         "Hugging Face, model-request metadata includes a random per-process session ID, and pinned Hub "
         "1.29.0 may request /api/agent-harnesses and add an agent/<id> label based on inherited "
         "agent-related environment markers. An available "
@@ -1961,6 +2038,40 @@ def check_windows_model_download_privacy_summary(
                 "summary — missing "
                 + ", ".join(repr(phrase) for phrase in missing)
             )
+    return errors
+
+
+def check_macos_model_download_privacy_summary(
+    surfaces: dict[Path, tuple[str, ...]] = MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY,
+    install_page: Path = DOCS / "install.html",
+) -> list[str]:
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing macOS model-download privacy summary")
+            continue
+        contents = " ".join(read_text(path).split()).casefold()
+        missing = [phrase for phrase in required if phrase.casefold() not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete decision-oriented macOS model-download privacy "
+                "guidance — missing "
+                + ", ".join(repr(phrase) for phrase in missing)
+            )
+
+        if path == install_page:
+            raw = read_text(path)
+            warning_position = raw.find('id="model-download-privacy"')
+            download_position = raw.find(
+                'class="button" href="https://github.com/rcourtman/presspeech/'
+                'releases/download/v'
+            )
+            if warning_position < 0 or download_position < 0 or warning_position > download_position:
+                errors.append(
+                    f"{display}: the macOS model-download privacy decision must "
+                    "precede the direct download action"
+                )
     return errors
 
 
@@ -2524,7 +2635,12 @@ def run_self_test() -> None:
             encoding="utf-8",
         )
         synced_llms = sync_llms(legacy_llms, metadata)
-        if OLD_LLMS_PRIVACY_SUMMARY in synced_llms or "random per-process session ID" not in synced_llms:
+        if (
+            OLD_LLMS_PRIVACY_SUMMARY in synced_llms
+            or "random per-process session ID" not in synced_llms
+            or "macOS 0.3.8 may attach an inherited Hugging Face token" not in synced_llms
+            or "wait until macOS 0.3.9 is published" not in synced_llms
+        ):
             raise SyncError("self-test: inaccurate llms privacy claim was not corrected")
         legacy_llms.write_text(synced_llms, encoding="utf-8")
         if sync_llms(legacy_llms, metadata) != synced_llms:
@@ -2647,6 +2763,8 @@ def run_self_test() -> None:
             or WINDOWS_INSTALL_PROMPT not in synced_agents
             or "site-metadata.json" not in synced_agents
             or "9.8.7" in synced_agents
+            or "Do not inspect or display token values" not in MAC_INSTALL_PROMPT
+            or "launch 0.3.8 without the user's informed choice" not in MAC_INSTALL_PROMPT
         ):
             raise SyncError("self-test: cross-platform assistant prompts were not generated")
 
@@ -3138,6 +3256,49 @@ def run_self_test() -> None:
         if check_windows_model_download_privacy_summary(required_summary_guidance):
             raise SyncError("self-test: complete Windows privacy decision was rejected")
 
+        mac_summary = Path(tmp) / "macos-privacy-summary.html"
+        required_mac_summary = {
+            mac_summary: (
+                'id="model-download-privacy"',
+                "Before installing or launching macOS 0.3.8",
+                "Hugging Face token inherited by Presspeech",
+                "public model needs no account token",
+                "wait until macOS 0.3.9 is published",
+                "Dictation audio and transcripts are not sent",
+                "version-specific network inventory",
+            )
+        }
+        mac_summary.write_text(
+            "Presspeech downloads a public model.\n", encoding="utf-8"
+        )
+        if not check_macos_model_download_privacy_summary(
+            required_mac_summary, install_page=mac_summary
+        ):
+            raise SyncError("self-test: missing macOS privacy decision was not flagged")
+        mac_warning = (
+            '<div id="model-download-privacy"><p>Before installing or launching '
+            "macOS 0.3.8, its model-download requests may include a Hugging Face "
+            "token inherited by Presspeech. The public model needs no account "
+            "token. If one may be present, wait until macOS 0.3.9 is published. "
+            "Dictation audio and transcripts are not sent. See the version-specific "
+            "network inventory.</p></div>\n"
+        )
+        mac_button = (
+            '<a class="button" href="https://github.com/rcourtman/presspeech/'
+            'releases/download/v0.3.8/Presspeech.zip">Download</a>\n'
+        )
+        mac_summary.write_text(mac_warning + mac_button, encoding="utf-8")
+        if check_macos_model_download_privacy_summary(
+            required_mac_summary, install_page=mac_summary
+        ):
+            raise SyncError("self-test: complete macOS privacy decision was rejected")
+        mac_summary.write_text(mac_button + mac_warning, encoding="utf-8")
+        mac_order_errors = check_macos_model_download_privacy_summary(
+            required_mac_summary, install_page=mac_summary
+        )
+        if not any("must precede the direct download action" in error for error in mac_order_errors):
+            raise SyncError("self-test: early macOS download action was accepted")
+
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {
             delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
@@ -3413,6 +3574,7 @@ def main() -> int:
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_windows_model_download_privacy_guidance())
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
+            errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_compatibility_evidence_guidance())
@@ -3455,6 +3617,7 @@ def main() -> int:
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_windows_model_download_privacy_guidance())
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
+        errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_compatibility_evidence_guidance())

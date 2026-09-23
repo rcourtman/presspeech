@@ -30,10 +30,11 @@ normal production-pinned build.
   --trials 3
 ```
 
-The FLEURS importer accepts only locales corresponding to languages exposed by
-Presspeech. It pins the dataset revision, reads the human reference TSV, and
-verifies the language/split archive against the SHA-256 and size in the pinned
-Git LFS pointer before extracting the selected rows. FLEURS is CC BY 4.0.
+The FLEURS importer accepts all 25 Parakeet TDT v3 language locales and the
+Bosnian, Belarusian, and Serbian script-filter aliases exposed by Presspeech.
+It pins the dataset revision, reads the human reference TSV, and verifies the
+language/split archive against the SHA-256 and size in the pinned Git LFS
+pointer before extracting the selected rows. FLEURS is CC BY 4.0.
 
 Then run the production v3 regression:
 

@@ -87,22 +87,28 @@ is_supported_fleurs_split() {
 }
 
 is_supported_fleurs_language() {
-    # These are the FLEURS locales corresponding to Presspeech's exposed
-    # Parakeet language hints. Keep this bounded: accepting arbitrary FLEURS
-    # languages would imply product support that Presspeech does not offer.
-    case "$1" in
-        en_us|es_419|fr_fr|de_de|it_it|pt_br|ro_ro|pl_pl|cs_cz|sk_sk|sl_si|hr_hr|bs_ba|ru_ru|uk_ua|be_by|bg_bg|sr_rs) return 0 ;;
-        *) return 1 ;;
-    esac
+    # Keep this bounded to the v3 model languages and the three explicitly
+    # exposed script-filter aliases; accepting arbitrary FLEURS locales
+    # would imply product support that Presspeech does not offer.
+    fleurs_language_hint "$1" >/dev/null
 }
 
 fleurs_language_hint() {
     case "$1" in
         en_us) printf 'en' ;;
         es_419) printf 'es' ;;
+        da_dk) printf 'da' ;;
+        nl_nl) printf 'nl' ;;
+        et_ee) printf 'et' ;;
+        fi_fi) printf 'fi' ;;
         fr_fr) printf 'fr' ;;
         de_de) printf 'de' ;;
+        el_gr) printf 'el' ;;
+        hu_hu) printf 'hu' ;;
         it_it) printf 'it' ;;
+        lv_lv) printf 'lv' ;;
+        lt_lt) printf 'lt' ;;
+        mt_mt) printf 'mt' ;;
         pt_br) printf 'pt' ;;
         ro_ro) printf 'ro' ;;
         pl_pl) printf 'pl' ;;
@@ -116,6 +122,7 @@ fleurs_language_hint() {
         be_by) printf 'be' ;;
         bg_bg) printf 'bg' ;;
         sr_rs) printf 'sr' ;;
+        sv_se) printf 'sv' ;;
         *) return 1 ;;
     esac
 }
@@ -466,7 +473,7 @@ assert_file_contains() {
 }
 
 run_self_test() {
-    local tmpdir
+    local tmpdir locale_hint locale hint
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-public-fetch-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
@@ -474,9 +481,20 @@ run_self_test() {
     assert_failure "unsupported split" is_supported_librispeech_split "train-clean-100"
     assert_success "supported FLEURS split" is_supported_fleurs_split "test"
     assert_failure "unsupported FLEURS split" is_supported_fleurs_split "validation"
-    assert_success "supported FLEURS product locale" is_supported_fleurs_language "uk_ua"
     assert_failure "unexposed FLEURS locale" is_supported_fleurs_language "sw_ke"
-    assert_eq "$(fleurs_language_hint uk_ua)" "uk" "FLEURS product language hint"
+    # Cover every official Parakeet v3 language plus the three script-only
+    # aliases. Keep support validation and hint mapping tied to one table.
+    for locale_hint in \
+        en_us:en es_419:es da_dk:da nl_nl:nl et_ee:et fi_fi:fi \
+        fr_fr:fr de_de:de el_gr:el hu_hu:hu it_it:it lv_lv:lv \
+        lt_lt:lt mt_mt:mt pt_br:pt ro_ro:ro pl_pl:pl cs_cz:cs \
+        sk_sk:sk sl_si:sl hr_hr:hr bs_ba:bs ru_ru:ru uk_ua:uk \
+        be_by:be bg_bg:bg sr_rs:sr sv_se:sv; do
+        IFS=: read -r locale hint <<<"$locale_hint"
+        assert_success "supported FLEURS locale $locale" is_supported_fleurs_language "$locale"
+        assert_eq "$(fleurs_language_hint "$locale")" "$hint" \
+            "FLEURS language hint for $locale"
+    done
     assert_success "positive integer" is_positive_integer "1"
     assert_failure "zero is not positive" is_positive_integer "0"
     assert_success "non-negative integer" is_nonnegative_integer "0"

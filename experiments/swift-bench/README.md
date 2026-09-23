@@ -578,10 +578,12 @@ extracts the selected FLAC clips, converts them to 16 kHz Float32 WAV with
 `afconvert`, and writes same-stem `.txt` references plus `manifest.tsv` under
 `public-audio/librispeech-dev-clean/`.
 
-For a public multilingual corpus, the same fetcher supports FLEURS locales
-that correspond to Presspeech's exposed language hints. It pins the FLEURS
-dataset revision and verifies each language/split archive against its pinned
-Git LFS SHA-256 and byte count. For example, fetch Ukrainian test speech:
+For a public multilingual corpus, the same fetcher supports a FLEURS locale
+for each of Parakeet TDT v3's 25 officially supported languages, plus the
+Bosnian, Belarusian, and Serbian script-filter aliases exposed by Presspeech.
+It pins the FLEURS dataset revision and verifies each language/split archive
+against its pinned Git LFS SHA-256 and byte count. For example, fetch
+Ukrainian test speech:
 
 ```sh
 ./fetch-public-speech-fixtures.sh \
@@ -593,6 +595,9 @@ This downloads the full compressed language/split archive (roughly 400 MB for
 the pinned Ukrainian test split) but extracts and converts only the requested
 deterministic row range. FLEURS is CC BY 4.0 read speech with human references;
 like LibriSpeech, it complements rather than replaces real push-to-talk clips.
+The Portuguese fixture is Brazilian Portuguese (`pt_br`), whereas NVIDIA notes
+that Parakeet's training data uses European Portuguese, so treat that split as
+regional-variant coverage rather than a direct like-for-like evaluation.
 
 To measure the macOS Parakeet v3 `auto` path against its language/script hint
 on identical known-language audio, use the same single-backend regression
