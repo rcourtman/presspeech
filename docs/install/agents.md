@@ -22,7 +22,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that Presspeech downloads the ~500-600 MB local speech model. Open Setup Checklist from the Presspeech menu bar item and use it to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.
+After launch, explain that the first local speech-model download is ~500-600 MB. Depending on the build, it starts on launch or Setup asks a new install to choose Download Model; closing Setup then defers the download. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.
 ```
 
 ## Windows

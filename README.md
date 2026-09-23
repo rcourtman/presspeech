@@ -14,10 +14,11 @@
 
 # Presspeech
 
-**Private push-to-talk dictation for Mac and Windows.** Hold a key, speak,
-release, and Presspeech transcribes locally before pasting at the cursor. If it
-cannot safely identify the same destination, the transcript stays on the
-clipboard for manual paste. No account, subscription, or cloud transcription.
+**Private push-to-talk dictation for Mac and Windows.** Hold is the default;
+choose **Press to toggle** to start and stop with separate presses. Presspeech
+transcribes locally before pasting at the cursor. If it cannot safely identify
+the same destination, the transcript stays on the clipboard for manual paste.
+No account, subscription, or cloud transcription.
 
 **Start here:** [official website](https://rcourtman.github.io/presspeech/) ·
 [first private dictation](https://rcourtman.github.io/presspeech/getting-started.html) ·
@@ -137,9 +138,11 @@ Requirements:
 - Apple Silicon Mac
 - macOS 14 (Sonoma) or later
 
-First launch downloads the local speech model, about 500-600 MB. Open
-**Setup Checklist…** from the menu bar to finish the model, permission,
-and hotkey checks. The checklist stays incomplete until the configured hotkey
+The first local speech-model download is about 500–600 MB. Depending on the
+build, it starts on first launch or Setup asks you to choose **Download Model**;
+close Setup to defer when that choice appears. Existing installs and cached
+models continue loading automatically. Use **Setup Checklist…** to finish the
+model, permission, and hotkey checks. The checklist stays incomplete until the configured hotkey
 actually reaches Presspeech; if it does not respond or controls another Mac
 feature, choose a different key under Settings. Presspeech asks for Microphone,
 Accessibility (shown as **Device Control and Data Access** on macOS 27 and
@@ -183,11 +186,14 @@ project.
 
 ## Use
 
-The gesture is the same on both platforms:
+Hold-to-talk is the default on both platforms. In **Press to toggle** mode,
+press the configured key once to start recording and again to stop. Choose the
+mode under **Settings → Dictation → Trigger** on macOS or in Windows Settings
+(also in Setup in the upcoming 0.1.13 build).
 
-1. Hold the configured push-to-talk key.
+1. Hold the configured key, or press it once in toggle mode.
 2. Speak.
-3. Release.
+3. Release the key, or press it again in toggle mode.
 4. Presspeech pastes the transcript at the cursor when it can verify the
    original destination; otherwise it copies the transcript and tells you to
    paste manually.
@@ -384,7 +390,7 @@ Presspeech is local-first:
 
 Network calls made by Presspeech are limited to:
 
-- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); published Windows 0.1.12 may include a configured or cached Hugging Face token, while upcoming Windows 0.1.13 disables implicit authentication; upcoming macOS 0.3.9 removes inherited Hugging Face account tokens from its own model-download process,
+- speech model download from the public Hugging Face Hub and its storage CDN (first launch, integrity-failure re-download, or user-triggered cache reset); upcoming macOS 0.3.9 asks new installs before the first model download and removes inherited Hugging Face account tokens from its own download process. Published Windows 0.1.12 may include a configured or cached Hugging Face token, while upcoming Windows 0.1.13 disables implicit authentication,
 - optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
 - user-triggered bug-report and feature-request links, plus the compatibility
   guide link in macOS 0.3.8 / upcoming Windows 0.1.13 or builds containing that

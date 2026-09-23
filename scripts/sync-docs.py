@@ -728,7 +728,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that Presspeech downloads the ~500-600 MB local speech model. Open Setup Checklist from the Presspeech menu bar item and use it to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After launch, explain that the first local speech-model download is ~500-600 MB. Depending on the build, it starts on launch or Setup asks a new install to choose Download Model; closing Setup then defers the download. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
@@ -1119,13 +1119,13 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:The Presspeech icon appears in the menu bar|Homebrew is the easiest path if you already use it or want command-line updates)\..*?</p>",
-        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. Allow 1-5 minutes for the model download before trying the hotkey. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
+        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. Depending on the build, the first model download starts automatically or Setup asks you to choose <strong>Download Model</strong>; close Setup to defer when offered. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
         path=path,
     )
     text = replace_regex(
         text,
         r'<div class="fact"><strong>(?:Model download|First model download)</strong><span>.*?</span></div>',
-        '<div class="fact"><strong>First model download</strong><span>Internet is required on first launch to download the local model, about 500-600 MB. Afterward, speech recognition runs on your Mac.</span></div>',
+        '<div class="fact"><strong>First model download</strong><span>Internet is required to download the local model, about 500-600 MB. Depending on the build, it starts on launch or after you choose Download Model in Setup. Afterward, speech recognition runs on your Mac.</span></div>',
         path=path,
     )
     text = replace_regex(

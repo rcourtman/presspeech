@@ -4,7 +4,7 @@
   "network_calls": [
     {
       "name": "macos_first_launch_model_download",
-      "when": "First launch until the model weights are cached locally; again if the local cache fails its integrity check and is re-downloaded; again when the user chooses Reset Speech Model Cache",
+      "when": "Depending on the macOS build, a first install starts the model download on launch or after choosing Download Model in Setup; existing installs keep automatic startup. Integrity-failure re-downloads and user-triggered cache resets can also download the model",
       "destination": [
         "huggingface.co and its subdomains",
         "Hugging Face model-storage and CDN hosts under hf.co"

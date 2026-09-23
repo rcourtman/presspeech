@@ -439,6 +439,19 @@ item after the development-wrapper launch check.
 - Confirm `/tmp/Presspeech-dev.app` launches and the menu-bar item appears.
 - Open **Support -> Setup Checklist...** and confirm model, permissions,
   audio input, and hotkey rows render.
+- On a clean user profile without a speech-model cache, launch Presspeech and
+  confirm Setup Checklist appears before the first model request. The model row
+  must say **Not downloaded**, explain the ~500–600 MB size and local-audio
+  boundary, and expose **Download Model**. With VoiceOver and keyboard-only
+  navigation, confirm the action has a useful name and is reachable. Close the
+  checklist without activating it; confirm no model download starts and the app
+  remains not ready. Reopen Presspeech and confirm the choice is still offered
+  without starting a download. Activate **Download Model** and confirm the
+  transfer starts only then, progress updates are announced without replacing
+  the VoiceOver reading element, and readiness proceeds normally. Interrupt an
+  approved download and relaunch; confirm it resumes without asking again.
+- Upgrade a profile from the preceding public macOS build with a valid cached
+  model and confirm it loads automatically without a first-download prompt.
 - Select a specific USB or Bluetooth microphone, disconnect it while Presspeech
   remains open, and confirm Setup Checklist reports **Using default** (not
   **Ready**) while explaining that the saved microphone is unavailable and the

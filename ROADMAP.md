@@ -119,6 +119,17 @@ remedy without matching Presspeech evidence. Do not infer adoption, unmet
 demand, or roadmap priority from discussion activity or competitor feature
 lists.
 
+A separate [RSI-community discussion about a Windows push-to-talk tool](https://www.reddit.com/r/RSI/comments/1tl9vxw/i_built_a_free_fully_offline_pushtotalk_dictation/)
+raised sustained key-holding as a possible added physical burden and suggested
+press-to-toggle. This is a single anecdotal exchange, and the commenter
+disclosed working on a competing dictation product, so it is a weak signal—not
+a Presspeech request or prevalence measure. Presspeech already supports
+press-to-toggle on both platforms, with recording status and cancellation
+controls; the proportionate response is to make the existing option easier to
+discover in first-use copy, not add another trigger mode. Revisit only if
+Presspeech-specific reports show that the current choice or its controls fall
+short.
+
 Feedback intake is currently a measurement limitation: on 23 September,
 GitHub's [Presspeech issue list](https://github.com/rcourtman/presspeech/issues)
 shows issue creation restricted (and four open issues). New reports therefore

@@ -86,7 +86,7 @@
           <div class="grid two">
             <article class="card" id="macos">
               <h3>macOS 0.3.8</h3>
-              <p>Requires Apple Silicon and macOS 14 or later. The release is notarised; first launch needs an internet connection to download about 500–600 MB of local model files. Afterward, speech recognition runs on your Mac.</p>
+              <p>Requires Apple Silicon and macOS 14 or later. The release is notarised; the first local model download is about 500–600 MB. Depending on the build, it starts on launch or Setup asks a new install to choose <strong>Download Model</strong> first. Afterward, speech recognition runs on your Mac.</p>
               <p><a href="install.html">Install the macOS release</a></p>
             </article>
             <article class="card" id="windows">
@@ -122,8 +122,8 @@
               <h3>On macOS</h3>
               <ol class="steps">
                 <li>
-                  <strong>Reach Ready</strong>
-                  <p>Keep Presspeech open while the model prepares. Setup Checklist opens automatically; reopen it from the menu-bar item if needed.</p>
+                  <strong>Prepare the speech model</strong>
+                  <p>Setup Checklist opens automatically. If Setup offers <strong>Download Model</strong>, choose it to start the first ~500–600 MB local model download, or close Setup to defer. Other builds start the download automatically. Keep Presspeech open while the model prepares. Reopen Setup Checklist from the menu-bar item if needed. Existing installations and cached models continue loading automatically.</p>
                 </li>
                 <li>
                   <strong>Grant the three permissions</strong>
@@ -171,8 +171,8 @@
               <p>Leave that field focused so Presspeech can verify the delivery path.</p>
             </li>
             <li>
-              <strong>Hold, speak, release</strong>
-              <p>Use the displayed key, say a short sentence, then release. In toggle mode, press once to start and again to stop. On macOS you can instead choose <strong>Start Dictation</strong> and <strong>Stop and Transcribe</strong> from the menu. Continue when your sentence appears. Audio is discarded after local processing; the scratchpad is not a saved history.</p>
+              <strong>Choose how to start and stop</strong>
+              <p>Hold the displayed key, say a short sentence, then release. Or choose <strong>Press to toggle</strong>—under <strong>Settings → Dictation → Trigger</strong> on macOS, or in Windows Settings (also in Setup in the upcoming 0.1.13 build)—to press once to start and again to stop. On macOS you can also choose <strong>Start Dictation</strong> and <strong>Stop and Transcribe</strong> from the menu. Continue when your sentence appears. Audio is discarded after local processing; the scratchpad is not a saved history.</p>
             </li>
           </ol>
           <div class="note"><p><strong>No recording cue?</strong> Recheck the hotkey and microphone in Setup Checklist on macOS or Settings on Windows. Do not retry while the model is still preparing.</p></div>

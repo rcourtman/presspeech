@@ -68,7 +68,7 @@
             <div class="fact"><strong>Apple Silicon</strong><span>M1 or newer. Intel Macs are not supported.</span></div>
             <div class="fact"><strong>macOS 14+</strong><span>Sonoma or later.</span></div>
             <div class="fact"><strong>Direct or Homebrew</strong><span>Download the signed zip manually, or use Homebrew for install and updates. Presspeech has no Homebrew runtime dependency after installation.</span></div>
-            <div class="fact"><strong>First model download</strong><span>Internet is required on first launch to download the local model, about 500-600 MB. Afterward, speech recognition runs on your Mac.</span></div>
+            <div class="fact"><strong>First model download</strong><span>Internet is required to download the local model, about 500-600 MB. Depending on the build, it starts on launch or after you choose Download Model in Setup. Afterward, speech recognition runs on your Mac.</span></div>
           </div>
         </div>
       </section>
@@ -102,7 +102,7 @@ gh release verify-asset v0.3.8 ~/Downloads/Presspeech.zip --repo rcourtman/press
             </li>
             <li>
               <strong>Finish Setup Checklist</strong>
-              <p>First launch downloads the speech model (~600 MB, 1-5 minutes), then Setup Checklist walks through the remaining checks.</p>
+              <p>The first speech-model download is ~600 MB and may take 1-5 minutes. Some builds start it on launch; if Setup offers <strong>Download Model</strong>, choose it to begin or close Setup to defer. Then use Setup Checklist for the remaining checks.</p>
             </li>
           </ol>
         </div>
@@ -114,7 +114,7 @@ gh release verify-asset v0.3.8 ~/Downloads/Presspeech.zip --repo rcourtman/press
           <h2>Homebrew install and launch</h2>
           <pre><code>brew install --cask rcourtman/presspeech/presspeech
 open /Applications/Presspeech.app</code></pre>
-          <p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. Allow 1-5 minutes for the model download before trying the hotkey. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>
+          <p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. Depending on the build, the first model download starts automatically or Setup asks you to choose <strong>Download Model</strong>; close Setup to defer when offered. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>
           <div class="note"><p>If a crowded or notched menu bar hides the Presspeech item, open <strong>Presspeech.app</strong> again from Applications, Finder, or Spotlight. The already-running app opens Setup Checklist. Enable <strong>Show in Dock</strong> there for a persistent alternative; right-click its Dock icon to reach dictation controls, Settings, and Support.</p></div>
         </div>
       </section>
@@ -194,7 +194,7 @@ open /Applications/Presspeech.app</code></pre>
             </li>
             <li>
               <strong>Launch the app</strong>
-              <p><code>open /Applications/Presspeech.app</code>. First launch downloads the speech model (~600 MB, 1-5 minutes).</p>
+              <p><code>open /Applications/Presspeech.app</code>. The first speech-model download is ~600 MB and may take 1-5 minutes; depending on the build, it starts on launch or after a new install chooses <strong>Download Model</strong> in Setup.</p>
             </li>
             <li>
               <strong>Finish Setup Checklist</strong>
@@ -230,7 +230,7 @@ Direct download:
 
 Stop if the Mac is not Apple Silicon (arm64) or macOS is older than 14.
 
-After launch, explain that Presspeech downloads the ~500-600 MB local speech model. Open Setup Checklist from the Presspeech menu bar item and use it to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.</code></pre>
+After launch, explain that the first local speech-model download is ~500-600 MB. Depending on the build, it starts on launch or Setup asks a new install to choose Download Model; closing Setup then defers the download. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project.</code></pre>
           </details>
           <p>Plain-text prompts for both macOS and Windows: <a href="install/agents.md">install/agents.md</a>.</p>
         </div>

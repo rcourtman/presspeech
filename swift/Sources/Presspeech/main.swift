@@ -1704,6 +1704,16 @@ func speechModelCacheExists(for profile: SpeechModelProfile) -> Bool {
     FileManager.default.fileExists(atPath: speechModelCacheDirectory(for: profile).path)
 }
 
+func requiresInitialSpeechModelDownloadChoice(downloadApproved: Bool,
+                                               cacheExists: Bool) -> Bool {
+    !downloadApproved && !cacheExists
+}
+
+func initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: Bool,
+                                                  cacheExists: Bool) -> Bool {
+    hadPriorLaunch || cacheExists
+}
+
 func assertSufficientDiskSpaceForSpeechModelDownload(profile: SpeechModelProfile) throws {
     let requiredBytes = speechModelDownloadRequiredBytes(for: profile)
     let availableBytes = availableImportantDiskSpaceBytes(containing: speechModelCacheBaseDirectory())
@@ -2450,6 +2460,7 @@ final class Settings: @unchecked Sendable {
     private static let keyTranscriptCorrectionsSyncFile = "transcript_corrections_sync_file"
     private static let keyDictationLanguage = "dictation_language"
     private static let keySpeechModelProfile = "speech_model_profile"
+    private static let keySpeechModelDownloadApproved = "speech_model_download_approved"
     private static let keyInitialSpeechModelChoiceRequired = "initial_speech_model_choice_required"
     private static let keyRemoveFillerWords = "remove_filler_words"
     private static let keySpokenFormattingCommands = "spoken_formatting_commands"
@@ -2823,6 +2834,15 @@ final class Settings: @unchecked Sendable {
             productionSpeechModelProfile(rawValue: defaults.string(forKey: Self.keySpeechModelProfile))
         }
         set { defaults.set(newValue.productionProfile.rawValue, forKey: Self.keySpeechModelProfile) }
+    }
+
+    var speechModelDownloadApproved: Bool {
+        get { defaults.bool(forKey: Self.keySpeechModelDownloadApproved) }
+        set { defaults.set(newValue, forKey: Self.keySpeechModelDownloadApproved) }
+    }
+
+    var hasSpeechModelDownloadDecision: Bool {
+        defaults.object(forKey: Self.keySpeechModelDownloadApproved) != nil
     }
 
     @discardableResult
@@ -3318,11 +3338,18 @@ private func speechModelSetupRowState(profile: SpeechModelProfile,
                                       isSpeechModelReady: Bool,
                                       isStartupInProgress: Bool,
                                       startupStatusTitle: String,
-                                      failure: StartupFailure?) -> SetupChecklistRowState {
+                                      failure: StartupFailure?,
+                                      requiresInitialDownloadChoice: Bool = false) -> SetupChecklistRowState {
     if let failure, failure.stage == .speechModel {
         return SetupChecklistRowState(detail: failure.detail,
                                       status: "Needs retry",
                                       buttonTitle: "Retry")
+    }
+    if requiresInitialDownloadChoice {
+        return SetupChecklistRowState(
+            detail: "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. Dictation audio and transcripts stay on your Mac. Choose Download Model to begin, or close setup to defer.",
+            status: "Not downloaded",
+            buttonTitle: "Download Model")
     }
     if isSpeechModelReady {
         return SetupChecklistRowState(detail: profile.setupReadyDetail,
@@ -8315,6 +8342,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
 
         migrateLegacyIdentityFilesIfNeeded(settings: settings)
+        if !settings.hasSpeechModelDownloadDecision {
+            // Keep automatic startup for existing installs. A genuinely new
+            // install with no local model gets a choice before a large transfer.
+            let hadPriorLaunch = !settings.lastSeenVersion.isEmpty
+            settings.speechModelDownloadApproved = initialSpeechModelDownloadApprovalForLaunch(
+                hadPriorLaunch: hadPriorLaunch,
+                cacheExists: speechModelCacheExists(for: settings.speechModelProfile)
+            )
+        }
         if settings.didMigrateLegacyIdentity {
             // macOS does not transfer privacy grants between bundle
             // identifiers. Remove the former rows so System Settings
@@ -8556,8 +8592,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
 
-        prepareForStartupAttempt()
         let speechModelProfile = settings.speechModelProfile
+        if requiresInitialSpeechModelDownloadChoice(
+            downloadApproved: settings.speechModelDownloadApproved,
+            cacheExists: speechModelCacheExists(for: speechModelProfile)
+        ) {
+            startupStatusTitle = "Waiting for your speech-model download choice."
+            log("startup paused (\(reason)): first speech-model download awaits user choice")
+            setMenuBarState(.loading)
+            rebuildMenu()
+            maybeShowSetupChecklist(reason: "first speech-model download choice")
+            return
+        }
+
+        prepareForStartupAttempt()
 
         // Load ASR FIRST, then audio + hotkey. Reversing this order
         // makes the first-launch CoreML compile of the ANE Encoder
@@ -10761,6 +10809,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if let failure = startupFailure {
             return failure.statusTitle
         }
+        if initialSpeechModelDownloadChoiceIsRequired {
+            return "Choose when to download speech model"
+        }
         if startupTask != nil || isRestartingAudioInput || isSwitchingSpeechModel {
             return startupStatusTitle
         }
@@ -10905,12 +10956,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         startStartup(reason: "manual retry")
     }
 
+    private var initialSpeechModelDownloadChoiceIsRequired: Bool {
+        requiresInitialSpeechModelDownloadChoice(
+            downloadApproved: settings.speechModelDownloadApproved,
+            cacheExists: speechModelCacheExists(for: settings.speechModelProfile)
+        )
+    }
+
     // MARK: - Setup checklist
 
     private func maybeShowSetupChecklist(reason: String) {
         guard !didOfferSetupChecklistThisLaunch else { return }
         guard startupFailure != nil
-            || !missingPermissions().isEmpty else { return }
+            || !missingPermissions().isEmpty
+            || initialSpeechModelDownloadChoiceIsRequired else { return }
         didOfferSetupChecklistThisLaunch = true
         log("setup checklist shown (\(reason))")
         showSetupChecklist()
@@ -11067,7 +11126,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 isSpeechModelReady: isSpeechModelReady,
                 isStartupInProgress: startupTask != nil || isSwitchingSpeechModel,
                 startupStatusTitle: startupStatusTitle,
-                failure: startupFailure),
+                failure: startupFailure,
+                requiresInitialDownloadChoice: initialSpeechModelDownloadChoiceIsRequired),
             audioInput: audioInputSetupRowState(
                 isSpeechModelReady: isSpeechModelReady,
                 isCoreRuntimeReady: isCoreRuntimeReady,
@@ -11115,7 +11175,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                       state: snapshot.speechModel,
                                       identifier: "speech-model",
                                       action: snapshot.speechModel.buttonTitle == nil
-                                          ? nil : #selector(retryStartupFromSetupClicked(_:)),
+                                          ? nil
+                                          : (snapshot.speechModel.buttonTitle == "Download Model"
+                                                ? #selector(downloadSpeechModelFromSetupClicked(_:))
+                                                : #selector(retryStartupFromSetupClicked(_:))),
                                       in: root),
               updateSetupChecklistRow(title: "Audio input",
                                       state: snapshot.audioInput,
@@ -11269,7 +11332,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             state: snapshot.speechModel,
             identifier: "speech-model",
             action: snapshot.speechModel.buttonTitle == nil
-                ? nil : #selector(retryStartupFromSetupClicked(_:))))
+                ? nil
+                : (snapshot.speechModel.buttonTitle == "Download Model"
+                    ? #selector(downloadSpeechModelFromSetupClicked(_:))
+                    : #selector(retryStartupFromSetupClicked(_:)))))
         root.addArrangedSubview(makeSetupChecklistRow(
             title: "Audio input",
             state: snapshot.audioInput,
@@ -11483,7 +11549,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         switch status {
         case "Granted", "Ready", "Detected", "Set":
             return .systemGreen
-        case "Missing", "Restricted", "Needs retry", "Required", "Check input", "Using default":
+        case "Missing", "Restricted", "Needs retry", "Required", "Check input", "Using default", "Not downloaded":
             return .systemOrange
         default:
             return .secondaryLabelColor
@@ -11635,6 +11701,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     @objc private func retryStartupFromSetupClicked(_ sender: NSButton) {
         startStartup(reason: "setup checklist retry")
+    }
+
+    @objc private func downloadSpeechModelFromSetupClicked(_ sender: NSButton) {
+        guard startupTask == nil, !isTerminating else { return }
+        settings.speechModelDownloadApproved = true
+        log("first speech-model download approved from setup")
+        startStartup(reason: "first speech-model download approved")
     }
 
     @objc private func showInputDevicesFromSetupClicked(_ sender: NSButton) {
@@ -16474,6 +16547,19 @@ private enum PresspeechSelfTest {
         try expect(
             speechModelSetupRowState(profile: .multilingualV3,
                                      isSpeechModelReady: false,
+                                     isStartupInProgress: false,
+                                     startupStatusTitle: "Waiting for your speech-model download choice.",
+                                     failure: nil,
+                                     requiresInitialDownloadChoice: true),
+            equals: SetupChecklistRowState(
+                detail: "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. Dictation audio and transcripts stay on your Mac. Choose Download Model to begin, or close setup to defer.",
+                status: "Not downloaded",
+                buttonTitle: "Download Model"),
+            "fresh setup should disclose the model size and wait for the user's action"
+        )
+        try expect(
+            speechModelSetupRowState(profile: .multilingualV3,
+                                     isSpeechModelReady: false,
                                      isStartupInProgress: true,
                                      startupStatusTitle: "Loading cached speech model…",
                                      failure: nil),
@@ -18823,6 +18909,42 @@ private enum PresspeechSelfTest {
     }
 
     private static func testSpeechModelStartupStatus() throws {
+        try expect(
+            requiresInitialSpeechModelDownloadChoice(downloadApproved: false,
+                                                     cacheExists: false),
+            equals: true,
+            "a fresh install should wait for an explicit first model-download choice"
+        )
+        try expect(
+            requiresInitialSpeechModelDownloadChoice(downloadApproved: false,
+                                                     cacheExists: true),
+            equals: false,
+            "an existing model cache should load without asking to download it again"
+        )
+        try expect(
+            requiresInitialSpeechModelDownloadChoice(downloadApproved: true,
+                                                     cacheExists: false),
+            equals: false,
+            "an explicitly approved download should resume on a later launch"
+        )
+        try expect(
+            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: false,
+                                                        cacheExists: false),
+            equals: false,
+            "a first install without a cached model should await user approval"
+        )
+        try expect(
+            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: true,
+                                                        cacheExists: false),
+            equals: true,
+            "existing installations should keep their established automatic startup"
+        )
+        try expect(
+            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: false,
+                                                        cacheExists: true),
+            equals: true,
+            "a preinstalled local model should not prompt for a download"
+        )
         try expect(
             productionParakeetASRConfig().melChunkContext,
             equals: true,

@@ -133,7 +133,7 @@
       <div class="wrap hero">
         <div class="hero-copy">
           <h1>Private push-to-talk dictation for Mac and Windows.</h1>
-          <p>Hold a key, speak, release. Presspeech transcribes locally, then pastes at the cursor or keeps a copy for manual paste when it cannot safely verify the destination. No account or cloud transcription; bundled-library network behavior is documented by version.</p>
+          <p>Hold a key to speak and release by default, or choose <strong>Press to toggle</strong> to start and stop with separate presses. Presspeech transcribes locally, then pastes at the cursor or keeps a copy for manual paste when it cannot safely verify the destination. No account or cloud transcription; bundled-library network behavior is documented by version.</p>
           <p class="quiet"><strong>macOS 0.3.8:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.12:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
           <div class="actions">
             <a class="button" href="install.html">Get the macOS release</a>
@@ -141,7 +141,7 @@
           </div>
           <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Complete the four checkpoints to your first dictation</a>.</p>
           <div class="note">
-            <p><strong>Before first launch:</strong> an internet connection is needed to download the local speech model (about 500–600 MB on macOS; about 141 MiB on Windows CPU or 2.5 GB with usable NVIDIA CUDA). Published Windows 0.1.12 starts the selected download automatically; upcoming 0.1.13 asks before fetching missing Parakeet files. Dictation audio and transcripts are not sent to a transcription service. Windows 0.1.12 leaves Hugging Face libraries’ default usage telemetry enabled during model downloads. The libraries may send usage data to Hugging Face, and model-request metadata includes a random per-process session ID. The exact telemetry fields are not independently itemised. An available Hugging Face account token may also accompany a public model request in 0.1.12; these models do not require one. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+            <p><strong>First model download:</strong> an internet connection is needed for the local speech model (about 500–600 MB on macOS; about 141 MiB on Windows CPU or 2.5 GB with usable NVIDIA CUDA). Depending on the macOS build, the first download starts automatically or Setup asks a new install to choose <strong>Download Model</strong>. Published Windows 0.1.12 starts its selected download automatically; upcoming 0.1.13 asks before fetching missing Parakeet files. Dictation audio and transcripts are not sent to a transcription service. Windows 0.1.12 leaves Hugging Face libraries’ default usage telemetry enabled during model downloads. The libraries may send usage data to Hugging Face, and model-request metadata includes a random per-process session ID. The exact telemetry fields are not independently itemised. An available Hugging Face account token may also accompany a public model request in 0.1.12; these models do not require one. See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
           </div>
           <div class="stat-row" aria-label="macOS release and benchmark summary">
             <div class="stat"><strong>~100 ms</strong><span>model transcription on benchmark clips</span></div>
@@ -172,7 +172,7 @@
           <div class="grid two">
             <article class="card">
               <h3>macOS — released</h3>
-              <p>The signed and notarised Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The app zip is small; the 500–600 MB local model downloads on first launch.</p>
+              <p>The signed and notarised Swift menu-bar app runs multilingual Parakeet TDT v3 through CoreML on Apple Silicon. The app zip is small; the first 500–600 MB local model download starts on launch or after a new install chooses <strong>Download Model</strong> in Setup, depending on the build.</p>
               <p><a href="install.html">Install on Apple Silicon and macOS 14+</a></p>
             </article>
             <article class="card">
@@ -190,7 +190,7 @@
         <div class="wrap">
           <span class="section-eyebrow">The whole workflow</span>
           <h2>Hold. Speak. Release.</h2>
-          <p>The video below shows the macOS build with its default <strong>Right Option</strong> hotkey. On Windows, use the same hold–speak–release gesture with <strong>Right Alt</strong> by default; if that key acts as AltGr for your keyboard layout, Setup lets you choose F8 or another available key.</p>
+          <p>The video below shows the macOS build with its default <strong>Right Option</strong> hotkey. On Windows, use the same hold–speak–release gesture with <strong>Right Alt</strong> by default; if that key acts as AltGr for your keyboard layout, Setup lets you choose F8 or another available key. <strong>Press to toggle</strong> is also available in macOS Settings → Dictation → Trigger and in Windows Settings; the upcoming 0.1.13 build also exposes it in Setup.</p>
           <figure class="demo-figure">
             <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — Presspeech checks the original destination before pasting." aria-describedby="demo-video-description">
               <source src="demo-video.webm" type="video/webm">
