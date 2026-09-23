@@ -83,25 +83,41 @@ reports supplement rather than replace native release testing.
 
 ### Product intelligence and community evidence (23 September 2026)
 
-A small scan of two active local projects shows that offline recognition,
-push-to-talk, and cross-app insertion are not unique differentiators among
-these products: [Whisper Local](https://github.com/drajb/whisper-local)
-advertises Windows and macOS support alongside hotwords, per-app rules, and
-optional local cleanup; [Parrot](https://github.com/basic-intelligence/parrot)
-describes local dictation across macOS, Windows, and Linux with cleanup and a
-personal dictionary. This is a narrow feature scan, not market sizing or an
-independent quality comparison. The implication is not to chase those feature
-lists: Presspeech should earn distinction through a small, trustworthy
-dictation loop and evidence that text reaches the intended target or is
-recovered safely.
+A small scan of public project pages shows that offline recognition,
+shortcut-driven dictation, and cross-app insertion recur as category claims:
+[Whisper Local](https://github.com/drajb/whisper-local) advertises Windows and
+macOS support, hotwords, per-app rules, and optional local cleanup;
+[Parrot](https://github.com/basic-intelligence/parrot) describes local
+dictation across macOS, Windows, and Linux with cleanup and a personal
+dictionary; [Handy](https://github.com/cjpais/Handy) and
+[Dictus Desktop](https://github.com/getdictus/dictus-desktop) also position
+themselves around local dictation across desktop apps. This is a directional
+scan of self-described products, not market sizing, adoption evidence, or an
+independent quality comparison. The implication is not to chase feature lists:
+Presspeech should earn distinction through a small, trustworthy dictation loop
+and evidence that text reaches the intended target or is recovered safely.
 
 Public user evidence is thin and self-selected. A recent
 [FOSS discussion of Handy](https://www.reddit.com/r/foss/comments/1vxrgg5/a_free_open_source_speechtotext_tool_that_has/)
 includes anecdotal replies about reducing typing burden and one user's initial
-difficulty finding a toggle mode that was already available. This is a narrow
-discoverability signal about another project, not a representative survey or
-Presspeech feedback. Do not infer adoption, unmet demand, or roadmap priority
-from discussion activity or competitor feature lists.
+difficulty finding a toggle mode that was already available. More directly,
+Handy's [Linux notes](https://github.com/cjpais/Handy#linux-notes) warn that,
+in some compositor configurations, its visible recording overlay can steal
+focus and interfere with paste, while
+separate users describe focus changes leaving a transcript undelivered and ask
+for a last-transcript recovery path ([discussion
+#211](https://github.com/cjpais/Handy/discussions/211), [discussion
+#1379](https://github.com/cjpais/Handy/discussions/1379)); another reports
+occasional stale clipboard content being pasted ([issue
+#502](https://github.com/cjpais/Handy/issues/502)). These are Handy-specific
+observations, not evidence of their prevalence across products or of a
+Presspeech defect or request. They do, however, independently reinforce that
+destination focus, safe delivery, and recovery are consequential risks in
+this workflow, consistent with Presspeech's open issues #33 and #36. Keep
+testing those risks ahead of scope growth; do not import another product's UI
+remedy without matching Presspeech evidence. Do not infer adoption, unmet
+demand, or roadmap priority from discussion activity or competitor feature
+lists.
 
 Feedback intake is currently a measurement limitation: on 23 September,
 GitHub's [Presspeech issue list](https://github.com/rcourtman/presspeech/issues)

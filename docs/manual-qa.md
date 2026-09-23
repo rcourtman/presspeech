@@ -373,7 +373,8 @@ Record this release-gate matrix against the exact installed candidate:
 | Focus-change recovery between native-app windows and between applications | |
 | Sleep/resume, microphone route change, and first dictation afterward | |
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
-| Setup, Try Dictation, menu-bar/Dock access, and recovery with VoiceOver and keyboard-only navigation | |
+| Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
+| Menu-bar/Dock access and dictation recovery with VoiceOver and keyboard-only navigation | |
 
 For issue #33, pass only if a steady-focus Electron target receives the complete
 transcript once, while switching to a second window of that same app before

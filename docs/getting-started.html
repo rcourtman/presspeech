@@ -93,19 +93,19 @@
               <h3>Windows 0.1.12 prerelease</h3>
               <ol class="steps">
                 <li>
-                  <strong>Check your PC</strong>
-                  <p>Requires an x64 PC; Windows 11 is recommended. Microsoft <a href="https://learn.microsoft.com/en-us/windows/release-health/release-information">ended general support for Windows 10 on 14 October 2025</a>, so use Windows 10 only while your specific edition remains supported or is enrolled in applicable Extended Security Updates.</p>
+                  <strong>Check this PC</strong>
+                  <p>Requires x64; Windows 11 is recommended. Use Windows 10 only while your specific edition remains supported or is covered by Extended Security Updates; <a href="https://learn.microsoft.com/en-us/windows/release-health/release-information">general support ended on 14 October 2025</a>.</p>
                 </li>
                 <li>
                   <strong>Check language and download size</strong>
-                  <p>Plan about 4.4 GB for the installed app, plus its first model download: usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB); without usable CUDA, the CPU default is English-only Whisper base.en (~141 MiB). Other local models remain selectable in Settings. Published 0.1.12 starts its selected model download on first launch; upcoming 0.1.13 asks before downloading missing Parakeet files and offers the smaller CPU model or deferral.</p>
+                  <p>Allow about 4.4 GB for the app plus a first model download: usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB); without usable CUDA, the CPU default is English-only Whisper base.en (~141 MiB). Published 0.1.12 starts its selected download on first launch; upcoming 0.1.13 asks before downloading missing Parakeet files and offers the smaller CPU model or deferral. See the <a href="windows.html#language-support">full language and model guide</a>.</p>
                 </li>
                 <li>
                   <strong>Verify before running</strong>
-                  <p>The installer is unsigned; verify its published SHA-256. After verification, SmartScreen may offer <strong>More info → Run anyway</strong>. If Smart App Control or managed policy blocks it, stop—do not try to circumvent the block. Follow the <a href="windows.html#download-verify-run">Windows verification steps</a>.</p>
+                  <p>The installer is unsigned. Follow the <a href="windows.html#download-verify-run">SHA-256 verification steps</a>. After checking the source and hash, you may choose <strong>More info → Run anyway</strong> for a SmartScreen warning. If Smart App Control or managed policy blocks it, stop—do not try to circumvent the block.</p>
                 </li>
               </ol>
-              <p class="quiet"><strong>Privacy note for Windows 0.1.12:</strong> during model downloads, bundled Hugging Face Hub/Transformers libraries may send default usage telemetry to Hugging Face; model-request metadata also includes a random per-process session ID. This is separate from dictation: audio and transcripts are not sent in model downloads. The exact telemetry fields for this build are not independently itemised. See the <a href="privacy.html#network-calls">network-call inventory</a>.</p>
+              <p class="quiet"><strong>Privacy note for Windows 0.1.12:</strong> during model downloads, Hugging Face libraries may send default usage telemetry; model-request metadata also includes a random per-process session ID. Dictation audio and transcripts are not sent with model downloads. Exact telemetry fields are not itemised. See the <a href="privacy.html#network-calls">version-specific network-call inventory</a>.</p>
               <p><a href="windows.html#language-support">Check requirements and install the Windows prerelease</a></p>
             </article>
           </div>
@@ -131,7 +131,7 @@
                 </li>
                 <li>
                   <strong>Confirm the hotkey</strong>
-                  <p>Hold and release the displayed key. The default is <strong>Right Option</strong>. If it does not respond or controls another feature, choose a different key in Settings. Continue when the checklist says <strong>Done</strong>.</p>
+                  <p>Hold and release the displayed key. The default is <strong>Right Option</strong>. If it does not respond or controls another feature, choose a different key in Settings. You can open <strong>Try Dictation</strong> once Presspeech is Ready, before this test succeeds, and use the menu's <strong>Start Dictation</strong> and <strong>Stop and Transcribe</strong> controls. The checklist says <strong>Done</strong> only after a real hotkey event.</p>
                 </li>
               </ol>
             </article>
@@ -172,7 +172,7 @@
             </li>
             <li>
               <strong>Hold, speak, release</strong>
-              <p>Use the displayed key, say a short sentence, then release. In toggle mode, press once to start and again to stop. Continue when your sentence appears. Audio is discarded after local processing; the scratchpad is not a saved history.</p>
+              <p>Use the displayed key, say a short sentence, then release. In toggle mode, press once to start and again to stop. On macOS you can instead choose <strong>Start Dictation</strong> and <strong>Stop and Transcribe</strong> from the menu. Continue when your sentence appears. Audio is discarded after local processing; the scratchpad is not a saved history.</p>
             </li>
           </ol>
           <div class="note"><p><strong>No recording cue?</strong> Recheck the hotkey and microphone in Setup Checklist on macOS or Settings on Windows. Do not retry while the model is still preparing.</p></div>

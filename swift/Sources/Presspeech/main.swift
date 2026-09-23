@@ -3293,6 +3293,7 @@ private struct SetupChecklistSnapshot: Equatable {
     let permissions: [SetupChecklistPermissionState]
     let hotkey: SetupChecklistRowState
     let showInDock: Bool
+    let canTryDictation: Bool
     let isComplete: Bool
 }
 
@@ -3302,6 +3303,7 @@ private struct SetupChecklistSnapshot: Equatable {
 private func setupChecklistSnapshotsHaveSameStructure(_ lhs: SetupChecklistSnapshot,
                                                        _ rhs: SetupChecklistSnapshot) -> Bool {
     guard lhs.isComplete == rhs.isComplete,
+          lhs.canTryDictation == rhs.canTryDictation,
           (lhs.speechModel.buttonTitle != nil) == (rhs.speechModel.buttonTitle != nil),
           (lhs.audioInput.buttonTitle != nil) == (rhs.audioInput.buttonTitle != nil),
           (lhs.hotkey.buttonTitle != nil) == (rhs.hotkey.buttonTitle != nil),
@@ -3405,8 +3407,8 @@ private func hotkeySetupRowState(isReady: Bool,
                                       buttonTitle: nil)
     }
     let testDetail = triggerMode == .hold
-        ? "Hold \(hotkeyName) briefly, then release."
-        : "Press \(hotkeyName) once, then press it again to stop the test."
+        ? "Hold \(hotkeyName) briefly, then release. You can also use Start Dictation in the menu."
+        : "Press \(hotkeyName) once, then press it again to stop the test. You can also use Start Dictation in the menu."
     return SetupChecklistRowState(detail: testDetail,
                                   status: "Ready to test",
                                   buttonTitle: nil)
@@ -3417,6 +3419,16 @@ private func setupChecklistCompletionState(isSpeechModelReady: Bool,
                                            permissionsGranted: Bool,
                                            hotkeyTestSucceeded: Bool) -> Bool {
     isSpeechModelReady && isReady && permissionsGranted && hotkeyTestSucceeded
+}
+
+/// The scratchpad can use the menu's Start/Stop Dictation actions, so a
+/// successful physical-hotkey test must not be a prerequisite for trying the
+/// accessible, menu-driven path. Keep the checklist's Done state stricter: it
+/// still confirms that the configured global hotkey actually reached us.
+private func setupChecklistCanTryDictation(isReady: Bool,
+                                           permissionsGranted: Bool,
+                                           isTerminating: Bool) -> Bool {
+    isReady && permissionsGranted && !isTerminating
 }
 
 private func permissionSetupDetail(_ permission: Permission,
@@ -10590,9 +10602,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                       action: #selector(showDictationScratchpadClicked(_:)),
                                       keyEquivalent: "")
         tryDictation.target = self
-        tryDictation.isEnabled = setupChecklistIsComplete && !isTerminating
-        tryDictation.toolTip = setupChecklistIsComplete
-            ? "Open a private scratchpad and try the dictation hotkey."
+        tryDictation.isEnabled = setupChecklistCanTryCurrentState
+        tryDictation.toolTip = setupChecklistCanTryCurrentState
+            ? "Open a private scratchpad. Use Start Dictation and Stop and Transcribe in the menu if you prefer not to use a hotkey."
             : "Finish Setup Checklist before trying dictation."
         sub.addItem(tryDictation)
 
@@ -11029,6 +11041,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 hotkeyName: hotkey.hotkey.name,
                 failure: startupFailure),
             showInDock: settings.showInDock,
+            canTryDictation: setupChecklistCanTryDictation(
+                isReady: isReady,
+                permissionsGranted: permissions.allSatisfy { $0.status == "Granted" },
+                isTerminating: isTerminating),
             isComplete: setupChecklistCompletionState(
                 isSpeechModelReady: isSpeechModelReady,
                 isReady: isReady,
@@ -11097,11 +11113,22 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         dockAccess.state = snapshot.showInDock ? .on : .off
         close.title = snapshot.isComplete ? "Done" : "Close"
-        if snapshot.isComplete {
+        if snapshot.canTryDictation {
             guard setupChecklistView(
                 identifiedBy: NSUserInterfaceItemIdentifier("setup-try-dictation"),
                 in: root
             ) is NSButton else { return false }
+        } else {
+            guard setupChecklistView(
+                identifiedBy: NSUserInterfaceItemIdentifier("setup-try-dictation"),
+                in: root
+            ) == nil else { return false }
+        }
+        if snapshot.isComplete {
+            guard setupChecklistView(
+                identifiedBy: NSUserInterfaceItemIdentifier("setup-tip"),
+                in: root
+            ) == nil else { return false }
         } else {
             guard let tip = setupChecklistView(
                 identifiedBy: NSUserInterfaceItemIdentifier("setup-tip"),
@@ -11157,7 +11184,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func setupChecklistTipText(snapshot: SetupChecklistSnapshot) -> String {
         if snapshot.hotkey.status == "Ready to test" {
-            return "Test the hotkey before choosing Done. If it controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
+            return "Test the hotkey before choosing Done. If you prefer menu controls, choose Try Dictation and use Start Dictation in the menu. If the hotkey controls another feature or does not respond, choose a different key in Settings → Dictation → Hotkey."
         }
         return "Tip: If clicking 'Grant' doesn't open a prompt or show Presspeech in System Settings, click 'Try Again' — Presspeech will reset its TCC permission entry and re-request, which clears stuck macOS state."
     }
@@ -11180,7 +11207,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         let title = setupLabel("Set Up Presspeech", font: .systemFont(ofSize: 22, weight: .semibold))
         title.identifier = NSUserInterfaceItemIdentifier("setup-title")
-        let subtitle = setupLabel("Finish these checks before dictating. Presspeech keeps this setup local to your Mac.",
+        let subtitle = setupLabel("Complete the checks that unlock dictation. When ready, use your hotkey or Start Dictation in the menu.",
                                   font: .systemFont(ofSize: 13),
                                   color: .secondaryLabelColor)
         subtitle.identifier = NSUserInterfaceItemIdentifier("setup-subtitle")
@@ -11254,12 +11281,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         footer.addArrangedSubview(dockAccess)
         footer.addArrangedSubview(NSView())
-        if snapshot.isComplete {
+        if snapshot.canTryDictation {
             let tryDictation = NSButton(title: "Try Dictation",
                                         target: self,
                                         action: #selector(showDictationScratchpadClicked(_:)))
             tryDictation.bezelStyle = .rounded
             tryDictation.identifier = NSUserInterfaceItemIdentifier("setup-try-dictation")
+            tryDictation.toolTip = "Open a private scratchpad. Use Start Dictation and Stop and Transcribe in the menu if you prefer not to use a hotkey."
+            tryDictation.setAccessibilityHelp(tryDictation.toolTip)
             footer.addArrangedSubview(tryDictation)
         }
         footer.addArrangedSubview(close)
@@ -11322,12 +11351,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         return container
     }
 
-    private var setupChecklistIsComplete: Bool {
-        setupChecklistCompletionState(
-            isSpeechModelReady: isSpeechModelReady,
+    private var setupChecklistCanTryCurrentState: Bool {
+        setupChecklistCanTryDictation(
             isReady: isReady,
             permissionsGranted: missingPermissions().isEmpty,
-            hotkeyTestSucceeded: hotkeyTestSucceeded
+            isTerminating: isTerminating
         )
     }
 
@@ -11427,7 +11455,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     // MARK: - Try Dictation scratchpad
 
     @objc private func showDictationScratchpadClicked(_ sender: Any?) {
-        guard setupChecklistIsComplete, !isTerminating else {
+        guard setupChecklistCanTryCurrentState else {
             showSetupChecklist()
             return
         }
@@ -11458,7 +11486,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         root.translatesAutoresizingMaskIntoConstraints = false
 
         let title = setupLabel("Try Presspeech", font: .systemFont(ofSize: 22, weight: .semibold))
-        let instruction = setupLabel("Click below, then \(settings.triggerMode == .hold ? "hold" : "press") \(hotkey.hotkey.name), speak, and \(settings.triggerMode == .hold ? "release" : "press it again"). Your words stay on this Mac.",
+        let instruction = setupLabel("Focus the text field, then \(settings.triggerMode == .hold ? "hold" : "press") \(hotkey.hotkey.name), speak, and \(settings.triggerMode == .hold ? "release" : "press it again"). You can also use Start Dictation and Stop and Transcribe in the menu. Your words stay on this Mac.",
                                      font: .systemFont(ofSize: 13),
                                      color: .secondaryLabelColor)
         instruction.preferredMaxLayoutWidth = 632
@@ -16077,6 +16105,7 @@ private enum PresspeechSelfTest {
             permissions: [setupPermission],
             hotkey: SetupChecklistRowState(detail: "Waiting", status: "Waiting", buttonTitle: nil),
             showInDock: false,
+            canTryDictation: false,
             isComplete: false
         )
         let setupValueUpdate = SetupChecklistSnapshot(
@@ -16090,6 +16119,7 @@ private enum PresspeechSelfTest {
             )],
             hotkey: setupBefore.hotkey,
             showInDock: true,
+            canTryDictation: false,
             isComplete: false
         )
         try expect(
@@ -16108,12 +16138,28 @@ private enum PresspeechSelfTest {
             )],
             hotkey: setupValueUpdate.hotkey,
             showInDock: setupValueUpdate.showInDock,
+            canTryDictation: false,
             isComplete: setupValueUpdate.isComplete
         )
         try expect(
             setupChecklistSnapshotsHaveSameStructure(setupValueUpdate, setupStructureUpdate),
             equals: false,
             "adding or removing setup controls should retain the full rebuild path"
+        )
+        let setupScratchpadAvailabilityUpdate = SetupChecklistSnapshot(
+            speechModel: setupValueUpdate.speechModel,
+            audioInput: setupValueUpdate.audioInput,
+            permissions: setupValueUpdate.permissions,
+            hotkey: setupValueUpdate.hotkey,
+            showInDock: setupValueUpdate.showInDock,
+            canTryDictation: true,
+            isComplete: setupValueUpdate.isComplete
+        )
+        try expect(
+            setupChecklistSnapshotsHaveSameStructure(setupValueUpdate,
+                                                     setupScratchpadAvailabilityUpdate),
+            equals: false,
+            "adding the ready-only scratchpad action should rebuild the setup controls"
         )
         try expect(
             Permission.accessibility.displayName(operatingSystemMajorVersion: 26),
@@ -16444,10 +16490,22 @@ private enum PresspeechSelfTest {
                                 hotkeyName: "F5",
                                 failure: nil),
             equals: SetupChecklistRowState(
-                detail: "Press F5 once, then press it again to stop the test.",
+                detail: "Press F5 once, then press it again to stop the test. You can also use Start Dictation in the menu.",
                 status: "Ready to test",
                 buttonTitle: nil),
             "setup checklist should explain how to finish a toggle-mode test"
+        )
+        try expect(
+            hotkeySetupRowState(isReady: true,
+                                hotkeyTestSucceeded: false,
+                                triggerMode: .hold,
+                                hotkeyName: "Right Option",
+                                failure: nil),
+            equals: SetupChecklistRowState(
+                detail: "Hold Right Option briefly, then release. You can also use Start Dictation in the menu.",
+                status: "Ready to test",
+                buttonTitle: nil),
+            "setup checklist should offer menu controls alongside the hold-hotkey test"
         )
         try expect(
             setupChecklistCompletionState(isSpeechModelReady: true,
@@ -16464,6 +16522,34 @@ private enum PresspeechSelfTest {
                                           hotkeyTestSucceeded: true),
             equals: true,
             "setup checklist should complete after runtime, permissions, and hotkey test succeed"
+        )
+        try expect(
+            setupChecklistCanTryDictation(isReady: true,
+                                          permissionsGranted: true,
+                                          isTerminating: false),
+            equals: true,
+            "the scratchpad should be available before the hotkey test when menu dictation is ready"
+        )
+        try expect(
+            setupChecklistCanTryDictation(isReady: true,
+                                          permissionsGranted: false,
+                                          isTerminating: false),
+            equals: false,
+            "the scratchpad should remain unavailable while a required permission is missing"
+        )
+        try expect(
+            setupChecklistCanTryDictation(isReady: false,
+                                          permissionsGranted: true,
+                                          isTerminating: false),
+            equals: false,
+            "the scratchpad should remain unavailable until the runtime is ready"
+        )
+        try expect(
+            setupChecklistCanTryDictation(isReady: true,
+                                          permissionsGranted: true,
+                                          isTerminating: true),
+            equals: false,
+            "the scratchpad should not open while Presspeech is terminating"
         )
 
         try expect(
