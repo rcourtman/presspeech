@@ -1885,13 +1885,15 @@ class DeliveryRecoveryWindow:
         ttk.Label(
             frame,
             text=(
-                "Presspeech could not confirm that the last dictation reached "
-                "its original field. Check that field first: some or all of "
-                "the text may already be there or on the clipboard.\n\n"
-                "Presspeech keeps its recovery copy in process memory; its "
+                "Presspeech could not confirm delivery of one or more recent "
+                "dictations. Check the original field or fields first: some "
+                "or all of the text may already be there or on the clipboard.\n\n"
+                "Presspeech keeps recovery copies in process memory; their "
                 "words are not shown in this window or written to a recovery "
-                "file. Copy it for deliberate manual paste, or discard it. "
-                "Recording remains paused while it is waiting."
+                "file. Copy for deliberate manual paste, or discard. When "
+                "multiple dictations are waiting, each action handles the "
+                "oldest one first. Resolve them one at a time; recording "
+                "remains paused until all are resolved."
             ),
             justify="left",
             wraplength=560,

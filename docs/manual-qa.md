@@ -339,6 +339,19 @@ Record this release-gate matrix against the exact installed candidate:
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup, Try Dictation, menu-bar/Dock access, and recovery with VoiceOver and keyboard-only navigation | |
 
+For the keyboard-only delivery-recovery check, use a harmless test transcript
+and create a clipboard-only delivery outcome, then open each menu using the
+keyboard: first the status-item menu, then the Dock menu with **Show in Dock**
+enabled. Traverse the available actions in both directions with the keyboard.
+Confirm **Copy Last Transcript** is reachable in the action order after the
+dictation control, is enabled when retained history is available, and copies
+the latest transcript when activated. Confirm any microphone recovery action
+is likewise reachable when shown, and that disabled or absent recovery actions
+are not presented as actionable. With VoiceOver, verify the recovery notice
+and action names explain what will happen without relying on color or the
+Command-key glyph. Do not record transcript contents; restore the test clipboard
+only through an explicit user-confirmed action.
+
 For the two ten-trial clipboard rows, use distinct harmless markers and record
 only aggregate pass/fail counts. Observe that the intended field consumed each
 transcript before explicitly restoring the old clipboard; posting Command-V or
@@ -785,8 +798,11 @@ clipboard.
 - Choose Copy while the clipboard is locked, then after it is released. Failure
   leaves the window open with inline recovery guidance; successful owned Copy
   disables Copy/Discard, reports that recording is available, and clears that
-  entry. Test an external copy immediately after write and confirm it is not
-  adopted as the recovery write's receipt.
+  entry. Retain two benign synthetic dictations and confirm Copy and Discard
+  each resolve only the oldest waiting entry, update the status to say another
+  remains, and keep recording paused until the queue is empty. Test an external
+  copy immediately after write and confirm it is not adopted as the recovery
+  write's receipt.
 - Enable Windows Clipboard History, deliver a unique harmless phrase, overwrite
   the current clipboard, and open Win+V. Confirm the Presspeech phrase is absent.
   When a disposable paired test device is available, enable Cloud Clipboard and

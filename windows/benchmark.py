@@ -239,6 +239,67 @@ def parakeet_window_metrics(backend_timings):
     }
 
 
+def task_group_metrics(samples):
+    """Summarise explicitly labelled benchmark strata without transcript text."""
+    groups = collections.defaultdict(list)
+    for sample in samples:
+        group = sample.get("task_group")
+        if isinstance(group, str) and group.strip():
+            groups[group.strip()].append(sample)
+
+    result = {}
+    for group, members in sorted(groups.items()):
+        reviewed = [sample for sample in members
+                    if sample.get("accuracy") is not None]
+        reference_words = sum(
+            sample["accuracy"]["reference_words"] for sample in reviewed)
+        word_errors = sum(
+            sample["accuracy"]["word_errors"] for sample in reviewed)
+        trial_reference_words = sum(
+            sample["accuracy"]["reference_words"]
+            * sample["trial_accuracy"]["trials"] for sample in reviewed)
+        trial_word_errors = sum(
+            sum(sample["trial_accuracy"]["all_word_errors"])
+            for sample in reviewed)
+        latencies = [
+            latency
+            for sample in members
+            for latency in sample.get("inference_seconds", {}).get("all", [])
+            if isinstance(latency, (int, float))
+            and not isinstance(latency, bool)
+            and math.isfinite(latency)
+            and latency >= 0
+        ]
+        silences = [sample["silence"] for sample in members
+                    if isinstance(sample.get("silence"), dict)
+                    and sample["silence"].get("evaluated")]
+        result[group] = {
+            "sample_count": len(members),
+            "reviewed_sample_count": len(reviewed),
+            "reviewed_reference_word_count": reference_words,
+            "reviewed_word_error_count": word_errors,
+            "aggregate_wer": (word_errors / reference_words
+                              if reference_words else None),
+            "reviewed_trial_reference_word_count": trial_reference_words,
+            "reviewed_trial_word_error_count": trial_word_errors,
+            "aggregate_trial_wer": (
+                trial_word_errors / trial_reference_words
+                if trial_reference_words else None
+            ),
+            "inference_seconds": {
+                "measured_trials": len(latencies),
+                "median": statistics.median(latencies) if latencies else None,
+                "p95": _percentile(latencies, 0.95) if latencies else None,
+            },
+            "reviewed_silence_sample_count": len(silences),
+            "reviewed_silence_trial_count": sum(
+                sample["trials"] for sample in silences),
+            "silence_false_positive_trial_count": sum(
+                sample["false_positive_trials"] for sample in silences),
+        }
+    return result
+
+
 def load_audio(path):
     audio, sample_rate = sf.read(path, dtype="float32", always_2d=False)
     if audio.ndim > 1:
@@ -319,6 +380,16 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     if isinstance(runs, bool) or not isinstance(runs, int) or runs < 1:
         raise ValueError("runs must be a positive integer")
     requested_language, language_hint = _benchmark_language(manifest, language)
+    samples = manifest.get("samples", [])
+    if not isinstance(samples, list):
+        raise ValueError("samples must be a list")
+    for sample in samples:
+        if not isinstance(sample, dict):
+            raise ValueError("each sample must be an object")
+        task_group = sample.get("task_group")
+        if task_group is not None and (
+                not isinstance(task_group, str) or not task_group.strip()):
+            raise ValueError("sample task_group must be a non-empty string")
     # Validate and freeze report provenance before loading any model. This
     # describes the requested pinned source, not a fresh integrity attestation.
     snapshot = engine.model_snapshot(model_name)
@@ -341,7 +412,8 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     warmup_seconds = time.perf_counter() - started
 
     sample_results = []
-    for sample in manifest.get("samples", []):
+    for sample in samples:
+        task_group = sample.get("task_group")
         audio_path = sample["audio"]
         if not os.path.isabs(audio_path):
             audio_path = os.path.join(manifest_dir, audio_path)
@@ -392,6 +464,8 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             "backend_stages": backend_stage_metrics(backend_timings),
             "parakeet_windowing": parakeet_window_metrics(backend_timings),
         }
+        if task_group is not None:
+            result["task_group"] = task_group.strip()
         result["silence"] = silence_metrics(
             bool(sample.get("expected_silence", False)),
             result["reference_reviewed"],
@@ -456,7 +530,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 3,
+        "benchmark_version": 4,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
         "model_snapshot": snapshot,
@@ -516,6 +590,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         "final_word_failure_trial_count": sum(
             item["final_word"]["failed_trials"]
             for item in reviewed_final_words),
+        "task_groups": task_group_metrics(sample_results),
         "samples": sample_results,
     }
 
@@ -553,6 +628,25 @@ def _print_summary(result):
                   result["aggregate_best_trial_wer"] * 100,
                   result["aggregate_worst_trial_wer"] * 100,
               ))
+    for group, metrics in result.get("task_groups", {}).items():
+        def percentage(value):
+            return "n/a" if value is None else "%.2f%%" % (value * 100)
+
+        def seconds(value):
+            return "n/a" if value is None else "%.3fs" % value
+
+        latency = metrics["inference_seconds"]
+        print("Task group %s: %d samples, %d reviewed; WER %s consensus / "
+              "%s all trials; inference %s median / %s p95 (%d trials); "
+              "reviewed silence false positives %d/%d trials" % (
+                  group, metrics["sample_count"],
+                  metrics["reviewed_sample_count"],
+                  percentage(metrics["aggregate_wer"]),
+                  percentage(metrics["aggregate_trial_wer"]),
+                  seconds(latency["median"]), seconds(latency["p95"]),
+                  latency["measured_trials"],
+                  metrics["silence_false_positive_trial_count"],
+                  metrics["reviewed_silence_trial_count"]))
     for sample in result["samples"]:
         timing = sample["inference_seconds"]
         print("\n%s: %.3fs median (%.1fx realtime, adaptive/max release-to-paste %.3f/%.3fs)" % (

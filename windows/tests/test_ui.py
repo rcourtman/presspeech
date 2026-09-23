@@ -1160,6 +1160,13 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
             body.index('self.copy_button.pack(side="right")'),
         )
 
+    def test_recovery_dialog_explains_multiple_pending_dictations(self):
+        body = inspect.getsource(ui.DeliveryRecoveryWindow._build_window)
+        self.assertIn("one or more recent", body)
+        self.assertIn("each action handles the ", body)
+        self.assertIn("oldest one first", body)
+        self.assertIn("until all are resolved", body)
+
     def test_async_build_failure_restores_tray_fallback(self):
         window = self.make_window()
         window._build_failed = False

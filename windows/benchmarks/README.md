@@ -3,12 +3,14 @@
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER,
 lowercase-normalized CER, case-sensitive CER, final-word retention, silence false positives, and Whisper VAD speech retention.
-Version 3 reports identify the loader's pinned model repository/revision,
+Version 4 reports identify the loader's pinned model repository/revision,
 retain historical consensus WER alongside all-trial WER and a per-clip
 best/worst error envelope, record the bounded Parakeet window count and longest
 model input for each clip, and add the requested language policy plus detected
-language counts for Whisper. Source metadata records what the loader requests;
-it does not independently attest the local model files.
+language counts for Whisper. Optional `task_group` labels add separately
+weighted consensus/all-trial WER, inference latency, and silence false-positive
+counts per stratum. Source metadata records what the loader requests; it does
+not independently attest the local model files.
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -47,6 +49,12 @@ but canonical fixtures make runs easier to compare.
   speech remains useful for reproducibility, but alone does not establish
   performance on push-to-talk dictation. Use privately recorded, consented
   clips for this stratum and keep audio and references out of version control.
+  Add a short, non-identifying `task_group` to each manifest row (for example
+  `spontaneous-dictation`, `read-speech`, `short-command`, or `quiet-speech`);
+  the JSON report and console summary then separate reviewed WER, repeated-trial
+  WER, latency, and reviewed silence false positives for each label. A sample
+  has one group, so choose a consistent primary stratum; unlabelled samples
+  remain in corpus totals but not group totals.
 - For model or decoding changes, use the same reviewed clips and repeat count
   across conditions. Compare error rates and intermittent failures within each
   speech/task group, plus latency; a corpus-wide WER improvement must not hide

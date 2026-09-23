@@ -10,6 +10,51 @@ import benchmark
 
 
 class MetricTests(unittest.TestCase):
+    def test_task_group_metrics_keep_accuracy_and_latency_stratified(self):
+        samples = [
+            {
+                "task_group": "spontaneous-dictation",
+                "accuracy": {"reference_words": 4, "word_errors": 1},
+                "trial_accuracy": {"trials": 2, "all_word_errors": [1, 0]},
+                "inference_seconds": {"all": [0.2, 0.4]},
+                "silence": None,
+            },
+            {
+                "task_group": "spontaneous-dictation",
+                "accuracy": None,
+                "inference_seconds": {"all": [0.6]},
+                "silence": {"evaluated": True,
+                            "trials": 2,
+                            "false_positive_trials": 1},
+            },
+            {
+                "task_group": "spontaneous-dictation",
+                "accuracy": {"reference_words": 2, "word_errors": 2},
+                "trial_accuracy": {"trials": 2, "all_word_errors": [2, 1]},
+                "inference_seconds": {"all": [0.8]},
+                "silence": None,
+            },
+            {"task_group": "read-speech", "accuracy": None,
+             "inference_seconds": {"all": [0.1]}, "silence": None},
+            {"accuracy": None, "inference_seconds": {"all": [9.0]},
+             "silence": None},
+        ]
+
+        result = benchmark.task_group_metrics(samples)
+
+        self.assertEqual(set(result), {"read-speech", "spontaneous-dictation"})
+        spontaneous = result["spontaneous-dictation"]
+        self.assertEqual(spontaneous["sample_count"], 3)
+        self.assertEqual(spontaneous["reviewed_sample_count"], 2)
+        self.assertEqual(spontaneous["reviewed_reference_word_count"], 6)
+        self.assertEqual(spontaneous["aggregate_wer"], 0.5)
+        self.assertEqual(spontaneous["aggregate_trial_wer"], 4 / 12)
+        self.assertEqual(spontaneous["inference_seconds"]["median"], 0.5)
+        self.assertEqual(spontaneous["inference_seconds"]["p95"], 0.8)
+        self.assertEqual(spontaneous["inference_seconds"]["measured_trials"], 4)
+        self.assertEqual(spontaneous["reviewed_silence_trial_count"], 2)
+        self.assertEqual(spontaneous["silence_false_positive_trial_count"], 1)
+
     def test_identical_text_has_zero_error(self):
         metrics = benchmark.accuracy_metrics("It works well.", "It works well.")
         self.assertEqual(metrics["wer"], 0)
@@ -83,6 +128,28 @@ class MetricTests(unittest.TestCase):
                 json.dump({"model": "not-a-pinned-model"}, handle)
             with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
                 with self.assertRaisesRegex(ValueError, "unsupported speech model"):
+                    benchmark.run_benchmark(path)
+                constructor.assert_not_called()
+
+    def test_invalid_task_group_is_rejected_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"samples": [{"task_group": "  "}]}, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "task_group"):
+                    benchmark.run_benchmark(path)
+                constructor.assert_not_called()
+
+    def test_non_object_sample_is_rejected_before_model_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"samples": [None]}, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "sample must be an object"):
                     benchmark.run_benchmark(path)
                 constructor.assert_not_called()
 
@@ -386,7 +453,7 @@ class MetricTests(unittest.TestCase):
             "Parakeet windows: 2-2 per trial; longest input 59.750s",
             output.getvalue(),
         )
-        self.assertEqual(result["benchmark_version"], 3)
+        self.assertEqual(result["benchmark_version"], 4)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,

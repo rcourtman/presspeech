@@ -5,12 +5,14 @@
   "samples": [
     {
       "id": "short-command-001",
+      "task_group": "short-command",
       "audio": "audio/short-command-001.wav",
       "reference": "Replace this with a human-reviewed reference.",
       "reference_reviewed": false
     },
     {
       "id": "quiet-room-001",
+      "task_group": "silence-control",
       "audio": "audio/quiet-room-001.wav",
       "expected_silence": true,
       "reference_reviewed": false
