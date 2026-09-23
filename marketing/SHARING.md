@@ -7,16 +7,33 @@ free tool exists" should travel in postures that aren't marketing:
 a note where engineers look up notes, and answers where people are
 already asking.
 
-**Current gate:** do not use the prepared launch posts while the roadmap's
-text-delivery qualification is incomplete. First collect native, browser, and
-Electron/Chromium results from the published build using the privacy-safe
-[target-app protocol](../docs/app-compatibility.md). Community reports help
-find target-specific behavior, but do not replace the native release checks.
+**Hold as of 23 September 2026: none of the launch drafts below is ready to
+post.** The [published releases](https://github.com/rcourtman/presspeech/releases)
+are macOS 0.3.8 and Windows 0.1.12, not the proposed 0.3.9 / 0.1.13 fixes.
+Before launching macOS 0.3.8, users need its [inherited-token
+warning](../README.md#install-on-macos); before launching Windows 0.1.12,
+they need its [telemetry, token, routing, and proxy
+warning](../README.md#install-on-windows). Do not collapse these into a
+generic "100% local" claim. Also, [new GitHub issues are currently
+restricted](https://github.com/rcourtman/presspeech/issues), so a new
+compatibility report cannot be promised as an available feedback route.
+Finally, the roadmap's native and target-app text-delivery qualification is
+incomplete. These are separate gates: a suitable published build with accurate
+privacy disclosures, an open reporting route, and completed native checks
+must each be verified before a launch post. Do not use unreleased source
+behavior as evidence for a published download.
 
-Every number below comes from `docs/site-metadata.json` and the
-benchmarks page — run `python3 scripts/sync-docs.py --check` and
-`python3 scripts/check-public-assets.py` before posting so both claims and
-generated visuals match the current release.
+Until then, use this document only as internal draft material. If someone
+already using Presspeech asks how to help, point to the privacy-safe
+[target-app protocol](../docs/app-compatibility.md) and current
+[support-route status](../SUPPORT.md), without implying that a saved worksheet
+draft is submitted or monitored. Community results supplement, not replace,
+native release checks.
+
+Recheck release-size and benchmark numbers against `docs/site-metadata.json`
+and the benchmarks page. Run `python3 scripts/sync-docs.py --check` and
+`python3 scripts/check-public-assets.py` before any future posting; these
+checks do not establish native delivery or privacy safety.
 
 ## Assets
 
@@ -52,11 +69,15 @@ Windows build is available.
   methodology included; clipboard and paste work are not part of that timing
 - **8.4 MB signed, notarised download** — release asset size; about 500-600 MB for the local speech model
 - **~80 MB RAM while idle, 0% CPU between dictations** — site stats
-- **100% local** — no cloud transcription or account; bundled-library network behavior is version-specific; the privacy page documents the full network surface
+- **Recognition runs locally** — no cloud transcription or Presspeech account;
+  model downloads and optional update checks are separate network paths, with
+  version-specific dependency requests and token/telemetry caveats in the
+  [privacy inventory](../docs/privacy.html#network-calls). Do not use "100%
+  local" to describe the whole app or its installation.
 - **Free, MIT, native Swift menu-bar app**
 - State the requirements up front (Apple Silicon, macOS 14+; Homebrew optional for updates) — it costs a sentence and buys trust.
 
-## Show HN (post once)
+## Show HN (unapproved draft; post once only after the gates above)
 
 > **Show HN: Presspeech – an 8.4 MB local dictation app for Apple Silicon**
 
@@ -76,7 +97,18 @@ recovery is part of the product contract rather than a universal-paste claim.
 
 I built it because I wanted dictation that feels like a keyboard
 shortcut rather than a mode you enter and leave. It is free and MIT
-licensed, with no account, subscription, or cloud transcription. Bundled-library network behavior is version-specific.
+licensed, with no account, subscription, or cloud transcription.
+
+Before launching macOS 0.3.8, note that its model download may include a
+Hugging Face token inherited by Presspeech even though the public model needs
+no account. If a token may be present in the app's launch environment, or you
+are unsure, wait for 0.3.9 to be published. Windows 0.1.12 separately may
+send Hugging Face usage telemetry and a configured or saved token during model
+downloads; custom routing or a trusted TLS-inspecting proxy can affect who
+receives it. The [version-specific privacy
+guide](https://rcourtman.github.io/presspeech/privacy.html#network-calls)
+explains both published builds. Dictation audio and transcripts are not sent
+with those model requests.
 
 How it works: audio is captured in memory and decoded once on key
 release with the local Parakeet TDT v3 CoreML model through FluidAudio on the
@@ -89,9 +121,9 @@ https://rcourtman.github.io/presspeech/benchmarks.html
 
 Numbers: ~100 ms model transcription on the documented clips; 8.4 MB notarised app plus about
 500-600 MB for the local speech model; ~80 MB RAM idle; 0% CPU between
-dictations. Transcription makes no network calls, and the full
-network surface (model download, optional update check) is
-documented on the privacy page.
+dictations. Transcription makes no network calls; model downloads, optional
+update checks, and dependency-generated requests are documented separately
+in the version-specific privacy guide above.
 
 The app also includes deterministic voice shortcuts (a spoken phrase maps to
 exact reusable text), opt-in spoken formatting commands such as “new
@@ -107,9 +139,9 @@ https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 Or install with Homebrew:
 `brew install --cask rcourtman/presspeech/presspeech`
 
-## Reddit / r/macapps (prepare, then confirm before posting)
+## Reddit / r/macapps (unapproved draft; recheck before any posting)
 
-> **[Free & open source] Presspeech – fast, fully local push-to-talk dictation for Apple Silicon**
+> **[Free & open source] Presspeech – on-device push-to-talk dictation for Apple Silicon**
 
 I’ve released Presspeech, a small native Mac menu-bar app for one
 workflow: hold a key, speak, release, and the text normally pastes after
@@ -120,7 +152,8 @@ cannot be verified, the text stays on the clipboard for manual paste instead.
   Neural Engine
 - about 100 ms for model transcription on the documented M4 benchmark clips;
   clipboard and paste work are not included
-- no account, subscription, cloud transcription, or saved audio; bundled-library network behavior is version-specific
+- no account, subscription, cloud transcription, or saved audio; model-download
+  network behavior is version-specific
 - 8.4 MB notarised app; the local speech model is about 500–600 MB on
   first launch
 - voice shortcuts for exact reusable text, plus optional deterministic
@@ -132,17 +165,25 @@ Presspeech uses one consistent product, repository, bundle, and Homebrew
 identity. Saved app settings migrate forward automatically when required;
 macOS privacy grants remain controlled by System Settings.
 
+Before launching macOS 0.3.8, be aware that its model download may include a
+Hugging Face token inherited by Presspeech. The public model needs no token;
+if a token may be present in the launch environment or you are unsure, wait
+for 0.3.9 to be published. See the [current privacy
+guidance](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+
 Demo and download:
 https://rcourtman.github.io/presspeech/
 
 Source:
 https://github.com/rcourtman/presspeech
 
-If you use it in a native, browser, or Electron/Chromium app, I’d especially
-value the aggregate result from the privacy-safe eight-check target-app
-protocol. Passing reports matter as well as failures; the protocol never asks
-you to publish dictated text:
-https://rcourtman.github.io/presspeech/app-compatibility.html
+The privacy-safe eight-check [target-app
+protocol](https://rcourtman.github.io/presspeech/app-compatibility.html) can
+help evaluate a disposable native, browser, or Electron/Chromium field without
+sharing dictated text. The [support
+guide](https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md) explains
+whether public reports are currently accepted; a locally downloaded worksheet
+draft is not submitted or monitored.
 
 ### Show HN posting notes
 
@@ -167,23 +208,32 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    the release candidate. Do not spend the launch post while any incorrect or
    unsafe result remains, and describe recurring safe recovery rather than
    turning it into a universal paste claim.
-3. Complete the [public release and support
+3. Recheck the published macOS and Windows tags and their [version-specific
+   model-download privacy guidance](../docs/privacy.html#network-calls). Do
+   not present the 0.3.9 / 0.1.13 source controls as shipped while 0.3.8 /
+   0.1.12 are the downloads. Resolve or carry the exact published-version
+   warnings before inviting a new user to install or launch; this draft is
+   held while the current issues remain.
+4. Complete the [public release and support
    qualification](../docs/manual-qa.md#public-release-and-support-qualification).
    Confirm `main` is deployed to GitHub Pages and the README shows the direct
    download above Homebrew. From a signed-in non-collaborator account, confirm
-   all three public issue templates are available before asking users for bug,
-   improvement, or compatibility reports. Apply the exact two-platform GitHub
+   all three public issue templates can actually be submitted before asking
+   users for bug, improvement, or compatibility reports. The visible
+   "Issue creation is restricted" banner is a stop, not an invitation to
+   redirect private reports elsewhere. Apply the exact two-platform GitHub
    About description and missing discovery topics above; a Mac-only profile
    hides a shipped platform.
-4. Record a baseline: latest release downloads, total release
+5. Record a baseline: latest release downloads, total release
    downloads, repo stars, repo views, unique views, clones, and top
    referrers.
-5. Post the Show HN as written above, linking the repo or site
-   depending on which preview looks cleaner that day.
-6. Stay available for the first few hours and answer only actual
+6. Rework and approve the draft against the release actually available that
+   day; do not post the dated text above unchanged. Then post Show HN once,
+   linking the repo or site depending on which preview looks cleaner.
+7. Stay available for the first few hours and answer only actual
    questions. Link the compare table for "why not X?" and the privacy
    page for trust questions.
-7. After 24 hours and 7 days, record the same metrics. Judge the post
+8. After 24 hours and 7 days, record the same metrics. Judge the post
    by qualified installs and questions, not points alone.
 
 If the direct download link materially outperforms the Homebrew command
@@ -195,8 +245,13 @@ once in README + install page + FAQ and rerun `scripts/sync-docs.py
 ## Answer material (ongoing, demand-driven)
 
 For threads asking "is there a local dictation app for Mac?" or
-similar. Reply, disclose, stop. Pick the variant that matches the
-question:
+similar. Reply, disclose, stop. These are prompts, not safe standalone copy:
+check the published tag and [current privacy
+guidance](../docs/privacy.html#network-calls) first, include the relevant
+release-specific warning before any install/launch suggestion, and never ask
+for a public report while issue creation is restricted. Do not imply that
+local-only dictation means network-free model setup or that a downloaded
+worksheet is a submission.
 
 General:
 
@@ -206,33 +261,40 @@ General:
 > normally pastes into the window where recording began, with a manual
 > clipboard fallback when that destination cannot be verified. The published
 > Mac benchmark measures about 100 ms for the local model call; the Windows
-> build is still a preview.
+> build is still a preview. Published-version model-download caveats are in
+> https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Local-AI angle (r/LocalLLaMA and similar):
 
 > If you want local ASR as a daily input method: Presspeech runs Parakeet
-> TDT v3 on the ANE via CoreML — no API keys, about 100 ms model transcription
-> on the documented clips. Benchmarks + methodology:
+> TDT v3 on the ANE via CoreML — no Presspeech API key required, about 100 ms
+> model transcription on the documented clips. Benchmarks + methodology:
 > https://rcourtman.github.io/presspeech/benchmarks.html. I'm the
-> maintainer; MIT licensed.
+> maintainer; MIT licensed. The published model-download privacy caveats are
+> version-specific: https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Privacy angle:
 
-> Presspeech transcribes entirely on-device and documents its full
-> network surface (model download + optional update check, nothing
-> else): https://rcourtman.github.io/presspeech/privacy.html. I maintain
-> it; it's free and MIT.
+> Presspeech transcribes on-device, but model downloads, optional update
+> checks, and bundled-library requests have version-specific behavior.
+> macOS 0.3.8 may inherit a Hugging Face token; Windows 0.1.12 may send a
+> configured or saved token and usage telemetry in model requests. Read the
+> current version-specific inventory before launching:
+> https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+> I maintain it; it's free and MIT.
 
-Current-user qualification:
+Current-user qualification (only if asked; do not solicit while issue intake
+is restricted):
 
-> If you already use the current Presspeech release on macOS, the most useful
-> feedback now is one privacy-safe target-app result, especially for a browser
-> or Electron/Chromium app. The protocol runs five steady-focus and three
-> focus-change attempts in blank disposable fields, then reports counts only—
-> never the phrases or transcripts:
-> https://rcourtman.github.io/presspeech/app-compatibility.html. Passing
-> results are useful too. Community reports supplement rather than replace
-> native release testing.
+> If you already use Presspeech on macOS and want to help qualify a target app,
+> the privacy-safe protocol uses five steady-focus and three focus-change
+> attempts in blank disposable fields. Keep only aggregate counts, never the
+> phrases or transcripts:
+> https://rcourtman.github.io/presspeech/app-compatibility.html. GitHub
+> currently restricts new issues; check for a matching thread that accepts
+> comments, or keep the worksheet draft locally until reporting reopens. It
+> is not submitted or monitored. Passing results matter too, but community
+> results do not replace native release testing.
 
 Comparison ("how is this different from Superwhisper / Wispr Flow /
 VoiceInk / FluidVoice?"):
@@ -310,9 +372,11 @@ For directories and "what is this" replies:
 > apps for Apple Silicon Macs and x64 Windows PCs: hold a key, speak, release,
 > and the transcript normally returns to the window where recording began,
 > with a manual clipboard fallback when that destination cannot be verified.
-> There is no cloud transcription or Presspeech-authored analytics; bundled-library network behavior is version-specific. The published Mac benchmark
-> measures about 100 ms for the local model call; it does not include clipboard
-> or paste work.
+> There is no cloud transcription or Presspeech-authored analytics; bundled-
+> library network behavior is version-specific (see
+> https://rcourtman.github.io/presspeech/privacy.html#network-calls). The
+> published Mac benchmark measures about 100 ms for the local model call; it
+> does not include clipboard or paste work.
 
 ## House rules
 

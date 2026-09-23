@@ -894,10 +894,16 @@ item after the development-wrapper launch check.
   new manual option remains off and the timer/delay controls are gone. A fresh
   explicit choice persists; diagnostics describe manual restoration and contain
   no clipboard snapshot bytes.
-- With preservation enabled, change focus before transcription finishes.
-  Confirm copy-only recovery remains available and no restore is pending for
-  that manual copy. A pure self-test or controlled AppKit fixture does not
-  qualify external app consumption, accessibility or clipboard providers.
+- With preservation and Recent Transcripts enabled, allow clipboard read
+  access if macOS asks, seed an old harmless clipboard marker, and change
+  focus before transcription finishes.
+  Confirm copy-only recovery leaves the complete transcript available for
+  manual paste and, while Presspeech still owns the clipboard, offers an
+  explicit restore of the pre-dictation clipboard. Then choose **Copy Last
+  Transcript** and confirm that this separate copy retires the restore offer
+  without restoring the old contents. A pure self-test or controlled AppKit
+  fixture does not qualify external app consumption, accessibility or
+  clipboard providers.
 - Test hold mode: hold the hotkey, speak, release, and confirm text pastes
   at the cursor.
 - In hold mode, release directly on the last consonant of several short
