@@ -115,7 +115,9 @@ PASTE_SUFFIX_ACCESSIBLE_NAME = "After pasting. " + PASTE_SUFFIX_GUIDANCE
 MODEL_DOWNLOAD_PRIVACY_NOTICE = (
     "Hugging Face receives a request for the selected model and revision. "
     "Presspeech disables Hugging Face model-library telemetry and sends no "
-    "account token; audio and transcripts stay on this PC."
+    "account token; audio and transcripts stay on this PC. Presspeech honors "
+    "configured HTTP proxy and custom CA settings; a TLS-inspecting proxy "
+    "trusted by that CA configuration can also see the model request."
 )
 
 
@@ -1979,8 +1981,8 @@ class SettingsWindow:
                 "Saving a different model starts preparation immediately. "
                 "If its files are missing, Presspeech downloads them from "
                 "huggingface.co; a first Parakeet download can be about "
-                "2.5 GB. Audio and transcripts stay on this PC, and "
-                "dictation is unavailable until the model is ready. "
+                "2.5 GB. " + MODEL_DOWNLOAD_PRIVACY_NOTICE + " "
+                "Dictation is unavailable until the model is ready. "
                 "Without usable NVIDIA CUDA, Whisper base.en is the "
                 "English-only CPU option (~141 MiB)."),
             justify="left", wraplength=620,

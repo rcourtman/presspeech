@@ -483,7 +483,10 @@ class AccessibleWindowTests(unittest.TestCase):
         notice = (
             "Hugging Face receives a request for the selected model and revision. "
             "Presspeech disables Hugging Face model-library telemetry and sends "
-            "no account token; audio and transcripts stay on this PC.")
+            "no account token; audio and transcripts stay on this PC. "
+            "Presspeech honors configured HTTP proxy and custom CA settings; "
+            "a TLS-inspecting proxy trusted by that CA configuration can also "
+            "see the model request.")
         self.assertEqual(ui.MODEL_DOWNLOAD_PRIVACY_NOTICE, notice)
         self.assertIn(
             "MODEL_DOWNLOAD_PRIVACY_NOTICE",
@@ -491,6 +494,9 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertIn(
             "MODEL_DOWNLOAD_PRIVACY_NOTICE",
             inspect.getsource(ui.SetupWindow._poll_model))
+        self.assertIn(
+            "MODEL_DOWNLOAD_PRIVACY_NOTICE",
+            inspect.getsource(ui.SettingsWindow._build))
 
     def test_hidden_first_run_model_choices_start_disabled_before_first_poll(self):
         body = inspect.getsource(ui.SetupWindow._build)
@@ -630,8 +636,8 @@ class AccessibleWindowTests(unittest.TestCase):
             "Saving a different model starts preparation immediately.", body)
         self.assertIn("huggingface.co", body)
         self.assertIn("first Parakeet download can be about", body)
-        self.assertIn("Audio and transcripts stay on this PC", body)
-        self.assertIn("dictation is unavailable until the model is ready.", body)
+        self.assertIn("MODEL_DOWNLOAD_PRIVACY_NOTICE", body)
+        self.assertIn("Dictation is unavailable until the model is ready.", body)
         self.assertIn("English-only CPU option (~141 MiB)", body)
         self.assertIn("wraplength=620", body)
         self.assertLess(
