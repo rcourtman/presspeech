@@ -357,7 +357,9 @@ each platform rather than identical.
   notification-area menu without using the global hotkey
 - **Try Dictation… / Setup… / Settings…** — test privately, revisit first-run
   readiness, or configure the hotkey, microphone, local model, text handling,
-  audio feedback, and Start with Windows
+  audio feedback, and Start with Windows. In upcoming 0.1.13, **Try
+  Dictation…** is also available beside the hotkey selector in Settings, where
+  it opens the private scratchpad without starting a recording
 - **Repair Global Hotkey** — replace the keyboard listener if menu-based
   Dictate still works but the configured key does not
 - **Copy Diagnostics / Report a Problem… / Suggest an Improvement…** — copy a

@@ -257,13 +257,16 @@ class ModelNetworkPolicyTests(unittest.TestCase):
             model_network.harden_loaded_runtime({})
 
     def test_installed_hub_reads_policy_before_its_first_import(self):
-        if importlib.util.find_spec("huggingface_hub") is None:
-            self.skipTest("installed Hub is exercised by Windows CI/package qualification")
+        if (importlib.util.find_spec("huggingface_hub") is None or
+                importlib.util.find_spec("transformers") is None):
+            self.skipTest(
+                "installed Hugging Face stack is exercised by Windows CI/package qualification")
         # A fresh interpreter avoids a preceding test masking an import-order
         # error. Only synthetic credentials are supplied; none are transmitted.
         code = """import engine, model_network
 from huggingface_hub import constants, file_download, utils
 from huggingface_hub.utils import _detect_agent
+from transformers.utils import hub as transformers_hub
 registry_fetches = []
 _detect_agent._registry = None
 _detect_agent._read_cached_registry = lambda *_args, **_kwargs: None
@@ -280,6 +283,10 @@ headers = {str(name).lower(): str(value) for name, value in utils.build_hf_heade
 assert 'authorization' not in headers
 assert all(marker not in headers['user-agent'].lower() for marker in ('agent/', 'origin/', 'session_id/'))
 assert not registry_fetches, 'telemetry-disabled header construction attempted an agent-registry request'
+assert transformers_hub.SESSION_ID == model_network.TRANSFORMERS_SESSION_ID
+transformers_user_agent = transformers_hub.http_user_agent()
+assert 'session_id/telemetry-off' in transformers_user_agent
+assert 'telemetry/off' in transformers_user_agent
 """
         environment = dict(os.environ, HF_DEBUG="1", HF_ENDPOINT="https://invalid.example",
                            HF_TOKEN="synthetic-fixture", HF_HUB_USER_AGENT_ORIGIN="synthetic-origin",

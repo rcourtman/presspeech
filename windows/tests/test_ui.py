@@ -613,6 +613,17 @@ class AccessibleWindowTests(unittest.TestCase):
             body.index("self.save_button"),
         )
 
+    def test_settings_exposes_private_scratchpad_without_tray_navigation(self):
+        body = inspect.getsource(ui.SettingsWindow._build)
+
+        self.assertIn(
+            'text="Try Dictation…", command=self.app.open_scratchpad', body)
+        self.assertIn('_add_access_key(root, self.try_button, "t")', body)
+        self.assertLess(
+            body.index("self.try_button.grid"),
+            body.index("root.update_idletasks()"),
+        )
+
     def test_changed_visible_text_refreshes_its_accessible_name(self):
         widget = mock.Mock()
         widget.cget.return_value = "Ready to download"

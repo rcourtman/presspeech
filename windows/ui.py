@@ -1648,6 +1648,9 @@ class SettingsWindow:
         self.var_hotkey = ttk.Combobox(f, values=cfg.HOTKEYS, state="readonly", width=14)
         self.var_hotkey.set(s["hotkey"])
         self.var_hotkey.grid(row=row, column=1, sticky="w", padx=10, pady=2)
+        self.try_button = ttk.Button(
+            f, text="Try Dictation…", command=self.app.open_scratchpad)
+        self.try_button.grid(row=row, column=2, sticky="w", padx=(10, 0), pady=2)
         row += 1
 
         ttk.Label(
@@ -1850,6 +1853,7 @@ class SettingsWindow:
         root.protocol("WM_DELETE_WINDOW", self._close)
         _add_access_key(root, add_button, "a")
         _add_access_key(root, remove_button, "r")
+        _add_access_key(root, self.try_button, "t")
         _add_access_key(root, self.repair_hotkey_button, "h")
         _add_access_key(root, startup_button, "o")
         _add_access_key(root, self.retry_model_button, "m")

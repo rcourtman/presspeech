@@ -233,6 +233,12 @@ If using the configured key is inconvenient, select **Dictate** from the
 Presspeech notification-area menu to start recording, then select it again to
 stop. This menu action toggles recording in either dictation style.
 
+For a private, click-driven test that does not type into another app, open
+**Try Dictation…** from the notification-area menu. Builds containing the
+upcoming 0.1.13 change also provide a **Try Dictation…** button in Settings.
+In the scratchpad, use **Dictate** to start and stop; the transcript stays in
+that private window.
+
 The configured key is reserved for Presspeech while it is running, so it does
 not also open a Windows surface or invoke an F8–F12 command in the focused app.
 Other keys and AltGr layout input continue to pass through normally.

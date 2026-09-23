@@ -252,7 +252,12 @@ keyboard access testing in addition to assistive-technology testing.
   Windows-injected key events, so a spoken **Press and hold [key]** command is
   not a substitute for testing the menu/control route. Record any point Voice
   Access cannot operate as a limitation; do not infer support from unit tests
-  or UI Automation names alone. Use Microsoft's [Voice Access overview](https://support.microsoft.com/en-us/accessibility/windows/voice-access/use-voice-access-to-control-your-pc-author-text-with-your-voice)
+  or UI Automation names alone. After setup is complete, also launch Presspeech
+  from the Start Menu, use Voice Access to activate Settings' **Try Dictation…**
+  button, then operate the scratchpad's **Dictate** / **Stop Dictation** button
+  by its accessible name. Confirm it opens the private scratchpad without
+  starting a recording, and record any Voice Access limitation. Use Microsoft's
+  [Voice Access overview](https://support.microsoft.com/en-us/accessibility/windows/voice-access/use-voice-access-to-control-your-pc-author-text-with-your-voice)
   and [screen-item interaction guidance](https://support.microsoft.com/en-us/accessibility/windows/voice-access/use-voice-to-interact-with-items-on-the-screen)
   for supported commands and alternatives.
 - On a layout with AltGr (for example Polish or German), confirm typing an
