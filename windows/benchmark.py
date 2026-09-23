@@ -258,6 +258,83 @@ def parakeet_window_metrics(backend_timings):
     }
 
 
+def _summarise_group(members):
+    """Summarise accuracy, delivery boundaries, silence, and latency."""
+    reviewed = [sample for sample in members
+                if sample.get("accuracy") is not None]
+    reference_words = sum(
+        sample["accuracy"]["reference_words"] for sample in reviewed)
+    word_errors = sum(
+        sample["accuracy"]["word_errors"] for sample in reviewed)
+    trial_reference_words = sum(
+        sample["accuracy"]["reference_words"]
+        * sample["trial_accuracy"]["trials"] for sample in reviewed)
+    trial_word_errors = sum(
+        sum(sample["trial_accuracy"]["all_word_errors"])
+        for sample in reviewed)
+    worst_trial_word_errors = sum(
+        sample["trial_accuracy"]["worst_word_errors"]
+        for sample in reviewed)
+    latencies = [
+        latency
+        for sample in members
+        for latency in sample.get("inference_seconds", {}).get("all", [])
+        if isinstance(latency, (int, float))
+        and not isinstance(latency, bool)
+        and math.isfinite(latency)
+        and latency >= 0
+    ]
+    silences = [sample["silence"] for sample in members
+                if isinstance(sample.get("silence"), dict)
+                and sample["silence"].get("evaluated")]
+    first_words = [sample["first_word"] for sample in members
+                   if isinstance(sample.get("first_word"), dict)]
+    final_words = [sample["final_word"] for sample in members
+                   if isinstance(sample.get("final_word"), dict)]
+    return {
+        "sample_count": len(members),
+        "reviewed_sample_count": len(reviewed),
+        "reviewed_reference_word_count": reference_words,
+        "reviewed_word_error_count": word_errors,
+        "aggregate_wer": (word_errors / reference_words
+                           if reference_words else None),
+        "reviewed_trial_reference_word_count": trial_reference_words,
+        "reviewed_trial_word_error_count": trial_word_errors,
+        "aggregate_trial_wer": (
+            trial_word_errors / trial_reference_words
+            if trial_reference_words else None
+        ),
+        "aggregate_worst_trial_wer": (
+            worst_trial_word_errors / reference_words
+            if reference_words else None
+        ),
+        "inference_seconds": {
+            "measured_trials": len(latencies),
+            "median": statistics.median(latencies) if latencies else None,
+            "p95": _percentile(latencies, 0.95) if latencies else None,
+        },
+        "reviewed_silence_sample_count": len(silences),
+        "reviewed_silence_trial_count": sum(
+            sample["trials"] for sample in silences),
+        "silence_false_positive_trial_count": sum(
+            sample["false_positive_trials"] for sample in silences),
+        "reviewed_first_word_sample_count": len(first_words),
+        "reviewed_first_word_trial_count": sum(
+            sample["trials"] for sample in first_words),
+        "first_word_failure_count": sum(
+            not sample["retained"] for sample in first_words),
+        "first_word_failure_trial_count": sum(
+            sample["failed_trials"] for sample in first_words),
+        "reviewed_final_word_sample_count": len(final_words),
+        "reviewed_final_word_trial_count": sum(
+            sample["trials"] for sample in final_words),
+        "final_word_failure_count": sum(
+            not sample["retained"] for sample in final_words),
+        "final_word_failure_trial_count": sum(
+            sample["failed_trials"] for sample in final_words),
+    }
+
+
 def _group_metrics(samples, field):
     """Summarise one explicitly labelled benchmark dimension."""
     groups = collections.defaultdict(list)
@@ -265,83 +342,28 @@ def _group_metrics(samples, field):
         group = sample.get(field)
         if isinstance(group, str) and group.strip():
             groups[group.strip()].append(sample)
+    return {
+        group: _summarise_group(members)
+        for group, members in sorted(groups.items())
+    }
 
-    result = {}
-    for group, members in sorted(groups.items()):
-        reviewed = [sample for sample in members
-                    if sample.get("accuracy") is not None]
-        reference_words = sum(
-            sample["accuracy"]["reference_words"] for sample in reviewed)
-        word_errors = sum(
-            sample["accuracy"]["word_errors"] for sample in reviewed)
-        trial_reference_words = sum(
-            sample["accuracy"]["reference_words"]
-            * sample["trial_accuracy"]["trials"] for sample in reviewed)
-        trial_word_errors = sum(
-            sum(sample["trial_accuracy"]["all_word_errors"])
-            for sample in reviewed)
-        worst_trial_word_errors = sum(
-            sample["trial_accuracy"]["worst_word_errors"]
-            for sample in reviewed)
-        latencies = [
-            latency
-            for sample in members
-            for latency in sample.get("inference_seconds", {}).get("all", [])
-            if isinstance(latency, (int, float))
-            and not isinstance(latency, bool)
-            and math.isfinite(latency)
-            and latency >= 0
-        ]
-        silences = [sample["silence"] for sample in members
-                    if isinstance(sample.get("silence"), dict)
-                    and sample["silence"].get("evaluated")]
-        first_words = [sample["first_word"] for sample in members
-                       if isinstance(sample.get("first_word"), dict)]
-        final_words = [sample["final_word"] for sample in members
-                       if isinstance(sample.get("final_word"), dict)]
-        result[group] = {
-            "sample_count": len(members),
-            "reviewed_sample_count": len(reviewed),
-            "reviewed_reference_word_count": reference_words,
-            "reviewed_word_error_count": word_errors,
-            "aggregate_wer": (word_errors / reference_words
-                              if reference_words else None),
-            "reviewed_trial_reference_word_count": trial_reference_words,
-            "reviewed_trial_word_error_count": trial_word_errors,
-            "aggregate_trial_wer": (
-                trial_word_errors / trial_reference_words
-                if trial_reference_words else None
-            ),
-            "aggregate_worst_trial_wer": (
-                worst_trial_word_errors / reference_words
-                if reference_words else None
-            ),
-            "inference_seconds": {
-                "measured_trials": len(latencies),
-                "median": statistics.median(latencies) if latencies else None,
-                "p95": _percentile(latencies, 0.95) if latencies else None,
-            },
-            "reviewed_silence_sample_count": len(silences),
-            "reviewed_silence_trial_count": sum(
-                sample["trials"] for sample in silences),
-            "silence_false_positive_trial_count": sum(
-                sample["false_positive_trials"] for sample in silences),
-            "reviewed_first_word_sample_count": len(first_words),
-            "reviewed_first_word_trial_count": sum(
-                sample["trials"] for sample in first_words),
-            "first_word_failure_count": sum(
-                not sample["retained"] for sample in first_words),
-            "first_word_failure_trial_count": sum(
-                sample["failed_trials"] for sample in first_words),
-            "reviewed_final_word_sample_count": len(final_words),
-            "reviewed_final_word_trial_count": sum(
-                sample["trials"] for sample in final_words),
-            "final_word_failure_count": sum(
-                not sample["retained"] for sample in final_words),
-            "final_word_failure_trial_count": sum(
-                sample["failed_trials"] for sample in final_words),
+
+def language_task_group_metrics(samples):
+    """Summarise language/task intersections when both labels are present."""
+    groups = collections.defaultdict(lambda: collections.defaultdict(list))
+    for sample in samples:
+        language = sample.get("language_group")
+        task = sample.get("task_group")
+        if (isinstance(language, str) and language.strip()
+                and isinstance(task, str) and task.strip()):
+            groups[language.strip()][task.strip()].append(sample)
+    return {
+        language: {
+            task: _summarise_group(members)
+            for task, members in sorted(task_groups.items())
         }
-    return result
+        for language, task_groups in sorted(groups.items())
+    }
 
 
 def task_group_metrics(samples):
@@ -594,7 +616,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 6,
+        "benchmark_version": 7,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "model": model_name,
         "model_snapshot": snapshot,
@@ -665,6 +687,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             for item in reviewed_first_words),
         "task_groups": task_group_metrics(sample_results),
         "language_groups": language_group_metrics(sample_results),
+        "language_task_groups": language_task_group_metrics(sample_results),
         "samples": sample_results,
     }
 
@@ -726,6 +749,28 @@ def _print_summary(result):
                   "edge-word failures first %d/%d, final %d/%d trials; "
                   "reviewed silence false positives %d/%d trials" % (
                       dimension, group, metrics["sample_count"],
+                      metrics["reviewed_sample_count"],
+                      percentage(metrics["aggregate_wer"]),
+                      percentage(metrics["aggregate_trial_wer"]),
+                      percentage(metrics["aggregate_worst_trial_wer"]),
+                      seconds(latency["median"]), seconds(latency["p95"]),
+                      latency["measured_trials"],
+                      metrics["first_word_failure_trial_count"],
+                      metrics["reviewed_first_word_trial_count"],
+                      metrics["final_word_failure_trial_count"],
+                      metrics["reviewed_final_word_trial_count"],
+                      metrics["silence_false_positive_trial_count"],
+                      metrics["reviewed_silence_trial_count"]))
+
+    for language, tasks in result.get("language_task_groups", {}).items():
+        for task, metrics in tasks.items():
+            latency = metrics["inference_seconds"]
+            print("Language/task %s / %s: %d samples, %d reviewed; WER %s "
+                  "consensus / %s all trials / %s worst-trial envelope; "
+                  "inference %s median / %s p95 (%d trials); "
+                  "edge-word failures first %d/%d, final %d/%d trials; "
+                  "reviewed silence false positives %d/%d trials" % (
+                      language, task, metrics["sample_count"],
                       metrics["reviewed_sample_count"],
                       percentage(metrics["aggregate_wer"]),
                       percentage(metrics["aggregate_trial_wer"]),

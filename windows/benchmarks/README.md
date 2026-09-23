@@ -3,7 +3,7 @@
 `../benchmark.py` measures model load/warm-up time, repeated inference latency,
 synchronized Parakeet prepare/transfer/generate/decode stages, WER,
 lowercase-normalized CER, first- and final-word retention, silence false positives, and Whisper VAD speech retention.
-Version 6 reports identify the loader's pinned model repository/revision,
+Version 7 reports identify the loader's pinned model repository/revision,
 retain historical consensus WER alongside all-trial WER and a per-clip
 best/worst error envelope, record the bounded Parakeet window count and longest
 model input for each clip, and add the requested language policy plus detected
@@ -11,11 +11,14 @@ language counts for Whisper. Optional `task_group` labels add separately
 weighted consensus/all-trial WER, inference latency, and silence false-positive
 counts per stratum. Optional `language_group` labels add an independent set of
 language-stratified accuracy, worst-trial envelope, boundary-retention, silence,
-and latency metrics. These are human-assigned clip labels, distinct from the
-top-level `language` decoder hint and Whisper's detected-language counts; the
-two dimensions are summarized separately, not cross-tabulated. Source metadata
-records what the loader requests; it does not independently attest the local
-model files.
+and latency metrics. When both labels are present, `language_task_groups` also
+reports the same metrics for each language/task intersection, so pooled
+language or task results cannot hide a regression in a paired stratum. These
+are human-assigned clip labels, distinct from the top-level `language` decoder
+hint and Whisper's detected-language counts; clips missing either label are
+omitted from the intersection report but remain in corpus and singly labelled
+groups. Source metadata records what the loader requests; it does not
+independently attest the local model files.
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -103,7 +106,10 @@ but canonical fixtures make runs easier to compare.
   seconds, with words spoken continuously across several likely window seams;
   inspect both WER and the reported window plan for duplication or loss.
 - Keep spontaneous dictation distinct from read-speech benchmark clips when
-  comparing models. Include unscripted sentences with ordinary disfluencies,
+  comparing models: ASR error rates vary materially across speaking styles and
+  spontaneity levels ([Szymański et al., 2020](https://aclanthology.org/2020.findings-emnlp.295/),
+  [Evain et al., 2024](https://aclanthology.org/2024.lrec-main.1491/)). Include
+  unscripted sentences with ordinary disfluencies,
   self-corrections, contractions, names, and dictated numbers/punctuation;
   report results by these recording/task groups as well as in aggregate. Read
   speech remains useful for reproducibility, but alone does not establish
@@ -119,8 +125,9 @@ but canonical fixtures make runs easier to compare.
   using the same human-assigned language/locale labels across candidates (for
   example `pl`, `en-GB`, or `pt-BR`). It is evaluation metadata only: the
   top-level `language` field still controls the recognizer hint. Reports
-  summarize language and task strata independently, so preserve both labels to
-  avoid trading away dictation-style breakdowns for language coverage. Review
+  summarize language and task strata independently and their intersections
+  when both labels are present. Preserve both labels to avoid trading away
+  dictation-style breakdowns for language coverage. Review
   both consensus/all-trial and worst-trial WER per language; the worst-trial
   value combines each clip's worst repetition and is not an observed corpus
   run or a confidence interval.

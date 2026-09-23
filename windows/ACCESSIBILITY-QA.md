@@ -45,13 +45,19 @@ Windows UI, UIA integration, or Tk version.
    the on-screen indicator, use a short harmless Try Dictation phrase and
    confirm its state is accessible and does not take focus.
 
-4. **Text size and contrast.** With Setup/Settings open, change Windows
-   Accessibility **Text size** up to 225% and enable a Contrast theme. Check
-   that dialog content remains reachable by scrolling, focused controls stay
-   visible, and the indicator remains legible and on-screen while its state is
-   visible. Also check the normal theme: high contrast is not a substitute for
-   readable default colors. If validating a release that still claims Windows
-   10 support, repeat the applicable checks there.
+4. **Text size and contrast.** Test Setup, Settings, Try Dictation, Delivery
+   Recovery, and the update window individually at Windows Accessibility
+   **Text size** 225%. Change the setting while each window is open as well as
+   before opening it. Check that all actions and explanatory text remain
+   reachable by scrolling, focused controls stay visible, and text remains
+   readable without clipping or obscuring a choice. Confirm Delivery Recovery
+   still does not expose retained transcript text. Enable a Contrast theme and
+   check each window plus the indicator; the indicator must remain legible and
+   on-screen while its state is visible. Also check the normal theme: high
+   contrast is not a substitute for readable default colors. Restore the
+   user's original Windows text-size and contrast settings after the test. If
+   validating a release that still claims Windows 10 support, repeat the
+   applicable checks there.
 
 ## Record the result
 
@@ -60,6 +66,41 @@ Contrast theme, and any UIA/Narrator findings. Review FastPass failures and
 identify known false positives instead of silently ignoring them. Do not attach
 screenshots or UIA snapshots containing dictated text, clipboard contents, or
 other personal data.
+
+For each candidate that needs this check, copy and complete this record so a
+later reviewer can distinguish a packaged Windows result from mocked tests or
+an incomplete run:
+
+```text
+Candidate version and package SHA-256:
+Test date:
+Windows edition, version, and build:
+Display scale / resolution:
+Accessibility Text size:
+Contrast theme (or None):
+Narrator version:
+Accessibility Insights version:
+Changed UI surfaces:
+
+FastPass — Setup / Settings / Try Dictation / Delivery Recovery / Update:
+UIA names, roles, values, and states:
+Keyboard traversal, focus, and scrolling:
+Narrator control and live-status announcements:
+Text scaling and contrast (including normal theme):
+Windows 10 checks, if this candidate claims Windows 10 support:
+
+Findings and reviewed false positives (identify surface and impact):
+Fixes and retest result:
+Overall result: Pass / Fail / Not run
+Unrun checks and reason:
+```
+
+Mark a check **Not run** rather than inferring a pass from source inspection,
+unit tests, or another Windows configuration. A candidate that changes the
+Windows UI, UIA integration, or Tk version has no native accessibility
+sign-off until the applicable packaged-app checks above are completed and
+reviewed; unresolved failures or unrun checks must remain explicit in the
+release decision.
 
 See Microsoft's [Windows accessibility testing guidance](https://learn.microsoft.com/en-us/windows/apps/design/accessibility/accessibility-testing)
 for the testing tools and procedures, and the [Accessibility Insights event

@@ -128,6 +128,68 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(polish["aggregate_worst_trial_wer"], 2 / 5)
         self.assertEqual(polish["inference_seconds"]["median"], 0.4)
 
+    def test_language_task_metrics_require_and_preserve_both_labels(self):
+        samples = [
+            {
+                "language_group": " pl ",
+                "task_group": "spontaneous-dictation",
+                "accuracy": {"reference_words": 4, "word_errors": 1},
+                "trial_accuracy": {
+                    "trials": 2, "all_word_errors": [1, 0],
+                    "worst_word_errors": 1,
+                },
+                "inference_seconds": {"all": [0.2, 0.4]},
+                "silence": None,
+                "first_word": {"retained": False, "failed_trials": 1,
+                               "trials": 2},
+                "final_word": {"retained": True, "failed_trials": 0,
+                               "trials": 2},
+            },
+            {
+                "language_group": "pl",
+                "task_group": "read-speech",
+                "accuracy": {"reference_words": 2, "word_errors": 0},
+                "trial_accuracy": {
+                    "trials": 1, "all_word_errors": [0],
+                    "worst_word_errors": 0,
+                },
+                "inference_seconds": {"all": [0.1]},
+                "silence": None,
+                "first_word": None,
+                "final_word": None,
+            },
+            {
+                "language_group": "en-GB",
+                "task_group": "spontaneous-dictation",
+                "accuracy": None,
+                "inference_seconds": {"all": [0.7]},
+                "silence": None,
+                "first_word": None,
+                "final_word": None,
+            },
+            {"language_group": "pl", "accuracy": None},
+            {"task_group": "read-speech", "accuracy": None},
+            {"language_group": "pl", "task_group": "  ", "accuracy": None},
+        ]
+
+        result = benchmark.language_task_group_metrics(samples)
+
+        self.assertEqual(set(result), {"pl", "en-GB"})
+        self.assertEqual(set(result["pl"]), {
+            "read-speech", "spontaneous-dictation",
+        })
+        spontaneous = result["pl"]["spontaneous-dictation"]
+        self.assertEqual(spontaneous["sample_count"], 1)
+        self.assertEqual(spontaneous["reviewed_reference_word_count"], 4)
+        self.assertEqual(spontaneous["aggregate_wer"], 0.25)
+        self.assertEqual(spontaneous["aggregate_trial_wer"], 1 / 8)
+        self.assertAlmostEqual(spontaneous["inference_seconds"]["median"], 0.3)
+        self.assertEqual(spontaneous["first_word_failure_trial_count"], 1)
+        self.assertEqual(
+            result["en-GB"]["spontaneous-dictation"]["reviewed_sample_count"],
+            0,
+        )
+
     def test_identical_text_has_zero_error(self):
         metrics = benchmark.accuracy_metrics("It works well.", "It works well.")
         self.assertEqual(metrics["wer"], 0)
@@ -564,7 +626,7 @@ class MetricTests(unittest.TestCase):
             "Parakeet windows: 2-2 per trial; longest input 59.750s",
             output.getvalue(),
         )
-        self.assertEqual(result["benchmark_version"], 6)
+        self.assertEqual(result["benchmark_version"], 7)
         self.assertEqual(result["model_snapshot"], {
             "repository": benchmark.engine.PARAKEET_MODEL,
             "revision": benchmark.engine.PARAKEET_REVISION,
@@ -637,6 +699,11 @@ class MetricTests(unittest.TestCase):
             result["language_groups"]["en-GB"]["aggregate_worst_trial_wer"],
             3 / 6,
         )
+        self.assertAlmostEqual(
+            result["language_task_groups"]["en-GB"]["short-command"]
+            ["aggregate_trial_wer"],
+            1 / 4,
+        )
         self.assertEqual(result["samples"][0]["language_group"], "en-GB")
         self.assertEqual(
             set(result["task_groups"]),
@@ -649,6 +716,7 @@ class MetricTests(unittest.TestCase):
         self.assertIn(
             "Snapshot: nvidia/parakeet-tdt-0.6b-v3@", output.getvalue())
         self.assertIn("Language group en-GB:", output.getvalue())
+        self.assertIn("Language/task en-GB / short-command:", output.getvalue())
         self.assertIn(
             "WER 16.67% consensus / 33.33% all trials / "
             "50.00% worst-trial envelope",

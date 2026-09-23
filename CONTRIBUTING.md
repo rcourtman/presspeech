@@ -55,10 +55,14 @@ titles. Those conditions distinguish a target-capture failure from a
 paste-consumption race without exposing the user's work.
 
 To test text delivery systematically, follow
-[`docs/app-compatibility.md`](docs/app-compatibility.md) and submit one
-[target-app compatibility report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml)
-per platform/app/version/field type. [Browse existing compatibility
-reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
+[`docs/app-compatibility.md`](docs/app-compatibility.md). When GitHub accepts
+new issues, submit one [target-app compatibility
+report](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml)
+per platform/app/version/field type. While issue creation is restricted, check
+for a comparable open report and whether its comments are enabled; otherwise
+keep the worksheet's privacy-safe result local and retry when a public route is
+available. Do not use another public service as a workaround. [Browse existing
+compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22)
 first and add counts only when those conditions are comparable. The protocol
 records five steady-focus attempts and three focus-change attempts using blank
 disposable fields. Successful reports matter as much as failures: without
@@ -67,11 +71,13 @@ limitation from a one-machine failure. These community reports are exploratory
 evidence and do not replace the native release checks in
 [`docs/manual-qa.md`](docs/manual-qa.md).
 
-When a matching platform/app-version/field-type report already exists, add the
-worksheet's six counts and overall result there with the Presspeech and
-operating-system versions, generic hardware if useful, and relevant conditions.
-Do not open a duplicate or omit a differing outcome; variation under comparable
-conditions is evidence.
+When a matching platform/app-version/field-type report already exists and
+comments are enabled, add the worksheet's six counts and overall result there
+with the Presspeech and operating-system versions, generic hardware if useful,
+and relevant conditions.
+When issue creation is available, open a separate report for conditions that
+are not comparable. Do not open a duplicate or omit a differing outcome;
+variation under comparable conditions is evidence.
 
 If Presspeech cannot open, do not paste a raw log tail by default. Share only
 the smallest relevant error detail needed to explain the failure, and manually
@@ -84,14 +90,16 @@ data. Report security vulnerabilities through the private process in
 
 ## Suggesting features
 
-Use the focused [feature request
+When GitHub accepts new issues, use the focused [feature request
 form](https://github.com/rcourtman/presspeech/issues/new?template=feature_request.yml).
-Describe the recurring problem and a measurable success condition, not only a
-proposed implementation. Check the [product roadmap](ROADMAP.md) first: it
-explains the current priority order, exploration gates, and deliberate
-non-goals. Roughly in scope: hotkey behaviour, transcription
-quality / latency, menu bar UX, install/upgrade ergonomics. Roughly out of
-scope:
+While issue creation is restricted, keep a draft locally and check
+[`SUPPORT.md`](SUPPORT.md) for current reporting guidance; do not use another
+public service as a workaround. Describe the recurring problem and a measurable
+success condition, not only a proposed implementation. Check the [product
+roadmap](ROADMAP.md) first: it explains the current priority order,
+exploration gates, and deliberate non-goals. Roughly in scope: hotkey
+behaviour, transcription quality / latency, menu bar UX, install/upgrade
+ergonomics. Roughly out of scope:
 
 - Cloud transcription backends — the project is local-only by design.
 - A shared cross-platform UI or runtime. The macOS and Windows integrations
