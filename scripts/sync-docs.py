@@ -534,12 +534,20 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
 }
 
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
+    ROOT / "windows" / "README.md": (
+        "published 0.1.12 build",
+        "usage telemetry enabled",
+        "avoid this possible usage telemetry",
+        "wait for 0.1.13",
+        "keep the app unopened",
+    ),
     ROOT / "README.md": (
         "Before installing or launching Windows 0.1.12",
         "usage telemetry",
         "already-configured or locally saved Hugging Face token",
         "Custom download routing can change where the model request",
-        "if a Hugging Face token or custom download route is configured on this PC",
+        "avoid this possible usage telemetry",
+        "concerned that a Hugging Face token or custom download route may be configured on this PC",
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
@@ -557,7 +565,8 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "usage telemetry",
         "already-configured or locally saved Hugging Face token",
         "Custom download routing can change where the model request",
-        "if a Hugging Face token or custom download route is configured on this PC",
+        "avoid this possible usage telemetry",
+        "concerned that a Hugging Face token or custom download route may be configured on this PC",
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
@@ -575,7 +584,8 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "usage telemetry",
         "already-configured or locally saved Hugging Face token",
         "Custom download routing can change where the model request",
-        "if a Hugging Face token or custom download route is configured on this PC",
+        "avoid this possible usage telemetry",
+        "concerned that a Hugging Face token or custom download route may be configured on this PC",
         "wait until Windows 0.1.13 is published",
         "public models need no account token",
         "Windows privacy decision and technical details",
@@ -593,9 +603,23 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "usage telemetry",
         "include an available token",
         "custom routing can change where the token goes",
+        "avoid this possible usage telemetry",
         "wait until Windows 0.1.13 is published",
         "dictation audio and transcripts are not sent",
         'id="faq-windows-install-privacy"',
+    ),
+    DOCS / "windows.html": (
+        "Privacy decision for published Windows 0.1.12",
+        "may send default usage telemetry",
+        "avoid this possible usage telemetry",
+        "wait for Windows 0.1.13",
+        "leave <strong>Launch Presspeech</strong> unchecked",
+    ),
+    DOCS / "privacy.html": (
+        "Windows 0.1.12 package vs. launch",
+        "avoid this possible usage telemetry",
+        "wait for 0.1.13 before launching",
+        "Launch Presspeech",
     ),
     DOCS / "install" / "agents.md": (
         "Before installing or launching published Windows 0.1.12",
@@ -603,7 +627,8 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "already-configured or locally saved Hugging Face token",
         "custom download routing can change where a request",
         "public models need no account token",
-        "if a Hugging Face token or custom download route may be configured",
+        "avoid this possible usage telemetry",
+        "concerned that a Hugging Face token or custom download route may be configured",
         "wait until Windows 0.1.13 is published",
         "Do not inspect or display token values",
         "launch 0.1.12 without the user's informed choice",
@@ -1040,7 +1065,7 @@ After launch, explain that macOS 0.3.8 starts its first local speech-model downl
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
-Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. These public models need no account token. If a Hugging Face token or custom download route may be configured on this PC—or the user is unsure—offer to wait until Windows 0.1.13 is published. Downloading the installer and checksum from GitHub does not make a model request; 0.1.12 starts its selected model download when Presspeech launches. If the user chooses to wait but still wants to install, tell them to uncheck the installer's final "Launch Presspeech" option; do not start the app. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. These public models need no account token. Offer to wait until Windows 0.1.13 is published if the user prefers to avoid this possible usage telemetry, is concerned that a Hugging Face token or custom download route may be configured on this PC, or is unsure. Downloading the installer and checksum from GitHub does not make a model request; 0.1.12 starts its selected model download when Presspeech launches. If the user chooses to wait but still wants to install, tell them to uncheck the installer's final "Launch Presspeech" option; do not start the app. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Use only the published Windows prerelease selected by Presspeech's deployed metadata and version-pinned install guide:
   https://rcourtman.github.io/presspeech/windows.html#download-verify-run
@@ -1640,7 +1665,9 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "model cache in place and wait for 0.3.9 before a planned re-download; see "
         "https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use. "
         "During Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
-        "Hugging Face, model-request metadata includes a random per-process session ID, and pinned Hub "
+        "Hugging Face. If you prefer to avoid this possible usage telemetry, are concerned that a token "
+        "or custom route may be configured, or are unsure, wait until Windows 0.1.13 is published. "
+        "Model-request metadata includes a random per-process session ID, and pinned Hub "
         "1.29.0 may request /api/agent-harnesses and add an agent/<id> label based on inherited "
         "agent-related environment markers. An available "
         "Hugging Face token may accompany a model request. Inherited HF_ENDPOINT and "
@@ -1767,6 +1794,8 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
             "During model downloads, the published Windows 0.1.12 prerelease leaves bundled "
             "Hugging Face libraries' default usage telemetry enabled. They may send usage data "
             "to Hugging Face, and model-request metadata includes a random per-process session ID. "
+            "If you prefer to avoid this possible usage telemetry, are concerned that a token or custom "
+            "route may be configured, or are unsure, wait for Windows 0.1.13 before launching 0.1.12. "
             "Dictation audio and transcripts are not sent in model downloads; exact telemetry "
             "fields are not independently itemised. An available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or token in the local Hugging Face cache may accompany a model request. The 0.1.12 loader honors inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings, which can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. These models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published. Audio is captured while the hotkey is "
             "active, transcribed locally, then discarded.",
@@ -2628,6 +2657,7 @@ def check_getting_started_preflight_order(
         "Windows 0.1.12",
         "may carry a Hugging Face token inherited by Presspeech",
         "may send telemetry or include a saved token",
+        "avoid this possible usage telemetry from Windows 0.1.12",
         "custom route can send the request and token elsewhere",
         "public models need no account token",
         "not when you download the installer",
@@ -4187,6 +4217,7 @@ def run_self_test() -> None:
                 "usage telemetry",
                 "already-configured or locally saved Hugging Face token",
                 "Custom download routing can change where the model request",
+                "avoid this possible usage telemetry",
                 "if a Hugging Face token or custom download route is configured on this PC",
                 "wait until Windows 0.1.13 is published",
                 "public models need no account token",
@@ -4209,8 +4240,8 @@ def run_self_test() -> None:
         summary_guidance.write_text(
             "Before installing or launching Windows 0.1.12, usage telemetry and an already-configured "
             "or locally saved Hugging Face token may be sent; custom download routing "
-            "can change where the model request goes. If a Hugging Face token or "
-            "custom download route is configured on this PC, wait until Windows 0.1.13 is published. "
+            "can change where the model request goes. If you prefer to avoid this possible usage telemetry, "
+            "or if a Hugging Face token or custom download route is configured on this PC, wait until Windows 0.1.13 is published. "
             "The public models need no account token; see the Windows privacy decision "
             "and technical details. Already used Windows 0.1.12? If a model download ran with "
             "a token available and an inherited HF_ENDPOINT or staging setting may have sent it to "
@@ -4221,6 +4252,19 @@ def run_self_test() -> None:
         )
         if check_windows_model_download_privacy_summary(required_summary_guidance):
             raise SyncError("self-test: complete Windows privacy decision was rejected")
+        summary_guidance.write_text(
+            "Before installing or launching Windows 0.1.12, usage telemetry and an already-configured "
+            "or locally saved Hugging Face token may be sent; custom download routing can change where "
+            "the model request goes. If a token is configured, wait until Windows 0.1.13 is published. "
+            "The public models need no account token. Windows privacy decision and technical details. "
+            "Already used Windows 0.1.12? If a model download ran with a token available and an inherited "
+            "HF_ENDPOINT or staging setting may have sent it to a destination you do not trust, treat the "
+            "token as disclosed to that destination. Revoke the token. Hugging Face Access Tokens. "
+            "Do not include token values in logs or support requests.\n",
+            encoding="utf-8",
+        )
+        if not check_windows_model_download_privacy_summary(required_summary_guidance):
+            raise SyncError("self-test: telemetry-only privacy concern was not covered")
 
         readme_install = Path(tmp) / "README.md"
         readme_install.write_text(
@@ -4341,7 +4385,8 @@ def run_self_test() -> None:
             'may send telemetry or include a saved token. A custom route can send the request '
             'and token elsewhere.</p><p>The public models need no account token. '
             'A missing-model request starts when Presspeech launches, not when you download the installer. '
-            'If unsure, wait for the fixed release; you do not need to inspect or share token values. '
+            'If you prefer to avoid this possible usage telemetry from Windows 0.1.12, or are unsure, '
+            'wait for the fixed release; you do not need to inspect or share token values. '
             'leave <strong>Launch Presspeech</strong> unchecked. '
             '<a href="#macos-model-download-privacy">macOS</a> '
             '<a href="#windows-model-download-privacy">Windows</a></p></div>'

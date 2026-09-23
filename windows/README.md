@@ -21,10 +21,15 @@ a model request. It honors inherited `HF_ENDPOINT` and
 instead of the public Hub; an available token may accompany the request there.
 If `HF_HUB_USER_AGENT_ORIGIN` is set, its value is also added to request
 metadata. These public models do not require an account token. Upcoming 0.1.13
-pins the public endpoint, clears the staging/origin settings, disables implicit
+disables Hub telemetry before import, pins the public endpoint, clears the
+staging/origin settings, disables implicit
 authentication, and explicitly sends no account token; see the
 [version-scoped
 network-call inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+If you prefer to avoid this possible usage telemetry, are concerned that a
+token or custom route may be configured, or are unsure, wait for 0.1.13 before
+launching 0.1.12. Installing the package alone does not start
+the model request; keep the app unopened if you choose to wait.
 
 Already used Windows 0.1.12? If you ran a model download with a token available
 and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
@@ -167,10 +172,13 @@ showing **Preparing speech model…** and does not open the microphone, play
 recording cues, mute playback, or claim to be listening. Release and press
 again once the preparation indicator disappears.
 Setup identifies local-cache checking, download, model loading, and warm-up as
-separate preparation phases. While files download it shows a cumulative count
-of model bytes downloaded; the total can grow as missing files are discovered,
-so it does not show a percentage or time estimate. Screen readers are notified
-of phase changes, not each changing byte count.
+separate preparation phases. While files download, Setup shows the received
+bytes and file size for the current transfer when available. This is not a
+cumulative model count: Hub transfers can be parallel, and the number and total
+size of missing files vary with the local cache. The overall model indicator
+stays indeterminate rather than implying whole-model completion; Setup does
+not estimate a percentage or remaining time. Screen readers are notified of
+phase changes, not each changing byte count.
 Before recording, open Windows microphone privacy settings and turn on
 **Microphone access**, **Let apps access your microphone**, and **Let desktop
 apps access your microphone**. On Windows 11 builds that offer individual

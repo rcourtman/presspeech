@@ -334,38 +334,59 @@ def _hotkey_readiness(app):
     return result
 
 
-def _format_downloaded_bytes(value):
-    """Format one untrusted progress count without implying a download ETA."""
+def _download_byte_count(value):
+    """Return a finite, nonnegative progress value; Hub progress is untrusted."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return ""
+        return None
     try:
         amount = float(value)
     except (OverflowError, TypeError, ValueError):
+        return None
+    if not math.isfinite(amount) or amount < 0:
+        return None
+    return amount
+
+
+def _format_byte_quantity(value):
+    """Format a byte count without implying a percentage or download ETA."""
+    amount = _download_byte_count(value)
+    if amount is None:
         return ""
-    if not math.isfinite(amount) or amount <= 0:
-        return ""
-    units = ("KiB", "MiB", "GiB", "TiB")
     if amount < 1024:
-        return "%d bytes downloaded" % int(amount)
+        integer = int(amount)
+        return "%d byte%s" % (integer, "" if integer == 1 else "s")
+    units = ("KiB", "MiB", "GiB", "TiB")
     for unit in units:
         amount /= 1024
         if amount < 1024:
-            return "%.1f %s downloaded" % (amount, unit)
-    return "%.1f TiB downloaded" % amount
+            return "%.1f %s" % (amount, unit)
+    return "%.1f TiB" % amount
+
+
+def _format_download_progress(progress):
+    """Describe the active Hub file transfer, not the whole model download."""
+    if not isinstance(progress, (tuple, list)) or len(progress) < 2:
+        return ""
+    done = _download_byte_count(progress[0])
+    if done is None or done <= 0:
+        return ""
+    done_text = _format_byte_quantity(done)
+    total = _download_byte_count(progress[1])
+    if total is not None and total > 0:
+        return " — %s of %s transferred in current file" % (
+            done_text, _format_byte_quantity(total))
+    return " — %s transferred in current file" % done_text
 
 
 def _model_loading_feedback(app):
-    """Return a truthful loading phase and cumulative download amount."""
+    """Return a truthful loading phase and per-file transfer amount."""
     detail = str(getattr(app, "model_status_detail", ""))
     if detail.startswith("Checking local model files"):
         label, phase = "Checking local model files…", "checking"
     elif detail.startswith("Downloading model files"):
         label, phase = "Downloading model files…", "downloading"
-        progress = getattr(app, "model_download_progress", None)
-        if isinstance(progress, (tuple, list)) and progress:
-            downloaded = _format_downloaded_bytes(progress[0])
-            if downloaded:
-                label += " — " + downloaded
+        label += _format_download_progress(
+            getattr(app, "model_download_progress", None))
     elif detail.startswith("Loading speech model"):
         label, phase = "Loading speech model…", "loading"
     elif detail.startswith("Warming speech model"):
@@ -1390,6 +1411,10 @@ class SetupWindow:
                 self._progress_active = False
             self.progress.config(mode="determinate", value=100 if status == "ready" else 0)
         else:
+            # Hub reports progress for individual file transfers, while the
+            # number and sizes of missing files vary with the local cache.
+            # Keep the overall model indicator indeterminate rather than
+            # showing a per-file value as whole-model completion.
             self.progress.config(mode="indeterminate")
             if not getattr(self, "_progress_active", False):
                 # A failed load stops the animation above. Retry publishes

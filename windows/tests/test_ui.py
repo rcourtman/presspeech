@@ -1133,7 +1133,7 @@ class SetupWindowTests(unittest.TestCase):
                 "Preparing speech model — downloading or loading…"),
         )
 
-    def test_setup_shows_received_bytes_without_reannouncing_each_update(self):
+    def test_setup_labels_bytes_as_current_file_progress(self):
         window = self.make_window("loading", "Downloading model files…")
         window.app.model_download_progress = (2 * 1024 * 1024, 8 * 1024 * 1024)
 
@@ -1142,8 +1142,12 @@ class SetupWindowTests(unittest.TestCase):
 
         first = mock.call(
             window.model_label,
-            "Downloading model files… — 2.0 MiB downloaded")
+            "Downloading model files… — 2.0 MiB of 8.0 MiB transferred "
+            "in current file")
         self.assertEqual(set_text.call_args_list[0], first)
+        self.assertIn(
+            mock.call(mode="indeterminate"),
+            window.progress.config.call_args_list)
 
         window.app.model_download_progress = (3 * 1024 * 1024, 8 * 1024 * 1024)
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
@@ -1153,7 +1157,8 @@ class SetupWindowTests(unittest.TestCase):
             set_text.call_args_list[0],
             mock.call(
                 window.model_label,
-                "Downloading model files… — 3.0 MiB downloaded",
+                "Downloading model files… — 3.0 MiB of 8.0 MiB transferred "
+                "in current file",
                 announce=False),
         )
 
@@ -1167,13 +1172,27 @@ class SetupWindowTests(unittest.TestCase):
             mock.call(window.model_label, "Loading speech model…"),
         )
 
-    def test_download_progress_formatter_rejects_invalid_counts(self):
-        self.assertEqual(ui._format_downloaded_bytes(0), "")
-        self.assertEqual(ui._format_downloaded_bytes(True), "")
-        self.assertEqual(ui._format_downloaded_bytes(float("nan")), "")
-        self.assertEqual(ui._format_downloaded_bytes(512), "512 bytes downloaded")
+    def test_download_progress_formatter_describes_one_file_transfer(self):
         self.assertEqual(
-            ui._format_downloaded_bytes(1024 * 1024), "1.0 MiB downloaded")
+            ui._format_download_progress((512, 1024)),
+            " — 512 bytes of 1.0 KiB transferred in current file")
+        self.assertEqual(
+            ui._format_download_progress((2 * 1024 * 1024, 8 * 1024 * 1024)),
+            " — 2.0 MiB of 8.0 MiB transferred in current file")
+        self.assertEqual(
+            ui._format_download_progress((2 * 1024 * 1024, None)),
+            " — 2.0 MiB transferred in current file")
+
+    def test_download_progress_formatter_rejects_invalid_counts(self):
+        self.assertEqual(ui._format_download_progress(None), "")
+        self.assertEqual(ui._format_download_progress((1,)), "")
+        self.assertEqual(ui._format_download_progress((0, 100)), "")
+        self.assertEqual(ui._format_download_progress((True, 100)), "")
+        self.assertEqual(
+            ui._format_download_progress((float("nan"), 100)), "")
+        self.assertEqual(
+            ui._format_download_progress((1024, float("nan"))),
+            " — 1.0 KiB transferred in current file")
 
     def test_stopped_global_hotkey_exposes_repair_and_blocks_finish(self):
         window = self.make_window("ready", "base.en on cpu")

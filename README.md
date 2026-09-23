@@ -76,9 +76,10 @@ The Hugging Face request starts when Presspeech launches to fetch a missing
 model; downloading the installer and checksum from GitHub does not make that
 request. If you install 0.1.12 but choose to wait, leave **Launch Presspeech**
 unchecked at the end of setup.
-If a Hugging Face token or custom download route is configured on this PC—or
-you are unsure—wait until Windows 0.1.13 is published. The public models need
-no account token; dictation audio and transcripts are not sent in model
+If you prefer to avoid this possible usage telemetry, are concerned that a
+Hugging Face token or custom download route may be configured on this PC, or
+are unsure, wait until Windows 0.1.13 is published. The public models need no
+account token; dictation audio and transcripts are not sent in model
 downloads. See the
 [Windows privacy decision and technical details](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
 and the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
