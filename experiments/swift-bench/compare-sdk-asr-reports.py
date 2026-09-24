@@ -52,7 +52,9 @@ OUTPUT_ROW = re.compile(
     r"empty=(true|false) characters=([0-9]+)$",
 )
 LATENCY_ROW = re.compile(
-    r"^    latency:[ \t]+p50=[ \t]*([0-9]+(?:\.[0-9]+)?) ms(?: |$)",
+    r"^    latency:[ \t]+p50=[ \t]*([0-9]+(?:\.[0-9]+)?) ms"
+    r"[ \t]+min=[ \t]*([0-9]+(?:\.[0-9]+)?) ms"
+    r"[ \t]+max=[ \t]*([0-9]+(?:\.[0-9]+)?) ms$",
 )
 CONTROL_ROW = re.compile(
     r"^Non-speech controls \(zero-byte references\): ([0-9]+); "
@@ -97,6 +99,7 @@ class ClipMetrics:
     first_failure: bool
     worst_deletion_run: int
     p50_ms: Decimal
+    max_ms: Decimal
     emitting_trials: int
 
 
@@ -122,11 +125,13 @@ def parse_clip(body: str, trials: int) -> ClipMetrics:
         emitting += empty == "false"
         receipt_shapes.add((empty, int(characters)))
 
-    latencies = [LATENCY_ROW.match(line) for line in lines
+    latencies = [LATENCY_ROW.fullmatch(line) for line in lines
                  if line.startswith("    latency:")]
     if len(latencies) != 1 or latencies[0] is None:
         raise ComparisonError("clip has incomplete latency metrics")
-    p50 = Decimal(latencies[0].group(1))
+    p50, minimum, maximum = (Decimal(value) for value in latencies[0].groups())
+    if not minimum <= p50 <= maximum:
+        raise ComparisonError("clip has inconsistent latency metrics")
 
     stable = [line for line in lines if line.startswith("    transcript:")]
     variable = [line for line in lines if line.startswith("    transcripts (")]
@@ -167,10 +172,11 @@ def parse_clip(body: str, trials: int) -> ClipMetrics:
             final_failure=any(match.group(2) == "false" for match in matches),
             first_failure=any(match.group(3) == "false" for match in matches),
             worst_deletion_run=max(int(match.group(6)) for match in matches),
-            p50_ms=p50, emitting_trials=emitting,
+            p50_ms=p50, max_ms=maximum, emitting_trials=emitting,
         )
     if all(CONTROL_SCORE.match(line) is not None for line in score_lines):
-        return ClipMetrics(0, 0, Decimal(0), False, False, 0, p50, emitting)
+        return ClipMetrics(0, 0, Decimal(0), False, False, 0,
+                           p50, maximum, emitting)
     raise ComparisonError("clip has incomplete or mixed score metrics")
 
 
@@ -393,6 +399,23 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
                     if delta == largest_slowdown)
         if largest_slowdown is not None else "none"
     )
+    # A few warm trials do not estimate a tail percentile. Keep the observed
+    # maximum as a per-clip diagnostic so an unchanged p50 or corpus maximum
+    # cannot hide an intermittent slow decode at one numbered position.
+    max_slowdowns = [
+        (right.max_ms - left.max_ms, position)
+        for position, left, right in speech_pairs
+        if right.max_ms > left.max_ms
+    ]
+    largest_max_slowdown = max((delta for delta, _ in max_slowdowns), default=None)
+    largest_max_slowdown_detail = (
+        f"{largest_max_slowdown:+.1f} ms at clip "
+        + ", ".join(f"{position:03d}" for delta, position in max_slowdowns
+                    if delta == largest_max_slowdown)
+        if largest_max_slowdown is not None else "none"
+    )
+    baseline_slowest = max(left.max_ms for _, left, _ in speech_pairs)
+    candidate_slowest = max(right.max_ms for _, _, right in speech_pairs)
     new_control_emissions = sum(right.emitting_trials > left.emitting_trials
                                 for _, left, right in control_pairs)
     resolved_control_emissions = sum(right.emitting_trials < left.emitting_trials
@@ -431,6 +454,11 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
         f"| Mean speech p50 | {baseline.average_p50_ms} ms | {candidate.average_p50_ms} ms | "
         f"{signed_delta(baseline.average_p50_ms, candidate.average_p50_ms, 1)} ms |",
         f"| Largest paired speech p50 slowdown | — | — | {largest_slowdown_detail} |",
+        f"| Slowest measured speech trial | {baseline_slowest} ms | "
+        f"{candidate_slowest} ms | "
+        f"{signed_delta(baseline_slowest, candidate_slowest, 1)} ms |",
+        f"| Largest paired speech-trial max slowdown | — | — | "
+        f"{largest_max_slowdown_detail} |",
         f"| Paired speech clips: worst-trial errors | — | — | "
         f"{worse_errors} worse; {better_errors} better |",
         f"| Paired speech clips: final word | — | — | "
@@ -441,6 +469,9 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
         f"{worse_deletion_runs} worse |",
         f"| Paired speech clips: p50 latency | — | — | "
         f"{slower} slower; {faster} faster |",
+        f"| Paired speech clips: trial maximum | — | — | "
+        f"{sum(right.max_ms > left.max_ms for _, left, right in speech_pairs)} slower; "
+        f"{sum(right.max_ms < left.max_ms for _, left, right in speech_pairs)} faster |",
     ]
     if baseline.controls is not None and candidate.controls is not None:
         rows.append(

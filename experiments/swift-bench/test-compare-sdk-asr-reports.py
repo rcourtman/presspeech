@@ -32,7 +32,8 @@ def report(*, candidate=False, digest=INPUT_DIGEST, order=ORDER_DIGEST,
            harness=HARNESS_DIGEST,
            hint="auto", trials=3,
            state="default", controls=True, scored=True, revision=None,
-           errors=None, app_pin=APP_PIN, kind="Real-Dictation"):
+           errors=None, app_pin=APP_PIN, kind="Real-Dictation",
+           latency=None, speech_max="71.0"):
     pin = revision or (CANDIDATE_PIN if candidate else APP_PIN)
     dependency = "candidate-dependency" if candidate else "production-dependency"
     if errors is None:
@@ -41,7 +42,8 @@ def report(*, candidate=False, digest=INPUT_DIGEST, order=ORDER_DIGEST,
     rounded_wer = "8.6" if errors == 3 else "5.7"
     deletion = 5 if candidate else 4
     failures = 1 if candidate else 0
-    latency = "65.0" if candidate else "60.0"
+    if latency is None:
+        latency = "65.0" if candidate else "60.0"
     clip_count = 2 if controls else 1
     speech_outputs = "".join(
         f"    output: trial={index}/{trials} empty=false characters=12\n"
@@ -97,7 +99,7 @@ def report(*, candidate=False, digest=INPUT_DIGEST, order=ORDER_DIGEST,
         f"- Clips: {clip_count}\n"
         "\n## Clip 001\n\n- Reference: <redacted path> (WER enabled)\n"
         "\n```text\n"
-        f"    latency:  p50=  {latency} ms  min=  49.0 ms  max=  71.0 ms\n"
+        f"    latency:  p50=  {latency} ms  min=  49.0 ms  max=  {speech_max} ms\n"
         f"{speech_outputs}{speech_line}```\n"
         f"{control_section}"
         "\n## Summary\n\n"
@@ -190,6 +192,51 @@ class ReportComparisonTests(unittest.TestCase):
             "Largest paired speech p50 slowdown | — | — | none",
             comparator.comparison_table(baseline, faster, 1),
         )
+
+    def test_trial_max_regression_is_visible_when_p50_is_unchanged(self):
+        baseline = comparator.parse_report(report(controls=False))
+        candidate = comparator.parse_report(report(
+            candidate=True, controls=False, latency="60.0", speech_max="140.0"))
+        comparator.validate_pair(baseline, candidate)
+        table = comparator.comparison_table(baseline, candidate, 1)
+        self.assertIn("Mean speech p50 | 60.0 ms | 60.0 ms | +0.0 ms", table)
+        self.assertIn("Slowest measured speech trial | 71.0 ms | 140.0 ms | +69.0 ms", table)
+        self.assertIn(
+            "Largest paired speech-trial max slowdown | — | — | +69.0 ms at clip 001",
+            table,
+        )
+        self.assertIn("Paired speech clips: trial maximum | — | — | 1 slower; 0 faster", table)
+        self.assertNotIn(SECRET, table)
+
+    def test_paired_trial_max_exposes_regression_hidden_by_corpus_max(self):
+        baseline = comparator.parse_report(report(controls=False))
+        candidate = comparator.parse_report(report(candidate=True, controls=False))
+        baseline = replace(baseline, clips=2, clip_metrics=(
+            replace(baseline.clip_metrics[0], max_ms=Decimal("100.0")),
+            replace(baseline.clip_metrics[0], max_ms=Decimal("200.0")),
+        ))
+        candidate = replace(candidate, clips=2, clip_metrics=(
+            replace(candidate.clip_metrics[0], max_ms=Decimal("150.0")),
+            replace(candidate.clip_metrics[0], max_ms=Decimal("200.0")),
+        ))
+        table = comparator.comparison_table(baseline, candidate, 1)
+        self.assertIn("Slowest measured speech trial | 200.0 ms | 200.0 ms | +0.0 ms", table)
+        self.assertIn(
+            "Largest paired speech-trial max slowdown | — | — | +50.0 ms at clip 001",
+            table,
+        )
+
+    def test_latency_receipt_requires_complete_ordered_bounds(self):
+        source = report(controls=False)
+        original = "min=  49.0 ms  max=  71.0 ms"
+        for replacement, reason in (
+                ("min=  49.0 ms", "incomplete latency metrics"),
+                ("min=  80.0 ms  max=  90.0 ms", "inconsistent latency metrics"),
+                ("min=  49.0 ms  max=  50.0 ms", "inconsistent latency metrics"),
+                ("min=  49.0 ms  max=  71.0 ms extra", "incomplete latency metrics")):
+            with self.subTest(replacement=replacement):
+                with self.assertRaisesRegex(comparator.ComparisonError, reason):
+                    comparator.parse_report(source.replace(original, replacement, 1))
 
     def test_stable_transcript_requires_identical_trial_receipts(self):
         source = report()

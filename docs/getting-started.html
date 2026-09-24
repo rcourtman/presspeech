@@ -154,7 +154,8 @@
                 </li>
                 <li>
                   <strong>Grant the three permissions</strong>
-                  <p>Use its buttons for Microphone, Accessibility (called <strong>Device Control and Data Access</strong> on macOS 27 and later), and Input Monitoring. Accessibility is a broad system-control grant: Apple advises granting it only to apps you trust. Presspeech uses it to check the focused destination and send the paste shortcut; without it, the normal verified paste path is unavailable. See <a href="install.html#permissions">the permission scope and Apple’s guidance</a> before deciding.</p>
+                  <p>Use its buttons for Microphone, Accessibility (called <strong>Device Control and Data Access</strong> on macOS 27 and later), and Input Monitoring. Accessibility is a broad system-control grant: Apple advises granting it only to apps you trust. Presspeech uses it to check the focused destination and send the paste shortcut; without it, the normal verified paste path is unavailable.</p>
+                  <p><strong>Before granting Input Monitoring:</strong> macOS's grant can expose typed keys across apps. Presspeech uses keyboard events to detect the configured hotkey and Escape to cancel recording; it passes other keys through without saving, logging, or sending their values. Read <a href="https://support.apple.com/guide/mac-help/mchl4cedafb6/mac">Apple's Input Monitoring guidance</a> and <a href="install.html#permissions">the full permission scope</a> before deciding.</p>
                 </li>
                 <li>
                   <strong>Confirm the hotkey</strong>

@@ -159,10 +159,14 @@ attest identical hardware, thermal load, model-cache bytes, or reference
 quality. The comparator refuses a supposedly stable transcript whose trial
 receipts disagree on empty status or character count; it also shows the
 largest paired speech-clip p50 slowdown, since a mean can conceal one slow
-clip. This is model-inference p50, not release-to-paste latency, and the
-slowdown is an observation rather than a significance test. Latency deltas need
-same-machine, comparable-load measurement, and the app still needs native
-qualification. Run the parser's model-free tests
+clip. It now requires the runner's complete min/p50/max latency line and also
+shows the slowest measured speech trial and largest paired per-clip trial-maximum
+slowdown. An unchanged p50 can conceal an intermittent slow trial, but a maximum
+from a few runs is noisy and is **not** a p95, a release threshold, or a
+tail-latency guarantee. These are model-inference times, not release-to-paste
+latency, and a slowdown is an observation rather than a significance test.
+Latency deltas need same-machine, comparable-load measurement, and the app
+still needs native qualification. Run the parser's model-free tests
 with `python3 ./test-compare-sdk-asr-reports.py`.
 
 `Package.resolved` is committed for the benchmark for the same reason as the
