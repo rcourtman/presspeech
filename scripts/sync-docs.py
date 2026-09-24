@@ -779,7 +779,7 @@ DELIVERY_BOUNDARY_GUIDANCE = {
         "manual paste",
     ),
     DOCS / "index.html": ("cannot safely verify the destination", "manual paste"),
-    DOCS / "getting-started.html": ("If Presspeech did not paste", "Windows 0.1.12", "clipboard for manual paste"),
+    DOCS / "getting-started.html": ("If Presspeech did not paste", "Windows 0.1.12", "only if it still holds the complete transcript"),
     DOCS / "install.html": ("cannot verify that destination", "clipboard"),
     DOCS / "windows.html": ("cannot verify that destination", "clipboard"),
     DOCS / "faq.html": ("cannot verify that destination", "clipboard"),
@@ -798,7 +798,7 @@ WINDOWS_DELIVERY_RECOVERY_GUIDANCE = {
     ROOT / "README.md": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "windows.html": ("Published 0.1.12", "Upcoming 0.1.13", "Delivery Recovery"),
     DOCS / "faq.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
-    DOCS / "getting-started.html": ("Windows 0.1.12", "Transcript copied, not pasted", "clipboard for manual paste"),
+    DOCS / "getting-started.html": ("Windows 0.1.12", "Transcript copied, not pasted", "only if it still holds the complete transcript"),
     DOCS / "privacy.html": ("Published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "llms.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "llms-full.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
@@ -817,6 +817,32 @@ WINDOWS_DELIVERY_UNSCOPED_CLAIMS = (
     "otherwise it leaves the transcript on the clipboard for manual paste",
     "if delivery succeeded or presspeech showed its copied/manual-paste notice, paste",
 )
+
+# A copied notice describes clipboard state at completion, not at a later
+# manual paste. Keep this warning in the actionable section on each first-use
+# and recovery surface; a matching phrase elsewhere on the page is not enough.
+COPY_NOTICE_FRESHNESS_GUIDANCE = {
+    DOCS / "getting-started.html": (
+        '<section id="first-app">', '</section>',
+        ("copied at completion", "later copy can replace", "only if it still holds the complete transcript", "Copy Last Transcript"),
+    ),
+    DOCS / "troubleshooting.html": (
+        'id="windows-paste"', '</article>',
+        ("copied at completion", "later copy can replace", "only if the clipboard still holds the complete transcript", "do not paste the newer item"),
+    ),
+    DOCS / "troubleshooting.md": (
+        "### Try Dictation Works But Text Is Not Inserted", "\n### Playback",
+        ("copied at completion", "later copy can", "only if the clipboard still holds the complete transcript", "do not paste the newer item"),
+    ),
+    DOCS / "llms.txt": (
+        "- Delivery fallback:", "\n- Command-shell safety:",
+        ("copied at completion", "later clipboard changes", "only if the clipboard still holds the complete transcript", "never paste a newer clipboard item"),
+    ),
+    DOCS / "llms-full.txt": (
+        "## Usage", "Do not describe direct",
+        ("copied at completion", "later clipboard changes", "only if the clipboard still holds the complete transcript", "never paste a newer clipboard item"),
+    ),
+}
 
 # Keep the large macOS model transfer's consent behavior explicit by release.
 # Discovery pages describe the linked 0.3.8 first run and point to the full
@@ -3601,6 +3627,32 @@ def check_delivery_boundary_guidance(
     return errors
 
 
+def check_copy_notice_freshness_guidance(
+    surfaces: dict[Path, tuple[str, str, tuple[str, ...]]] = COPY_NOTICE_FRESHNESS_GUIDANCE,
+) -> list[str]:
+    """Require point-in-time copy notices and conditional paste in recovery steps."""
+    errors: list[str] = []
+    for path, (start_marker, end_marker, required) in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing copy-notice recovery guidance")
+            continue
+        contents = read_text(path)
+        start = contents.find(start_marker)
+        end = contents.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+        if start < 0 or end < 0:
+            errors.append(f"{display}: missing copy-notice recovery section")
+            continue
+        section = " ".join(contents[start:end].split()).casefold()
+        missing = [phrase for phrase in required if phrase.casefold() not in section]
+        if missing:
+            errors.append(
+                f"{display}: copied-notice recovery must check clipboard freshness — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
 def check_windows_delivery_recovery_guidance(
     surfaces: dict[Path, tuple[str, ...]] = WINDOWS_DELIVERY_RECOVERY_GUIDANCE,
 ) -> list[str]:
@@ -5864,6 +5916,29 @@ def run_self_test() -> None:
         if check_delivery_boundary_guidance(required_delivery_guidance):
             raise SyncError("self-test: complete delivery boundary was rejected")
 
+        copy_notice = Path(tmp) / "copy-notice.html"
+        required_copy_notice = {
+            copy_notice: (
+                '<section id="recovery">', '</section>',
+                ("copied at completion", "later copy can replace", "only if the clipboard still holds"),
+            ),
+        }
+        copy_notice.write_text(
+            '<section id="recovery">Copied — press Control-V to paste.</section>'
+            '<section>It was copied at completion; a later copy can replace it. '
+            'Paste only if the clipboard still holds the transcript.</section>',
+            encoding="utf-8",
+        )
+        if not check_copy_notice_freshness_guidance(required_copy_notice):
+            raise SyncError("self-test: guidance outside the recovery section was accepted")
+        copy_notice.write_text(
+            '<section id="recovery">It was copied at completion; a later copy can replace it. '
+            'Paste only if the clipboard still holds the transcript.</section>',
+            encoding="utf-8",
+        )
+        if check_copy_notice_freshness_guidance(required_copy_notice):
+            raise SyncError("self-test: conditional copy recovery was rejected")
+
         recovery_page = Path(tmp) / "recovery.html"
         scoped_recovery = {
             recovery_page: (
@@ -6300,6 +6375,7 @@ def main() -> int:
             errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_agent_brief_preflight_order())
             errors.extend(check_delivery_boundary_guidance())
+            errors.extend(check_copy_notice_freshness_guidance())
             errors.extend(check_windows_delivery_recovery_guidance())
             errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_compatibility_worksheet_contract())
@@ -6365,6 +6441,7 @@ def main() -> int:
         errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_agent_brief_preflight_order())
         errors.extend(check_delivery_boundary_guidance())
+        errors.extend(check_copy_notice_freshness_guidance())
         errors.extend(check_windows_delivery_recovery_guidance())
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_compatibility_worksheet_contract())

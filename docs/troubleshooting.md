@@ -218,8 +218,11 @@ modifier or F-key and retry in **Try Dictation**.
 Click the destination text field before pressing the hotkey and keep that window
 focused until transcription finishes. In published Windows 0.1.12, if the
 notification says **Transcript copied, not pasted**, the finished transcript
-is already on the clipboard.
-Return to the intended field and press **Ctrl+V** instead of dictating it again.
+was copied at completion. Check the intended field first, then press **Ctrl+V**
+only if the clipboard still holds the complete transcript. A later copy can
+replace it without changing the notice. If unsure, check it in a blank,
+disposable text field before pasting into the intended field. If it has changed,
+do not paste the newer item as your dictation.
 This fallback is used when focus changed, the original window could not be
 identified, or the target runs as administrator. Reopen an elevated target
 normally when possible; do not run Presspeech as administrator as a workaround.

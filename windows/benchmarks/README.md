@@ -139,6 +139,38 @@ reproduced a short utterance decoding to an empty string after appending
 Transformers loader or Windows capture path, so it is a risk to test rather
 than evidence that Presspeech has the same defect.
 
+To replay the **same public source and 1.0–3.2 s crop** through Presspeech's
+Windows benchmark, use the source virtual environment:
+
+```bat
+cd windows
+.venv\Scripts\python prepare_public_tail_fixture.py
+```
+
+The preparer fetches the audio from a fixed Hugging Face `speech-to-speech`
+commit, checks its SHA-256 and size, downmixes and resamples it with the app's
+SoXR-HQ policy, then writes a 16 kHz float WAV and manifest under the ignored
+`benchmarks\public-parakeet-tail\` directory. It will not overwrite an
+existing fixture. The upstream NeMo example used SciPy resampling, so this is
+not a byte-identical replay of its waveform; it tests the pinned Presspeech
+input path instead. The source repo's [license](https://github.com/huggingface/speech-to-speech/blob/main/LICENSE)
+is Apache-2.0. The script does not commit, distribute, or upload audio.
+
+**Listen to the generated clip** and enter its exact words in
+`manifest.json`, then set `reference_reviewed` to `true`. The upstream
+recognizer's quoted output is not a ground-truth reference. Until review, the
+runner refuses the paired probe. Then run:
+
+```bat
+.venv\Scripts\python benchmark.py --manifest benchmarks\public-parakeet-tail\manifest.json --model parakeet-tdt-0.6b-v3 --runs 5 --parakeet-tail-silence-ms 400 --output benchmarks\public-parakeet-tail-result.json
+```
+
+Inspect paired blank transitions, word errors, final-word losses, and signed
+latency deltas, not just a single transcript. A result from one public voice
+and synthetic zero tail cannot qualify an automatic trim/retry policy: also
+test multiple native captured short and quiet utterances, reviewed silence
+controls, and the actual Windows release-to-paste timing.
+
 Build a small, private manifest of short speech clips cropped at the spoken
 endpoint, with listened-to references and `reference_reviewed: true`; include
 short commands and quiet speech. At 400 ms, keep original clips at or below
