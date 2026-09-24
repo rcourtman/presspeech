@@ -1655,11 +1655,14 @@ clipboard.
   transcribing. If the update window is closed instead, its temporary verified
   installer must be removed. Record this as native update/recovery behavior,
   not as proof that an accepted paste reached the original field.
-- Force `SendInput` to return zero for modifier-down, V-down, V-up and
-  modifier-up separately, and inject an exception after an event may have
-  reached Windows. Every case must retain recovery and run applicable release
-  attempts; review the field before retrying. A fully accepted shortcut is not
-  evidence of target consumption.
+- In a controlled candidate build, force the one-batch `SendInput` call to
+  report zero accepted events, then a nonzero incomplete count for the local
+  Ctrl-down, V-down, V-up, Ctrl-up chord. Every case must retain recovery.
+  Zero must cause no cleanup key-up; a partial count must still attempt
+  conservative key-up cleanup. Also inject an exception after submission may
+  have begun: with no accepted count, best-effort release may include every
+  chord key. Review the field before retrying. A fully accepted shortcut is
+  not evidence of target consumption.
 - Repeat ordinary local, elevated-window, RDP and Moonlight dictation checks.
   For the keyboard-layout row, compare US with a layout that moves V to a
   different physical key (for example US Dvorak). In a blank local editor,

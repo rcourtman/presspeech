@@ -6440,6 +6440,30 @@ func clipboardOnlyOutcomeAfterOwnedWrite(
     clipboardStillOwned() ? .copiedWithoutPasting : .clipboardChanged
 }
 
+private enum ClipboardPasteStart: Equatable {
+    case targetFocused(sourceChangeCount: Int)
+    case copyOnly(sourceChangeCount: Int)
+    case clipboardChanged
+}
+
+/// AX focus queries can wait on another process. Keep the clipboard generation
+/// from before that wait, so a copy made during it is not replaced by either
+/// the normal paste path or its copy-only recovery path.
+@MainActor
+private func clipboardPasteStart(
+    on pb: NSPasteboard,
+    targetStillFocused: () -> Bool
+) -> ClipboardPasteStart {
+    let sourceChangeCount = pb.changeCount
+    let focused = targetStillFocused()
+    guard pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                             expected: sourceChangeCount) else {
+        return .clipboardChanged
+    }
+    return focused ? .targetFocused(sourceChangeCount: sourceChangeCount)
+                   : .copyOnly(sourceChangeCount: sourceChangeCount)
+}
+
 @MainActor
 private enum ClipboardPasteInserter {
     private static let virtualKeyCommand: CGKeyCode = 0x37  // left Command
@@ -7046,19 +7070,34 @@ private enum ClipboardPasteInserter {
     static func insert(_ text: String,
                        preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
-        guard dictationPasteTargetStillFocused(expectedTarget) else {
-            return TextInserter.copyWithoutPasting(
-                text,
-                preserveClipboard: preserveClipboard
-            )
+        let pb = NSPasteboard.general
+        let sourceChangeCount: Int
+        switch clipboardPasteStart(on: pb, targetStillFocused: {
+            dictationPasteTargetStillFocused(expectedTarget)
+        }) {
+        case .targetFocused(let count):
+            sourceChangeCount = count
+        case .copyOnly(let count):
+            return copyWithoutPasting(text, to: pb,
+                                      preserveClipboard: preserveClipboard,
+                                      expectedSourceChangeCount: count)
+        case .clipboardChanged:
+            log("clipboard changed during initial paste-target check; insertion stopped")
+            return .clipboardChanged
         }
 
-        let pb = NSPasteboard.general
         let context: ReplacementContext
         switch prepareReplacement(on: pb, preserveClipboard: preserveClipboard) {
         case .ready(let prepared):
             context = prepared
         case .clipboardChanged:
+            return .clipboardChanged
+        }
+        // Optional preservation may read a lazy provider. Even when it is off,
+        // do not replace a copy made since the initial AX focus check.
+        guard pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                                 expected: sourceChangeCount) else {
+            log("clipboard changed before transcript write; insertion stopped")
             return .clipboardChanged
         }
 
@@ -19364,6 +19403,49 @@ private enum PresspeechSelfTest {
                    "an unchanged clipboard may receive a deliberate recovery copy")
         try expect(guardedUnicodeRecoveryCopy.recovered, equals: "recovery fixture",
                    "the guarded recovery copy should retain the complete transcript")
+        let initialFocusClipboardProbe = MainActor.assumeIsolated {
+            let pb = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.initial-focus-clipboard.\(UUID().uuidString)"
+            ))
+            defer { pb.releaseGlobally() }
+            _ = ClipboardPasteInserter.write("original fixture", to: pb)
+            let originalCount = pb.changeCount
+            let focused = clipboardPasteStart(on: pb, targetStillFocused: { true })
+            let copyOnly = clipboardPasteStart(on: pb, targetStillFocused: { false })
+            var changedDuringLookup: [ClipboardPasteStart] = []
+            for focusRemained in [true, false] {
+                let result = clipboardPasteStart(on: pb, targetStillFocused: {
+                    // Model a copy while the synchronous AX query waits on
+                    // another process, for both the paste and recovery routes.
+                    pb.clearContents()
+                    _ = pb.setString("newer fixture", forType: .string)
+                    return focusRemained
+                })
+                changedDuringLookup.append(result)
+            }
+            let staleRecovery = ClipboardPasteInserter.copyWithoutPasting(
+                "dictation fixture", to: pb,
+                expectedSourceChangeCount: originalCount
+            )
+            return (originalCount: originalCount,
+                    focused: focused, copyOnly: copyOnly,
+                    changedDuringLookup: changedDuringLookup,
+                    staleRecovery: staleRecovery,
+                    remaining: pb.string(forType: .string))
+        }
+        try expect(initialFocusClipboardProbe.focused,
+                   equals: .targetFocused(sourceChangeCount: initialFocusClipboardProbe.originalCount),
+                   "an unchanged clipboard should allow the focused paste route")
+        try expect(initialFocusClipboardProbe.copyOnly,
+                   equals: .copyOnly(sourceChangeCount: initialFocusClipboardProbe.originalCount),
+                   "an unchanged clipboard should allow guarded copy-only recovery")
+        try expect(initialFocusClipboardProbe.changedDuringLookup,
+                   equals: [.clipboardChanged, .clipboardChanged],
+                   "a copy during AX lookup must block both paste and copy-only recovery")
+        try expect(initialFocusClipboardProbe.staleRecovery, equals: .clipboardChanged,
+                   "copy-only recovery must not replace a later clipboard owner")
+        try expect(initialFocusClipboardProbe.remaining, equals: "newer fixture",
+                   "the newer clipboard item must survive a refused recovery copy")
         try expect(
             clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
             equals: [

@@ -3027,6 +3027,7 @@ class PresspeechApp:
                 keyboard_delivery.VK_LSHIFT,
             ))
         failure = None
+        cleanup_required = True
 
         def before_submit():
             # Controller setup and the physical-key scan can outlast the
@@ -3055,13 +3056,17 @@ class PresspeechApp:
             failure = "modifier-held"
         except keyboard_delivery.ModifierStateError:
             failure = "modifier-state-unavailable"
+        except keyboard_delivery.KeyboardDeliveryError as exc:
+            failure = "shortcut-uncertain"
+            cleanup_required = exc.cleanup_required
         except Exception:
             failure = "shortcut-uncertain"
         finally:
-            if failure == "shortcut-uncertain" and keyboard is not None:
-                # A short SendInput result can mean a prefix was inserted.
-                # Release every possible down key without assuming how much of
-                # the batch Windows accepted. Retrying cleanup is best effort.
+            if (failure == "shortcut-uncertain" and keyboard is not None
+                    and cleanup_required):
+                # Zero accepted events or failure before submission need no
+                # injected key-ups. For nonzero partial/unknown results, do
+                # not assume which keys remain down: release all candidates.
                 for key in (keyboard_delivery.VK_V, *reversed(modifiers)):
                     try:
                         keyboard.release(key)

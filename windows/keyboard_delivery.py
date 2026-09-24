@@ -37,6 +37,13 @@ _MAPVK_VK_TO_VSC = 0
 class KeyboardDeliveryError(OSError):
     """Windows did not confirm that a requested keyboard event was inserted."""
 
+    def __init__(self, message, *, cleanup_required=True):
+        # Zero accepted events or a failure before submission needs no key-up
+        # cleanup. A nonzero partial count or native-call exception remains
+        # uncertain and requires conservative best-effort cleanup.
+        self.cleanup_required = cleanup_required
+        super().__init__(message)
+
 
 class ModifierHeldError(KeyboardDeliveryError):
     """A held paste key would change the intended shortcut."""
@@ -205,16 +212,24 @@ class Controller:
                     # failure codes for a more accurate recovery notice.
                     reason = "clipboard-changed" if result is False else result
                     raise PreSubmitCheckError(reason) from None
-            inserted = int(self._api.SendInput(
-                len(inputs), inputs, ctypes.sizeof(_INPUT)))
         except (ModifierHeldError, ModifierStateError, PreSubmitCheckError):
             raise
         except Exception:
             raise KeyboardDeliveryError(
+                "Windows did not accept the keyboard event",
+                cleanup_required=False) from None
+        try:
+            inserted = int(self._api.SendInput(
+                len(inputs), inputs, ctypes.sizeof(_INPUT)))
+        except Exception:
+            # A native-call exception gives no accepted count. The caller may
+            # need best-effort release of every possibly submitted key.
+            raise KeyboardDeliveryError(
                 "Windows did not accept the keyboard event") from None
         if inserted != len(inputs):
             raise KeyboardDeliveryError(
-                "Windows did not accept the keyboard event")
+                "Windows did not accept the keyboard event",
+                cleanup_required=inserted != 0)
 
     def press(self, virtual_key):
         self._send(((virtual_key, 0),))

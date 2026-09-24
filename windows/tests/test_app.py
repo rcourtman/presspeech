@@ -5130,6 +5130,69 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertFalse(self.instance._injecting_keys)
         self.assert_retained_without_content_logs()
 
+    def test_rejected_batch_skips_cleanup_but_partial_batch_keeps_it(self):
+        # SendInput reports an accepted count. A zero result must not send
+        # key-ups that could disturb newly held user keys; nonzero partial
+        # results still need conservative release of every possible down key.
+        for accepted, expected in (
+                (0, ()),
+                (1, (app.keyboard_delivery.VK_V,
+                     app.keyboard_delivery.VK_LCONTROL)),
+                (2, (app.keyboard_delivery.VK_V,
+                     app.keyboard_delivery.VK_LCONTROL)),
+                (3, (app.keyboard_delivery.VK_V,
+                     app.keyboard_delivery.VK_LCONTROL))):
+            with self.subTest(accepted=accepted):
+                self.instance._undelivered_dictations.clear()
+                api = mock.Mock()
+                api.MapVirtualKeyW.return_value = 0x1D
+                api.GetAsyncKeyState.return_value = 0
+                api.SendInput.side_effect = [accepted, *([1] * len(expected))]
+                keyboard = self.checked_controller(api=api)
+                self.controller.return_value = keyboard
+                with mock.patch.object(
+                        keyboard, "release", wraps=keyboard.release) as release:
+                    self.assertFalse(self.paste())
+                self.assertEqual(
+                    release.call_args_list,
+                    [mock.call(key) for key in expected])
+                self.assertEqual(api.SendInput.call_count, 1 + len(expected))
+                self.assertFalse(self.instance._injecting_keys)
+                self.assert_retained_without_content_logs()
+
+    def test_shortcut_preparation_failure_does_not_inject_cleanup(self):
+        api = mock.Mock()
+        api.MapVirtualKeyW.side_effect = OSError("private mapping detail")
+        api.GetAsyncKeyState.return_value = 0
+        keyboard = self.checked_controller(api=api)
+        self.controller.return_value = keyboard
+
+        with mock.patch.object(keyboard, "release", wraps=keyboard.release) as release:
+            self.assertFalse(self.paste())
+
+        release.assert_not_called()
+        api.SendInput.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.assertNotIn("private mapping detail", str(self.instance.notify.mock_calls))
+
+    def test_native_shortcut_exception_keeps_best_effort_cleanup(self):
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+        api.SendInput.side_effect = [OSError("private native detail"), 1, 1]
+        keyboard = self.checked_controller(api=api)
+        self.controller.return_value = keyboard
+
+        with mock.patch.object(keyboard, "release", wraps=keyboard.release) as release:
+            self.assertFalse(self.paste())
+
+        self.assertEqual(release.call_args_list, [
+            mock.call(app.keyboard_delivery.VK_V),
+            mock.call(app.keyboard_delivery.VK_LCONTROL),
+        ])
+        self.assert_retained_without_content_logs()
+        self.assertNotIn("private native detail", str(self.instance.notify.mock_calls))
+
     def test_failed_cleanup_release_is_retried_and_modifiers_released(self):
         self.keyboard.shortcut.side_effect = RuntimeError("uncertain")
         self.keyboard.release.side_effect = [RuntimeError("uncertain"), None, None]

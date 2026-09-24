@@ -197,12 +197,36 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
 
     def test_partial_shortcut_batch_is_reported_as_uncertain(self):
         api = self.backend(inserted=2)
-        with self.assertRaises(delivery.KeyboardDeliveryError):
+        with self.assertRaises(delivery.KeyboardDeliveryError) as raised:
             delivery.Controller(api=api).shortcut(
                 [delivery.VK_LCONTROL], delivery.VK_V)
 
         api.SendInput.assert_called_once()
         self.assertEqual(len(self.events), 4)
+        self.assertTrue(raised.exception.cleanup_required)
+
+    def test_nonzero_partial_counts_keep_conservative_cleanup(self):
+        modifiers = (delivery.VK_LCONTROL, delivery.VK_LMENU,
+                     delivery.VK_LSHIFT)
+        for accepted in range(1, 8):
+            with self.subTest(accepted=accepted):
+                api = self.backend(inserted=accepted)
+                with self.assertRaises(delivery.KeyboardDeliveryError) as raised:
+                    delivery.Controller(api=api).shortcut(modifiers, delivery.VK_V)
+                self.assertTrue(raised.exception.cleanup_required)
+                api.SendInput.assert_called_once()
+
+    def test_failure_before_submission_requires_no_key_up_cleanup(self):
+        api = self.backend()
+        api.MapVirtualKeyW.side_effect = OSError("private mapping detail")
+
+        with self.assertRaises(delivery.KeyboardDeliveryError) as raised:
+            delivery.Controller(api=api).shortcut(
+                [delivery.VK_LCONTROL], delivery.VK_V)
+
+        self.assertFalse(raised.exception.cleanup_required)
+        self.assertNotIn("private", str(raised.exception))
+        api.SendInput.assert_not_called()
 
     def test_shortcut_rejects_ambiguous_key_sets_before_native_calls(self):
         for modifiers, key in (([], delivery.VK_V),
@@ -218,9 +242,10 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
 
     def test_unaccepted_event_is_reported_as_uncertain_delivery(self):
         api = self.backend(inserted=0)
-        with self.assertRaises(delivery.KeyboardDeliveryError):
+        with self.assertRaises(delivery.KeyboardDeliveryError) as raised:
             delivery.Controller(api=api).press(delivery.VK_LCONTROL)
         self.assertEqual(len(self.events), 1)
+        self.assertFalse(raised.exception.cleanup_required)
 
     def test_native_exception_is_redacted_to_a_content_free_error(self):
         api = self.backend()
@@ -231,6 +256,7 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
 
         self.assertNotIn("sensitive", str(raised.exception))
         self.assertIsNone(raised.exception.__cause__)
+        self.assertTrue(raised.exception.cleanup_required)
 
     def test_invalid_virtual_keys_are_rejected_before_native_calls(self):
         for virtual_key in (None, False, True, 0, 0xFF, -1, "V"):

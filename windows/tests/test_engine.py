@@ -279,6 +279,47 @@ class ParakeetConfigurationTests(unittest.TestCase):
                 sample_rate=10,
             )
 
+    def test_parakeet_overlap_rejects_out_of_order_timestamps(self):
+        window = engine._ParakeetWindow(
+            audio_start=0, audio_end=100, owned_start=0, owned_end=10)
+        # Without an order check the time crop silently returns "alpha gamma"
+        # even though "beta" occurs between them in the decoded text.
+        records = [
+            {"token": "alpha", "start": 0.1, "end": 0.2},
+            {"token": " beta", "start": 2.0, "end": 2.1},
+            {"token": " gamma", "start": 0.3, "end": 0.4},
+        ]
+        with self.assertRaisesRegex(RuntimeError, "out-of-order"):
+            engine._owned_parakeet_text(
+                "alpha beta gamma", [records], window, sample_rate=10)
+
+    def test_parakeet_overlap_allows_tokens_on_the_same_frame(self):
+        window = engine._ParakeetWindow(
+            audio_start=0, audio_end=100, owned_start=0, owned_end=10)
+        records = [
+            {"token": "alpha", "start": 0.1, "end": 0.2},
+            {"token": ".", "start": 0.15, "end": 0.15},
+        ]
+        self.assertEqual(
+            engine._owned_parakeet_text(
+                "alpha.", [records], window, sample_rate=10),
+            ("alpha.", False),
+        )
+
+    def test_parakeet_overlap_rejects_noncontiguous_selection_at_seam(self):
+        window = engine._ParakeetWindow(
+            audio_start=0, audio_end=100, owned_start=0, owned_end=10)
+        # Sub-nanosecond timestamp jitter is tolerated as equal order, but
+        # must not allow a token skipped at the seam to be silently spliced.
+        records = [
+            {"token": "alpha", "start": 0.5, "end": 0.5},
+            {"token": " beta", "start": 1.0000000002, "end": 1.0000000002},
+            {"token": " gamma", "start": 0.9999999998, "end": 0.9999999998},
+        ]
+        with self.assertRaisesRegex(RuntimeError, "out-of-order"):
+            engine._owned_parakeet_text(
+                "alpha beta gamma", [records], window, sample_rate=10)
+
     def test_parakeet_long_transcription_aggregates_bounded_chunk_work(self):
         transcriber = engine.Transcriber()
         audio = list(range(8))

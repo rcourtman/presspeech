@@ -311,6 +311,7 @@ def _owned_parakeet_text(decoded, timestamps, window,
     owned_start = (window.owned_start - window.audio_start) / sample_rate
     owned_end = (window.owned_end - window.audio_start) / sample_rate
     selected_indexes = []
+    previous_midpoint = None
     for index, record in enumerate(records):
         if not isinstance(record, dict) or not isinstance(record.get("token"), str):
             raise RuntimeError("Parakeet returned malformed token timestamps")
@@ -323,12 +324,27 @@ def _owned_parakeet_text(decoded, timestamps, window,
                 or start < 0 or end < start):
             raise RuntimeError("Parakeet returned malformed token timestamps")
         midpoint = (float(start) + float(end)) / 2
+        # Text is decoded in token order. If timestamps run backwards, the
+        # ownership filter can select non-contiguous tokens and silently drop
+        # words between them. Reject that output rather than splice a damaged
+        # transcript at the long-dictation seam. Equal times are valid for
+        # zero-duration punctuation and tokens emitted on the same frame.
+        # Independently rounded start/end values can differ by a few ULPs
+        # even when tokens occupy the same frame.
+        if (previous_midpoint is not None
+                and midpoint < previous_midpoint - 1e-9):
+            raise RuntimeError("Parakeet returned out-of-order token timestamps")
+        previous_midpoint = midpoint
         # A token exactly on a seam belongs to the earlier range. This makes
         # adjacent ownership deterministic even for zero-duration punctuation.
         after_start = (midpoint >= owned_start if window.owned_start == 0
                        else midpoint > owned_start)
         if after_start and midpoint <= owned_end:
             selected_indexes.append(index)
+
+    if (selected_indexes and
+            selected_indexes[-1] - selected_indexes[0] + 1 != len(selected_indexes)):
+        raise RuntimeError("Parakeet returned out-of-order token timestamps")
 
     text_parts = _parakeet_timestamp_text_parts(decoded, records)
 
