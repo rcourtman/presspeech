@@ -975,11 +975,49 @@ class InputSelectionTests(unittest.TestCase):
                 80, None, None)
             return stream
 
-        with mock.patch.object(app.sd, "InputStream", side_effect=input_stream):
+        with mock.patch.object(app.sd, "InputStream", side_effect=input_stream), \
+                mock.patch.object(app.time, "sleep") as sleep:
             level = app.PresspeechApp._probe_input_level(
                 3, 16000, listen_for=0)
 
         self.assertAlmostEqual(level, 0.02, places=5)
+        sleep.assert_not_called()
+
+    def test_explicit_check_keeps_listening_after_early_input_level(self):
+        stream = mock.Mock()
+        listening = mock.Mock()
+        callback = {}
+
+        def input_stream(**kwargs):
+            callback["audio"] = kwargs["callback"]
+            # The first buffer already exceeds the readiness threshold.
+            stream.start.side_effect = lambda: callback["audio"](
+                app.np.full((80, 1), 0.01, dtype="float32"),
+                80, None, None)
+            return stream
+
+        def during_listening(seconds):
+            self.assertEqual(seconds, app.MICROPHONE_CHECK_LISTEN_SEC)
+            listening.assert_called_once_with()
+            stream.stop.assert_not_called()
+            # Speech after the status is announced still contributes to the
+            # result instead of the first buffer ending the check.
+            callback["audio"](
+                app.np.full((80, 1), 0.02, dtype="float32"),
+                80, None, None)
+
+        with mock.patch.object(app.AUDIO_BACKEND, "open_input_stream",
+                               side_effect=input_stream), \
+                mock.patch.object(app.time, "sleep",
+                                  side_effect=during_listening) as sleep:
+            level = app.PresspeechApp._probe_input_level(
+                3, 16000, listen_for=app.MICROPHONE_CHECK_LISTEN_SEC,
+                on_listening=listening)
+
+        sleep.assert_called_once_with(app.MICROPHONE_CHECK_LISTEN_SEC)
+        self.assertAlmostEqual(level, 0.02, places=5)
+        stream.stop.assert_called_once_with()
+        stream.close.assert_called_once_with()
 
     def test_setup_probe_invites_speech_only_after_first_audio_buffer(self):
         stream = mock.Mock()

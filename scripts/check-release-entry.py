@@ -29,7 +29,10 @@ VERSION = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")
 LEAD_CHARACTERS = 1800
 ROOT = Path(__file__).resolve().parents[1]
 KNOWN_RISKS = {
-    ("macos", "0.3.8"): ("hugging face token", "wait", "proxy", "universal clipboard"),
+    ("macos", "0.3.8"): (
+        "hugging face token", "wait", "proxy", "malformed", "https_proxy",
+        "http_proxy", "proxy credentials", "ignore it", "universal clipboard",
+    ),
     ("macos", "0.3.9"): ("token", "proxy"),
     ("windows", "0.1.12"): (
         "hugging face", "telemetry", "token", "routing", "wait", "proxy",
@@ -99,6 +102,8 @@ def run_self_test() -> None:
     known_mac = (
         mac.replace("9.8.7", "0.3.8")
         + "A Hugging Face token may be sent via a proxy; wait if unsure. "
+        + "A malformed https_proxy or http_proxy URL may log proxy credentials; "
+        + "the client can ignore it. "
         + "Universal Clipboard may share dictated text. " + CLIPBOARD_GUIDE
     )
     known_windows = (
@@ -115,6 +120,8 @@ def run_self_test() -> None:
     assert not entry_errors("windows", "0.1.12", wrapped_windows)
     assert any("universal clipboard" in error for error in entry_errors(
         "macos", "0.3.8", known_mac.replace("Universal Clipboard", "clipboard")))
+    assert any("malformed" in error for error in entry_errors(
+        "macos", "0.3.8", known_mac.replace("malformed", "invalid")))
     assert any("clipboard-services" in error for error in entry_errors(
         "windows", "0.1.12", known_windows.replace(CLIPBOARD_GUIDE, "")))
 

@@ -232,7 +232,8 @@ Requirements:
 - macOS 14 (Sonoma) or later
 
 The macOS 0.3.8 release starts its first local speech-model download
-(about 500–600 MB) on launch. In 0.3.9, a clean install must choose
+(about 500–600 MB) on launch. In upcoming macOS 0.3.9 (not yet published),
+a clean install must choose
 **Download Model** in Setup; choose **Set Up Later** to defer. CoreML also needs
 free space to prepare the model. Setup shows the current estimated space before
 the download starts. Existing installs and cached models continue loading

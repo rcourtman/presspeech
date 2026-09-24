@@ -2696,7 +2696,6 @@ class PresspeechApp:
     def _probe_input_level(idx, rate, listen_for=0.0, on_listening=None):
         """Return peak RMS from a short in-memory probe, or None if it cannot open."""
         got = threading.Event()
-        heard = threading.Event()
         peak_rms = [0.0]
         stream = None
 
@@ -2705,8 +2704,6 @@ class PresspeechApp:
             level = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
             peak_rms[0] = max(peak_rms[0], level)
             got.set()
-            if level >= MICROPHONE_CHECK_AUDIO_RMS:
-                heard.set()
 
         try:
             stream = AUDIO_BACKEND.open_input_stream(
@@ -2725,10 +2722,13 @@ class PresspeechApp:
                     # A status notification must not turn a working input into
                     # a failed check (for example, if Setup was just closed).
                     pass
-            # Return early once a meaningful input level arrives. Otherwise
-            # retain the stream briefly so a person has time to speak during
-            # the explicit first-run check.
-            heard.wait(max(0.0, listen_for))
+            # Keep the explicit check open for its full listening interval,
+            # even if the first callback already has a meaningful level. An
+            # early level may precede the user's chance to speak. Returning
+            # immediately also lets the result overtake the queued Listening
+            # status before Setup/Settings next polls it.
+            if listen_for > 0:
+                time.sleep(listen_for)
             return peak_rms[0]
         except Exception:
             return None

@@ -6,7 +6,7 @@
   "network_calls": [
     {
       "name": "macos_first_launch_model_download",
-      "when": "macOS 0.3.8 starts its first model download on launch. In 0.3.9, a clean install without a complete model cache must choose Download Model in Setup; choosing Set Up Later defers the transfer. A complete preinstalled cache can load offline without granting future download permission; an incomplete cache needs the choice. Existing installs keep automatic startup. An integrity failure may redownload automatically only when download permission is already recorded; otherwise a clean install must reset the cache and choose Download Model first",
+      "when": "macOS 0.3.8 starts its first model download on launch. In upcoming macOS 0.3.9 (not yet published), a clean install without a complete model cache must choose Download Model in Setup; choosing Set Up Later defers the transfer. A complete preinstalled cache can load offline without granting future download permission; an incomplete cache needs the choice. Existing installs keep automatic startup. An integrity failure may redownload automatically only when download permission is already recorded; otherwise a clean install must reset the cache and choose Download Model first",
       "destination": [
         "huggingface.co and its subdomains",
         "Hugging Face model-storage and CDN hosts under hf.co",

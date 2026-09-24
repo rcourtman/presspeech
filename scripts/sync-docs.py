@@ -898,21 +898,30 @@ COPY_NOTICE_FRESHNESS_GUIDANCE = {
 # warning; reference/install pages also explain 0.3.9's clean-install prompt.
 # Vague "depending on the build" copy hides the behavior that matters most.
 MAC_MODEL_DOWNLOAD_GUIDANCE = {
-    ROOT / "README.md": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
+    ROOT / "README.md": (
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model",
+        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
+    ),
     DOCS / "index.html": ("0.3.8", "0.3.9", "500", "on launch", "full macOS warning"),
     DOCS / "getting-started.html": (
         "0.3.8", "0.3.9", "500", "on launch", "full macOS warning"
     ),
     DOCS / "install.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
-    DOCS / "faq.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
+    DOCS / "faq.html": (
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model",
+        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
+    ),
     DOCS / "privacy.html": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model",
+        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
     ),
     DOCS / "privacy" / "network-calls.json": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model",
+        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
     ),
     DOCS / "llms-full.txt": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
+        "0.3.8", "0.3.9", "500", "clean install", "Download Model",
+        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
     ),
     DOCS / "install" / "agents.md": (
         "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
@@ -2291,7 +2300,8 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         )
     download_sentence = (
         "The macOS 0.3.8 release starts its first speech-model download (about 500-600 MB) "
-        "on launch. In 0.3.9, a clean install must choose Download Model in Setup; "
+        "on launch. In upcoming macOS 0.3.9 (not yet published), a clean install "
+        "must choose Download Model in Setup; "
         "choosing Set Up Later defers it. Existing installations and cached models load automatically. "
         "The model is stored under `~/Library/Application Support/FluidAudio/`.\n"
     )
@@ -5723,7 +5733,7 @@ def run_self_test() -> None:
                 or "install.html#direct-download" not in synced_llms_full
                 or "Before installing or launching macOS 0.3.8" not in synced_llms_full
                 or "The macOS 0.3.8 release starts its first speech-model download" not in synced_llms_full
-                or "In 0.3.9, a clean install must choose Download Model" not in synced_llms_full
+                or "In upcoming macOS 0.3.9 (not yet published), a clean install must choose Download Model" not in synced_llms_full
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
                 > synced_llms_full.find("brew install --cask")
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
@@ -7156,16 +7166,25 @@ def run_self_test() -> None:
             raise SyncError("self-test: complete macOS proxy disclosure was rejected")
         required_model_download_guidance = {
             model_download_guidance: (
-                "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer"
+                "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer",
+                "upcoming macOS 0.3.9 (not yet published)",
             )
         }
         model_download_guidance.write_text(
-            "macOS 0.3.8 downloads 500 MB on launch. 0.3.9 asks a clean install "
-            "to choose Download Model or defer in Setup.\n",
+            "macOS 0.3.8 downloads 500 MB on launch. In upcoming macOS 0.3.9 "
+            "(not yet published), a clean install must choose Download Model or "
+            "defer in Setup.\n",
             encoding="utf-8",
         )
         if check_mac_model_download_guidance(required_model_download_guidance):
             raise SyncError("self-test: clear versioned Mac download guidance was rejected")
+        model_download_guidance.write_text(
+            "macOS 0.3.8 downloads 500 MB on launch. In 0.3.9, a clean install must "
+            "choose Download Model or defer in Setup.\n",
+            encoding="utf-8",
+        )
+        if not check_mac_model_download_guidance(required_model_download_guidance):
+            raise SyncError("self-test: unqualified future Mac controls were accepted")
         model_download_guidance.write_text(
             "The Mac download behavior depends on the build.\n", encoding="utf-8"
         )

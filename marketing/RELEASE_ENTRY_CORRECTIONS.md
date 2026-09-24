@@ -5,7 +5,10 @@ Checked 24 September 2026. **Not published or approved for posting.** The
 and [Windows 0.1.12 release](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12)
 are standalone download pages. Neither currently gives the model-download
 privacy decision present in the [version-specific inventory](../docs/privacy/network-calls.json).
-The macOS notes also invite compatibility reports while the [issue index](https://github.com/rcourtman/presspeech/issues)
+The macOS page also omits the malformed-proxy warning: the [pinned FluidAudio
+client](https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Sources/FluidAudio/ModelRegistry.swift)
+logs the invalid URL string and ignores that proxy setting. Its notes invite
+compatibility reports while the [issue index](https://github.com/rcourtman/presspeech/issues)
 says new issue creation is restricted. The existing install guides warn users,
 but a release-page visitor need not pass through those guides.
 
@@ -21,7 +24,8 @@ controls are present in these downloads.
 
 The tracked `swift/release-notes/v0.3.8.md` and
 `windows/release-notes/0.1.12.md` now include candidate first-use notices for
-model requests, clipboard services, and (on Windows) the automatic microphone
+model requests, the macOS malformed-proxy behavior, clipboard services, and
+(on Windows) the automatic microphone
 check and sign-in startup default. They are **not** evidence of a public
 correction. Review the complete tracked bodies alongside the live notes before
 using them for an authorized release-page edit; do not overwrite release
@@ -46,6 +50,13 @@ to fail while the current public entries remain uncorrected.
 > If a token may be present in the app's launch environment, or you are unsure,
 > leave the app unopened and wait until macOS 0.3.9 is published. If the trust
 > of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use.
+> The bundled 0.3.8 client can also log a malformed inherited lowercase
+> `https_proxy` or `http_proxy` URL verbatim, including embedded proxy
+> credentials, then ignore it and make a model request without the proxy you
+> expected. If you depend on an inherited proxy and are unsure its URL is
+> valid, leave 0.3.8 unopened. Do not share proxy URLs or log excerpts
+> containing them. Upcoming 0.3.9 refuses malformed proxy settings before
+> model loading.
 > Dictation audio and transcripts are not sent in model downloads. See the
 > [version-specific privacy guide](https://rcourtman.github.io/presspeech/privacy.html#network-calls)
 > and [guidance if you already used 0.3.8](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).

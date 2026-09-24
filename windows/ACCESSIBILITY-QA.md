@@ -82,7 +82,9 @@ Windows UI, UIA integration, or Tk version.
    progress, and the consent controls must be exposed in the UIA tree. For a
    microphone check, confirm **Connecting microphone…** precedes **Listening —
    speak a few words…**, and Listening is not announced before the first input
-   buffer arrives. If a model download is already part of the test, verify
+   buffer arrives. Repeat with an input already producing a level: Listening
+   should remain available during the two-second check instead of jumping
+   straight to Ready. If a model download is already part of the test, verify
    that phase changes are
    announced but byte-count updates do not repeatedly interrupt speech. For
    the on-screen indicator, use a short harmless Try Dictation phrase and

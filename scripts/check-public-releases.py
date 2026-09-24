@@ -61,6 +61,11 @@ KNOWN_DISCLOSURE_MARKERS = {
         "before opening",
         "model",
         "hugging face token",
+        "malformed",
+        "https_proxy",
+        "http_proxy",
+        "proxy credentials",
+        ("ignore it", "ignored"),
         "wait",
         "0.3.9",
         "privacy.html#network-calls",
@@ -764,6 +769,8 @@ def run_self_test() -> None:
         {"tag_name": "v0.3.8", "draft": False, "body": (
             "> Before opening macOS 0.3.8: a missing model download may include a\n"
             "> Hugging Face token. If unsure, wait until 0.3.9. See\n"
+            "> A malformed https_proxy or http_proxy URL may log proxy credentials;\n"
+            "> the client can ignore it and use a different route.\n"
             "> https://rcourtman.github.io/presspeech/privacy.html#network-calls. "
             "Universal Clipboard may share text; see "
             "https://rcourtman.github.io/presspeech/privacy.html#operating-system-clipboard-services"
@@ -797,6 +804,13 @@ def run_self_test() -> None:
     missing_clipboard[0]["body"] = missing_clipboard[0]["body"].replace("Universal Clipboard", "clipboard")
     if not any("universal clipboard" in error for error in known_release_disclosure_errors(missing_clipboard)):
         raise ReleaseCheckError("self-test missed the macOS clipboard boundary")
+    missing_proxy = json.loads(json.dumps(disclosed))
+    missing_proxy[0]["body"] = missing_proxy[0]["body"].replace(
+        "A malformed https_proxy or http_proxy URL may log proxy credentials;\n"
+        "> the client can ignore it and use a different route.\n", ""
+    )
+    if not any("malformed" in error for error in known_release_disclosure_errors(missing_proxy)):
+        raise ReleaseCheckError("self-test missed the malformed macOS proxy warning")
     missing_microphone = json.loads(json.dumps(disclosed))
     missing_microphone[1]["body"] = missing_microphone[1]["body"].replace("automatic local readiness check", "check")
     if not any("automatic local readiness check" in error for error in known_release_disclosure_errors(missing_microphone)):

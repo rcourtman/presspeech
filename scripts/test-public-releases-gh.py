@@ -224,6 +224,8 @@ class GhTransportTests(unittest.TestCase):
     def test_windows_disclosure_accepts_launch_and_route_alternatives(self):
         mac = {'tag_name': 'v0.3.8', 'draft': False,
                'body': ('Before opening model Hugging Face token wait 0.3.9 '
+                        'A malformed https_proxy or http_proxy URL can log proxy credentials; '
+                        'the client may ignore it. '
                         'privacy.html#network-calls Universal Clipboard '
                         'privacy.html#operating-system-clipboard-services')}
         windows = {'tag_name': 'windows-v0.1.12', 'draft': False,
@@ -240,6 +242,23 @@ class GhTransportTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn('before opening / before launching', errors[0])
         self.assertIn('routing / route', errors[0])
+
+    def test_mac_disclosure_requires_malformed_proxy_warning(self):
+        body = (Path(__file__).resolve().parents[1] / 'swift/release-notes/v0.3.8.md').read_text()
+        self.assertEqual(check.known_release_disclosure_errors([
+            {'tag_name': 'v0.3.8', 'draft': False, 'body': body},
+            {'tag_name': 'windows-v0.1.12', 'draft': False,
+             'body': (Path(__file__).resolve().parents[1] / 'windows/release-notes/0.1.12.md').read_text()},
+        ]), [])
+        body = body.replace('proxy credentials', 'details').replace('malformed', 'invalid')
+        errors = check.known_release_disclosure_errors([
+            {'tag_name': 'v0.3.8', 'draft': False, 'body': body},
+            {'tag_name': 'windows-v0.1.12', 'draft': False,
+             'body': (Path(__file__).resolve().parents[1] / 'windows/release-notes/0.1.12.md').read_text()},
+        ])
+        self.assertEqual(len(errors), 1)
+        self.assertIn('malformed', errors[0])
+        self.assertIn('proxy credentials', errors[0])
 
 
 if __name__ == '__main__':

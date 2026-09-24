@@ -174,7 +174,9 @@ choose **Check Microphone**, the check briefly opens the selected input,
 discards its samples in memory, and distinguishes an input level from a
 connected-but-silent device or one that cannot be opened. Setup says
 **Connecting microphone…** until the input has delivered its first audio
-buffer; speak when it says **Listening — speak a few words…**. If it is silent,
+buffer; speak when it says **Listening — speak a few words…**. The explicit
+check keeps listening for two seconds after that first buffer, even if it
+detects an input level immediately. If it is silent,
 unmute it and choose **Check Microphone** again (in published 0.1.12, use
 **Check Again** to repeat its automatic check); if it cannot be opened, use the
 window's direct links to Windows Microphone Privacy or Sound Input settings

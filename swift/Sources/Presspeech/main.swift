@@ -5899,6 +5899,8 @@ enum DictationPasteTargetCaptureFailure: Error, Equatable {
     case focusedWindowQueryFailed(Int32)
     case focusedWindowValueUnavailable
     case focusedWindowValueInvalid
+    case focusedElementWindowUnavailable
+    case focusedElementWindowMismatch
     case frontmostApplicationChanged
 
     var allowsFocusedElementWindowFallback: Bool {
@@ -5931,6 +5933,10 @@ enum DictationPasteTargetCaptureFailure: Error, Equatable {
             return "focused-window query returned no value"
         case .focusedWindowValueInvalid:
             return "focused-window query returned an unexpected value"
+        case .focusedElementWindowUnavailable:
+            return "focused control's containing window is unavailable"
+        case .focusedElementWindowMismatch:
+            return "focused control belongs to another window"
         case .frontmostApplicationChanged:
             return "frontmost application changed during focused-window query"
         }
@@ -5995,6 +6001,19 @@ func captureDictationPasteTarget(
     case .success(let window):
         focusedWindow = window
         focusedElement = focusedElementForProcess(processIdentifier)
+        if let focusedElement, !CFEqual(window, focusedElement) {
+            // App-level AXFocusedWindow and AXFocusedUIElement are separate
+            // round trips. A focus change (or an incoherent AX reply) can pair
+            // a window with a control from another window of the same app.
+            // AXWindow is not required when the focused element is the window
+            // itself. Otherwise never paste from a mixed snapshot.
+            guard let elementWindow = focusedWindowForElement(focusedElement) else {
+                return .unavailable(.focusedElementWindowUnavailable)
+            }
+            guard CFEqual(window, elementWindow) else {
+                return .unavailable(.focusedElementWindowMismatch)
+            }
+        }
     case .failure(let failure):
         // Some applications omit the recommended app-level AXFocusedWindow
         // attribute while still exposing a focused control with a required
@@ -6011,7 +6030,7 @@ func captureDictationPasteTarget(
     }
     // Not every target (notably some Electron/Chromium views) publishes a
     // focused control. The normal exact-window route remains available when
-    // it is absent; the fallback above requires one.
+    // it is absent; a published control must belong to that window.
     guard frontmostProcessIdentifier() == processIdentifier else {
         return .unavailable(.frontmostApplicationChanged)
     }
@@ -17170,7 +17189,10 @@ private enum PresspeechSelfTest {
                 focusedWindowForProcess: { pid in
                     pid == 700 ? .success(firstWindow) : .failure(.focusedWindowValueUnavailable)
                 },
-                focusedElementForProcess: { pid in pid == 700 ? firstField : nil }
+                focusedElementForProcess: { pid in pid == 700 ? firstField : nil },
+                focusedWindowForElement: { element in
+                    CFEqual(element, firstField) ? firstWindow : nil
+                }
             )
             guard case .captured(let capture) = captureResult else {
                 throw SelfTestFailure.failed("paste target capture should succeed with an exact window")
@@ -17216,13 +17238,45 @@ private enum PresspeechSelfTest {
                 focusedElementForProcess: { _ in firstField },
                 focusedWindowForElement: { _ in
                     queriedElementWindowOnNormalPath = true
-                    return otherWindow
+                    return firstWindow
                 })
             guard case .captured = normalPath else {
-                throw SelfTestFailure.failed("a published focused window should retain the normal capture route")
+                throw SelfTestFailure.failed("a focused control in the published window should be captured")
             }
-            try expect(queriedElementWindowOnNormalPath, equals: false,
-                       "normal capture should not add a bounded AXWindow round-trip")
+            try expect(queriedElementWindowOnNormalPath, equals: true,
+                       "normal capture must verify the focused control's containing window")
+            var queriedWindowItself = false
+            let windowIsFocusedElement = captureDictationPasteTarget(
+                frontmostProcessIdentifier: { 700 },
+                focusedWindowForProcess: { _ in .success(firstWindow) },
+                focusedElementForProcess: { _ in firstWindow },
+                focusedWindowForElement: { _ in
+                    queriedWindowItself = true
+                    return nil
+                })
+            guard case .captured = windowIsFocusedElement else {
+                throw SelfTestFailure.failed("a window focused as its own element should remain deliverable")
+            }
+            try expect(queriedWindowItself, equals: false,
+                       "the focused window itself needs no AXWindow parent query")
+            let incoherentCases: [(AXUIElement?, DictationPasteTargetCaptureFailure)] = [
+                (otherWindow, .focusedElementWindowMismatch),
+                (nil, .focusedElementWindowUnavailable),
+            ]
+            for (elementWindow, expectedFailure) in incoherentCases {
+                let incoherent = captureDictationPasteTarget(
+                    frontmostProcessIdentifier: { 700 },
+                    focusedWindowForProcess: { _ in .success(firstWindow) },
+                    focusedElementForProcess: { _ in firstField },
+                    focusedWindowForElement: { _ in elementWindow })
+                guard case .unavailable(let actualFailure) = incoherent else {
+                    throw SelfTestFailure.failed("an incoherent window/control snapshot must be copy-only")
+                }
+                try expect(actualFailure, equals: expectedFailure,
+                           "a missing or different control window must not authorize automatic paste")
+                try expect(actualFailure.logDescription.contains("firstField"), equals: false,
+                           "control-window failures must not log field metadata")
+            }
             for missingWindow in [
                 DictationPasteTargetCaptureFailure.focusedWindowQueryFailed(-25212),
                 .focusedWindowQueryFailed(AXError.attributeUnsupported.rawValue),

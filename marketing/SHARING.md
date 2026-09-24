@@ -10,8 +10,9 @@ already asking.
 **Hold as of 24 September 2026: the Show HN launch draft below is not ready to
 post.** The [published releases](https://github.com/rcourtman/presspeech/releases)
 are macOS 0.3.8 and Windows 0.1.12, not the proposed 0.3.9 / 0.1.13 fixes.
-Before launching macOS 0.3.8, users need its [inherited-token
-warning](../README.md#install-on-macos); before launching Windows 0.1.12,
+Before launching macOS 0.3.8, users need its [inherited-token, proxy, and
+malformed-proxy warning](../README.md#install-on-macos); before launching
+Windows 0.1.12,
 they need its [telemetry, token, routing, and proxy
 warning](../README.md#install-on-windows). Do not collapse these into a
 generic "100% local" claim. Also, [new GitHub issues are currently
@@ -33,8 +34,8 @@ native release checks.
 **Observed 24 September 2026:** the published [macOS 0.3.8 release
 notes](https://github.com/rcourtman/presspeech/releases/tag/v0.3.8) invite
 compatibility reports but do not mention that new issues are restricted or
-surface the inherited-token model-download warning. The published [Windows
-0.1.12 release notes](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12)
+surface the inherited-token and malformed-proxy model-download warnings. The
+published [Windows 0.1.12 release notes](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12)
 likewise omit that build's model-download telemetry, token, and routing caveat.
 The README and install guides carry the version-specific decisions, but a
 visitor can download from a release page without reading them. Before linking
@@ -150,7 +151,9 @@ licensed, with no account, subscription, or cloud transcription.
 Before launching macOS 0.3.8, note that its model download may include a
 Hugging Face token inherited by Presspeech even though the public model needs
 no account. If a token may be present in the app's launch environment, or you
-are unsure, wait for 0.3.9 to be published. Windows 0.1.12 separately may
+are unsure, wait for 0.3.9 to be published. A malformed inherited proxy URL
+may also be logged verbatim and ignored by 0.3.8; if you depend on that proxy
+and are unsure its URL is valid, leave the app unopened. Windows 0.1.12 separately may
 send Hugging Face usage telemetry and a configured or saved token during model
 downloads; custom routing or a trusted TLS-inspecting proxy can affect who
 receives it. The [version-specific privacy
