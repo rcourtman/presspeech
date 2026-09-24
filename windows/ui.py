@@ -891,6 +891,7 @@ class DictationIndicator:
         "no_text": ("No text recognized \u2014 try again", "#ffb340"),
         "no_content": ("Nothing to insert \u2014 check text settings", "#ffb340"),
         "audio_incomplete": ("Microphone audio incomplete \u2014 try again", "#ffb340"),
+        "transcription_start_failed": ("Dictation could not start \u2014 try again", "#ffb340"),
         "not_ready": ("Microphone was not ready \u2014 try again", "#ffb340"),
     }
 

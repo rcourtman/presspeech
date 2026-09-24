@@ -247,6 +247,38 @@ class ParakeetConfigurationTests(unittest.TestCase):
         self.assertEqual(engine._join_owned_parakeet_text([first, second]),
                          "forty-two")
 
+    def test_parakeet_join_keeps_opening_punctuation_attached_at_seam(self):
+        # When the next window emits no preceding context token, ownership
+        # cannot tell whether its first token follows an opening mark. The
+        # joiner must not invent a space inside the punctuation pair.
+        first_window = engine._ParakeetWindow(0, 60, 0, 40)
+        second_window = engine._ParakeetWindow(20, 80, 40, 80)
+        for opening, expected in (("(", "Say (word"),
+                                  ("[", "Say [word"),
+                                  ("{", "Say {word"),
+                                  ("\u00bf", "Say \u00bfword"),
+                                  ("\u00a1", "Say \u00a1word")):
+            with self.subTest(opening=opening):
+                first = engine._owned_parakeet_text(
+                    "Say " + opening,
+                    [[{"token": "Say", "start": 3.0, "end": 3.6},
+                      {"token": " " + opening, "start": 3.9, "end": 3.9}]],
+                    first_window, sample_rate=10)
+                second = engine._owned_parakeet_text(
+                    "word", [[{"token": "word", "start": 2.1,
+                                "end": 2.5}]],
+                    second_window, sample_rate=10)
+                self.assertEqual(
+                    engine._join_owned_parakeet_text([first, second]), expected)
+
+        # A real separator from the decoder stays authoritative.
+        self.assertEqual(engine._join_owned_parakeet_text([
+            ("Say (", False), (" word", False)]), "Say ( word")
+        # Quote glyphs can be closing marks in other supported languages;
+        # do not infer their role from appearance alone.
+        self.assertEqual(engine._join_owned_parakeet_text([
+            ("Say \u201c", False), ("word", False)]), "Say \u201c word")
+
     def test_parakeet_timestamp_alignment_preserves_decoder_whitespace(self):
         # Reduced from the public Transformers Parakeet TDT v3 example. Its
         # timestamp token strings contain no word-boundary spaces even though

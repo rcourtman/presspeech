@@ -96,7 +96,7 @@
             </li>
             <li>
               <strong>In-app test passed</strong>
-              <span><a href="#first-app">Try a blank TextEdit or Notepad field</a>. Count automatic paste only if complete text appears once with no recovery notice. A copied notice is manual recovery, not an automatic-paste pass; <a href="#copied-notice-recovery">check the field and clipboard before recovering</a>.</span>
+              <span><a href="#first-app">Try a blank TextEdit or Notepad field</a>. Count automatic paste only if complete text appears once with no recovery notice. A copied notice is manual recovery, not an automatic-paste pass; <a href="#first-app-result">classify the result</a> before pasting or retrying.</span>
             </li>
           </ol>
           <p class="quiet">If a step fails, stop there. Use its guidance below or match the visible status to the <a href="troubleshooting.html">recovery guide</a>.</p>
@@ -211,7 +211,21 @@
           <span class="section-eyebrow">Ready to use</span>
           <h2>Dictate into a familiar text field</h2>
           <p>Open a blank TextEdit document on macOS or Notepad on Windows, click in it, and repeat hold–speak–release without changing windows. Keep that field selected until dictation finishes; a window-level check does not reliably establish the identity of a field or browser tab. Press <strong>Escape</strong> to cancel an active recording.</p>
-          <p>In every new target app, start with a blank, disposable field that cannot submit or execute text. Dictate harmless words once. Count automatic paste as working only if the complete text appears exactly once in the intended field without a recovery notice. A successful scratchpad or TextEdit/Notepad test does not establish automatic-paste support in another app.</p>
+          <p>In every new target app, start with a blank, disposable field that cannot submit or execute text. Dictate harmless words once. Count automatic paste as working only if the complete text appears exactly once in the intended field without a recovery notice. A successful scratchpad or TextEdit/Notepad test does not establish automatic-paste support in another app. Use the result guide below before pasting or recording again.</p>
+          <div class="grid" id="first-app-result">
+            <article class="card">
+              <h3>Practice sentence once, no notice</h3>
+              <p>If the complete sentence appears in the intended field, this is an automatic-paste smoke pass for this field only. Test another app separately before relying on it.</p>
+            </article>
+            <article class="card">
+              <h3>No text, copied notice</h3>
+              <p>This is manual recovery, not automatic paste. Check the field first. Before pasting, <a href="#copied-notice-recovery">verify the current clipboard only if safe</a>; a later copy may have replaced the transcript.</p>
+            </article>
+            <article class="card">
+              <h3>Partial, duplicate, wrong, or uncertain</h3>
+              <p>Stop and inspect the disposable field before trying again. A delivery error does not prove the field is empty or that the clipboard holds the transcript. Follow the <a href="troubleshooting.html#macos-paste">macOS</a> or <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps.</p>
+            </article>
+          </div>
           <div class="note warn"><p><strong>Keep the original field and browser tab selected until Presspeech finishes.</strong> A switch within the same window may paste into the newly focused place without a copied/manual-paste notice. If you changed focus, inspect the destination before retrying; use only disposable fields for a target-app test.</p></div>
           <div class="note" id="copied-notice-recovery">
             <p><strong>If Presspeech did not paste:</strong> check the intended field first; text may already be there. A macOS 0.3.8 copied notice or Windows 0.1.12's <strong>Transcript copied, not pasted</strong> means the finished transcript was copied at completion, not that the clipboard still holds it for manual paste. A later copy can replace it without changing the notice. Other delivery-error notices do not guarantee that the clipboard holds the transcript or that the field is empty; do not paste or dictate again blindly. Match the notice to the <a href="troubleshooting.html#macos-paste">macOS</a> or <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps.</p>

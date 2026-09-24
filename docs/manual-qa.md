@@ -1712,6 +1712,13 @@ Neither qualifies Clipboard History, Cloud Clipboard, real input delivery, or
 the packaged recovery UI. Do not run these steps against a user's active
 clipboard.
 
+- In a controlled candidate build, make captured-audio resampling fail after a
+  harmless recording, then make the model executor reject the queued work.
+  Neither failure may leave **Transcribing…** stuck, copy to the clipboard, or
+  send a paste shortcut. Confirm the brief **Dictation could not start — try
+  again** indicator, a content-free notice, and an available next recording.
+  Record this as a fault-injection check, not normal microphone behavior.
+
 - In a disposable editor with selected harmless text, configure a dictionary
   rule that replaces a reliably recognized test phrase with the empty string.
   Test the Space, Newline and None suffix choices separately. When that phrase

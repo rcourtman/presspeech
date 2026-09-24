@@ -4205,6 +4205,87 @@ class TextRegressionTests(unittest.TestCase):
         queued = instance._model_executor.submit.call_args.args
         self.assertIs(queued[1], converted)
 
+    def test_resample_failure_clears_transcribing_and_reports_no_delivery(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance.transcribing = False
+        instance._rec_epoch = 7
+        instance._capture_ready = True
+        instance.buffer = [app.np.ones(12000, dtype=app.np.float32)]
+        instance.stream = None
+        instance.icon = None
+        instance._recording_input_device = (3, 48000)
+        instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
+        instance._recording_scratchpad = None
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._set_temporary_indicator = mock.Mock()
+        instance._capture_benchmark_if_armed = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._model_executor = mock.Mock()
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        with mock.patch.object(
+                app, "_resample_to_16k", side_effect=OSError(
+                    "synthetic-private-audio-detail")), \
+                mock.patch.object(app.clipboard_delivery, "write_text") as write:
+            self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        self.assertFalse(instance.recording)
+        self.assertFalse(instance.transcribing)
+        instance._model_executor.submit.assert_not_called()
+        instance._capture_benchmark_if_armed.assert_not_called()
+        instance._set_temporary_indicator.assert_called_once_with(
+            app.TRANSCRIPTION_START_FAILED_OUTCOME,
+            app.NO_SPEECH_FEEDBACK_SEC)
+        instance._schedule_model_idle_unload.assert_called_once_with()
+        self.assertIn("Nothing was pasted or copied", str(instance.notify.mock_calls))
+        self.assertNotIn("synthetic-private-audio-detail",
+                         str(instance._log.mock_calls) + str(instance.notify.mock_calls))
+        write.assert_not_called()
+
+    def test_model_queue_rejection_clears_transcribing_and_reports_failure(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance.transcribing = False
+        instance._rec_epoch = 7
+        instance._capture_ready = True
+        instance.buffer = [app.np.ones(4000, dtype=app.np.float32)]
+        instance.stream = None
+        instance.icon = None
+        instance._recording_input_device = (0, 16000)
+        instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
+        instance._recording_scratchpad = None
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._set_temporary_indicator = mock.Mock()
+        instance._capture_benchmark_if_armed = mock.Mock()
+        instance._model_executor = mock.Mock()
+        instance._model_executor.submit.side_effect = RuntimeError(
+            "synthetic-private-queue-detail")
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+
+        with mock.patch.object(app.clipboard_delivery, "write_text") as write:
+            self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        self.assertFalse(instance.recording)
+        self.assertFalse(instance.transcribing)
+        instance._model_executor.submit.assert_called_once()
+        instance._set_temporary_indicator.assert_called_once_with(
+            app.TRANSCRIPTION_START_FAILED_OUTCOME,
+            app.NO_SPEECH_FEEDBACK_SEC)
+        self.assertIn("Nothing was pasted or copied", str(instance.notify.mock_calls))
+        self.assertNotIn("synthetic-private-queue-detail",
+                         str(instance._log.mock_calls) + str(instance.notify.mock_calls))
+        write.assert_not_called()
+
 
 class PostRollTests(unittest.TestCase):
     def make_app(self, value, peak=0.1, rate=16000):

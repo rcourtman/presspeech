@@ -400,6 +400,10 @@ leaves nothing to insert, **Nothing to insert** explains the result instead;
 Presspeech does not change the clipboard or paste only the configured suffix
 over a field.
 A quick retry cannot be hidden by the previous message's timeout.
+If captured audio cannot be prepared or the transcription worker cannot start,
+the upcoming build ends **Transcribing…** and briefly shows **Dictation could
+not start — try again**. It does not copy or paste that recording; retry, or
+restart Presspeech and check the microphone in Setup or Settings if it repeats.
 
 After release, silence-aware post-roll stops as early as 80 ms while retaining
 the original 400 ms safety ceiling whenever speech is still present. This keeps

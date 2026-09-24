@@ -109,6 +109,7 @@ NO_SPEECH_OUTCOME = "no_speech"
 NO_TEXT_OUTCOME = "no_text"
 NO_CONTENT_OUTCOME = "no_content"
 AUDIO_INCOMPLETE_OUTCOME = "audio_incomplete"
+TRANSCRIPTION_START_FAILED_OUTCOME = "transcription_start_failed"
 
 VK_ESCAPE = 0x1B
 WM_KEYDOWN = 0x0100
@@ -2239,10 +2240,20 @@ class PresspeechApp:
                 self._log("recording stopped before microphone was ready")
             self._schedule_model_idle_unload()
             return True
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-        if recording_device is not None and recording_device[1] != 16000:
-            audio = _resample_to_16k(audio, recording_device[1])
+        try:
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            if recording_device is not None and recording_device[1] != 16000:
+                audio = _resample_to_16k(audio, recording_device[1])
+        except Exception as exc:
+            # The stop path claimed transcribing before closing the stream.
+            # A failed native resample must not leave every later hotkey press
+            # stuck behind a transcription that was never queued.
+            self._log("recording audio preparation failed: %s" %
+                      type(exc).__name__)
+            self._finish_transcribing(TRANSCRIPTION_START_FAILED_OUTCOME)
+            self._schedule_model_idle_unload()
+            return True
         if audio.size < MIN_TRANSCRIPTION_AUDIO_SAMPLES:
             if input_overflowed:
                 self._finish_transcribing(AUDIO_INCOMPLETE_OUTCOME)
@@ -2261,9 +2272,16 @@ class PresspeechApp:
             self._capture_benchmark_if_armed(audio)
         self._set_indicator("transcribing")
         self._log("recording stopped; %.2fs captured, transcribing" % (audio.size / 16000.0))
-        self._model_executor.submit(
-            self._transcribe_worker, audio, paste_target, scratchpad_target,
-            input_overflowed)
+        try:
+            self._model_executor.submit(
+                self._transcribe_worker, audio, paste_target, scratchpad_target,
+                input_overflowed)
+        except Exception as exc:
+            # In particular, ThreadPoolExecutor rejects work after shutdown.
+            # No worker will run its usual finally block to clear this state.
+            self._log("transcription queue failed: %s" % type(exc).__name__)
+            self._finish_transcribing(TRANSCRIPTION_START_FAILED_OUTCOME)
+            return True
         return True
 
     def _capture_benchmark_if_armed(self, audio):
@@ -2751,7 +2769,8 @@ class PresspeechApp:
         # erasing that newer recording state.
         with self.lock:
             if outcome in (NO_SPEECH_OUTCOME, NO_TEXT_OUTCOME,
-                           NO_CONTENT_OUTCOME, AUDIO_INCOMPLETE_OUTCOME):
+                           NO_CONTENT_OUTCOME, AUDIO_INCOMPLETE_OUTCOME,
+                           TRANSCRIPTION_START_FAILED_OUTCOME):
                 self._set_temporary_indicator(
                     outcome, NO_SPEECH_FEEDBACK_SEC)
             else:
@@ -2765,6 +2784,13 @@ class PresspeechApp:
             self._notify_no_content()
         elif outcome == AUDIO_INCOMPLETE_OUTCOME:
             self._notify_audio_capture_incomplete()
+        elif outcome == TRANSCRIPTION_START_FAILED_OUTCOME:
+            self.notify(
+                "Dictation could not start",
+                "Presspeech could not prepare this recording for local "
+                "transcription. Nothing was pasted or copied. Try again; "
+                "if this repeats, restart Presspeech and check the "
+                "microphone in Setup or Settings.")
 
     def _notify_audio_capture_incomplete(self):
         self.notify(
