@@ -405,6 +405,15 @@ After release, silence-aware post-roll stops as early as 80 ms while retaining
 the original 400 ms safety ceiling whenever speech is still present. This keeps
 final words intact without always paying the full delay. The Try Dictation
 button uses this same stop path as the hotkey and notification-area command.
+In the current source candidate, a microphone input-overflow report during
+accepted capture means the audio may have lost samples. Presspeech still
+transcribes what arrived, but keeps nonempty text for explicit Copy or Discard
+in Delivery Recovery instead of automatically pasting it; an armed benchmark
+capture is not saved from that incomplete recording. A blank result reports
+incomplete audio instead of claiming that no speech was detected. The recovery
+window does not display the words: copy into a private editor to inspect them,
+or discard and dictate again. Check the input device if words are missing. This requires
+native qualification on the exact Windows build before release.
 
 Recordings stop and transcribe automatically at the maximum length selected in
 Settings: 1, 2 (the default), 5, or 10 minutes. This bounds in-memory audio and

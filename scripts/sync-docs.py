@@ -867,7 +867,8 @@ COPY_NOTICE_FRESHNESS_GUIDANCE = {
     ),
     DOCS / "getting-started.html": (
         '<section id="first-app">', '</section>',
-        ("copied at completion", "later copy can replace", "only if it still holds the complete transcript", "Copy Last Transcript"),
+        ("copied at completion", "later copy can replace", "only if it still holds the complete transcript", "Copy Last Transcript",
+         "Other delivery-error notices do not guarantee", "do not paste or dictate again blindly"),
     ),
     DOCS / "troubleshooting.html": (
         'id="windows-paste"', '</article>',
@@ -1282,6 +1283,10 @@ STALE_PATTERNS = [
     (
         re.compile(r"transcribed locally, pasted, then discarded", re.IGNORECASE),
         "delivery pipeline omits clipboard recovery",
+    ),
+    (
+        re.compile(r"If verification fails, the published build copies the transcript", re.IGNORECASE),
+        "failed destination checks do not guarantee clipboard recovery",
     ),
     (
         re.compile(r"Anywhere you can type", re.IGNORECASE),
@@ -6760,6 +6765,30 @@ def run_self_test() -> None:
         )
         if check_copy_notice_freshness_guidance(required_copy_notice):
             raise SyncError("self-test: conditional copy recovery was rejected")
+
+        first_app_notice = Path(tmp) / "first-app.html"
+        first_app_guidance = {
+            first_app_notice: (
+                '<section id="first-app">', '</section>',
+                ("copied at completion", "later copy can replace",
+                 "only if it still holds the complete transcript",
+                 "Other delivery-error notices do not guarantee"),
+            ),
+        }
+        safe_first_app = (
+            '<section id="first-app">A copied notice means it was copied at completion; '
+            'a later copy can replace it. Paste only if it still holds the complete transcript. '
+            'Other delivery-error notices do not guarantee a clipboard copy.</section>'
+        )
+        first_app_notice.write_text(safe_first_app, encoding="utf-8")
+        if check_copy_notice_freshness_guidance(first_app_guidance):
+            raise SyncError("self-test: safe first-app recovery guidance was rejected")
+        first_app_notice.write_text(
+            safe_first_app.replace("Other delivery-error notices do not guarantee", "Other delivery-error notices"),
+            encoding="utf-8",
+        )
+        if not check_copy_notice_freshness_guidance(first_app_guidance):
+            raise SyncError("self-test: first-app generic delivery error promise was accepted")
 
         recovery_page = Path(tmp) / "recovery.html"
         scoped_recovery = {

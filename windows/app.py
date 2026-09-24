@@ -108,6 +108,7 @@ NOT_READY_FEEDBACK_SEC = 2.5
 NO_SPEECH_OUTCOME = "no_speech"
 NO_TEXT_OUTCOME = "no_text"
 NO_CONTENT_OUTCOME = "no_content"
+AUDIO_INCOMPLETE_OUTCOME = "audio_incomplete"
 
 VK_ESCAPE = 0x1B
 WM_KEYDOWN = 0x0100
@@ -758,6 +759,9 @@ class PresspeechApp:
         self._rec_epoch = 0
         self._recording_limit_timer = None
         self._peak_rms = 0.0
+        # PortAudio reports a discontinuity after it discards microphone
+        # samples. Keep this per recording, not as mutable model-worker state.
+        self._input_overflowed = False
         # Monotonic within one recording. The post-roll timer snapshots this
         # at the hold/toggle stop gesture and also checks when the newest
         # accepted callback began. The timestamp prevents a callback that was
@@ -1708,6 +1712,7 @@ class PresspeechApp:
             self.recording = True
             self.buffer = []
             self._peak_rms = 0.0
+            self._input_overflowed = False
             self._recording_input_device = None
             self._audio_sequence = 0
             self._last_audio_callback_started_at = 0.0
@@ -1802,6 +1807,7 @@ class PresspeechApp:
             self._cached_input_topology = None
             self.buffer = []
             self._peak_rms = 0.0
+            self._input_overflowed = False
         try:
             self._cancel_recording_limit(epoch)
             if stream is not None:
@@ -1984,6 +1990,11 @@ class PresspeechApp:
                     return
                 self.buffer.append(chunk)
                 self._peak_rms = max(self._peak_rms, chunk_rms)
+                # With the stream's unspecified block size, input_overflow
+                # means samples before this callback were discarded. Do not
+                # treat a pre-readiness/start-cue overflow as lost dictation.
+                if getattr(status, "input_overflow", False):
+                    self._input_overflowed = True
                 self._audio_sequence = getattr(self, "_audio_sequence", 0) + 1
                 self._last_audio_callback_started_at = callback_started_at
 
@@ -2026,6 +2037,7 @@ class PresspeechApp:
             self.stream = None
             self.buffer = []
             self._peak_rms = 0.0
+            self._input_overflowed = False
             self._recording_paste_target = PasteTarget("", 0)
             self._recording_scratchpad = None
             self._recording_input_device = None
@@ -2179,6 +2191,8 @@ class PresspeechApp:
             audio = (np.concatenate(self.buffer)
                      if capture_was_ready and self.buffer else
                      np.zeros(0, dtype=np.float32))
+            input_overflowed = getattr(self, "_input_overflowed", False)
+            self._input_overflowed = False
             # Claim the delivery lifecycle before releasing the recording lock.
             # This closes the small window in which another hotkey press could
             # start capture while this method prepares and queues model work.
@@ -2214,8 +2228,12 @@ class PresspeechApp:
             self._play_cue("stop")
         if audio.size == 0:
             if capture_was_ready:
-                self._show_no_speech_feedback()
-                self._log("recording stopped; no audio captured")
+                if input_overflowed:
+                    self._finish_transcribing(AUDIO_INCOMPLETE_OUTCOME)
+                    self._log("recording stopped; no audio after microphone input overflow")
+                else:
+                    self._show_no_speech_feedback()
+                    self._log("recording stopped; no audio captured")
             else:
                 self._show_not_ready_feedback()
                 self._log("recording stopped before microphone was ready")
@@ -2226,15 +2244,26 @@ class PresspeechApp:
         if recording_device is not None and recording_device[1] != 16000:
             audio = _resample_to_16k(audio, recording_device[1])
         if audio.size < MIN_TRANSCRIPTION_AUDIO_SAMPLES:
-            self._finish_transcribing(NO_SPEECH_OUTCOME)
-            self._log("recording stopped; too short (%.2fs)" % (audio.size / 16000.0))
+            if input_overflowed:
+                self._finish_transcribing(AUDIO_INCOMPLETE_OUTCOME)
+                self._log("recording stopped; too short after microphone input overflow")
+            else:
+                self._finish_transcribing(NO_SPEECH_OUTCOME)
+                self._log("recording stopped; too short (%.2fs)" % (
+                    audio.size / 16000.0))
             self._schedule_model_idle_unload()
             return True
-        self._capture_benchmark_if_armed(audio)
+        if input_overflowed:
+            # A fixture with missing samples cannot establish model quality.
+            # Leave an armed capture for the next intact dictation.
+            self._log("benchmark capture skipped: microphone input overflow")
+        else:
+            self._capture_benchmark_if_armed(audio)
         self._set_indicator("transcribing")
         self._log("recording stopped; %.2fs captured, transcribing" % (audio.size / 16000.0))
         self._model_executor.submit(
-            self._transcribe_worker, audio, paste_target, scratchpad_target)
+            self._transcribe_worker, audio, paste_target, scratchpad_target,
+            input_overflowed)
         return True
 
     def _capture_benchmark_if_armed(self, audio):
@@ -2700,11 +2729,11 @@ class PresspeechApp:
 
     def _transcribe_worker(
             self, audio, paste_target=PasteTarget("", 0),
-            scratchpad_target=None):
+            scratchpad_target=None, input_overflowed=False):
         outcome = None
         try:
             outcome = self._transcribe_worker_inner(
-                audio, paste_target, scratchpad_target)
+                audio, paste_target, scratchpad_target, input_overflowed)
             return outcome
         finally:
             # Empty/error results still exercised the model. Refresh the idle
@@ -2722,7 +2751,7 @@ class PresspeechApp:
         # erasing that newer recording state.
         with self.lock:
             if outcome in (NO_SPEECH_OUTCOME, NO_TEXT_OUTCOME,
-                           NO_CONTENT_OUTCOME):
+                           NO_CONTENT_OUTCOME, AUDIO_INCOMPLETE_OUTCOME):
                 self._set_temporary_indicator(
                     outcome, NO_SPEECH_FEEDBACK_SEC)
             else:
@@ -2734,10 +2763,19 @@ class PresspeechApp:
             self._notify_no_text()
         elif outcome == NO_CONTENT_OUTCOME:
             self._notify_no_content()
+        elif outcome == AUDIO_INCOMPLETE_OUTCOME:
+            self._notify_audio_capture_incomplete()
+
+    def _notify_audio_capture_incomplete(self):
+        self.notify(
+            "Audio capture incomplete",
+            "The microphone dropped audio during dictation, so Presspeech "
+            "cannot tell whether words were missed. Nothing was pasted; "
+            "check the microphone and try again.")
 
     def _transcribe_worker_inner(
             self, audio, paste_target=PasteTarget("", 0),
-            scratchpad_target=None):
+            scratchpad_target=None, input_overflowed=False):
         model_started = time.perf_counter()
         try:
             if not self.transcriber.loaded(self.settings["model"]):
@@ -2813,6 +2851,9 @@ class PresspeechApp:
             self._log("transcription returned empty (model %.3fs)" % model_seconds)
             if timing_summary is not None:
                 self._log(timing_summary)
+            if input_overflowed:
+                self._log("microphone input overflow; transcription returned no text")
+                return AUDIO_INCOMPLETE_OUTCOME
             # Only Silero's explicit zero-speech result supports a no-speech
             # diagnosis. Parakeet (and a Whisper decoder after retained audio)
             # can return blank text despite audible speech; do not blame the
@@ -2828,6 +2869,9 @@ class PresspeechApp:
             self._log("transcription removed by text settings; no delivery attempted")
             if timing_summary is not None:
                 self._log(timing_summary)
+            if input_overflowed:
+                self._log("microphone input overflow; text settings removed output")
+                return AUDIO_INCOMPLETE_OUTCOME
             return NO_CONTENT_OUTCOME
         # Dictation is private: retain performance data without persisting the
         # user's words in the diagnostic log. Whisper's detected-speech duration
@@ -2836,6 +2880,12 @@ class PresspeechApp:
                   (len(text), model_seconds))
         if timing_summary is not None:
             self._log(timing_summary)
+        if input_overflowed:
+            # Recognition can be internally consistent despite a missing
+            # microphone buffer. Preserve the text for review, but never
+            # silently paste a potentially incomplete transcript.
+            self._remember_undelivered_dictation(text, "audio-overflow")
+            return
         self._deliver_text(text, paste_target, scratchpad_target)
 
     def _deliver_text(
@@ -2934,6 +2984,9 @@ class PresspeechApp:
             "scratchpad-unavailable": (
                 "Try Dictation could not confirm that the transcript reached "
                 "its private editor; no paste shortcut was sent. "),
+            "audio-overflow": (
+                "The microphone dropped audio during dictation, so this "
+                "transcript may be incomplete; no paste shortcut was sent. "),
             "modifier-held": (
                 "A Ctrl, Shift, Alt, Windows, or V key was held; no paste "
                 "shortcut was sent. Release it before a manual paste. "),
@@ -2958,6 +3011,10 @@ class PresspeechApp:
                 "reached the original field or a different field. "),
         }[reason]
         review_instruction = (
+            "Delivery Recovery does not show the words. Choose Copy for Manual "
+            "Paste into a private editor to inspect them, or Discard and "
+            "dictate again. "
+            if reason == "audio-overflow" else
             "Check the intended field and any field that may have gained "
             "focus, then check the current clipboard before choosing Copy or "
             "Discard. "

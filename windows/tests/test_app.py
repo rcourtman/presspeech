@@ -3219,6 +3219,23 @@ class TextRegressionTests(unittest.TestCase):
             "and dictionary rules in Settings if this was unexpected.")
         self.assertFalse(instance.transcribing)
 
+    def test_incomplete_audio_feedback_is_visible_and_actionable(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"visual_indicator": True}
+        instance.indicator = mock.Mock()
+        instance.notify = mock.Mock()
+        instance.lock = threading.Lock()
+        instance.transcribing = True
+
+        instance._finish_transcribing(app.AUDIO_INCOMPLETE_OUTCOME)
+
+        instance.indicator.show_temporary.assert_called_once_with(
+            "audio_incomplete", app.NO_SPEECH_FEEDBACK_SEC)
+        self.assertEqual(instance.notify.call_args.args[0],
+                         "Audio capture incomplete")
+        self.assertIn("Nothing was pasted", instance.notify.call_args.args[1])
+        self.assertFalse(instance.transcribing)
+
     def test_frozen_autostart_runs_only_the_packaged_executable(self):
         command = app._autostart_command(
             r"C:\Program Files\Presspeech\Presspeech.exe",
@@ -3946,6 +3963,36 @@ class TextRegressionTests(unittest.TestCase):
             app.NO_SPEECH_OUTCOME)
         instance._model_executor.submit.assert_not_called()
 
+    def test_too_short_after_overflow_reports_incomplete_capture(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance.transcribing = False
+        instance._rec_epoch = 7
+        instance._capture_ready = True
+        instance._input_overflowed = True
+        instance.buffer = [app.np.ones(3999, dtype=app.np.float32)]
+        instance.stream = None
+        instance.icon = None
+        instance._recording_input_device = (0, 16000)
+        instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._finish_transcribing = mock.Mock()
+        instance._notify_audio_capture_incomplete = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._model_executor = mock.Mock()
+
+        self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        instance._finish_transcribing.assert_called_once_with(
+            app.AUDIO_INCOMPLETE_OUTCOME)
+        instance._notify_audio_capture_incomplete.assert_not_called()
+        instance._model_executor.submit.assert_not_called()
+        self.assertFalse(instance._input_overflowed)
+
     def test_cancel_discards_capture_and_restores_recording_resources(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = __import__("threading").Lock()
@@ -3956,6 +4003,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.buffer = [
             __import__("numpy").ones(4800, dtype="float32")]
         instance._peak_rms = 0.4
+        instance._input_overflowed = True
         instance._recording_paste_target = app.PasteTarget(
             "notepad.exe", 1234)
         instance._recording_scratchpad = mock.Mock()
@@ -3982,6 +4030,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertFalse(instance.transcribing)
         self.assertEqual(instance.buffer, [])
         self.assertEqual(instance._peak_rms, 0.0)
+        self.assertFalse(instance._input_overflowed)
         self.assertEqual(
             instance._recording_paste_target, app.PasteTarget("", 0))
         self.assertIsNone(instance._recording_scratchpad)
@@ -4086,6 +4135,7 @@ class TextRegressionTests(unittest.TestCase):
         # Exactly 250 ms passes the same duration gate reported by the benchmark.
         audio = __import__("numpy").ones(4000, dtype="float32")
         instance.buffer = [audio]
+        instance._input_overflowed = True
         instance.stream = None
         instance.icon = None
         instance.input_device = (0, 16000)
@@ -4109,7 +4159,11 @@ class TextRegressionTests(unittest.TestCase):
         queued = instance._model_executor.submit.call_args.args
         self.assertEqual(queued[0], instance._transcribe_worker)
         __import__("numpy").testing.assert_array_equal(queued[1], audio)
-        self.assertEqual(queued[2:], (paste_target, None))
+        self.assertEqual(queued[2:], (paste_target, None, True))
+        self.assertFalse(instance._input_overflowed)
+        instance._capture_benchmark_if_armed.assert_not_called()
+        self.assertIn("benchmark capture skipped: microphone input overflow",
+                      [call.args[0] for call in instance._log.call_args_list])
 
     def test_active_stream_rate_survives_microphone_cache_invalidation(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -4180,6 +4234,33 @@ class PostRollTests(unittest.TestCase):
         self.assertGreater(rms, threshold)
         self.assertEqual(sequence, 3)
         self.assertEqual(callback_started_at, 9.9)
+
+    def test_only_accepted_microphone_overflow_marks_the_recording(self):
+        numpy = __import__("numpy")
+        instance = self.make_app(0.001)
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance._stop_before_ready = False
+        instance._capture_ready = False
+        instance._capture_ready_at = 10.0
+        instance._first_audio_callback = threading.Event()
+        instance._input_overflowed = False
+        status = mock.Mock(input_overflow=True)
+        chunk = numpy.full((320, 1), 0.001, dtype="float32")
+
+        with mock.patch.object(app.time, "perf_counter", return_value=9.99):
+            instance._audio_cb(chunk, 320, None, status, 7)
+        self.assertFalse(instance._input_overflowed)
+
+        instance._capture_ready = True
+        with mock.patch.object(app.time, "perf_counter", return_value=10.01):
+            instance._audio_cb(chunk, 320, None, status, 6)
+        self.assertFalse(instance._input_overflowed)
+
+        with mock.patch.object(app.time, "perf_counter", return_value=10.02):
+            instance._audio_cb(chunk, 320, None, status, 7)
+        self.assertTrue(instance._input_overflowed)
+        self.assertEqual(instance._audio_sequence, 4)
 
     def test_cache_invalidation_does_not_shorten_a_48khz_tail(self):
         numpy = __import__("numpy")
@@ -4414,6 +4495,81 @@ class ModelIdleTests(unittest.TestCase):
         instance._schedule_model_idle_unload.assert_called_once_with()
         instance._set_indicator.assert_called_once_with(None)
         self.assertFalse(instance.transcribing)
+
+    def test_overflow_flag_reaches_model_worker_for_this_recording(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.transcribing = True
+        instance._transcribe_worker_inner = mock.Mock(return_value=None)
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._set_indicator = mock.Mock()
+
+        instance._transcribe_worker(
+            mock.sentinel.audio, app.PasteTarget("notepad.exe", 1234),
+            None, True)
+
+        instance._transcribe_worker_inner.assert_called_once_with(
+            mock.sentinel.audio, app.PasteTarget("notepad.exe", 1234),
+            None, True)
+
+    def test_overflowed_transcript_waits_for_review_without_paste(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "base.en"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.return_value = "synthetic private phrase"
+        instance.transcriber.last_timing = {"backend": "whisper"}
+        instance._apply_text = mock.Mock(return_value="synthetic private phrase ")
+        instance._remember_undelivered_dictation = mock.Mock()
+        instance._deliver_text = mock.Mock()
+        instance._log = mock.Mock()
+
+        instance._transcribe_worker_inner(
+            mock.sentinel.audio, input_overflowed=True)
+
+        instance._remember_undelivered_dictation.assert_called_once_with(
+            "synthetic private phrase ", "audio-overflow")
+        instance._deliver_text.assert_not_called()
+        self.assertNotIn("synthetic private phrase",
+                         str(instance._log.call_args_list))
+
+    def test_overflow_review_notice_identifies_possible_missing_words(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.notify = mock.Mock()
+        instance._log = mock.Mock()
+        instance.open_delivery_recovery = mock.Mock()
+
+        instance._remember_undelivered_dictation(
+            "synthetic private phrase ", "audio-overflow")
+
+        self.assertEqual(instance._undelivered_dictations,
+                         ["synthetic private phrase "])
+        instance.notify.assert_called_once()
+        notice = instance.notify.call_args.args[1]
+        self.assertIn("may be incomplete", notice)
+        self.assertIn("no paste shortcut was sent", notice)
+        self.assertIn("does not show the words", notice)
+        self.assertIn("Copy for Manual Paste", notice)
+        self.assertIn("Discard and dictate again", notice)
+        self.assertNotIn("synthetic private phrase", notice)
+        self.assertNotIn("synthetic private phrase",
+                         str(instance._log.call_args_list))
+        instance.open_delivery_recovery.assert_called_once_with()
+
+    def test_blank_decode_after_overflow_does_not_claim_no_speech(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "base.en"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.return_value = ""
+        instance.transcriber.last_timing = {
+            "backend": "whisper", "speech_seconds": 0.0}
+        instance._log = mock.Mock()
+
+        outcome = instance._transcribe_worker_inner(
+            mock.sentinel.audio, input_overflowed=True)
+
+        self.assertEqual(outcome, app.AUDIO_INCOMPLETE_OUTCOME)
 
     def test_empty_transcription_keeps_a_transient_recovery_status(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

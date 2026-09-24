@@ -428,6 +428,9 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertEqual(
             ui.DictationIndicator._STATES["no_content"][0],
             "Nothing to insert \u2014 check text settings")
+        self.assertEqual(
+            ui.DictationIndicator._STATES["audio_incomplete"][0],
+            "Microphone audio incomplete \u2014 try again")
 
     def test_dialog_viewport_uses_content_size_until_screen_margin(self):
         self.assertEqual(ui._bounded_viewport(500, 1920, 96, 320), 500)

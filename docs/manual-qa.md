@@ -713,6 +713,15 @@ keyboard access testing in addition to assistive-technology testing.
   final word is retained. Repeat with quiet room tone and steady background
   noise: quiet input should begin transcription promptly, and ongoing sound
   must never hold capture more than about 0.4 seconds after the stop gesture.
+- For a candidate with the Windows input-overflow guard, exercise the flag
+  path in focused callback-status fault-injection tests using the release's
+  source and dependencies. Nonempty text must go to Delivery Recovery without
+  automatic paste or a saved benchmark fixture; a blank result must say audio
+  capture was incomplete rather than claiming no speech. A pre-readiness or
+  stale-recording overflow must not taint the next valid dictation. Separately
+  test the exact artifact on real input if an overflow can be reproduced;
+  ordinary recordings without a warning do not qualify the native overflow
+  path. Keep source fault injection and native observations distinct.
 - On the NVIDIA Parakeet path, dictate a human-reviewed passage longer than 60
   seconds with no long pause at the internal boundaries. Confirm the complete
   passage arrives once, without joined/split words or duplicated phrases, and
