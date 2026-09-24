@@ -4,7 +4,8 @@ GetForegroundWindow identifies the top-level window, not necessarily its
 focused child control. Querying the owning GUI thread adds a useful guard for
 classic Win32 edit controls; custom-rendered fields may share one HWND. A
 private fingerprint of a nonempty window caption catches some same-HWND tab
-changes, but neither captions nor HWNDs identify every browser field.
+changes. Recognized browsers additionally require an editable UI Automation
+element identity; neither captions nor HWNDs identify every browser field.
 """
 
 import ctypes
@@ -29,6 +30,15 @@ _COMMAND_TERMINAL_PROCESSES = frozenset({
     "powershell.exe", "pwsh.exe",
 })
 
+# These are foreground window owners whose editable page fields commonly
+# share a Win32 focus HWND. Unknown browsers and embedded webviews still need
+# native qualification; never infer browser identity from a private caption.
+_BROWSER_PROCESSES = frozenset({
+    "chrome.exe", "chromium.exe", "msedge.exe", "firefox.exe",
+    "brave.exe", "opera.exe", "vivaldi.exe", "arc.exe", "waterfox.exe",
+})
+_UIA_EDIT_CONTROL_TYPE = 50004
+
 
 def requires_terminal_review(text, process_name):
     """Defer automatic multiline paste into a recognized command terminal.
@@ -51,6 +61,85 @@ class PasteTarget(NamedTuple):
     focus_handle: int | None = 0
     # None means no usable nonempty caption was available, not proof of a tab.
     caption_fingerprint: bytes | None = None
+    # Only an opaque UIA RuntimeId for a focused Edit element; never its name,
+    # value, selection, or text. None cannot authorize browser auto-paste.
+    edit_identity: tuple[int, ...] | None = None
+
+
+def requires_edit_identity(process_name):
+    return (isinstance(process_name, str) and
+            process_name.lower() in _BROWSER_PROCESSES)
+
+
+def _create_uia_client():
+    """Create the bundled UIA client; also used by the package smoke test."""
+    import comtypes.client
+
+    library = comtypes.client.GetModule("UIAutomationCore.dll")
+    return comtypes.client.CreateObject(
+        library.CUIAutomation, interface=library.IUIAutomation)
+
+
+def _read_uia_focused_edit():
+    """Read only the focused element's type, password flag, and RuntimeId.
+
+    This runs on the caller's worker thread. Do not retain a COM element across
+    recording/transcription threads or inspect an element's private text.
+    A missing provider or failed COM query is an unavailable identity.
+    """
+    initialized = False
+    try:
+        import comtypes
+
+        comtypes.CoInitialize()
+        initialized = True
+        automation = _create_uia_client()
+        element = automation.GetFocusedElement()
+        if (element is None or
+                int(element.CurrentControlType) != _UIA_EDIT_CONTROL_TYPE or
+                bool(element.CurrentIsPassword)):
+            return None
+        return element.GetRuntimeId()
+    except Exception:
+        return None
+    finally:
+        if initialized:
+            comtypes.CoUninitialize()
+
+
+def focused_edit_identity(user32, window_handle, thread_identifier,
+                          focus_handle, caption_fingerprint, *,
+                          element_reader=_read_uia_focused_edit,
+                          observation_reader=None):
+    """Accept an opaque edit identity only within a coherent window snapshot.
+
+    UIA's focused element may disappear while it is queried. Re-read the
+    foreground Win32 focus and private caption afterwards; any discrepancy
+    makes this observation unavailable. A RuntimeId is a useful comparison
+    signal, not a guarantee that a destination consumed a later paste.
+    """
+    if not window_handle or focus_handle is None:
+        return None
+    try:
+        identity = element_reader()
+        if identity is None:
+            return None
+        identity = tuple(identity)
+        if (not 1 <= len(identity) <= 64 or
+                any(type(part) is not int for part in identity)):
+            return None
+        if observation_reader is None:
+            observation_reader = stable_focus_and_caption
+        later_focus, later_caption = observation_reader(
+            user32, window_handle, thread_identifier)
+        if (later_focus is None or later_focus != focus_handle or
+                later_caption != caption_fingerprint):
+            return None
+        if int(user32.GetForegroundWindow() or 0) != window_handle:
+            return None
+        return identity
+    except Exception:
+        return None
 
 
 def input_integrity_blocks_delivery(target_level, source_level):
@@ -206,16 +295,20 @@ def same_window(expected, current):
 
 
 def matches(expected, current):
-    """Match window owner, observed Win32 focus and available caption identity.
+    """Match owner, Win32 focus, caption, and required browser edit identity.
 
     Some toolkits never expose a useful focus HWND. When both *successful*
     observations lack one, retain the exact top-level-window policy. A failed
     or incoherent query is not evidence of no focused child; recover instead
-    of treating two failures as a match. Matching captions are not proof that
-    the same browser tab or DOM field remains selected.
+    of treating two failures as a match. Browsers need matching UIA Edit
+    RuntimeIds as well, because matching captions can still name different
+    tabs or fields. RuntimeIds can be reused, so native checks remain required.
     """
     return (same_window(expected, current) and
             expected.focus_handle is not None and
             current.focus_handle is not None and
             current.focus_handle == expected.focus_handle and
-            current.caption_fingerprint == expected.caption_fingerprint)
+            current.caption_fingerprint == expected.caption_fingerprint and
+            (not requires_edit_identity(expected.process_name) or
+             (expected.edit_identity is not None and
+              expected.edit_identity == current.edit_identity)))

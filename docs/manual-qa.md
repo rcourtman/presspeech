@@ -218,7 +218,13 @@ For each configuration, also record this release-gate matrix:
 | Locked/replaced clipboard recovery with notifications disabled and tray icon in overflow | |
 | Explicit recovery Copy, Discard, Leave Waiting, and Exit behavior | |
 | Non-text clipboard item preserved by known-invalid-target recovery; explicit Copy replacement clearly disclosed | |
-| Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
+| Windows Clipboard History positive control (ordinary small-text copy survives replacement) | |
+| Clipboard History exclusion: automatic dictation delivery | |
+| Clipboard History exclusion: explicit Delivery Recovery Copy | |
+| Clipboard History exclusion: Try Dictation Copy | |
+| Clipboard History exclusion: Try Dictation Cut | |
+| Clipboard History exclusion: Copy Diagnostics | |
+| Cloud Clipboard positive control and exclusion on a disposable paired device (**Not applicable** if no such device is available) | |
 | Try Dictation Copy/Cut uses protected clipboard and failed Cut leaves text intact | |
 | Microphone disconnect/reconnect rescan and in-flight selection change | |
 | Microsoft Remote Desktop and Moonlight insertion routes: client-only preflight, repeated distinct text, original-field check, and focus-change recovery | |
@@ -272,6 +278,17 @@ be exercised, mark it **Not run**, not Pass. A different-title recovery or a
 steady-focus browser pass does not qualify these same-window switches. Record
 only the browser version, generic field types, and aggregate outcomes, not tab
 titles, dictated words, or clipboard contents.
+
+For a candidate that checks UI Automation Edit-element identities, use
+Accessibility Insights Live Inspect to confirm that each test field exposes a
+distinct focused Edit element, without recording its name, value, or runtime
+identifier. Also test a field that exposes no usable Edit identity, if one is
+available: Presspeech must retain the dictation for Delivery Recovery before
+replacing the prior clipboard item rather than fall back to the matching
+Win32 handle and title. A matching provider identifier alone is not a pass;
+inspect the actual field and clipboard for every attempt. Provider runtime
+identifiers can be reused, and unknown browsers or embedded webviews may need
+separate qualification.
 
 For the remote-delivery row, use disposable local and remote machines and a
 blank, non-submitting plain-text editor on the remote host—not a shell,
@@ -1885,14 +1902,49 @@ clipboard.
   expected behavior, not a recovery-preservation pass. Record only outcomes,
   not the sample or transcript contents. Do not rely on Clipboard History or a
   third-party manager to retrieve the prior item.
-- Enable Windows Clipboard History, deliver a unique harmless phrase, overwrite
-  the current clipboard, and open Win+V. Confirm the Presspeech phrase is absent.
-  When a disposable paired test device is available, enable Cloud Clipboard and
-  confirm the phrase is not offered there. While the Presspeech item is current,
-  confirm ordinary Ctrl+V and explicit recovery still work. These native checks
-  qualify Windows' ExcludeClipboardContentFromMonitorProcessing behavior; the
-  opt-in native probe only confirms the marker is present, while doubled tests
-  qualify write ordering and fail-closed control flow.
+- On a disposable Windows profile, enable Clipboard History and clear only
+  that profile's test history; do not assume clearing removes pinned items.
+  First copy a short, unique, harmless plain-text control from an ordinary
+  editor (not Presspeech), replace the current clipboard with a second control,
+  and confirm the first is still present in Win+V. If the control is absent,
+  do not mark an exclusion pass: History may be disabled by policy or
+  unavailable. Record
+  **Blocked** or **Fail**, as appropriate, and stop this check. Use short text
+  because Windows does not retain history items above its
+  [size limit](https://support.microsoft.com/en-us/windows/apps/using-the-clipboard).
+- With that positive control working, exercise five separate candidate
+  operations: automatic dictation into a blank, non-submitting editor; Delivery
+  Recovery's explicit Copy; Try Dictation Copy; Try Dictation Cut; and Copy
+  Diagnostics. Use a distinct harmless phrase or disposable-profile diagnostic
+  item for each operation. Confirm that recovery does not replace the clipboard
+  until the user chooses Copy. While each Presspeech item is current, confirm
+  ordinary Ctrl+V still works. Then replace it with an ordinary small control
+  copy, confirm the new control appears in Win+V, and confirm the Presspeech
+  item does not. For Cut, also verify that the selected scratchpad text was
+  removed only after its protected copy was
+  confirmed. Record a separate Pass/Fail/Blocked/Not run result for each
+  operation; one successful dictation does not qualify the other UI paths.
+  Inspect the items locally but never record their contents or screenshots.
+- If a disposable paired device is available, enable Clipboard History and
+  *automatic* cross-device clipboard sync on both test devices. First confirm
+  that an ordinary harmless small-text control reaches the paired device while
+  it is current. If it does not, Cloud Clipboard exclusion is **Blocked** or
+  **Fail**, not Pass. Repeat the candidate-operation checks with fresh harmless
+  items. While each Presspeech
+  item is current, confirm local Ctrl+V works, observe the paired device's
+  Win+V for at least the control's measured sync interval, and confirm the item
+  is absent. Then make another ordinary small-text control copy; confirm it
+  reaches the paired device and the Presspeech item remains absent there.
+  Record each operation's outcome; the Cloud Clipboard gate passes only if all
+  five do. If sync is intermittent, do not infer exclusion from absence.
+  Record **Not applicable**, not Pass, when no disposable paired device is
+  available; never use a personal account or device just to complete this
+  optional check.
+  These native observations qualify Windows' documented
+  [clipboard exclusion format](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats)
+  under the recorded OS configuration. The opt-in native probe only confirms
+  the marker is present; unit tests qualify write ordering and fail-closed
+  control flow, not Windows History or cross-device behavior.
 - In Try Dictation, select a distinct harmless phrase and use Ctrl+C, then
   Ctrl+X on another selection. Confirm each copy remains available to ordinary
   Ctrl+V, Cut removes only the selected text, and neither item appears in

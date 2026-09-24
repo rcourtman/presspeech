@@ -2090,6 +2090,7 @@ class TextRegressionTests(unittest.TestCase):
         with mock.patch.object(app.sys, "frozen", True, create=True), \
                 mock.patch.object(app.importlib, "import_module",
                                   side_effect=load_module) as importer, \
+                mock.patch.object(app, "_create_uia_client") as uia_client, \
                 mock.patch.object(
                     app.model_network, "harden_loaded_runtime") as harden:
             app._package_selftest()
@@ -2108,6 +2109,9 @@ class TextRegressionTests(unittest.TestCase):
             "soundfile", "soxr", "tokenizers", "torch", "tk_uia",
             "transformers", "transformers.utils.hub",
         })
+        loaded["comtypes"].CoInitialize.assert_called_once_with()
+        loaded["comtypes"].CoUninitialize.assert_called_once_with()
+        uia_client.assert_called_once_with()
         harden.assert_called_once_with(require_loaded=True)
 
     def test_packaged_selftest_redacts_import_exception_details(self):
@@ -2117,6 +2121,22 @@ class TextRegressionTests(unittest.TestCase):
                     side_effect=OSError(r"C:\\private\\build\\missing.dll")):
             with self.assertRaisesRegex(
                     RuntimeError, r"^packaged import unavailable: torch$") as caught:
+                app._package_selftest()
+        self.assertNotIn("private", str(caught.exception))
+
+    def test_packaged_selftest_rejects_missing_uia_wrapper_without_details(self):
+        def load_module(_name):
+            return mock.Mock()
+
+        with mock.patch.object(app.sys, "frozen", True, create=True), \
+                mock.patch.object(app.importlib, "import_module",
+                                  side_effect=load_module), \
+                mock.patch.object(app, "_create_uia_client",
+                                  side_effect=OSError(r"C:\private\uia.dll")), \
+                mock.patch.object(app.model_network, "harden_loaded_runtime"):
+            with self.assertRaisesRegex(
+                    RuntimeError,
+                    r"^packaged import unavailable: UIAutomationCore$") as caught:
                 app._package_selftest()
         self.assertNotIn("private", str(caught.exception))
 
@@ -5291,14 +5311,19 @@ class ForegroundPasteTargetTests(unittest.TestCase):
                 mock.patch.object(app.os, "getpid", return_value=123), \
                 mock.patch.object(app, "_stable_focus_and_caption",
                                   return_value=(101, b"private-fingerprint")) as observation, \
+                mock.patch.object(app, "_focused_edit_identity",
+                                  return_value=(7, 11)) as edit_observation, \
                 mock.patch.object(app, "_process_integrity_level",
                                   return_value=0x2000):
             target = app._foreground_paste_target()
 
         self.assertEqual(target, app.PasteTarget(
-            "chrome.exe", 100, 41, 0x2000, 101, b"private-fingerprint"))
+            "chrome.exe", 100, 41, 0x2000, 101, b"private-fingerprint",
+            (7, 11)))
         observation.assert_called_once_with(
             user32, 100, 77, read_caption=True)
+        edit_observation.assert_called_once_with(
+            user32, 100, 77, 101, b"private-fingerprint")
         kernel32.CloseHandle.assert_called_once_with(88)
 
     def test_unreadable_process_image_does_not_invent_a_local_route(self):
@@ -5324,6 +5349,7 @@ class ForegroundPasteTargetTests(unittest.TestCase):
                 mock.patch.object(app.os, "getpid", return_value=123), \
                 mock.patch.object(app, "_stable_focus_and_caption",
                                   return_value=(101, b"private-fingerprint")), \
+                mock.patch.object(app, "_focused_edit_identity") as edit_observation, \
                 mock.patch.object(app, "_process_integrity_level",
                                   return_value=0x2000):
             target = app._foreground_paste_target()
@@ -5331,6 +5357,7 @@ class ForegroundPasteTargetTests(unittest.TestCase):
         self.assertEqual(target, app.PasteTarget(
             "", 100, 41, 0x2000, 101, b"private-fingerprint"))
         self.assertIsNone(app._paste_route(target.process_name))
+        edit_observation.assert_not_called()
         kernel32.CloseHandle.assert_called_once_with(88)
 
 
@@ -5462,6 +5489,43 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.controller.assert_not_called()
         self.assert_retained_without_content_logs()
         self.assertIn("window title changed", str(self.instance.notify.mock_calls))
+
+    def test_browser_same_title_other_edit_preserves_prior_clipboard(self):
+        # A same-title tab or second field can reuse the Win32 focus HWND.
+        self.target = app.PasteTarget(
+            "chrome.exe", 1234, 41, 0x2000, 101, b"same-title", (7, 11))
+        self.foreground.return_value = self.target._replace(
+            edit_identity=(7, 12))
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.instance.open_delivery_recovery.assert_called_once_with()
+
+    def test_browser_missing_edit_identity_preserves_prior_clipboard(self):
+        self.target = app.PasteTarget(
+            "msedge.exe", 1234, 41, 0x2000, 101, b"same-title")
+        self.foreground.return_value = self.target
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+
+    def test_browser_edit_change_after_copy_never_sends_shortcut(self):
+        self.target = app.PasteTarget(
+            "chrome.exe", 1234, 41, 0x2000, 101, b"same-title", (7, 11))
+        other_edit = self.target._replace(edit_identity=(7, 12))
+        self.foreground.side_effect = [self.target, other_edit]
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_called_once()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
 
     def test_caption_change_after_copy_never_sends_shortcut(self):
         self.target = self.target._replace(caption_fingerprint=b"original")

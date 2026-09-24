@@ -1,6 +1,8 @@
 """Model-free focus identity tests, runnable without a Windows desktop."""
 
 import ctypes
+import sys
+import types
 import unittest
 from unittest import mock
 
@@ -229,6 +231,91 @@ class StableFocusAndCaptionTests(unittest.TestCase):
         caption.assert_not_called()
 
 
+class FocusedEditIdentityTests(unittest.TestCase):
+    def test_uia_reader_never_reads_field_text_and_releases_com(self):
+        comtypes = types.ModuleType("comtypes")
+        comtypes.__path__ = []
+        client = types.ModuleType("comtypes.client")
+        comtypes.client = client
+        comtypes.CoInitialize = mock.Mock()
+        comtypes.CoUninitialize = mock.Mock()
+        library = types.SimpleNamespace(
+            CUIAutomation=mock.sentinel.cuia,
+            IUIAutomation=mock.sentinel.iuia)
+        client.GetModule = mock.Mock(return_value=library)
+        element = mock.Mock()
+        element.CurrentControlType = 50004
+        element.CurrentIsPassword = False
+        element.GetRuntimeId.return_value = (7, 11)
+        automation = mock.Mock()
+        automation.GetFocusedElement.return_value = element
+        client.CreateObject = mock.Mock(return_value=automation)
+        with mock.patch.dict(sys.modules, {
+                "comtypes": comtypes, "comtypes.client": client}):
+            self.assertEqual(paste_target._read_uia_focused_edit(), (7, 11))
+            element.CurrentIsPassword = True
+            self.assertIsNone(paste_target._read_uia_focused_edit())
+            element.CurrentIsPassword = False
+            element.CurrentControlType = 50030  # page Document, not a field
+            self.assertIsNone(paste_target._read_uia_focused_edit())
+        self.assertEqual(element.GetRuntimeId.call_count, 1)
+        client.CreateObject.assert_called_with(
+            library.CUIAutomation, interface=library.IUIAutomation)
+        self.assertEqual(comtypes.CoInitialize.call_count, 3)
+        self.assertEqual(comtypes.CoUninitialize.call_count, 3)
+        self.assertNotIn("CurrentName", element._mock_children)
+        self.assertNotIn("CurrentValue", element._mock_children)
+
+    def test_browser_owner_list_does_not_depend_on_a_private_caption(self):
+        for name in ("chrome.exe", "chromium.exe", "MSEDGE.EXE",
+                     "firefox.exe", "brave.exe",
+                     "opera.exe", "vivaldi.exe", "arc.exe", "waterfox.exe"):
+            self.assertTrue(paste_target.requires_edit_identity(name))
+        for name in ("notepad.exe", "", None):
+            self.assertFalse(paste_target.requires_edit_identity(name))
+
+    def test_accepts_only_a_stable_opaque_edit_identity(self):
+        user32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 100
+        observer = mock.Mock(return_value=(101, b"title"))
+        reader = mock.Mock(return_value=(7, -2, 19))
+        self.assertEqual(paste_target.focused_edit_identity(
+            user32, 100, 77, 101, b"title", element_reader=reader,
+            observation_reader=observer), (7, -2, 19))
+        observer.assert_called_once_with(user32, 100, 77)
+
+    def test_disappearing_or_changed_focus_cannot_authorize_paste(self):
+        user32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 100
+        for later in ((None, None), (102, b"title"), (101, b"other")):
+            with self.subTest(later=later):
+                self.assertIsNone(paste_target.focused_edit_identity(
+                    user32, 100, 77, 101, b"title",
+                    element_reader=lambda: (7, 8),
+                    observation_reader=lambda *_args: later))
+        user32.GetForegroundWindow.return_value = 200
+        self.assertIsNone(paste_target.focused_edit_identity(
+            user32, 100, 77, 101, b"title",
+            element_reader=lambda: (7, 8),
+            observation_reader=lambda *_args: (101, b"title")))
+
+    def test_missing_or_malformed_identity_fails_closed(self):
+        user32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 100
+        observer = lambda *_args: (101, b"title")
+        for identity in (None, (), (True,), ("private field name",),
+                         tuple(range(65))):
+            with self.subTest(identity=identity):
+                self.assertIsNone(paste_target.focused_edit_identity(
+                    user32, 100, 77, 101, b"title",
+                    element_reader=lambda: identity,
+                    observation_reader=observer))
+        self.assertIsNone(paste_target.focused_edit_identity(
+            user32, 100, 77, None, b"title",
+            element_reader=mock.Mock(side_effect=AssertionError),
+            observation_reader=observer))
+
+
 class PasteTargetMatchTests(unittest.TestCase):
     def target(self, focus=101, *, process=41, window=100, name="notepad.exe"):
         return paste_target.PasteTarget(name, window, process, 0, focus)
@@ -282,6 +369,18 @@ class PasteTargetMatchTests(unittest.TestCase):
         self.assertFalse(paste_target.matches(unavailable, first))
         # Uncaptioned apps retain the existing HWND/Win32-focus policy.
         self.assertTrue(paste_target.matches(unavailable, unavailable))
+
+    def test_browser_same_caption_and_win32_focus_needs_same_edit(self):
+        captured = paste_target.PasteTarget(
+            "chrome.exe", 100, 41, 0, 101, b"same title", (7, 11))
+        other_field = captured._replace(edit_identity=(7, 12))
+        unavailable = captured._replace(edit_identity=None)
+        self.assertTrue(paste_target.matches(captured, captured))
+        self.assertFalse(paste_target.matches(captured, other_field))
+        self.assertFalse(paste_target.matches(captured, unavailable))
+        self.assertFalse(paste_target.matches(unavailable, unavailable))
+        self.assertTrue(paste_target.matches(
+            self.target()._replace(edit_identity=None), self.target()))
 
     def test_executable_fallback_and_unidentified_owner(self):
         expected = self.target(process=0)

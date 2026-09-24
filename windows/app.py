@@ -34,6 +34,9 @@ import keyboard_delivery
 import session_events
 from paste_target import (
     PasteTarget, stable_focus_and_caption as _stable_focus_and_caption,
+    focused_edit_identity as _focused_edit_identity,
+    requires_edit_identity as _requires_edit_identity,
+    _create_uia_client,
     matches as _paste_target_matches, same_window as _paste_target_same_window,
     input_integrity_blocks_delivery as _input_integrity_blocks_delivery,
     requires_terminal_review as _requires_terminal_review,
@@ -457,28 +460,31 @@ def _foreground_paste_target():
         focus_handle, caption_fingerprint = _stable_focus_and_caption(
             user32, int(hwnd), int(thread_identifier),
             read_caption=process_id.value != os.getpid())
+
+        def target_for(process_name):
+            edit_identity = None
+            if _requires_edit_identity(process_name):
+                edit_identity = _focused_edit_identity(
+                    user32, int(hwnd), int(thread_identifier),
+                    focus_handle, caption_fingerprint)
+            return PasteTarget(
+                process_name, int(hwnd), int(process_id.value),
+                _process_integrity_level(process_id.value), focus_handle,
+                caption_fingerprint, edit_identity)
+
         handle = kernel32.OpenProcess(0x1000, False, process_id.value)
         if not handle:
-            return PasteTarget(
-                "", int(hwnd), int(process_id.value),
-                _process_integrity_level(process_id.value), focus_handle,
-                caption_fingerprint)
+            return target_for("")
+        process_name = ""
         try:
             size = wintypes.DWORD(32768)
             path = ctypes.create_unicode_buffer(size.value)
-            if not kernel32.QueryFullProcessImageNameW(
+            if kernel32.QueryFullProcessImageNameW(
                     handle, 0, path, ctypes.byref(size)):
-                return PasteTarget(
-                    "", int(hwnd), int(process_id.value),
-                    _process_integrity_level(process_id.value), focus_handle,
-                    caption_fingerprint)
-            return PasteTarget(
-                os.path.basename(path.value).lower(), int(hwnd),
-                int(process_id.value),
-                _process_integrity_level(process_id.value), focus_handle,
-                caption_fingerprint)
+                process_name = os.path.basename(path.value).lower()
         finally:
             kernel32.CloseHandle(handle)
+        return target_for(process_name)
     except Exception:
         return PasteTarget("", 0)
 
@@ -3009,7 +3015,8 @@ class PresspeechApp:
                 "no paste shortcut was sent. "),
             "focus-changed": (
                 "The original window or focused control could not be "
-                "verified, or the window title changed; no paste shortcut "
+                "verified (including browser edit identity), or the window "
+                "title changed; no paste shortcut "
                 "was sent. "),
             "input-integrity-boundary": (
                 "The original app's input privilege boundary blocks automatic "
@@ -3043,7 +3050,8 @@ class PresspeechApp:
                 "Presspeech could not prepare the paste shortcut; no paste "
                 "key events were sent. The clipboard may have changed. "),
             "shortcut-focus-uncertain": (
-                "The original focused field or window title could not be "
+                "The original focused field, browser edit identity, or "
+                "window title could not be "
                 "verified after the paste shortcut was sent. Text may have "
                 "reached the original field or a different field. "),
         }[reason]
@@ -3938,6 +3946,7 @@ def _package_selftest():
     """Verify that the frozen executable contains every lazy runtime import."""
     if not getattr(sys, "frozen", False):
         raise RuntimeError("packaged self-test requires a frozen executable")
+    comtypes_module = None
     for module_name, symbols in PACKAGE_SMOKE_IMPORTS:
         try:
             module = importlib.import_module(module_name)
@@ -3952,6 +3961,26 @@ def _package_selftest():
                 raise RuntimeError(
                     "packaged import unavailable: %s.%s" %
                     (module_name, symbol)) from None
+        if module_name == "comtypes":
+            comtypes_module = module
+    # Importing comtypes alone does not prove that the frozen app can generate
+    # or load UIAutomationCore's interface wrapper. That missing wrapper would
+    # turn every recognized-browser dictation into manual recovery.
+    initialized = False
+    try:
+        comtypes_module.CoInitialize()
+        initialized = True
+        _create_uia_client()
+    except Exception:
+        raise RuntimeError(
+            "packaged import unavailable: UIAutomationCore") from None
+    finally:
+        if initialized:
+            try:
+                comtypes_module.CoUninitialize()
+            except Exception:
+                raise RuntimeError(
+                    "packaged import unavailable: UIAutomationCore") from None
     # Validate the values cached by the real bundled libraries, not only the
     # environment from which they were imported.
     model_network.harden_loaded_runtime(require_loaded=True)
