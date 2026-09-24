@@ -6213,6 +6213,25 @@ private struct KeyboardEventStep: Equatable {
     let flags: CGEventFlags
 }
 
+/// A physically held modifier can turn our Paste chord into a different app
+/// shortcut. Query HID state rather than the combined session state to avoid
+/// unrelated session-posted keys. Once our Command-down is posted, its state
+/// may also be visible there, so only *other* modifiers can be distinguished
+/// from the synthetic one. This is a last-moment safety check, not an atomic
+/// HID transaction; native held-key qualification remains necessary.
+private func modifiersAllowSyntheticTextDelivery(_ flags: CGEventFlags,
+                                                 syntheticCommandDown: Bool) -> Bool {
+    let relevant: CGEventFlags = [.maskShift, .maskControl, .maskAlternate,
+                                  .maskCommand, .maskSecondaryFn]
+    let forbidden = syntheticCommandDown ? relevant.subtracting(.maskCommand) : relevant
+    return flags.intersection(forbidden).isEmpty
+}
+
+private func physicalModifiersAllowSyntheticTextDelivery(syntheticCommandDown: Bool = false) -> Bool {
+    modifiersAllowSyntheticTextDelivery(CGEventSource.flagsState(.hidSystemState),
+                                        syntheticCommandDown: syntheticCommandDown)
+}
+
 private let ANSI_PASTE_VIRTUAL_KEY: CGKeyCode = 0x09
 
 /// Resolve the key whose current-layout Command translation is the lowercase
@@ -6339,6 +6358,7 @@ private func clipboardPastePostableSteps(_ steps: [KeyboardEventStep]) -> [Keybo
 private enum ClipboardPasteEventOutcome: Equatable {
     case posted
     case targetChanged
+    case modifierChanged
     case clipboardChanged
     case failed
     // V key-down was posted or partial-shortcut cleanup failed. A second
@@ -6352,6 +6372,7 @@ private func postFocusBoundClipboardPasteSteps(
     pasteKey: CGKeyCode,
     targetStillFocused: () -> Bool,
     clipboardStillOwned: () -> Bool,
+    unrelatedPhysicalModifiersClear: () -> Bool = { true },
     postStep: (KeyboardEventStep) -> Bool
 ) -> ClipboardPasteEventOutcome {
     var pressedKeys: [CGKeyCode] = []
@@ -6384,6 +6405,18 @@ private func postFocusBoundClipboardPasteSteps(
             }
             guard focused else {
                 return releasePressedKeys() ? .targetChanged : .deliveryUncertain
+            }
+            // Our Command-down may now be reflected in HID state. Reject a
+            // newly held Shift, Control, Option or Fn before V-down, but do
+            // not mistake the synthetic Command for a user's modifier.
+            let modifiersClear = unrelatedPhysicalModifiersClear()
+            // The state query is another boundary at which a different app
+            // can copy. Never post V against a newer clipboard generation.
+            guard clipboardStillOwned() else {
+                return releasePressedKeys() ? .clipboardChanged : .deliveryUncertain
+            }
+            guard modifiersClear else {
+                return releasePressedKeys() ? .modifierChanged : .deliveryUncertain
             }
         }
         guard postStep(step) else {
@@ -7255,6 +7288,20 @@ private enum ClipboardPasteInserter {
         }
         let steps = clipboardPasteKeyboardEventSteps(commandKey: virtualKeyCommand,
                                                      pasteKey: pasteKey)
+        // The hotkey may have been released while another physical modifier
+        // remains down. Do not send a potentially different target-app command;
+        // keep the owned transcript for deliberate paste after key release.
+        guard physicalModifiersAllowSyntheticTextDelivery() else {
+            let outcome = clipboardOnlyOutcomeAfterOwnedWrite {
+                receipt.stillOwns(pb)
+            }
+            if outcome == .copiedWithoutPasting {
+                stageManualPreservation(context, on: pb,
+                                        expectedChangeCount: writeChangeCount)
+                log("physical modifier held before paste; transcript copied for manual paste")
+            }
+            return outcome
+        }
         let postOutcome = post(
             steps,
             pasteKey: pasteKey,
@@ -7267,15 +7314,18 @@ private enum ClipboardPasteInserter {
             log("clipboard changed during paste focus check; insertion stopped")
             return .clipboardChanged
         }
-        if postOutcome == .targetChanged {
+        if postOutcome == .targetChanged || postOutcome == .modifierChanged {
             let outcome = clipboardOnlyOutcomeAfterOwnedWrite {
                 receipt.stillOwns(pb)
             }
             if outcome == .copiedWithoutPasting {
                 stageManualPreservation(context, on: pb,
                                         expectedChangeCount: writeChangeCount)
+                if postOutcome == .modifierChanged {
+                    log("physical modifier pressed during paste; transcript copied for manual paste")
+                }
             } else {
-                log("clipboard changed while unwinding paste focus move; insertion stopped")
+                log("clipboard changed while unwinding paste shortcut; insertion stopped")
             }
             return outcome
         }
@@ -7341,7 +7391,10 @@ private enum ClipboardPasteInserter {
             steps,
             pasteKey: pasteKey,
             targetStillFocused: targetStillFocused,
-            clipboardStillOwned: clipboardStillOwned
+            clipboardStillOwned: clipboardStillOwned,
+            unrelatedPhysicalModifiersClear: {
+                physicalModifiersAllowSyntheticTextDelivery(syntheticCommandDown: true)
+            }
         ) { step in
             guard let event = events.first(where: { $0.0 == step })?.1 else {
                 return false
@@ -7474,6 +7527,14 @@ private enum DirectUnicodeInserter {
                        preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         let clipboardAtStart = NSPasteboard.general.changeCount
+        guard physicalModifiersAllowSyntheticTextDelivery() else {
+            log("physical modifier held before Unicode typing; transcript copied for manual paste")
+            return TextInserter.copyWithoutPasting(
+                text,
+                preserveClipboard: preserveClipboard,
+                expectedSourceChangeCount: clipboardAtStart
+            )
+        }
         guard let chunks = postableUnicodeInsertionChunks(for: text) else {
             log("direct Unicode typing skipped: a grapheme exceeds the event limit")
             return TextInserter.copyWithoutPasting(
@@ -7487,6 +7548,7 @@ private enum DirectUnicodeInserter {
             chunks: chunks,
             targetStillFocused: {
                 dictationPasteTargetStillFocused(expectedTarget)
+                    && physicalModifiersAllowSyntheticTextDelivery()
             },
             postChunk: { post($0, source: source) },
             copyWithoutPasting: {
@@ -19692,6 +19754,29 @@ private enum PresspeechSelfTest {
             ],
             "clipboard paste should synthesize a full Command+V key sequence"
         )
+        try expect(modifiersAllowSyntheticTextDelivery([], syntheticCommandDown: false),
+                   equals: true,
+                   "unmodified physical HID state should permit synthetic text delivery")
+        try expect(modifiersAllowSyntheticTextDelivery(.maskAlphaShift,
+                                                      syntheticCommandDown: false),
+                   equals: true,
+                   "Caps Lock alone should not force clipboard-only recovery")
+        let heldModifiers: [CGEventFlags] = [.maskShift, .maskControl, .maskAlternate,
+                                             .maskCommand, .maskSecondaryFn]
+        for heldModifier in heldModifiers {
+            try expect(modifiersAllowSyntheticTextDelivery(heldModifier,
+                                                          syntheticCommandDown: false),
+                       equals: false,
+                       "a physically held shortcut modifier must block synthetic delivery")
+        }
+        try expect(modifiersAllowSyntheticTextDelivery(.maskCommand,
+                                                      syntheticCommandDown: true),
+                   equals: true,
+                   "our posted Command-down must not be mistaken for a new physical modifier")
+        try expect(modifiersAllowSyntheticTextDelivery([.maskCommand, .maskAlternate],
+                                                      syntheticCommandDown: true),
+                   equals: false,
+                   "Option appearing after Command-down must stop before Paste key-down")
         let interruptedKeyUpProbe = MainActor.assumeIsolated {
             let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
                                                          pasteKey: 0x09)
@@ -19757,6 +19842,64 @@ private enum PresspeechSelfTest {
             ],
             "focus-bound clipboard paste should release Command without emitting V"
         )
+        let heldModifierPasteProbe = MainActor.assumeIsolated {
+            var posted: [KeyboardEventStep] = []
+            let outcome = postFocusBoundClipboardPasteSteps(
+                clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                pasteKey: 0x09,
+                targetStillFocused: { true },
+                clipboardStillOwned: { true },
+                unrelatedPhysicalModifiersClear: { false },
+                postStep: {
+                    posted.append($0)
+                    return true
+                }
+            )
+            return (outcome: outcome, posted: posted)
+        }
+        try expect(heldModifierPasteProbe.outcome, equals: .modifierChanged,
+                   "a newly held modifier should choose copy-only recovery before Paste key-down")
+        try expect(heldModifierPasteProbe.posted, equals: [
+            KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
+            KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
+        ], "modifier change should unwind Command without posting Paste")
+        let heldModifierCleanupFailure = MainActor.assumeIsolated {
+            postFocusBoundClipboardPasteSteps(
+                clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                pasteKey: 0x09,
+                targetStillFocused: { true },
+                clipboardStillOwned: { true },
+                unrelatedPhysicalModifiersClear: { false },
+                postStep: { $0.keyDown }
+            )
+        }
+        try expect(heldModifierCleanupFailure, equals: .deliveryUncertain,
+                   "an unreleased synthetic Command must not claim safe modifier recovery")
+        let ownershipDuringModifierProbe = MainActor.assumeIsolated {
+            var owned = true
+            var posted: [KeyboardEventStep] = []
+            let outcome = postFocusBoundClipboardPasteSteps(
+                clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                pasteKey: 0x09,
+                targetStillFocused: { true },
+                clipboardStillOwned: { owned },
+                unrelatedPhysicalModifiersClear: {
+                    owned = false
+                    return true
+                },
+                postStep: {
+                    posted.append($0)
+                    return true
+                }
+            )
+            return (outcome: outcome, posted: posted)
+        }
+        try expect(ownershipDuringModifierProbe.outcome, equals: .clipboardChanged,
+                   "a clipboard change during modifier lookup must block Paste key-down")
+        try expect(ownershipDuringModifierProbe.posted, equals: [
+            KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
+            KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
+        ], "newer clipboard ownership must unwind Command without posting Paste")
 
         // A post failure before V-down is safe to retry with Unicode typing
         // only when the partial shortcut's keys were released successfully.

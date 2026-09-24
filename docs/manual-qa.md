@@ -983,8 +983,12 @@ delivery, then release it. Observe whether the intended field receives the
 complete text once or Presspeech gives explicit copy-only recovery. No other
 shortcut, target, or field may receive the text, and Presspeech must not
 release a user's physically held key. Check Control, Option, and Shift
-separately where the test target makes the resulting chords harmless. A
-normal paste after all modifiers are released does not qualify this row;
+separately where the test target makes the resulting chords harmless. Also
+check a held physical Command key: it should not be treated as Presspeech's
+synthetic Command-down or released by Presspeech. If delivery is copy-only,
+release all physical modifiers before using Command-V and verify the complete
+transcript is available. An attempt that releases modifiers before delivery
+does not qualify this row;
 neither source-level event flags nor a successfully posted Command-V prove
 what the native target actually received. Record aggregate outcomes only.
 
