@@ -5004,6 +5004,26 @@ def run_self_test() -> None:
         launch_entry, {"guide": "Uncheck Launch Presspeech to wait"}
     ):
         raise SyncError("self-test: missing checkbox-default warning was accepted")
+    # Pages and CI use --check, not the rewriting path below. Keep this guard
+    # wired into that mode as well as testing its parser in isolation.
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    from unittest.mock import patch
+
+    check_errors = StringIO()
+    with (
+        patch.object(
+            sys.modules[__name__],
+            "check_windows_install_launch_checkbox",
+            return_value=["launch-checkbox-check-probe"],
+        ),
+        patch.object(sys, "argv", ["sync-docs.py", "--check"]),
+        redirect_stderr(check_errors),
+        redirect_stdout(StringIO()),
+    ):
+        check_result = main()
+    if check_result != 1 or "launch-checkbox-check-probe" not in check_errors.getvalue():
+        raise SyncError("self-test: --check skipped the installer launch-checkbox guard")
 
     readme_fixture = (
         "before\n" + README_MAC_PROMPT_START + "stale prompt"
@@ -7413,6 +7433,7 @@ def main() -> int:
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_windows_verified_download_flow())
+            errors.extend(check_windows_install_launch_checkbox())
             errors.extend(check_macos_install_download_versions(metadata))
             errors.extend(check_public_attestation_steps())
             errors.extend(check_anchored_install_preflights(metadata))
