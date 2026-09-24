@@ -3,12 +3,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rcourtman/presspeech/releases/latest"><img src="https://img.shields.io/github/v/release/rcourtman/presspeech?label=release&color=10B981" alt="Latest release"></a>
+  <a href="https://rcourtman.github.io/presspeech/install.html#model-download-privacy"><img src="https://img.shields.io/github/v/release/rcourtman/presspeech?label=release&color=10B981" alt="Latest macOS release: review the first-launch privacy warning"></a>
   <a href="https://github.com/rcourtman/presspeech/actions/workflows/check.yml"><img src="https://github.com/rcourtman/presspeech/actions/workflows/check.yml/badge.svg" alt="Build status"></a>
   <a href="https://github.com/rcourtman/presspeech/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rcourtman/presspeech?color=10B981" alt="MIT licensed"></a>
   <a href="https://rcourtman.github.io/presspeech/install.html"><img src="https://img.shields.io/badge/macOS-Released%20%C2%B7%20notarised-10B981" alt="macOS: released and notarised"></a>
   <a href="https://rcourtman.github.io/presspeech/windows.html"><img src="https://img.shields.io/badge/Windows-Prerelease%20%C2%B7%20unsigned-D97706" alt="Windows: prerelease and unsigned"></a>
-  <a href="https://github.com/rcourtman/homebrew-presspeech"><img src="https://img.shields.io/badge/Homebrew-Cask-10B981?logo=homebrew&logoColor=white" alt="Homebrew Cask"></a>
+  <a href="https://rcourtman.github.io/presspeech/install.html"><img src="https://img.shields.io/badge/Homebrew-Cask-10B981?logo=homebrew&logoColor=white" alt="Homebrew Cask: review macOS install warning"></a>
   <a href="https://rcourtman.github.io/presspeech/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-10B981" alt="Documentation site"></a>
 </p>
 
@@ -637,8 +637,7 @@ and NVIDIA qualification record in [`docs/manual-qa.md`](docs/manual-qa.md).
 - [Test target-app compatibility](https://rcourtman.github.io/presspeech/app-compatibility.html)
 - [Product roadmap](ROADMAP.md)
 - [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)
-- [Latest release](https://github.com/rcourtman/presspeech/releases/latest)
-- [Direct download](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip)
+- [macOS install, first-launch privacy decision, and verified download](https://rcourtman.github.io/presspeech/install.html#model-download-privacy)
 - [Windows install guide](https://rcourtman.github.io/presspeech/windows.html)
 - [Documentation site](https://rcourtman.github.io/presspeech/)
 - [Benchmarks and methodology](https://rcourtman.github.io/presspeech/benchmarks.html)

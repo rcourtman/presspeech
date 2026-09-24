@@ -331,7 +331,7 @@ enum DictationNotice: Equatable {
         case .pasteTargetUnavailable:
             return "Presspeech couldn't verify the window for automatic paste. The transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available."
         case .insertionFailed:
-            return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu."
+            return "Presspeech couldn't confirm text delivery. Check the destination field before pasting or trying again. If text is absent or incomplete, remove any partial text before pasting a copied transcript. Copy Last Transcript is available in the Presspeech menu."
         case .insertionFailedWithoutHistory:
             return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. No transcript is available in the Presspeech menu; correct or remove any partial text before dictating again."
         case .transcriptionFailed:
@@ -878,6 +878,12 @@ func dictationNoticeAfterHistoryChange(_ notice: DictationNotice?,
         return .insertionFailedWithoutHistory
     }
     return notice
+}
+
+func shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(_ notice: DictationNotice?) -> Bool {
+    // Copying an entry (including an older one) does not establish whether
+    // the last dictation reached the target, or whether it arrived partially.
+    notice == .insertionFailed || notice == .insertionFailedWithoutHistory
 }
 
 func parseRecentTranscriptLimit(storedValue value: Any?) -> RecentTranscriptLimit? {
@@ -10884,9 +10890,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
         log("history copied to clipboard (\(s.count) chars)")
-        clearDictationNotice()
+        let preservesUncertainDelivery = shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(dictationNotice)
+        if !preservesUncertainDelivery {
+            clearDictationNotice()
+        }
         if isReady, !isRecording, !isBusy, !isTerminating {
-            setMenuBarState(.idle)
+            // A successful copy is not a paste acknowledgement. Nor should
+            // opening History shorten an in-flight failure-icon flash.
+            setMenuBarState(preservesUncertainDelivery && errorFlashWorkItem != nil ? .error : .idle)
         }
         rebuildMenu()
     }
@@ -19928,6 +19939,31 @@ private enum PresspeechSelfTest {
             equals: .pasteTargetUnavailable,
             "history changes must not hide an unverified-window manual-paste notice"
         )
+        try expect(
+            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.insertionFailed),
+            equals: true,
+            "a History copy cannot confirm whether the target received all or part of a dictation"
+        )
+        try expect(
+            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.insertionFailedWithoutHistory),
+            equals: true,
+            "a stale History action must not clear uncertain delivery after history was disabled"
+        )
+        try expect(
+            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.copiedToClipboard),
+            equals: false,
+            "re-copying after a known copy-only fallback can clear its manual-paste notice"
+        )
+        try expect(
+            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.pasteTargetUnavailable),
+            equals: false,
+            "re-copying after an unverified-window copy fallback may clear its manual-paste notice"
+        )
+        try expect(
+            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(nil),
+            equals: false,
+            "a History copy without a notice needs no delivery warning"
+        )
 
         try expect(
             limitedRecentTranscripts(transcripts, limit: .off),
@@ -22413,6 +22449,10 @@ private enum PresspeechSelfTest {
                                              notice: .noAudioCaptured),
                    equals: DictationNotice.noAudioCaptured.accessibilityValue,
                    "dictation recovery should retain its actionable status on the menu-bar item")
+        try expect(menuBarAccessibilityValue(for: .idle,
+                                             notice: .insertionFailed),
+                   equals: DictationNotice.insertionFailed.accessibilityValue,
+                   "an idle icon after a History copy must still expose uncertain delivery to VoiceOver")
         try expect(shouldNotifyAssistiveAppsOfMenuBarState(.recording,
                                                            hasDictationNotice: false),
                    equals: false,
@@ -22475,7 +22515,7 @@ private enum PresspeechSelfTest {
                    equals: "Presspeech couldn't verify the window for automatic paste. The transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available.",
                    "VoiceOver should explain the safety fallback without promising stale clipboard contents")
         try expect(DictationNotice.insertionFailed.accessibilityValue,
-                   equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu.",
+                   equals: "Presspeech couldn't confirm text delivery. Check the destination field before pasting or trying again. If text is absent or incomplete, remove any partial text before pasting a copied transcript. Copy Last Transcript is available in the Presspeech menu.",
                    "uncertain delivery should prevent duplicate insertion during in-memory recovery")
         try expect(DictationNotice.insertionFailedWithoutHistory.accessibilityValue,
                    equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. No transcript is available in the Presspeech menu; correct or remove any partial text before dictating again.",

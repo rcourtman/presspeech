@@ -501,12 +501,13 @@ class Transcriber:
                 model_path, local_files_only=True, revision=PARAKEET_REVISION,
                 token=False, trust_remote_code=False,
                 use_safetensors=True)
-        except RuntimeError as exc:
+        except RuntimeError:
             if requested_dtype == "auto":
                 raise
             if notify is not None:
-                notify("Presspeech", "Half-precision load failed; retrying FP32 (%s)"
-                       % str(exc)[:100])
+                # Backend error text can contain a local model path or other
+                # private state. A retry notice needs no raw exception detail.
+                notify("Presspeech", "Half-precision load failed; retrying FP32.")
             self.model = AutoModelForTDT.from_pretrained(
                 model_path, local_files_only=True, revision=PARAKEET_REVISION, dtype="auto",
                 token=False, trust_remote_code=False,

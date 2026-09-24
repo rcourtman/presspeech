@@ -137,18 +137,26 @@ def paired_tail_silence_metrics(reference, baseline, tailed):
     """
     if not baseline or len(baseline) != len(tailed):
         raise ValueError("tail-silence probe needs matching non-empty trials")
-    if not _normalise_words(reference):
+    reference_words = _normalise_words(reference)
+    if not reference_words:
         raise ValueError("tail-silence probe needs a scoreable reference")
+    final_word = reference_words[-1]
     pairs = []
     for clean_text, tailed_text in zip(baseline, tailed):
         clean_errors = accuracy_metrics(reference, clean_text)["word_errors"]
         tailed_errors = accuracy_metrics(reference, tailed_text)["word_errors"]
+        clean_words = _normalise_words(clean_text)
+        tailed_words = _normalise_words(tailed_text)
+        clean_kept_final = bool(clean_words) and clean_words[-1] == final_word
+        tailed_kept_final = bool(tailed_words) and tailed_words[-1] == final_word
         pairs.append({
             "baseline_transcript": clean_text,
             "tailed_transcript": tailed_text,
             "baseline_word_errors": clean_errors,
             "tailed_word_errors": tailed_errors,
             "nonempty_to_empty": bool(clean_text.strip()) and not tailed_text.strip(),
+            "final_word_lost": clean_kept_final and not tailed_kept_final,
+            "final_word_recovered": not clean_kept_final and tailed_kept_final,
         })
     return {
         "trial_count": len(pairs),
@@ -156,6 +164,10 @@ def paired_tail_silence_metrics(reference, baseline, tailed):
         "tailed_empty_trial_count": sum(not text.strip() for text in tailed),
         "nonempty_to_empty_trial_count": sum(
             pair["nonempty_to_empty"] for pair in pairs),
+        "final_word_lost_trial_count": sum(
+            pair["final_word_lost"] for pair in pairs),
+        "final_word_recovered_trial_count": sum(
+            pair["final_word_recovered"] for pair in pairs),
         "changed_text_trial_count": sum(
             _canonical_text(clean_text) != _canonical_text(tailed_text)
             for clean_text, tailed_text in zip(baseline, tailed)),
@@ -197,6 +209,7 @@ def summarise_tail_silence_probe(samples):
                 key: sum(
                     probe["order_breakdown"][order][key] for probe in probes)
                 for key in ("trial_count", "nonempty_to_empty_trial_count",
+                            "final_word_lost_trial_count",
                             "worsened_word_error_trial_count")
             }
             for order in ("baseline-first", "tailed-first")
@@ -212,6 +225,8 @@ def summarise_tail_silence_probe(samples):
             for key in (
                 "trial_count", "baseline_empty_trial_count",
                 "tailed_empty_trial_count", "nonempty_to_empty_trial_count",
+                "final_word_lost_trial_count",
+                "final_word_recovered_trial_count",
                 "changed_text_trial_count", "baseline_word_error_count",
                 "tailed_word_error_count", "worsened_word_error_trial_count",
                 "improved_word_error_trial_count",
@@ -233,6 +248,9 @@ def tail_probe_order_breakdown(pairs, trial_order):
             "trial_count": sum(value == order for value in trial_order),
             "nonempty_to_empty_trial_count": sum(
                 value == order and pair["nonempty_to_empty"]
+                for pair, value in zip(pairs, trial_order)),
+            "final_word_lost_trial_count": sum(
+                value == order and pair["final_word_lost"]
                 for pair, value in zip(pairs, trial_order)),
             "worsened_word_error_trial_count": sum(
                 value == order
@@ -1240,7 +1258,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 15,
+        "benchmark_version": 16,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "recorded_tail_probe_inputs_sha256": (
@@ -1360,12 +1378,15 @@ def _print_summary(result):
     tail_probe = result.get("tail_silence_probe")
     if tail_probe is not None:
         print("Parakeet +%d ms silence (benchmark-only): nonempty-to-empty "
-              "%d/%d paired trials; word errors %d -> %d; worsened %d, "
+              "%d/%d paired trials; final word lost %d, recovered %d; "
+              "word errors %d -> %d; worsened %d, "
               "improved %d trials across %d reviewed clips; order "
               "baseline-first %d, tailed-first %d" % (
                   result["parakeet_tail_silence_ms"],
                   tail_probe["nonempty_to_empty_trial_count"],
                   tail_probe["trial_count"],
+                  tail_probe["final_word_lost_trial_count"],
+                  tail_probe["final_word_recovered_trial_count"],
                   tail_probe["baseline_word_error_count"],
                   tail_probe["tailed_word_error_count"],
                   tail_probe["worsened_word_error_trial_count"],
@@ -1375,10 +1396,13 @@ def _print_summary(result):
                   tail_probe["tailed_first_trial_count"],
               ))
         for order, counts in tail_probe["order_breakdown"].items():
-            print("  %s: nonempty-to-empty %d/%d; worsened word errors "
+            print("  %s: nonempty-to-empty %d/%d; final word lost %d/%d; "
+                  "worsened word errors "
                   "%d/%d trials" % (
                       order,
                       counts["nonempty_to_empty_trial_count"],
+                      counts["trial_count"],
+                      counts["final_word_lost_trial_count"],
                       counts["trial_count"],
                       counts["worsened_word_error_trial_count"],
                       counts["trial_count"],
@@ -1520,10 +1544,13 @@ def _print_summary(result):
         sample_tail_probe = sample.get("tail_silence_probe")
         if sample_tail_probe is not None:
             print("  +%d ms silence: nonempty-to-empty %d/%d paired trials; "
-                  "word errors %d -> %d; tailed inference %.3fs median" % (
+                  "final word lost %d, recovered %d; word errors %d -> %d; "
+                  "tailed inference %.3fs median" % (
                       sample_tail_probe["appended_silence_ms"],
                       sample_tail_probe["nonempty_to_empty_trial_count"],
                       sample_tail_probe["trial_count"],
+                      sample_tail_probe["final_word_lost_trial_count"],
+                      sample_tail_probe["final_word_recovered_trial_count"],
                       sample_tail_probe["baseline_word_error_count"],
                       sample_tail_probe["tailed_word_error_count"],
                       sample_tail_probe["tailed_inference_seconds"]["median"],

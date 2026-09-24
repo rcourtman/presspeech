@@ -19,6 +19,100 @@ except ModuleNotFoundError:
 import ui
 
 
+class WindowHostPrivacyTests(unittest.TestCase):
+    def make_host(self):
+        host = ui._WindowHost.__new__(ui._WindowHost)
+        host.commands = queue.Queue()
+        host.root = None
+        host.failure = None
+        host.callback_failures = 0
+        host._next_callback_notice_at = 0.0
+        host.accessibility = "not initialized"
+        host.ready = threading.Event()
+        root = mock.Mock()
+        with mock.patch.object(ui.tk, "Tk", return_value=root, create=True), \
+                mock.patch.object(ui, "_watch_windows_text_scale"), \
+                mock.patch.object(ui.tk_uia, "enable", return_value=types.SimpleNamespace(name="provided")):
+            host._run()
+        self.assertTrue(host.ready.is_set())
+        self.assertIsNone(host.failure)
+        self.assertEqual(root.report_callback_exception, host._report_callback_failure)
+        return host, root
+
+    def test_queued_and_native_tk_callback_errors_hide_private_details(self):
+        host, root = self.make_host()
+        secret = "synthetic-private-transcript-and-path"
+
+        def fail():
+            raise RuntimeError(secret)
+
+        host.commands.put(fail)
+        poll = root.after.call_args_list[0].args[1]
+        with mock.patch.object(ui.messagebox, "showerror") as showerror:
+            poll()
+            # Tk itself calls this hook for ordinary widget callbacks.
+            root.report_callback_exception(RuntimeError, RuntimeError(secret), None)
+
+        self.assertEqual(host.callback_failures, 2)
+        showerror.assert_called_once()
+        title, message = showerror.call_args.args
+        self.assertEqual(title, "Presspeech action failed")
+        self.assertIn("Check the intended field and current clipboard", message)
+        self.assertNotIn(secret, str(showerror.call_args))
+        self.assertEqual(showerror.call_args.kwargs, {"parent": root})
+
+    def test_failed_generic_notice_never_rethrows_original_error(self):
+        host, root = self.make_host()
+        with mock.patch.object(
+                ui.messagebox, "showerror",
+                side_effect=OSError("synthetic-private-dialog-detail")) as showerror:
+            root.report_callback_exception(
+                RuntimeError, RuntimeError("synthetic-private-transcript"), None)
+            root.report_callback_exception(
+                RuntimeError, RuntimeError("another-private-transcript"), None)
+        self.assertEqual(host.callback_failures, 2)
+        showerror.assert_called_once()
+
+    def test_generic_notice_can_recur_after_rate_limit(self):
+        host, root = self.make_host()
+        with mock.patch.object(ui.time, "monotonic", side_effect=[100.0, 120.0, 161.0]), \
+                mock.patch.object(ui.messagebox, "showerror") as showerror:
+            for _ in range(3):
+                root.report_callback_exception(
+                    RuntimeError, RuntimeError("synthetic-private-transcript"), None)
+        self.assertEqual(host.callback_failures, 3)
+        self.assertEqual(showerror.call_count, 2)
+        self.assertNotIn("synthetic-private", str(showerror.call_args_list))
+
+    def test_host_startup_failure_does_not_chain_private_exception(self):
+        host = ui._WindowHost.__new__(ui._WindowHost)
+        host.commands = queue.Queue()
+        host.root = None
+        host.failure = None
+        host.ready = threading.Event()
+        with mock.patch.object(
+                ui.tk, "Tk", create=True,
+                side_effect=OSError("synthetic-private-user-path")):
+            host._run()
+
+        self.assertTrue(host.ready.is_set())
+        self.assertIs(host.failure, True)
+        with self.assertRaises(RuntimeError) as raised:
+            host.submit(lambda: None)
+        self.assertEqual(
+            str(raised.exception), "Presspeech could not start its window system")
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertTrue(raised.exception.__suppress_context__)
+
+    def test_only_aggregate_callback_failures_enter_diagnostics(self):
+        with mock.patch.object(ui, "_WINDOW_HOST", None):
+            self.assertEqual(ui.callback_failure_count(), 0)
+        host, _root = self.make_host()
+        host.callback_failures = 3
+        with mock.patch.object(ui, "_WINDOW_HOST", host):
+            self.assertEqual(ui.callback_failure_count(), 3)
+
+
 class WindowCallbackLifetimeTests(unittest.TestCase):
     class Interpreter:
         def __init__(self):

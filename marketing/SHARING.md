@@ -68,7 +68,8 @@ Links:
 - Repo: <https://github.com/rcourtman/presspeech>
 - Site: <https://rcourtman.github.io/presspeech/>
 - Benchmarks: <https://rcourtman.github.io/presspeech/benchmarks.html>
-- Download: <https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip>
+- macOS install and first-launch decision: <https://rcourtman.github.io/presspeech/install.html#model-download-privacy>
+- Windows install and first-launch decision: <https://rcourtman.github.io/presspeech/windows.html#model-download-privacy>
 - Homebrew: `brew install --cask rcourtman/presspeech/presspeech`
 
 GitHub's repository profile is a manual distribution surface and must match the
@@ -180,8 +181,9 @@ first-run setup. None of these features uses a rewriting model.
 Limitations: Apple Silicon and macOS 14+ only; 25 European languages with
 selectable language hints for 18; no streaming mode.
 
-MIT licensed. Download:
-https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
+MIT licensed. Before downloading or launching the published build, review the
+current version's first-launch privacy decision and verified download steps:
+https://rcourtman.github.io/presspeech/install.html#model-download-privacy
 
 Or install with Homebrew:
 `brew install --cask rcourtman/presspeech/presspeech`

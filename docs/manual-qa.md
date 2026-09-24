@@ -650,6 +650,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
 | Clipboard-only recovery notice after a later harmless copy: no unconditional ⌘V promise; Copy Last Transcript restores the dictation when history is on | |
+| History copy during uncertain delivery retains the destination-check warning rather than returning to Ready | |
 | Same-window focus change between two controls with distinct AX identities: clipboard-only recovery | |
 | Permission loss while recording: captured speech completes to clipboard-only recovery | |
 | Screen Sharing shared-clipboard path: consecutive remote pastes stay fresh; a focus change recovers safely | |
@@ -1117,6 +1118,14 @@ item after the development-wrapper launch check.
   a full transcript over possible partial text. If the test target does not
   produce uncertain delivery, mark this case Not run rather than treating a
   copied/manual-paste notice as proof.
+- With **Delivery uncertain** and Recent Transcripts on, inspect the original
+  field before choosing **Copy Last Transcript**. Confirm the menu status and
+  status item's VoiceOver value still warn that delivery is uncertain after
+  the copy, rather than returning to Ready. If an older History entry exists,
+  copying it must not clear the same warning. Check copied text only in a
+  separate disposable field; do not paste over possible partial text in the
+  original field. If no safe target produces uncertain delivery, mark this
+  check Not run.
 - With a harmless multi-sentence transcript in recent history, hover **Copy
   Last Transcript**, a **Recent Transcripts** entry, and **Add Correction from
   Last Transcript…**. Their help tags must describe the actions without

@@ -80,7 +80,9 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    disable_windowed_traceback=False,
+    # Unhandled errors must not display Python exception text or traceback:
+    # these can include a partial transcript, clipboard text, or local paths.
+    disable_windowed_traceback=True,
     argv_emulation=False,
     target_arch="x86_64",
     icon=str(ROOT / "assets" / "presspeech.ico"),

@@ -50,6 +50,30 @@ class BenchmarkCapturePrivacyTests(unittest.TestCase):
         instance._log.assert_called_once_with("benchmark audio saved")
         self.assertNotIn("private-session-label", str(instance._log.call_args_list))
 
+    def test_capture_failure_notice_omits_raw_exception_and_private_path(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "capture_benchmark_remaining": 1,
+            "capture_benchmark_session": "private-session-label",
+            "capture_benchmark_index": 1,
+            "capture_next_benchmark": False,
+        }
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(app, "__file__", str(Path(directory) / "app.py")), \
+                mock.patch("wave.open", side_effect=OSError(
+                    "synthetic-private-path-and-clip-detail")):
+            self.assertIsNone(instance._capture_benchmark_if_armed(
+                app.np.array([0.0, 0.1], dtype=app.np.float32)))
+
+        self.assertNotIn("synthetic-private", str(instance.notify.call_args_list))
+        self.assertNotIn("private-session-label", str(instance.notify.call_args_list))
+        instance.notify.assert_called_once_with(
+            "Benchmark capture failed",
+            "The armed clip could not be saved. Check the local benchmark "
+            "output directory before trying again.")
+
 
 class SingleInstanceActivationTests(unittest.TestCase):
     def make_app(self, setup_complete=False):
@@ -2666,6 +2690,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertIn("Model status: ready", diagnostics)
         self.assertIn("Global hotkey status: not started", diagnostics)
         self.assertIn("Windows UI Automation: not initialized", diagnostics)
+        self.assertIn("Window action failures: 0", diagnostics)
         self.assertIn("Configured microphone: Specific input (name omitted)", diagnostics)
         self.assertIn("Active microphone: Open at 16000 Hz (name omitted)", diagnostics)
         self.assertIn("exact microphone names, raw error details, or raw log lines included",

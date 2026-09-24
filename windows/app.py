@@ -2059,7 +2059,12 @@ class PresspeechApp:
             return output_path
         except Exception as exc:
             self._log("benchmark capture failed: %s" % type(exc).__name__)
-            self.notify("Benchmark capture failed", str(exc))
+            # OS errors can name the private session or output path; tray
+            # notifications are not a safe channel for their raw text.
+            self.notify(
+                "Benchmark capture failed",
+                "The armed clip could not be saved. Check the local benchmark "
+                "output directory before trying again.")
             return None
 
     # ---------------- input device selection ----------------
@@ -3033,6 +3038,7 @@ class PresspeechApp:
             cfg.recording_length_seconds(
                 self.settings.get("max_recording_seconds")),
             "Windows UI Automation: %s" % ui.accessibility_status(),
+            "Window action failures: %d" % ui.callback_failure_count(),
             "Undelivered dictation waiting: %s" %
             self.has_undelivered_dictation(),
             "Automatic update checks: %s" % bool(

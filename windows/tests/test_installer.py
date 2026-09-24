@@ -3,9 +3,16 @@ from pathlib import Path
 
 
 INSTALLER = Path(__file__).resolve().parents[1] / "installer.iss"
+SPEC = Path(__file__).resolve().parents[1] / "Presspeech.spec"
 
 
 class InstallerLifecycleTests(unittest.TestCase):
+    def test_windowed_package_disables_unhandled_traceback_dialog(self):
+        spec = SPEC.read_text(encoding="utf-8")
+        self.assertIn("console=False,", spec)
+        self.assertIn("disable_windowed_traceback=True,", spec)
+        self.assertNotIn("disable_windowed_traceback=False,", spec)
+
     @staticmethod
     def setup_directives():
         directives = {}

@@ -1046,7 +1046,13 @@ COMMAND_SHELL_GUIDANCE = {
 # before the matching assets are necessarily public. Pages has a publication
 # gate, but repository-rendered entry points do not. Keep those entry points on
 # URLs that can only resolve to a published artifact: GitHub's stable latest
-# alias for macOS and the gated, version-pinned Pages guide for Windows.
+# alias for macOS and the gated, version-pinned Pages guide for Windows. The
+# README's top install badges should reach the warning-first macOS guide, not
+# a release or cask page that may be opened before its privacy decision.
+README_BADGE_PREFLIGHT = (
+    'href="https://rcourtman.github.io/presspeech/install.html#model-download-privacy"><img src="https://img.shields.io/github/v/release/rcourtman/presspeech',
+    'href="https://rcourtman.github.io/presspeech/install.html"><img src="https://img.shields.io/badge/Homebrew-Cask',
+)
 REPOSITORY_INSTALL_GUIDANCE = {
     ROOT / "llms.txt": (
         "Before installing or launching macOS 0.3.8",
@@ -1058,6 +1064,7 @@ REPOSITORY_INSTALL_GUIDANCE = {
     ROOT / "README.md": (
         "The `main` branch can contain",
         "an unreleased candidate",
+        *README_BADGE_PREFLIGHT,
         "releases/latest/download/Presspeech.zip",
         "install.html#direct-download",
         "windows.html#download-verify-run",
@@ -4821,6 +4828,22 @@ def run_self_test() -> None:
             raise SyncError(
                 "self-test: unsafe repository download link was not rejected"
             )
+
+        badge_required = README_BADGE_PREFLIGHT
+        badge_entrypoint = Path(tmp) / "badge-entrypoint.md"
+        badge_entrypoint.write_text(" ".join(badge_required), encoding="utf-8")
+        if check_repository_install_guidance({badge_entrypoint: badge_required}, {}):
+            raise SyncError("self-test: warning-first README badges were rejected")
+        for index in range(len(badge_required)):
+            unsafe_badges = list(badge_required)
+            unsafe_badges[index] = unsafe_badges[index].replace(
+                'href="https://rcourtman.github.io/presspeech/install.html#model-download-privacy"'
+                if index == 0 else 'href="https://rcourtman.github.io/presspeech/install.html"',
+                'href="https://github.com/rcourtman/presspeech/releases/latest"',
+            )
+            badge_entrypoint.write_text(" ".join(unsafe_badges), encoding="utf-8")
+            if not check_repository_install_guidance({badge_entrypoint: badge_required}, {}):
+                raise SyncError("self-test: README badge bypassed the install warning")
 
         faq = Path(tmp) / "faq.html"
         faq.write_text(

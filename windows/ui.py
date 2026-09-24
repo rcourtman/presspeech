@@ -7,6 +7,7 @@ import queue
 import re
 import tempfile
 import threading
+import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -49,6 +50,8 @@ class _WindowHost:
         self.commands = queue.Queue()
         self.root = None
         self.failure = None
+        self.callback_failures = 0
+        self._next_callback_notice_at = 0.0
         self.accessibility = "not initialized"
         self.ready = threading.Event()
         threading.Thread(
@@ -57,15 +60,41 @@ class _WindowHost:
     def submit(self, command):
         self.ready.wait()
         if self.failure is not None:
-            raise RuntimeError("Presspeech could not start its window system") \
-                from self.failure
+            raise RuntimeError("Presspeech could not start its window system") from None
         self.commands.put(command)
+
+    def _report_callback_failure(self, _exception_type, _exception, _traceback):
+        """Keep Tk callback errors visible without rendering private details.
+
+        Tk's default report_callback_exception prints the exception and full
+        traceback. UI callbacks can hold dictation or local paths in either.
+        Rate-limit a fixed notice instead of flooding the user if a polling
+        callback fails repeatedly; Copy Diagnostics reports the failure count.
+        """
+        self.callback_failures += 1
+        now = time.monotonic()
+        if now < self._next_callback_notice_at:
+            return
+        self._next_callback_notice_at = now + 60
+        try:
+            messagebox.showerror(
+                "Presspeech action failed",
+                "Presspeech could not complete a window action. Check the "
+                "intended field and current clipboard before retrying. If "
+                "dictation is waiting, use Delivery Recovery.",
+                parent=self.root,
+            )
+        except Exception:
+            # A failed notice must not send the original exception to Tk's
+            # default traceback reporter or start a recursive error dialog.
+            pass
 
     def _run(self):
         try:
             root = tk.Tk()
             self.root = root
             root.withdraw()
+            root.report_callback_exception = self._report_callback_failure
             _watch_windows_text_scale(root)
             # Tk 8.6's Windows accessibility proxy leaves most ttk controls
             # anonymous or inert. One installation follows every later
@@ -77,6 +106,9 @@ class _WindowHost:
                 # An assistive-technology integration failure must not take
                 # dictation's setup and recovery windows away from the user.
                 self.accessibility = "unavailable"
+            # The bridge may configure Tk callbacks. Keep our redacted error
+            # boundary installed before any queued widget event can run.
+            root.report_callback_exception = self._report_callback_failure
             self.ready.set()
 
             def poll():
@@ -94,8 +126,10 @@ class _WindowHost:
 
             root.after(0, poll)
             root.mainloop()
-        except Exception as exc:
-            self.failure = exc
+        except Exception:
+            # Do not retain a Tk/OS exception that may name a private path,
+            # then expose it as the cause of a later submit() failure.
+            self.failure = True
             self.ready.set()
 
 
@@ -229,6 +263,13 @@ def accessibility_status():
     if _WINDOW_HOST is None:
         return "not initialized"
     return _WINDOW_HOST.accessibility
+
+
+def callback_failure_count():
+    """Return only an aggregate count, never callback values or tracebacks."""
+    if _WINDOW_HOST is None:
+        return 0
+    return _WINDOW_HOST.callback_failures
 
 
 def _accessibility_failed():

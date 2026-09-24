@@ -23,6 +23,29 @@ class ParakeetConfigurationTests(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"torch": None}):
             self.assertFalse(engine.cuda_available())
 
+    def test_half_precision_retry_notice_redacts_backend_exception(self):
+        torch = types.ModuleType("torch")
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = True
+        torch.float16 = object()
+        transformers = types.ModuleType("transformers")
+        transformers.AutoProcessor = mock.Mock()
+        transformers.AutoModelForTDT = mock.Mock()
+        transformers.AutoModelForTDT.from_pretrained.side_effect = [
+            RuntimeError("synthetic-private-model-path-or-transcript"),
+            mock.Mock(),
+        ]
+        notify = mock.Mock()
+        with mock.patch.dict(sys.modules, {"torch": torch, "transformers": transformers}), \
+                mock.patch.object(engine.model_network, "harden_loaded_runtime"):
+            engine.Transcriber(precision="fp16")._load_parakeet(notify)
+
+        self.assertEqual(
+            notify.call_args_list[-1],
+            mock.call("Presspeech", "Half-precision load failed; retrying FP32."),
+        )
+        self.assertNotIn("synthetic-private", str(notify.call_args_list))
+
     def test_only_explicit_whisper_vad_zero_supports_no_speech_diagnosis(self):
         self.assertTrue(engine.whisper_vad_rejected({
             "backend": "whisper", "speech_seconds": 0.0}))
