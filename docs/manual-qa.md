@@ -1100,7 +1100,10 @@ item after the development-wrapper launch check.
   phrases and confirm the final word is retained. Repeat with quiet room tone
   and with steady background noise; the quiet case should begin transcription
   promptly, and ongoing noise must never hold capture more than about 0.4
-  seconds after release.
+  seconds after release. For the tap-callback boundary, vary the release timing
+  across at least 20 short-phrase attempts and record only the number of missing
+  final words and any capture materially longer than about 0.4 seconds; do not
+  retain the phrases or recordings in the qualification record.
 - Test toggle mode: press once to start, press again to stop.
 - Press Escape during an active recording and confirm it cancels without
   pasting.

@@ -1843,6 +1843,30 @@ OLD_LLMS_PRIVACY_SUMMARY = (
     "The apps ship with no account, subscription, telemetry, or cloud transcription endpoint."
 )
 
+LLMS_SHORT_ANSWER = (
+    "Presspeech is local push-to-talk dictation for Apple Silicon Macs and x64 Windows PCs. "
+    "It transcribes on-device and pastes only when it can verify the original destination. "
+    "If delivery is uncertain, macOS and published Windows 0.1.12 copy the transcript "
+    "for manual paste; upcoming Windows 0.1.13 instead requires an explicit Delivery "
+    "Recovery Copy or Discard and may leave the previous clipboard item unchanged. "
+    "No account or cloud transcription is required. Before opening a published build "
+    "with a missing model, read its launch decision: macOS 0.3.8 may include an "
+    "inherited Hugging Face token in the model request. If a token may be present or "
+    "you are unsure, wait for macOS 0.3.9. Windows 0.1.12 may send Hugging Face "
+    "usage telemetry and an available token; custom routing can change the request "
+    "destination. If you want to avoid possible telemetry, cannot rule out a token "
+    "or custom route, or are unsure, wait for Windows 0.1.13. Neither newer build "
+    "is published yet. A TLS-inspecting HTTPS proxy trusted by the client can read "
+    "any token sent through it; do not launch through one whose trust is unclear. "
+    "Downloading the app alone does not start a model request, but opening it with a "
+    "missing model does. If installing Windows 0.1.12 while waiting, leave the final "
+    "Launch Presspeech option unchecked. Review the macOS "
+    "https://rcourtman.github.io/presspeech/install.html#model-download-privacy "
+    "or Windows https://rcourtman.github.io/presspeech/windows.html#model-download-privacy "
+    "warning before choosing to launch. Dictation audio and transcripts are not sent "
+    "in model downloads."
+)
+
 
 def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
@@ -1922,17 +1946,6 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "https://rcourtman.github.io/presspeech/windows.html.",
         1,
     )
-    if OLD_LLMS_PRIVACY_SUMMARY in text:
-        text = replace_literal(
-            text,
-            OLD_LLMS_PRIVACY_SUMMARY,
-            "The apps have no account or cloud transcription endpoint and Presspeech does not operate first-party analytics. "
-            "Published Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads; "
-            "the libraries may send usage data, and model-request metadata includes a random per-process session ID. "
-            "It also leaves implicit authentication enabled, so an available HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or locally cached Hugging Face token may accompany a model request. Inherited HF_ENDPOINT and HUGGINGFACE_CO_STAGING settings can change its destination; if HF_HUB_USER_AGENT_ORIGIN is set, its value is included in request metadata. These models do not require an account token. Upcoming Windows 0.1.13 fixes these inherited settings but is not yet published. "
-            "Dictation audio and transcripts are not sent in model downloads; see the version-specific privacy inventory for details and limits.",
-            path=path,
-        )
     old_windows_privacy = (
         "Published Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads; "
         "the libraries may send usage data, and model-request metadata includes a random per-process session ID."
@@ -1965,6 +1978,14 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
             + windows_page,
             path=path,
         )
+    if text.count("Best short answer:\n") != 1:
+        raise SyncError(f"{path}: expected one Best short answer section")
+    text = re.sub(
+        r"(?ms)^Best short answer:\n.*?(?=^If you are an agent installing Presspeech|\Z)",
+        "Best short answer:\n" + LLMS_SHORT_ANSWER + "\n\n",
+        text,
+        count=1,
+    )
     return text
 
 
@@ -4423,6 +4444,23 @@ def run_self_test() -> None:
             > synced_llms.find("- Homebrew install:")
         ):
             raise SyncError("self-test: inaccurate llms privacy claim was not corrected")
+        short_answer = synced_llms.partition("Best short answer:\n")[2]
+        if not all(
+            phrase in short_answer
+            for phrase in (
+                "macOS 0.3.8 may include an inherited Hugging Face token",
+                "wait for macOS 0.3.9",
+                "Windows 0.1.12 may send Hugging Face usage telemetry",
+                "wait for Windows 0.1.13",
+                "Delivery Recovery Copy or Discard",
+                "may leave the previous clipboard item unchanged",
+                "Downloading the app alone does not start a model request",
+                "leave the final Launch Presspeech option unchecked",
+                "install.html#model-download-privacy",
+                "windows.html#model-download-privacy",
+            )
+        ):
+            raise SyncError("self-test: short agent answer omitted a launch or delivery decision")
         legacy_llms.write_text(synced_llms, encoding="utf-8")
         if sync_llms(legacy_llms, metadata) != synced_llms:
             raise SyncError("self-test: llms privacy correction is not idempotent")

@@ -460,9 +460,13 @@ again; unsaved edits remain in place while it waits.
   device's previous mute state afterwards
 - A click-through **Connecting microphone… / Listening… / Transcribing…**
   indicator on the active display in the upcoming 0.1.13 build
-- Optional daily GitHub update checks; downloads and installation require
-  approval, mutable releases are ignored, and the installer is verified by
-  size and SHA-256 after download and again immediately before launch
+- Optional GitHub update checks at startup when the recorded check is at least
+  24 hours old. Published 0.1.12 records only successful checks, so a failed
+  check can repeat after each restart; upcoming 0.1.13 records automatic
+  attempts before connecting and offers unrestricted manual retries. Downloads
+  and installation require approval, mutable releases are ignored, and the
+  installer is verified by size and SHA-256 after download and again
+  immediately before launch
 - Dictionary: map a misheard phrase or spoken shortcut to exact text
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)

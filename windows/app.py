@@ -2891,9 +2891,18 @@ class PresspeechApp:
         if not lock_held and not self._update_lock.acquire(blocking=False):
             return
         try:
+            if not manual:
+                # A failed request still exposes a connection to GitHub. Save
+                # the attempt before sending it so restarts cannot turn an
+                # offline or rate-limited check into repeated background calls.
+                # If persistence fails, do not make an unthrottled automatic
+                # request; the manual command remains available for retries.
+                self.settings["last_update_check_epoch"] = int(time.time())
+                cfg.save(self.settings)
             update = updates.fetch_update(cfg.VERSION)
-            self.settings["last_update_check_epoch"] = int(time.time())
-            cfg.save(self.settings)
+            if manual:
+                self.settings["last_update_check_epoch"] = int(time.time())
+                cfg.save(self.settings)
             if update is None:
                 if manual:
                     self.notify("Presspeech", "Version %s is up to date." % cfg.VERSION)

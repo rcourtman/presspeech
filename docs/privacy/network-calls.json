@@ -94,7 +94,7 @@
     },
     {
       "name": "windows_update_check",
-      "when": "At most once every 24 hours when automatic checks are enabled, plus manual checks from the tray menu",
+      "when": "When the Windows app starts with automatic checks enabled and the recorded check is at least 24 hours old, plus manual checks from the tray menu. Published 0.1.12 records only successful checks, so a failed check can repeat on every restart. Upcoming 0.1.13 records automatic attempts before contacting GitHub, so failures also defer automatic retries for 24 hours. Manual retries remain available",
       "destination": "api.github.com/repos/rcourtman/presspeech/releases?per_page=100, followed by bounded numbered pages from that same endpoint only when GitHub reports more than 100 releases",
       "purpose": "Find a newer complete, immutable windows-vX.Y.Z release and offer it to the user",
       "user_triggered": false,

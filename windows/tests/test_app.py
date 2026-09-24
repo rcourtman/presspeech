@@ -348,22 +348,90 @@ class UpdateWindowTests(unittest.TestCase):
 
 
 class UpdateCheckFailureTests(unittest.TestCase):
-    def test_manual_failure_notification_redacts_exception_details(self):
+    def make_app(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._update_lock = threading.Lock()
+        instance.settings = {"last_update_check_epoch": 0}
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
+        instance.pending_update = None
+        instance.update_window = None
+        return instance
+
+    def test_manual_failure_notification_redacts_exception_details(self):
+        instance = self.make_app()
+        instance.settings["last_update_check_epoch"] = 99_999
         private_detail = "proxy-password=synthetic-private-marker"
 
         with mock.patch.object(
                 app.updates, "fetch_update",
-                side_effect=RuntimeError(private_detail)):
+                side_effect=RuntimeError(private_detail)), \
+                mock.patch.object(app.cfg, "save") as save:
             instance._update_check_worker(manual=True)
 
+        save.assert_not_called()
+        self.assertEqual(instance.settings["last_update_check_epoch"], 99_999)
         instance._log.assert_called_once_with(
             "update check failed: RuntimeError")
         instance.notify.assert_called_once_with(
             "Update check failed", "Could not check for updates. Please try again.")
+
+    def test_automatic_failure_persists_attempt_before_request(self):
+        instance = self.make_app()
+        private_detail = "proxy-password=synthetic-private-marker"
+        with mock.patch.object(app.time, "time", return_value=100_000), \
+                mock.patch.object(app.cfg, "save") as save:
+            def fail(_version):
+                save.assert_called_once_with(instance.settings)
+                self.assertEqual(instance.settings["last_update_check_epoch"], 100_000)
+                raise RuntimeError(private_detail)
+
+            with mock.patch.object(app.updates, "fetch_update", side_effect=fail) as fetch:
+                instance._update_check_worker()
+
+        fetch.assert_called_once_with(app.cfg.VERSION)
+        self.assertFalse(app._update_check_due(
+            instance.settings["last_update_check_epoch"], 100_001))
+        instance._log.assert_called_once_with(
+            "update check failed: RuntimeError")
+        instance.notify.assert_not_called()
+
+    def test_automatic_persistence_failure_skips_unthrottled_request(self):
+        instance = self.make_app()
+        with mock.patch.object(app.time, "time", return_value=100_000), \
+                mock.patch.object(app.cfg, "save", side_effect=OSError("private path")), \
+                mock.patch.object(app.updates, "fetch_update") as fetch:
+            instance._update_check_worker()
+
+        fetch.assert_not_called()
+        instance._log.assert_called_once_with("update check failed: OSError")
+        self.assertFalse(instance._update_lock.locked())
+
+    def test_automatic_success_records_attempt_without_a_second_save(self):
+        instance = self.make_app()
+        with mock.patch.object(app.time, "time", return_value=100_000), \
+                mock.patch.object(app.cfg, "save") as save, \
+                mock.patch.object(app.updates, "fetch_update", return_value=None) as fetch:
+            instance._update_check_worker()
+
+        fetch.assert_called_once_with(app.cfg.VERSION)
+        save.assert_called_once_with(instance.settings)
+        self.assertEqual(instance.settings["last_update_check_epoch"], 100_000)
+        instance.notify.assert_not_called()
+
+    def test_manual_success_is_not_throttled_and_records_check(self):
+        instance = self.make_app()
+        instance.settings["last_update_check_epoch"] = 99_999
+        with mock.patch.object(app.time, "time", return_value=100_000), \
+                mock.patch.object(app.cfg, "save") as save, \
+                mock.patch.object(app.updates, "fetch_update", return_value=None) as fetch:
+            instance._update_check_worker(manual=True)
+
+        fetch.assert_called_once_with(app.cfg.VERSION)
+        save.assert_called_once_with(instance.settings)
+        self.assertEqual(instance.settings["last_update_check_epoch"], 100_000)
+        instance.notify.assert_called_once_with(
+            "Presspeech", "Version %s is up to date." % app.cfg.VERSION)
 
 
 class InputSelectionTests(unittest.TestCase):

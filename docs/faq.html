@@ -97,7 +97,7 @@
             </article>
             <article class="card">
               <h3>How do updates work?</h3>
-              <p>Both apps can read public GitHub release metadata without sending a version, device, or user identifier. The macOS app checks every six hours and the Windows app daily when automatic checks are enabled. Nothing downloads or installs without approval; Windows also verifies the installer size and SHA-256 before offering to run it.</p>
+              <p>Both apps can read public GitHub release metadata without sending a version, device, or user identifier. The macOS app checks every six hours. Windows checks on startup when automatic checks are enabled and 24 hours have passed since the recorded check. Published Windows 0.1.12 can repeat a failed check on each restart; upcoming 0.1.13 counts failed attempts toward that 24-hour interval. You can retry manually from the tray menu. Nothing downloads or installs without approval; Windows also verifies the installer size and SHA-256 before offering to run it.</p>
             </article>
             <article class="card">
               <h3>Can I change the hotkey?</h3>

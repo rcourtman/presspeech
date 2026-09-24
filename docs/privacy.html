@@ -109,7 +109,7 @@
                 <tr>
                   <th scope="row">Periodic update check</th>
                   <td><code>api.github.com/repos/rcourtman/presspeech/releases/latest</code> (macOS); <code>api.github.com/repos/rcourtman/presspeech/releases?per_page=100</code> and bounded numbered pages of that same endpoint when needed (Windows)</td>
-                  <td>macOS checks every six hours; Windows checks at most daily. Both ignore release responses not marked immutable, only notify, and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no app-added version, device, settings, transcript, or usage identifier. GitHub can still observe the source IP address and request timing.</td>
+                  <td>macOS checks every six hours. Published Windows 0.1.12 checks at startup when 24 hours have passed since its last successful check; a failed check can repeat on each restart. Upcoming Windows 0.1.13 records an automatic attempt before contacting GitHub, so failed attempts also defer automatic retries for 24 hours. Manual tray checks remain available. Both apps ignore release responses not marked immutable, only notify, and use fixed platform User-Agents (<code>presspeech-update-check</code> and <code>presspeech-windows-update-check</code>) with no app-added version, device, settings, transcript, or usage identifier. GitHub can still observe the source IP address and request timing.</td>
                   <td>Disable update notifications from Settings.</td>
                 </tr>
                 <tr>

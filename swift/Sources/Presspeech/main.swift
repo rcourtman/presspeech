@@ -4474,7 +4474,8 @@ final class HotkeyListener {
 //
 // Locking discipline: `lock` protects ALL mutable state shared with
 // the render thread — `samples`, `_isRunning`, `latestLevel`,
-// `latestLevelSequence`, `recordingGeneration`, the engine-open flag,
+// `latestLevelSequence`, `latestCallbackStartedAt`, `recordingGeneration`,
+// the engine-open flag,
 // AND the converter trio (`converter`, `converterInputFormat`,
 // `manuallyMixInputToMono`). The trio is written on the main thread
 // in startEngine/stopEngine and read in handleTap on AVFoundation's
@@ -4558,13 +4559,16 @@ fileprivate struct PostReleaseTailMeasurement: Equatable {
     let tailRMS: Double
     let silenceThreshold: Double
     let sampleSequence: UInt64
+    let callbackStartedAt: TimeInterval
 
     init(tailRMS: Double,
          silenceThreshold: Double,
-         sampleSequence: UInt64 = 0) {
+         sampleSequence: UInt64,
+         callbackStartedAt: TimeInterval) {
         self.tailRMS = tailRMS
         self.silenceThreshold = silenceThreshold
         self.sampleSequence = sampleSequence
+        self.callbackStartedAt = callbackStartedAt
     }
 }
 
@@ -4582,7 +4586,8 @@ private func postReleaseSilenceThreshold(peakRMS: Double) -> Double {
 
 private func postReleaseCaptureDecision(elapsed: TimeInterval,
                                         measurement: PostReleaseTailMeasurement,
-                                        receivedNewSamples: Bool = true) -> PostReleaseCaptureDecision {
+                                        releaseSampleSequence: UInt64,
+                                        releasedAt: TimeInterval) -> PostReleaseCaptureDecision {
     let elapsed = max(0, elapsed)
     if elapsed >= POST_RELEASE_MAX_CAPTURE_SECONDS {
         return .finishMaximum
@@ -4590,10 +4595,15 @@ private func postReleaseCaptureDecision(elapsed: TimeInterval,
     if elapsed < POST_RELEASE_MIN_CAPTURE_SECONDS {
         return .wait(POST_RELEASE_MIN_CAPTURE_SECONDS - elapsed)
     }
-    // AVAudioEngine documents bufferSize as a request: the implementation may
-    // choose another size. Never let the first timer merely re-score the
-    // pre-release tail while the boundary buffer is still pending.
-    if !receivedNewSamples {
+    // A tap callback may start before key release yet append after the release
+    // sequence snapshot while it finishes conversion. Sequence advancement
+    // alone would let that old, quiet buffer end capture before any callback
+    // starting after release has arrived.
+    let receivedPostReleaseSamples = (
+        measurement.sampleSequence != releaseSampleSequence &&
+        measurement.callbackStartedAt >= releasedAt
+    )
+    if !receivedPostReleaseSamples {
         return .wait(min(POST_RELEASE_CAPTURE_CHECK_SECONDS,
                          POST_RELEASE_MAX_CAPTURE_SECONDS - elapsed))
     }
@@ -4683,6 +4693,7 @@ final class AudioCapture: @unchecked Sendable {
     private var _isRunning = false
     private var latestLevel: Float = 0
     private var latestLevelSequence: UInt64 = 0
+    private var latestCallbackStartedAt: TimeInterval = 0
     private var peakRMS = 0.0
     private var recordingGeneration: UInt64 = 0
     private var engineStarted = false
@@ -4750,6 +4761,7 @@ final class AudioCapture: @unchecked Sendable {
             samples.removeAll(keepingCapacity: true)
             latestLevel = 0
             latestLevelSequence &+= 1
+            latestCallbackStartedAt = 0
             peakRMS = 0
             _isRunning = true
         }
@@ -4806,6 +4818,7 @@ final class AudioCapture: @unchecked Sendable {
         _isRunning = false
         latestLevel = 0
         latestLevelSequence &+= 1
+        latestCallbackStartedAt = 0
         peakRMS = 0
         recordingGeneration &+= 1
         samples.removeAll(keepingCapacity: true)
@@ -4841,6 +4854,7 @@ final class AudioCapture: @unchecked Sendable {
         samples.removeAll(keepingCapacity: true)
         latestLevel = 0
         latestLevelSequence &+= 1
+        latestCallbackStartedAt = 0
         peakRMS = 0
         _isRunning = true
     }
@@ -4876,6 +4890,7 @@ final class AudioCapture: @unchecked Sendable {
         _isRunning = false
         latestLevel = 0
         latestLevelSequence &+= 1
+        latestCallbackStartedAt = 0
         recordingGeneration &+= 1
         let captured = samples.drain()
         peakRMS = 0
@@ -4894,11 +4909,13 @@ final class AudioCapture: @unchecked Sendable {
         return PostReleaseTailMeasurement(
             tailRMS: samples.tailRMS(maxSampleCount: tailSamples),
             silenceThreshold: postReleaseSilenceThreshold(peakRMS: peakRMS),
-            sampleSequence: latestLevelSequence
+            sampleSequence: latestLevelSequence,
+            callbackStartedAt: latestCallbackStartedAt
         )
     }
 
     private func handleTap(buffer: AVAudioPCMBuffer, target: AVAudioFormat) {
+        let callbackStartedAt = ProcessInfo.processInfo.systemUptime
         // Snapshot the running flag AND the converter trio in one
         // lock acquisition; bail fast if we're not recording so we
         // don't pay conversion cost for nothing. Working off the
@@ -4940,8 +4957,10 @@ final class AudioCapture: @unchecked Sendable {
             log("AudioCapture: convert error: \(safeErrorCategory)")
             return
         }
-        guard let ch = out.floatChannelData?[0] else { return }
         let frameCount = Int(out.frameLength)
+        // Converter callbacks can yield no output frames. Such a callback is
+        // not new boundary audio and must not advance the post-release gate.
+        guard frameCount > 0, let ch = out.floatChannelData?[0] else { return }
         var arr: [Float] = []
         arr.reserveCapacity(frameCount)
         var sumSquares: Double = 0
@@ -4968,6 +4987,7 @@ final class AudioCapture: @unchecked Sendable {
             samples.append(arr)
             latestLevel = level
             latestLevelSequence &+= 1
+            latestCallbackStartedAt = callbackStartedAt
             peakRMS = max(peakRMS, rawRMS)
         }
         lock.unlock()
@@ -6158,8 +6178,9 @@ private func postFocusBoundClipboardPasteSteps(
             // AX focus lookup may block. Check clipboard ownership afterward,
             // even when focus changed, before a copy-only fallback can run.
             guard clipboardStillOwned() else {
-                _ = releasePressedKeys()
-                return .clipboardChanged
+                // A failed Command release is an interrupted shortcut, not
+                // just a newer clipboard owner. Do not report clean unwind.
+                return releasePressedKeys() ? .clipboardChanged : .deliveryUncertain
             }
             guard focused else {
                 return releasePressedKeys() ? .targetChanged : .deliveryUncertain
@@ -10266,10 +10287,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                             measurement: measurement)
             return
         }
-        let receivedNewSamples = measurement.sampleSequence != releaseSampleSequence
         switch postReleaseCaptureDecision(elapsed: elapsed,
                                           measurement: measurement,
-                                          receivedNewSamples: receivedNewSamples) {
+                                          releaseSampleSequence: releaseSampleSequence,
+                                          releasedAt: releasedAt) {
         case .wait(let delay):
             schedulePostReleaseCaptureCheck(after: delay,
                                             releasedAt: releasedAt,
@@ -19199,6 +19220,28 @@ private enum PresspeechSelfTest {
             try expect(ownershipDuringFocusProbe.remaining, equals: "new external pre-V fixture",
                        "ownership loss must preserve the newer external copy")
         }
+        let failedOwnershipCleanupProbe = MainActor.assumeIsolated {
+            let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
+                                                         pasteKey: 0x09)
+            var attempted: [KeyboardEventStep] = []
+            let outcome = postFocusBoundClipboardPasteSteps(
+                steps,
+                pasteKey: 0x09,
+                targetStillFocused: { true },
+                clipboardStillOwned: { false },
+                postStep: { step in
+                    attempted.append(step)
+                    return step.keyDown
+                }
+            )
+            return (outcome: outcome, attempted: attempted)
+        }
+        try expect(failedOwnershipCleanupProbe.outcome, equals: .deliveryUncertain,
+                   "a failed Command release after ownership loss must report interrupted delivery")
+        try expect(failedOwnershipCleanupProbe.attempted, equals: [
+            KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
+            KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
+        ], "ownership loss must attempt Command cleanup without posting V")
         try expect(TextInsertionOutcome.clipboardChanged.allowsFallback, equals: false,
                    "clipboard ownership loss must stop fallbacks that could copy over newer content")
         try expect(dictationCompletionNotice(processedText: "fixed fixture",
@@ -19715,37 +19758,74 @@ private enum PresspeechSelfTest {
         )
 
         let quietTail = PostReleaseTailMeasurement(tailRMS: 0.001,
-                                                   silenceThreshold: 0.003)
+                                                   silenceThreshold: 0.003,
+                                                   sampleSequence: 2,
+                                                   callbackStartedAt: 1.1)
         let voicedTail = PostReleaseTailMeasurement(tailRMS: 0.03,
-                                                    silenceThreshold: 0.006)
+                                                    silenceThreshold: 0.006,
+                                                    sampleSequence: 2,
+                                                    callbackStartedAt: 1.1)
         try expect(
-            postReleaseCaptureDecision(elapsed: 0.04, measurement: quietTail),
+            postReleaseCaptureDecision(elapsed: 0.04, measurement: quietTail,
+                                       releaseSampleSequence: 1, releasedAt: 1),
             equals: .wait(0.04),
             "post-release capture should always retain its minimum safety window"
         )
         try expect(
             postReleaseCaptureDecision(elapsed: POST_RELEASE_MIN_CAPTURE_SECONDS,
-                                       measurement: quietTail),
+                                       measurement: quietTail,
+                                       releaseSampleSequence: 1, releasedAt: 1),
             equals: .finishSilence,
             "a quiet tail should finish immediately after the minimum window"
         )
         try expect(
             postReleaseCaptureDecision(elapsed: 0.2,
-                                       measurement: quietTail,
-                                       receivedNewSamples: false),
+                                       measurement: PostReleaseTailMeasurement(
+                                        tailRMS: 0.001, silenceThreshold: 0.003,
+                                        sampleSequence: 1, callbackStartedAt: 0.9),
+                                       releaseSampleSequence: 1, releasedAt: 1),
             equals: .wait(POST_RELEASE_CAPTURE_CHECK_SECONDS),
             "pre-release silence should not finish while the boundary audio buffer is pending"
         )
         try expect(
-            postReleaseCaptureDecision(elapsed: 0.2, measurement: voicedTail),
+            postReleaseCaptureDecision(elapsed: 0.2,
+                                       measurement: PostReleaseTailMeasurement(
+                                        tailRMS: 0.001, silenceThreshold: 0.003,
+                                        sampleSequence: 2, callbackStartedAt: 0.9),
+                                       releaseSampleSequence: 1, releasedAt: 1),
+            equals: .wait(POST_RELEASE_CAPTURE_CHECK_SECONDS),
+            "a pre-release callback finishing late must not end the capture"
+        )
+        try expect(
+            postReleaseCaptureDecision(elapsed: 0.2,
+                                       measurement: PostReleaseTailMeasurement(
+                                        tailRMS: 0.001, silenceThreshold: 0.003,
+                                        sampleSequence: 2, callbackStartedAt: 1),
+                                       releaseSampleSequence: 1, releasedAt: 1),
+            equals: .finishSilence,
+            "a callback starting at release should count as new boundary audio"
+        )
+        try expect(
+            postReleaseCaptureDecision(elapsed: 0.2, measurement: voicedTail,
+                                       releaseSampleSequence: 1, releasedAt: 1),
             equals: .wait(POST_RELEASE_CAPTURE_CHECK_SECONDS),
             "a voiced tail should keep capture armed before the hard bound"
         )
         try expect(
             postReleaseCaptureDecision(elapsed: POST_RELEASE_MAX_CAPTURE_SECONDS,
-                                       measurement: voicedTail),
+                                       measurement: voicedTail,
+                                       releaseSampleSequence: 1, releasedAt: 1),
             equals: .finishMaximum,
             "ongoing sound should never extend post-release capture past its bound"
+        )
+        try expect(
+            postReleaseCaptureDecision(elapsed: POST_RELEASE_MAX_CAPTURE_SECONDS,
+                                       measurement: PostReleaseTailMeasurement(
+                                        tailRMS: 0.001, silenceThreshold: 0.003,
+                                        sampleSequence: 2, callbackStartedAt: 0.9),
+                                       releaseSampleSequence: 1, releasedAt: 1),
+            equals: .finishMaximum,
+            "waiting for a post-release callback must still respect the hard bound"
         )
 
         try expect(
