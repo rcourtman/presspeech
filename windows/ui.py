@@ -2621,8 +2621,9 @@ class DeliveryRecoveryWindow:
             frame,
             text=(
                 "Presspeech could not confirm delivery of one or more recent "
-                "dictations. Check the original field or fields first: some "
-                "or all of the text may already be there or on the clipboard.\n\n"
+                "dictations. Check the intended field and any field that "
+                "may have gained focus first: some or all of the text may be "
+                "there or on the clipboard.\n\n"
                 "Presspeech keeps recovery copies in process memory; their "
                 "words are not shown in this window or written to a recovery "
                 "file. Copy for deliberate manual paste, or discard. When "

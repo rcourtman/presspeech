@@ -2873,9 +2873,18 @@ class PresspeechApp:
                 "The final delivery check could not be completed; no paste "
                 "shortcut was sent. "),
             "shortcut-uncertain": "The paste shortcut may have partly completed. ",
+            "shortcut-focus-uncertain": (
+                "The original focused field could not be verified after the "
+                "paste shortcut was sent. Text may have reached the original "
+                "field or a different field. "),
         }[reason]
+        review_instruction = (
+            "Check the intended field and any field that may have gained "
+            "focus before trying again. "
+            if reason == "shortcut-focus-uncertain" else
+            "Check the intended field before trying again. ")
         self.notify("Dictation needs review", prefix +
-                    "Check the intended field before trying again. A recovery copy "
+                    review_instruction + "A recovery copy "
                     "is kept in process memory: use the Delivery Recovery window "
                     "or the notification-area Copy and Discard commands before "
                     "recording again. "
@@ -3072,15 +3081,29 @@ class PresspeechApp:
         if not clipboard_delivery.is_current(receipt):
             self._remember_undelivered_dictation(text, "shortcut-uncertain")
             return False
+        # SendInput reports acceptance into the input stream, not which field
+        # eventually consumed the paste shortcut. A focus change during
+        # submission or its brief cleanup makes delivery uncertain despite an
+        # unchanged clipboard receipt. Retain the text rather than claiming a
+        # successful insertion; this cannot undo a paste that already landed.
+        if not self._paste_target_still_focused(
+                paste_target, after_shortcut=True):
+            self._remember_undelivered_dictation(
+                text, "shortcut-focus-uncertain")
+            return False
         return True
 
-    def _paste_target_still_focused(self, paste_target):
+    def _paste_target_still_focused(
+            self, paste_target, *, after_shortcut=False):
         current_target = _foreground_paste_target()
         if _paste_target_matches(paste_target, current_target):
             return True
         # Executable basenames can contain user or workplace names. Window
         # identity is enough to decide delivery; logs need only the outcome.
-        self._log("paste skipped; original target could not be verified")
+        self._log(
+            "paste outcome uncertain; original target could not be verified"
+            if after_shortcut else
+            "paste skipped; original target could not be verified")
         return False
 
     # ---------------- windows ----------------

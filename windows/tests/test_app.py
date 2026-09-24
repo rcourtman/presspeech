@@ -5013,6 +5013,58 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertIn("may have partly completed",
                       str(self.instance.notify.mock_calls))
 
+    def test_focus_change_during_accepted_shortcut_is_reported_uncertain(self):
+        # SendInput can accept the chord while the foreground changes; its
+        # return value does not identify the field that consumes the paste.
+        replacement = app.PasteTarget("other.exe", 4321, 99)
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+
+        def accept_then_change_focus(count, _inputs, _size):
+            self.foreground.return_value = replacement
+            return count
+
+        api.SendInput.side_effect = accept_then_change_focus
+        self.controller.return_value = self.checked_controller(api=api)
+
+        self.assertFalse(self.paste())
+
+        api.SendInput.assert_called_once()
+        self.copy.assert_called_once_with("private transcript")
+        self.assertFalse(self.instance._injecting_keys)
+        self.assert_retained_without_content_logs()
+        self.instance.open_delivery_recovery.assert_called_once_with()
+        self.assertIn("Text may have reached the original field or a different field",
+                      str(self.instance.notify.mock_calls))
+        self.assertIn("any field that may have gained focus",
+                      str(self.instance.notify.mock_calls))
+        self.assertNotIn("no paste shortcut was sent",
+                         str(self.instance.notify.mock_calls))
+        self.assertIn("paste outcome uncertain; original target could not be verified",
+                      str(self.instance._log.mock_calls))
+        self.assertNotIn("paste skipped", str(self.instance._log.mock_calls))
+
+    def test_failed_focus_query_after_shortcut_is_not_reported_as_success(self):
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+
+        def accept_then_lose_focus_query(count, _inputs, _size):
+            self.foreground.return_value = self.target._replace(
+                focus_handle=None)
+            return count
+
+        api.SendInput.side_effect = accept_then_lose_focus_query
+        self.controller.return_value = self.checked_controller(api=api)
+
+        self.assertFalse(self.paste())
+
+        api.SendInput.assert_called_once()
+        self.assert_retained_without_content_logs()
+        self.assertIn("could not be verified after the paste shortcut was sent",
+                      str(self.instance.notify.mock_calls))
+
     def test_target_becomes_elevated_after_preflight_still_blocks_paste(self):
         self.blocked.side_effect = [False, True]
 

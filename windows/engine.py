@@ -454,25 +454,30 @@ class Transcriber:
 
     def load(self, model_name, notify=None, *, local_only=False,
              progress_callback=None):
-        with self.lock:
-            if self.loaded(model_name):
-                return
-            self._unload_locked()
-            if is_parakeet(model_name):
-                self._load_parakeet(
-                    notify, local_only=local_only,
-                    progress_callback=progress_callback)
-            elif is_nemotron(model_name):
-                self._load_nemotron(notify, progress_callback)
-            elif is_moonshine(model_name):
-                self._load_moonshine(notify, progress_callback)
-            else:
-                self._load_whisper(
-                    model_name, notify, progress_callback,
-                    local_only=local_only)
-            self.model_name = model_name
-            if notify is not None:
-                notify("Presspeech", "Model %s ready." % model_name)
+        # A Whisper transcription consumes a lazy segment generator while
+        # holding inference_lock. Match unload()'s lock order so changing the
+        # model cannot close its staged files or dispose native resources
+        # before that decode finishes.
+        with self.inference_lock:
+            with self.lock:
+                if self.loaded(model_name):
+                    return
+                self._unload_locked()
+                if is_parakeet(model_name):
+                    self._load_parakeet(
+                        notify, local_only=local_only,
+                        progress_callback=progress_callback)
+                elif is_nemotron(model_name):
+                    self._load_nemotron(notify, progress_callback)
+                elif is_moonshine(model_name):
+                    self._load_moonshine(notify, progress_callback)
+                else:
+                    self._load_whisper(
+                        model_name, notify, progress_callback,
+                        local_only=local_only)
+                self.model_name = model_name
+                if notify is not None:
+                    notify("Presspeech", "Model %s ready." % model_name)
 
     def _load_parakeet(self, notify, *, local_only=False,
                        progress_callback=None):

@@ -248,6 +248,13 @@ focused, or elevated, or cannot verify either app's input integrity level,
 it also leaves the previous clipboard item unchanged and waits for an explicit
 recovery choice. A change after that check may still
 leave the dictated text on the current clipboard.
+If the original focused window or Win32 control cannot be verified just after
+the paste shortcut is submitted, Presspeech also opens Delivery Recovery even
+when Windows accepted the shortcut. The text may already be in the original
+or another field: check the original and any newly focused field before
+copying again. This check cannot identify a different browser tab or
+custom-rendered field sharing one HWND,
+and it cannot undo a paste or prove that a target consumed it.
 
 If a clipboard write fails after replacement begins, Windows cannot restore
 the previous item. Presspeech clears its partial item while it still owns the

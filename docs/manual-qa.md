@@ -51,6 +51,13 @@ collaborator where noted:
   discoverable from the release page itself; do not assume visitors first read
   the README or install guide. A request for compatibility reports must not
   imply that new issues can be submitted while issue creation is restricted.
+  Run `python3 scripts/check-release-entry.py --platform macos --version X.Y.Z
+  --file swift/release-notes/vX.Y.Z.md` or the corresponding `--platform windows
+  --file windows/release-notes/X.Y.Z.md` before approving the entry. The
+  automated lead-and-link check catches omissions, not misleading wording or
+  a broken public guide; review the rendered notice and exact build behavior
+  yourself. The macOS release script rechecks this before publication;
+  Windows still requires the manual check until its workflow guard is approved.
   Editing a tracked release-notes file does not update notes already published
   on GitHub, and unreleased fixes must not be described as shipped.
   For the known 0.3.8 and 0.1.12 gaps, review the
@@ -1556,6 +1563,15 @@ clipboard.
   Replace it during submission or within the brief post-shortcut check and
   confirm an uncertain-delivery notice, with no automatic second write.
   A later copy can still race the target's asynchronous paste consumption.
+- With controlled fault injection, let `SendInput` accept the complete shortcut,
+  then change or invalidate the focused-window observation before the final
+  check. Confirm Delivery Recovery retains the text and reports uncertainty,
+  the fixed log status is
+  `paste outcome uncertain; original target could not be verified`, and no
+  second clipboard write or shortcut is attempted. Check the original and
+  any newly focused field before resolving the copy; an
+  accepted shortcut may already have pasted. Do not treat an uncontrolled
+  manual focus switch that missed this narrow interval as a pass.
 - Switch to a different target window before delivery. Confirm the recovery
   notice appears and the Presspeech-authored target-verification log message is
   the fixed status `paste skipped; original target could not be verified`, not either executable

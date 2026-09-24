@@ -1,5 +1,6 @@
 import sys
 from contextlib import nullcontext
+import threading
 import types
 import unittest
 from unittest import mock
@@ -543,6 +544,76 @@ class ParakeetConfigurationTests(unittest.TestCase):
             vad_parameters=engine.WHISPER_VAD_POLICY,
         )
         self.assertEqual(transcriber.last_timing["speech_seconds"], 1.25)
+
+    def test_model_load_waits_for_lazy_whisper_decode_before_replacing_files(self):
+        decoding = threading.Event()
+        finish_decode = threading.Event()
+        load_started = threading.Event()
+        load_finished = threading.Event()
+        failures = []
+        results = []
+
+        def segments():
+            decoding.set()
+            if not finish_decode.wait(2):
+                raise RuntimeError("test decode did not resume")
+            yield types.SimpleNamespace(text=" Complete dictation")
+
+        old_model = mock.Mock()
+        old_model.transcribe.return_value = (
+            segments(), types.SimpleNamespace(duration_after_vad=1.0))
+        old_files = mock.Mock()
+        transcriber = engine.Transcriber()
+        transcriber.model = old_model
+        transcriber.backend = "whisper"
+        transcriber.model_name = "base.en"
+        transcriber._model_files = old_files
+
+        def replace_model(_name, _notify, _progress, *, local_only=False):
+            transcriber.model = mock.sentinel.new_model
+            transcriber.backend = "whisper"
+
+        def run_transcription():
+            try:
+                results.append(transcriber.transcribe(mock.sentinel.audio))
+            except Exception as error:
+                failures.append(error)
+
+        def run_load():
+            load_started.set()
+            try:
+                transcriber.load("small.en")
+            except Exception as error:
+                failures.append(error)
+            finally:
+                load_finished.set()
+
+        transcription_thread = threading.Thread(target=run_transcription, daemon=True)
+        load_thread = threading.Thread(target=run_load, daemon=True)
+        with mock.patch.object(transcriber, "_load_whisper", side_effect=replace_model):
+            transcription_thread.start()
+            try:
+                self.assertTrue(decoding.wait(1), "Whisper decode did not start")
+                load_thread.start()
+                self.assertTrue(load_started.wait(1), "model load did not start")
+                self.assertFalse(
+                    load_finished.wait(0.1),
+                    "model load replaced a model still decoding speech",
+                )
+                old_files.close.assert_not_called()
+            finally:
+                finish_decode.set()
+                transcription_thread.join(2)
+                if load_thread.ident is not None:
+                    load_thread.join(2)
+
+        self.assertFalse(transcription_thread.is_alive())
+        self.assertFalse(load_thread.is_alive())
+        self.assertEqual(failures, [])
+        self.assertEqual(results, ["Complete dictation"])
+        self.assertTrue(load_finished.is_set())
+        old_files.close.assert_called_once_with()
+        self.assertEqual(transcriber.model_name, "small.en")
 
     def test_multilingual_whisper_detects_language_when_unspecified(self):
         model = mock.Mock()

@@ -251,21 +251,9 @@ validate_release_notes_file() {
     awk 'NR > 1 && /[^[:space:]]/ { found = 1 } END { exit !found }' "$notes_file" \
         || die "release notes have no content after the heading: $notes_file"
     check_no_attribution_file "release notes" "$notes_file"
-}
-
-latest_macos_release_tag() {
-    local repository="$1"
-    # Windows prerelease tags share this repository. Restrict generated macOS
-    # notes to reachable, canonical vX.Y.Z tags so neither a Windows tag nor a
-    # nearby tag such as v1-wip can truncate the macOS change list. Git's
-    # --match patterns are globs, so 'v[0-9]*' alone is not that constraint.
-    git -C "$repository" tag --merged HEAD --list 'v*' --sort=-version:refname \
-        | awk '
-            /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ && !found {
-                print
-                found = 1
-            }
-        '
+    /usr/bin/python3 "$PROJECT_DIR/scripts/check-release-entry.py" \
+        --platform macos --version "$version" --file "$notes_file" \
+        || die "release notes lack a lead model-download privacy handoff: $notes_file"
 }
 
 rewrite_cask_file() {
@@ -601,35 +589,14 @@ run_release_script_self_test() {
     local tmpdir
     tmpdir="$(mktemp -d)"
     local notes_file="$tmpdir/notes.md"
-    printf '%s\n\n%s\n' "# Presspeech 9.8.7" "Release details." >"$notes_file"
+    printf '%s\n\n%s\n' "# Presspeech 9.8.7" \
+        'Before opening 9.8.7, decide whether to launch for a missing model download. Read https://rcourtman.github.io/presspeech/install.html#model-download-privacy first.' >"$notes_file"
     validate_release_notes_file "$notes_file" "9.8.7"
     assert_self_test_fails "accepted a release-note heading for another version" \
         validate_release_notes_file "$notes_file" "9.8.8"
     printf '%s\n' "# Presspeech 9.8.7" >"$notes_file"
     assert_self_test_fails "accepted empty release notes" \
         validate_release_notes_file "$notes_file" "9.8.7"
-
-    local tag_probe
-    tag_probe="$({
-        git() {
-            [[ "$#" -eq 8 && "$1" == "-C" && "$2" == "/self-test/repository" &&
-               "$3" == "tag" && "$4" == "--merged" && "$5" == "HEAD" &&
-               "$6" == "--list" && "$7" == "v*" &&
-               "$8" == "--sort=-version:refname" ]] || return 1
-            printf '%s\n' \
-                "v9-wip" \
-                "v2.0.0-rc1" \
-                "v1.10.0" \
-                "v1.9.0" \
-                "v01.8.0" \
-                "windows-v9.0.0"
-        }
-        latest_macos_release_tag "/self-test/repository"
-    })"
-    assert_self_test_equals "$tag_probe" "v1.10.0" \
-        "macOS release notes should use the newest canonical macOS tag"
-
-    check_no_attribution_text "self-test generated notes" "$(printf -- '- Release v9.8.7\n- Improve update checks')"
 
     assert_self_test_equals "$(compute_target_version "1.2.3" patch)" "1.2.4" \
         "patch version bump failed"
@@ -927,11 +894,9 @@ new_build="$(increment_build_number "$current_build")"
 say "Version: $current_version (build $current_build) -> $new_version (build $new_build)"
 
 NOTES_FILE="$SWIFT_DIR/release-notes/v$new_version.md"
-if [[ -f "$NOTES_FILE" ]]; then
-    # Validate hand-written notes before QA, signing, and notarisation rather
-    # than discovering a stale heading at the publication boundary.
-    validate_release_notes_file "$NOTES_FILE" "$new_version"
-fi
+# Every GitHub release is a standalone download entry point. Reject a missing
+# or privacy-silent hand-written notice before QA, signing, or notarisation.
+validate_release_notes_file "$NOTES_FILE" "$new_version"
 
 if git -C "$PROJECT_DIR" rev-parse -q --verify "refs/tags/v$new_version" >/dev/null; then
     die "tag v$new_version already exists locally -- pick a different version (or delete the stale local tag first)"
@@ -1097,31 +1062,12 @@ fi
 say "Committing version bump"
 release_commit_message="Release v$new_version"
 release_title="v$new_version"
-USE_NOTES_FILE=0
-notes=""
-
 check_no_attribution_text "release commit message" "$release_commit_message"
 check_no_attribution_text "release title" "$release_title"
 
-# If a hand-written release-notes file exists for this version, use it
-# verbatim — preferable to a list of commit subjects for releases with
-# any narrative content (migration steps, breaking changes, etc.).
-# Otherwise fall back to the exact generated commit-list the GitHub
-# release step will publish. Preflight before pushing the tag so a
-# release-note wording issue does not leave remote state half-published.
-if [[ -f "$NOTES_FILE" ]]; then
-    USE_NOTES_FILE=1
-    validate_release_notes_file "$NOTES_FILE" "$new_version"
-else
-    prev_tag="$(latest_macos_release_tag "$PROJECT_DIR" 2>/dev/null || true)"
-    if [[ -n "$prev_tag" ]]; then
-        prior_notes="$(git -C "$PROJECT_DIR" log --pretty='- %s' "$prev_tag..HEAD")"
-        notes="$(printf -- '- %s\n%s' "$release_commit_message" "$prior_notes")"
-    else
-        notes="Initial Swift release."
-    fi
-    check_no_attribution_text "generated release notes" "$notes"
-fi
+# Recheck immediately before the first public mutation; a missing or replaced
+# note must not silently fall back to a commit list.
+validate_release_notes_file "$NOTES_FILE" "$new_version"
 
 git -C "$PROJECT_DIR" add "$INFO_PLIST" "${DOC_SYNC_PATHS[@]}"
 git -C "$PROJECT_DIR" commit -m "$release_commit_message"
@@ -1148,22 +1094,13 @@ say "Creating GitHub release v$new_version"
 # rather than replaced, before any manual recovery.
 release_failure_msg="gh release create failed -- commit and tag v$new_version ARE pushed to origin. The CLI stages assets in a private draft before publication, so inspect that draft before retrying; do not replace any existing asset. Publish only the exact $ZIP_OUT and $ZIP_CHECKSUM bytes, verify the immutable release, then finish with ./ship-swift.sh --cask-only $new_version"
 
-if [[ "$USE_NOTES_FILE" -eq 1 ]]; then
-    say "Using hand-written release notes from $NOTES_FILE"
-    gh release create "v$new_version" "$ZIP_OUT" "$ZIP_CHECKSUM" \
-        --repo rcourtman/presspeech \
-        --verify-tag \
-        --title "$release_title" \
-        --notes-file "$NOTES_FILE" \
-        || die "$release_failure_msg"
-else
-    gh release create "v$new_version" "$ZIP_OUT" "$ZIP_CHECKSUM" \
-        --repo rcourtman/presspeech \
-        --verify-tag \
-        --title "$release_title" \
-        --notes "$notes" \
-        || die "$release_failure_msg"
-fi
+say "Using hand-written release notes from $NOTES_FILE"
+gh release create "v$new_version" "$ZIP_OUT" "$ZIP_CHECKSUM" \
+    --repo rcourtman/presspeech \
+    --verify-tag \
+    --title "$release_title" \
+    --notes-file "$NOTES_FILE" \
+    || die "$release_failure_msg"
 
 say "Verifying immutable GitHub release and exact assets"
 release_json="$(gh api \
