@@ -546,7 +546,7 @@ class MetricTests(unittest.TestCase):
                                    "worsened_word_error_trial_count": 1},
                 "tailed-first": {"trial_count": 1,
                                  "nonempty_to_empty_trial_count": 0,
-                                 "worsened_word_error_trial_count": 0},
+                                 "worsened_word_error_trial_count": 1},
             })
         self.assertEqual(
             result["tail_silence_probe"]["nonempty_to_empty_trial_count"], 1)
