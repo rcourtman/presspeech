@@ -889,7 +889,8 @@ class MetricTests(unittest.TestCase):
                          [16000, 9600, 9600, 16000, 16000, 16000])
         self.assertIs(calls[0].args[0], audio)
         self.assertIs(calls[3].args[0], audio)
-        self.assertEqual(result["benchmark_version"], 20)
+        self.assertEqual(result["benchmark_version"], 21)
+        self.assertRegex(result["benchmark_order_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(result["aggregate_trial_wer"], 0.75)
         self.assertEqual(result["samples"][0]["transcript"], "")
         probe = result["samples"][0]["recorded_tail_probe"]
@@ -923,6 +924,7 @@ class MetricTests(unittest.TestCase):
             benchmark._print_summary(result)
         self.assertIn("Parakeet recorded tail (benchmark-only)",
                       output.getvalue())
+        self.assertIn("Benchmark order SHA-256: ", output.getvalue())
         self.assertIn("Paired inference trimmed-minus-full median",
                       output.getvalue())
         self.assertIn("trimmed worsened", output.getvalue())
@@ -1073,6 +1075,8 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["aggregate_trial_wer"], 0)
         self.assertEqual(result["benchmark_inputs_sha256"],
                          plain_result["benchmark_inputs_sha256"])
+        self.assertEqual(result["benchmark_order_sha256"],
+                         plain_result["benchmark_order_sha256"])
         self.assertEqual(result["aggregate_trial_wer"],
                          plain_result["aggregate_trial_wer"])
         self.assertIsNone(plain_result["tail_silence_probe"])
@@ -1080,7 +1084,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["recorded_tail_probe_groups"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 20)
+        self.assertEqual(result["benchmark_version"], 21)
         self.assertEqual(result["tail_silence_probe_groups"][
             "language_task_groups"]["en"]["short-command"][
                 "final_word_lost_trial_count"], 2)
@@ -1837,7 +1841,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 20)
+        self.assertEqual(result["benchmark_version"], 21)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

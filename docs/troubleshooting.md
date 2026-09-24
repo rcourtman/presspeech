@@ -295,10 +295,13 @@ The **Delivery Recovery** window opens without showing or copying the dictated
 words. Choose **Copy for Manual Paste** to copy explicitly, **Discard
 Dictation** to forget the recovery copy and resume recording, or **Leave
 Waiting** to close the window while recording remains paused. Discard leaves
-the clipboard unchanged. A blocked hotkey or reopening Presspeech brings the
-window back; neither action copies automatically. Equivalent **Review
-Undelivered Dictation…**, **Copy Undelivered Dictation**, and **Discard
-Undelivered Dictation** commands remain in the notification-area menu.
+the clipboard unchanged. Copy replaces the current clipboard item, including
+an image or formatted copy, and Presspeech does not restore it; choose Leave
+Waiting if you need to save that item first. A blocked hotkey or reopening
+Presspeech brings the window back; neither action copies automatically.
+Equivalent **Review Undelivered Dictation…**, **Copy Undelivered Dictation
+(replaces clipboard)**, and **Discard Undelivered Dictation** commands remain
+in the notification-area menu.
 
 Depending on where delivery became uncertain, some or all text may already be
 in the intended field or on the clipboard. If another writer changes the

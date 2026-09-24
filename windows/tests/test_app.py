@@ -4582,6 +4582,32 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assert_retained_without_content_logs()
         self.assertNotIn("private clipboard detail", str(self.instance._log.mock_calls))
 
+    def test_two_failed_focus_queries_preserve_prior_clipboard(self):
+        # An unavailable GUI-thread query at capture and delivery must not
+        # collapse into the completed-query, no-child window-only fallback.
+        self.target = self.target._replace(focus_handle=None)
+        self.foreground.return_value = self.target
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.assertIn("focused control could not be verified",
+                      str(self.instance.notify.mock_calls))
+
+    def test_focus_query_failure_after_copy_never_sends_shortcut(self):
+        # The transcript may already be on the current clipboard, but a
+        # failed delivery-time query must not authorize keyboard insertion.
+        failed_query = self.target._replace(focus_handle=None)
+        self.foreground.side_effect = [self.target, failed_query]
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_called_once_with("private transcript")
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+
     def test_hook_held_paste_key_preserves_previous_clipboard(self):
         for key in app.keyboard_delivery._MODIFIER_KEYS:
             with self.subTest(key=key):

@@ -263,10 +263,18 @@ window while Presspeech keeps the recovery copy and pauses new recording. A
 blocked hotkey or a second launch reopens the window. If **Try Dictation** is
 open, its **Review Delivery…** button also reopens the window without copying
 anything; it is enabled only while a dictation is waiting. Equivalent **Review
-Undelivered Dictation…**, **Copy Undelivered Dictation**, and **Discard
-Undelivered Dictation** commands remain in the notification-area menu; exiting
-discards the recovery copy. None of these navigation actions silently
+Undelivered Dictation…**, **Copy Undelivered Dictation (replaces clipboard)**,
+and **Discard Undelivered Dictation** commands remain in the notification-area
+menu; exiting discards the recovery copy. None of these navigation actions silently
 overwrites the current clipboard.
+
+**Copy for Manual Paste** does replace the current clipboard item, including
+an image or formatted content, and Presspeech does not restore that item.
+Choose **Leave Waiting** if you need to save it elsewhere first. Normal
+automatic paste also replaces the current clipboard with transcript text;
+preservation applies only when Presspeech detects an unsafe destination before
+the write. Windows Clipboard History or a third-party manager is not a
+guaranteed way to recover an earlier item.
 
 Presspeech's recovery copy stays in process memory, without transcript logs,
 settings storage or a recovery file. Depending on where delivery became
@@ -403,6 +411,12 @@ a guarantee of field identity within those apps. Keep the intended field
 focused until delivery finishes, and review where the text landed.
 If a control is identifiable only at the later delivery check, Presspeech
 cannot confirm it was focused when recording began and uses Delivery Recovery.
+Upcoming 0.1.13 also uses Delivery Recovery when Windows' focused-control
+query fails or disagrees with the foreground window, even if both failed
+observations concern the same window. In that case it does not replace the
+previous clipboard item if the failure is known before copying. A completed
+query with no focused child still uses the window-level check, so this is not
+proof that a browser field or tab remained selected.
 [Windows prevents](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput#remarks)
 a standard app from sending simulated input into an app running as administrator.
 Presspeech detects that boundary. Published 0.1.12 leaves the transcript on

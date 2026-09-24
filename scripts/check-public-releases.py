@@ -11,10 +11,11 @@ to keep the existing site until the advertised downloads are available.
 Use ``--github-api-via-gh`` when a repository-scoped gh broker holds the API
 credentials; checksum sidecars still download over public HTTPS.
 With ``--check-release-notes``, also compare the latest public macOS and
-Windows release descriptions with their tracked notes. This remains useful
-while source metadata is preparing a newer release: visitors can still reach
-the preceding release pages. It is not a Pages gate: a source edit cannot
-correct an already-published GitHub release page.
+Windows release descriptions with their tracked notes. ``--notes-only`` runs
+just that read-only audit, without asset downloads or candidate metadata checks.
+This remains useful while source metadata is preparing a newer release:
+visitors can still reach the preceding release pages. It is not a Pages gate:
+a source edit cannot correct an already-published GitHub release page.
 """
 
 from __future__ import annotations
@@ -245,12 +246,16 @@ def release_note_parity_errors(
     identify which public entry needs an authorized correction.
     """
     checks: list[tuple[str, object, Path]] = []
+    errors: list[str] = []
     if isinstance(mac_release, dict):
         tag = mac_release.get("tag_name")
         if (isinstance(tag, str) and tag.startswith("v") and
                 SEMVER.fullmatch(tag[1:]) and mac_release.get("draft") is False):
             checks.append((tag, mac_release, root / "swift" / "release-notes" / f"{tag}.md"))
+    if not checks:
+        errors.append("latest published macOS release metadata is missing or invalid")
 
+    found_windows = False
     if isinstance(releases, list):
         windows_releases: list[tuple[tuple[int, int, int], str, dict[str, object]]] = []
         for release in releases:
@@ -265,8 +270,10 @@ def release_note_parity_errors(
         if windows_releases:
             _, tag, release = max(windows_releases, key=lambda item: item[0])
             checks.append((tag, release, root / "windows" / "release-notes" / f"{tag.removeprefix('windows-v')}.md"))
+            found_windows = True
+    if not found_windows:
+        errors.append("latest published Windows release metadata is missing or invalid")
 
-    errors: list[str] = []
     for tag, release, path in checks:
         body = release.get("body") if isinstance(release, dict) else None
         if not isinstance(body, str) or not body.strip():
@@ -605,6 +612,14 @@ def run_self_test() -> None:
         windows["body"] = "Windows note\r\n"
         if release_note_parity_errors(mac, [mac, windows], root=root):
             raise ReleaseCheckError("self-test rejected matching public release notes")
+        if release_note_parity_errors({}, [windows], root=root) != [
+            "latest published macOS release metadata is missing or invalid"
+        ]:
+            raise ReleaseCheckError("self-test accepted missing macOS release notes")
+        if release_note_parity_errors(mac, [], root=root) != [
+            "latest published Windows release metadata is missing or invalid"
+        ]:
+            raise ReleaseCheckError("self-test accepted missing Windows release notes")
         windows["body"] = "older Windows note"
         note_errors = release_note_parity_errors(mac, [mac, windows], root=root)
         if len(note_errors) != 1 or "windows-v4.5.6" not in note_errors[0]:
@@ -757,8 +772,11 @@ def main() -> int:
     parser.add_argument("--self-test", action="store_true", help="run without network access")
     parser.add_argument("--require-published", action="store_true", help="block deployment while configured downloads are not public yet")
     parser.add_argument("--check-release-notes", action="store_true", help="audit the latest published release notes for both platforms against tracked notes")
+    parser.add_argument("--notes-only", action="store_true", help="audit only the latest public release notes; skip package and candidate-metadata checks")
     parser.add_argument("--github-api-via-gh", action="store_true", help="read API JSON through repo-scoped gh api without exporting credentials; checksum downloads remain public HTTPS")
     args = parser.parse_args()
+    if args.notes_only and (args.require_published or args.check_release_notes):
+        parser.error("--notes-only cannot be combined with --require-published or --check-release-notes")
     try:
         if args.self_test:
             run_self_test()
@@ -766,9 +784,17 @@ def main() -> int:
             return 0
 
         token = "" if args.github_api_via_gh else os.environ.get("GITHUB_TOKEN", "").strip()
-        metadata = load_metadata()
         mac_release = github_json(f"{API_ROOT}/releases/latest", token, via_gh=args.github_api_via_gh)
         releases = github_releases(token, via_gh=args.github_api_via_gh)
+        if args.notes_only:
+            errors = release_note_parity_errors(mac_release, releases)
+            for error in errors:
+                print(f"check-public-releases: {error}", file=sys.stderr)
+            if errors:
+                return 1
+            print("latest public macOS and Windows release notes match tracked files")
+            return 0
+        metadata = load_metadata()
         errors, status = public_release_errors(
             metadata,
             mac_release,

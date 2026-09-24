@@ -795,7 +795,7 @@ class PresspeechApp:
                     self.open_delivery_recovery,
                     enabled=lambda _item: self.has_undelivered_dictation()),
                 MenuItem(
-                    "Copy Undelivered Dictation",
+                    "Copy Undelivered Dictation (replaces clipboard)",
                     self.copy_undelivered_dictation,
                     enabled=lambda _item: self.has_undelivered_dictation()),
                 MenuItem(
@@ -2917,8 +2917,8 @@ class PresspeechApp:
             "delivery recovery window unavailable: %s" % type(exc).__name__)
         self.notify(
             "Delivery Recovery unavailable",
-            "Use Copy Undelivered Dictation or Discard Undelivered "
-            "Dictation in the notification-area menu.")
+            "Use Copy Undelivered Dictation (replaces clipboard) or "
+            "Discard Undelivered Dictation in the notification-area menu.")
 
     def open_delivery_recovery(self, icon=None, item=None):
         """Show explicit recovery controls without copying private text."""

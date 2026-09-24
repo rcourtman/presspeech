@@ -41,20 +41,22 @@ class FocusedChildTests(unittest.TestCase):
         for active, foreground in ((200, 100), (100, 200)):
             with self.subTest(active=active, foreground=foreground):
                 user32 = self.backend(active=active, foreground=foreground)
-                self.assertEqual(
-                    paste_target.focused_child_handle(user32, 100, 77), 0)
+                self.assertIsNone(
+                    paste_target.focused_child_handle(user32, 100, 77))
 
-    def test_missing_focus_failed_query_and_missing_thread_are_not_adopted(self):
+    def test_completed_query_without_child_preserves_window_level_fallback(self):
         self.assertEqual(paste_target.focused_child_handle(
             self.backend(focused=0), 100, 77), 0)
+
+    def test_failed_query_and_missing_thread_are_not_adopted(self):
         user32 = self.backend()
         user32.GetGUIThreadInfo.return_value = 0
         user32.GetGUIThreadInfo.side_effect = None
-        self.assertEqual(paste_target.focused_child_handle(user32, 100, 77), 0)
+        self.assertIsNone(paste_target.focused_child_handle(user32, 100, 77))
         user32.GetGUIThreadInfo.side_effect = OSError("sensitive target title")
-        self.assertEqual(paste_target.focused_child_handle(user32, 100, 77), 0)
-        self.assertEqual(paste_target.focused_child_handle(user32, 100, 0), 0)
-        self.assertEqual(paste_target.focused_child_handle(user32, 0, 77), 0)
+        self.assertIsNone(paste_target.focused_child_handle(user32, 100, 77))
+        self.assertIsNone(paste_target.focused_child_handle(user32, 100, 0))
+        self.assertIsNone(paste_target.focused_child_handle(user32, 0, 77))
 
 
 class PasteTargetMatchTests(unittest.TestCase):
@@ -73,10 +75,27 @@ class PasteTargetMatchTests(unittest.TestCase):
         self.assertFalse(paste_target.matches(expected, self.target(process=42)))
         self.assertFalse(paste_target.matches(expected, self.target(window=200)))
 
-    def test_both_unknown_focus_handles_preserve_window_level_policy(self):
+    def test_two_completed_queries_without_child_preserve_window_level_policy(self):
         expected = self.target(0)
         self.assertTrue(paste_target.matches(expected, self.target(0)))
         self.assertFalse(paste_target.matches(expected, self.target(window=200)))
+
+    def test_failed_focus_query_never_matches_even_when_both_fail(self):
+        expected = self.target(None)
+        self.assertTrue(paste_target.same_window(expected, self.target(None)))
+        for current in (self.target(None), self.target(0), self.target(101)):
+            with self.subTest(current=current.focus_handle):
+                self.assertFalse(paste_target.matches(expected, current))
+                self.assertFalse(paste_target.matches(current, expected))
+
+    def test_two_failed_gui_queries_cannot_authorize_same_window_paste(self):
+        user32 = mock.Mock()
+        user32.GetGUIThreadInfo.return_value = 0
+        captured_focus = paste_target.focused_child_handle(user32, 100, 77)
+        delivery_focus = paste_target.focused_child_handle(user32, 100, 77)
+        captured = self.target(captured_focus)
+        delivery = self.target(delivery_focus)
+        self.assertFalse(paste_target.matches(captured, delivery))
 
     def test_focus_identity_available_only_after_capture_fails_closed(self):
         expected = self.target(0)

@@ -14,7 +14,9 @@ class PasteTarget(NamedTuple):
     window_handle: int
     process_identifier: int = 0
     integrity_level: int = 0
-    focus_handle: int = 0
+    # None means the Win32 focus query failed or observed an incoherent window.
+    # Zero is reserved for a completed query with no child HWND available.
+    focus_handle: int | None = 0
 
 
 class _RECT(ctypes.Structure):
@@ -46,11 +48,12 @@ def focused_child_handle(user32, window_handle, thread_identifier):
     """Return keyboard focus only if it still belongs to the captured window.
 
     GetFocus reads the caller's queue, not the target app's. A failed or
-    incoherent GetGUIThreadInfo query supplies no control-level identity; it
-    must never borrow a child HWND from a newly foreground window.
+    incoherent GetGUIThreadInfo query is not equivalent to a successful query
+    with no focus HWND. Mark it unavailable so two failures cannot authorize
+    a window-only paste into a different field of the same window.
     """
     if not window_handle or not thread_identifier:
-        return 0
+        return None
     try:
         user32.GetGUIThreadInfo.argtypes = (
             ctypes.c_uint32, ctypes.POINTER(_GUIThreadInfo))
@@ -58,13 +61,13 @@ def focused_child_handle(user32, window_handle, thread_identifier):
         info = _GUIThreadInfo()
         info.cbSize = ctypes.sizeof(_GUIThreadInfo)
         if not user32.GetGUIThreadInfo(thread_identifier, ctypes.byref(info)):
-            return 0
+            return None
         if (int(info.hwndActive or 0) != window_handle or
                 int(user32.GetForegroundWindow() or 0) != window_handle):
-            return 0
+            return None
         return int(info.hwndFocus or 0)
     except Exception:
-        return 0
+        return None
 
 
 def same_window(expected, current):
@@ -82,11 +85,12 @@ def same_window(expected, current):
 def matches(expected, current):
     """Match window owner and any child control observed when capture began.
 
-    Some toolkits never expose a useful focus HWND. When both observations
-    lack one, retain the exact top-level-window policy. If only the later
-    observation has a focus HWND, however, we cannot prove it was the control
-    focused at recording start: recover instead of adopting that new identity.
-    This is not a DOM-field identity check.
+    Some toolkits never expose a useful focus HWND. When both *successful*
+    observations lack one, retain the exact top-level-window policy. A failed
+    or incoherent query is not evidence of no focused child; recover instead
+    of treating two failures as a match. This is not a DOM-field identity check.
     """
     return (same_window(expected, current) and
+            expected.focus_handle is not None and
+            current.focus_handle is not None and
             current.focus_handle == expected.focus_handle)

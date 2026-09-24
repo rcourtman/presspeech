@@ -174,6 +174,26 @@ class GhTransportTests(unittest.TestCase):
             self.assertEqual(gh.call_count, 2)
             https.assert_called_once_with(check.DOWNLOAD_ROOT + '/checksum', limit=check.MAX_CHECKSUM_BYTES)
 
+    def test_notes_only_audits_public_bodies_without_asset_or_candidate_checks(self):
+        mac = {'tag_name': 'v1.2.3', 'draft': False, 'body': 'mac note'}
+        releases = [{'tag_name': 'windows-v4.5.6', 'draft': False, 'body': 'Windows note'}]
+        for note_errors, expected_status in [([], 0), (['v1.2.3 public notes differ'], 1)]:
+            with self.subTest(note_errors=note_errors), \
+                 patch.object(sys, 'argv', ['check', '--notes-only']), \
+                 patch.object(check, 'github_json', return_value=mac) as latest, \
+                 patch.object(check, 'github_releases', return_value=releases) as listed, \
+                 patch.object(check, 'release_note_parity_errors', return_value=note_errors) as parity, \
+                 patch.object(check, 'load_metadata') as metadata, \
+                 patch.object(check, 'public_release_errors') as assets, \
+                 contextlib.redirect_stdout(io.StringIO()), \
+                 contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(check.main(), expected_status)
+                latest.assert_called_once()
+                listed.assert_called_once()
+                parity.assert_called_once_with(mac, releases)
+                metadata.assert_not_called()
+                assets.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

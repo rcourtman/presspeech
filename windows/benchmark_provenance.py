@@ -9,6 +9,7 @@ import json
 
 
 _DOMAIN = b"presspeech-windows-benchmark-inputs-v1\0"
+_ORDER_DOMAIN = b"presspeech-windows-benchmark-order-v1\0"
 _RECORDED_TAIL_DOMAIN = b"presspeech-windows-recorded-tail-probe-v1\0"
 
 
@@ -49,6 +50,24 @@ def benchmark_inputs_sha256(rows):
     digest = hashlib.sha256(_DOMAIN)
     for row_hash in sorted(row_hashes):
         digest.update(row_hash)
+    return digest.hexdigest()
+
+
+def benchmark_order_sha256(rows):
+    """Hash fixture order without exposing paths, IDs, or per-clip digests.
+
+    The corpus digest is deliberately order-independent, but paired probe
+    execution alternates by fixture position. Compare both digests and the
+    separately reported run/probe settings before comparing paired results.
+    Include unprobed fixtures: their position can affect warm-up and drift.
+    """
+    digest = hashlib.sha256(_ORDER_DOMAIN)
+    for row in rows:
+        audio_digest = row["asr_audio_sha256"]
+        if (not isinstance(audio_digest, str) or len(audio_digest) != 64
+                or any(char not in "0123456789abcdef" for char in audio_digest)):
+            raise ValueError("ASR audio SHA-256 must be lowercase hexadecimal")
+        digest.update(bytes.fromhex(audio_digest))
     return digest.hexdigest()
 
 

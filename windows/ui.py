@@ -162,6 +162,13 @@ MODEL_DOWNLOAD_ACCESSIBLE_DESCRIPTION = (
     "TLS-inspecting proxy can read the request."
 )
 
+RECOVERY_COPY_CLIPBOARD_WARNING = (
+    "Copy for Manual Paste replaces the current clipboard item, including "
+    "images or formatted content. Presspeech does not restore it afterward. "
+    "Choose Leave Waiting if you need to save that item first; the dictation "
+    "stays in memory while Presspeech runs."
+)
+
 
 def _window_host():
     global _WINDOW_HOST
@@ -2630,6 +2637,11 @@ class DeliveryRecoveryWindow:
             frame, text="", justify="left", wraplength=560)
         self.status.pack(anchor="w", pady=(0, 12))
 
+        ttk.Label(
+            frame, text=RECOVERY_COPY_CLIPBOARD_WARNING,
+            justify="left", wraplength=560,
+        ).pack(anchor="w", pady=(0, 12))
+
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x")
         self.leave_button = ttk.Button(
@@ -2637,6 +2649,8 @@ class DeliveryRecoveryWindow:
         self.leave_button.pack(side="left")
         self.copy_button = ttk.Button(
             buttons, text="Copy for Manual Paste", command=self._copy)
+        _describe_control(
+            self.copy_button, RECOVERY_COPY_CLIPBOARD_WARNING)
         # Construct Copy before Discard so keyboard traversal reaches the
         # recoverable action before the destructive one. Pack the right-side
         # buttons in reverse so their visual order matches that tab sequence.

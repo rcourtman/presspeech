@@ -2,7 +2,7 @@ import array
 import unittest
 
 from benchmark_provenance import (
-    asr_audio_sha256, benchmark_inputs_sha256,
+    asr_audio_sha256, benchmark_inputs_sha256, benchmark_order_sha256,
     recorded_tail_probe_inputs_sha256,
 )
 
@@ -66,6 +66,31 @@ class BenchmarkProvenanceTests(unittest.TestCase):
                     baseline_digest,
                     benchmark_inputs_sha256([dict(baseline, **change)]),
                 )
+
+    def test_order_digest_distinguishes_manifest_order_without_private_names(self):
+        first = self.row()
+        second = self.row(samples=(0.0, 0.0), reference="",
+                          expected_silence=True)
+        self.assertEqual(benchmark_inputs_sha256([first, second]),
+                         benchmark_inputs_sha256([second, first]))
+        ordered = benchmark_order_sha256([first, second])
+        self.assertRegex(ordered, r"^[0-9a-f]{64}$")
+        self.assertNotEqual(ordered, benchmark_order_sha256([second, first]))
+        self.assertEqual(ordered, benchmark_order_sha256([
+            dict(first, id="renamed", audio="moved.wav"),
+            dict(second, id="other", audio="elsewhere.wav"),
+        ]))
+        self.assertNotEqual(ordered, benchmark_order_sha256([first]))
+        self.assertNotEqual(ordered,
+                            benchmark_order_sha256([first, second, second]))
+        self.assertNotIn("private-label", ordered)
+        self.assertNotIn("private-path", ordered)
+
+    def test_order_digest_rejects_invalid_audio_identity(self):
+        for invalid in ("", "x" * 64, "A" * 64, None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "ASR audio SHA-256"):
+                    benchmark_order_sha256([self.row(asr_audio_sha256=invalid)])
 
     def test_rejects_non_digest_audio_identity(self):
         for invalid in ("", "x" * 64, "A" * 64, None):

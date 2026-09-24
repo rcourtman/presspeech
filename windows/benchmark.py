@@ -17,7 +17,7 @@ import soundfile as sf
 
 import app
 from benchmark_provenance import (
-    asr_audio_sha256, benchmark_inputs_sha256,
+    asr_audio_sha256, benchmark_inputs_sha256, benchmark_order_sha256,
     recorded_tail_probe_inputs_sha256,
 )
 import config as cfg
@@ -1395,9 +1395,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 20,
+        "benchmark_version": 21,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
+        "benchmark_order_sha256": benchmark_order_sha256(input_rows),
         "recorded_tail_probe_inputs_sha256": (
             recorded_tail_probe_inputs_sha256(recorded_probe_rows)
             if parakeet_recorded_tail_probe else None),
@@ -1498,6 +1499,7 @@ def _print_summary(result):
     print("Snapshot: %s@%s" %
           (snapshot["repository"], snapshot["revision"]))
     print("Benchmark inputs SHA-256: %s" % result["benchmark_inputs_sha256"])
+    print("Benchmark order SHA-256: %s" % result["benchmark_order_sha256"])
     if result.get("recorded_tail_probe_inputs_sha256") is not None:
         print("Recorded-tail probe inputs SHA-256: %s" %
               result["recorded_tail_probe_inputs_sha256"])

@@ -55,7 +55,7 @@ all reviewed pairs and records each pair's order. Compare both the input digest
 and benchmark version before interpreting probe latency across reports; version
 12 always ran the tailed member second. Manifest order can change which
 condition goes first for a particular clip even when the input digest matches;
-retain manifest order for comparisons or inspect each clip's `trial_order`.
+version 21's order digest makes this visible without revealing clip paths.
 Version 14 adds signed, per-pair **tailed minus clean** inference time and
 order-stratified medians at the sample and corpus levels. A positive delta is
 slower with the tail; a negative delta is faster. These are diagnostics, not
@@ -120,6 +120,18 @@ retained. The same rule applies to paired tail loss/recovery counts; WER and
 product inference are unchanged. Compare version 20 reports when a reference
 starts or ends with repeated words. The check is deliberately conservative:
 it cannot identify which identical spoken occurrence was lost.
+
+Version 21 adds `benchmark_order_sha256` to the JSON report and console. It
+hashes effective ASR-audio identities in **manifest order**, including
+unprobed controls, without emitting per-clip hashes, IDs, or paths. The older
+`benchmark_inputs_sha256` remains order-independent. For paired probe
+comparisons, require matching input **and** order digests, benchmark version,
+run count, probe settings, model, language, precision, and hardware before
+attributing differences to a policy. The recorded-tail probe also requires a
+matching `recorded_tail_probe_inputs_sha256`. A matching order digest cannot
+prove representative audio, human-review quality, or identical thermal and
+background-load conditions. Version 21 changes report provenance only, not
+recognition or the probe execution order.
 
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.

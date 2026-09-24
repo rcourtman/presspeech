@@ -2613,6 +2613,20 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
         self.assertIn("oldest one first", body)
         self.assertIn("until all are resolved", body)
 
+    def test_recovery_copy_discloses_clipboard_replacement_before_action(self):
+        warning = ui.RECOVERY_COPY_CLIPBOARD_WARNING
+        self.assertIn("replaces the current clipboard item", warning)
+        self.assertIn("images or formatted content", warning)
+        self.assertIn("does not restore it", warning)
+        self.assertIn("Leave Waiting", warning)
+        body = inspect.getsource(ui.DeliveryRecoveryWindow._build_window)
+        self.assertLess(
+            body.index("text=RECOVERY_COPY_CLIPBOARD_WARNING"),
+            body.index('text="Copy for Manual Paste"'),
+        )
+        self.assertIn(
+            "self.copy_button, RECOVERY_COPY_CLIPBOARD_WARNING", body)
+
     def test_async_build_failure_restores_tray_fallback(self):
         window = self.make_window()
         window._build_failed = False

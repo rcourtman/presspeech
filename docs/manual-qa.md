@@ -29,8 +29,10 @@ collaborator where noted:
   in a clean browser. The notes audit compares the latest published GitHub
   body for each platform with its tracked file, even while source metadata is
   preparing another version; a mismatch needs a correction on the public
-  release page, not only a source edit. The separate weekly release-notes
-  workflow repeats this read-only audit without blocking Pages deployment.
+  release page, not only a source edit. For a read-only notes audit without
+  asset downloads or candidate metadata checks, run
+  `python3 scripts/check-public-releases.py --notes-only` separately; it does
+  not block Pages deployment.
 - Review each candidate's release notes before publication, then inspect the
   rendered GitHub release page as a standalone download entry point. Check its
   notes against that exact version's model-download privacy inventory and
@@ -101,6 +103,9 @@ collaborator where noted:
   microphone, hotkey, scratchpad, and paste-recovery instructions must not ask
   the user to use a control that exists only in an upcoming release. The wait
   decision may name that release, but must not imply it is already downloadable.
+  On the home-page first-run card and Get started's fourth checkpoint, confirm
+  a copied/manual-paste notice is identified as recovery, not an automatic-paste
+  pass; a scratchpad pass must not imply that another target app is qualified.
 - With keyboard focus on a primary-navigation link, narrow the viewport below
   720 CSS pixels. The links should collapse and focus should move to the visible
   Menu button. Open the menu and focus a link; Escape should collapse it and
@@ -169,6 +174,7 @@ For each configuration, also record this release-gate matrix:
 | Automatic paste and manual recovery on US and a layout that moves V (for example US Dvorak) | |
 | Locked/replaced clipboard recovery with notifications disabled and tray icon in overflow | |
 | Explicit recovery Copy, Discard, Leave Waiting, and Exit behavior | |
+| Non-text clipboard item preserved by known-invalid-target recovery; explicit Copy replacement clearly disclosed | |
 | Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
 | Try Dictation Copy/Cut uses protected clipboard and failed Cut leaves text intact | |
 | Microphone disconnect/reconnect rescan and in-flight selection change | |
@@ -1472,6 +1478,11 @@ clipboard.
   preflight may still leave transcript text on the current clipboard; inspect
   the field before deciding to Copy or Discard. Record only pass/fail, not the
   raw log or clipboard content.
+- Force `GetGUIThreadInfo` to fail at both capture and delivery for the same
+  top-level window, then repeat with failure only after the clipboard write.
+  Neither case may send the paste shortcut. The pre-write case must preserve
+  the prior clipboard item; the late failure may leave transcript text current
+  but must retain Delivery Recovery. Record outcomes without content.
 - With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt, Windows and V in
   turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
   does not release the physically held key, explains the retained dictation,
@@ -1496,6 +1507,19 @@ clipboard.
   remains, and keep recording paused until the queue is empty. Test an external
   copy immediately after write and confirm it is not adopted as the recovery
   write's receipt.
+- On a disposable profile, copy a harmless test image or formatted sample and
+  verify it can be pasted before dictation. Trigger a known-invalid destination
+  before Presspeech writes, then choose Leave Waiting: the existing non-text
+  item must still paste, and no transcript should appear on the clipboard.
+  Reopen Delivery Recovery and verify the visible warning and Copy button's
+  Narrator description both say Copy replaces the current item and does not
+  restore it; the notification-area Copy label must also say it replaces the
+  clipboard. Choose Copy, confirm the current item is now transcript text for
+  deliberate paste, and do not claim the earlier image is preserved. Separately
+  confirm normal automatic paste also replaces a seeded non-text item; that is
+  expected behavior, not a recovery-preservation pass. Record only outcomes,
+  not the sample or transcript contents. Do not rely on Clipboard History or a
+  third-party manager to retrieve the prior item.
 - Enable Windows Clipboard History, deliver a unique harmless phrase, overwrite
   the current clipboard, and open Win+V. Confirm the Presspeech phrase is absent.
   When a disposable paired test device is available, enable Cloud Clipboard and

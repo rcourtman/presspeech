@@ -482,6 +482,15 @@ p[data-release-status] {
   line-height: 1.4;
 }
 
+.start-card p.start-card__caution {
+  margin: 8px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .start-card__link {
   display: inline-flex;
   margin-top: 18px;
