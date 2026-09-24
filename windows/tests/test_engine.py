@@ -220,6 +220,33 @@ class ParakeetConfigurationTests(unittest.TestCase):
             "forty-two",
         )
 
+    def test_parakeet_join_keeps_trailing_punctuation_attached_at_seam(self):
+        for first, second, expected in (
+                ("forty-", "two", "forty-two"),
+                ("one/", "two", "one/two"),
+                ("John'", "s book", "John's book"),
+                ("John\u2019", "s book", "John\u2019s book"),
+                ("James'", " car", "James' car"),
+                ("Finished.", "Next", "Finished. Next")):
+            with self.subTest(first=first, second=second):
+                self.assertEqual(
+                    engine._join_owned_parakeet_text([
+                        (first, False), (second, False)]), expected)
+
+        # Exercise the timestamp ownership path as well as the joiner: the
+        # next model window emitted no context token before its first word.
+        first_window = engine._ParakeetWindow(0, 60, 0, 40)
+        second_window = engine._ParakeetWindow(20, 80, 40, 80)
+        first = engine._owned_parakeet_text(
+            "forty-", [[{"token": "forty", "start": 3.0, "end": 3.6},
+                        {"token": "-", "start": 3.8, "end": 3.8}]],
+            first_window, sample_rate=10)
+        second = engine._owned_parakeet_text(
+            "two", [[{"token": "two", "start": 2.1, "end": 2.5}]],
+            second_window, sample_rate=10)
+        self.assertEqual(engine._join_owned_parakeet_text([first, second]),
+                         "forty-two")
+
     def test_parakeet_timestamp_alignment_preserves_decoder_whitespace(self):
         # Reduced from the public Transformers Parakeet TDT v3 example. Its
         # timestamp token strings contain no word-boundary spaces even though

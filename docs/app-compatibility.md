@@ -348,6 +348,39 @@ it in a real field and use the appropriate reporting route when available.
   host names, account names, document titles, commands, or other private
   context.
 
+### Optional remote clipboard handoff check
+
+The eight worksheet slots switch to a local scratch field after each attempt.
+Returning to a remote viewer can refresh a separately synchronised clipboard,
+so even eight passing slots do not establish that *consecutive* dictations
+work while the viewer stays active. This is a separate observation, not a ninth
+worksheet category or a substitute for native release qualification.
+
+If the protocol's harmless-marker physical Paste baseline works in a blank,
+non-submitting remote field where clipboard sharing is permitted and enabled,
+and no unsafe result has occurred, optionally make up to three **additional**
+dictations with distinct harmless markers. Keep the viewer and same remote
+field active throughout; clear the field using only remote controls between
+attempts. Do not switch to a local scratch field, copy anything, or reactivate
+the viewer between attempts. Inspect each result before clearing it. Stop on
+stale, missing, partial, duplicated, or misdirected text, or on a recovery
+notice; do not keep testing a failed path. After the series, compare the last
+result with a local scratch paste only if that version actually leaves the
+finished transcript on the clipboard or offers an explicit recovery Copy.
+
+Keep this observation separate from the eight counts. Under **Relevant
+conditions**, note the remote client and public version, local and guest
+operating-system versions, whether clipboard sharing was enabled, the number
+of additional attempts run, any stale, missing, partial, duplicate, or
+misdirected result or recovery notice, and whether the final scratch
+comparison matched or was unavailable. Do not include markers, recognized
+text, remote hostnames, clipboard contents, or screenshots. This sequence can
+reveal stale transfer but cannot independently verify the exact transcript
+for its earlier attempts; if it was not run, say so rather than claiming
+continuous-focus remote delivery passed. The worksheet's **Overall result**
+describes only its eight slots; a passing block does not override an anomaly
+in this supplement.
+
 ## Share the result
 
 When public reporting is available, first [browse existing compatibility
@@ -395,6 +428,9 @@ Hardware (optional, no serial or device names): [generic model/chip]
 Relevant conditions: [trigger mode, keyboard layout/input source when
 relevant, suffix, clipboard manager/history, assistive technology, or a minimal
 reproduction; omit private context]
+Optional remote clipboard handoff observation (if safely run, separate from
+eight counts): [client/version, local and guest OS, sharing state, attempts,
+anomalies or recovery notices, final scratch comparison; no text or hostnames]
 ```
 
 For the form's **Overall result**, a complete automatic-paste pass means all
@@ -404,12 +440,12 @@ manual-recovery limitation. Choose that option only when manual-paste recovery
 occurred while the original target stayed focused. An incorrect or unsafe
 result takes precedence over either successful classification.
 
-Report only counts and classifications. Never include the phrases, recognized
-transcripts, clipboard contents, audio, dictionary or shortcut contents,
-document or window titles, private paths, credentials, or screenshots that
-contain user data. **Copy Diagnostics** produces a privacy-safe summary if you
-choose to include it; exact microphone names, raw error details, and raw local
-log lines are not copied into that report.
+Report aggregate outcomes and generic context, not dictated content. Never
+include phrases, recognized transcripts, clipboard contents, audio, dictionary
+or shortcut contents, document or window titles, private paths, credentials,
+or screenshots that contain user data. **Copy Diagnostics** produces a
+privacy-safe summary if you choose to include it; exact microphone names,
+raw error details, and raw local log lines are not copied into that report.
 
 An incorrect or unsafe result should also include the smallest observed
 sequence in the report; do not repeat a safety failure solely for reporting.

@@ -4184,12 +4184,14 @@ private struct HotkeyTransitionResult: Equatable, Sendable {
 private struct HotkeyTransitionState {
     private var hotkeyModifierDown = false
     private var combinationKeyDown = false
+    private var plainKeyDown = false
     private var toggleActive = false
     private var suppressEscapeKeyUp = false
 
     mutating func resetAll() {
         hotkeyModifierDown = false
         combinationKeyDown = false
+        plainKeyDown = false
         toggleActive = false
         suppressEscapeKeyUp = false
     }
@@ -4254,9 +4256,16 @@ private struct HotkeyTransitionState {
                 return .pass
             }
         } else {
-            if event.typeRawValue == CGEventType.keyDown.rawValue, !event.isAutoRepeat {
+            if event.typeRawValue == CGEventType.keyDown.rawValue {
+                // One physical F-key hold owns one recording transition even
+                // if a repeat arrives without the autorepeat bit. Do not let
+                // a second key-down stop a toggle recording before key-up.
+                if plainKeyDown || event.isAutoRepeat { return .suppressOnly }
+                plainKeyDown = true
                 isPress = true
             } else if event.typeRawValue == CGEventType.keyUp.rawValue {
+                guard plainKeyDown else { return .pass }
+                plainKeyDown = false
                 isRelease = true
             } else {
                 return .suppressOnly
@@ -17291,7 +17300,7 @@ private enum PresspeechSelfTest {
         try testHotkeyRecorderRestartActions()
         try testRecordingStartBlockerResolution()
         try testHandledHotkeySuppression()
-        try testFKeyAutoRepeatSuppressesWithoutAction()
+        try testFKeyHeldPressSuppressesRepeat()
         try testRightModifierReleaseWithLeftFlagStillSet()
         try testTogglePressFlipsOnceAndReleaseIsNoOp()
         try testToggleGatedPressDoesNotFlipToggleState()
@@ -23809,10 +23818,15 @@ private enum PresspeechSelfTest {
         )
     }
 
-    private static func testFKeyAutoRepeatSuppressesWithoutAction() throws {
+    private static func testFKeyHeldPressSuppressesRepeat() throws {
         var state = HotkeyTransitionState()
         let f5 = hotkeyChoice(forKeycode: 96)
 
+        try expect(
+            state.transition(for: event(.keyUp, keycode: f5.keycode), hotkey: f5, triggerMode: .hold, isRecording: false),
+            equals: .pass,
+            "an unmatched F-key release should not be claimed"
+        )
         try expect(
             state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .hold, isRecording: false),
             equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
@@ -23822,6 +23836,54 @@ private enum PresspeechSelfTest {
             state.transition(for: event(.keyDown, keycode: f5.keycode, isAutoRepeat: true), hotkey: f5, triggerMode: .hold, isRecording: false),
             equals: .suppressOnly,
             "F-key autorepeat keyDown should suppress without action"
+        )
+        try expect(
+            state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .hold, isRecording: true),
+            equals: .suppressOnly,
+            "a repeated keyDown without the autorepeat bit must not start another session"
+        )
+        try expect(
+            state.transition(for: event(.keyUp, keycode: f5.keycode), hotkey: f5, triggerMode: .hold, isRecording: true),
+            equals: HotkeyTransitionResult(suppress: true, actions: [.release]),
+            "the first keyUp should end the held session once"
+        )
+        try expect(
+            state.transition(for: event(.keyUp, keycode: f5.keycode), hotkey: f5, triggerMode: .hold, isRecording: false),
+            equals: .pass,
+            "a second keyUp should not stop another session"
+        )
+        try expect(
+            state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .hold, isRecording: false),
+            equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+            "a new physical F-key press should start again after keyUp"
+        )
+        state.resetAll()
+        try expect(
+            state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .hold, isRecording: false),
+            equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+            "listener reset should clear a stale F-key latch"
+        )
+
+        var toggle = HotkeyTransitionState()
+        try expect(
+            toggle.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: false),
+            equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+            "the first toggle press should start recording"
+        )
+        try expect(
+            toggle.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: true),
+            equals: .suppressOnly,
+            "an unflagged repeat must not stop a toggle recording during one hold"
+        )
+        try expect(
+            toggle.transition(for: event(.keyUp, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: true),
+            equals: .suppressOnly,
+            "releasing the first toggle press should only clear its latch"
+        )
+        try expect(
+            toggle.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: true),
+            equals: HotkeyTransitionResult(suppress: true, actions: [.release]),
+            "a distinct second press should stop the toggle recording"
         )
     }
 
@@ -23878,9 +23940,19 @@ private enum PresspeechSelfTest {
             "gated toggle press should report the decline without flipping state"
         )
         try expect(
+            state.transition(for: event(.keyUp, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: false),
+            equals: .suppressOnly,
+            "releasing a declined press should clear its physical-key latch"
+        )
+        try expect(
             state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: false, canStartRecording: true),
             equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
             "press after a gated press should start immediately"
+        )
+        try expect(
+            state.transition(for: event(.keyUp, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: true),
+            equals: .suppressOnly,
+            "releasing the start press should allow a separate stop press"
         )
         // The stop-side press must NOT be gated: once a recording is
         // active (canStartRecording is false by definition), the
@@ -23889,6 +23961,11 @@ private enum PresspeechSelfTest {
             state.transition(for: event(.keyDown, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: true, canStartRecording: false),
             equals: HotkeyTransitionResult(suppress: true, actions: [.release]),
             "gate must not block the toggle press that stops a recording"
+        )
+        try expect(
+            state.transition(for: event(.keyUp, keycode: f5.keycode), hotkey: f5, triggerMode: .toggle, isRecording: false),
+            equals: .suppressOnly,
+            "releasing the stop press should clear its latch"
         )
         // Hold mode ignores the gate entirely — handlePress discarding
         // the press leaves no state behind in hold mode.

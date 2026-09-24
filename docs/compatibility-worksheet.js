@@ -131,6 +131,7 @@
       "Hardware (optional; generic model only):",
       "Clipboard preservation during steady-focus check:",
       "Relevant conditions (keyboard layout/input source if relevant):",
+      "Optional remote clipboard handoff observation (separate from eight counts; if safely run):",
       "Known clipboard-change interruptions excluded:",
       "",
       summaryText,

@@ -168,7 +168,19 @@ body:
     id: conditions
     attributes:
       label: Relevant conditions
-      description: Note trigger mode, suffix, clipboard manager/history, assistive technology, or a minimal repro. Include the active keyboard layout/input source only when it differs from your usual layout or helps explain the result; use its public name and never include typed text. Separately count known clipboard-change interruptions excluded from completed attempts; do not exclude unexplained failures. Omit private document, account, server, and window names.
+      description: >-
+        Note trigger mode, suffix, clipboard manager/history, assistive
+        technology, or a minimal repro. Include the active keyboard
+        layout/input source only when it differs from your usual layout or
+        helps explain the result; use its public name and never include typed
+        text. For a remote target, report any optional continuous-focus
+        handoff observation separately from the eight counts, including
+        remote client/version, local and guest OS versions, clipboard-sharing
+        state, attempts run, anomalies or recovery notices, and whether a
+        final scratch comparison was possible. Separately count known
+        clipboard-change interruptions excluded from completed attempts; do
+        not exclude unexplained failures. Omit private document, account,
+        server, and window names.
       placeholder: e.g. Dvorak input source; hold mode; plain-text editor field; append-space suffix; no clipboard manager
   - type: textarea
     id: diagnostics

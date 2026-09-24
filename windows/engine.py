@@ -358,6 +358,12 @@ def _join_owned_parakeet_text(parts):
     """Join timestamp-cropped windows without splitting subword continuations."""
     result = ""
     attached_punctuation = "',.;:!?%-/)]}\u00bb\u2019\u201d"
+    # A window can end just after punctuation that binds the following token.
+    # The next window may emit that token first, leaving no preceding context
+    # token from which _owned_parakeet_text could infer a continuation. Keep
+    # whitespace present in the retained text; only supply a separator when
+    # neither fragment marks the boundary as attached.
+    trailing_joiners = "-/'\u2019"
     for text, continues_previous_word in parts:
         if not text:
             continue
@@ -367,6 +373,7 @@ def _join_owned_parakeet_text(parts):
         if (not continues_previous_word
                 and not result[-1].isspace()
                 and not text[0].isspace()
+                and result[-1] not in trailing_joiners
                 and text[0] not in attached_punctuation):
             result += " "
         result += text

@@ -83,11 +83,16 @@ Windows UI, UIA integration, or Tk version.
    readable without clipping or obscuring a choice. Confirm Delivery Recovery
    still does not expose retained transcript text. Enable a Contrast theme and
    check each window plus the indicator; the indicator must remain legible and
-   on-screen while its state is visible. Also check the normal theme: high
-   contrast is not a substitute for readable default colors. Restore the
-   user's original Windows text-size and contrast settings after the test. If
-   validating a release that still claims Windows 10 support, repeat the
-   applicable checks there.
+   on-screen while its state is visible. At 225% Text size, trigger the longest
+   indicator status (for example, **Nothing to insert — check text settings**)
+   on a narrow remote desktop and a secondary monitor, including one with
+   negative virtual-screen coordinates. Check that its words wrap without
+   being cut off. During a harmless recording, move the active window between
+   monitors and check that the persistent Listening indicator follows it.
+   Also check the normal theme: high contrast is not a substitute for readable
+   default colors. Restore the user's original Windows text-size and contrast
+   settings after the test. If validating a release that still claims Windows
+   10 support, repeat the applicable checks there.
 
 ## Record the result
 

@@ -772,6 +772,7 @@ Record this release-gate matrix against the exact installed candidate:
 | First macOS pasteboard-access prompt during opt-in clipboard preservation, when supported: correct-field delivery or explicit copy-only recovery, never insertion into the prompt or another window | |
 | Manual restore preserves a representative rich-text clipboard item, not just its plain-text fallback | |
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
+| One physical F-key hold across key repeat triggers at most one transition in hold and toggle modes | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
 | Clipboard-only recovery notice after a later harmless copy: no unconditional ⌘V promise; Copy Last Transcript restores the dictation when history is on | |
@@ -1185,6 +1186,12 @@ item after the development-wrapper launch check.
 - Record an F-key such as F7 with **Record Hotkey...**. Confirm the dialog
   previews F7 without closing or changing the current setting, then choose
   **Use Selected** and dictate once. Repeat using only Tab and Return.
+- With that F-key selected, hold it beyond the system key-repeat interval in
+  hold mode. Confirm exactly one recording starts and release stops it once.
+  In toggle mode, hold the first press through repeat and confirm recording
+  stays active until a distinct second press after release. Verify a fresh
+  press still works after each session; a source-level repeat test is not a
+  substitute for physical-key behavior.
 - Record a right-side modifier such as **Right Control**, then dictate once.
 - Record **Command-comma**, confirm the preview, restart Presspeech and confirm
   the entire combination persists. A bare comma must still type normally;

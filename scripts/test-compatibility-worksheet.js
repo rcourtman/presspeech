@@ -190,6 +190,10 @@ async function main() {
       worksheet.formatReportDraft(summary.value),
       /Relevant conditions \(keyboard layout\/input source if relevant\):/,
     );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /Optional remote clipboard handoff observation \(separate from eight counts; if safely run\):/,
+    );
     assert.doesNotMatch(worksheet.formatReportDraft(summary.value), /https?:\/\//);
     assert.match(
       worksheet.formatReportDraft(summary.value),

@@ -444,6 +444,42 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertEqual(ui._scaled_pixels(42, 192), 84)
         self.assertEqual(ui._scaled_pixels(42, 0), 42)
 
+    def test_indicator_caps_large_requested_size_on_narrow_desktop(self):
+        area = types.SimpleNamespace(left=0, top=0, right=300, bottom=200)
+
+        self.assertEqual(ui._indicator_max_width(area, 8), 284)
+        self.assertEqual(
+            ui._indicator_geometry(area, 700, 96, 224, 38, 42, 8),
+            (8, 62, 284, 96),
+        )
+        # A nominal minimum or bottom offset must not push the overlay below
+        # or above an even smaller work area.
+        tiny = types.SimpleNamespace(left=0, top=0, right=100, bottom=80)
+        self.assertEqual(
+            ui._indicator_geometry(tiny, 400, 100, 224, 38, 42, 8),
+            (8, 0, 84, 80),
+        )
+
+    def test_indicator_fits_a_secondary_monitor_with_negative_coordinates(self):
+        area = types.SimpleNamespace(
+            left=-1280, top=-900, right=-980, bottom=-700)
+
+        self.assertEqual(
+            ui._indicator_geometry(area, 700, 96, 224, 38, 42, 8),
+            (-1272, -838, 284, 96),
+        )
+
+    def test_indicator_wraps_text_and_tracks_the_active_work_area(self):
+        source = inspect.getsource(ui.DictationIndicator._run)
+        self.assertIn("label.configure(wraplength=max(", source)
+        self.assertIn("max_width = _indicator_max_width(area, edge_margin)", source)
+        self.assertIn("dot.winfo_reqwidth() - 2 * label_padding", source)
+        self.assertLess(
+            source.index("root.update_idletasks()  # First resolve"),
+            source.index("dot.winfo_reqwidth() - 2 * label_padding"))
+        self.assertIn("area = self._work_area()", source)
+        self.assertIn("!= visible_area:", source)
+
     def test_indicator_status_is_a_screen_reader_live_region(self):
         source = inspect.getsource(ui.DictationIndicator._run)
         self.assertIn("tk_uia.enable(root)", source)

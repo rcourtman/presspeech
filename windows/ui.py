@@ -688,6 +688,33 @@ def _bounded_window_size(
     )
 
 
+def _indicator_max_width(area, edge_margin):
+    """Leave a border without losing the entire viewport on a tiny desktop."""
+    work_width = max(1, area.right - area.left)
+    inset = min(max(0, edge_margin), (work_width - 1) // 2)
+    return work_width - 2 * inset
+
+
+def _indicator_geometry(
+        area, requested_width, requested_height, minimum_width,
+        minimum_height, bottom_offset, edge_margin):
+    """Keep a transient indicator inside the active monitor's work area.
+
+    Work-area coordinates are virtual-screen coordinates and can be negative
+    on a secondary display. The nominal minimums and bottom offset must not
+    move any edge outside a small remote-desktop work area.
+    """
+    work_width = max(1, area.right - area.left)
+    work_height = max(1, area.bottom - area.top)
+    width = min(
+        _indicator_max_width(area, edge_margin),
+        max(minimum_width, requested_width))
+    height = min(work_height, max(minimum_height, requested_height))
+    x = area.left + (work_width - width) // 2
+    y = max(area.top, area.bottom - height - max(0, bottom_offset))
+    return x, y, width, height
+
+
 def _colourref_hex(value):
     """Convert a Win32 COLORREF (0x00bbggrr) to a Tk colour string."""
     value = int(value)
@@ -978,9 +1005,10 @@ class DictationIndicator:
             dot = tk.Label(frame, text="\u25cf", bg="#202124", fg="#ff5a5f",
                            font=("Segoe UI", 11))
             dot.pack(side="left")
+            label_padding = _scaled_pixels(7, pixels_per_inch)
             label = tk.Label(frame, text="Listening\u2026", bg="#202124", fg="#ffffff",
                              font=("Segoe UI", 10, "bold"),
-                             padx=_scaled_pixels(7, pixels_per_inch))
+                             padx=label_padding, justify="left", anchor="w")
             label.pack(side="left")
             root.update_idletasks()
             _mark_live_region(label)
@@ -1011,9 +1039,11 @@ class DictationIndicator:
             minimum_width = _scaled_pixels(224, pixels_per_inch)
             minimum_height = _scaled_pixels(38, pixels_per_inch)
             bottom_offset = _scaled_pixels(42, pixels_per_inch)
+            edge_margin = _scaled_pixels(8, pixels_per_inch)
             visible_state = None
             current_palette = None
             current_text_scale = None
+            visible_area = None
 
             def apply_palette(state, force=False):
                 nonlocal current_palette
@@ -1051,13 +1081,25 @@ class DictationIndicator:
                     "Segoe UI", _scaled_font_points(10, text_scale), "bold"))
                 return True
 
-            def position_visible_indicator():
+            def position_visible_indicator(area=None):
+                nonlocal visible_area
+                area = self._work_area() if area is None else area
+                visible_area = (
+                    area.left, area.top, area.right, area.bottom)
+                # Tk otherwise requests a single line wider than a narrow
+                # remote desktop, particularly at 225% Windows Text size.
+                # Wrap before measuring, and reserve room for the dot and
+                # both widgets' padding inside the available work area.
+                root.update_idletasks()  # First resolve a newly scaled dot.
+                max_width = _indicator_max_width(area, edge_margin)
+                label.configure(wraplength=max(
+                    1, max_width - 2 * horizontal_padding
+                    - dot.winfo_reqwidth() - 2 * label_padding - 4))
                 root.update_idletasks()
-                width = max(minimum_width, frame.winfo_reqwidth())
-                height = max(minimum_height, frame.winfo_reqheight())
-                area = self._work_area()
-                x = area.left + ((area.right - area.left - width) // 2)
-                y = area.bottom - height - bottom_offset
+                x, y, width, height = _indicator_geometry(
+                    area, frame.winfo_reqwidth(), frame.winfo_reqheight(),
+                    minimum_width, minimum_height, bottom_offset,
+                    edge_margin)
                 user32.SetWindowPos(
                     hwnd, ctypes.c_void_p(-1), x, y, width, height,
                     0x0010 | 0x0040,  # SWP_NOACTIVATE | SWP_SHOWWINDOW
@@ -1108,8 +1150,12 @@ class DictationIndicator:
                     # display DPI. Keep both in sync without requiring another
                     # dictation state transition or an app restart.
                     apply_palette(visible_state)
-                    if apply_text_scale():
-                        position_visible_indicator()
+                    scale_changed = apply_text_scale()
+                    area = self._work_area()
+                    if scale_changed or (
+                            area.left, area.top, area.right, area.bottom
+                    ) != visible_area:
+                        position_visible_indicator(area)
                 root.after(250, refresh_accessibility_settings)
 
             root.after(0, poll)
