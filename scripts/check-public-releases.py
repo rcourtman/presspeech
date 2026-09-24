@@ -52,6 +52,7 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 MAX_API_BYTES = 10 * 1024 * 1024
 MAX_CHECKSUM_BYTES = 4096
 MAX_RELEASE_PAGES = 100
+FIRST_USE_LEAD_CHARACTERS = 2000
 
 # These archived release pages remain direct download entry points after newer
 # versions ship. A tuple within a release's marker list accepts equivalent
@@ -371,8 +372,12 @@ def known_release_disclosure_errors(releases: object) -> list[str]:
         if not isinstance(body, str) or not body.strip():
             errors.append(f"{tag} has no public release notes; cannot verify its first-use disclosure")
             continue
-        # GitHub Markdown often wraps a lead notice in blockquotes and lines.
-        normalized = re.sub(r"\s+", " ", re.sub(r"(?m)^\s*>\s?", "", body).casefold())
+        # An archived release remains a direct download page. A warning buried
+        # beneath the release history does not give a first-use decision, even
+        # if every marker appears somewhere in the full body. GitHub Markdown
+        # often wraps the lead notice in blockquotes and lines.
+        lead = body[:FIRST_USE_LEAD_CHARACTERS]
+        normalized = re.sub(r"\s+", " ", re.sub(r"(?m)^\s*>\s?", "", lead).casefold())
         missing = []
         for marker in markers:
             alternatives = (marker,) if isinstance(marker, str) else marker
@@ -380,7 +385,8 @@ def known_release_disclosure_errors(releases: object) -> list[str]:
                 missing.append(" / ".join(alternatives))
         if missing:
             errors.append(
-                f"{tag} public release notes lack first-use disclosure markers: "
+                f"{tag} public release notes lack first-use disclosure markers "
+                f"in their first {FIRST_USE_LEAD_CHARACTERS} characters: "
                 + ", ".join(missing)
             )
     return errors
@@ -822,6 +828,12 @@ def run_self_test() -> None:
     missing_microphone[1]["body"] = missing_microphone[1]["body"].replace("automatic local readiness check", "check")
     if not any("automatic local readiness check" in error for error in known_release_disclosure_errors(missing_microphone)):
         raise ReleaseCheckError("self-test missed the Windows automatic microphone check")
+
+    buried_warning = json.loads(json.dumps(disclosed))
+    for release in buried_warning:
+        release["body"] = "Release history.\n" + ("x" * FIRST_USE_LEAD_CHARACTERS) + release["body"]
+    if len(known_release_disclosure_errors(buried_warning)) != len(disclosed):
+        raise ReleaseCheckError("self-test accepted first-use warnings buried below release history")
 
     if not any("v0.3.8" in error for error in known_release_disclosure_errors(disclosed[1:])):
         raise ReleaseCheckError("self-test missed an unauditable archived macOS release")

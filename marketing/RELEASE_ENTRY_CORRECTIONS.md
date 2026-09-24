@@ -33,11 +33,12 @@ history with only the excerpts below.
 
 Run `python3 scripts/check-public-releases.py --notes-only` before and after
 any authorized correction. It audits public/tracked-note parity and flags
-missing first-use disclosure markers on both archived release pages and the absent
-reporting handoff on macOS 0.3.8, without modifying GitHub. A passing marker
-check is only a presence check; review the rendered warnings, current support
-route, version-specific decisions, and links manually. The audit is expected
-to fail while the current public entries remain uncorrected.
+missing first-use disclosure markers in the first 2,000 characters of both
+archived release pages and the absent reporting handoff on macOS 0.3.8,
+without modifying GitHub. A passing marker check is only a presence check;
+review the rendered warnings, current support route, version-specific
+decisions, and links manually. The audit is expected to fail while the current
+public entries remain uncorrected.
 
 ## macOS 0.3.8 — proposed lead notice
 

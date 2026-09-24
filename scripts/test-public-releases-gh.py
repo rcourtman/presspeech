@@ -225,7 +225,7 @@ class GhTransportTests(unittest.TestCase):
         mac = {'tag_name': 'v0.3.8', 'draft': False,
                'body': ('Before opening model Hugging Face token wait 0.3.9 '
                         'A malformed https_proxy or http_proxy URL can log proxy credentials; '
-                        'the client may ignore it. '
+                        'the client may ignore it and connect directly. '
                         'privacy.html#network-calls Universal Clipboard '
                         'privacy.html#operating-system-clipboard-services')}
         windows = {'tag_name': 'windows-v0.1.12', 'draft': False,
@@ -242,6 +242,21 @@ class GhTransportTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn('before opening / before launching', errors[0])
         self.assertIn('routing / route', errors[0])
+
+    def test_archived_release_warning_must_be_in_lead(self):
+        root = Path(__file__).resolve().parents[1]
+        releases = [
+            {'tag_name': 'v0.3.8', 'draft': False,
+             'body': (root / 'swift/release-notes/v0.3.8.md').read_text()},
+            {'tag_name': 'windows-v0.1.12', 'draft': False,
+             'body': (root / 'windows/release-notes/0.1.12.md').read_text()},
+        ]
+        self.assertEqual(check.known_release_disclosure_errors(releases), [])
+        for release in releases:
+            release['body'] = 'Release history.\n' + ('x' * check.FIRST_USE_LEAD_CHARACTERS) + release['body']
+        errors = check.known_release_disclosure_errors(releases)
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(all('first-use disclosure markers in their first' in error for error in errors))
 
     def test_mac_disclosure_requires_malformed_proxy_warning(self):
         body = (Path(__file__).resolve().parents[1] / 'swift/release-notes/v0.3.8.md').read_text()
