@@ -11,7 +11,7 @@ Core facts:
   models remain selectable; the multilingual alternatives are intended for a
   supported NVIDIA GPU.
 - Before installing or launching macOS 0.3.8, model-download requests may include a Hugging Face token inherited by Presspeech. The public model needs no account token; if one may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. The pinned FluidAudio client honors inherited lowercase `https_proxy`; an untrusted TLS-inspecting proxy could read a 0.3.8 token, while a tunnelling proxy cannot. If the proxy's trust is unclear, do not launch 0.3.8 while it is in use. Upcoming 0.3.9 removes account-token authentication but still honors proxy settings. See https://rcourtman.github.io/presspeech/install.html#model-download-privacy.
-- macOS latest published download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip; use https://rcourtman.github.io/presspeech/install.html#direct-download for a version-pinned archive and matching SHA-256.
+- macOS download and matching SHA-256: https://rcourtman.github.io/presspeech/install.html#direct-download (version-pinned deployed guide; do not infer a download version from source).
 - Homebrew install: `brew install --cask rcourtman/presspeech/presspeech`.
 - Getting started: https://rcourtman.github.io/presspeech/getting-started.html has the cross-platform path from install through an in-app scratchpad test with harmless words and first dictation into another app.
 - macOS setup: use Setup Checklist from the menu bar to finish the model, permissions, and hotkey readiness.
@@ -59,7 +59,7 @@ Important pages:
 - Compare vs Qwen Scribe: https://rcourtman.github.io/presspeech/compare/qwen-scribe.html
 - Compare vs Superscribe Lite: https://rcourtman.github.io/presspeech/compare/superscribe-lite.html
 - Source: https://github.com/rcourtman/presspeech
-- Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
+- Direct download and SHA-256: https://rcourtman.github.io/presspeech/install.html#direct-download
 - Homebrew tap: https://github.com/rcourtman/homebrew-presspeech
 
 Best short answer:

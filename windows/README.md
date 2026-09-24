@@ -112,8 +112,10 @@ independently verify model-file contents against SHA-256. Upcoming 0.1.13
 verifies every allowed inference file—including present optional configuration—against its
 in-app SHA-256 manifest before loading the model. A mismatch stops loading;
 review network and proxy trust before clearing this model's cache and retrying.
-For unchanged files, a local verification record avoids hashing them again on
-each launch; a changed file identity or metadata requires another hash check.
+On Windows, Presspeech rehashes the reviewed model files on every load. Python
+3.12 reports file creation time, not change time, as `st_ctime_ns` on Windows;
+a metadata-only verification record could miss a same-size rewrite whose
+last-write time was restored. The extra hashing may lengthen model preparation.
 The standard HTTPX proxy and CA settings still apply, so a proxy
 can observe model-request metadata and block a download, but modified model
 bytes fail verification. Upcoming 0.1.13 also applies the following privacy

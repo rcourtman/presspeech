@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import soundfile as sf
+
 import app
 import config
 
@@ -63,13 +65,21 @@ class BenchmarkCapturePrivacyTests(unittest.TestCase):
         }
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
+        # These samples are deliberately not all representable as PCM16; the
+        # benchmark export must retain the exact float signal sent to ASR.
+        captured = app.np.array(
+            [0.0, 0.00001, -0.12345679, 0.9876543, 1.125],
+            dtype=app.np.float32)
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.object(app, "__file__", str(Path(directory) / "app.py")), \
                 mock.patch.object(app.cfg, "save"):
-            output = instance._capture_benchmark_if_armed(
-                app.np.array([0.0, 0.1], dtype=app.np.float32))
+            output = instance._capture_benchmark_if_armed(captured)
             self.assertTrue(Path(output).is_file())
             self.assertIn("private-session-label", Path(output).name)
+            self.assertEqual(sf.info(output).subtype, "FLOAT")
+            replay, sample_rate = sf.read(output, dtype="float32")
+            self.assertEqual(sample_rate, 16000)
+            app.np.testing.assert_array_equal(replay, captured)
         instance._log.assert_called_once_with("benchmark audio saved")
         self.assertNotIn("private-session-label", str(instance._log.call_args_list))
         self.assertNotIn("private-session-label", str(instance.notify.call_args_list))
@@ -89,7 +99,7 @@ class BenchmarkCapturePrivacyTests(unittest.TestCase):
         instance.notify = mock.Mock()
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.object(app, "__file__", str(Path(directory) / "app.py")), \
-                mock.patch("wave.open", side_effect=OSError(
+                mock.patch("soundfile.write", side_effect=OSError(
                     "synthetic-private-path-and-clip-detail")):
             self.assertIsNone(instance._capture_benchmark_if_armed(
                 app.np.array([0.0, 0.1], dtype=app.np.float32)))
@@ -2713,6 +2723,45 @@ class TextRegressionTests(unittest.TestCase):
             self.assertFalse(instance.start_recording())
 
         self.assertFalse(instance.recording)
+
+    def test_recording_rechecks_recovery_after_foreground_discovery(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance.transcribing = False
+        instance._rec_epoch = 1
+        instance._model_idle_epoch = 0
+        instance._undelivered_lock = threading.Lock()
+        instance._undelivered_dictations = []
+        instance._dictation_model_ready = mock.Mock(return_value=True)
+        instance._log = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._wake_model_if_idle = mock.Mock()
+        instance._schedule_recording_limit = mock.Mock()
+        instance._start_audio_worker = mock.Mock()
+
+        def previous_delivery_finishes():
+            # This can run while a start that saw the previous recording in
+            # progress is doing unlocked foreground discovery. Delivery has
+            # retained text and completed before start takes its final lock.
+            instance.recording = False
+            instance._undelivered_dictations.append("private transcript")
+            return app.PasteTarget("notepad.exe", 1234)
+
+        with mock.patch.object(
+                app, "_foreground_paste_target",
+                side_effect=previous_delivery_finishes), \
+                mock.patch.object(app.threading, "Thread") as worker:
+            self.assertFalse(instance.start_recording())
+
+        self.assertFalse(instance.recording)
+        self.assertFalse(instance._starting_recording)
+        self.assertEqual(instance._rec_epoch, 1)
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        instance._dictation_model_ready.assert_called_once_with()
+        instance._set_indicator.assert_not_called()
+        worker.assert_not_called()
+        self.assertNotIn("private transcript", str(instance._log.mock_calls))
 
     def test_first_press_after_model_error_starts_one_retry_not_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

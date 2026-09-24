@@ -351,15 +351,73 @@ class CacheFirstTests(unittest.TestCase):
                     expected_sha256s=manifest)
         self.download.assert_not_called()
 
-    def test_valid_snapshot_is_hashed_then_marker_avoids_repeat_reads(self):
+    def test_valid_snapshot_marker_speeds_only_supported_platforms(self):
         self.assertEqual(self.resolve_verified(), str(self.snapshot))
         marker_files = list((Path(self.temp.name) / 'integrity-cache').glob('*.json'))
-        self.assertEqual(len(marker_files), 1)
+        self.assertEqual(len(marker_files), int(model_cache._can_reuse_integrity_marker()))
         with mock.patch.object(
                 model_cache, '_calculate_sha256',
                 wraps=model_cache._calculate_sha256) as calculate:
             self.assertEqual(self.resolve_verified(), str(self.snapshot))
-        calculate.assert_not_called()
+        self.assertEqual(
+            calculate.call_count,
+            0 if model_cache._can_reuse_integrity_marker() else len(self.files))
+
+    def test_windows_policy_never_reuses_metadata_only_integrity_markers(self):
+        with mock.patch.object(model_cache.os, 'name', 'nt'):
+            self.assertFalse(model_cache._can_reuse_integrity_marker())
+        with mock.patch.object(model_cache.os, 'name', 'posix'):
+            self.assertTrue(model_cache._can_reuse_integrity_marker())
+        with mock.patch.object(model_cache, '_can_reuse_integrity_marker',
+                               return_value=False), \
+                mock.patch.object(model_cache, '_calculate_sha256',
+                                  wraps=model_cache._calculate_sha256) as calculate:
+            self.assertEqual(self.resolve_verified(), str(self.snapshot))
+            self.assertEqual(self.resolve_verified(), str(self.snapshot))
+        self.assertEqual(calculate.call_count, 2 * len(self.files))
+        self.assertEqual(
+            list((Path(self.temp.name) / 'integrity-cache').glob('*.json')), [])
+
+    def test_windows_rehash_rejects_same_size_rewrite_with_restored_mtime(self):
+        # Python 3.12's Windows st_ctime_ns is creation time, not change time.
+        # Simulate that value so the old metadata-only marker would appear to
+        # match after an in-place rewrite and restored last-write timestamp.
+        original_fingerprint = model_cache._file_fingerprint
+
+        def windows_fingerprint(path, metadata):
+            result = original_fingerprint(path, metadata)
+            result['ctime_ns'] = 123456789
+            return result
+
+        weights = self.snapshot / 'model.safetensors'
+        with mock.patch.object(model_cache, '_file_fingerprint',
+                               side_effect=windows_fingerprint), \
+                mock.patch.object(model_cache, '_can_reuse_integrity_marker',
+                                  return_value=True):
+            self.assertEqual(self.resolve_verified(), str(self.snapshot))
+            before = windows_fingerprint(weights, weights.stat())
+
+        old_stat = weights.stat()
+        weights.write_bytes(b'X' * len(b'synthetic weights'))
+        os.utime(weights, ns=(old_stat.st_atime_ns, old_stat.st_mtime_ns))
+
+        with mock.patch.object(model_cache, '_file_fingerprint',
+                               side_effect=windows_fingerprint), \
+                mock.patch.object(model_cache, '_can_reuse_integrity_marker',
+                                  return_value=False):
+            self.assertEqual(before, windows_fingerprint(weights, weights.stat()))
+            marker = next((Path(self.temp.name) / 'integrity-cache').glob('*.json'))
+            fingerprints = {
+                name: windows_fingerprint(self.snapshot / name,
+                                          (self.snapshot / name).stat())
+                for name in self.files
+            }
+            self.assertTrue(model_cache._integrity_marker_matches(
+                marker, self.snapshot,
+                model_cache._manifest_digest(self.checksums()), fingerprints))
+            with self.assertRaises(model_cache.ModelCacheIntegrityError):
+                self.resolve_verified()
+        self.assertEqual(self.flags(), [True, True])
 
     def test_changed_file_invalidates_marker_and_fails_closed_without_retry(self):
         self.assertEqual(self.resolve_verified(), str(self.snapshot))
@@ -380,13 +438,15 @@ class CacheFirstTests(unittest.TestCase):
         self.assertEqual(self.flags(), [True, False])
 
     def test_corrupt_verification_marker_is_only_a_cache_miss(self):
-        self.assertEqual(self.resolve_verified(), str(self.snapshot))
-        marker = next((Path(self.temp.name) / 'integrity-cache').glob('*.json'))
-        marker.write_text('{broken', encoding='utf-8')
-        with mock.patch.object(
-                model_cache, '_calculate_sha256',
-                wraps=model_cache._calculate_sha256) as calculate:
+        with mock.patch.object(model_cache, '_can_reuse_integrity_marker',
+                               return_value=True):
             self.assertEqual(self.resolve_verified(), str(self.snapshot))
+            marker = next((Path(self.temp.name) / 'integrity-cache').glob('*.json'))
+            marker.write_text('{broken', encoding='utf-8')
+            with mock.patch.object(
+                    model_cache, '_calculate_sha256',
+                    wraps=model_cache._calculate_sha256) as calculate:
+                self.assertEqual(self.resolve_verified(), str(self.snapshot))
         self.assertEqual(calculate.call_count, len(self.files))
 
 

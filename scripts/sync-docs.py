@@ -1127,10 +1127,11 @@ AGENT_REPORTING_ROUTE_GUIDANCE = {
 # GitHub renders repository Markdown as soon as a release commit reaches main,
 # before the matching assets are necessarily public. Pages has a publication
 # gate, but repository-rendered entry points do not. Keep those entry points on
-# URLs that can only resolve to a published artifact: GitHub's stable latest
-# alias for macOS and the gated, version-pinned Pages guide for Windows. The
-# README's top install badges should reach the warning-first macOS guide, not
-# a release or cask page that may be opened before its privacy decision.
+# URLs that can only resolve to a published artifact: the gated, version-pinned
+# Pages install guides. A moving macOS binary URL can advance before the guide's
+# version-specific first-launch warning, so repository and agent entry points
+# must route through the guide rather than directly to that binary. The README's
+# top install badges likewise reach the warning-first macOS guide.
 README_BADGE_PREFLIGHT = (
     'href="https://rcourtman.github.io/presspeech/install.html#model-download-privacy"><img src="https://img.shields.io/github/v/release/rcourtman/presspeech',
     'href="https://rcourtman.github.io/presspeech/install.html"><img src="https://img.shields.io/badge/Homebrew-Cask',
@@ -1147,7 +1148,6 @@ REPOSITORY_INSTALL_GUIDANCE = {
         "The `main` branch can contain",
         "an unreleased candidate",
         *README_BADGE_PREFLIGHT,
-        "releases/latest/download/Presspeech.zip",
         "install.html#direct-download",
         "windows.html#download-verify-run",
     ),
@@ -1156,7 +1156,9 @@ REPOSITORY_INSTALL_GUIDANCE = {
         "source tree can be ahead of the published prerelease",
     ),
     DOCS / "llms.txt": (
-        "releases/latest/download/Presspeech.zip",
+        "install.html#direct-download",
+    ),
+    DOCS / "llms-full.txt": (
         "install.html#direct-download",
     ),
     DOCS / "install" / "agents.md": (
@@ -1166,8 +1168,9 @@ REPOSITORY_INSTALL_GUIDANCE = {
         "$version -notmatch",
     ),
 }
-REPOSITORY_UNPUBLISHED_DOWNLOAD_PATTERNS = {
+REPOSITORY_UNSAFE_DOWNLOAD_PATTERNS = {
     ROOT / "README.md": (
+        re.compile(r"releases/latest/download/Presspeech\.zip"),
         re.compile(r"releases/download/v\d+\.\d+\.\d+/Presspeech\.zip"),
         re.compile(
             r"releases/download/windows-v\d+\.\d+\.\d+/"
@@ -1183,12 +1186,17 @@ REPOSITORY_UNPUBLISHED_DOWNLOAD_PATTERNS = {
         re.compile(r"releases/tag/windows-v\d+\.\d+\.\d+"),
     ),
     DOCS / "llms.txt": (
+        re.compile(r"releases/latest/download/Presspeech\.zip"),
         re.compile(r"releases/download/v\d+\.\d+\.\d+/Presspeech\.zip"),
         re.compile(
             r"releases/download/windows-v\d+\.\d+\.\d+/"
             r"Presspeech-Setup-\d+\.\d+\.\d+-x64\.exe"
         ),
         re.compile(r"Presspeech\.zip[^\n]*[0-9a-f]{64}"),
+    ),
+    DOCS / "llms-full.txt": (
+        re.compile(r"releases/latest/download/Presspeech\.zip"),
+        re.compile(r"releases/download/v\d+\.\d+\.\d+/Presspeech\.zip"),
     ),
     DOCS / "install" / "agents.md": (
         re.compile(r"Presspeech for Windows \d+\.\d+\.\d+"),
@@ -1850,6 +1858,15 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     )
     text = replace_regex(
         text,
+        r'<p>Download <a href="https://github\.com/rcourtman/presspeech/releases/'
+        r'(?:latest/download|download/v\d+\.\d+\.\d+)/Presspeech\.zip">Presspeech\.zip</a>'
+        r'(?: from the version-pinned release above)?, or run '
+        r'<code>brew install --cask rcourtman/presspeech/presspeech</code>\.</p>',
+        f'<p>Download <a href="https://github.com/rcourtman/presspeech/releases/download/v{version}/Presspeech.zip">Presspeech.zip</a> from the version-pinned release above, or run <code>brew install --cask rcourtman/presspeech/presspeech</code>.</p>',
+        path=path,
+    )
+    text = replace_regex(
+        text,
         r"<p>(?:Download <a href=\"https://github\.com/rcourtman/presspeech/releases/latest/"
         r"download/Presspeech\.zip\.sha256\">.*?|The current archive's published SHA-256 is .*?"
         r"|In Downloads, verify the current archive against its published SHA-256:)</p>"
@@ -2015,6 +2032,16 @@ LLMS_SHORT_ANSWER = (
 
 def sync_llms(path: Path, metadata: dict[str, object]) -> str:
     text = read_text(path)
+    text = re.sub(
+        r"(?m)^- macOS latest published download:.*$",
+        "- macOS download and matching SHA-256: https://rcourtman.github.io/presspeech/install.html#direct-download (version-pinned deployed guide; do not infer a download version from source).",
+        text,
+        count=1,
+    )
+    text = text.replace(
+        "- Direct download: https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip",
+        "- Direct download and SHA-256: https://rcourtman.github.io/presspeech/install.html#direct-download",
+    )
     size = str(metadata["release_zip_size"])
     text = replace_regex(
         text,
@@ -2043,7 +2070,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "https://rcourtman.github.io/presspeech/install.html#model-download-privacy.\n"
     )
     if download_privacy_notice not in text:
-        marker = "- macOS latest published download:"
+        marker = "- macOS download and matching SHA-256:"
         if marker not in text:
             marker = "- Homebrew install:"
         text = replace_literal(text, marker, download_privacy_notice + marker, path=path)
@@ -2137,6 +2164,11 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
 def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     del metadata
     text = read_text(path)
+    text = text.replace(
+        "Direct download:\nhttps://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip",
+        "Direct download and matching SHA-256 (version-pinned deployed guide):\n"
+        "https://rcourtman.github.io/presspeech/install.html#direct-download",
+    )
     macos_install_notice = (
         "Before installing or launching macOS 0.3.8, its model-download requests may "
         "include a Hugging Face token inherited by Presspeech. The public model needs "
@@ -2570,6 +2602,31 @@ def check_windows_verified_download_flow(
             f"{display}: visible installer links must follow #download-verify-run guidance"
         )
     return errors
+
+
+def check_macos_install_download_versions(
+    metadata: dict[str, object], path: Path = DOCS / "install.html"
+) -> list[str]:
+    """Every visible macOS ZIP route must match the reviewed install version."""
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    try:
+        contents = read_text(path)
+    except OSError as exc:
+        return [f"{display}: cannot read macOS install downloads: {exc}"]
+    links = re.findall(
+        r'href="(https://github\.com/rcourtman/presspeech/releases/[^\"]+/Presspeech\.zip)"',
+        contents,
+    )
+    expected = (
+        "https://github.com/rcourtman/presspeech/releases/download/"
+        f"v{metadata['version']}/Presspeech.zip"
+    )
+    if len(links) != 3 or any(link != expected for link in links):
+        return [
+            f"{display}: all three macOS ZIP links must use the version-pinned "
+            f"release {expected}"
+        ]
+    return []
 
 
 def check_public_attestation_steps(
@@ -3767,9 +3824,9 @@ def check_macos_model_download_privacy_summary(
             )
             warning = install.find("Before installing or launching macOS 0.3.8")
             actions = (
-                ("brew install --cask", "Direct download:")
+                ("brew install --cask", "Direct download and matching SHA-256")
                 if path.name == "llms-full.txt"
-                else ("- macOS latest published download:", "- Homebrew install:")
+                else ("- macOS download and matching SHA-256:", "- Homebrew install:")
             )
             if warning < 0 or any(
                 install.find(action) < 0 or warning > install.find(action)
@@ -4118,7 +4175,7 @@ def check_repository_install_guidance(
     required_surfaces: dict[Path, tuple[str, ...]] = REPOSITORY_INSTALL_GUIDANCE,
     forbidden_surfaces: dict[
         Path, tuple[re.Pattern[str], ...]
-    ] = REPOSITORY_UNPUBLISHED_DOWNLOAD_PATTERNS,
+    ] = REPOSITORY_UNSAFE_DOWNLOAD_PATTERNS,
 ) -> list[str]:
     errors: list[str] = []
     for path, required in required_surfaces.items():
@@ -4141,8 +4198,8 @@ def check_repository_install_guidance(
         for pattern in patterns:
             if pattern.search(contents):
                 errors.append(
-                    f"{display}: repository install entry point advertises "
-                    "release-specific metadata before publication"
+                    f"{display}: repository install entry point bypasses the "
+                    "version-pinned published guide"
                 )
     return errors
 
@@ -5014,9 +5071,10 @@ def run_self_test() -> None:
             or "TLS-inspecting" not in synced_llms
             or "macos-0-3-8-after-use" not in synced_llms
             or synced_llms.find("Before installing or launching macOS 0.3.8")
-            > synced_llms.find("- macOS latest published download:")
+            > synced_llms.find("- macOS download and matching SHA-256:")
             or synced_llms.find("Before installing or launching macOS 0.3.8")
             > synced_llms.find("- Homebrew install:")
+            or "releases/latest/download/Presspeech.zip" in synced_llms
         ):
             raise SyncError("self-test: inaccurate llms privacy claim was not corrected")
         short_answer = synced_llms.partition("Best short answer:\n")[2]
@@ -5097,11 +5155,25 @@ def run_self_test() -> None:
             not in synced_install
             or "gh release verify v0.3.8" in synced_install
             or "First model download" not in synced_install
+            or 'releases/download/v8.7.6/Presspeech.zip">Presspeech.zip</a> from the version-pinned release above' not in synced_install
+            or "releases/latest/download/Presspeech.zip" in synced_install
         ):
-            raise SyncError("self-test: install verification commands did not follow release metadata")
+            raise SyncError("self-test: install download or verification did not follow release metadata")
         install_page.write_text(synced_install, encoding="utf-8")
         if sync_install_html(install_page, metadata) != synced_install:
             raise SyncError("self-test: install guidance sync was not idempotent")
+        if check_macos_install_download_versions(metadata, install_page):
+            raise SyncError("self-test: version-pinned macOS download links were rejected")
+        install_page.write_text(
+            synced_install.replace(
+                'href="https://github.com/rcourtman/presspeech/releases/download/v8.7.6/Presspeech.zip">Presspeech.zip</a>',
+                'href="https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip">Presspeech.zip</a>',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_macos_install_download_versions(metadata, install_page):
+            raise SyncError("self-test: moving step-by-step macOS download was accepted")
 
         sitemap = Path(tmp) / "sitemap.xml"
         sitemap.write_text(
@@ -5201,7 +5273,6 @@ def run_self_test() -> None:
         release_safe_readme = Path(tmp) / "README.md"
         release_safe_readme.write_text(
             "The `main` branch can contain an unreleased candidate.\n"
-            "https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip\n"
             "https://rcourtman.github.io/presspeech/install.html#direct-download\n"
             "https://rcourtman.github.io/presspeech/windows.html#download-verify-run\n"
             "**1.0 MB release zip**\n"
@@ -5216,8 +5287,8 @@ def run_self_test() -> None:
         if (
             "8.7.6" in synced_release_safe_readme
             or "a" * 64 in synced_release_safe_readme
-            or "releases/latest/download/Presspeech.zip"
-            not in synced_release_safe_readme
+            or "releases/latest/download/Presspeech.zip" in synced_release_safe_readme
+            or "install.html#direct-download" not in synced_release_safe_readme
         ):
             raise SyncError(
                 "self-test: candidate metadata leaked into the repository README"
@@ -5229,6 +5300,11 @@ def run_self_test() -> None:
             "v8.7.6/Presspeech.zip\n",
             encoding="utf-8",
         )
+        moving_entrypoint = Path(tmp) / "moving-readme.md"
+        moving_entrypoint.write_text(
+            "https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip\n",
+            encoding="utf-8",
+        )
         safe_windows_entrypoint = Path(tmp) / "windows-readme-safe.md"
         safe_windows_entrypoint.write_text(
             "Use windows.html#download-verify-run; the source tree can be ahead "
@@ -5238,7 +5314,6 @@ def run_self_test() -> None:
         entrypoint_errors = check_repository_install_guidance(
             {
                 release_safe_readme: (
-                    "releases/latest/download/Presspeech.zip",
                     "install.html#direct-download",
                     "windows.html#download-verify-run",
                 ),
@@ -5248,14 +5323,17 @@ def run_self_test() -> None:
                 ),
             },
             {
-                unsafe_entrypoint: REPOSITORY_UNPUBLISHED_DOWNLOAD_PATTERNS[
+                unsafe_entrypoint: REPOSITORY_UNSAFE_DOWNLOAD_PATTERNS[
                     ROOT / "README.md"
-                ]
+                ],
+                moving_entrypoint: REPOSITORY_UNSAFE_DOWNLOAD_PATTERNS[
+                    ROOT / "README.md"
+                ],
             },
         )
         if (
-            len(entrypoint_errors) != 1
-            or "release-specific metadata" not in entrypoint_errors[0]
+            len(entrypoint_errors) != 2
+            or not all("version-pinned published guide" in error for error in entrypoint_errors)
         ):
             raise SyncError(
                 "self-test: unsafe repository download link was not rejected"
@@ -5315,13 +5393,15 @@ def run_self_test() -> None:
         if (old_diagnostics in synced_llms_full
                 or synced_llms_full.count("For support, macOS Copy/Save Diagnostics") != 1
                 or "raw error details, and raw log lines" not in synced_llms_full
+                or "releases/latest/download/Presspeech.zip" in synced_llms_full
+                or "install.html#direct-download" not in synced_llms_full
                 or "Before installing or launching macOS 0.3.8" not in synced_llms_full
                 or "The macOS 0.3.8 release starts its first speech-model download" not in synced_llms_full
                 or "In 0.3.9, a clean install must choose Download Model" not in synced_llms_full
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
                 > synced_llms_full.find("brew install --cask")
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
-                > synced_llms_full.find("Direct download:")):
+                > synced_llms_full.find("Direct download and matching SHA-256")):
             raise SyncError("self-test: llms-full diagnostics paragraph was not replaced")
 
         compare_dir = Path(tmp) / "compare"
@@ -6716,6 +6796,7 @@ def main() -> int:
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_windows_verified_download_flow())
+            errors.extend(check_macos_install_download_versions(metadata))
             errors.extend(check_public_attestation_steps())
             errors.extend(check_anchored_install_preflights(metadata))
             errors.extend(check_macos_upgrade_preflight(metadata))
@@ -6785,6 +6866,7 @@ def main() -> int:
         errors.extend(check_platform_orientation())
         errors.extend(check_windows_unsigned_guidance())
         errors.extend(check_windows_verified_download_flow())
+        errors.extend(check_macos_install_download_versions(metadata))
         errors.extend(check_public_attestation_steps())
         errors.extend(check_anchored_install_preflights(metadata))
         errors.extend(check_macos_upgrade_preflight(metadata))

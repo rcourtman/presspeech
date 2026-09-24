@@ -177,9 +177,10 @@ Already used macOS 0.3.8? See the
 
 Download the notarised app:
 
-- [Download the latest published Presspeech.zip](https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip).
-- For a version-pinned archive and its matching SHA-256, use the
-  [current macOS install guide](https://rcourtman.github.io/presspeech/install.html#direct-download).
+- Use the [current macOS install guide](https://rcourtman.github.io/presspeech/install.html#direct-download)
+  for a version-pinned archive and its matching SHA-256. The repository source
+  can be ahead of the published download; do not substitute a moving download
+  URL for the archive named in that guide.
 - Unzip it and move **Presspeech.app** to **Applications**. If you choose to wait
   after reading the warning above, leave it unopened.
 
@@ -522,10 +523,10 @@ Presspeech is local-first:
   it receives. Upcoming 0.1.13 still honors these proxy and CA settings but does
   not send account tokens. A proxy that only tunnels HTTPS sees connection
   metadata, not request contents. Upcoming 0.1.13 also verifies every allowed
-  inference file before model loading using its pinned SHA-256 manifest. A
-  local verification record is reused only while file identity and metadata
-  remain unchanged; files without a matching record are rehashed, and
-  mismatches fail closed. Published Windows 0.1.12 does not independently
+  inference file before model loading using its pinned SHA-256 manifest.
+  On Windows, Presspeech rehashes the reviewed files on every load rather
+  than trusting a metadata-only verification record; a mismatch fails closed. Published
+  Windows 0.1.12 does not independently
   verify model-file contents against SHA-256. A proxy can still observe request
   metadata or block a download; see the
   [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).

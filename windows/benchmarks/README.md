@@ -314,8 +314,12 @@ There is no Settings control for this capture flag. The app resets the flag
 after saving the next captured WAV under the ignored `benchmarks/audio/`
 directory beside the source code. Keep both the WAV and local config private;
 the latter can contain personal dictionary rules. Do not assume the packaged
-installer has a writable benchmark directory. Listen to the full recording
-and set a reviewed reference. Mark `speech_end_ms` at the boundary **after
+installer has a writable benchmark directory. New captures use 32-bit float
+WAV so the benchmark reads the same samples the app sent to ASR, including
+quiet tails and any values outside the PCM16 range. Earlier app captures were
+saved as clipped, quantized 16-bit WAV; they cannot recover the original ASR
+input, so recapture them for sample-exact comparisons. Listen to the full
+recording and set a reviewed reference. Mark `speech_end_ms` at the boundary **after
 the entire final spoken sound**, including a quiet final consonant; do not
 equate the hotkey release with speech end. For example, a reviewed 1,000 ms
 capture with its last speech sample before 600 ms can use:

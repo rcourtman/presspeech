@@ -183,6 +183,17 @@ def _write_integrity_marker(marker_path, snapshot, manifest_digest, files):
                 pass
 
 
+def _can_reuse_integrity_marker():
+    """Only trust a metadata fingerprint where ctime tracks file changes.
+
+    The release uses Python 3.12 on Windows, where ``st_ctime_ns`` is the
+    file's creation time. An in-place rewrite with the same size and a
+    restored last-write time can therefore retain every field in our marker.
+    Rehash on each Windows load instead of treating that record as proof.
+    """
+    return os.name != "nt"
+
+
 def _verify_snapshot_integrity(
         path, present, expected_sha256s, repository, revision,
         integrity_cache_dir):
@@ -196,7 +207,8 @@ def _verify_snapshot_integrity(
     manifest_digest = _manifest_digest(expected_sha256s)
     marker_path = (
         _integrity_marker_path(integrity_cache_dir, repository, revision)
-        if integrity_cache_dir is not None else None)
+        if integrity_cache_dir is not None and _can_reuse_integrity_marker()
+        else None)
     if (marker_path is not None and
             _integrity_marker_matches(marker_path, path, manifest_digest, files)):
         return

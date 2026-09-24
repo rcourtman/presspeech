@@ -188,6 +188,7 @@ For each configuration, also record this release-gate matrix:
 | --- | --- |
 | Verify candidate, install per-user, and launch from Start | |
 | First model preparation through first successful dictation | |
+| Pinned model integrity: same-size cached-file rewrite with restored last-write time is rejected offline | |
 | Ten consecutive dictations into Notepad | |
 | Ten short-phrase onset checks across hold/toggle; first word or syllable retained | |
 | A physical hold across the OS key-repeat interval remains one capture until release | |
@@ -360,6 +361,19 @@ keyboard access testing in addition to assistive-technology testing.
   clean profile, accept the download and confirm fetching begins only after
   that action and Setup reports its progress. With a complete local base.en
   snapshot, confirm startup loads it without asking again.
+- After a selected pinned model has loaded successfully, close Presspeech on a
+  **disposable test profile only**. In that profile's model cache, identify a
+  reviewed weight file for the selected snapshot (`model.bin` or
+  `model.safetensors`); do not alter a real user's shared cache. Record its
+  byte length and last-write time, flip one byte **in place** without replacing
+  the file, then restore its last-write time. Verify that length and last-write
+  time still match the originals. Launch the installed candidate with
+  `HF_HUB_OFFLINE=1` in its process environment. It must refuse the altered
+  model with an integrity error before inference and must not contact the Hub
+  or silently fetch a replacement. A successful earlier load, a unit-test
+  mock, or a mismatch caused by changed size/time does not pass this check.
+  Delete the disposable profile/cache afterward; if controlled mutation is
+  unavailable, record **Not run**, not Pass.
 - While Setup is awaiting the model choice, press the configured dictation
   hotkey. Confirm Setup is presented again and Presspeech does not open the
   microphone or claim to be listening.

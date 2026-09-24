@@ -1658,6 +1658,13 @@ class PresspeechApp:
                     getattr(self, "_canceling_recording", False)
                     or getattr(self, "transcribing", False)):
                 return False
+            # The previous recording can finish delivery while foreground
+            # discovery above is in progress. It may retain text and clear
+            # transcribing before this lock is acquired, so the early recovery
+            # check alone cannot authorize a new capture.
+            if self.has_undelivered_dictation():
+                self._log("dictation deferred; recovery became pending during startup")
+                return False
             self._rec_epoch += 1
             epoch = self._rec_epoch
             self.recording = True
@@ -2205,14 +2212,12 @@ class PresspeechApp:
             filename = "live-%s.wav" % time.strftime("%Y%m%d-%H%M%S")
         output_path = os.path.join(output_dir, filename)
         try:
-            import wave
+            from benchmark_capture import write_capture_wav
             os.makedirs(output_dir, exist_ok=True)
-            pcm = (np.clip(audio, -1, 1) * 32767).astype(np.int16)
-            with wave.open(output_path, "wb") as handle:
-                handle.setnchannels(1)
-                handle.setsampwidth(2)
-                handle.setframerate(16000)
-                handle.writeframes(pcm.tobytes())
+            # The benchmark must replay the same float32 samples sent to ASR.
+            # PCM16 clips/quantizes quiet tails and can change the very model
+            # behaviour that the recorded-tail probe is meant to measure.
+            write_capture_wav(output_path, audio)
             self.settings["capture_next_benchmark"] = False
             if remaining > 0:
                 self.settings["capture_benchmark_remaining"] = remaining - 1
