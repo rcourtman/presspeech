@@ -195,8 +195,8 @@ either microphone while the ambiguity remains. Disconnect one or use **Automatic
 only if either input is acceptable. Wait
 until it says the model is ready before the
 first dictation. **Try Dictation** remains disabled until then, and **Finish
-Setup** requires both the speech model and global hotkey to be ready. If
-preparation fails, use **Retry Speech Model**; the window keeps
+Setup** requires the speech model to be ready and the global hotkey listener
+to have started. If preparation fails, use **Retry Speech Model**; the window keeps
 tracking the retry instead of leaving the previous error on screen. Choose
 **Set Up Later** to close the window without marking setup complete; it will
 open again on the next launch. Microphone, hotkey, dictation style, and Start
@@ -518,6 +518,14 @@ If the configured key stops responding while menu-based **Dictate** still
 works, choose **Repair Global Hotkey** from the notification-area menu, Setup,
 or Settings. Presspeech replaces the Windows keyboard listener even when its
 thread still appears healthy, then reports whether the new listener started.
+In upcoming 0.1.13, **Listener started** means only that its thread launched;
+[Windows can silently remove a low-level hook](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)
+without notifying the app.
+**Key just detected** appears briefly after Presspeech sees a physical press
+of the configured key, not as a promise that the hook will keep working.
+Use **Try Dictation** with harmless text to confirm capture and insertion;
+if the key stops working later, use **Repair Global Hotkey** even if the
+status still says **Listener started**.
 Upcoming 0.1.13 also dispatches ordered press/release actions to a dedicated
 worker so target discovery, recording setup, logging and recovery UI never run
 inside Windows' time-limited low-level keyboard-hook callback.
@@ -571,6 +579,16 @@ again; unsaved edits remain in place while it waits.
 - Dictionary: map a misheard phrase or spoken shortcut to exact text
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)
+
+Windows in-app update checks and approved installer/checksum downloads use
+Python `urllib.request` proxy routing, separate from the model client's HTTPX
+settings. Inherited `https_proxy`/`HTTPS_PROXY` and `no_proxy`/`NO_PROXY`, or
+Windows Internet Settings when no environment proxy is set, can route these
+requests through a proxy. A CONNECT-only proxy sees connection metadata, not
+HTTPS contents. A TLS-inspecting proxy trusted by the client can replace both
+GitHub release metadata and installer bytes; the in-app size and SHA-256
+checks do not independently verify the release attestation. No dictation
+audio or transcript is sent. See the [updater proxy boundary](https://rcourtman.github.io/presspeech/privacy.html#windows-updater-proxy).
 
 Saving a different speech model starts downloading/loading and warming it in
 the background immediately. Settings shows whether the selected model is being

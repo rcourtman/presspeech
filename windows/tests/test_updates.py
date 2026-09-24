@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
 import tempfile
@@ -11,6 +12,43 @@ import unittest
 from unittest import mock
 
 import updates
+
+
+class UpdaterProxyPolicyTests(unittest.TestCase):
+    def test_both_default_transports_honor_configured_proxy_without_network(self):
+        # A synthetic proxy exercises routing configuration, not a request.
+        proxy_url = "http://synthetic-proxy.invalid:8080"
+        with mock.patch.object(
+                updates.urllib.request, "getproxies",
+                return_value={"https": proxy_url}) as discover:
+            for handler in (updates._UpdateAPIRedirectHandler(),
+                            updates._ReleaseRedirectHandler()):
+                with self.subTest(handler=type(handler).__name__):
+                    open_method = updates._configured_proxy_opener(handler)
+                    configured = [
+                        item for item in open_method.__self__.handlers
+                        if isinstance(item, updates.urllib.request.ProxyHandler)
+                    ]
+                    self.assertEqual(len(configured), 1)
+                    self.assertEqual(configured[0].proxies, {"https": proxy_url})
+                    self.assertIn(handler, open_method.__self__.handlers)
+        self.assertEqual(discover.call_count, 2)
+
+    def test_network_inventory_discloses_both_windows_update_proxy_paths(self):
+        root = Path(__file__).resolve().parents[2]
+        inventory = json.loads((root / "docs/privacy/network-calls.json")
+                               .read_text(encoding="utf-8"))
+        calls = {entry["name"]: entry for entry in inventory["network_calls"]}
+        for name in ("windows_update_check", "user_triggered_install_or_update"):
+            with self.subTest(name=name):
+                routing = calls[name]["proxy_routing"]
+                self.assertIn("urllib.request.ProxyHandler", routing)
+                self.assertIn("https_proxy/HTTPS_PROXY", routing)
+                self.assertIn("Windows Internet Settings", routing)
+                self.assertIn("TLS-inspecting", routing)
+        page = (root / "docs/privacy.html").read_text(encoding="utf-8")
+        self.assertIn('id="windows-updater-proxy"', page)
+        self.assertIn("does <strong>not</strong> independently verify", page)
 
 
 class Response(io.BytesIO):

@@ -552,6 +552,13 @@ keyboard access testing in addition to assistive-technology testing.
   verify that **Repair Global Hotkey** restores the listener manually. Record
   event delivery and recovery separately; mock tests cannot establish either
   on a packaged Windows build.
+- In Setup and Settings, confirm the status reads **Listener started** after
+  startup or Repair, changes briefly to **Key just detected** after one physical
+  configured-key press, then returns to **Listener started** after about ten
+  seconds. Perform the press in Try Dictation with harmless text rather than
+  in an unrelated focused app. Injected keys and AltGr text-entry chords must
+  not count as a physical configured-key confirmation. A status change alone
+  does not prove that dictation started or that the hook will remain installed.
 - On the upcoming 0.1.13 candidate, repeat a cold microphone start with cues
   on and off and with a USB or Bluetooth input after reconnect/resume. Confirm
   **Connecting microphone…** appears first; neither the high cue nor

@@ -118,6 +118,18 @@ unsigned until a code-signing certificate is configured; release attestation
 proves which immutable Presspeech release supplied the bytes, but it is not a
 substitute for Authenticode publisher identity.
 
+The Windows in-app updater also honors Python `urllib.request` proxy routing:
+inherited `https_proxy`/`HTTPS_PROXY` and `no_proxy`/`NO_PROXY`, or Windows
+Internet Settings when no environment proxy is set. This applies to automatic
+release checks and approved installer/checksum downloads, not just model
+downloads. A CONNECT-only proxy sees connection metadata but not HTTPS request
+contents. A TLS-inspecting proxy trusted by the client can read or replace
+GitHub's release metadata and assets together; the updater verifies their
+consistency but does not independently verify the release attestation. Treat
+the proxy and its CA configuration as part of the Windows update trust boundary.
+No transcript or audio is sent in those update requests. See the
+[network inventory](https://rcourtman.github.io/presspeech/privacy.html#windows-updater-proxy).
+
 For source builds containing the SHA-256 dependency lock, the Windows packaging
 environment is also fixed before PyInstaller runs. Its PyPI dependency graph is exact-version locked to CPython 3.12 on Windows x64,
 and every selected wheel has a reviewed SHA-256 in

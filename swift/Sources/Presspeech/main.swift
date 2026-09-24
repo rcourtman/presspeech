@@ -5941,8 +5941,9 @@ enum TextInsertionOutcome: Equatable {
     // shortcut could not release its keys. The destination may contain all or
     // part of the text, so another strategy could duplicate or misdirect it.
     case deliveryUncertain
-    // Terminal failure: a fallback can itself copy when focus changes, so it
-    // must not run after another process has replaced our clipboard contents.
+    // Terminal failure: the original clipboard generation no longer holds.
+    // Another process may have copied, or our write may have acquired the
+    // pasteboard before failing; a fallback could replace newer contents.
     case clipboardChanged
 
     var allowsFallback: Bool { self == .failed }
@@ -6457,6 +6458,18 @@ enum TextInserter {
 // replaced its contents, and we must not clobber them.
 func pasteboardChangeCountAllowsRestore(current: Int, expected: Int) -> Bool {
     current == expected
+}
+
+/// A failed transcript write is retryable only if it never changed the
+/// observed pasteboard generation. The write may have acquired ownership
+/// before failing, or another app may have copied during it; either case is
+/// indistinguishable here and must not start a fallback that could replace
+/// that newer clipboard value.
+func clipboardWriteFailureOutcome(sourceChangeCount: Int,
+                                  currentChangeCount: Int) -> TextInsertionOutcome {
+    pasteboardChangeCountAllowsRestore(current: currentChangeCount,
+                                      expected: sourceChangeCount)
+        ? .failed : .clipboardChanged
 }
 
 /// The transcript is already on the pasteboard when a late focus check fails.
@@ -7104,8 +7117,8 @@ private enum ClipboardPasteInserter {
         preserveClipboard: Bool = false,
         expectedSourceChangeCount: Int? = nil
     ) -> TextInsertionOutcome {
-        if let expectedSourceChangeCount,
-           pb.changeCount != expectedSourceChangeCount {
+        let sourceChangeCount = expectedSourceChangeCount ?? pb.changeCount
+        if pb.changeCount != sourceChangeCount {
             return .clipboardChanged
         }
         let context: ReplacementContext
@@ -7116,14 +7129,19 @@ private enum ClipboardPasteInserter {
             return .clipboardChanged
         }
         // Snapshotting can block while another app replaces the clipboard.
-        if let expectedSourceChangeCount,
-           pb.changeCount != expectedSourceChangeCount {
+        if pb.changeCount != sourceChangeCount {
             return .clipboardChanged
         }
 
         guard let receipt = writeTranscriptWithReceipt(text, to: pb) else {
-            log("pasteboard write failed")
-            return .failed
+            let outcome = clipboardWriteFailureOutcome(
+                sourceChangeCount: sourceChangeCount,
+                currentChangeCount: pb.changeCount
+            )
+            log(outcome == .clipboardChanged
+                ? "clipboard changed during recovery copy; insertion stopped"
+                : "pasteboard write failed")
+            return outcome
         }
         guard receipt.stillOwns(pb) else {
             log("clipboard changed after recovery copy; manual preservation skipped")
@@ -7168,8 +7186,14 @@ private enum ClipboardPasteInserter {
         }
 
         guard let receipt = writeTranscriptWithReceipt(text, to: pb) else {
-            log("pasteboard write failed")
-            return .failed
+            let outcome = clipboardWriteFailureOutcome(
+                sourceChangeCount: sourceChangeCount,
+                currentChangeCount: pb.changeCount
+            )
+            log(outcome == .clipboardChanged
+                ? "clipboard changed during transcript write; insertion stopped"
+                : "pasteboard write failed")
+            return outcome
         }
         let writeChangeCount = receipt.changeCount
 
@@ -19295,6 +19319,18 @@ private enum PresspeechSelfTest {
             "direct Unicode insertion should not loop back to clipboard paste"
         )
         try expect(
+            clipboardWriteFailureOutcome(sourceChangeCount: 7,
+                                         currentChangeCount: 7),
+            equals: .failed,
+            "a write rejected before acquiring clipboard ownership may use Unicode fallback"
+        )
+        try expect(
+            clipboardWriteFailureOutcome(sourceChangeCount: 7,
+                                         currentChangeCount: 8),
+            equals: .clipboardChanged,
+            "a failed write after ownership changed must not start Unicode fallback"
+        )
+        try expect(
             TextInserter.defaultStrategyDescription,
             equals: "Clipboard paste with Direct Unicode typing fallback",
             "diagnostics should describe the insertion fallback chain"
@@ -20430,6 +20466,7 @@ private enum PresspeechSelfTest {
             )
             let currentText = pb.string(forType: .string)
 
+            let sourceBeforeLateCopy = pb.changeCount
             let acquiredBeforeLateCopy = pb.prepareForNewContents(with: .currentHostOnly)
             let lateItem = NSPasteboardItem()
             let lateItemReady = lateItem.setString("dictation fixture", forType: .string)
@@ -20442,9 +20479,14 @@ private enum PresspeechSelfTest {
                     return wrote
                 }
             )
+            let lateWriteFailureOutcome = clipboardWriteFailureOutcome(
+                sourceChangeCount: sourceBeforeLateCopy,
+                currentChangeCount: pb.changeCount
+            )
             return (itemReady && lateItemReady, newerCopyWritten, staleWriteAccepted,
                     staleWriteInvoked, newerCopyPreserved, currentWriteAccepted,
-                    currentText, lateCopyAccepted, pb.string(forType: .string))
+                    currentText, lateCopyAccepted, pb.string(forType: .string),
+                    lateWriteFailureOutcome)
         }
         try expect(probe.0 && probe.1, equals: true,
                    "the prepared-write fixture must install both pasteboard values")
@@ -20458,6 +20500,8 @@ private enum PresspeechSelfTest {
                    "a newer owner during writeObjects must not be reported as a completed write")
         try expect(probe.8, equals: "late external fixture",
                    "a later copy must remain the current clipboard value")
+        try expect(probe.9, equals: .clipboardChanged,
+                   "a failed prepared write with a later clipboard owner must block insertion fallback")
     }
 
     private static func testRecentTranscriptLimit() throws {

@@ -1419,6 +1419,7 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.request_stop.assert_called_once_with()
         self.assertEqual(instance.listener.suppress_event.call_count, 2)
         self.assertEqual(instance._suppressed_hotkey_vks, {})
+        self.assertEqual(instance._last_hotkey_observation[0], "f8")
 
     def test_native_hook_returns_while_slow_hotkey_action_runs_on_worker(self):
         instance = self.make_app(hotkey="f8")
@@ -1597,6 +1598,7 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.start_recording.assert_not_called()
         self.assertEqual(instance._suppressed_hotkey_vks, {})
         self.assertEqual(instance._filter_pressed_vks, set())
+        self.assertIsNone(getattr(instance, "_last_hotkey_observation", None))
 
     def test_hotkey_action_failure_still_withholds_reserved_key(self):
         instance = self.make_app(hotkey="f8")
@@ -1659,6 +1661,7 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.start_recording.assert_not_called()
         instance.request_stop.assert_not_called()
         instance.listener.suppress_event.assert_not_called()
+        self.assertIsNone(getattr(instance, "_last_hotkey_observation", None))
 
     def test_altgr_right_alt_transaction_is_not_suppressed(self):
         instance = self.make_app(hotkey="right alt")
@@ -1678,6 +1681,7 @@ class HotkeyRegressionTests(unittest.TestCase):
         instance.listener.suppress_event.assert_not_called()
         self.assertEqual(instance._passthrough_hotkey_vks, set())
         self.assertEqual(instance._filter_pressed_vks, set())
+        self.assertIsNone(getattr(instance, "_last_hotkey_observation", None))
 
     def test_modifier_release_during_paste_does_not_leave_altgr_state_stuck(self):
         instance = self.make_app()
@@ -1764,7 +1768,9 @@ class HotkeyListenerLifecycleTests(unittest.TestCase):
             self.assertTrue(instance._start_hotkey_listener())
 
         listener.start.assert_called_once_with()
-        self.assertEqual(instance.hotkey_listener_status(), ("ready", "Ready — F8"))
+        self.assertEqual(
+            instance.hotkey_listener_status(),
+            ("ready", "Listener started — F8"))
         self.assertIs(instance.listener, listener)
         thread.assert_called_once_with(
             target=instance._watch_hotkey_listener,
@@ -1773,6 +1779,26 @@ class HotkeyListenerLifecycleTests(unittest.TestCase):
             daemon=True,
         )
         thread.return_value.start.assert_called_once_with()
+
+    def test_recent_physical_key_is_reported_only_briefly(self):
+        instance = self.make_app()
+        instance._hotkey_status = "ready"
+        instance._last_hotkey_observation = ("f8", 100.0)
+
+        with mock.patch.object(app.time, "monotonic", return_value=105.0):
+            self.assertEqual(
+                instance.hotkey_listener_status(),
+                ("ready", "Key just detected — F8"))
+        with mock.patch.object(app.time, "monotonic", return_value=111.0):
+            self.assertEqual(
+                instance.hotkey_listener_status(),
+                ("ready", "Listener started — F8"))
+
+        instance.settings["hotkey"] = "f9"
+        with mock.patch.object(app.time, "monotonic", return_value=105.0):
+            self.assertEqual(
+                instance.hotkey_listener_status(),
+                ("ready", "Listener started — F9"))
 
     def test_listener_start_failure_keeps_app_recoverable(self):
         instance = self.make_app()
@@ -1813,13 +1839,15 @@ class HotkeyListenerLifecycleTests(unittest.TestCase):
 
         start.assert_called_once_with(force=True)
         instance.notify.assert_called_once_with(
-            "Global hotkey ready", "F8 is ready for dictation.")
+            "Global hotkey listener restarted",
+            "Try F8 in Try Dictation to confirm it responds.")
 
     def test_user_repair_replaces_an_apparently_alive_listener(self):
         instance = self.make_app()
         old_listener = mock.Mock()
         instance.listener = old_listener
         instance._hotkey_status = "ready"
+        instance._last_hotkey_observation = ("f8", 100.0)
         new_listener = mock.Mock()
 
         with mock.patch.object(app.pkb, "Listener", return_value=new_listener), \
@@ -1829,6 +1857,7 @@ class HotkeyListenerLifecycleTests(unittest.TestCase):
         old_listener.stop.assert_called_once_with()
         new_listener.start.assert_called_once_with()
         self.assertIs(instance.listener, new_listener)
+        self.assertIsNone(instance._last_hotkey_observation)
 
     def test_user_repair_does_not_interrupt_active_dictation(self):
         instance = self.make_app()

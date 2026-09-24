@@ -420,10 +420,10 @@ def _bind_window_command(root, sequence, command):
 
 
 def _hotkey_readiness(app):
-    """Read optional app hotkey health without breaking lightweight test fakes."""
+    """Read listener startup/error state without breaking lightweight fakes."""
     checker = getattr(app, "hotkey_listener_status", None)
     if checker is None or not callable(checker):
-        return "ready", "Global hotkey ready"
+        return "ready", "Listener status unavailable"
     try:
         result = checker()
     except Exception:
@@ -433,7 +433,7 @@ def _hotkey_readiness(app):
             not isinstance(result[1], str)):
         # unittest.mock objects and older embedders do not implement the new
         # readiness contract. Treat those compatibility shims as ready.
-        return "ready", "Global hotkey ready"
+        return "ready", "Listener status unavailable"
     return result
 
 
@@ -1925,7 +1925,10 @@ class UpdateWindow(_RegisteredDialog):
                   "downloaded only if you approve it; its size and SHA-256 "
                   "checksum are verified before it runs. Release notes may "
                   "change after publication; hash verification confirms the "
-                  "installer bytes, not the publisher's identity. An unsigned "
+                  "installer bytes, not the publisher's identity. Configured "
+                  "proxy settings may route the check and download through a "
+                  "proxy; a TLS-inspecting proxy trusted by this client could "
+                  "change the release metadata and bytes together. An unsigned "
                   "installer may show Unknown publisher in Windows."),
             justify="left",
             wraplength=560,

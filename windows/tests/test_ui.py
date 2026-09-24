@@ -19,6 +19,13 @@ except ModuleNotFoundError:
 import ui
 
 
+class HotkeyReadinessTests(unittest.TestCase):
+    def test_legacy_status_fallback_does_not_claim_verification(self):
+        self.assertEqual(
+            ui._hotkey_readiness(object()),
+            ("ready", "Listener status unavailable"))
+
+
 class UpdateInstallRecoveryTests(unittest.TestCase):
     """The verified installer stays available when dictation blocks an exit."""
 
@@ -1124,7 +1131,7 @@ class SetupWindowTests(unittest.TestCase):
         window.hotkey_status = mock.Mock()
         window.repair_hotkey_button = mock.Mock()
         window.app.hotkey_listener_status.return_value = (
-            "ready", "Ready — Right Alt")
+            "ready", "Listener started — Right Alt")
         window.autostart_status = mock.Mock()
         window.microphone_events = queue.Queue()
         window.microphone_checking = False
@@ -1149,7 +1156,7 @@ class SetupWindowTests(unittest.TestCase):
 
         self.assertEqual(set_text.call_args_list, [
             mock.call(window.model_label, "Needs attention — download failed"),
-            mock.call(window.hotkey_status, "Ready — Right Alt"),
+            mock.call(window.hotkey_status, "Listener started — Right Alt"),
         ])
         window.repair_hotkey_button.config.assert_called_once_with(
             state="normal")
@@ -1524,6 +1531,19 @@ class SetupWindowTests(unittest.TestCase):
         window.repair_hotkey_button.config.assert_called_once_with(state="normal")
         window.try_button.config.assert_called_once_with(state="normal")
         window.finish_button.config.assert_called_once_with(state="disabled")
+
+    def test_recent_key_observation_reaches_setup_status(self):
+        window = self.make_window("ready", "base.en on cpu")
+        window.app.hotkey_listener_status.return_value = (
+            "ready", "Key just detected — Right Alt")
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_model()
+
+        self.assertIn(
+            mock.call(window.hotkey_status, "Key just detected — Right Alt"),
+            set_text.call_args_list)
+        window.finish_button.config.assert_called_once_with(state="normal")
 
     def test_retry_action_uses_app_single_flight_gate(self):
         window = self.make_window("error")
@@ -2286,6 +2306,8 @@ class UpdateWindowTests(unittest.TestCase):
         disclosure = "\n".join(displayed)
         self.assertIn("Release notes may change after publication", disclosure)
         self.assertIn("not the publisher's identity", disclosure)
+        self.assertIn("proxy settings may route the check and download", disclosure)
+        self.assertIn("TLS-inspecting proxy trusted by this client", disclosure)
         self.assertIn("Unknown publisher", disclosure)
         self.assertEqual(
             [call["text"] for call in button_calls],
@@ -3366,7 +3388,7 @@ class DictionarySettingsTests(unittest.TestCase):
         window.app.model_status_detail = "base.en on cpu (int8)"
         window.app.transcriber.loaded.return_value = True
         window.app.hotkey_listener_status.return_value = (
-            "ready", "Ready — Right Alt")
+            "ready", "Listener started — Right Alt")
         window.root.focus_get.return_value = window.retry_model_button
 
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
@@ -3378,7 +3400,7 @@ class DictionarySettingsTests(unittest.TestCase):
                 "Speech model ready — base.en on cpu (int8)"),
             mock.call(
                 window.hotkey_status,
-                "Global hotkey status: Ready — Right Alt"),
+                "Global hotkey status: Listener started — Right Alt"),
         ])
         window.retry_model_button.config.assert_called_once_with(state="disabled")
         window.var_model.focus_set.assert_called_once_with()

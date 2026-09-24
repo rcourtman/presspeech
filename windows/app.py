@@ -160,6 +160,7 @@ UNSAFE_INPUT_HOST_APIS = ("wdm-ks",)
 
 LOG_PATH = os.path.join(cfg.CONFIG_DIR, "log.txt")
 UPDATE_CHECK_INTERVAL_SEC = 24 * 60 * 60
+HOTKEY_OBSERVATION_FEEDBACK_SEC = 10.0
 
 # The frozen app imports UI and capture dependencies at startup. Exercise the
 # model backends and other lazy imports explicitly before an installer can be
@@ -711,6 +712,7 @@ class PresspeechApp:
         self._hotkey_listener_lock = threading.Lock()
         self._hotkey_status = "not started"
         self._hotkey_status_detail = "Global hotkey has not started"
+        self._last_hotkey_observation = None
         self._session_repair_lock = threading.Lock()
         self._session_repair_generation = 0
         self._session_repair_running = False
@@ -983,14 +985,27 @@ class PresspeechApp:
     # ---------------- hotkey ----------------
 
     def hotkey_available(self):
-        """Return whether the observed global keyboard listener is usable."""
+        """Return whether listener startup was reported successful."""
         return getattr(self, "_hotkey_status", "not started") == "ready"
 
     def hotkey_listener_status(self):
-        """Return a stable state and user-facing detail for readiness UI."""
+        """Report listener startup separately from a recently observed key.
+
+        Windows can silently remove a low-level hook while its thread remains
+        alive. Neither a successful start nor an old key event proves that the
+        hook still works, so never describe either as ongoing verification.
+        """
         status = getattr(self, "_hotkey_status", "not started")
         if status == "ready":
-            detail = "Ready \u2014 %s" % self.settings["hotkey"].title()
+            hotkey = self.settings["hotkey"]
+            observation = getattr(self, "_last_hotkey_observation", None)
+            age = (time.monotonic() - observation[1]
+                   if observation is not None and observation[0] == hotkey
+                   else None)
+            detail = (
+                "Key just detected \u2014 %s" % hotkey.title()
+                if age is not None and 0 <= age <= HOTKEY_OBSERVATION_FEEDBACK_SEC
+                else "Listener started \u2014 %s" % hotkey.title())
         else:
             detail = getattr(
                 self, "_hotkey_status_detail",
@@ -1017,6 +1032,7 @@ class PresspeechApp:
                 self._filter_pressed_vks.clear()
                 self._passthrough_hotkey_vks.clear()
                 self._suppressed_hotkey_vks.clear()
+                self._last_hotkey_observation = None
 
     def _start_hotkey_listener(self, force=False):
         """Create a fresh listener after startup failure or listener exit."""
@@ -1072,8 +1088,9 @@ class PresspeechApp:
                 return False
 
             self._hotkey_status = "ready"
-            self._hotkey_status_detail = (
-                "Ready \u2014 %s" % self.settings["hotkey"].title())
+            # "ready" gates the app's existing startup flow. It does not mean
+            # Windows has confirmed this hook or will keep it installed.
+            self._hotkey_status_detail = "Global hotkey listener started"
             threading.Thread(
                 target=self._watch_hotkey_listener,
                 args=(listener,),
@@ -1167,8 +1184,9 @@ class PresspeechApp:
             return False
         if result == "ready":
             self.notify(
-                "Global hotkey ready",
-                "%s is ready for dictation." % self.settings["hotkey"].title())
+                "Global hotkey listener restarted",
+                "Try %s in Try Dictation to confirm it responds." %
+                self.settings["hotkey"].title())
             return True
         self.notify(
             "Global hotkey still unavailable",
@@ -1400,14 +1418,15 @@ class PresspeechApp:
                 self._on_release, key, listener=listener,
                 generation=dispatch_generation)
 
-        configured = HOTKEY_VIRTUAL_KEYS.get(self.settings.get("hotkey"))
+        hotkey_name = self.settings.get("hotkey")
+        configured = HOTKEY_VIRTUAL_KEYS.get(hotkey_name)
         if not is_press or configured is None or vk_code != configured[0]:
             return
 
         # Windows implements AltGr as synthetic Left Ctrl + Right Alt. Leave
         # that complete transaction available for layout characters; the
         # ordinary callback applies the same guard before starting dictation.
-        if (self.settings.get("hotkey") == "right alt" and
+        if (hotkey_name == "right alt" and
                 (0xA2 in self._filter_pressed_vks or
                  pkb.Key.ctrl_l in self._pressed_keys)):
             self._passthrough_hotkey_vks.add(vk_code)
@@ -1416,6 +1435,11 @@ class PresspeechApp:
         if vk_code not in self._suppressed_hotkey_vks:
             key = configured[1]
             self._suppressed_hotkey_vks[vk_code] = key
+            # Only a physical configured-key event proves that this listener
+            # received a hook callback. Keep the feedback brief: Windows does
+            # not notify us if it silently removes the hook afterwards.
+            self._last_hotkey_observation = (
+                hotkey_name, time.monotonic())
             return self._dispatch_and_suppress_win32_event(
                 self._on_press, key, listener=listener,
                 generation=dispatch_generation)

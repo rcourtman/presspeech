@@ -206,6 +206,11 @@ def _score(samples):
         "trial_word_errors": errors,
         "trial_reference_words": words,
         "trial_wer": errors / words if words else None,
+        # Count clean decodes without pretending trial positions in separate
+        # benchmark invocations are controlled pairs.
+        "error_free_trials": sum(
+            error == 0 for item in speech
+            for error in item["trial_accuracy"]["all_word_errors"]),
         "worst_deletion_run": max((item["trial_accuracy"][
             "worst_max_reference_deletion_run"] for item in speech), default=None),
         "first_word_failures": sum(item["first_word"]["failed_trials"]
@@ -228,6 +233,11 @@ def _worsened(base, candidate):
         return {
             "word_errors": sum(candidate["trial_accuracy"]["all_word_errors"])
             > sum(base["trial_accuracy"]["all_word_errors"]),
+            "error_free_trials": sum(
+                error == 0 for error in candidate["trial_accuracy"]["all_word_errors"]
+            ) < sum(
+                error == 0 for error in base["trial_accuracy"]["all_word_errors"]
+            ),
             "worst_trial_errors": candidate["trial_accuracy"][
                 "worst_word_errors"] > base["trial_accuracy"]["worst_word_errors"],
             "worst_deletion_run": candidate["trial_accuracy"][
@@ -350,7 +360,8 @@ def main():
         print("Model-only clips below the app duration gate: %d; included in "
               "scores, not product delivery evidence" % (
                   result["baseline"]["below_app_gate_clips"]))
-    for key in ("trial_word_errors", "trial_wer", "worst_deletion_run",
+    for key in ("trial_word_errors", "trial_wer", "error_free_trials",
+                "worst_deletion_run",
                 "first_word_failures", "final_word_failures", "vad_rejections",
                 "vad_missing", "silence_false_positives",
                 "inference_median_seconds"):

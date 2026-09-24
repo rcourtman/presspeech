@@ -100,7 +100,8 @@
       "purpose": "Find a newer complete, immutable windows-vX.Y.Z release and offer it to the user",
       "user_triggered": false,
       "can_disable": true,
-      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; Presspeech adds no version, device, or user identifier and sends no transcript, microphone audio, settings, or usage counts. GitHub can observe the source IP address and request timing as ordinary connection metadata"
+      "data_sent": "GET with a fixed User-Agent header, exactly presspeech-windows-update-check; Presspeech adds no version, device, or user identifier and sends no transcript, microphone audio, settings, or usage counts. GitHub or a configured proxy can observe connection metadata such as source IP address and request timing; GitHub sees the proxy's address when one is used",
+      "proxy_routing": "The Windows in-app updater uses Python urllib.request.ProxyHandler. It honors inherited https_proxy/HTTPS_PROXY and no_proxy/NO_PROXY settings and, when no environment proxy is set, Windows Internet Settings. A proxy for HTTPS requests can carry the automatic or manual release check. A CONNECT-only proxy sees connection metadata but not the HTTPS path or headers. A trusted TLS-inspecting proxy can read or change the response; the updater does not independently verify GitHub's release attestation. This is separate from the model client's HTTPX proxy and CA settings."
     },
     {
       "name": "user_triggered_support_guide",
@@ -132,7 +133,8 @@
       "purpose": "User-triggered install/update flow: immutable GitHub release download checked against its published SHA-256, a Homebrew metadata refresh followed by the signed macOS archive, or a Windows installer whose immutable release state, published size, and SHA-256 are verified before launch",
       "user_triggered": true,
       "can_disable": true,
-      "data_sent": "Browser or Homebrew request metadata; no dictation audio"
+      "data_sent": "Browser or Homebrew request metadata for those routes; the Windows in-app updater sends a fixed User-Agent and no dictation audio, transcript, device ID, or settings during the user-approved installer and checksum download. Its configured proxy can observe connection metadata. A trusted TLS-inspecting proxy can read or change GitHub responses; published size and SHA-256 checks only prove consistency with the release metadata received by this client, not an independently verified publisher signature.",
+      "proxy_routing": "Windows in-app installer and checksum downloads use Python urllib.request.ProxyHandler with inherited https_proxy/HTTPS_PROXY and no_proxy/NO_PROXY settings or, absent environment proxy settings, Windows Internet Settings. Each redirect URL must remain on an approved HTTPS GitHub asset host; these URL checks do not authenticate a TLS-inspecting proxy. Browser, Homebrew, and macOS routes follow their own proxy configuration."
     }
   ],
   "local_storage": {

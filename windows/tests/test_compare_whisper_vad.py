@@ -97,9 +97,12 @@ class CompareWhisperVadTests(unittest.TestCase):
         self.assertEqual(result["baseline"]["trial_wer"], 0)
         self.assertEqual(result["candidate"]["trial_wer"], 1 / 6)
         self.assertEqual(result["candidate"]["worst_deletion_run"], 1)
+        self.assertEqual(result["baseline"]["error_free_trials"], 2)
+        self.assertEqual(result["candidate"]["error_free_trials"], 1)
         self.assertEqual(result["candidate"]["vad_rejections"], 1)
         self.assertEqual(result["candidate"]["silence_false_positives"], 1)
         self.assertEqual(result["regressions"]["word_errors"], [1])
+        self.assertEqual(result["regressions"]["error_free_trials"], [1])
         self.assertEqual(result["regressions"]["first_word"], [1])
         self.assertEqual(result["regressions"]["worst_deletion_run"], [1])
         self.assertEqual(result["regressions"]["silence_false_positives"], [2])
@@ -218,6 +221,40 @@ class CompareWhisperVadTests(unittest.TestCase):
             "count": 1, "regressed": 1,
         })
 
+    def test_loss_of_error_free_trial_is_visible_despite_unchanged_wer(self):
+        base, candidate = reports()
+        base["samples"][0]["trial_accuracy"].update({
+            "all_word_errors": [0, 2], "worst_word_errors": 2,
+        })
+        candidate["samples"][0]["trial_accuracy"].update({
+            "all_word_errors": [1, 1], "worst_word_errors": 1,
+        })
+
+        result = compare.compare_reports(base, candidate)
+
+        self.assertEqual(result["baseline"]["trial_wer"],
+                         result["candidate"]["trial_wer"])
+        self.assertLess(candidate["samples"][0]["trial_accuracy"]["worst_word_errors"],
+                        base["samples"][0]["trial_accuracy"]["worst_word_errors"])
+        self.assertEqual(result["baseline"]["error_free_trials"], 1)
+        self.assertEqual(result["candidate"]["error_free_trials"], 0)
+        self.assertEqual(result["regressions"], {"error_free_trials": [1]})
+
+    def test_trial_order_alone_does_not_change_clean_decode_count(self):
+        base, candidate = reports()
+        base["samples"][0]["trial_accuracy"].update({
+            "all_word_errors": [0, 2], "worst_word_errors": 2,
+        })
+        candidate["samples"][0]["trial_accuracy"].update({
+            "all_word_errors": [2, 0], "worst_word_errors": 2,
+        })
+
+        result = compare.compare_reports(base, candidate)
+
+        self.assertEqual(result["baseline"]["error_free_trials"], 1)
+        self.assertEqual(result["candidate"]["error_free_trials"], 1)
+        self.assertEqual(result["regressions"], {})
+
     def test_cli_does_not_print_transcript_path_or_raw_parse_error(self):
         base, candidate = reports()
         with tempfile.TemporaryDirectory() as root:
@@ -230,6 +267,7 @@ class CompareWhisperVadTests(unittest.TestCase):
                     redirect_stdout(output):
                 compare.main()
             self.assertIn("160 -> 2000 ms", output.getvalue())
+            self.assertIn("error_free_trials: 2 -> 2", output.getvalue())
             self.assertNotIn("private speech", output.getvalue())
             self.assertNotIn("private-path", output.getvalue())
             with open(paths[1], "w", encoding="utf-8") as handle:

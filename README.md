@@ -532,6 +532,13 @@ Presspeech is local-first:
   verify model-file contents against SHA-256. A proxy can still observe request
   metadata or block a download; see the
   [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
+- Separately, Windows in-app GitHub update checks and approved installer
+  downloads honor Python `urllib.request` proxy settings, including inherited
+  `https_proxy`/`HTTPS_PROXY` or Windows Internet Settings. A trusted
+  TLS-inspecting proxy can replace release metadata and asset bytes together;
+  the in-app SHA-256 check is not independent attestation verification. No
+  dictation audio or transcript is sent in update requests. See the
+  [updater proxy boundary](https://rcourtman.github.io/presspeech/privacy.html#windows-updater-proxy).
 - Transcript content is never written to logs.
 - On macOS, optional Recent Transcripts are in memory only and clear on quit;
   Windows has no in-app transcript history.

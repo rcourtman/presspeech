@@ -244,17 +244,29 @@ class _UpdateAPIRedirectHandler(urllib.request.HTTPRedirectHandler):
         raise UpdateError("GitHub redirected the update check unexpectedly")
 
 
+def _configured_proxy_opener(redirect_handler):
+    """Use the user's urllib/Windows proxy configuration, not a hidden route.
+
+    An explicit ProxyHandler preserves urllib's existing environment and, on
+    Windows, Internet Settings behavior. The redirect handler still checks
+    the *destination URL* on every hop; a proxy is a separate trust boundary
+    disclosed in the network inventory. Neither path sends dictation content.
+    """
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler(), redirect_handler).open
+
+
 def _open_release_asset(request, opener, timeout):
-    # urlopen validates neither intermediate redirect schemes nor hosts. Use a
-    # dedicated opener in production; injected openers keep unit tests offline.
+    # urlopen validates neither intermediate redirect schemes nor hosts.
+    # Injected openers keep unit tests offline.
     if opener is None:
-        opener = urllib.request.build_opener(_ReleaseRedirectHandler()).open
+        opener = _configured_proxy_opener(_ReleaseRedirectHandler())
     return opener(request, timeout=timeout)
 
 
 def _open_update_api(request, opener, timeout):
     if opener is None:
-        opener = urllib.request.build_opener(_UpdateAPIRedirectHandler()).open
+        opener = _configured_proxy_opener(_UpdateAPIRedirectHandler())
     return opener(request, timeout=timeout)
 
 
