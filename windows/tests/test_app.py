@@ -5061,8 +5061,37 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertFalse(self.paste())
         api.SendInput.assert_called_once()
         self.assert_retained_without_content_logs()
-        self.assertIn("may have partly completed",
+        self.assertIn("may have run fully or partly",
                       str(self.instance.notify.mock_calls))
+
+    def test_clipboard_and_focus_change_during_shortcut_warns_about_both(self):
+        # The post-submit receipt check runs before the post-submit focus
+        # check. An external copy must not hide a simultaneous destination
+        # change from the user-facing recovery instructions.
+        replacement = app.PasteTarget("other.exe", 4321, 99)
+        self.owned.side_effect = [True, True, True, True, False]
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+
+        def accept_then_change_both(count, _inputs, _size):
+            self.foreground.return_value = replacement
+            return count
+
+        api.SendInput.side_effect = accept_then_change_both
+        self.controller.return_value = self.checked_controller(api=api)
+
+        self.assertFalse(self.paste())
+
+        api.SendInput.assert_called_once()
+        self.copy.assert_called_once_with("private transcript")
+        self.assert_retained_without_content_logs()
+        notice = str(self.instance.notify.mock_calls)
+        self.assertIn("any field that may have gained focus", notice)
+        self.assertIn(
+            "check the current clipboard before choosing Copy or Discard", notice)
+        self.assertNotIn("no paste shortcut was sent", notice)
+        self.assertFalse(self.instance._injecting_keys)
 
     def test_focus_change_during_accepted_shortcut_is_reported_uncertain(self):
         # SendInput can accept the chord while the foreground changes; its
@@ -5130,7 +5159,8 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertFalse(self.paste())
         self.assert_retained_without_content_logs()
         self.assertNotIn("remains on the clipboard", str(self.instance.notify.mock_calls))
-        self.assertIn("may have partly completed", str(self.instance.notify.mock_calls))
+        self.assertIn("delivery could not be verified",
+                      str(self.instance.notify.mock_calls))
 
     def test_held_modifier_retains_text_without_shortcut_or_keyup_cleanup(self):
         self.keyboard.shortcut.side_effect = (

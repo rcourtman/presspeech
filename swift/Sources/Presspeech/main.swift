@@ -6458,6 +6458,16 @@ func clipboardOnlyOutcomeAfterOwnedWrite(
     clipboardStillOwned() ? .copiedWithoutPasting : .clipboardChanged
 }
 
+/// Event posting is not a paste acknowledgement. If another process takes
+/// clipboard ownership while the shortcut is posted, the target might have
+/// consumed either value. Report uncertainty instead of silent success, and
+/// never try a second insertion that could duplicate an already-consumed paste.
+func clipboardPasteOutcomeAfterPostedShortcut(
+    clipboardStillOwned: () -> Bool
+) -> TextInsertionOutcome {
+    clipboardStillOwned() ? .inserted : .deliveryUncertain
+}
+
 private enum ClipboardPasteStart: Equatable {
     case targetFocused(sourceChangeCount: Int)
     case copyOnly(sourceChangeCount: Int)
@@ -7208,10 +7218,20 @@ private enum ClipboardPasteInserter {
             return postOutcome == .deliveryUncertain ? .deliveryUncertain : .failed
         }
 
-        // Posting Command+V is not a consumption acknowledgement. Keep the
-        // transcript until the user deliberately restores or copies.
+        // Posting Command+V is not a consumption acknowledgement. A different
+        // owner may also have copied while these events were being delivered;
+        // in that case we cannot know which value the target consumed. Do not
+        // stage a restore offer for a clipboard generation we no longer own.
+        let completionOutcome = clipboardPasteOutcomeAfterPostedShortcut {
+            receipt.stillOwns(pb)
+        }
+        guard completionOutcome == .inserted else {
+            log("clipboard changed while posting paste shortcut; delivery uncertain")
+            return completionOutcome
+        }
+        // Keep the transcript until the user deliberately restores or copies.
         stageManualPreservation(context, on: pb, expectedChangeCount: writeChangeCount)
-        return .inserted
+        return completionOutcome
     }
 
     private static func post(
@@ -19677,6 +19697,53 @@ private enum PresspeechSelfTest {
             try expect(ownershipDuringFocusProbe.remaining, equals: "new external pre-V fixture",
                        "ownership loss must preserve the newer external copy")
         }
+        let ownershipAfterPostingProbe = MainActor.assumeIsolated {
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.post-v-ownership.\(UUID().uuidString)"
+            ))
+            defer { pasteboard.releaseGlobally() }
+            let receipt = ClipboardPasteInserter.writeWithReceipt(
+                "temporary post-V fixture", to: pasteboard
+            )
+            let stillOwned = clipboardPasteOutcomeAfterPostedShortcut {
+                receipt?.stillOwns(pasteboard) == true
+            }
+            var posted: [KeyboardEventStep] = []
+            let eventOutcome = postFocusBoundClipboardPasteSteps(
+                clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                pasteKey: 0x09,
+                targetStillFocused: { true },
+                clipboardStillOwned: { receipt?.stillOwns(pasteboard) == true },
+                postStep: { step in
+                    posted.append(step)
+                    if step.virtualKey == 0x37, !step.keyDown {
+                        // An external copy after the V-down ownership check
+                        // makes consumption ambiguous despite all events posting.
+                        pasteboard.clearContents()
+                        _ = pasteboard.setString("new external post-V fixture", forType: .string)
+                    }
+                    return true
+                }
+            )
+            let afterCopy = clipboardPasteOutcomeAfterPostedShortcut {
+                receipt?.stillOwns(pasteboard) == true
+            }
+            return (stillOwned: stillOwned, eventOutcome: eventOutcome,
+                    afterCopy: afterCopy, posted: posted,
+                    remaining: pasteboard.string(forType: .string))
+        }
+        try expect(ownershipAfterPostingProbe.stillOwned, equals: .inserted,
+                   "an unchanged receipt may complete the posted-shortcut path")
+        try expect(ownershipAfterPostingProbe.eventOutcome, equals: .posted,
+                   "the fixture must post the entire paste chord before the external copy")
+        try expect(ownershipAfterPostingProbe.posted.count, equals: 4,
+                   "the post-V copy fixture must not interrupt any paste event")
+        try expect(ownershipAfterPostingProbe.afterCopy, equals: .deliveryUncertain,
+                   "a copy after V-down must not be reported as successful insertion")
+        try expect(ownershipAfterPostingProbe.afterCopy.allowsFallback, equals: false,
+                   "ambiguous posted paste must not retry with Unicode typing")
+        try expect(ownershipAfterPostingProbe.remaining, equals: "new external post-V fixture",
+                   "post-V ownership loss must leave the newer clipboard item intact")
         let failedOwnershipCleanupProbe = MainActor.assumeIsolated {
             let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
                                                          pasteKey: 0x09)

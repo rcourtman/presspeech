@@ -1576,6 +1576,9 @@ clipboard.
   shortcut and retain text without replacing the newer copy automatically.
   Replace it during submission or within the brief post-shortcut check and
   confirm an uncertain-delivery notice, with no automatic second write.
+  In a controlled candidate build, combine that late replacement with a
+  focus change: the notice must tell the user to check the intended field,
+  any field that gained focus, and the current clipboard before Copy or Discard.
   A later copy can still race the target's asynchronous paste consumption.
 - With controlled fault injection, let `SendInput` accept the complete shortcut,
   then change or invalidate the focused-window observation before the final

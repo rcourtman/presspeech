@@ -2879,7 +2879,9 @@ class PresspeechApp:
             "delivery-check-unavailable": (
                 "The final delivery check could not be completed; no paste "
                 "shortcut was sent. "),
-            "shortcut-uncertain": "The paste shortcut may have partly completed. ",
+            "shortcut-uncertain": (
+                "The paste shortcut may have run fully or partly; delivery "
+                "could not be verified. "),
             "shortcut-focus-uncertain": (
                 "The original focused field could not be verified after the "
                 "paste shortcut was sent. Text may have reached the original "
@@ -2887,8 +2889,9 @@ class PresspeechApp:
         }[reason]
         review_instruction = (
             "Check the intended field and any field that may have gained "
-            "focus before trying again. "
-            if reason == "shortcut-focus-uncertain" else
+            "focus, then check the current clipboard before choosing Copy or "
+            "Discard. "
+            if reason in ("shortcut-uncertain", "shortcut-focus-uncertain") else
             "Check the intended field before trying again. ")
         self.notify("Dictation needs review", prefix +
                     review_instruction + "A recovery copy "

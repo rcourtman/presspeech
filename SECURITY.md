@@ -209,8 +209,9 @@ Hub snapshot and HTTPS storage path. Upcoming Windows 0.1.13 verifies every
 allowed required and present optional inference file against a SHA-256 manifest tied to the pinned
 repository revisions before backend loading. A mismatch fails closed, including
 when the response has the expected size; no alternate or unpinned model is
-loaded. Successful verification is reused only while the recorded local file
-identity and metadata remain unchanged. Proxy and CA overrides remain active:
+loaded. On Windows, Presspeech rehashes the reviewed files on every load rather
+than trusting a metadata-only verification record. This may lengthen model
+preparation. Proxy and CA overrides remain active:
 they can observe request metadata or deny service, while altered model bytes are
 rejected by the manifest check.
 

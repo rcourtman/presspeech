@@ -751,6 +751,7 @@ WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE = {
         "Published Windows 0.1.12 does not independently verify",
         "SHA-256",
         "verifies every allowed",
+        "rehash",
     )
     for path in (
         ROOT / "SECURITY.md",
@@ -763,6 +764,11 @@ WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE = {
         DOCS / "llms-full.txt",
     )
 }
+
+WINDOWS_MODEL_DOWNLOAD_INTEGRITY_STALE_CLAIMS = (
+    "reuses a local verification record",
+    "successful verification is reused",
+)
 
 # Published 0.1.12 and the unreleased 0.1.13 candidate have different
 # authentication behavior. Keep each claim attached to the affected version.
@@ -2095,7 +2101,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "HUGGINGFACE_CO_STAGING settings can change its destination, and HF_HUB_USER_AGENT_ORIGIN "
         "is included in request metadata if set; the token may accompany a request to that configured "
         "endpoint. These public models do not need an account token. Upcoming Windows 0.1.13 fixes "
-        "these inherited settings but is not yet published. Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file before model loading: it checks each against its pinned SHA-256 manifest and reuses a local verification record only while file identity and metadata remain unchanged. Files without a matching record are rehashed, and mismatches fail closed; a proxy can still observe request metadata or block a download. Dictation audio "
+        "these inherited settings but is not yet published. Both published Windows 0.1.12 and upcoming Windows 0.1.13 use HTTPX 0.28.1 with the Hub client's default trust_env=True; it honors HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY, SSL_CERT_FILE, and SSL_CERT_DIR, and 0.1.13 does not clear those proxy/CA settings. A TLS-inspecting HTTPS proxy whose CA is trusted by the client can read a model request and any 0.1.12 token it carries; a proxy that only tunnels HTTPS sees connection metadata, not request contents. Published Windows 0.1.12 does not independently verify model-file contents against SHA-256. Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file before model loading: it checks each against its pinned SHA-256 manifest. On Windows, Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only verification record; mismatches fail closed. This may lengthen model preparation. A proxy can still observe request metadata or block a download. Dictation audio "
         "and transcripts are not sent in model downloads; exact telemetry fields are not independently "
         "itemised (see the privacy inventory)."
     )
@@ -2214,12 +2220,21 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
     )
     integrity_detail = (
         "Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file "
+        "before model loading by checking each against its pinned SHA-256 manifest. On Windows, "
+        "Presspeech rehashes the reviewed files on every load rather than trusting a metadata-only "
+        "verification record; mismatches fail closed. This may lengthen model preparation. A proxy "
+        "can still observe request metadata or block a download."
+    )
+    stale_integrity_detail = (
+        "Upcoming Windows 0.1.13 verifies every allowed required and present optional inference file "
         "before model loading by checking each against its pinned SHA-256 manifest; it reuses a local "
         "verification record only while file identity and metadata remain unchanged. Files without a "
         "matching record are rehashed, and mismatches fail closed, although a proxy can still observe "
         "request metadata or block a download."
     )
-    if legacy_integrity_summary in privacy_paragraph:
+    if stale_integrity_detail in privacy_paragraph:
+        text = text.replace(stale_integrity_detail, integrity_detail, 1)
+    elif legacy_integrity_summary in privacy_paragraph:
         text = text.replace(legacy_integrity_summary, integrity_detail, 1)
     elif "does not independently verify model-file contents against SHA-256" not in privacy_paragraph:
         integrity_summary = (
@@ -2883,6 +2898,22 @@ def check_windows_model_download_privacy_guidance(
                 "guidance — missing "
                 + ", ".join(repr(phrase) for phrase in missing)
             )
+    return errors
+
+
+def check_windows_model_integrity_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE,
+) -> list[str]:
+    """Keep the candidate's rehash-on-every-Windows-load promise consistent."""
+    errors = check_windows_model_download_privacy_guidance(surfaces)
+    for path in surfaces:
+        if not path.exists():
+            continue
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        contents = " ".join(read_text(path).split()).casefold()
+        for stale_claim in WINDOWS_MODEL_DOWNLOAD_INTEGRITY_STALE_CLAIMS:
+            if stale_claim in contents:
+                errors.append(f"{display}: stale Windows model-integrity claim: {stale_claim}")
     return errors
 
 
@@ -5070,6 +5101,8 @@ def run_self_test() -> None:
             or "https_proxy" not in synced_llms
             or "TLS-inspecting" not in synced_llms
             or "macos-0-3-8-after-use" not in synced_llms
+            or "rehashes the reviewed files on every load" not in synced_llms
+            or "reuses a local verification record" in synced_llms
             or synced_llms.find("Before installing or launching macOS 0.3.8")
             > synced_llms.find("- macOS download and matching SHA-256:")
             or synced_llms.find("Before installing or launching macOS 0.3.8")
@@ -5884,6 +5917,28 @@ def run_self_test() -> None:
         )
         if not check_windows_model_download_privacy_summary(required_summary_guidance):
             raise SyncError("self-test: telemetry-only privacy concern was not covered")
+
+        integrity_copy = Path(tmp) / "windows-integrity.txt"
+        required_integrity_copy = {
+            integrity_copy: WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE[DOCS / "llms.txt"]
+        }
+        good_integrity_copy = (
+            "Published Windows 0.1.12 does not independently verify model files against SHA-256. "
+            "Upcoming Windows 0.1.13 verifies every allowed inference file. "
+            "On Windows, Presspeech rehashes the reviewed files on every load."
+        )
+        integrity_copy.write_text(good_integrity_copy, encoding="utf-8")
+        if check_windows_model_integrity_guidance(required_integrity_copy):
+            raise SyncError("self-test: correct Windows rehash guidance was rejected")
+        integrity_copy.write_text(good_integrity_copy.replace("rehashes", "checks"), encoding="utf-8")
+        if not check_windows_model_integrity_guidance(required_integrity_copy):
+            raise SyncError("self-test: missing Windows rehash guidance was accepted")
+        integrity_copy.write_text(
+            good_integrity_copy + " It reuses a local verification record.", encoding="utf-8"
+        )
+        if not any("stale Windows model-integrity claim" in error
+                   for error in check_windows_model_integrity_guidance(required_integrity_copy)):
+            raise SyncError("self-test: contradictory Windows integrity claim was accepted")
 
         readme_install = Path(tmp) / "README.md"
         readme_install.write_text(
@@ -6808,7 +6863,7 @@ def main() -> int:
             errors.extend(check_user_triggered_support_guide())
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
             errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
-            errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE))
+            errors.extend(check_windows_model_integrity_guidance())
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
             errors.extend(check_windows_model_download_privacy_summary())
@@ -6878,7 +6933,7 @@ def main() -> int:
         errors.extend(check_user_triggered_support_guide())
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_AGENT_DISCLOSURE))
         errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE))
-        errors.extend(check_windows_model_download_privacy_guidance(WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE))
+        errors.extend(check_windows_model_integrity_guidance())
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
         errors.extend(check_windows_model_download_privacy_summary())

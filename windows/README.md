@@ -244,7 +244,8 @@ cannot be used, a paste key is held, or keyboard delivery becomes uncertain.
 If the hotkey hook detects a held Ctrl, Shift, Alt, Windows, or V key before
 writing, the previous clipboard item remains unchanged. Release the key and
 use Delivery Recovery to copy or discard the waiting text. Check the intended field
-first: an input error can happen after part or all of the paste has completed.
+and any field that may have gained focus, then check the current clipboard before
+Copy: an input error can happen after part or all of the paste has completed.
 If Presspeech already knows that the original window is missing, no longer
 focused, or elevated, or cannot verify either app's input integrity level,
 it also leaves the previous clipboard item unchanged and waits for an explicit
