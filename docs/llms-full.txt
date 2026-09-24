@@ -33,6 +33,8 @@ Windows:
 
 Before installing or launching macOS 0.3.8, its model-download requests may include a Hugging Face token inherited by Presspeech. The public model needs no account token. If one may be present in the environment that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published. The pinned FluidAudio client also honors inherited lowercase `https_proxy`; an untrusted TLS-inspecting proxy could read a 0.3.8 token, while a tunnelling proxy cannot. If the proxy's trust is unclear, do not launch 0.3.8 while it is in use. Upcoming 0.3.9 removes account-token authentication but still honors proxy settings. Review the [current privacy decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy) first.
 
+Downloading or installing without opening Presspeech does not start the missing-model request. If waiting, leave 0.3.8 unopened and check [GitHub Releases](https://github.com/rcourtman/presspeech/releases) in a browser rather than opening it to look for updates. The planned 0.3.9 behavior is not in the published download.
+
 ```sh
 brew install --cask rcourtman/presspeech/presspeech
 ```
@@ -61,6 +63,8 @@ token, and custom routing can change where a token goes. If these risks are
 unclear, leave the app unopened and wait until Windows 0.1.13 is published.
 The installer is unsigned: verify the matching SHA-256 before running it, and
 do not bypass Smart App Control or managed policy.
+
+Downloading or installing without opening Presspeech does not start the missing-model request. The installer's final Launch Presspeech option starts checked; if waiting, clear it before choosing Finish and leave 0.1.12 unopened. The planned 0.1.13 behavior is not in the published download.
 
 The current Windows installer, requirements, checksum verification, and first-run steps are maintained at:
 https://rcourtman.github.io/presspeech/windows.html

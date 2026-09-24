@@ -53,9 +53,15 @@ class KeyboardDeliveryError(OSError):
 class ModifierHeldError(KeyboardDeliveryError):
     """A held paste key would change the intended shortcut."""
 
+    def __init__(self, message):
+        super().__init__(message, cleanup_required=False, accepted_count=0)
+
 
 class ModifierStateError(KeyboardDeliveryError):
     """The physical modifier snapshot could not be read."""
+
+    def __init__(self, message):
+        super().__init__(message, cleanup_required=False, accepted_count=0)
 
 
 class PreSubmitCheckError(KeyboardDeliveryError):
@@ -69,7 +75,8 @@ class PreSubmitCheckError(KeyboardDeliveryError):
     def __init__(self, reason="delivery-check-unavailable"):
         self.reason = (reason if isinstance(reason, str) and reason in self._REASONS
                        else "delivery-check-unavailable")
-        super().__init__("delivery changed before the paste shortcut")
+        super().__init__("delivery changed before the paste shortcut",
+                         cleanup_required=False, accepted_count=0)
 
 
 # Win32 LONG and DWORD remain 32-bit when Python itself is 64-bit. Fixed-width
@@ -197,8 +204,8 @@ class Controller:
             ))
             # SendInput does not reset physical keyboard state. A held paste
             # key can change the chord or be released by our synthetic key-up.
-            # Snapshot as close as possible to the single SendInput call;
-            # this is a guard, not an atomic guarantee against a later press.
+            # Reject an already-held key before a potentially blocking caller
+            # guard, then check again if that guard took time.
             if check_modifiers and self._modifiers_down():
                 raise ModifierHeldError(
                     "a paste key is held; paste was not attempted")
@@ -217,6 +224,12 @@ class Controller:
                     # failure codes for a more accurate recovery notice.
                     reason = "clipboard-changed" if result is False else result
                     raise PreSubmitCheckError(reason) from None
+            # A focus/clipboard guard can wait on another process. A physical
+            # key pressed while it ran must not modify the shortcut we submit.
+            # This remains a point-in-time check, not an atomic key-state lock.
+            if check_modifiers and before_submit is not None and self._modifiers_down():
+                raise ModifierHeldError(
+                    "a paste key is held; paste was not attempted")
         except (ModifierHeldError, ModifierStateError, PreSubmitCheckError):
             raise
         except Exception:

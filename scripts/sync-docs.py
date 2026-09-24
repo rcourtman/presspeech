@@ -2029,7 +2029,8 @@ LLMS_SHORT_ANSWER = (
     "is published yet. A TLS-inspecting HTTPS proxy trusted by the client can read "
     "any token sent through it; do not launch through one whose trust is unclear. "
     "Downloading the app alone does not start a model request, but opening it with a "
-    "missing model does. If installing Windows 0.1.12 while waiting, leave the final "
+    "missing model does. Installing without opening it does not start the request "
+    "either. If installing Windows 0.1.12 while waiting, leave the final "
     "Launch Presspeech option unchecked. It starts checked by default; clear it "
     "before choosing Finish. Review the macOS "
     "https://rcourtman.github.io/presspeech/install.html#model-download-privacy "
@@ -3428,7 +3429,7 @@ def check_readme_windows_install_decision_order(
 
 
 def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]:
-    """Keep the FAQ's release warnings ahead of safe guide routes."""
+    """Keep release warnings and a wait-without-launch path ahead of install routes."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     if not path.exists():
         return [f"{display}: missing FAQ install privacy warning"]
@@ -3466,6 +3467,24 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
                 f"{display}: {platform} model-download privacy warning must "
                 "precede its install action"
             )
+    stop_position = answer.find('id="faq-safe-stopping-point"')
+    stop_end = answer.find("</p>", stop_position) if stop_position >= 0 else -1
+    stop_copy = answer[stop_position:stop_end] if stop_end >= 0 else ""
+    stop_requirements = (
+        "Downloading or installing", "without opening Presspeech",
+        "does not start a model request", "leave the app unopened",
+        "Launch Presspeech", "starts checked", "clear it before choosing",
+        'href="getting-started.html#model-download-preflight"', "browser",
+    )
+    if stop_position < 0 or any(phrase not in stop_copy for phrase in stop_requirements):
+        errors.append(f"{display}: FAQ lacks a usable wait-without-launch stopping point")
+    elif not (
+        answer.find('id="faq-macos-install-privacy"') < stop_position
+        and answer.find('id="faq-windows-install-privacy"') < stop_position
+        and stop_position < answer.find('href="install.html"')
+        and stop_position < answer.find('href="windows.html#download-verify-run"')
+    ):
+        errors.append(f"{display}: FAQ stopping point must precede install routes")
     if (
         "releases/latest/download/Presspeech.zip" in answer
         or "brew install --cask" in answer
@@ -5371,6 +5390,7 @@ def run_self_test() -> None:
                 "Delivery Recovery Copy or Discard",
                 "may leave the previous clipboard item unchanged",
                 "Downloading the app alone does not start a model request",
+                "Installing without opening it does not start the request either",
                 "leave the final Launch Presspeech option unchecked",
                 "install.html#model-download-privacy",
                 "windows.html#model-download-privacy",
@@ -6360,10 +6380,19 @@ def run_self_test() -> None:
             raise SyncError("self-test: early macOS download action was accepted")
 
         faq_install = Path(tmp) / "faq.html"
+        faq_stop = (
+            '<p id="faq-safe-stopping-point">Downloading or installing either build '
+            'without opening Presspeech does not start a model request; '
+            'leave the app unopened. The final Launch Presspeech option starts checked; '
+            'clear it before choosing Finish. Follow '
+            '<a href="getting-started.html#model-download-preflight">existing-install steps</a>. '
+            'Check releases in a browser.</p>'
+        )
         faq_install.write_text(
             '<article><h3>How do I install it?</h3>'
             '<p id="faq-macos-install-privacy">macOS warning</p>'
             '<p id="faq-windows-install-privacy">Windows warning</p>'
+            + faq_stop +
             '<a href="install.html#model-download-privacy">Privacy decision</a>'
             '<a href="install.html">macOS guide</a>'
             '<a href="windows.html#download-verify-run">Windows guide</a>'
@@ -6379,16 +6408,18 @@ def run_self_test() -> None:
             '<a href="windows.html#download-verify-run">Windows guide</a>'
             '<p id="faq-macos-install-privacy">macOS warning</p>'
             '<p id="faq-windows-install-privacy">Windows warning</p>'
+            + faq_stop +
             '</article>',
             encoding="utf-8",
         )
         faq_order_errors = check_faq_install_privacy_order(faq_install)
-        if len(faq_order_errors) != 2:
+        if len(faq_order_errors) != 3:
             raise SyncError("self-test: install action before FAQ privacy warning was accepted")
         faq_install.write_text(
             '<article><h3>How do I install it?</h3>'
             '<p id="faq-macos-install-privacy">macOS warning</p>'
             '<p id="faq-windows-install-privacy">Windows warning</p>'
+            + faq_stop +
             '<a href="install.html#model-download-privacy">Privacy decision</a>'
             '<a href="install.html">macOS guide</a>'
             '<a href="windows.html#download-verify-run">Windows guide</a>'
@@ -6399,6 +6430,18 @@ def run_self_test() -> None:
         )
         if not check_faq_install_privacy_order(faq_install):
             raise SyncError("self-test: FAQ direct download shortcut was accepted")
+        faq_install.write_text(
+            '<article><h3>How do I install it?</h3>'
+            '<p id="faq-macos-install-privacy">macOS warning</p>'
+            '<p id="faq-windows-install-privacy">Windows warning</p>'
+            '<a href="install.html#model-download-privacy">Privacy decision</a>'
+            '<a href="install.html">macOS guide</a>'
+            '<a href="windows.html#download-verify-run">Windows guide</a>'
+            '</article>',
+            encoding="utf-8",
+        )
+        if not any("wait-without-launch" in error for error in check_faq_install_privacy_order(faq_install)):
+            raise SyncError("self-test: FAQ missing safe stopping point was accepted")
 
         getting_started = Path(tmp) / "getting-started.html"
         safe_getting_started = (

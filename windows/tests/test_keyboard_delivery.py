@@ -159,7 +159,53 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
             before_submit=final_guard)
 
         self.assertEqual(observed, [len(delivery._MODIFIER_KEYS)])
+        self.assertEqual(api.GetAsyncKeyState.call_count,
+                         2 * len(delivery._MODIFIER_KEYS))
         api.SendInput.assert_called_once()
+
+    def test_key_pressed_during_pre_submit_guard_blocks_shortcut(self):
+        api = self.backend()
+        state = {"held": False}
+        api.GetAsyncKeyState.side_effect = (
+            lambda key: -32768 if state["held"] and key == delivery.VK_LSHIFT else 0)
+
+        def final_guard():
+            state["held"] = True
+            return True
+
+        with self.assertRaises(delivery.ModifierHeldError) as raised:
+            delivery.Controller(api=api).shortcut(
+                [delivery.VK_LCONTROL], delivery.VK_V,
+                before_submit=final_guard)
+
+        self.assertFalse(raised.exception.cleanup_required)
+        self.assertEqual(raised.exception.accepted_count, 0)
+        api.SendInput.assert_not_called()
+
+    def test_key_query_failure_after_pre_submit_guard_blocks_shortcut(self):
+        api = self.backend()
+        state = {"fail": False}
+
+        def key_state(_key):
+            if state["fail"]:
+                raise OSError("private keyboard detail")
+            return 0
+
+        api.GetAsyncKeyState.side_effect = key_state
+
+        def final_guard():
+            state["fail"] = True
+            return True
+
+        with self.assertRaises(delivery.ModifierStateError) as raised:
+            delivery.Controller(api=api).shortcut(
+                [delivery.VK_LCONTROL], delivery.VK_V,
+                before_submit=final_guard)
+
+        self.assertFalse(raised.exception.cleanup_required)
+        self.assertEqual(raised.exception.accepted_count, 0)
+        self.assertNotIn("private", str(raised.exception))
+        api.SendInput.assert_not_called()
 
     def test_failed_or_unavailable_pre_submit_guard_injects_nothing(self):
         def unavailable():

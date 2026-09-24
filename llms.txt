@@ -33,14 +33,17 @@ Before installing or launching macOS 0.3.8, read the
 [macOS model-download privacy decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy).
 A missing model downloads on launch and may include an inherited Hugging Face
 token. If one may be present, or you are unsure, leave the app unopened and
-wait until 0.3.9 is published. Do not inspect or display token values.
+wait until 0.3.9 is published. Downloading or installing without opening the
+app does not start that request. Do not inspect or display token values.
 
 If you are installing the unsigned Windows 0.1.12 prerelease, read the
 [Windows privacy decision and verification steps](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
 before downloading or launching it. Its first model download may send usage
 telemetry or an available Hugging Face token. If those risks are unclear, wait
 until 0.1.13 is published. Verify the installer SHA-256 before deciding to run
-it; do not bypass Smart App Control or managed policy.
+it; do not bypass Smart App Control or managed policy. Installing without
+opening the app does not start a model request, but the final Launch Presspeech
+option starts checked. If waiting, clear it before choosing Finish.
 
 After that decision, the macOS Homebrew command is:
 

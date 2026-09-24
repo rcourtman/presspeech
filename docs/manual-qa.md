@@ -209,6 +209,7 @@ For each configuration, also record this release-gate matrix:
 | A physical hold across the OS key-repeat interval remains one capture until release | |
 | Five consecutive dictations into a current Chromium browser text field | |
 | Same-window Chromium tab switch with different titles uses Delivery Recovery before paste | |
+| Same-title Chromium tab switch and same-tab field switch: no insertion into the new destination | |
 | Five consecutive dictations into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
 | Held-modifier shortcut guard and manual recovery | |
@@ -259,9 +260,17 @@ timing can be controlled, and verify no paste shortcut reaches the second tab;
 the dictated text may already be on the current clipboard in that case. Also
 test steady focus in the original tab: a caption change unrelated to a tab
 switch may conservatively require recovery, but must not silently discard the
-dictation. Same-title tabs and two fields within one tab remain an unresolved
-identity limit, not a pass from the different-title test. Record only the
-browser version and aggregate outcomes, not titles or dictated words.
+dictation. Separately, use two tabs with the same harmless title and two blank,
+non-submitting fields in one tab. Begin each dictation in the first destination,
+switch to the second while recording, and leave it focused through delivery.
+For each switch, require no automatic insertion into the newly focused field
+and complete, deliberate recovery of the transcript. A recovery copy does not
+make an unintended insertion safe. If the current build cannot distinguish
+either switch, mark the new release-gate row **Fail**; if a configuration cannot
+be exercised, mark it **Not run**, not Pass. A different-title recovery or a
+steady-focus browser pass does not qualify these same-window switches. Record
+only the browser version, generic field types, and aggregate outcomes, not tab
+titles, dictated words, or clipboard contents.
 
 For the remote-delivery row, use disposable local and remote machines and a
 blank, non-submitting plain-text editor on the remote host—not a shell,
