@@ -101,6 +101,18 @@ word errors unchanged; pooled WER alone would miss that boundary regression.
 Compare version 18 reports for these fields. This is benchmark-only and does
 not change capture or recognition.
 
+Version 19 adds `tail_silence_probe_groups` and
+`recorded_tail_probe_groups` to the JSON report. Each repeats the paired
+probe's counts, decode-order breakdown, and signed latency distribution for
+human-labelled task groups, language groups, and language/task intersections.
+Only reviewed speech actually probed enters these groups; unlabelled probed
+clips remain in the pooled probe summary, and unprobed silence controls do not
+enter a probe group even if they have labels. The console prints compact harm
+and order counts for each labelled group. Compare `sample_count`, pair counts,
+and order balance before interpreting a small group; grouping does not make
+clips independent or establish a statistically significant effect. Version 19
+does not change product recognition, capture, or benchmark inference inputs.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -207,7 +219,8 @@ and the aggregate report separately count nonempty-to-empty and
 worsened-word-error trials for each first variant.
 `paired_inference_delta_seconds.by_order` retains separate
 first-variant timing distributions; an empty stratum has `null` medians. The
-console reports pooled and order-stratified counts and paired latency medians.
+console reports pooled and order-stratified counts, paired latency medians,
+and harm counts by labelled task/language group and intersection.
 Review `nonempty_to_empty_trial_count`, `final_word_lost_trial_count`, and
 worsened word errors by order,
 and first/final-word failures by task group, not just pooled WER. A tailed
@@ -268,7 +281,9 @@ trimmed-minus-full inference deltas, and counterbalanced execution order for
 every pair. It also marks whether either variant retained the reviewed final
 word and counts newly lost and recovered final words separately. The corpus
 summary keeps both harm directions, final-word transitions, and latency deltas
-stratified by decode order; compare these strata as well as pooled medians.
+stratified by decode order; `recorded_tail_probe_groups` also repeats the
+summary for labelled task/language groups and their intersections. Compare
+these strata as well as pooled medians.
 These final-word flags compare the last normalized transcript token with the
 reference's last token; they are diagnostic text matches, not acoustic proof
 that the final spoken sound survived a crop (especially for repeated words).

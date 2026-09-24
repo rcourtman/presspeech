@@ -410,6 +410,47 @@ def summarise_recorded_tail_probe(samples):
 
 
 
+def probe_group_metrics(samples, probe_field, summarise):
+    """Stratify paired speech probes without counting unprobed controls.
+
+    Keep each group's pair count and decode-order breakdown: a pooled result
+    can hide harm to a smaller language/task group, and an uneven order can
+    make a small stratum misleading. Unlabelled clips remain in the corpus.
+    """
+    tasks = collections.defaultdict(list)
+    languages = collections.defaultdict(list)
+    intersections = collections.defaultdict(lambda: collections.defaultdict(list))
+    for sample in samples:
+        if sample.get(probe_field) is None:
+            continue
+        task = sample.get("task_group")
+        language = sample.get("language_group")
+        task = task.strip() if isinstance(task, str) else None
+        language = language.strip() if isinstance(language, str) else None
+        if task:
+            tasks[task].append(sample)
+        if language:
+            languages[language].append(sample)
+        if task and language:
+            intersections[language][task].append(sample)
+    return {
+        "task_groups": {
+            name: summarise(members) for name, members in sorted(tasks.items())
+        },
+        "language_groups": {
+            name: summarise(members)
+            for name, members in sorted(languages.items())
+        },
+        "language_task_groups": {
+            language: {
+                task: summarise(members)
+                for task, members in sorted(task_groups.items())
+            }
+            for language, task_groups in sorted(intersections.items())
+        },
+    }
+
+
 def _paired_delta_summary(deltas, trial_order,
                           orders=("baseline-first", "tailed-first")):
     """Summarise signed variant-minus-baseline time by execution order."""
@@ -1327,7 +1368,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 18,
+        "benchmark_version": 19,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "recorded_tail_probe_inputs_sha256": (
@@ -1351,8 +1392,16 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         "tail_silence_probe": (
             summarise_tail_silence_probe(sample_results)
             if parakeet_tail_silence_ms is not None else None),
+        "tail_silence_probe_groups": (
+            probe_group_metrics(sample_results, "tail_silence_probe",
+                                summarise_tail_silence_probe)
+            if parakeet_tail_silence_ms is not None else None),
         "recorded_tail_probe": (
             summarise_recorded_tail_probe(sample_results)
+            if parakeet_recorded_tail_probe else None),
+        "recorded_tail_probe_groups": (
+            probe_group_metrics(sample_results, "recorded_tail_probe",
+                                summarise_recorded_tail_probe)
             if parakeet_recorded_tail_probe else None),
         "precision": precision,
         "model_dtype": model_dtype,
@@ -1543,6 +1592,45 @@ def _print_summary(result):
                         order, latency["median"], latency["trial_count"]))
         else:
             print("  Paired inference trimmed-minus-full: no reviewed speech pairs")
+    for probe_name, groups in (
+            ("Synthetic tail", result.get("tail_silence_probe_groups")),
+            ("Recorded tail", result.get("recorded_tail_probe_groups"))):
+        if groups is None:
+            continue
+        labelled = [
+            ("task", name, metrics)
+            for name, metrics in groups["task_groups"].items()
+        ] + [
+            ("language", name, metrics)
+            for name, metrics in groups["language_groups"].items()
+        ] + [
+            ("language/task", "%s / %s" % (language, task), metrics)
+            for language, tasks in groups["language_task_groups"].items()
+            for task, metrics in tasks.items()
+        ]
+        for dimension, label, metrics in labelled:
+            if probe_name == "Synthetic tail":
+                harm = "blanked %d, final lost %d, WER-worsened %d" % (
+                    metrics["nonempty_to_empty_trial_count"],
+                    metrics["final_word_lost_trial_count"],
+                    metrics["worsened_word_error_trial_count"])
+                order = "baseline-first %d, tailed-first %d" % (
+                    metrics["baseline_first_trial_count"],
+                    metrics["tailed_first_trial_count"])
+            else:
+                harm = ("full blanked %d, trim blanked %d, final lost %d, "
+                        "full WER-worsened %d, trim WER-worsened %d" % (
+                            metrics["trimmed_nonempty_to_full_empty_trial_count"],
+                            metrics["full_nonempty_to_trimmed_empty_trial_count"],
+                            metrics["final_word_lost_trial_count"],
+                            metrics["full_worsened_word_error_trial_count"],
+                            metrics["trimmed_worsened_word_error_trial_count"]))
+                order = "full-first %d, trimmed-first %d" % (
+                    metrics["full_first_trial_count"],
+                    metrics["trimmed_first_trial_count"])
+            print("%s %s %s: %d clips / %d pairs; %s; %s" % (
+                probe_name, dimension, label, metrics["sample_count"],
+                metrics["trial_count"], harm, order))
     if result["aggregate_wer"] is not None:
         print("Reviewed corpus WER: %.2f%% consensus | %.2f%% all trials | "
               "%.2f/%.2f%% best/worst trial envelope" % (

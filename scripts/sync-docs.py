@@ -515,6 +515,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     DOCS / "install.html": (
         'id="model-download-privacy"',
         "Before installing or launching macOS 0.3.8",
+        "installing Presspeech without opening it does not make a model request",
+        "its Setup cannot defer it",
         "Hugging Face token inherited by Presspeech",
         "public model needs no account token",
         "wait until macOS 0.3.9 is published",
@@ -691,6 +693,9 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     ),
     DOCS / "windows.html": (
         "Privacy decision for published Windows 0.1.12",
+        "leave 0.1.12 unopened and wait for Windows 0.1.13 before use",
+        "installing without opening Presspeech does not make a model request",
+        "has no <strong>Set Up Later</strong> option to defer it",
         "may send default usage telemetry",
         "avoid this possible usage telemetry",
         "wait for Windows 0.1.13",
@@ -3248,7 +3253,9 @@ def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str
         '<h2 id="launch-decision-title">Before opening a current build</h2>',
         '<strong>Unsure? Leave it unopened.</strong>',
         "Downloading the ZIP or installer does not start a speech-model request",
+        "installing without opening Presspeech does not either",
         "first launch with a missing model does",
+        "neither published build lets Setup defer that request",
         "On Windows, clear the installer’s final <strong>Launch Presspeech</strong> option if you choose to wait",
         "macOS 0.3.8 — inherited token",
         "wait until macOS 0.3.9 is published",
@@ -3288,7 +3295,11 @@ def check_getting_started_preflight_order(
         "Downloading is not launching",
         "macOS 0.3.8 and Windows 0.1.12 start a missing-model request when Presspeech opens, not when you download the ZIP or installer",
         "You can download a build and leave it unopened",
+        "installing without opening it also does not start the request",
+        "Neither published build lets Setup defer a missing-model request after launch",
         "Unsure about a token, telemetry, or proxy? Keep it closed",
+        '<p><strong>Safe stopping point:</strong>',
+        "If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option",
         "Wait for published 0.3.9",
         "a Hugging Face token may be inherited by Presspeech",
         "Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear",
@@ -4469,6 +4480,12 @@ def run_self_test() -> None:
         )
         if not check_homepage_launch_decision(homepage):
             raise SyncError("self-test: missing homepage stop action was accepted")
+        homepage.write_text(
+            safe_homepage.replace("installing without opening Presspeech does not either", "", 1),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: missing homepage install/launch boundary was accepted")
         homepage.write_text(
             safe_homepage.replace(
                 '<div class="note warn launch-decision"',
@@ -5720,8 +5737,11 @@ def run_self_test() -> None:
             '<h2 id="launch-decision-heading">Decide before opening a current build</h2>'
             '<p><strong>Downloading is not launching:</strong> macOS 0.3.8 and Windows 0.1.12 '
             'start a missing-model request when Presspeech opens, not when you download the ZIP or installer. '
-            'You can download a build and leave it unopened. '
-            '<strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong> '
+            'Neither published build lets Setup defer a missing-model request after launch. '
+            '<strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong></p>'
+            '<p><strong>Safe stopping point:</strong> You can download a build and leave it unopened; '
+            'installing without opening it also does not start the request. '
+            'If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option. '
             '<a href="#macos-launch-decision">macOS decision</a> '
             '<a href="#windows-launch-decision">Windows decision</a></p>'
             '<ul><li id="macos-launch-decision"><h3>macOS 0.3.8 — wait if a token may be inherited</h3> '
@@ -5752,6 +5772,12 @@ def run_self_test() -> None:
         getting_started.write_text(safe_getting_started, encoding="utf-8")
         if check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: safe getting-started preflight was rejected")
+        getting_started.write_text(
+            safe_getting_started.replace("Neither published build lets Setup defer a missing-model request after launch.", ""),
+            encoding="utf-8",
+        )
+        if not check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: missing prelaunch deferral boundary was accepted")
         getting_started.write_text(
             safe_getting_started.replace("Do not inspect or share token values.", ""),
             encoding="utf-8",

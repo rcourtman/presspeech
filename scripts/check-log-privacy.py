@@ -18,6 +18,9 @@ labels are private too: a sanitized filename can still identify its user.
 
 Windows notifications can persist in Notification Center and are checked with
 the same Python rules as logs. The reviewed updater error wrapper is allowed.
+The Python check follows simple local aliases into sinks, including aliases
+assigned on conditional, loop, and exception paths. It does not prove that
+arbitrary helper calls or containers are free of private data.
 
 The whole argument expression of each Swift `log(...)` call is scanned —
 string-literal prose is stripped first so only code (interpolations,
@@ -149,6 +152,7 @@ PYTHON_PRIVATE_IDENTIFIERS = {
     "transcript",
     "trimmed",
     "uid",
+    "_undelivered_dictations",
 }
 
 # Reading these properties exposes only bounded metadata, not the private value.
@@ -314,12 +318,21 @@ def contains_raw_exception_details(
 
 
 def python_private_identifiers(
-    node: ast.AST, exception_names: frozenset[str] = frozenset()
+    node: ast.AST, exception_names: frozenset[str] = frozenset(),
+    private_aliases: frozenset[str] = frozenset(),
 ) -> list[str]:
     identifiers: set[str] = set()
     exception_identifiers = PYTHON_EXCEPTION_IDENTIFIERS | exception_names
 
     def visit(current: ast.AST) -> None:
+        # A private predicate chooses between values but does not put the
+        # predicate itself into the rendered message. Inspect both possible
+        # outputs instead of tainting a fixed-label status by its condition.
+        if isinstance(current, ast.IfExp):
+            visit(current.body)
+            visit(current.orelse)
+            return
+
         # The updater maps arbitrary exceptions to a fixed fallback and only
         # returns deliberately authored UpdateError messages. Keep this one
         # reviewed UI wrapper available without allowing generic formatters.
@@ -345,7 +358,6 @@ def python_private_identifiers(
                 and current.value.func.id == "type"
                 and len(current.value.args) == 1
                 and isinstance(current.value.args[0], ast.Name)
-                and current.value.args[0].id in exception_identifiers
                 and not current.value.keywords):
             return
 
@@ -363,6 +375,7 @@ def python_private_identifiers(
 
         if (isinstance(current, ast.Name)
                 and (current.id in exception_names or
+                     current.id in private_aliases or
                      python_private_name(current.id))):
             identifiers.add(current.id)
         elif (isinstance(current, ast.Attribute)
@@ -386,16 +399,144 @@ def python_private_identifiers(
 
 
 class PythonPrivateSinkCallCollector(ast.NodeVisitor):
-    """Remember exception bindings only inside their handler suites.
+    """Track local private aliases as well as exception bindings at each sink.
 
     `except ... as e` exposes the same unbounded error details as `exc`; a
-    name-based denylist cannot cover it. The binding is cleared when the
-    handler exits, so do not flag an unrelated `e` in later code.
+    name-based denylist cannot cover it. Simple assignments can similarly hide
+    a transcript or error behind a harmless-looking `message` variable. Keep
+    binding state local to a scope and in source order; merge both sides of a
+    conditional because either can reach a subsequent log. This is still a
+    conservative guard, not whole-program information-flow analysis.
     """
 
     def __init__(self) -> None:
-        self.calls: list[tuple[ast.Call, frozenset[str]]] = []
+        self.calls: list[tuple[ast.Call, frozenset[str], frozenset[str]]] = []
         self.exception_names: frozenset[str] = frozenset()
+        self.private_aliases: frozenset[str] = frozenset()
+        self._try_body_history: list[set[str]] = []
+
+    def _bind(self, target: ast.AST, private: bool) -> None:
+        if isinstance(target, ast.Name):
+            aliases = set(self.private_aliases)
+            if private:
+                aliases.add(target.id)
+                # A try handler can run before a later clean reassignment.
+                for history in self._try_body_history:
+                    history.add(target.id)
+            else:
+                aliases.discard(target.id)
+            self.private_aliases = frozenset(aliases)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for element in target.elts:
+                self._bind(element, private)
+
+    def _is_private(self, expression: ast.AST) -> bool:
+        return bool(python_private_identifiers(
+            expression, self.exception_names, self.private_aliases)
+            or contains_raw_exception_details(expression, self.exception_names))
+
+    def _visit_block(self, statements: list[ast.stmt],
+                     aliases: frozenset[str]) -> frozenset[str]:
+        self.private_aliases = aliases
+        for statement in statements:
+            self.visit(statement)
+        return self.private_aliases
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        self.visit(node.value)
+        private = self._is_private(node.value)
+        for target in node.targets:
+            self._bind(target, private)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if node.value is not None:
+            self.visit(node.value)
+            self._bind(node.target, self._is_private(node.value))
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        self.visit(node.value)
+        self._bind(node.target, self._is_private(node.target)
+                   or self._is_private(node.value))
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        self.visit(node.value)
+        self._bind(node.target, self._is_private(node.value))
+
+    def visit_If(self, node: ast.If) -> None:
+        self.visit(node.test)
+        before = self.private_aliases
+        from_body = self._visit_block(node.body, before)
+        from_else = self._visit_block(node.orelse, before)
+        self.private_aliases = from_body | from_else
+
+    def visit_Try(self, node: ast.Try) -> None:
+        before = self.private_aliases
+        body_history: set[str] = set()
+        self._try_body_history.append(body_history)
+        try:
+            after_body = self._visit_block(node.body, before)
+        finally:
+            self._try_body_history.pop()
+        outcomes = self._visit_block(node.orelse, after_body)
+        for handler in node.handlers:
+            # A handler can run after any statement in the try body. Inspect
+            # both prior and body bindings rather than letting a later sibling
+            # handler's clean assignment erase an earlier private one.
+            self.private_aliases = before | after_body | body_history
+            self.visit(handler)
+            outcomes |= self.private_aliases
+        self.private_aliases = self._visit_block(node.finalbody, outcomes)
+
+    visit_TryStar = visit_Try
+
+    def visit_For(self, node: ast.For) -> None:
+        self.visit(node.iter)
+        before = self.private_aliases
+        self._bind(node.target, self._is_private(node.iter))
+        after_body = self._visit_block(node.body, self.private_aliases)
+        # The iterable might be empty. The else suite can run after either
+        # zero or more iterations, including a break-free private iteration.
+        self.private_aliases = self._visit_block(node.orelse, before | after_body)
+
+    visit_AsyncFor = visit_For
+
+    def visit_While(self, node: ast.While) -> None:
+        self.visit(node.test)
+        before = self.private_aliases
+        after_body = self._visit_block(node.body, before)
+        self.private_aliases = self._visit_block(node.orelse, before | after_body)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for default in (*node.args.defaults, *node.args.kw_defaults):
+            if default is not None:
+                self.visit(default)
+        previous_aliases = self.private_aliases
+        previous_exceptions = self.exception_names
+        previous_try_history = self._try_body_history
+        try:
+            # A closure can read outer aliases, but assignments in one
+            # function must never taint an unrelated sibling function.
+            arguments = (*node.args.posonlyargs, *node.args.args,
+                         *node.args.kwonlyargs)
+            shadowed = {argument.arg for argument in arguments}
+            if node.args.vararg:
+                shadowed.add(node.args.vararg.arg)
+            if node.args.kwarg:
+                shadowed.add(node.args.kwarg.arg)
+            self.private_aliases -= shadowed
+            # Defining a nested function does not execute its assignments in
+            # the enclosing try body.
+            self._try_body_history = []
+            for statement in node.body:
+                self.visit(statement)
+        finally:
+            self.private_aliases = previous_aliases
+            self.exception_names = previous_exceptions
+            self._try_body_history = previous_try_history
+
+    visit_AsyncFunctionDef = visit_FunctionDef
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
         if node.type is not None:
@@ -411,7 +552,7 @@ class PythonPrivateSinkCallCollector(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         if is_python_private_sink_call(node):
-            self.calls.append((node, self.exception_names))
+            self.calls.append((node, self.exception_names, self.private_aliases))
         self.generic_visit(node)
 
 
@@ -424,13 +565,14 @@ def scan_python_text(path: Path, text: str) -> list[str]:
     findings: list[str] = []
     collector = PythonPrivateSinkCallCollector()
     collector.visit(tree)
-    for node, exception_names in sorted(
+    for node, exception_names, private_aliases in sorted(
         collector.calls, key=lambda item: (item[0].lineno, item[0].col_offset)
     ):
         identifiers: set[str] = set()
         raw_exception_details = False
         for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
-            identifiers.update(python_private_identifiers(argument, exception_names))
+            identifiers.update(python_private_identifiers(
+                argument, exception_names, private_aliases))
             raw_exception_details |= contains_raw_exception_details(argument, exception_names)
         if identifiers or raw_exception_details:
             if raw_exception_details:
@@ -564,6 +706,73 @@ self.notify("Clip saved", os.path.basename(output_path))
 self.notify("Clip saved", filename)
 self.notify("Update failed", updates.user_facing_error(updates.UpdateError(text), "fallback"))
 """
+    python_alias_dirty = """
+def report(text):
+    message = f"dictated: {text}"
+    self._log(message)
+    notice = message
+    self.notify("Delivery", notice)
+    if failed:
+        detail = text
+    else:
+        detail = "safe status"
+    self._log(detail)
+    self._log(self._undelivered_dictations[0])
+    try:
+        work()
+    except OSError as failure:
+        detail = str(failure)
+        self.notify("Failure", detail)
+"""
+    python_alias_clean = """
+def report(text):
+    message = "dictation length: %d" % len(text)
+    self._log(message)
+    message = text
+    message = "fixed status"
+    self.notify("Delivery", message)
+    self._log(type(message).__name__)
+def unrelated():
+    self._log(message)
+"""
+    python_control_dirty = """
+def report(text):
+    for piece in text:
+        self._log(piece)
+    try:
+        detail = "fixed status"
+    except OSError:
+        detail = text
+    except ValueError:
+        detail = "other fixed status"
+    self.notify("Failure", detail)
+    try:
+        message = text
+        work()
+        message = "fixed status"
+    except OSError:
+        self._log(message)
+"""
+    python_control_clean = """
+def outer(text):
+    message = text
+    def inner(message):
+        self._log(message)
+    try:
+        status = "fixed status"
+    except OSError:
+        status = "other fixed status"
+    self._log(status)
+    for number in range(len(text)):
+        self._log(number)
+    message = "fixed status"
+    try:
+        def inner():
+            message = text
+        work()
+    except OSError:
+        self._log(message)
+"""
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
         dirty_path = Path(tmp) / "dirty.swift"
@@ -574,6 +783,10 @@ self.notify("Update failed", updates.user_facing_error(updates.UpdateError(text)
         python_exception_alias_dirty_path = Path(tmp) / "exception-alias-dirty.py"
         python_notification_clean_path = Path(tmp) / "notification-clean.py"
         python_notification_dirty_path = Path(tmp) / "notification-dirty.py"
+        python_alias_clean_path = Path(tmp) / "alias-clean.py"
+        python_alias_dirty_path = Path(tmp) / "alias-dirty.py"
+        python_control_clean_path = Path(tmp) / "control-clean.py"
+        python_control_dirty_path = Path(tmp) / "control-dirty.py"
         clean_path.write_text(clean, encoding="utf-8")
         dirty_path.write_text(dirty, encoding="utf-8")
         non_log_path.write_text(non_log_calls, encoding="utf-8")
@@ -587,6 +800,10 @@ self.notify("Update failed", updates.user_facing_error(updates.UpdateError(text)
             python_notification_clean, encoding="utf-8")
         python_notification_dirty_path.write_text(
             python_notification_dirty, encoding="utf-8")
+        python_alias_clean_path.write_text(python_alias_clean, encoding="utf-8")
+        python_alias_dirty_path.write_text(python_alias_dirty, encoding="utf-8")
+        python_control_clean_path.write_text(python_control_clean, encoding="utf-8")
+        python_control_dirty_path.write_text(python_control_dirty, encoding="utf-8")
         findings = scan_paths([clean_path])
         if findings:
             raise SystemExit(f"self-test rejected clean log calls: {findings}")
@@ -652,6 +869,28 @@ self.notify("Update failed", updates.user_facing_error(updates.UpdateError(text)
                 raise SystemExit(
                     f"self-test did not catch notification leak {identifier!r}"
                 )
+        findings = scan_paths([python_alias_clean_path])
+        if findings:
+            raise SystemExit(f"self-test rejected safe local aliases: {findings}")
+        findings = scan_paths([python_alias_dirty_path])
+        if len(findings) != 5:
+            raise SystemExit(
+                f"self-test expected 5 unsafe alias sinks, got {len(findings)}: {findings}"
+            )
+        for identifier in ("message", "notice", "detail", "_undelivered_dictations"):
+            if not any(identifier in finding for finding in findings):
+                raise SystemExit(
+                    f"self-test did not catch private alias {identifier!r}"
+                )
+        findings = scan_paths([python_control_clean_path])
+        if findings:
+            raise SystemExit(f"self-test rejected safe control-flow aliases: {findings}")
+        findings = scan_paths([python_control_dirty_path])
+        if (len(findings) != 3 or not any("piece" in finding for finding in findings)
+                or not any("message" in finding for finding in findings)):
+            raise SystemExit(
+                f"self-test did not catch loop/handler aliases: {findings}"
+            )
 
 
 def main() -> int:
