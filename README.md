@@ -27,6 +27,16 @@ window; keep the starting field and tab selected until insertion or a recovery
 notice appears.
 No account, subscription, or cloud transcription.
 
+> **Before opening the published builds (macOS 0.3.8 / Windows 0.1.12):**
+> A missing speech-model download starts on launch, not when you download the
+> app. macOS 0.3.8 may include an inherited Hugging Face token in that request;
+> Windows 0.1.12 may send Hugging Face usage telemetry or an available token,
+> including to a custom download route. If you are unsure, leave the app
+> unopened and read the [macOS launch decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy)
+> or [Windows launch decision](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
+> before choosing to launch. If you install Windows but wait, clear the
+> installer's final **Launch Presspeech** option.
+
 **Start here:** [official website](https://rcourtman.github.io/presspeech/) ·
 [first dictation guide](https://rcourtman.github.io/presspeech/getting-started.html) ·
 [macOS install](https://rcourtman.github.io/presspeech/install.html) ·

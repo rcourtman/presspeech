@@ -69,7 +69,9 @@ qualification, if issue creation is still restricted when the owner edits it:
 > a tunnelling proxy cannot read the HTTPS request. If you prefer to avoid the
 > possible telemetry, a token or custom route may be configured, or you are
 > unsure, wait until Windows 0.1.13 is published. If you install 0.1.12 but
-> choose to wait, leave **Launch Presspeech** unchecked at the end of setup.
+> choose to wait, clear **Launch Presspeech** on the final installer screen
+> before choosing **Finish**. It starts checked by default; otherwise
+> **Finish** opens 0.1.12 and can start the model request.
 > Do not launch 0.1.12 while an untrusted TLS-inspecting proxy is in use.
 > Published 0.1.12 also briefly opens the selected microphone for an
 > automatic local readiness check in first-run Setup; its samples are

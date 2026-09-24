@@ -184,6 +184,7 @@ class GhTransportTests(unittest.TestCase):
                  patch.object(check, 'github_releases', return_value=releases) as listed, \
                  patch.object(check, 'release_note_parity_errors', return_value=note_errors) as parity, \
                  patch.object(check, 'known_release_disclosure_errors', return_value=[]) as disclosure, \
+                 patch.object(check, 'known_release_reporting_errors', return_value=[]) as reporting, \
                  patch.object(check, 'load_metadata') as metadata, \
                  patch.object(check, 'public_release_errors') as assets, \
                  contextlib.redirect_stdout(io.StringIO()), \
@@ -193,6 +194,7 @@ class GhTransportTests(unittest.TestCase):
                 listed.assert_called_once()
                 parity.assert_called_once_with(mac, releases)
                 disclosure.assert_called_once_with(releases)
+                reporting.assert_called_once_with(releases)
                 metadata.assert_not_called()
                 assets.assert_not_called()
 
@@ -224,7 +226,8 @@ class GhTransportTests(unittest.TestCase):
                'body': 'Before opening model Hugging Face token wait 0.3.9 privacy.html#network-calls'}
         windows = {'tag_name': 'windows-v0.1.12', 'draft': False,
                    'body': 'Before launching model Hugging Face token telemetry custom route wait '
-                           '0.1.13 windows.html#model-download-privacy'}
+                           '0.1.13 Launch Presspeech is checked initially; clear before Finish. '
+                           'windows.html#model-download-privacy'}
         self.assertEqual(check.known_release_disclosure_errors([mac, windows]), [])
         windows['body'] = windows['body'].replace('Before launching', 'Ready to use').replace('route', 'path')
         errors = check.known_release_disclosure_errors([mac, windows])

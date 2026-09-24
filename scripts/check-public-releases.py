@@ -74,6 +74,9 @@ KNOWN_DISCLOSURE_MARKERS = {
         ("routing", "route"),
         "wait",
         "0.1.13",
+        "launch presspeech",
+        ("checked by default", "checked initially"),
+        "finish",
         "windows.html#model-download-privacy",
     ),
 }
@@ -758,7 +761,8 @@ def run_self_test() -> None:
         {"tag_name": "windows-v0.1.12", "draft": False, "body": (
             "Before launching Windows 0.1.12: model downloads may send Hugging Face "
             "telemetry and a token; custom routing can change the destination. "
-            "If unsure, wait until 0.1.13. See "
+            "If unsure, wait until 0.1.13. Launch Presspeech is checked by default; "
+            "clear it before Finish if waiting. See "
             "https://rcourtman.github.io/presspeech/windows.html#model-download-privacy"
         )},
     ]
@@ -768,6 +772,13 @@ def run_self_test() -> None:
     missing_warning[1]["body"] = "Local recognition; download the installer."
     if not any("windows-v0.1.12" in error for error in known_release_disclosure_errors(missing_warning)):
         raise ReleaseCheckError("self-test missed a disclosure omitted from public Windows notes")
+    missing_launch_warning = json.loads(json.dumps(disclosed))
+    missing_launch_warning[1]["body"] = missing_launch_warning[1]["body"].replace(
+        "checked by default", "optional"
+    )
+    if not any("checked by default / checked initially" in error
+               for error in known_release_disclosure_errors(missing_launch_warning)):
+        raise ReleaseCheckError("self-test missed the default-on installer launch checkbox")
     if not any("v0.3.8" in error for error in known_release_disclosure_errors(disclosed[1:])):
         raise ReleaseCheckError("self-test missed an unauditable archived macOS release")
 

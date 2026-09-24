@@ -259,6 +259,10 @@ writing, the previous clipboard item remains unchanged. Release the key and
 use Delivery Recovery to copy or discard the waiting text. Check the intended field
 and any field that may have gained focus, then check the current clipboard before
 Copy: an input error can happen after part or all of the paste has completed.
+When Windows reports accepting zero paste-key events, Recovery says automatic
+paste did not run instead of calling the result uncertain. A partial count or
+native exception without a count remains uncertain. A zero-event result may
+still leave the dictation on the current clipboard, so check it before Copy.
 If Presspeech already knows that the original window is missing, no longer
 focused, or elevated, or cannot verify either app's input integrity level,
 it also leaves the previous clipboard item unchanged and waits for an explicit

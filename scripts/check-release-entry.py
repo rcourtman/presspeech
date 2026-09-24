@@ -29,7 +29,9 @@ LEAD_CHARACTERS = 1800
 ROOT = Path(__file__).resolve().parents[1]
 KNOWN_RISKS = {
     ("macos", "0.3.8"): ("hugging face token", "wait", "proxy"),
+    ("macos", "0.3.9"): ("token", "proxy"),
     ("windows", "0.1.12"): ("hugging face", "telemetry", "token", "routing", "wait", "proxy"),
+    ("windows", "0.1.13"): ("telemetry", "token", "proxy"),
 }
 
 
@@ -55,7 +57,7 @@ def entry_errors(platform: str, version: str, body: str) -> list[str]:
     normalized = re.sub(r"\s+", " ", prose).casefold()
     missing_risks = [term for term in KNOWN_RISKS.get((platform, version), ()) if term not in normalized]
     if missing_risks:
-        errors.append("lead omits known published-build caveats: " + ", ".join(missing_risks))
+        errors.append("lead omits known version-specific caveats: " + ", ".join(missing_risks))
     return errors
 
 
@@ -79,6 +81,12 @@ def run_self_test() -> None:
     assert entry_errors("windows", "9.8.7", windows.replace("windows.html#model-download-privacy", "install.html"))
     assert entry_errors("windows", "9.8.7", "Release details.\n" * 100 + windows)
     assert entry_errors("windows", "0.1.12", windows.replace("9.8.7", "0.1.12"))
+    assert entry_errors("macos", "0.3.9", mac.replace("9.8.7", "0.3.9")) == [
+        "lead omits known version-specific caveats: token, proxy"
+    ]
+    assert entry_errors("windows", "0.1.13", windows.replace("9.8.7", "0.1.13")) == [
+        "lead omits known version-specific caveats: telemetry, token, proxy"
+    ]
     for invalid in ("09.8.7", "9.8", "9.8.7-rc1"):
         try:
             entry_errors("macos", invalid, mac)

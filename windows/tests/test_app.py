@@ -5480,6 +5480,16 @@ class DeliveryRecoveryTests(unittest.TestCase):
                 self.assertEqual(api.SendInput.call_count, 1 + len(expected))
                 self.assertFalse(self.instance._injecting_keys)
                 self.assert_retained_without_content_logs()
+                notice = str(self.instance.notify.mock_calls)
+                if accepted == 0:
+                    self.assertIn(
+                        "accepted no Presspeech paste key events", notice)
+                    self.assertNotIn("may have run fully or partly", notice)
+                else:
+                    self.assertIn("may have run fully or partly", notice)
+                    self.assertNotIn(
+                        "accepted no Presspeech paste key events", notice)
+                self.instance.notify.reset_mock()
 
     def test_shortcut_preparation_failure_does_not_inject_cleanup(self):
         api = mock.Mock()
@@ -5495,6 +5505,8 @@ class DeliveryRecoveryTests(unittest.TestCase):
         api.SendInput.assert_not_called()
         self.assert_retained_without_content_logs()
         self.assertNotIn("private mapping detail", str(self.instance.notify.mock_calls))
+        self.assertIn("accepted no Presspeech paste key events",
+                      str(self.instance.notify.mock_calls))
 
     def test_native_shortcut_exception_keeps_best_effort_cleanup(self):
         api = mock.Mock()
@@ -5513,6 +5525,8 @@ class DeliveryRecoveryTests(unittest.TestCase):
         ])
         self.assert_retained_without_content_logs()
         self.assertNotIn("private native detail", str(self.instance.notify.mock_calls))
+        self.assertIn("may have run fully or partly",
+                      str(self.instance.notify.mock_calls))
 
     def test_failed_cleanup_release_is_retried_and_modifiers_released(self):
         self.keyboard.shortcut.side_effect = RuntimeError("uncertain")

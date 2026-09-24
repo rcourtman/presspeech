@@ -2946,6 +2946,9 @@ class PresspeechApp:
             "shortcut-uncertain": (
                 "The paste shortcut may have run fully or partly; delivery "
                 "could not be verified. "),
+            "shortcut-rejected": (
+                "Windows accepted no Presspeech paste key events; automatic "
+                "paste did not run. The clipboard may have changed. "),
             "shortcut-focus-uncertain": (
                 "The original focused field or window title could not be "
                 "verified after the paste shortcut was sent. Text may have "
@@ -3129,7 +3132,8 @@ class PresspeechApp:
         except keyboard_delivery.ModifierStateError:
             failure = "modifier-state-unavailable"
         except keyboard_delivery.KeyboardDeliveryError as exc:
-            failure = "shortcut-uncertain"
+            failure = ("shortcut-rejected" if exc.accepted_count == 0
+                       else "shortcut-uncertain")
             cleanup_required = exc.cleanup_required
         except Exception:
             failure = "shortcut-uncertain"

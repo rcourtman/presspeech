@@ -204,6 +204,7 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         api.SendInput.assert_called_once()
         self.assertEqual(len(self.events), 4)
         self.assertTrue(raised.exception.cleanup_required)
+        self.assertEqual(raised.exception.accepted_count, 2)
 
     def test_nonzero_partial_counts_keep_conservative_cleanup(self):
         modifiers = (delivery.VK_LCONTROL, delivery.VK_LMENU,
@@ -214,6 +215,7 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
                 with self.assertRaises(delivery.KeyboardDeliveryError) as raised:
                     delivery.Controller(api=api).shortcut(modifiers, delivery.VK_V)
                 self.assertTrue(raised.exception.cleanup_required)
+                self.assertEqual(raised.exception.accepted_count, accepted)
                 api.SendInput.assert_called_once()
 
     def test_failure_before_submission_requires_no_key_up_cleanup(self):
@@ -225,6 +227,7 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
                 [delivery.VK_LCONTROL], delivery.VK_V)
 
         self.assertFalse(raised.exception.cleanup_required)
+        self.assertEqual(raised.exception.accepted_count, 0)
         self.assertNotIn("private", str(raised.exception))
         api.SendInput.assert_not_called()
 
@@ -240,12 +243,13 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
                 api.MapVirtualKeyW.assert_not_called()
                 api.SendInput.assert_not_called()
 
-    def test_unaccepted_event_is_reported_as_uncertain_delivery(self):
+    def test_unaccepted_event_reports_zero_accepted_events(self):
         api = self.backend(inserted=0)
         with self.assertRaises(delivery.KeyboardDeliveryError) as raised:
             delivery.Controller(api=api).press(delivery.VK_LCONTROL)
         self.assertEqual(len(self.events), 1)
         self.assertFalse(raised.exception.cleanup_required)
+        self.assertEqual(raised.exception.accepted_count, 0)
 
     def test_native_exception_is_redacted_to_a_content_free_error(self):
         api = self.backend()
@@ -257,6 +261,7 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         self.assertNotIn("sensitive", str(raised.exception))
         self.assertIsNone(raised.exception.__cause__)
         self.assertTrue(raised.exception.cleanup_required)
+        self.assertIsNone(raised.exception.accepted_count)
 
     def test_invalid_virtual_keys_are_rejected_before_native_calls(self):
         for virtual_key in (None, False, True, 0, 0xFF, -1, "V"):

@@ -37,11 +37,16 @@ _MAPVK_VK_TO_VSC = 0
 class KeyboardDeliveryError(OSError):
     """Windows did not confirm that a requested keyboard event was inserted."""
 
-    def __init__(self, message, *, cleanup_required=True):
+    def __init__(self, message, *, cleanup_required=True,
+                 accepted_count=None):
         # Zero accepted events or a failure before submission needs no key-up
         # cleanup. A nonzero partial count or native-call exception remains
         # uncertain and requires conservative best-effort cleanup.
         self.cleanup_required = cleanup_required
+        # None means the native call did not provide an accepted-event count.
+        # Keep this separate from cleanup_required so the UI can distinguish
+        # a proven zero-event rejection from uncertain partial delivery.
+        self.accepted_count = accepted_count
         super().__init__(message)
 
 
@@ -217,7 +222,7 @@ class Controller:
         except Exception:
             raise KeyboardDeliveryError(
                 "Windows did not accept the keyboard event",
-                cleanup_required=False) from None
+                cleanup_required=False, accepted_count=0) from None
         try:
             inserted = int(self._api.SendInput(
                 len(inputs), inputs, ctypes.sizeof(_INPUT)))
@@ -229,7 +234,8 @@ class Controller:
         if inserted != len(inputs):
             raise KeyboardDeliveryError(
                 "Windows did not accept the keyboard event",
-                cleanup_required=inserted != 0)
+                cleanup_required=inserted != 0,
+                accepted_count=inserted)
 
     def press(self, virtual_key):
         self._send(((virtual_key, 0),))

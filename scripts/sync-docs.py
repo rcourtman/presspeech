@@ -3319,6 +3319,46 @@ def check_windows_model_download_privacy_summary(
     return errors
 
 
+def check_readme_launch_preflight(
+    metadata: dict[str, object], path: Path = ROOT / "README.md"
+) -> list[str]:
+    """Keep the published-build decision visible before README install routes.
+
+    The release pages are standalone downloads and cannot be corrected by a
+    repository edit. This guard only protects readers who arrive at the README.
+    A new published version needs a fresh human review of the warning.
+    """
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: missing README launch preflight"]
+    contents = read_text(path)
+    heading = contents.find("\n# Presspeech\n")
+    start_links = contents.find("\n**Start here:**", heading + 1)
+    if heading < 0 or start_links < 0:
+        return [f"{display}: missing README heading or start links"]
+    intro = " ".join(re.sub(r"(?m)^> ?", "", contents[heading:start_links]).split())
+    required = (
+        "**Before opening the published builds",
+        f"macOS {metadata['version']}",
+        f"Windows {metadata['windows_version']}",
+        "missing speech-model download starts on launch",
+        "inherited Hugging Face token",
+        "Hugging Face usage telemetry or an available token",
+        "custom download route",
+        "leave the app unopened",
+        "install.html#model-download-privacy",
+        "windows.html#model-download-privacy",
+        "clear the installer's final **Launch Presspeech** option",
+    )
+    missing = [phrase for phrase in required if phrase not in intro]
+    if missing:
+        return [
+            f"{display}: README launch preflight before start links is missing "
+            + ", ".join(repr(phrase) for phrase in missing)
+        ]
+    return []
+
+
 def check_readme_windows_install_decision_order(
     path: Path = ROOT / "README.md",
 ) -> list[str]:
@@ -6199,6 +6239,33 @@ def run_self_test() -> None:
                    for error in check_windows_model_integrity_guidance(required_integrity_copy)):
             raise SyncError("self-test: contradictory Windows integrity claim was accepted")
 
+        readme_preflight = Path(tmp) / "readme-preflight.md"
+        published = {"version": "0.3.8", "windows_version": "0.1.12"}
+        safe_readme = read_text(ROOT / "README.md")
+        readme_preflight.write_text(safe_readme, encoding="utf-8")
+        if check_readme_launch_preflight(published, readme_preflight):
+            raise SyncError("self-test: README launch preflight was rejected")
+        intro_start = safe_readme.index("\n> **Before opening the published builds")
+        intro_end = safe_readme.index("\n**Start here:**", intro_start)
+        intro = safe_readme[intro_start:intro_end]
+        readme_preflight.write_text(
+            safe_readme[:intro_start] + safe_readme[intro_end:].replace(
+                "**Start here:**", "**Start here:**" + intro, 1
+            ), encoding="utf-8",
+        )
+        if not check_readme_launch_preflight(published, readme_preflight):
+            raise SyncError("self-test: README warning after start links was accepted")
+        for stale in (
+            intro.replace("macOS 0.3.8", "macOS 9.9.9"),
+            intro.replace("windows.html#model-download-privacy", "windows.html"),
+        ):
+            readme_preflight.write_text(
+                safe_readme[:intro_start] + stale + safe_readme[intro_end:],
+                encoding="utf-8",
+            )
+            if not check_readme_launch_preflight(published, readme_preflight):
+                raise SyncError("self-test: stale README launch preflight was accepted")
+
         readme_install = Path(tmp) / "README.md"
         readme_install.write_text(
             "## Install on Windows\n"
@@ -7142,6 +7209,7 @@ def main() -> int:
             errors.extend(check_macos_model_download_privacy_summary())
             errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
             errors.extend(check_windows_model_download_privacy_summary())
+            errors.extend(check_readme_launch_preflight(metadata))
             errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
             errors.extend(check_homepage_launch_decision())
@@ -7214,6 +7282,7 @@ def main() -> int:
         errors.extend(check_macos_model_download_privacy_summary())
         errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
         errors.extend(check_windows_model_download_privacy_summary())
+        errors.extend(check_readme_launch_preflight(metadata))
         errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())
         errors.extend(check_homepage_launch_decision())
