@@ -4193,6 +4193,43 @@ class PostRollTests(unittest.TestCase):
         instance._schedule_post_roll.assert_called_once_with(
             app.POST_ROLL_CHECK_SEC, 7, 10.0, 3)
 
+    def test_empty_post_release_callback_is_not_new_audio(self):
+        numpy = __import__("numpy")
+        instance = self.make_app(0.001)
+        instance._rec_epoch = 7
+        instance.recording = True
+        instance._capture_ready = True
+        instance._capture_ready_at = 9.0
+        instance._first_audio_callback = threading.Event()
+        instance.stop_recording = mock.Mock()
+        instance._schedule_post_roll = mock.Mock()
+        instance._log = mock.Mock()
+        prior_buffer_count = len(instance.buffer)
+
+        # A zero-frame callback has started after release, but it cannot
+        # establish that any post-release microphone samples reached capture.
+        with mock.patch.object(app.time, "perf_counter", return_value=10.01):
+            instance._audio_cb(numpy.empty((0, 1), dtype="float32"),
+                               0, None, None, 7)
+        self.assertEqual(len(instance.buffer), prior_buffer_count)
+        self.assertEqual(instance._audio_sequence, 3)
+        self.assertEqual(instance._last_audio_callback_started_at, 9.9)
+        self.assertFalse(instance._first_audio_callback.is_set())
+        with mock.patch.object(app.time, "perf_counter", return_value=10.08):
+            instance._finish_after_roll(7, 10.0, 3)
+        instance.stop_recording.assert_not_called()
+        instance._schedule_post_roll.assert_called_once_with(
+            app.POST_ROLL_CHECK_SEC, 7, 10.0, 3)
+
+        # A subsequent non-empty callback does satisfy the boundary gate.
+        with mock.patch.object(app.time, "perf_counter", return_value=10.1):
+            instance._audio_cb(numpy.full((320, 1), 0.001, dtype="float32"),
+                               320, None, None, 7)
+        self.assertEqual(instance._audio_sequence, 4)
+        with mock.patch.object(app.time, "perf_counter", return_value=10.12):
+            instance._finish_after_roll(7, 10.0, 3)
+        instance.stop_recording.assert_called_once_with(expected_epoch=7)
+
     def test_quiet_tail_stops_after_a_new_audio_callback(self):
         instance = self.make_app(0.001)
         instance._rec_epoch = 7

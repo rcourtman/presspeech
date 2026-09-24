@@ -1660,7 +1660,11 @@ clipboard.
   Win+V after the current clipboard is replaced. Repeat with the clipboard
   held by another process: Copy/Cut must not fall through to Tk's unprotected
   default clipboard path, and a failed Cut must leave the selection in the
-  scratchpad. Record only pass/fail; never save the test clipboard contents.
+  scratchpad. In a controlled candidate build, replace the clipboard after the
+  first copy confirmation but before Cut's final selection check completes;
+  Cut must keep the selection and report the changed clipboard. This is a
+  point-in-time guard, not an atomic guarantee against a later external copy.
+  Record only pass/fail; never save the test clipboard contents.
 - Choose Discard and Exit separately. Both forget private recovery; Discard must
   leave a newer external clipboard untouched. No late worker may retain after Exit.
 - With an in-app update's installer verified and a harmless recovery dictation

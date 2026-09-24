@@ -2898,6 +2898,16 @@ class ScratchpadWindow(_RegisteredDialog):
                 if (self.text.index("sel.first") == start and
                         self.text.index("sel.last") == end and
                         self.text.get(start, end) == selected):
+                    # Tk selection queries can also outlive the confirmed
+                    # copy. A newer clipboard owner must not leave Cut with
+                    # neither the selected text nor its recovery copy.
+                    if not clipboard_delivery.is_current(receipt):
+                        self.app.notify(
+                            "Clipboard changed",
+                            "Try Dictation kept the selected text because the "
+                            "clipboard copy could no longer be confirmed. "
+                            "Check the clipboard before trying again.")
+                        return "break"
                     self.text.delete(start, end)
             except tk.TclError:
                 pass

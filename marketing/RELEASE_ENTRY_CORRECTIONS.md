@@ -70,6 +70,13 @@ qualification, if issue creation is still restricted when the owner edits it:
 > unsure, wait until Windows 0.1.13 is published. If you install 0.1.12 but
 > choose to wait, leave **Launch Presspeech** unchecked at the end of setup.
 > Do not launch 0.1.12 while an untrusted TLS-inspecting proxy is in use.
+> Published 0.1.12 also briefly opens the selected microphone for an
+> automatic local readiness check in first-run Setup; its samples are
+> discarded, not saved, sent, or transcribed. If you do not want that check,
+> leave the app unopened. Upcoming 0.1.13 waits for an explicit **Check
+> Microphone** choice. On a new 0.1.12 profile, **Start Presspeech with
+> Windows** is selected by default; turn it off in Setup before finishing,
+> choosing **Set Up Later**, or closing Setup if you do not want it at sign-in.
 > Dictation audio and transcripts are not sent in model downloads. See the
 > [version-specific privacy decision and after-use guidance](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy).
 > Dictation still uses the system clipboard: this build's transcript entries

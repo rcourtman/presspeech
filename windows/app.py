@@ -1929,12 +1929,16 @@ class PresspeechApp:
     def _audio_cb(self, indata, frames, time_info, status, epoch):
         callback_started_at = time.perf_counter()
         chunk = indata.copy()
-        chunk_rms = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
+        # Post-roll treats a sequence advance as proof that new microphone
+        # samples arrived after release. A zero-frame callback is not audio;
+        # counting it could end capture on a quiet pre-release tail.
+        if not chunk.size:
+            return
+        chunk_rms = float(np.sqrt(np.mean(np.square(chunk))))
         with self.lock:
             if (self.recording and epoch == self._rec_epoch and
                     not getattr(self, "_stop_before_ready", False)):
-                if chunk.size:
-                    self._first_audio_callback.set()
+                self._first_audio_callback.set()
                 # A callback can begin copying cue-era samples before the
                 # gate opens and acquire this lock only afterwards.
                 if (not self._capture_ready or

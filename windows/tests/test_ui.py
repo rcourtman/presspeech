@@ -2393,13 +2393,33 @@ class ScratchpadWindowTests(unittest.TestCase):
 
     def test_cut_deletes_only_after_confirmed_protected_copy(self):
         window = self.selected_window()
+        receipt = object()
         with mock.patch.object(ui.clipboard_delivery, "write_text",
-                               return_value=object()), \
+                               return_value=receipt), \
                 mock.patch.object(ui.clipboard_delivery, "is_current",
-                                  return_value=True):
+                                  return_value=True) as current:
             self.assertEqual(window._copy_or_cut_selection(cut=True), "break")
 
+        self.assertEqual(current.call_args_list,
+                         [mock.call(receipt), mock.call(receipt)])
         window.text.delete.assert_called_once_with("1.0", "1.15")
+
+    def test_cut_keeps_selection_if_clipboard_changes_during_selection_check(self):
+        window = self.selected_window()
+        receipt = object()
+        with mock.patch.object(ui.clipboard_delivery, "write_text",
+                               return_value=receipt), \
+                mock.patch.object(ui.clipboard_delivery, "is_current",
+                                  side_effect=[True, False]) as current:
+            self.assertEqual(window._copy_or_cut_selection(cut=True), "break")
+
+        self.assertEqual(current.call_args_list,
+                         [mock.call(receipt), mock.call(receipt)])
+        window.text.delete.assert_not_called()
+        window.app.notify.assert_called_once_with(
+            "Clipboard changed",
+            "Try Dictation kept the selected text because the clipboard copy "
+            "could no longer be confirmed. Check the clipboard before trying again.")
 
     def test_missing_selection_neither_changes_clipboard_nor_runs_default_copy(self):
         window = self.make_window()
