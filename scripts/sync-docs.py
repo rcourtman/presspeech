@@ -2570,6 +2570,52 @@ def check_anchored_install_preflights(
     return errors
 
 
+def check_macos_upgrade_preflight(
+    metadata: dict[str, object],
+    page: Path = DOCS / "install.html",
+    reviewed_version: str = "0.3.8",
+) -> list[str]:
+    """An upgrade can fetch a missing/invalid model, so deep links need a stop choice."""
+    display = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page.name
+    if metadata.get("version") != reviewed_version:
+        return [f"{display}: review the macOS upgrade launch decision for release {metadata.get('version')}"]
+    if not page.exists():
+        return [f"{display}: missing macOS upgrade guide"]
+    contents = read_text(page)
+    match = re.search(r'<section id="upgrade">(.*?)</section>', contents, flags=re.S)
+    if match is None:
+        return [f"{display}: missing #upgrade section"]
+    section = match.group(1)
+    note = re.search(
+        r'<div class="note warn" data-install-preflight="macos-upgrade">(.*?)</div>',
+        section,
+        flags=re.S,
+    )
+    if note is None or note.start() > section.find('<div class="grid two">'):
+        return [f"{display}: #upgrade needs a local privacy decision before upgrade launch steps"]
+    visible = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", note.group(1))).split())
+    required = (
+        "macOS 0.3.8", "cached model loads without a download",
+        "missing or fails integrity checks", "model request at launch",
+        "inherited Hugging Face token", "or you are unsure",
+        "leave the upgraded app unopened", "wait until macOS 0.3.9 is published",
+        "TLS-inspecting proxy",
+    )
+    errors = [
+        f"{display}: #upgrade privacy decision is missing {phrase!r}"
+        for phrase in required if phrase not in visible
+    ]
+    if 'href="#model-download-privacy"' not in note.group(1):
+        errors.append(f"{display}: #upgrade must link to the full launch decision")
+    cards = re.findall(r'<article class="card">(.*?)</article>', section, flags=re.S)
+    if len(cards) != 2 or any(
+        "If you decide to launch after reading the warning above" not in card
+        for card in cards
+    ):
+        errors.append(f"{display}: #upgrade must make both launch steps conditional")
+    return errors
+
+
 def check_windows_language_guidance(
     surfaces: dict[Path, tuple[str, ...]] = WINDOWS_LANGUAGE_GUIDANCE,
 ) -> list[str]:
@@ -4447,6 +4493,46 @@ def run_self_test() -> None:
         ):
             raise SyncError("self-test: unconditional Windows launch was accepted")
 
+        upgrade_page = Path(tmp) / "upgrade.html"
+        safe_upgrade = read_text(DOCS / "install.html")
+        upgrade_page.write_text(safe_upgrade, encoding="utf-8")
+        if check_macos_upgrade_preflight(preflight_metadata, upgrade_page):
+            raise SyncError("self-test: safe macOS upgrade launch decision was rejected")
+        if not check_macos_upgrade_preflight(stale_preflight_metadata, upgrade_page):
+            raise SyncError("self-test: stale macOS upgrade launch decision was accepted")
+        upgrade_note = re.search(
+            r'<div class="note warn" data-install-preflight="macos-upgrade">.*?</div>',
+            safe_upgrade,
+            flags=re.S,
+        )
+        if upgrade_note is None:
+            raise SyncError("self-test: missing macOS upgrade preflight fixture")
+        upgrade_page.write_text(safe_upgrade.replace(upgrade_note.group(0), "", 1), encoding="utf-8")
+        if not check_macos_upgrade_preflight(preflight_metadata, upgrade_page):
+            raise SyncError("self-test: missing macOS upgrade warning was accepted")
+        upgrade_page.write_text(
+            safe_upgrade.replace(
+                upgrade_note.group(0), "", 1
+            ).replace(
+                '<div class="grid two">',
+                '<div class="grid two">' + upgrade_note.group(0),
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_macos_upgrade_preflight(preflight_metadata, upgrade_page):
+            raise SyncError("self-test: late macOS upgrade warning was accepted")
+        upgrade_page.write_text(
+            safe_upgrade.replace(
+                "If you decide to launch after reading the warning above, open it once.",
+                "Open it once.",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_macos_upgrade_preflight(preflight_metadata, upgrade_page):
+            raise SyncError("self-test: unconditional macOS upgrade launch was accepted")
+
         release_zip = Path(tmp) / "Presspeech.zip"
         release_zip.write_bytes(b"release fixture\n")
         generated_metadata = build_metadata(
@@ -6190,6 +6276,7 @@ def main() -> int:
             errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_windows_verified_download_flow())
             errors.extend(check_anchored_install_preflights(metadata))
+            errors.extend(check_macos_upgrade_preflight(metadata))
             errors.extend(check_windows_language_guidance())
             errors.extend(check_clipboard_service_guidance())
             errors.extend(check_windows_model_download_privacy_guidance())
@@ -6254,6 +6341,7 @@ def main() -> int:
         errors.extend(check_windows_unsigned_guidance())
         errors.extend(check_windows_verified_download_flow())
         errors.extend(check_anchored_install_preflights(metadata))
+        errors.extend(check_macos_upgrade_preflight(metadata))
         errors.extend(check_windows_language_guidance())
         errors.extend(check_clipboard_service_guidance())
         errors.extend(check_windows_model_download_privacy_guidance())

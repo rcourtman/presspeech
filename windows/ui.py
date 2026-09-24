@@ -2810,7 +2810,10 @@ class ScratchpadWindow:
 
     def toggle(self):
         if self.app.recording:
-            self.app.stop_recording()
+            # Match the hotkey and tray stop path. Closing capture here skips
+            # the bounded silence-aware tail and can clip a final syllable in
+            # the first-run scratchpad test.
+            self.app.request_stop()
         else:
             self.app.start_recording()
         self._refresh_controls()

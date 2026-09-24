@@ -529,6 +529,82 @@ class MetricTests(unittest.TestCase):
                     benchmark.paired_tail_latency_metrics(
                         baseline, tailed, orders)
 
+    def test_recorded_tail_latency_keeps_signed_pairs_and_both_orders(self):
+        metrics = benchmark.paired_recorded_tail_latency_metrics(
+            [1.0, 1.25, 1.0, 1.25], [1.5, 1.0, 1.25, 1.0],
+            ["full-first", "trimmed-first", "full-first", "trimmed-first"])
+        self.assertEqual(metrics["all"], [0.5, -0.25, 0.25, -0.25])
+        self.assertEqual(metrics["median"], 0.0)
+        self.assertEqual(metrics["by_order"]["full-first"]["median"], 0.375)
+        self.assertEqual(metrics["by_order"]["trimmed-first"]["median"], -0.25)
+        for full, trimmed, orders, error in (
+                ([], [], [], "matching non-empty"),
+                ([1.0], [], ["full-first"], "matching non-empty"),
+                ([float("nan")], [2.0], ["full-first"], "finite"),
+                ([1.0], [2.0], ["baseline-first"], "valid order")):
+            with self.subTest(full=full, trimmed=trimmed, orders=orders):
+                with self.assertRaisesRegex(ValueError, error):
+                    benchmark.paired_recorded_tail_latency_metrics(
+                        full, trimmed, orders)
+
+    def test_recorded_tail_aggregates_paired_trials_not_clip_medians(self):
+        def probe(full_times, trimmed_times, orders):
+            full_text = ["spoken words"] * len(orders)
+            scored = benchmark.paired_recorded_tail_metrics(
+                "spoken words", full_text, full_text)
+            return {
+                **scored,
+                "trial_order": orders,
+                "order_breakdown": benchmark.recorded_tail_order_breakdown(
+                    scored["pairs"], orders),
+                "paired_inference_delta_seconds": (
+                    benchmark.paired_recorded_tail_latency_metrics(
+                        full_times, trimmed_times, orders)),
+            }
+
+        summary = benchmark.summarise_recorded_tail_probe([
+            {"recorded_tail_probe": probe(
+                [1, 1, 1], [1.5, 1, 1.5],
+                ["full-first", "trimmed-first", "full-first"])},
+            {"recorded_tail_probe": probe(
+                [3], [2], ["trimmed-first"])},
+        ])
+        latency = summary["paired_inference_delta_seconds"]
+        self.assertEqual(latency["all"], [0.5, 0, 0.5, -1])
+        self.assertEqual(latency["median"], 0.25)
+        self.assertEqual(latency["by_order"]["full-first"]["median"], 0.5)
+        self.assertEqual(latency["by_order"]["trimmed-first"]["median"], -0.5)
+
+    def test_recorded_tail_aggregate_exposes_unsafe_crops_in_each_order(self):
+        def probe(full_text, trimmed_text, orders):
+            scored = benchmark.paired_recorded_tail_metrics(
+                "hello world", full_text, trimmed_text)
+            return {
+                **scored,
+                "trial_order": orders,
+                "order_breakdown": benchmark.recorded_tail_order_breakdown(
+                    scored["pairs"], orders),
+                "paired_inference_delta_seconds": (
+                    benchmark.paired_recorded_tail_latency_metrics(
+                        [1.0] * len(orders), [0.9] * len(orders), orders)),
+            }
+
+        summary = benchmark.summarise_recorded_tail_probe([
+            {"recorded_tail_probe": probe(
+                ["", "hello world"], ["hello world", ""],
+                ["full-first", "trimmed-first"])},
+            {"recorded_tail_probe": probe(
+                ["hello world"], ["hello there"], ["full-first"])},
+        ])
+        self.assertEqual(summary["full_worsened_word_error_trial_count"], 1)
+        self.assertEqual(summary["trimmed_worsened_word_error_trial_count"], 2)
+        self.assertEqual(summary[
+            "full_nonempty_to_trimmed_empty_trial_count"], 1)
+        self.assertEqual(summary["order_breakdown"]["full-first"][
+            "trimmed_worsened_word_error_trial_count"], 1)
+        self.assertEqual(summary["order_breakdown"]["trimmed-first"][
+            "trimmed_worsened_word_error_trial_count"], 1)
+
     def test_tail_probe_order_breakdown_rejects_misaligned_orders(self):
         pairs = benchmark.paired_tail_silence_metrics(
             "spoken words", ["spoken words"], [""])["pairs"]
@@ -552,12 +628,16 @@ class MetricTests(unittest.TestCase):
                 "full-first": {
                     "trial_count": 2,
                     "trimmed_nonempty_to_full_empty_trial_count": 1,
+                    "full_nonempty_to_trimmed_empty_trial_count": 0,
                     "full_worsened_word_error_trial_count": 2,
+                    "trimmed_worsened_word_error_trial_count": 0,
                 },
                 "trimmed-first": {
                     "trial_count": 1,
                     "trimmed_nonempty_to_full_empty_trial_count": 0,
+                    "full_nonempty_to_trimmed_empty_trial_count": 1,
                     "full_worsened_word_error_trial_count": 0,
+                    "trimmed_worsened_word_error_trial_count": 1,
                 },
             })
         with self.assertRaisesRegex(ValueError, "valid order"):
@@ -699,7 +779,7 @@ class MetricTests(unittest.TestCase):
                          [16000, 9600, 9600, 16000, 16000, 16000])
         self.assertIs(calls[0].args[0], audio)
         self.assertIs(calls[3].args[0], audio)
-        self.assertEqual(result["benchmark_version"], 16)
+        self.assertEqual(result["benchmark_version"], 17)
         self.assertEqual(result["aggregate_trial_wer"], 0.75)
         self.assertEqual(result["samples"][0]["transcript"], "")
         probe = result["samples"][0]["recorded_tail_probe"]
@@ -709,6 +789,16 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(probe["trimmed_nonempty_to_full_empty_trial_count"], 1)
         self.assertEqual(result["recorded_tail_probe"]["full_first_trial_count"], 1)
         self.assertEqual(result["recorded_tail_probe"]["trimmed_first_trial_count"], 1)
+        self.assertEqual(result["recorded_tail_probe"]["order_breakdown"][
+            "trimmed-first"]["trimmed_worsened_word_error_trial_count"], 0)
+        sample_latency = probe["paired_inference_delta_seconds"]
+        full_times = result["samples"][0]["inference_seconds"]["all"]
+        trimmed_times = probe["trimmed_inference_seconds"]["all"]
+        for observed, full, trimmed in zip(
+                sample_latency["all"], full_times, trimmed_times):
+            self.assertAlmostEqual(observed, trimmed - full)
+        self.assertEqual(result["recorded_tail_probe"][
+            "paired_inference_delta_seconds"]["trial_count"], 2)
         self.assertRegex(result["recorded_tail_probe_inputs_sha256"],
                          r"^[0-9a-f]{64}$")
         self.assertNotIn("recorded_tail_probe", result["samples"][1])
@@ -717,6 +807,9 @@ class MetricTests(unittest.TestCase):
             benchmark._print_summary(result)
         self.assertIn("Parakeet recorded tail (benchmark-only)",
                       output.getvalue())
+        self.assertIn("Paired inference trimmed-minus-full median",
+                      output.getvalue())
+        self.assertIn("trimmed worsened", output.getvalue())
         json.dumps(result, allow_nan=False)
 
     def test_recorded_tail_probe_balances_odd_runs_across_clips(self):
@@ -864,7 +957,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["tail_silence_probe"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 16)
+        self.assertEqual(result["benchmark_version"], 17)
         self.assertEqual(
             result["samples"][0]["tail_silence_probe"]["trial_order"],
             ["baseline-first", "tailed-first"])
@@ -1600,7 +1693,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 16)
+        self.assertEqual(result["benchmark_version"], 17)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

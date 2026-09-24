@@ -320,9 +320,16 @@ def recorded_tail_order_breakdown(pairs, trial_order):
             "trimmed_nonempty_to_full_empty_trial_count": sum(
                 value == order and pair["trimmed_nonempty_to_full_empty"]
                 for pair, value in zip(pairs, trial_order)),
+            "full_nonempty_to_trimmed_empty_trial_count": sum(
+                value == order and pair["full_nonempty_to_trimmed_empty"]
+                for pair, value in zip(pairs, trial_order)),
             "full_worsened_word_error_trial_count": sum(
                 value == order
                 and pair["full_word_errors"] > pair["trimmed_word_errors"]
+                for pair, value in zip(pairs, trial_order)),
+            "trimmed_worsened_word_error_trial_count": sum(
+                value == order
+                and pair["trimmed_word_errors"] > pair["full_word_errors"]
                 for pair, value in zip(pairs, trial_order)),
         }
         for order in ("full-first", "trimmed-first")
@@ -332,6 +339,11 @@ def recorded_tail_order_breakdown(pairs, trial_order):
 def summarise_recorded_tail_probe(samples):
     probes = [sample["recorded_tail_probe"] for sample in samples
               if sample.get("recorded_tail_probe") is not None]
+    paired_deltas = [
+        delta for probe in probes
+        for delta in probe["paired_inference_delta_seconds"]["all"]
+    ]
+    trial_orders = [order for probe in probes for order in probe["trial_order"]]
     count_keys = (
         "trial_count", "full_empty_trial_count", "trimmed_empty_trial_count",
         "trimmed_nonempty_to_full_empty_trial_count",
@@ -353,19 +365,24 @@ def summarise_recorded_tail_probe(samples):
                 key: sum(probe["order_breakdown"][order][key] for probe in probes)
                 for key in ("trial_count",
                             "trimmed_nonempty_to_full_empty_trial_count",
-                            "full_worsened_word_error_trial_count")
+                            "full_nonempty_to_trimmed_empty_trial_count",
+                            "full_worsened_word_error_trial_count",
+                            "trimmed_worsened_word_error_trial_count")
             }
             for order in ("full-first", "trimmed-first")
         },
+        "paired_inference_delta_seconds": _paired_delta_summary(
+            paired_deltas, trial_orders, ("full-first", "trimmed-first")),
         **{key: sum(probe[key] for probe in probes) for key in count_keys},
     }
 
 
 
-def _paired_delta_summary(deltas, trial_order):
-    """Summarise signed tail-minus-clean inference time by execution order."""
+def _paired_delta_summary(deltas, trial_order,
+                          orders=("baseline-first", "tailed-first")):
+    """Summarise signed variant-minus-baseline time by execution order."""
     if len(deltas) != len(trial_order) or any(
-            order not in ("baseline-first", "tailed-first")
+            order not in orders
             for order in trial_order):
         raise ValueError("paired latency needs one valid order per trial")
 
@@ -384,24 +401,39 @@ def _paired_delta_summary(deltas, trial_order):
                 delta for delta, observed_order in zip(deltas, trial_order)
                 if observed_order == order
             ])
-            for order in ("baseline-first", "tailed-first")
+            for order in orders
         },
     }
 
 
 def paired_tail_latency_metrics(baseline_seconds, tailed_seconds, trial_order):
     """Keep each tail cost paired with its clean decode, including signed wins."""
-    if (not baseline_seconds or len(baseline_seconds) != len(tailed_seconds)
+    return _paired_latency_metrics(
+        baseline_seconds, tailed_seconds, trial_order,
+        ("baseline-first", "tailed-first"))
+
+
+def paired_recorded_tail_latency_metrics(full_seconds, trimmed_seconds,
+                                         trial_order):
+    """Keep each crop cost paired with its captured baseline decode."""
+    return _paired_latency_metrics(
+        full_seconds, trimmed_seconds, trial_order,
+        ("full-first", "trimmed-first"))
+
+
+def _paired_latency_metrics(baseline_seconds, variant_seconds, trial_order,
+                            orders):
+    if (not baseline_seconds or len(baseline_seconds) != len(variant_seconds)
             or len(baseline_seconds) != len(trial_order)):
         raise ValueError("paired latency needs matching non-empty trials")
     if any(
             isinstance(value, bool) or not isinstance(value, (int, float))
             or not math.isfinite(value) or value < 0
-            for value in (*baseline_seconds, *tailed_seconds)):
+            for value in (*baseline_seconds, *variant_seconds)):
         raise ValueError("paired latency needs finite non-negative timings")
-    deltas = [tail - clean for clean, tail in zip(
-        baseline_seconds, tailed_seconds)]
-    return _paired_delta_summary(deltas, trial_order)
+    deltas = [variant - baseline for baseline, variant in zip(
+        baseline_seconds, variant_seconds)]
+    return _paired_delta_summary(deltas, trial_order, orders)
 
 
 def final_word_metrics(reference, hypotheses):
@@ -1190,6 +1222,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                     "p95": _percentile(variant_timings, 0.95),
                     "all": variant_timings,
                 },
+                "paired_inference_delta_seconds": (
+                    paired_recorded_tail_latency_metrics(
+                        timings, variant_timings, trial_order)),
             }
         if task_group is not None:
             result["task_group"] = task_group.strip()
@@ -1260,7 +1295,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 16,
+        "benchmark_version": 17,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "recorded_tail_probe_inputs_sha256": (
@@ -1422,11 +1457,15 @@ def _print_summary(result):
     recorded_probe = result.get("recorded_tail_probe")
     if recorded_probe is not None:
         print("Parakeet recorded tail (benchmark-only): trimmed nonempty to "
-              "full empty %d/%d paired trials; word errors trimmed %d -> "
-              "full %d; full worse %d, trimmed worse %d trials across %d "
+              "full empty %d/%d paired trials, full nonempty to trimmed "
+              "empty %d/%d; word errors trimmed %d -> full %d; full worse "
+              "%d, trimmed worse %d trials across %d "
               "reviewed clips; order full-first %d, trimmed-first %d" % (
                   recorded_probe[
                       "trimmed_nonempty_to_full_empty_trial_count"],
+                  recorded_probe["trial_count"],
+                  recorded_probe[
+                      "full_nonempty_to_trimmed_empty_trial_count"],
                   recorded_probe["trial_count"],
                   recorded_probe["trimmed_word_error_count"],
                   recorded_probe["full_word_error_count"],
@@ -1438,13 +1477,29 @@ def _print_summary(result):
               ))
         for order, counts in recorded_probe["order_breakdown"].items():
             print("  %s: trimmed nonempty to full empty %d/%d; full "
-                  "worsened word errors %d/%d trials" % (
+                  "nonempty to trimmed empty %d/%d; full worsened word "
+                  "errors %d/%d, trimmed worsened %d/%d trials" % (
                       order,
                       counts["trimmed_nonempty_to_full_empty_trial_count"],
                       counts["trial_count"],
+                      counts["full_nonempty_to_trimmed_empty_trial_count"],
+                      counts["trial_count"],
                       counts["full_worsened_word_error_trial_count"],
                       counts["trial_count"],
+                      counts["trimmed_worsened_word_error_trial_count"],
+                      counts["trial_count"],
                   ))
+        paired_latency = recorded_probe["paired_inference_delta_seconds"]
+        if paired_latency["trial_count"]:
+            print("  Paired inference trimmed-minus-full median %+.3fs "
+                  "(positive is slower; benchmark-only)" %
+                  paired_latency["median"])
+            for order, latency in paired_latency["by_order"].items():
+                if latency["trial_count"]:
+                    print("    %s: median %+.3fs across %d pairs" % (
+                        order, latency["median"], latency["trial_count"]))
+        else:
+            print("  Paired inference trimmed-minus-full: no reviewed speech pairs")
     if result["aggregate_wer"] is not None:
         print("Reviewed corpus WER: %.2f%% consensus | %.2f%% all trials | "
               "%.2f/%.2f%% best/worst trial envelope" % (

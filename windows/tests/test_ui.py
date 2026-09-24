@@ -2134,6 +2134,27 @@ class ScratchpadWindowTests(unittest.TestCase):
         window.text.get.return_value = "private words 🐈"
         return window
 
+    def test_dictate_button_uses_same_stop_path_as_hotkey_and_tray(self):
+        window = self.make_window(recording=True)
+        window._refresh_controls = mock.Mock()
+
+        window.toggle()
+
+        window.app.request_stop.assert_called_once_with()
+        window.app.stop_recording.assert_not_called()
+        window.app.start_recording.assert_not_called()
+        window._refresh_controls.assert_called_once_with()
+
+    def test_dictate_button_starts_when_idle(self):
+        window = self.make_window()
+        window._refresh_controls = mock.Mock()
+
+        window.toggle()
+
+        window.app.start_recording.assert_called_once_with()
+        window.app.request_stop.assert_not_called()
+        window._refresh_controls.assert_called_once_with()
+
     def test_copy_and_cut_virtual_events_stop_tk_class_clipboard_bindings(self):
         window = self.make_window()
         window._copy_or_cut_selection = mock.Mock(return_value="break")

@@ -84,6 +84,16 @@ tail-silence probe. These distinguish a final word lost only with the appended
 tail from one already absent in the clean decode; the prior tailed-only failure
 count remains for continuity. Losses are also stratified by decode order.
 
+Version 17 adds signed **trimmed minus full** paired inference time to the
+recorded-tail probe, pooled across trials and split by which variant ran
+first. It also splits blank transitions and worsened word errors in *both*
+directions by execution order, so a harmful crop cannot hide behind a pooled
+tail-benefit count. These are model-inference diagnostics, not measured
+release-to-paste times or evidence that an automatic crop can find the
+human-marked speech endpoint. Older reports do not have these fields; compare
+matching benchmark versions and inspect the order strata before interpreting
+the deltas. Version 17 does not change product recognition.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -214,8 +224,11 @@ Only reviewed speech rows with `speech_end_ms` are paired; other rows,
 including silence controls, still receive ordinary full-audio trials. The
 full captured input remains the product baseline for ordinary WER, boundary
 retention, and latency. The JSON includes full/trimmed transcripts, word errors,
-blank transitions in **both** directions, inference times, and counterbalanced
-execution order for every pair. The cropped variant is a diagnostic only: an
+blank transitions in **both** directions, inference times, signed paired
+trimmed-minus-full inference deltas, and counterbalanced execution order for
+every pair. The corpus summary keeps both harm directions and latency deltas
+stratified by decode order; compare these strata as well as pooled medians.
+The cropped variant is a diagnostic only: an
 improvement does not show that an automatic trim can locate this human-marked
 boundary, and a mistaken crop can delete a final word. Neither the manifest nor
 the report proves that the WAV came from Presspeech's capture path or that the

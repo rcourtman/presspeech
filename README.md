@@ -320,10 +320,12 @@ Upcoming Windows 0.1.13 retains uncertain delivery for an explicit **Delivery
 Recovery** Copy or Discard. Check the field before copying, and do not dictate
 the same text again first.
 
-On macOS, the delivery check identifies the window, not the field or browser
-tab within it. Keep the original field and tab focused until insertion or the
-recovery notice appears: moving to another field or tab in the same window can
-send the transcript there without triggering clipboard-only recovery.
+macOS 0.3.8 verifies the original window, not the field or browser tab within
+it. The 0.3.9 implementation also compares the focused Accessibility
+control when an app exposes one at recording start. If no control is exposed
+then, or two fields reuse one identity, a same-window move can still send the
+transcript to the new focus without clipboard-only recovery. Keep the original
+field and tab focused until insertion or a recovery notice appears.
 
 Treat a command shell as an execution surface, not an ordinary text field.
 Terminal, PowerShell, Command Prompt, and remote consoles may run pasted text

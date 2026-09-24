@@ -132,19 +132,22 @@ gh release verify-asset v0.3.8 ~/Downloads/Presspeech.zip --repo rcourtman/press
         </div>
       </section>
 
-      <section>
+      <section id="upgrade">
         <div class="wrap">
           <span class="section-eyebrow">Existing installations</span>
           <h2>Upgrade to the current Presspeech identity</h2>
-          <p>Presspeech migrates preferences, hotkey choices, local dictionary rules, correction-sync paths, and recovery state automatically. macOS privacy grants cannot move between app identities, so grant Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring once when Setup Checklist opens.</p>
+          <p>Presspeech migrates preferences, hotkey choices, local dictionary rules, correction-sync paths, and recovery state automatically. If an upgrade changes the app identity, macOS privacy grants cannot move with it; review the Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring rows when Setup Checklist opens.</p>
+          <div class="note warn" data-install-preflight="macos-upgrade">
+            <p><strong>Before reopening macOS 0.3.8 after an upgrade:</strong> A valid cached model loads without a download, but if the model is missing or fails integrity checks, 0.3.8 can start a model request at launch. That request may include an inherited Hugging Face token. If a token may be present—or you are unsure—leave the upgraded app unopened and wait until macOS 0.3.9 is published. Do not launch 0.3.8 through a TLS-inspecting proxy whose trust is unclear. Read the <a href="#model-download-privacy">full launch decision</a> before opening it.</p>
+          </div>
           <div class="grid two">
             <article class="card">
               <h3>Homebrew</h3>
-              <p>Run <code>brew update &amp;&amp; brew upgrade --cask rcourtman/presspeech/presspeech</code>. The fully qualified command trusts only this cask under Homebrew's tap-trust model. Launch Presspeech, accept the standard macOS downloaded-app confirmation, then finish the three permission rows in Setup Checklist.</p>
+              <p>Run <code>brew update &amp;&amp; brew upgrade --cask rcourtman/presspeech/presspeech</code>. The fully qualified command trusts only this cask under Homebrew's tap-trust model. If you decide to launch after reading the warning above, open Presspeech, accept the standard macOS downloaded-app confirmation if shown, then finish any permission rows still needed in Setup Checklist.</p>
             </article>
             <article class="card">
               <h3>Direct download</h3>
-              <p>Quit the installed copy, replace it with the current <strong>Presspeech.app</strong>, and launch it once. Saved app settings migrate automatically; finish the fresh macOS permission grants in Setup Checklist.</p>
+              <p>Quit the installed copy and replace it with the current <strong>Presspeech.app</strong>. If you decide to launch after reading the warning above, open it once. Saved app settings migrate automatically; finish any permission rows still needed in Setup Checklist.</p>
             </article>
           </div>
         </div>

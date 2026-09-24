@@ -481,6 +481,12 @@ keyboard access testing in addition to assistive-technology testing.
   or audio in the qualification record. Any opening loss blocks qualification
   pending local diagnosis; distinguish capture timing from recognition variation
   before changing inference policy.
+- In **Try Dictation**, use its **Dictate** button to start and stop several
+  short, harmless phrases, ending a word at the stop click. Confirm the final
+  word is present as it is when stopping with the hotkey or notification-area
+  command. Repeat one quick stop before **Listening…** and confirm it
+  reports the microphone was not ready rather than producing a partial
+  transcript. Record aggregate outcomes only; do not retain audio or words.
 - With a text editor focused, select **Left Win** and dictate in both hold and
   toggle modes; confirm the Start menu never opens and the transcript returns
   to the original editor. Repeat with **F11** in an app that normally assigns

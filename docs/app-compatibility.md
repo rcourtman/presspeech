@@ -39,11 +39,13 @@ updating that notice; use Command-V only if the clipboard still holds the
 dictation, or use **Copy Last Transcript** when available. Revised macOS copy
 notices make this condition explicit.
 
-On macOS, this is a window-level identity check, not a field- or tab-level
-check. Moving to another field or browser tab within that same window while
-dictation is finishing can send the transcript to the new focus. Keep the
-original field and tab focused until insertion or a recovery notice appears.
-The separate-window checks below do not establish safety for same-window moves.
+macOS 0.3.8 checks the original window, not the field or browser tab within it.
+The 0.3.9 implementation also compares the focused Accessibility control
+when an app exposes one at recording start. If no control is exposed then, or
+two fields reuse one identity, a same-window move can still send the transcript
+to the new focus. Keep the original field and tab focused until insertion or a
+recovery notice appears. The separate-window checks below do not establish
+safety for same-window moves.
 
 Target apps expose focus and paste behavior differently. A result from one app
 version, operating-system version, and Presspeech build is therefore evidence

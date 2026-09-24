@@ -351,7 +351,8 @@ A quick retry cannot be hidden by the previous message's timeout.
 
 After release, silence-aware post-roll stops as early as 80 ms while retaining
 the original 400 ms safety ceiling whenever speech is still present. This keeps
-final words intact without always paying the full delay.
+final words intact without always paying the full delay. The Try Dictation
+button uses this same stop path as the hotkey and notification-area command.
 
 Recordings stop and transcribe automatically at the maximum length selected in
 Settings: 1, 2 (the default), 5, or 10 minutes. This bounds in-memory audio and

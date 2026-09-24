@@ -59,7 +59,7 @@
             </article>
             <article class="card">
               <h3>Do upgrades preserve settings and permissions?</h3>
-              <p><strong>macOS:</strong> Saved preferences and local dictionary rules migrate to the current Presspeech identity automatically. Because macOS ties privacy grants to the bundle identity, that identity-changing upgrade requires one fresh grant for Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. <strong>Windows:</strong> Installing a newer prerelease over the existing app keeps settings in the current user profile.</p>
+              <p><strong>macOS:</strong> Saved preferences and local dictionary rules migrate to the current Presspeech identity automatically. An upgrade that changes the bundle identity requires fresh Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring grants; otherwise, check Setup Checklist for any permission that still needs attention. Before reopening 0.3.8 after an upgrade, read the <a href="install.html#upgrade">upgrade launch decision</a>: a missing or invalid model cache can trigger a model request. <strong>Windows:</strong> Installing a newer prerelease over the existing app keeps settings in the current user profile.</p>
             </article>
             <article class="card">
               <h3>Does audio leave my computer?</h3>
