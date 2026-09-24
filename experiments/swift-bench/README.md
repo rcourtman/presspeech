@@ -156,8 +156,13 @@ threshold. Compare the
 the SDK's chunking-policy change. This is **not** a pass/fail gate: inspect
 per-clip regressions and the absolute release checks too. Report files do not
 attest identical hardware, thermal load, model-cache bytes, or reference
-quality; latency deltas need same-machine, comparable-load measurement and
-the app still needs native qualification. Run the parser's model-free tests
+quality. The comparator refuses a supposedly stable transcript whose trial
+receipts disagree on empty status or character count; it also shows the
+largest paired speech-clip p50 slowdown, since a mean can conceal one slow
+clip. This is model-inference p50, not release-to-paste latency, and the
+slowdown is an observation rather than a significance test. Latency deltas need
+same-machine, comparable-load measurement, and the app still needs native
+qualification. Run the parser's model-free tests
 with `python3 ./test-compare-sdk-asr-reports.py`.
 
 `Package.resolved` is committed for the benchmark for the same reason as the

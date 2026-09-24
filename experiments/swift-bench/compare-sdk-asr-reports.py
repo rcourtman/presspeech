@@ -112,6 +112,7 @@ def parse_clip(body: str, trials: int) -> ClipMetrics:
     if len(outputs) != trials or any(match is None for match in outputs):
         raise ComparisonError("clip has incomplete trial receipts")
     emitting = 0
+    receipt_shapes = set()
     for number, match in enumerate(outputs, 1):
         assert match is not None
         trial, total, empty, characters = match.groups()
@@ -119,6 +120,7 @@ def parse_clip(body: str, trials: int) -> ClipMetrics:
                 (empty == "true") != (int(characters) == 0)):
             raise ComparisonError("clip has inconsistent trial receipts")
         emitting += empty == "false"
+        receipt_shapes.add((empty, int(characters)))
 
     latencies = [LATENCY_ROW.match(line) for line in lines
                  if line.startswith("    latency:")]
@@ -130,10 +132,17 @@ def parse_clip(body: str, trials: int) -> ClipMetrics:
     variable = [line for line in lines if line.startswith("    transcripts (")]
     bullets = [line for line in lines if line.startswith("      • ")]
     if len(stable) == 1 and not variable and not bullets:
+        # The Swift runner prints a single transcript only when *all raw
+        # trial texts are identical*. Their trimmed delivery status and
+        # character counts must therefore be identical too. Otherwise a
+        # missing or spliced blank-trial hypothesis can disappear from WER.
+        if len(receipt_shapes) != 1:
+            raise ComparisonError("stable transcript conflicts with trial receipts")
         score_lines = stable
     elif not stable and len(variable) == 1 and bullets:
         distinct = re.fullmatch(r"    transcripts \(([0-9]+) distinct\):", variable[0])
-        if distinct is None or int(distinct.group(1)) != len(bullets) or len(bullets) > trials:
+        if (distinct is None or int(distinct.group(1)) != len(bullets)
+                or not 2 <= len(bullets) <= trials):
             raise ComparisonError("clip has incomplete transcript metrics")
         score_lines = bullets
     else:
@@ -372,6 +381,18 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
                               for _, left, right in speech_pairs)
     slower = sum(right.p50_ms > left.p50_ms for _, left, right in speech_pairs)
     faster = sum(right.p50_ms < left.p50_ms for _, left, right in speech_pairs)
+    slowdowns = [
+        (right.p50_ms - left.p50_ms, position)
+        for position, left, right in speech_pairs
+        if right.p50_ms > left.p50_ms
+    ]
+    largest_slowdown = max((delta for delta, _ in slowdowns), default=None)
+    largest_slowdown_detail = (
+        f"{largest_slowdown:+.1f} ms at clip "
+        + ", ".join(f"{position:03d}" for delta, position in slowdowns
+                    if delta == largest_slowdown)
+        if largest_slowdown is not None else "none"
+    )
     new_control_emissions = sum(right.emitting_trials > left.emitting_trials
                                 for _, left, right in control_pairs)
     resolved_control_emissions = sum(right.emitting_trials < left.emitting_trials
@@ -409,6 +430,7 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
         f"{signed_delta(baseline.worst_deletion_run, candidate.worst_deletion_run)} words |",
         f"| Mean speech p50 | {baseline.average_p50_ms} ms | {candidate.average_p50_ms} ms | "
         f"{signed_delta(baseline.average_p50_ms, candidate.average_p50_ms, 1)} ms |",
+        f"| Largest paired speech p50 slowdown | — | — | {largest_slowdown_detail} |",
         f"| Paired speech clips: worst-trial errors | — | — | "
         f"{worse_errors} worse; {better_errors} better |",
         f"| Paired speech clips: final word | — | — | "

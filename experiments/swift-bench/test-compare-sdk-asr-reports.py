@@ -122,6 +122,10 @@ class ReportComparisonTests(unittest.TestCase):
         self.assertIn("+1 errors", table)
         self.assertIn("+1 words", table)
         self.assertIn("+5.0 ms", table)
+        self.assertIn(
+            "Largest paired speech p50 slowdown | — | — | +5.0 ms at clip 001",
+            table,
+        )
         self.assertIn("1/3", table)
         self.assertIn("1 worse; 0 better", table)
         self.assertIn("1 newly failed; 0 recovered", table)
@@ -152,6 +156,64 @@ class ReportComparisonTests(unittest.TestCase):
         self.assertIn("Conservative corpus WER | 5.71% (2/35) | 5.71% (2/35)", table)
         self.assertIn("Paired speech clips: first word | — | — | 1 newly failed", table)
         self.assertIn("Review numbered positions with quality regressions: 001.", table)
+
+    def test_equal_mean_latency_does_not_hide_one_clip_slowdown(self):
+        baseline = comparator.parse_report(report(controls=False))
+        candidate = comparator.parse_report(report(candidate=True, controls=False))
+        baseline = replace(
+            baseline, clips=2, average_p50_ms=Decimal("550.0"),
+            clip_metrics=(
+                replace(baseline.clip_metrics[0], p50_ms=Decimal("100.0")),
+                replace(baseline.clip_metrics[0], p50_ms=Decimal("1000.0")),
+            ),
+        )
+        candidate = replace(
+            candidate, clips=2, average_p50_ms=Decimal("550.0"),
+            clip_metrics=(
+                replace(candidate.clip_metrics[0], p50_ms=Decimal("1.0")),
+                replace(candidate.clip_metrics[0], p50_ms=Decimal("1099.0")),
+            ),
+        )
+        table = comparator.comparison_table(baseline, candidate, 1)
+        self.assertIn("Mean speech p50 | 550.0 ms | 550.0 ms | +0.0 ms", table)
+        self.assertIn(
+            "Largest paired speech p50 slowdown | — | — | +99.0 ms at clip 002",
+            table,
+        )
+        self.assertNotIn(SECRET, table)
+
+        faster = replace(candidate, clip_metrics=(
+            replace(candidate.clip_metrics[0], p50_ms=Decimal("50.0")),
+            replace(candidate.clip_metrics[1], p50_ms=Decimal("900.0")),
+        ))
+        self.assertIn(
+            "Largest paired speech p50 slowdown | — | — | none",
+            comparator.comparison_table(baseline, faster, 1),
+        )
+
+    def test_stable_transcript_requires_identical_trial_receipts(self):
+        source = report()
+        for replacement in (
+                "output: trial=2/3 empty=true characters=0",
+                "output: trial=2/3 empty=false characters=11"):
+            with self.subTest(replacement=replacement):
+                mutated = source.replace(
+                    "output: trial=2/3 empty=false characters=12",
+                    replacement, 1,
+                )
+                with self.assertRaisesRegex(
+                        comparator.ComparisonError,
+                        "stable transcript conflicts with trial receipts"):
+                    comparator.parse_report(mutated)
+
+    def test_variable_transcript_group_needs_multiple_distinct_outputs(self):
+        source = report().replace(
+            "    transcript: [WER 5.7%]",
+            "    transcripts (1 distinct):\n      • [WER 5.7%]",
+        )
+        with self.assertRaisesRegex(
+                comparator.ComparisonError, "incomplete transcript metrics"):
+            comparator.parse_report(source)
 
     def test_compensating_clip_changes_are_visible_when_corpus_errors_tie(self):
         baseline = comparator.parse_report(report(controls=False))
