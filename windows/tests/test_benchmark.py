@@ -639,7 +639,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                        side_effect=fixture_audio_by_path(audio)):
                 result = benchmark.run_benchmark(
                     path, parakeet_recorded_tail_probe=True)
 
@@ -686,7 +686,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                        side_effect=fixture_audio_by_path(audio)):
                 result = benchmark.run_benchmark(
                     path, parakeet_recorded_tail_probe=True)
 
