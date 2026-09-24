@@ -20421,8 +20421,10 @@ private enum PresspeechSelfTest {
             let currentText = pb.string(forType: .string)
 
             let acquiredBeforeLateCopy = pb.prepareForNewContents(with: .currentHostOnly)
+            let lateItem = NSPasteboardItem()
+            let lateItemReady = lateItem.setString("dictation fixture", forType: .string)
             let lateCopyAccepted = ClipboardPasteInserter.writePreparedItems(
-                [item], to: pb, acquiredChangeCount: acquiredBeforeLateCopy,
+                [lateItem], to: pb, acquiredChangeCount: acquiredBeforeLateCopy,
                 performWrite: { items, board in
                     let wrote = board.writeObjects(items)
                     board.clearContents()
@@ -20430,7 +20432,7 @@ private enum PresspeechSelfTest {
                     return wrote
                 }
             )
-            return (itemReady, newerCopyWritten, staleWriteAccepted,
+            return (itemReady && lateItemReady, newerCopyWritten, staleWriteAccepted,
                     staleWriteInvoked, newerCopyPreserved, currentWriteAccepted,
                     currentText, lateCopyAccepted, pb.string(forType: .string))
         }
