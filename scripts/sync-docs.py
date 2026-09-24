@@ -3556,6 +3556,26 @@ def check_getting_started_preflight_order(
                 "its warning"
             ]
 
+    # The download cost and Windows language split must be visible inside the
+    # relevant decision card, not only later in the install instructions.
+    for platform, markers in {
+        "macos": ("Download on launch", "500–600 MB"),
+        "windows": (
+            "Download size and language", "2.5 GB", "141 MiB",
+            "English-only", 'href="windows.html#language-support"',
+        ),
+    }.items():
+        start = preflight.find(f'<li id="{platform}-launch-decision">')
+        end = preflight.find("</li>", start) if start >= 0 else -1
+        card = preflight[start:end] if end >= 0 else ""
+        missing = [marker for marker in markers if marker not in card]
+        if missing:
+            return [
+                f"{display}: {platform} launch decision omits model cost or "
+                "language guidance — missing "
+                + ", ".join(repr(marker) for marker in missing)
+            ]
+
     actions = contents.find('<div class="actions">')
     if actions < 0 or preflight_end < 0 or preflight_end > actions:
         return [
@@ -4271,6 +4291,41 @@ def stale_copy_errors(paths: list[Path]) -> list[str]:
     return errors
 
 
+def check_macos_about_privacy_copy(
+    path: Path = ROOT / "swift" / "Sources" / "Presspeech" / "main.swift",
+) -> list[str]:
+    """Keep the shipped About dialog aligned with release-scoped privacy copy.
+
+    This UI copy is not part of the public-document scan above. In particular,
+    a blanket no-telemetry claim here can be mistaken for a project-wide claim
+    despite the published Windows dependency behavior.
+    """
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    if not path.exists():
+        return [f"{display}: macOS About privacy copy is missing"]
+    source = read_text(path)
+    start = source.find("@objc private func showAboutClicked(")
+    end = source.find("// MARK: - Update flow", start)
+    if start < 0 or end < 0:
+        return [f"{display}: macOS About privacy copy could not be located"]
+    about = source[start:end]
+    required = (
+        "No Presspeech-operated analytics or cloud transcription",
+        "paste or manual recovery can use the shared system clipboard",
+        "Other local apps and OS history may retain copied text",
+        'alert.addButton(withTitle: "View Privacy Guide")',
+        "NSWorkspace.shared.open(PRIVACY_GUIDE_PAGE)",
+    )
+    errors = [f"{display}: macOS About privacy copy is incomplete"] if any(
+        phrase not in about for phrase in required
+    ) else []
+    if re.search(r"\bno telemetry\b", about, re.IGNORECASE):
+        errors.append(f"{display}: macOS About uses an unqualified telemetry claim")
+    if 'let PRIVACY_GUIDE_PAGE = URL(string: "https://rcourtman.github.io/presspeech/privacy.html")!' not in source:
+        errors.append(f"{display}: macOS About privacy link is not the fixed guide URL")
+    return errors
+
+
 def check_mac_release_phase_copy(
     metadata: dict[str, object], paths: list[Path] | None = None
 ) -> list[str]:
@@ -4753,6 +4808,25 @@ def diff_text(path: Path, current: str, expected: str) -> str:
 
 
 def run_self_test() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        about_path = Path(tmp) / "main.swift"
+        about_source = read_text(ROOT / "swift" / "Sources" / "Presspeech" / "main.swift")
+        about_path.write_text(about_source, encoding="utf-8")
+        if check_macos_about_privacy_copy(about_path):
+            raise SyncError("self-test: current macOS About privacy copy was rejected")
+        about_path.write_text(
+            about_source.replace("No Presspeech-operated analytics", "No telemetry", 1),
+            encoding="utf-8",
+        )
+        if not check_macos_about_privacy_copy(about_path):
+            raise SyncError("self-test: unqualified macOS About telemetry claim was accepted")
+        about_path.write_text(
+            about_source.replace('alert.addButton(withTitle: "View Privacy Guide")',
+                                 'alert.addButton(withTitle: "View Help")', 1),
+            encoding="utf-8",
+        )
+        if not check_macos_about_privacy_copy(about_path):
+            raise SyncError("self-test: missing macOS About privacy link was accepted")
     launch_entry = (
         '[Run]\nFilename: "{app}\\Presspeech.exe"; '
         'Description: "Launch Presspeech"; Flags: postinstall\n'
@@ -6251,12 +6325,15 @@ def run_self_test() -> None:
             '<ul><li id="macos-launch-decision"><h3>macOS 0.3.8 — wait if a token may be inherited</h3> '
             '<strong>Wait for published 0.3.9</strong> if a Hugging Face token may be inherited by Presspeech. '
             'Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear. '
+            '<strong>Download on launch:</strong> 500–600 MB. '
             'A model request can include the inherited token; the bundled client honors '
             'lowercase <code>https_proxy</code>, and a TLS-inspecting proxy trusted by macOS can read that token. '
             '<a href="install.html#model-download-privacy">full macOS warning</a></li>'
             '<li id="windows-launch-decision"><h3>Windows 0.1.12 — wait if privacy risks are unclear</h3> '
             '<strong>Wait for published 0.1.13</strong> if you want to avoid possible Hugging Face usage telemetry, '
-            'an available token or custom download route may be configured. A custom route can change where '
+            'an available token or custom download route may be configured. '
+            '<strong>Download size and language:</strong> 2.5 GB multilingual or 141 MiB English-only. '
+            '<a href="windows.html#language-support">Check language support</a>. A custom route can change where '
             'the request and token go; a TLS-inspecting proxy trusted by the client can read the token. '
             "If such a proxy's trust is unclear, do not launch while it is in use. "
             'If you install but wait, leave <strong>Launch Presspeech</strong> unchecked. '
@@ -6288,6 +6365,18 @@ def run_self_test() -> None:
         )
         if not check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: missing token-handling guidance was accepted")
+        getting_started.write_text(
+            safe_getting_started.replace("500–600 MB", ""),
+            encoding="utf-8",
+        )
+        if not check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: missing macOS prelaunch model size was accepted")
+        getting_started.write_text(
+            safe_getting_started.replace("141 MiB English-only", "English-only"),
+            encoding="utf-8",
+        )
+        if not check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: missing Windows prelaunch model size was accepted")
         getting_started.write_text(
             safe_getting_started.replace('href="#windows-launch-decision"', 'href="#quick-path"'),
             encoding="utf-8",
@@ -7001,6 +7090,7 @@ def main() -> int:
         errors: list[str] = []
         if args.check:
             errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
+            errors.extend(check_macos_about_privacy_copy())
             errors.extend(check_mac_release_phase_copy(metadata))
             errors.extend(check_mac_model_download_guidance())
             errors.extend(check_first_run_action_copy())
@@ -7072,6 +7162,7 @@ def main() -> int:
         sync_icon_stats(previous_size, str(metadata["release_zip_size"]))
 
         errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
+        errors.extend(check_macos_about_privacy_copy())
         errors.extend(check_mac_release_phase_copy(metadata))
         errors.extend(check_mac_model_download_guidance())
         errors.extend(check_first_run_action_copy())

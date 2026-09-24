@@ -1127,6 +1127,11 @@ item after the development-wrapper launch check.
   status item (or at the active window if the menu-bar item is crowded out).
   With a Presspeech window active, press Command-comma and confirm it opens the
   same hierarchy with current checkmarks and disabled states.
+- Open **About Presspeech** and confirm it distinguishes on-device
+  transcription and Presspeech-operated analytics from model-download network
+  calls, and says paste/recovery may use the shared clipboard. With keyboard
+  navigation and VoiceOver, activate **View Privacy Guide** and confirm it opens
+  the fixed privacy page without app, device, or transcript data in the URL.
 - In Try Dictation and the dictionary manager's search field, confirm
   Command-Z, Shift-Command-Z, Command-X/C/V, and Command-A match the enabled
   Edit-menu commands and act on the focused text. With each Presspeech utility

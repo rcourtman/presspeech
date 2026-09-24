@@ -221,6 +221,32 @@ per-trial errors, VAD-retained duration, rejected-speech trials, boundary-word
 retention, silence false positives, and latency by task group before proposing
 any product-policy change.
 
+For two version-25 JSON reports from those commands, run the model-free
+comparison helper locally:
+
+```bat
+.venv\Scripts\python compare_whisper_vad.py benchmarks\whisper-160ms.json benchmarks\whisper-2000ms.json
+```
+
+It requires reviewed speech and silence controls and rejects mismatched
+corpus/order digests, model snapshot, requested language,
+precision, recorded environment, run count, per-clip review scope, or any VAD
+setting other than the minimum silence duration. It compares all-trial WER,
+longest deletion, first/final-word failures, VAD rejection and missing-duration
+counts, reviewed-silence false positives, and inference median. It also counts
+anonymous clip positions with worsened metrics and task/language/intersection
+strata containing a clip-level quality regression, even if pooled errors improve.
+It does **not** print IDs, paths, references,
+transcripts, or group labels. Sub-250 ms clips remain in model scores and are
+counted separately as below the app's transcription gate, not product delivery
+evidence. The script does not certify the input digest or
+hardware metadata independently and cannot prove identical thermal/background
+load, representative references, acoustic speech recall, or native delivery.
+Do not treat its zero-regression output as a release pass; review the private
+reports and recordings before changing product VAD policy. Test the helper
+without models using `python -m unittest tests.test_compare_whisper_vad` from
+`windows/`.
+
 ## Parakeet trailing-silence probe
 
 The Windows app captures at least 80 ms and at most 400 ms after hotkey

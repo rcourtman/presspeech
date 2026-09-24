@@ -75,6 +75,13 @@ boundaries. Builds with that protection also add the standard transient,
 auto-generated, and concealed markers, asking cooperating clipboard managers
 not to archive or visibly expose transcript entries; these advisory markers do
 not constrain arbitrary local readers.
+Published Windows 0.1.12 clipboard writes can enter Windows Clipboard History
+or Cloud Clipboard. The upcoming 0.1.13 candidate adds Microsoft's
+history/cloud exclusion format to transcript writes, but the current clipboard
+remains available to other local software and remote-session clipboard routes
+are separate boundaries. See the
+[release-specific privacy guide](https://rcourtman.github.io/presspeech/privacy.html)
+before sensitive dictation.
 
 ## Reporting a vulnerability
 
@@ -126,28 +133,35 @@ substitute another transitive package.
 
 ## What's in scope
 
-- Anything that lets a non-Presspeech process read transcripts in flight,
-  or trigger Presspeech paste actions.
+- An unintended transcript disclosure outside the documented shared-clipboard
+  boundary, including a new disk or network path.
+- A way to trigger an unwanted Presspeech paste action or bypass its
+  destination checks, including delivery into a different field or window.
+- A bypass of release or update integrity checks that could run unapproved code.
 - Privilege-escalation paths through the app bundle's launcher.
 - TCC bypasses or impersonation that misuse Presspeech's granted
   permissions.
 
 ## What's out of scope
 
-- Issues that require already having local user privileges (e.g. an
-  attacker who can already read `~/Library/Logs/Presspeech.log` doesn't
-  need a vulnerability — they're already on the box).
-- Vulnerabilities in upstream dependencies (please report those to
-  the upstream project).
+- Another same-user app reading a transcript that Presspeech deliberately put
+  on the general clipboard, or an operating-system/third-party clipboard
+  service retaining it, without a Presspeech-specific bypass. This is a
+  documented delivery privacy boundary, not a promise of clipboard secrecy.
+- Ordinary access to a user's existing Presspeech log by another process with
+  the same user's file privileges, without a new Presspeech disclosure path.
+- Vulnerabilities solely in upstream dependencies (please report those to
+  the upstream project); a Presspeech-specific unsafe integration is in scope.
 - Anything that requires the user to ship a custom build with
   transcript logging deliberately enabled — Presspeech as shipped never
   writes transcript content to disk.
 
 ## Trust model for the speech model
 
-Presspeech's transcription is local, but the speech-recognition weights
-themselves are downloaded once on first launch. That download is
-handled by the upstream [FluidAudio](https://github.com/FluidInference/FluidAudio)
+Presspeech's transcription is local, but speech-recognition weights may need
+to be downloaded when a selected model is missing, after a cache reset, or
+when an integrity retry is allowed. On macOS, that download is handled by
+the upstream [FluidAudio](https://github.com/FluidInference/FluidAudio)
 library, which fetches the CoreML conversion from
 [`FluidInference/parakeet-tdt-0.6b-v3-coreml` on Hugging Face](https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml).
 That model is derived from NVIDIA's
@@ -161,8 +175,8 @@ What that means for trust:
   payload.
 - FluidAudio does not verify a cryptographic checksum itself, so
   Presspeech adds its own manifest check around the v3 CoreML files it
-  loads. Startup downloads the model through FluidAudio, verifies the
-  downloaded model bundle and vocabulary against SHA-256 hashes pinned
+  loads. When needed, startup downloads the model through FluidAudio,
+  verifies the downloaded model bundle and vocabulary against SHA-256 hashes pinned
   in `swift/Sources/Presspeech/main.swift`, and only then asks FluidAudio
   to compile/load the models. The manifest is tied to a specific
   `FluidInference/parakeet-tdt-0.6b-v3-coreml` repository commit; a

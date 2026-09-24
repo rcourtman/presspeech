@@ -89,6 +89,7 @@ let GITHUB_REPOSITORY_PAGE = URL(string: "https://github.com/rcourtman/presspeec
 let GITHUB_RELEASES_PAGE = URL(string: "https://github.com/rcourtman/presspeech/releases/latest")!
 let GITHUB_SUPPORT_GUIDE_PAGE = URL(string: "https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md")!
 let APP_COMPATIBILITY_GUIDE_PAGE = URL(string: "https://rcourtman.github.io/presspeech/app-compatibility.html")!
+let PRIVACY_GUIDE_PAGE = URL(string: "https://rcourtman.github.io/presspeech/privacy.html")!
 let HOMEBREW_CASK_TAP = "rcourtman/presspeech"
 let HOMEBREW_CASK_TOKEN = "rcourtman/presspeech/presspeech"
 let HOMEBREW_CASK_INSTALLED_TOKEN = "presspeech"
@@ -15207,9 +15208,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             Mode:    \(TRIGGER_DISPLAY[settings.triggerMode] ?? settings.triggerMode.rawValue)
             Model:   \(settings.speechModelProfile.aboutModelText)
 
-            Local-only dictation. No cloud transcription, no telemetry.
+            On-device transcription. No Presspeech-operated analytics or cloud transcription.
             Network: model download, optional update check and install.
             Permissions: microphone audio, paste-at-cursor, push-to-talk hotkey.
+            Clipboard: paste or manual recovery can use the shared system clipboard.
+            Other local apps and OS history may retain copied text.
+            See the Privacy Guide for release-specific network and clipboard details.
 
             Maintained by Richard Courtman.
             github.com/rcourtman/presspeech · MIT licensed
@@ -15223,8 +15227,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "View on GitHub")
-        if alert.runModal() == .alertSecondButtonReturn {
+        alert.addButton(withTitle: "View Privacy Guide")
+        switch alert.runModal() {
+        case .alertSecondButtonReturn:
             NSWorkspace.shared.open(GITHUB_REPOSITORY_PAGE)
+        case .alertThirdButtonReturn:
+            NSWorkspace.shared.open(PRIVACY_GUIDE_PAGE)
+        default:
+            break
         }
     }
 
