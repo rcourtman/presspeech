@@ -285,6 +285,10 @@ func shouldNotifyAssistiveAppsOfMenuBarState(_ state: MenuBarState,
 enum DictationNotice: Equatable {
     case copiedToClipboard
     case pasteTargetUnavailable
+    case clipboardCopyUnconfirmed
+    case clipboardCopyUnconfirmedAfterUncertainDelivery
+    case clipboardCopyUnconfirmedAfterTerminalReview
+    case terminalReview
     case insertionFailed
     case insertionFailedWithoutHistory
     case transcriptionFailed
@@ -298,6 +302,14 @@ enum DictationNotice: Equatable {
             return "Transcript copied — ⌘V if clipboard unchanged"
         case .pasteTargetUnavailable:
             return "Can’t verify window — ⌘V if clipboard unchanged"
+        case .clipboardCopyUnconfirmed:
+            return "Copy unconfirmed — check clipboard before pasting"
+        case .clipboardCopyUnconfirmedAfterUncertainDelivery:
+            return "Copy unconfirmed — check field before retrying"
+        case .clipboardCopyUnconfirmedAfterTerminalReview:
+            return "Copy unconfirmed — review terminal text"
+        case .terminalReview:
+            return "Terminal line break — review before pasting"
         case .insertionFailed:
             return "Delivery uncertain — check field before retrying"
         case .insertionFailedWithoutHistory:
@@ -319,6 +331,14 @@ enum DictationNotice: Equatable {
             return "Copied — ⌘V if unchanged"
         case .pasteTargetUnavailable:
             return "Unverified — ⌘V if unchanged"
+        case .clipboardCopyUnconfirmed:
+            return "Copy unconfirmed — verify before paste"
+        case .clipboardCopyUnconfirmedAfterUncertainDelivery:
+            return "Check field; copy unconfirmed"
+        case .clipboardCopyUnconfirmedAfterTerminalReview:
+            return "Copy unconfirmed; review terminal text"
+        case .terminalReview:
+            return "Review before manual terminal paste"
         case .insertionFailed:
             return "Check field; copy from menu if needed"
         case .insertionFailedWithoutHistory:
@@ -340,6 +360,14 @@ enum DictationNotice: Equatable {
             return "Transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available."
         case .pasteTargetUnavailable:
             return "Presspeech couldn't verify the window for automatic paste. The transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available."
+        case .clipboardCopyUnconfirmed:
+            return "Presspeech could not confirm the transcript is on the clipboard. Check it in a disposable field before pasting elsewhere. If delivery was uncertain, inspect the original destination before trying again."
+        case .clipboardCopyUnconfirmedAfterUncertainDelivery:
+            return "Presspeech could not confirm the transcript is on the clipboard. The last dictation's delivery is still uncertain. Inspect its original destination for complete or partial text before retrying, and check the clipboard in a disposable field before pasting elsewhere."
+        case .clipboardCopyUnconfirmedAfterTerminalReview:
+            return "Presspeech could not confirm the transcript is on the clipboard. No automatic terminal paste was attempted. Check the clipboard in a non-executing editor before any manual shell paste: a line break can run a command."
+        case .terminalReview:
+            return "Presspeech did not automatically paste a line break into a recognized command terminal. The transcript was copied. Review the exact text in a non-executing editor before pasting into a shell: a line break can run a command. If the clipboard changed, use Copy Last Transcript if it is available."
         case .insertionFailed:
             return "Presspeech couldn't confirm text delivery. Check the destination field before pasting or trying again. If text is absent or incomplete, remove any partial text before pasting a copied transcript. Copy Last Transcript is available in the Presspeech menu."
         case .insertionFailedWithoutHistory:
@@ -904,10 +932,38 @@ func dictationNoticeAfterHistoryChange(_ notice: DictationNotice?,
     return notice
 }
 
-func shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(_ notice: DictationNotice?) -> Bool {
-    // Copying an entry (including an older one) does not establish whether
-    // the last dictation reached the target, or whether it arrived partially.
-    notice == .insertionFailed || notice == .insertionFailedWithoutHistory
+func dictationNoticeAfterConfirmedManualCopy(_ notice: DictationNotice?,
+                                            hasRecentTranscripts: Bool = true) -> DictationNotice? {
+    // Copying text (including an older History entry or scratchpad text) does
+    // not establish whether the last dictation reached its target completely.
+    // A successful retry resolves the copy warning, not delivery uncertainty.
+    guard let notice else { return nil }
+    switch notice {
+    case .insertionFailed:
+        return hasRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
+    case .insertionFailedWithoutHistory:
+        return .insertionFailedWithoutHistory
+    case .clipboardCopyUnconfirmedAfterUncertainDelivery:
+        return hasRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
+    case .terminalReview, .clipboardCopyUnconfirmedAfterTerminalReview:
+        return .terminalReview
+    default:
+        return nil
+    }
+}
+
+func manualClipboardCopyFailureNotice(after notice: DictationNotice?) -> DictationNotice {
+    // A failed retry does not resolve the original partial-paste risk.
+    guard let notice else { return .clipboardCopyUnconfirmed }
+    switch notice {
+    case .insertionFailed, .insertionFailedWithoutHistory,
+         .clipboardCopyUnconfirmedAfterUncertainDelivery:
+        return .clipboardCopyUnconfirmedAfterUncertainDelivery
+    case .terminalReview, .clipboardCopyUnconfirmedAfterTerminalReview:
+        return .clipboardCopyUnconfirmedAfterTerminalReview
+    default:
+        return .clipboardCopyUnconfirmed
+    }
 }
 
 func parseRecentTranscriptLimit(storedValue value: Any?) -> RecentTranscriptLimit? {
@@ -5884,13 +5940,41 @@ struct DictationPasteTarget {
     let processIdentifier: pid_t
     let focusedWindow: AXUIElement
     let focusedElement: AXUIElement?
+    // Used only for a narrow terminal safety policy; never log app identity.
+    let bundleIdentifier: String?
 
     init(processIdentifier: pid_t, focusedWindow: AXUIElement,
-         focusedElement: AXUIElement? = nil) {
+         focusedElement: AXUIElement? = nil, bundleIdentifier: String? = nil) {
         self.processIdentifier = processIdentifier
         self.focusedWindow = focusedWindow
         self.focusedElement = focusedElement
+        self.bundleIdentifier = bundleIdentifier
     }
+}
+
+/// A pasted return can execute at a shell prompt. Match only known standalone
+/// terminal bundles, not a title (which can contain private document text) or
+/// a process name (which can be user-controlled). Embedded and unknown terminal
+/// surfaces still need native qualification and deliberate user review.
+private let commandTerminalBundleIdentifiers: Set<String> = [
+    "com.apple.Terminal", "com.googlecode.iterm2", "org.alacritty",
+    "com.mitchellh.ghostty", "net.kovidgoyal.kitty",
+    "com.github.wez.wezterm", "dev.warp.Warp-Stable",
+]
+
+func requiresCommandTerminalReview(_ text: String, bundleIdentifier: String?) -> Bool {
+    guard let bundleIdentifier,
+          commandTerminalBundleIdentifiers.contains(bundleIdentifier) else { return false }
+    return text.contains("\n") || text.contains("\r")
+}
+
+func commandTerminalCopyOnlyOutcome(
+    _ text: String,
+    bundleIdentifier: String?,
+    copyOnly: () -> TextInsertionOutcome
+) -> TextInsertionOutcome? {
+    guard requiresCommandTerminalReview(text, bundleIdentifier: bundleIdentifier) else { return nil }
+    return copyOnly()
 }
 
 enum DictationPasteTargetCaptureFailure: Error, Equatable {
@@ -5969,11 +6053,13 @@ enum TextInsertionOutcome: Equatable {
 func dictationCompletionNotice(processedText: String,
                                 insertionOutcome: TextInsertionOutcome?,
                                 keepsRecentTranscripts: Bool,
-                                pasteTargetUnavailableAtStart: Bool = false) -> DictationNotice? {
+                                pasteTargetUnavailableAtStart: Bool = false,
+                                terminalReviewRequired: Bool = false) -> DictationNotice? {
     guard !processedText.isEmpty else { return .noTextToInsert }
     guard let insertionOutcome else { return nil }
     switch insertionOutcome {
     case .copiedWithoutPasting:
+        if terminalReviewRequired { return .terminalReview }
         return pasteTargetUnavailableAtStart ? .pasteTargetUnavailable : .copiedToClipboard
     case .failed, .deliveryUncertain, .clipboardChanged:
         return keepsRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
@@ -5987,7 +6073,8 @@ func captureDictationPasteTarget(
     frontmostProcessIdentifier: () -> pid_t?,
     focusedWindowForProcess: (pid_t) -> Result<AXUIElement, DictationPasteTargetCaptureFailure>,
     focusedElementForProcess: (pid_t) -> AXUIElement? = { _ in nil },
-    focusedWindowForElement: (AXUIElement) -> AXUIElement? = { _ in nil }
+    focusedWindowForElement: (AXUIElement) -> AXUIElement? = { _ in nil },
+    bundleIdentifierForProcess: (pid_t) -> String? = { _ in nil }
 ) -> DictationPasteTargetCaptureResult {
     guard let processIdentifier = frontmostProcessIdentifier() else {
         return .unavailable(.frontmostApplicationUnavailable)
@@ -6031,12 +6118,14 @@ func captureDictationPasteTarget(
     // Not every target (notably some Electron/Chromium views) publishes a
     // focused control. The normal exact-window route remains available when
     // it is absent; a published control must belong to that window.
+    let bundleIdentifier = bundleIdentifierForProcess(processIdentifier)
     guard frontmostProcessIdentifier() == processIdentifier else {
         return .unavailable(.frontmostApplicationChanged)
     }
     return .captured(DictationPasteTarget(processIdentifier: processIdentifier,
                                           focusedWindow: focusedWindow,
-                                          focusedElement: focusedElement))
+                                          focusedElement: focusedElement,
+                                          bundleIdentifier: bundleIdentifier))
 }
 
 @MainActor
@@ -6100,6 +6189,13 @@ func currentDictationPasteTarget(reportFailure: Bool = false,
                 return nil
             }
             return windowValue as! AXUIElement
+        },
+        bundleIdentifierForProcess: { processIdentifier in
+            // Read only the captured process, not a title or window text;
+            // captureDictationPasteTarget checks frontmost PID again afterwards.
+            NSRunningApplication.runningApplication(
+                withProcessIdentifier: processIdentifier
+            )?.bundleIdentifier
         }
     )
     // captureDictationPasteTarget rechecks activation after the potentially
@@ -6469,6 +6565,17 @@ enum TextInserter {
                        strategy: TextInsertionStrategy = defaultStrategy,
                        preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
+        // Guard both the normal paste and direct-Unicode fallback. A line
+        // break, including the selected suffix, must not be injected into a
+        // known shell host before the user can inspect it.
+        if let recovery = commandTerminalCopyOnlyOutcome(
+            text,
+            bundleIdentifier: expectedTarget.bundleIdentifier,
+            copyOnly: { copyWithoutPasting(text, preserveClipboard: preserveClipboard) }
+        ) {
+            log("automatic terminal insertion skipped; line break requires review")
+            return recovery
+        }
         for candidate in textInsertionStrategyChain(primary: strategy) {
             let outcome = insert(text,
                                  using: candidate,
@@ -10578,14 +10685,17 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         )
     }
 
-    // Visible + audible, actionable feedback when insertion cannot be
-    // confirmed. Input delivery may be partial, so the notice asks the user to
-    // inspect the destination before copying or retrying. The menu keeps the
-    // recovery instruction until the next recording, while the optional
-    // waveform panel briefly shows the same instruction at the user's point of
-    // attention. The sound honours the feedback toggle; the icon flash always
-    // fires for users who hide the waveform or run silent.
+    // Visible + audible, actionable feedback when insertion or a manual
+    // recovery copy cannot be confirmed. Input delivery may be partial, so
+    // the notice asks the user to inspect the destination before retrying.
+    // The menu keeps the recovery instruction until the next recording, while
+    // the optional waveform panel briefly shows it at the point of attention.
+    // The sound honours the feedback toggle; the icon flash always fires.
     private func signalDictationFailure(_ notice: DictationNotice) {
+        // A second notice (for example, a failed Copy after uncertain paste)
+        // owns a fresh HUD lifetime. An older hide task must not cut it short.
+        dictationNoticeHUDWorkItem?.cancel()
+        dictationNoticeHUDWorkItem = nil
         dictationNotice = notice
         statusItem?.button?.toolTip = notice.statusTitle
         statusItem?.button?.setAccessibilityHelp(notice.accessibilityValue)
@@ -10605,6 +10715,43 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             DispatchQueue.main.asyncAfter(deadline: .now() + DICTATION_NOTICE_HUD_SECONDS,
                                            execute: work)
         }
+    }
+
+    private func reportManualClipboardCopyUnconfirmed() {
+        // A write can fail after taking pasteboard ownership, or lose its
+        // receipt to another copy. Do not leave a previous "Copied" status as
+        // the only feedback. During live capture or startup, do not replace
+        // recording/readiness state or announce recovery speech into the mic;
+        // retain the existing beep fallback instead.
+        if isReady, !isRecording, !isBusy, !isTerminating {
+            signalDictationFailure(manualClipboardCopyFailureNotice(after: dictationNotice))
+            rebuildMenu()
+        } else {
+            NSSound.beep()
+        }
+    }
+
+    private func acknowledgeConfirmedManualCopy() {
+        let nextNotice = dictationNoticeAfterConfirmedManualCopy(
+            dictationNotice,
+            hasRecentTranscripts: !history.isEmpty
+        )
+        if let nextNotice {
+            dictationNotice = nextNotice
+            statusItem?.button?.toolTip = nextNotice.statusTitle
+            statusItem?.button?.setAccessibilityHelp(nextNotice.accessibilityValue)
+            if recordingHUDPanel?.isVisible == true {
+                recordingHUDView?.mode = .notice(nextNotice)
+            }
+        } else {
+            clearDictationNotice()
+        }
+        if isReady, !isRecording, !isBusy, !isTerminating {
+            // Copy is not a paste acknowledgement; nor should it shorten an
+            // in-flight failure-icon flash when delivery remains uncertain.
+            setMenuBarState(nextNotice != nil && errorFlashWorkItem != nil ? .error : .idle)
+        }
+        rebuildMenu()
     }
 
     private func flashErrorMenuBarIcon() {
@@ -10874,11 +11021,18 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                         )
                         let completed = RecentTranscript(processedText: cleaned,
                                                          suffix: settings.pasteSuffix)
-                        let insertionOutcome: TextInsertionOutcome
-                        if shouldAttemptAutomaticDictationDelivery(
+                        let automaticDeliveryPermitted = shouldAttemptAutomaticDictationDelivery(
                             permissionInterruptionObserved: permissionInterruptionObserved,
                             missingPermissions: missing
-                        ), let expectedTarget = recordingPasteTarget {
+                        )
+                        let terminalReviewRequired = automaticDeliveryPermitted
+                            && requiresCommandTerminalReview(
+                                completed.deliveredText,
+                                bundleIdentifier: recordingPasteTarget?.bundleIdentifier
+                            )
+                        let insertionOutcome: TextInsertionOutcome
+                        if automaticDeliveryPermitted,
+                           let expectedTarget = recordingPasteTarget {
                             insertionOutcome = TextInserter.insert(
                                 completed.deliveredText,
                                 preserveClipboard: settings.preserveClipboardForManualRestore,
@@ -10917,7 +11071,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             keepsRecentTranscripts: settings.recentTranscriptLimit.count > 0,
                             pasteTargetUnavailableAtStart: recordingPasteTarget == nil
                                 && !permissionInterruptionObserved
-                                && missing.isEmpty
+                                && missing.isEmpty,
+                            terminalReviewRequired: terminalReviewRequired
                         )
                         addToHistory(completed)
                     }
@@ -11257,21 +11412,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         guard let s = sender.representedObject as? String else { return }
         let pb = NSPasteboard.general
         guard ClipboardPasteInserter.writeTranscript(s, to: pb) else {
-            log("history clipboard write failed")
-            NSSound.beep()
+            log("history clipboard copy unconfirmed")
+            reportManualClipboardCopyUnconfirmed()
             return
         }
         log("history copied to clipboard (\(s.count) chars)")
-        let preservesUncertainDelivery = shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(dictationNotice)
-        if !preservesUncertainDelivery {
-            clearDictationNotice()
-        }
-        if isReady, !isRecording, !isBusy, !isTerminating {
-            // A successful copy is not a paste acknowledgement. Nor should
-            // opening History shorten an in-flight failure-icon flash.
-            setMenuBarState(preservesUncertainDelivery && errorFlashWorkItem != nil ? .error : .idle)
-        }
-        rebuildMenu()
+        acknowledgeConfirmedManualCopy()
     }
 
     @objc private func clearHistoryClicked(_ sender: NSMenuItem) {
@@ -12992,8 +13138,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     @objc private func copyDictationScratchpadClicked(_ sender: NSButton) {
         guard let text = dictationScratchpadTextView?.string, !text.isEmpty else { return }
         if !ClipboardPasteInserter.writeTranscript(text, to: .general) {
-            log("scratchpad clipboard write failed")
-            NSSound.beep()
+            log("scratchpad clipboard copy unconfirmed")
+            reportManualClipboardCopyUnconfirmed()
+        } else if dictationNotice != nil {
+            acknowledgeConfirmedManualCopy()
         }
     }
 
@@ -17192,6 +17340,9 @@ private enum PresspeechSelfTest {
                 focusedElementForProcess: { pid in pid == 700 ? firstField : nil },
                 focusedWindowForElement: { element in
                     CFEqual(element, firstField) ? firstWindow : nil
+                },
+                bundleIdentifierForProcess: { pid in
+                    pid == 700 ? "com.apple.Terminal" : nil
                 }
             )
             guard case .captured(let capture) = captureResult else {
@@ -17199,6 +17350,8 @@ private enum PresspeechSelfTest {
             }
             try expect(capture.processIdentifier, equals: pid_t(700),
                        "frontmost process capture must not require system-wide AX focus")
+            try expect(capture.bundleIdentifier, equals: "com.apple.Terminal",
+                       "terminal safety identity should be captured with the focused process")
             try expect(dictationPasteTargetMatches(capture, capture), equals: true,
                        "the same process, window, and field should permit delivery")
             try expect(dictationPasteTargetMatches(capture, DictationPasteTarget(
@@ -19423,6 +19576,52 @@ private enum PresspeechSelfTest {
             equals: "hello world\n",
             "append-newline suffix should add a single newline"
         )
+        for bundleIdentifier in [
+            "com.apple.Terminal", "com.googlecode.iterm2", "org.alacritty",
+            "com.mitchellh.ghostty", "net.kovidgoyal.kitty",
+            "com.github.wez.wezterm", "dev.warp.Warp-Stable",
+        ] {
+            try expect(requiresCommandTerminalReview(
+                pastedText(from: "harmless fixture", suffix: .appendNewline),
+                bundleIdentifier: bundleIdentifier
+            ), equals: true,
+                       "a newline suffix must stop automatic insertion into a known terminal")
+            try expect(requiresCommandTerminalReview(
+                "harmless fixture\rnext line", bundleIdentifier: bundleIdentifier
+            ), equals: true,
+                       "an embedded carriage return must also require terminal review")
+            try expect(requiresCommandTerminalReview(
+                "harmless fixture", bundleIdentifier: bundleIdentifier
+            ), equals: false,
+                       "single-line dictation should retain normal terminal insertion")
+        }
+        try expect(requiresCommandTerminalReview(
+            "first line\nsecond line", bundleIdentifier: "com.example.Editor"
+        ), equals: false,
+                   "multiline dictation into a known nonterminal must keep its normal path")
+        try expect(requiresCommandTerminalReview(
+            "first line\nsecond line", bundleIdentifier: nil
+        ), equals: false,
+                   "an unknown bundle must not be misreported as a known command terminal")
+        var terminalCopyCount = 0
+        let terminalRecovery = commandTerminalCopyOnlyOutcome(
+            "harmless fixture\n", bundleIdentifier: "com.apple.Terminal"
+        ) {
+            terminalCopyCount += 1
+            return .copiedWithoutPasting
+        }
+        try expect(terminalRecovery, equals: .copiedWithoutPasting,
+                   "terminal line breaks must route directly to copy-only recovery")
+        let ordinaryRoute = commandTerminalCopyOnlyOutcome(
+            "harmless fixture\n", bundleIdentifier: "com.example.Editor"
+        ) {
+            terminalCopyCount += 1
+            return .copiedWithoutPasting
+        }
+        try expect(ordinaryRoute, equals: nil,
+                   "ordinary multiline text must not take the terminal recovery route")
+        try expect(terminalCopyCount, equals: 1,
+                   "only recognized terminal line breaks may call copy-only recovery")
         try expect(
             pastedText(from: "hello world ", suffix: .appendSpace),
             equals: "hello world  ",
@@ -20768,29 +20967,106 @@ private enum PresspeechSelfTest {
             "history changes must not hide an unverified-window manual-paste notice"
         )
         try expect(
-            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.insertionFailed),
-            equals: true,
+            dictationNoticeAfterHistoryChange(.clipboardCopyUnconfirmed,
+                                              hasRecentTranscripts: false),
+            equals: .clipboardCopyUnconfirmed,
+            "clearing history must not hide an unconfirmed manual copy"
+        )
+        try expect(
+            dictationNoticeAfterHistoryChange(.clipboardCopyUnconfirmedAfterUncertainDelivery,
+                                              hasRecentTranscripts: false),
+            equals: .clipboardCopyUnconfirmedAfterUncertainDelivery,
+            "clearing history after a failed copy must retain both warnings"
+        )
+        try expect(
+            dictationNoticeAfterHistoryChange(.clipboardCopyUnconfirmedAfterTerminalReview,
+                                              hasRecentTranscripts: false),
+            equals: .clipboardCopyUnconfirmedAfterTerminalReview,
+            "clearing history must not erase terminal review or a failed copy"
+        )
+        try expect(
+            dictationNoticeAfterConfirmedManualCopy(.insertionFailed),
+            equals: .insertionFailed,
             "a History copy cannot confirm whether the target received all or part of a dictation"
         )
         try expect(
-            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.insertionFailedWithoutHistory),
-            equals: true,
+            dictationNoticeAfterConfirmedManualCopy(.insertionFailed,
+                                                    hasRecentTranscripts: false),
+            equals: .insertionFailedWithoutHistory,
+            "a confirmed scratchpad copy cannot claim an absent History action"
+        )
+        try expect(
+            dictationNoticeAfterConfirmedManualCopy(.insertionFailedWithoutHistory),
+            equals: .insertionFailedWithoutHistory,
             "a stale History action must not clear uncertain delivery after history was disabled"
         )
         try expect(
-            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.copiedToClipboard),
-            equals: false,
+            dictationNoticeAfterConfirmedManualCopy(.clipboardCopyUnconfirmedAfterUncertainDelivery),
+            equals: .insertionFailed,
+            "a successful copy retry resolves the copy warning but not the uncertain destination"
+        )
+        try expect(
+            dictationNoticeAfterConfirmedManualCopy(
+                .clipboardCopyUnconfirmedAfterUncertainDelivery,
+                hasRecentTranscripts: false
+            ),
+            equals: .insertionFailedWithoutHistory,
+            "a scratchpad copy cannot manufacture missing Copy Last Transcript recovery"
+        )
+        try expect(
+            dictationNoticeAfterConfirmedManualCopy(.copiedToClipboard),
+            equals: DictationNotice?.none,
             "re-copying after a known copy-only fallback can clear its manual-paste notice"
         )
         try expect(
-            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(.pasteTargetUnavailable),
-            equals: false,
+            dictationNoticeAfterConfirmedManualCopy(.pasteTargetUnavailable),
+            equals: DictationNotice?.none,
             "re-copying after an unverified-window copy fallback may clear its manual-paste notice"
         )
         try expect(
-            shouldPreserveUncertainDeliveryNoticeAfterHistoryCopy(nil),
-            equals: false,
+            dictationNoticeAfterConfirmedManualCopy(.clipboardCopyUnconfirmed),
+            equals: DictationNotice?.none,
+            "a later confirmed manual copy should clear an obsolete copy-failure warning"
+        )
+        try expect(
+            dictationNoticeAfterConfirmedManualCopy(.clipboardCopyUnconfirmedAfterTerminalReview),
+            equals: .terminalReview,
+            "a confirmed retry resolves copy failure but not terminal review"
+        )
+        try expect(
+            dictationNoticeAfterConfirmedManualCopy(nil),
+            equals: DictationNotice?.none,
             "a History copy without a notice needs no delivery warning"
+        )
+        try expect(
+            manualClipboardCopyFailureNotice(after: .copiedToClipboard),
+            equals: .clipboardCopyUnconfirmed,
+            "a failed manual copy must replace an earlier copied notice"
+        )
+        try expect(
+            manualClipboardCopyFailureNotice(after: nil),
+            equals: .clipboardCopyUnconfirmed,
+            "a failed scratchpad copy without prior dictation should still warn"
+        )
+        try expect(
+            manualClipboardCopyFailureNotice(after: .insertionFailed),
+            equals: .clipboardCopyUnconfirmedAfterUncertainDelivery,
+            "failed recovery copying must retain the partial-delivery warning"
+        )
+        try expect(
+            manualClipboardCopyFailureNotice(after: .insertionFailedWithoutHistory),
+            equals: .clipboardCopyUnconfirmedAfterUncertainDelivery,
+            "a stale History action cannot erase an uncertain-delivery warning"
+        )
+        try expect(
+            manualClipboardCopyFailureNotice(after: .clipboardCopyUnconfirmedAfterUncertainDelivery),
+            equals: .clipboardCopyUnconfirmedAfterUncertainDelivery,
+            "another failed retry must not erase the destination warning"
+        )
+        try expect(
+            manualClipboardCopyFailureNotice(after: .terminalReview),
+            equals: .clipboardCopyUnconfirmedAfterTerminalReview,
+            "failed terminal recovery copying must retain shell review guidance"
         )
 
         try expect(
@@ -23369,12 +23645,27 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.pasteTargetUnavailable.statusTitle,
                    equals: "Can’t verify window — ⌘V if clipboard unchanged",
                    "an unverified destination should not look like an ordinary focus change")
+        try expect(DictationNotice.clipboardCopyUnconfirmed.statusTitle,
+                   equals: "Copy unconfirmed — check clipboard before pasting",
+                   "a failed manual recovery copy must not leave an earlier copied status as the only feedback")
+        try expect(DictationNotice.clipboardCopyUnconfirmedAfterUncertainDelivery.statusTitle,
+                   equals: "Copy unconfirmed — check field before retrying",
+                   "a failed manual copy must retain visible partial-delivery caution")
+        try expect(DictationNotice.clipboardCopyUnconfirmedAfterTerminalReview.statusTitle,
+                   equals: "Copy unconfirmed — review terminal text",
+                   "a failed manual terminal copy must retain the shell warning")
         try expect(DictationNotice.copiedToClipboard.hudTitle,
                    equals: "Copied — ⌘V if unchanged",
                    "the copied-transcript HUD must not promise stale clipboard contents")
         try expect(DictationNotice.pasteTargetUnavailable.hudTitle,
                    equals: "Unverified — ⌘V if unchanged",
                    "the transient recovery HUD should retain the window warning without promising stale clipboard contents")
+        try expect(DictationNotice.clipboardCopyUnconfirmed.hudTitle,
+                   equals: "Copy unconfirmed — verify before paste",
+                   "failed manual copy needs a visible warning even when feedback sound is disabled")
+        try expect(DictationNotice.clipboardCopyUnconfirmedAfterUncertainDelivery.hudTitle,
+                   equals: "Check field; copy unconfirmed",
+                   "the failure HUD must retain destination caution after an uncertain delivery")
         try expect(DictationNotice.insertionFailed.statusTitle,
                    equals: "Delivery uncertain — check field before retrying",
                    "failed insertion should prompt a destination check before retrying")
@@ -23408,6 +23699,22 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.pasteTargetUnavailable.accessibilityValue,
                    equals: "Presspeech couldn't verify the window for automatic paste. The transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available.",
                    "VoiceOver should explain the safety fallback without promising stale clipboard contents")
+        try expect(DictationNotice.clipboardCopyUnconfirmed.accessibilityValue,
+                   equals: "Presspeech could not confirm the transcript is on the clipboard. Check it in a disposable field before pasting elsewhere. If delivery was uncertain, inspect the original destination before trying again.",
+                   "a failed recovery copy must not send VoiceOver users to a stale clipboard or duplicate a partial delivery")
+        try expect(DictationNotice.clipboardCopyUnconfirmedAfterUncertainDelivery.accessibilityValue,
+                   equals: "Presspeech could not confirm the transcript is on the clipboard. The last dictation's delivery is still uncertain. Inspect its original destination for complete or partial text before retrying, and check the clipboard in a disposable field before pasting elsewhere.",
+                   "VoiceOver must retain both the failed-copy and uncertain-delivery warnings")
+        try expect(menuBarAccessibilityValue(for: .error,
+                                             notice: .clipboardCopyUnconfirmed),
+                   equals: DictationNotice.clipboardCopyUnconfirmed.accessibilityValue,
+                   "the copy warning should remain available on the status item after its announcement")
+        try expect(DictationNotice.terminalReview.accessibilityValue.contains(
+            "Review the exact text in a non-executing editor"), equals: true,
+                   "terminal recovery must warn against immediate manual command execution")
+        try expect(DictationNotice.clipboardCopyUnconfirmedAfterTerminalReview.accessibilityValue.contains(
+            "a line break can run a command"), equals: true,
+                   "failed terminal recovery copying must preserve execution caution")
         try expect(DictationNotice.insertionFailed.accessibilityValue,
                    equals: "Presspeech couldn't confirm text delivery. Check the destination field before pasting or trying again. If text is absent or incomplete, remove any partial text before pasting a copied transcript. Copy Last Transcript is available in the Presspeech menu.",
                    "uncertain delivery should prevent duplicate insertion during in-memory recovery")
@@ -23419,6 +23726,18 @@ private enum PresspeechSelfTest {
                                               keepsRecentTranscripts: true),
                    equals: .copiedToClipboard,
                    "focus-safe clipboard delivery should produce the recovery notice")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .copiedWithoutPasting,
+                                              keepsRecentTranscripts: false,
+                                              terminalReviewRequired: true),
+                   equals: .terminalReview,
+                   "a copied command-terminal line break needs explicit review guidance even without menu history")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .failed,
+                                              keepsRecentTranscripts: false,
+                                              terminalReviewRequired: true),
+                   equals: .insertionFailedWithoutHistory,
+                   "a failed terminal recovery copy must never claim the text is on the clipboard")
         try expect(dictationCompletionNotice(processedText: "hello",
                                               insertionOutcome: .copiedWithoutPasting,
                                               keepsRecentTranscripts: false,

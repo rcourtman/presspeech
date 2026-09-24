@@ -83,8 +83,9 @@ editing this file does not change it.
 
 Use this About description:
 
-> Private local push-to-talk dictation for Apple Silicon Macs, plus an x64
-> Windows preview — no account, subscription, or cloud transcription; bundled-library network behavior is version-specific.
+> Local push-to-talk dictation for Apple Silicon Macs and x64
+> Windows preview. No account required; no cloud transcription. Check
+> model-download privacy.
 
 Keep the existing topics and include `windows`, `offline`, and `on-device-ai`;
 otherwise GitHub search presents Presspeech as a Mac-only project even while a

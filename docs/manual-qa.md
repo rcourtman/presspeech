@@ -818,12 +818,14 @@ Record this release-gate matrix against the exact installed candidate:
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
 | Clipboard-only recovery notice after a later harmless copy: no unconditional ⌘V promise; Copy Last Transcript restores the dictation when history is on | |
+| A failed manual Copy Last Transcript or Try Dictation Copy, when reproducible safely, reports Copy unconfirmed in the menu, enabled HUD, and VoiceOver rather than leaving a prior Copied status | |
 | History copy during uncertain delivery retains the destination-check warning rather than returning to Ready | |
 | Same-window focus change between two controls with distinct AX identities: clipboard-only recovery | |
 | Permission loss while recording: captured speech completes to clipboard-only recovery | |
 | Screen Sharing shared-clipboard path: consecutive remote pastes stay fresh; a focus change recovers safely | |
 | Screen Sharing shared-clipboard path without leaving the remote window between dictations: no stale or missing transfer | |
 | Modifier still physically held at macOS paste time: no altered shortcut or misdirected insertion | |
+| Candidate terminal line-break guard: recognized standalone terminal gets copy-only review, while single-line terminal text and multiline TextEdit text keep normal delivery | |
 | Sleep/resume, microphone route change, and first dictation afterward | |
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
@@ -865,6 +867,20 @@ and stop on stale, misdirected, or unrecoverable delivery even when that copy
 explains it; never exclude an unexplained failure. Retain only aggregate counts,
 app versions, and generic field types—not phrases, clipboard contents, or
 screenshots.
+
+For a candidate with the macOS terminal line-break guard, use a disposable
+Terminal.app and, if installed, iTerm2 session with only a harmless test
+command. Select **Append newline** and dictate that command while the shell
+prompt is focused. No Command-V or direct-Unicode events may be sent; the
+terminal must receive no command, and the notice must say to review the copied
+text in a non-executing editor before any manual paste. Repeat with **space**
+selected and a spoken-formatting line break in the final text. Verify a
+single-line terminal dictation and multiline dictation into TextEdit retain
+normal automatic delivery. Test a focus change during transcription too: it
+must not redirect a paste or lose recovery. These checks do not qualify
+unknown terminal bundles, IDE-embedded shells, or remote consoles; terminal
+paste warnings and manual Command-V are not a Presspeech execution barrier.
+Keep only outcomes and app versions, never commands or transcripts.
 
 For the synthetic-credential row, use a disposable macOS profile or VM with no
 Hugging Face login/cache. Launch the installed candidate executable directly
@@ -1053,6 +1069,23 @@ actions are not presented as actionable. With VoiceOver, verify the recovery not
 and action names explain what will happen without relying on color or the
 Command-key glyph. Do not record transcript contents; restore the test clipboard
 only through an explicit user-confirmed action.
+
+If a manual clipboard write failure can be induced safely in a disposable
+profile, enable the waveform and try **Copy Last Transcript** and the
+scratchpad **Copy** action while idle, including after a copied-recovery notice.
+Both must show **Copy unconfirmed** in the menu and HUD and give VoiceOver a
+warning not to assume the transcript is on the clipboard. A beep alone or a
+remaining **Copied** status fails this check. After an uncertain delivery, a
+failed Copy must also retain the check-field caution; a later successful Copy
+may clear the copy-failure warning but not that destination caution. Never
+paste blindly into the original field. If the failure cannot be
+induced without changing system security settings or affecting real clipboard
+data, record this conditional check **Not applicable**, not **Pass**.
+
+After a terminal line-break copy-only recovery, a failed manual Copy must
+retain both the copy-failure and terminal-review warnings; a successful retry
+may clear only the copy-failure warning. Never test this by pasting a command
+into a live shell.
 
 For the two-display HUD row, park the pointer on display A and use the
 keyboard to focus a disposable, non-submitting field on display B. With the
