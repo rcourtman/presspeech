@@ -26,9 +26,11 @@ collaborator where noted:
   `python3 scripts/check-public-releases.py --require-published --check-release-notes`
   with read-only GitHub API access. Confirm the deployed platform guide names
   the new version and that its pinned package and checksum downloads succeed
-  in a clean browser. The notes audit compares the published GitHub body with
-  the tracked file for each advertised version; a mismatch needs a correction
-  on the public release page, not only a source edit.
+  in a clean browser. The notes audit compares the latest published GitHub
+  body for each platform with its tracked file, even while source metadata is
+  preparing another version; a mismatch needs a correction on the public
+  release page, not only a source edit. The separate weekly release-notes
+  workflow repeats this read-only audit without blocking Pages deployment.
 - Review each candidate's release notes before publication, then inspect the
   rendered GitHub release page as a standalone download entry point. Check its
   notes against that exact version's model-download privacy inventory and
@@ -654,6 +656,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Verify signature, notarisation, staple, version, archive size, and SHA-256 | |
 | First launch through model, microphone, Accessibility / Device Control and Data Access, Input Monitoring, and keyboard-event-posting readiness | |
 | Clean first model download with synthetic values in all inherited Hugging Face token variables | |
+| Physical Command-V into each chosen native, browser, and Electron target works before Presspeech delivery is scored | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current browser text field, plus three two-window focus-change recoveries, with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
@@ -674,6 +677,18 @@ Record this release-gate matrix against the exact installed candidate:
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
 | Menu-bar visibility preference, Dock fallback/restore, and dictation recovery with VoiceOver and keyboard-only navigation | |
 | Copy Last Transcript and Recent Transcripts recover the original dictation suffix, including after the suffix setting changes | |
+
+Before scoring each target-app delivery row, copy a harmless marker by ordinary
+means and paste it once with physical Command-V into the same blank,
+non-submitting field and input source that will receive dictation. Verify the
+marker appears exactly once, then clear the field. Do not use Presspeech to
+create this baseline. If ordinary paste fails, record that target/version as a
+failed baseline rather than attributing a later missing paste to Presspeech or
+marking automatic delivery Pass. For the fixed TextEdit row, mark it Blocked;
+for browser or Electron, select another representative target of the same app
+class for the required row. Preserve the failed target as a separate
+compatibility observation. A context-menu Paste that works while Command-V
+fails does not establish this shortcut baseline.
 
 For each ten-attempt TextEdit, browser, and Electron delivery row, use distinct
 harmless phrases in blank, non-submitting fields and seed a harmless previous

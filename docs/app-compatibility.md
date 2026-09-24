@@ -127,7 +127,16 @@ bug reports are not counted as completed protocol evidence.
    that test text retained outside Presspeech. If macOS Clipboard History in
    Spotlight is enabled on macOS 26 or later, clear it after the check if you
    do not want the harmless text retained there.
-5. Note the exact Presspeech, operating-system, and target-app versions. Also
+5. Copy a harmless marker by ordinary means, then use the physical Paste
+   shortcut (Command-V on macOS, Control-V on Windows) once in that same blank
+   target field. Confirm it appears exactly once and clear the field before
+   dictating. This is a target-app shortcut baseline, not a Presspeech result
+   or one of the eight worksheet attempts. If it fails, do not score that
+   target as a Presspeech paste pass or guess that Presspeech caused the
+   failure; keep a local note of the target version and try another safe
+   target. A working context-menu Paste does not establish that the keyboard
+   shortcut works.
+6. Note the exact Presspeech, operating-system, and target-app versions. Also
    note whether the target is a native app, browser page, Electron/Chromium
    app, terminal, remote desktop, or elevated Windows app, plus the generic
    field type (for example, plain text, rich text, or browser content editor).

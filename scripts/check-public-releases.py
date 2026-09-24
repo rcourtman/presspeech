@@ -10,10 +10,11 @@ commits reach ``main`` before publication. Pages uses ``--require-published``
 to keep the existing site until the advertised downloads are available.
 Use ``--github-api-via-gh`` when a repository-scoped gh broker holds the API
 credentials; checksum sidecars still download over public HTTPS.
-With ``--check-release-notes``, also compare the public release descriptions
-with the tracked notes for the versions advertised by the site. This is a
-manual post-publication audit, not a Pages gate: a source edit cannot correct
-an already-published GitHub release page.
+With ``--check-release-notes``, also compare the latest public macOS and
+Windows release descriptions with their tracked notes. This remains useful
+while source metadata is preparing a newer release: visitors can still reach
+the preceding release pages. It is not a Pages gate: a source edit cannot
+correct an already-published GitHub release page.
 """
 
 from __future__ import annotations
@@ -232,32 +233,38 @@ def compare_versions(
 
 
 def release_note_parity_errors(
-    metadata: dict[str, object],
     mac_release: object,
     releases: object,
     *,
     root: Path = ROOT,
 ) -> list[str]:
-    """Check only the versions currently advertised by Pages.
+    """Audit the latest public entry point for each platform, not candidate metadata.
 
-    A release-preparation commit can put tracked notes ahead of public assets;
-    ``--require-published`` handles that separately. Never print release bodies
-    or a diff here, because this audit only needs to identify a stale entry.
+    Pages can still advertise the preceding release while main prepares the
+    next one. Never print release bodies or a diff: the audit only needs to
+    identify which public entry needs an authorized correction.
     """
     checks: list[tuple[str, object, Path]] = []
-    mac_version = metadata.get("version")
-    if isinstance(mac_version, str) and isinstance(mac_release, dict):
-        tag = f"v{mac_version}"
-        if mac_release.get("tag_name") == tag and mac_release.get("draft") is False:
+    if isinstance(mac_release, dict):
+        tag = mac_release.get("tag_name")
+        if (isinstance(tag, str) and tag.startswith("v") and
+                SEMVER.fullmatch(tag[1:]) and mac_release.get("draft") is False):
             checks.append((tag, mac_release, root / "swift" / "release-notes" / f"{tag}.md"))
 
-    windows_version = metadata.get("windows_version")
-    if isinstance(windows_version, str) and isinstance(releases, list):
-        tag = f"windows-v{windows_version}"
+    if isinstance(releases, list):
+        windows_releases: list[tuple[tuple[int, int, int], str, dict[str, object]]] = []
         for release in releases:
-            if isinstance(release, dict) and release.get("tag_name") == tag and release.get("draft") is False:
-                checks.append((tag, release, root / "windows" / "release-notes" / f"{windows_version}.md"))
-                break
+            if not isinstance(release, dict) or release.get("draft") is not False:
+                continue
+            tag = release.get("tag_name")
+            if not isinstance(tag, str) or not tag.startswith("windows-v"):
+                continue
+            version = tag.removeprefix("windows-v")
+            if SEMVER.fullmatch(version):
+                windows_releases.append((parse_version(version, "Windows release notes"), tag, release))
+        if windows_releases:
+            _, tag, release = max(windows_releases, key=lambda item: item[0])
+            checks.append((tag, release, root / "windows" / "release-notes" / f"{tag.removeprefix('windows-v')}.md"))
 
     errors: list[str] = []
     for tag, release, path in checks:
@@ -596,16 +603,22 @@ def run_self_test() -> None:
         (root / "windows" / "release-notes" / "4.5.6.md").write_text("Windows note\n", encoding="utf-8")
         mac["body"] = "mac note"
         windows["body"] = "Windows note\r\n"
-        if release_note_parity_errors(metadata, mac, [mac, windows], root=root):
+        if release_note_parity_errors(mac, [mac, windows], root=root):
             raise ReleaseCheckError("self-test rejected matching public release notes")
         windows["body"] = "older Windows note"
-        note_errors = release_note_parity_errors(metadata, mac, [mac, windows], root=root)
+        note_errors = release_note_parity_errors(mac, [mac, windows], root=root)
         if len(note_errors) != 1 or "windows-v4.5.6" not in note_errors[0]:
             raise ReleaseCheckError("self-test did not identify stale public release notes")
         windows["body"] = "Windows note"
-        ahead_notes = dict(metadata, version="1.2.4", windows_version="4.5.7")
-        if release_note_parity_errors(ahead_notes, mac, [mac, windows], root=root):
-            raise ReleaseCheckError("self-test checked unpublished candidate notes")
+        newer_draft = dict(windows, tag_name="windows-v4.5.7", draft=True, body="draft")
+        older_public = dict(windows, tag_name="windows-v4.5.5", body="older public notes")
+        if release_note_parity_errors(mac, [newer_draft, older_public, mac, windows], root=root):
+            raise ReleaseCheckError("self-test did not select the latest published notes")
+        windows["body"] = "older Windows note"
+        note_errors = release_note_parity_errors(mac, [newer_draft, older_public, windows], root=root)
+        if len(note_errors) != 1 or "windows-v4.5.6" not in note_errors[0]:
+            raise ReleaseCheckError("self-test skipped public notes during release preparation")
+        windows["body"] = "Windows note"
 
     draft = json.loads(json.dumps(windows))
     draft["tag_name"] = "windows-v9.9.9"
@@ -743,7 +756,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help="run without network access")
     parser.add_argument("--require-published", action="store_true", help="block deployment while configured downloads are not public yet")
-    parser.add_argument("--check-release-notes", action="store_true", help="audit published release descriptions against tracked notes for advertised versions")
+    parser.add_argument("--check-release-notes", action="store_true", help="audit the latest published release notes for both platforms against tracked notes")
     parser.add_argument("--github-api-via-gh", action="store_true", help="read API JSON through repo-scoped gh api without exporting credentials; checksum downloads remain public HTTPS")
     args = parser.parse_args()
     try:
@@ -766,7 +779,7 @@ def main() -> int:
             require_published=args.require_published,
         )
         if args.check_release_notes:
-            errors.extend(release_note_parity_errors(metadata, mac_release, releases))
+            errors.extend(release_note_parity_errors(mac_release, releases))
         for line in status:
             print(line)
         if errors:
