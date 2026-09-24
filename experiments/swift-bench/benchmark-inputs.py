@@ -192,6 +192,25 @@ def corpus_digest(entries: list[dict[str, object]]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def order_digest(entries: list[dict[str, object]]) -> str:
+    """Fingerprint execution order without disclosing fixture names or contents.
+
+    The snapshot runner reads generic ordinal directories in this order. The
+    corpus digest deliberately ignores order, but separate SDK builds can
+    experience different warmup/thermal conditions if fixture order changes.
+    """
+    pairs = [
+        (str(entry["audio_suffix"]), str(entry["audio_sha256"]),
+         str(entry["reference_sha256"] or "missing"))
+        for entry in sorted(entries, key=lambda entry: str(entry["audio"]))
+    ]
+    encoded = json.dumps(
+        {"domain": "presspeech-benchmark-fixture-order-v1", "pairs": pairs},
+        ensure_ascii=True, separators=(",", ":"), sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def safe_snapshot_path(root: Path, relative: str) -> Path:
     pure = PurePosixPath(relative)
     if pure.is_absolute() or not pure.parts or any(part in ("", ".", "..") for part in pure.parts):
@@ -282,7 +301,7 @@ def load_manifest(snapshot_dir: Path) -> dict[str, object]:
     return manifest
 
 
-def verify(snapshot_dir: Path) -> str:
+def verified_digests(snapshot_dir: Path) -> tuple[str, str]:
     manifest = load_manifest(snapshot_dir)
     if manifest.get("schema_version") != SCHEMA_VERSION:
         raise InputError("snapshot manifest has an unsupported schema")
@@ -291,6 +310,7 @@ def verify(snapshot_dir: Path) -> str:
         raise InputError("snapshot manifest contains no fixtures")
 
     entries: list[dict[str, object]] = []
+    seen_audio_paths: set[str] = set()
     for raw in raw_entries:
         if not isinstance(raw, dict) or set(raw) != {
             "audio",
@@ -303,6 +323,9 @@ def verify(snapshot_dir: Path) -> str:
         audio_relative = raw["audio"]
         if not isinstance(audio_relative, str):
             raise InputError("snapshot manifest audio path is invalid")
+        if audio_relative in seen_audio_paths:
+            raise InputError("snapshot manifest repeats an audio fixture")
+        seen_audio_paths.add(audio_relative)
         audio = safe_snapshot_path(snapshot_dir, audio_relative)
         require_regular_file(audio, "frozen audio fixture")
         if file_sha256(audio) != raw["audio_sha256"]:
@@ -322,10 +345,25 @@ def verify(snapshot_dir: Path) -> str:
                 raise InputError("frozen reference sidecar changed after snapshot")
         entries.append(raw)
 
+    # The runners consume the ordinal snapshot paths, not manifest row order.
+    # Require that exact inventory so an order receipt describes the audio
+    # actually passed to ASR even if manifest rows were rearranged.
+    for index, entry in enumerate(sorted(entries, key=lambda item: str(item["audio"])), 1):
+        suffix = entry["audio_suffix"]
+        expected_dir = f"{index:06d}"
+        if (not isinstance(suffix, str)
+                or entry["audio"].casefold() != f"{expected_dir}/audio{suffix}"
+                or entry["reference"] not in (None, f"{expected_dir}/audio.txt")):
+            raise InputError("snapshot manifest has an invalid fixture order")
+
     digest = corpus_digest(entries)
     if manifest.get("corpus_sha256") != digest:
         raise InputError("snapshot corpus fingerprint does not match its manifest")
-    return digest
+    return digest, order_digest(entries)
+
+
+def verify(snapshot_dir: Path) -> str:
+    return verified_digests(snapshot_dir)[0]
 
 
 def run_self_test() -> None:
@@ -368,6 +406,29 @@ def run_self_test() -> None:
         second_digest = snapshot([renamed_audio], root / "second", False)
         if second_digest != first_digest:
             raise AssertionError("renaming an unchanged fixture changed its fingerprint")
+
+        other_audio = source / "different.WAV"
+        other_audio.write_bytes(b"RIFF different private audio bytes")
+        other_audio.with_suffix(".txt").write_text("different private words\n", encoding="utf-8")
+        forward = root / "forward"
+        reverse = root / "reverse"
+        if snapshot([audio, other_audio], forward, False) != snapshot(
+                [other_audio, audio], reverse, False):
+            raise AssertionError("input order changed the corpus fingerprint")
+        if verified_digests(forward)[1] == verified_digests(reverse)[1]:
+            raise AssertionError("input order did not change the order fingerprint")
+        if verified_digests(first)[1] != verified_digests(root / "second")[1]:
+            raise AssertionError("renaming unchanged input changed its order fingerprint")
+        forward_receipt = verified_digests(forward)
+        forward_manifest = load_manifest(forward)
+        forward_manifest["entries"].reverse()
+        forward_manifest_path = forward / MANIFEST_NAME
+        forward_manifest_path.chmod(0o600)
+        forward_manifest_path.write_text(
+            json.dumps(forward_manifest, sort_keys=True), encoding="utf-8"
+        )
+        if verified_digests(forward) != forward_receipt:
+            raise AssertionError("manifest row order changed the execution-order receipt")
 
         audio.write_bytes(b"changed after snapshot")
         reference.write_text("changed after snapshot\n", encoding="utf-8")
@@ -481,6 +542,8 @@ def parse_args() -> argparse.Namespace:
 
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("--snapshot-dir", type=Path, required=True)
+    receipt_parser = subparsers.add_parser("receipt")
+    receipt_parser.add_argument("--snapshot-dir", type=Path, required=True)
     private_parser = subparsers.add_parser(
         "validate-private-corpus",
         help="validate aggregate private human-dictation reference volume",
@@ -511,6 +574,10 @@ def main() -> int:
         if args.command == "verify":
             print(verify(args.snapshot_dir))
             return 0
+        if args.command == "receipt":
+            corpus, order = verified_digests(args.snapshot_dir)
+            print(f"{corpus}\t{order}")
+            return 0
         if args.command == "validate-private-corpus":
             clips, words = validate_private_reference_corpus(
                 args.directory, args.minimum_clips, args.minimum_words
@@ -529,7 +596,7 @@ def main() -> int:
                 f"{controls} zero-byte references; floor met"
             )
             return 0
-        raise InputError("choose snapshot, verify, validate-private-corpus, "
+        raise InputError("choose snapshot, verify, receipt, validate-private-corpus, "
                          "validate-private-controls, or --self-test")
     except (InputError, OSError, UnicodeError) as exc:
         if args.command == "validate-private-corpus":

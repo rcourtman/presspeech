@@ -41,6 +41,7 @@ MAX_REFERENCE_DELETION_RUN=""
 MAX_CORPUS_WER=""
 MAX_NON_SPEECH_EMISSIONS=""
 BENCHMARK_INPUT_SHA256="unreported"
+BENCHMARK_ORDER_SHA256="unreported"
 WINDOW_SHIFT_CORPUS=0
 
 usage() {
@@ -533,6 +534,7 @@ write_report_header() {
         echo "- App FluidAudio revision: $PRODUCTION_FLUID_REVISION"
         echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
         echo "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
+        echo "- Benchmark order SHA-256: $BENCHMARK_ORDER_SHA256"
         echo "- Trials per clip: $TRIALS"
         if backend_uses_parakeet_v3; then
             echo "- Parakeet TDT v3 language/script hint: $LANGUAGE"
@@ -643,6 +645,7 @@ run_self_test() {
     NEMOTRON_MULTILINGUAL_LANGUAGE="en-US"
     NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
     BENCHMARK_INPUT_SHA256="$(printf 'a%.0s' {1..64})"
+    BENCHMARK_ORDER_SHA256="$(printf 'b%.0s' {1..64})"
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
     MAX_REFERENCE_DELETION_RUN=""
@@ -656,6 +659,7 @@ run_self_test() {
     assert_contains "$report" "- FluidAudio revision: $FLUID_REVISION"
     assert_contains "$report" "- Parakeet TDT v3 language/script hint: auto"
     assert_contains "$report" "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
+    assert_contains "$report" "- Benchmark order SHA-256: $BENCHMARK_ORDER_SHA256"
     assert_not_contains "$report" "Unified trailing silence"
     WINDOW_SHIFT_CORPUS=1
     write_report_header "$report" "20260101T000000Z" 1
@@ -1213,6 +1217,18 @@ if ! BENCHMARK_INPUT_SHA256="$(
     echo "could not freeze and fingerprint real-dictation inputs" >&2
     exit 1
 fi
+if ! benchmark_receipt="$(
+    python3 ./benchmark-inputs.py receipt --snapshot-dir "$tmpdir/inputs"
+)"; then
+    echo "could not fingerprint real-dictation input order" >&2
+    exit 1
+fi
+IFS=$'\t' read -r verified_input_sha256 BENCHMARK_ORDER_SHA256 <<< "$benchmark_receipt"
+if [[ "$verified_input_sha256" != "$BENCHMARK_INPUT_SHA256" || \
+      ! "$BENCHMARK_ORDER_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "could not fingerprint real-dictation input order" >&2
+    exit 1
+fi
 for index in "${!clips[@]}"; do
     extension="${clips[$index]##*.}"
     clips[index]="$tmpdir/inputs/$(printf '%06d' "$((index + 1))")/audio.$extension"
@@ -1321,8 +1337,10 @@ for clip in "${clips[@]}"; do
     echo '```' >>"$report"
 done
 
-observed_input_sha256="$(python3 ./benchmark-inputs.py verify --snapshot-dir "$tmpdir/inputs")"
-if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" ]]; then
+observed_receipt="$(python3 ./benchmark-inputs.py receipt --snapshot-dir "$tmpdir/inputs")"
+IFS=$'\t' read -r observed_input_sha256 observed_order_sha256 <<< "$observed_receipt"
+if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" || \
+      "$observed_order_sha256" != "$BENCHMARK_ORDER_SHA256" ]]; then
     echo "frozen real-dictation inputs changed during the benchmark" >&2
     exit 1
 fi

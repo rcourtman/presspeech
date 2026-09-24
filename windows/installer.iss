@@ -17,7 +17,9 @@ AppVersion={#AppVersion}
 AppVerName=Presspeech {#AppVersion}
 AppPublisher=rcourtman
 AppPublisherURL=https://github.com/rcourtman/presspeech
-AppSupportURL=https://github.com/rcourtman/presspeech/issues
+; Match the app's Report a Problem action: the support guide explains safe
+; recovery and current reporting routes before anyone opens a public issue.
+AppSupportURL=https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md
 AppUpdatesURL=https://github.com/rcourtman/presspeech/releases
 DefaultDirName={localappdata}\Programs\Presspeech
 DefaultGroupName=Presspeech

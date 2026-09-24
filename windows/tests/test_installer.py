@@ -1,9 +1,11 @@
+import ast
 import unittest
 from pathlib import Path
 
 
 INSTALLER = Path(__file__).resolve().parents[1] / "installer.iss"
 SPEC = Path(__file__).resolve().parents[1] / "Presspeech.spec"
+APP = Path(__file__).resolve().parents[1] / "app.py"
 
 
 class InstallerLifecycleTests(unittest.TestCase):
@@ -25,7 +27,7 @@ class InstallerLifecycleTests(unittest.TestCase):
             if not in_setup or not line or line.startswith(";") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
-            directives[key.strip().casefold()] = value.strip().casefold()
+            directives[key.strip().casefold()] = value.strip()
         return directives
 
     def test_installer_rejects_unsupported_windows_systems(self):
@@ -58,6 +60,21 @@ class InstallerLifecycleTests(unittest.TestCase):
         self.assertIn("valuetype: none", entry)
         self.assertIn("dontcreatekey", entry)
         self.assertIn("uninsdeletevalue", entry)
+
+    def test_installed_app_support_link_matches_in_app_reporting_guide(self):
+        # Installed Apps can expose this URL even when the tray UI is broken.
+        # Keep it on the privacy-safe guide rather than the restricted issue
+        # creation path, and prevent its route from drifting from the app.
+        module = ast.parse(APP.read_text(encoding="utf-8"))
+        support_url = next(
+            ast.literal_eval(node.value)
+            for node in module.body
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "SUPPORT_GUIDE_URL"
+                for target in node.targets
+            )
+        )
+        self.assertEqual(self.setup_directives().get("appsupporturl"), support_url)
 
 
 if __name__ == "__main__":

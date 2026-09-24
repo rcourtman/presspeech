@@ -4520,6 +4520,47 @@ def check_cross_platform_compare_privacy(
     return []
 
 
+def check_windows_10_compare_guidance(compare_dir: Path = COMPARE_DIR) -> list[str]:
+    """Keep Presspeech's Windows 10 comparison claims conditional on OS support."""
+    scopes = (
+        ("windows-dictation.html", r'<th scope="row">Setup and scope</th>\s*<td>(.*?)</td>', True),
+        ("scribe.html", r'<th scope="row">Install and systems</th>\s*<td>(.*?)</td>', True),
+        ("scribe.html", r'<p>Choose Scribe AI if .*?</p>', False),
+    )
+    errors: list[str] = []
+    for filename, pattern, needs_source in scopes:
+        path = compare_dir / filename
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing Windows comparison page")
+            continue
+        match = re.search(pattern, read_text(path), flags=re.S)
+        if match is None:
+            errors.append(f"{display}: missing Presspeech Windows 10 comparison claim")
+            continue
+        fragment = match.group(1) if match.lastindex else match.group(0)
+        visible = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", fragment)).split())
+        qualified = (
+            re.search(
+                r"Windows 10.{0,100}(?:only while|on an edition still supported)"
+                r".{0,100}Extended Security Updates",
+                visible,
+                flags=re.I,
+            ) is not None
+        )
+        if not qualified:
+            errors.append(
+                f"{display}: Presspeech Windows 10 comparison claim must require "
+                "a supported edition or Extended Security Updates"
+            )
+        if needs_source and (
+            "support.microsoft.com/en-us/windows/deployment/updates-lifecycle/"
+            "windows-10-support-has-ended-on-october-14-2025"
+        ) not in fragment:
+            errors.append(f"{display}: Windows 10 comparison cell needs Microsoft's support source")
+    return errors
+
+
 def check_macos_agent_install_order(
     prompt: str = MAC_INSTALL_PROMPT, readme: str | None = None,
 ) -> list[str]:
@@ -5557,6 +5598,55 @@ def run_self_test() -> None:
             for error in check_cross_platform_compare_privacy(compare_privacy)
         ):
             raise SyncError("self-test: unqualified cross-platform telemetry claim was accepted")
+
+        windows_compare = compare_dir / "windows-dictation.html"
+        scribe_compare = compare_dir / "scribe.html"
+        support_link = (
+            "https://support.microsoft.com/en-us/windows/deployment/updates-lifecycle/"
+            "windows-10-support-has-ended-on-october-14-2025"
+        )
+        windows_compare.write_text(
+            '<th scope="row">Setup and scope</th><td>Windows 10 x64 remains '
+            'compatible only while its edition is supported or enrolled in '
+            f'Extended Security Updates. <a href="{support_link}">Microsoft</a></td>',
+            encoding="utf-8",
+        )
+        scribe_safe = (
+            '<th scope="row">Install and systems</th><td>Windows 10 only while '
+            'its edition is supported or enrolled in Extended Security Updates. '
+            f'<a href="{support_link}">Microsoft</a></td>'
+            '<p>Choose Scribe AI if you need a signed installer. Choose Presspeech '
+            'if Windows 10 compatibility on an edition still supported or enrolled '
+            'in Extended Security Updates matters more.</p>'
+        )
+        scribe_compare.write_text(scribe_safe, encoding="utf-8")
+        if check_windows_10_compare_guidance(compare_dir):
+            raise SyncError("self-test: qualified Windows 10 comparisons were rejected")
+        windows_compare.write_text(
+            windows_compare.read_text(encoding="utf-8").replace(
+                "only while its edition is supported or enrolled in Extended Security Updates",
+                "without a support qualification",
+            ),
+            encoding="utf-8",
+        )
+        if not check_windows_10_compare_guidance(compare_dir):
+            raise SyncError("self-test: unqualified Windows 10 comparison cell was accepted")
+        windows_compare.write_text(
+            '<th scope="row">Setup and scope</th><td>Windows 10 x64 remains '
+            'compatible only while its edition is supported or enrolled in '
+            f'Extended Security Updates. <a href="{support_link}">Microsoft</a></td>',
+            encoding="utf-8",
+        )
+        scribe_compare.write_text(
+            scribe_safe.replace(
+                "Windows 10 compatibility on an edition still supported or enrolled "
+                "in Extended Security Updates",
+                "Windows 10 support",
+            ),
+            encoding="utf-8",
+        )
+        if not check_windows_10_compare_guidance(compare_dir):
+            raise SyncError("self-test: unqualified Windows 10 recommendation was accepted")
 
         stale = Path(tmp) / "privacy.txt"
         stale.write_text(
@@ -6958,6 +7048,7 @@ def main() -> int:
             errors.extend(check_repository_install_guidance())
             errors.extend(check_compare_freshness())
             errors.extend(check_cross_platform_compare_privacy())
+            errors.extend(check_windows_10_compare_guidance())
             for path, want in expected.items():
                 have = read_text(path) if path.exists() else ""
                 if have != want:
@@ -7028,6 +7119,7 @@ def main() -> int:
         errors.extend(check_repository_install_guidance())
         errors.extend(check_compare_freshness())
         errors.extend(check_cross_platform_compare_privacy())
+        errors.extend(check_windows_10_compare_guidance())
         errors.extend(check_install_prompt_sync(metadata))
         errors.extend(check_windows_install_launch_checkbox())
         if errors:

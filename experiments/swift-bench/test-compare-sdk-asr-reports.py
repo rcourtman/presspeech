@@ -21,10 +21,12 @@ spec.loader.exec_module(comparator)
 APP_PIN = "a" * 40
 CANDIDATE_PIN = "b" * 40
 INPUT_DIGEST = "c" * 64
+ORDER_DIGEST = "e" * 64
 SECRET = "confidential spoken words and local fixture path"
 
 
-def report(*, candidate=False, digest=INPUT_DIGEST, hint="auto", trials=3,
+def report(*, candidate=False, digest=INPUT_DIGEST, order=ORDER_DIGEST,
+           hint="auto", trials=3,
            state="default", controls=True, scored=True, revision=None,
            errors=None, app_pin=APP_PIN, kind="Real-Dictation"):
     pin = revision or (CANDIDATE_PIN if candidate else APP_PIN)
@@ -83,6 +85,7 @@ def report(*, candidate=False, digest=INPUT_DIGEST, hint="auto", trials=3,
         f"- App FluidAudio revision: {app_pin}\n"
         f"- Baseline dependency: {dependency} (not whole-app qualification)\n"
         f"- Benchmark inputs SHA-256: {digest}\n"
+        f"- Benchmark order SHA-256: {order}\n"
         f"- Trials per clip: {trials}\n"
         f"- Parakeet TDT v3 language/script hint: {hint}\n"
         f"- Clips: {clip_count}\n"
@@ -119,6 +122,7 @@ class ReportComparisonTests(unittest.TestCase):
     def test_rejects_unmatched_provenance_and_input_coverage(self):
         changes = (
             (dict(digest="d" * 64), "benchmark inputs SHA-256"),
+            (dict(order="d" * 64), "benchmark order SHA-256"),
             (dict(hint="de"), "language hint"),
             (dict(trials=5, controls=False), "trial count"),
             (dict(kind="Public-Speech"), "corpus kind"),
@@ -147,6 +151,11 @@ class ReportComparisonTests(unittest.TestCase):
             comparator.parse_report(report(state="configured"))
         with self.assertRaisesRegex(comparator.ComparisonError, "incomplete or mixed score"):
             comparator.parse_report(report(scored=False))
+        with self.assertRaisesRegex(comparator.ComparisonError, "comparison provenance"):
+            comparator.parse_report(report().replace(
+                f"- Benchmark order SHA-256: {ORDER_DIGEST}\n", ""))
+        with self.assertRaisesRegex(comparator.ComparisonError, "input-order fingerprint"):
+            comparator.parse_report(report(order="not-a-digest"))
         with self.assertRaisesRegex(comparator.ComparisonError, "clip WER conflicts"):
             comparator.parse_report(report(errors=4))
         with self.assertRaisesRegex(comparator.ComparisonError, "non-speech control receipt"):

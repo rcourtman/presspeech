@@ -168,10 +168,14 @@ file and reference sidecar before building, then report one rename-independent
 `Benchmark inputs SHA-256` over the complete paired corpus. Compare that digest
 when production and candidate SDK revisions have to be measured in separate
 builds: matching clip counts or redacted report rows are not enough to show
-that the inputs stayed fixed. The snapshot manifest uses generic names, and
-the reported digest exposes neither individual file hashes nor reference text.
-The folded digest establishes input identity only; it does not attest reference
-quality, speaker diversity, language coverage, normalization, or native hardware.
+that the inputs stayed fixed. These runners also report `Benchmark order
+SHA-256`, a separate fingerprint of the generic ordinal execution sequence.
+The SDK report comparator requires both receipts to match: the corpus digest
+alone would accept a reordered run whose warmup or thermal history differs.
+Older reports without the order receipt need a new run for automated SDK
+comparison. Neither receipt exposes individual file hashes, names, or reference
+text. They establish input and order identity only, not reference quality,
+speaker diversity, language coverage, normalization, or native hardware.
 
 After building, the vocabulary, real-dictation and model-comparison runners also
 inspect SwiftPM's selected checkout, its actual Git revision and every source
@@ -829,7 +833,8 @@ The release wrapper now requires the generated directory above (default:
 marker and its inherited FLEURS locale/split/license/revision/checksum metadata,
 then runs `v3 --language de --trials 3` with the existing long-form thresholds.
 Its `Benchmark inputs SHA-256` binds same-fixture comparisons across SDK pins;
-inspect the report's SDK revision, trial count, transcripts, deletion runs, WER,
+also require the `Benchmark order SHA-256` to match before comparing latency.
+Inspect the report's SDK revision, trial count, transcripts, deletion runs, WER,
 and latency as well. These composed FLEURS clips are a controlled read-speech
 probe, not spontaneous dictation or proof of product quality; retain private,
 consented German push-to-talk evidence as a separate check. Do not change

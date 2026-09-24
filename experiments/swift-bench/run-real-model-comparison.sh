@@ -31,6 +31,7 @@ REQUIRE_CANDIDATE_PASS=0
 SELF_TEST=0
 EXPERIMENT_ENVIRONMENT_STATE="unreported"
 BENCHMARK_INPUT_SHA256="unreported"
+BENCHMARK_ORDER_SHA256="unreported"
 
 MIN_CANDIDATE_TRIALS=3
 MIN_CANDIDATE_CLIPS=25
@@ -1184,6 +1185,18 @@ if ! BENCHMARK_INPUT_SHA256="$(
     echo "could not freeze and fingerprint model-comparison inputs" >&2
     exit 1
 fi
+if ! benchmark_receipt="$(
+    python3 ./benchmark-inputs.py receipt --snapshot-dir "$tmpdir/benchmark-inputs"
+)"; then
+    echo "could not fingerprint model-comparison input order" >&2
+    exit 1
+fi
+IFS=$'\t' read -r verified_input_sha256 BENCHMARK_ORDER_SHA256 <<< "$benchmark_receipt"
+if [[ "$verified_input_sha256" != "$BENCHMARK_INPUT_SHA256" || \
+      ! "$BENCHMARK_ORDER_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "could not fingerprint model-comparison input order" >&2
+    exit 1
+fi
 for index in "${!clips[@]}"; do
     extension="${clips[$index]##*.}"
     clips[index]="$tmpdir/benchmark-inputs/$(printf '%06d' "$((index + 1))")/audio.$extension"
@@ -1276,6 +1289,7 @@ mkdir -p "$raw_dir"
     echo "- App FluidAudio revision: $PRODUCTION_FLUID_REVISION"
     echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
     echo "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
+    echo "- Benchmark order SHA-256: $BENCHMARK_ORDER_SHA256"
     echo "- Parakeet language hint: $LANGUAGE"
     if [[ "$CANDIDATE_BACKEND" == "unified" ]]; then
         echo "- Unified trailing silence: ${UNIFIED_TRAILING_SILENCE_MS} ms"
@@ -1381,8 +1395,10 @@ for index in "${!normalized_clips[@]}"; do
     done
 done
 
-observed_input_sha256="$(python3 ./benchmark-inputs.py verify --snapshot-dir "$tmpdir/benchmark-inputs")"
-if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" ]]; then
+observed_receipt="$(python3 ./benchmark-inputs.py receipt --snapshot-dir "$tmpdir/benchmark-inputs")"
+IFS=$'\t' read -r observed_input_sha256 observed_order_sha256 <<< "$observed_receipt"
+if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" || \
+      "$observed_order_sha256" != "$BENCHMARK_ORDER_SHA256" ]]; then
     echo "frozen model-comparison inputs changed during the benchmark" >&2
     exit 1
 fi

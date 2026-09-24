@@ -2250,10 +2250,18 @@ class UpdateWindowTests(unittest.TestCase):
         scrollable = mock.Mock()
         scrollable.content = mock.Mock()
         label_calls = []
+        button_calls = []
+        buttons = []
 
         def label(*args, **kwargs):
             label_calls.append(kwargs)
             return mock.Mock()
+
+        def button(*args, **kwargs):
+            button_calls.append(kwargs)
+            control = mock.Mock()
+            buttons.append(control)
+            return control
 
         with mock.patch.object(ui, "_interactive_window", return_value=root), \
                 mock.patch.object(ui, "_ScrollableDialogBody",
@@ -2261,7 +2269,7 @@ class UpdateWindowTests(unittest.TestCase):
                 mock.patch.object(ui.ttk, "Label", side_effect=label), \
                 mock.patch.object(ui.ttk, "Progressbar", return_value=mock.Mock()), \
                 mock.patch.object(ui.ttk, "Frame", return_value=mock.Mock()), \
-                mock.patch.object(ui.ttk, "Button", return_value=mock.Mock()), \
+                mock.patch.object(ui.ttk, "Button", side_effect=button), \
                 mock.patch.object(ui, "_add_access_key"), \
                 mock.patch.object(ui, "_bind_window_command"), \
                 mock.patch.object(ui, "_mark_live_region"):
@@ -2280,6 +2288,30 @@ class UpdateWindowTests(unittest.TestCase):
         self.assertIn("Release notes may change after publication", disclosure)
         self.assertIn("not the publisher's identity", disclosure)
         self.assertIn("Unknown publisher", disclosure)
+        self.assertEqual(
+            [call["text"] for call in button_calls],
+            ["Later", "Download Update"])
+        self.assertEqual(button_calls[1]["default"], "normal")
+        self.assertNotIn("active", [call.get("default") for call in button_calls])
+        self.assertEqual(root.after_idle.call_args, mock.call(buttons[0].focus_set))
+        self.assertIsNot(buttons[0], buttons[1])
+
+    def test_install_confirmation_defaults_to_no(self):
+        window = ui.UpdateWindow.__new__(ui.UpdateWindow)
+        window.root = mock.Mock()
+        window.download_lock = threading.Lock()
+        window.downloaded_installer = "verified-installer.exe"
+        window.cancel_download = threading.Event()
+        window.app = mock.Mock()
+        window._discard_completed_download = mock.Mock()
+        window._reset_download_action = mock.Mock()
+
+        with mock.patch.object(ui.messagebox, "askyesno", return_value=False) as confirm:
+            window._install_ready("verified-installer.exe")
+
+        self.assertEqual(confirm.call_args.kwargs["default"], "no")
+        window.app.launch_update.assert_not_called()
+        window._discard_completed_download.assert_called_once_with()
 
     def test_download_moves_focus_before_disabling_its_command(self):
         window = ui.UpdateWindow.__new__(ui.UpdateWindow)

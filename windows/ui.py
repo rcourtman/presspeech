@@ -1943,7 +1943,7 @@ class UpdateWindow(_RegisteredDialog):
         self.later_button.pack(side="left")
         self.download_button = ttk.Button(
             buttons, text="Download Update", command=self._download,
-            default="active")
+            default="normal")
         self.download_button.pack(side="right")
         root.protocol("WM_DELETE_WINDOW", self._close)
         _add_access_key(root, self.later_button, "l")
@@ -1952,7 +1952,10 @@ class UpdateWindow(_RegisteredDialog):
         root.update_idletasks()
         _mark_live_region(self.status)
         self.scrollable_body.fit_to_screen()
-        root.after_idle(self.download_button.focus_set)
+        # Automatic update checks can open this window while the user is
+        # typing elsewhere. An incidental Enter must not approve a network
+        # download before the release notes have been deliberately reviewed.
+        root.after_idle(self.later_button.focus_set)
         root.after(100, self._poll)
 
     def _download(self):
@@ -2050,7 +2053,7 @@ class UpdateWindow(_RegisteredDialog):
         if not messagebox.askyesno(
                 "Install update",
                 "Close Presspeech and run the verified installer now?",
-                parent=self.root):
+                default="no", parent=self.root):
             self._discard_completed_download()
             self._reset_download_action("Ready to download")
             return
