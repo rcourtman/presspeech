@@ -311,12 +311,14 @@ validate_main_check_runs() {
 # ordinary pre-build QA gate. Validate that final candidate before committing
 # or publishing it; otherwise a bad generated link or metadata row can reach
 # main and a GitHub release even though Pages later (correctly) refuses it.
+# Callers use `validate_generated_release_surfaces || die`, which disables
+# errexit inside the function; chain explicitly so any failing check fails it.
 validate_generated_release_surfaces() {
-    /usr/bin/python3 "$PROJECT_DIR/scripts/sync-docs.py" --check
-    /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-links.py"
-    /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-metadata.py"
-    /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-accessibility.py"
-    /usr/bin/python3 "$PROJECT_DIR/scripts/check-public-assets.py"
+    /usr/bin/python3 "$PROJECT_DIR/scripts/sync-docs.py" --check \
+        && /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-links.py" \
+        && /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-metadata.py" \
+        && /usr/bin/python3 "$PROJECT_DIR/scripts/check-docs-accessibility.py" \
+        && /usr/bin/python3 "$PROJECT_DIR/scripts/check-public-assets.py"
 }
 
 immutable_releases_enabled() {
