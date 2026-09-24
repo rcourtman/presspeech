@@ -479,6 +479,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "version-specific network inventory",
         "follow-up guidance before another model download",
         "Do not inspect or display token values",
+        "malformed inherited", "embedded proxy credentials", "leave 0.3.8 unopened",
     ),
     DOCS / "index.html": (
         "Before opening macOS 0.3.8",
@@ -489,6 +490,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "full macOS warning",
         "Already used macOS 0.3.8?",
         "macos-0-3-8-after-use",
+        "malformed inherited proxy URL", "leave 0.3.8 unopened",
     ),
     DOCS / "getting-started.html": (
         "Downloading is not launching",
@@ -501,6 +503,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "install.html#model-download-privacy",
         "Already used macOS 0.3.8?",
         "macos-0-3-8-after-use",
+        "Proxy URL risk", "leave 0.3.8 unopened",
     ),
     DOCS / "faq.html": (
         "Before installing or launching macOS 0.3.8",
@@ -524,6 +527,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "version-specific network inventory",
         "Already used macOS 0.3.8?",
         "macos-0-3-8-after-use",
+        "Malformed proxy URLs are a separate risk", "keep 0.3.8 unopened",
     ),
     DOCS / "install" / "agents.md": (
         "macOS 0.3.8",
@@ -532,6 +536,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "wait until macOS 0.3.9 is published",
         "Do not inspect or display token values",
         "informed choice",
+        "malformed inherited lowercase", "embedded proxy credentials",
     ),
     DOCS / "llms.txt": (
         "Before installing or launching macOS 0.3.8",
@@ -1389,7 +1394,7 @@ class SyncError(RuntimeError):
 
 MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
-Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. Upcoming 0.3.9 removes account-token authentication but still honors proxy settings. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. Upcoming 0.3.9 removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Before downloading or installing, run these read-only compatibility checks:
   uname -m
@@ -3942,6 +3947,19 @@ def check_macos_model_download_privacy_summary(
                     f"{display}: the macOS model-download privacy decision must "
                     "precede the direct download action"
                 )
+            else:
+                warning = raw[warning_position:download_position]
+                for phrase in (
+                    "Malformed proxy URLs are a separate risk",
+                    "https_proxy", "http_proxy", "including embedded proxy credentials",
+                    "then ignore it", "keep 0.3.8 unopened",
+                    "0.3.9 refuses malformed proxy settings",
+                ):
+                    if phrase not in warning:
+                        errors.append(
+                            f"{display}: macOS malformed-proxy warning before download "
+                            f"is missing {phrase!r}"
+                        )
         elif path.name in ("llms.txt", "llms-full.txt"):
             raw = read_text(path)
             install = (
@@ -6366,7 +6384,10 @@ def run_self_test() -> None:
             "token inherited by Presspeech. The public model needs no account "
             "token. If one may be present, wait until macOS 0.3.9 is published. "
             "Dictation audio and transcripts are not sent. See the version-specific "
-            "network inventory.</p></div>\n"
+            "network inventory. Malformed proxy URLs are a separate risk: "
+            "https_proxy or http_proxy can be logged verbatim, including embedded "
+            "proxy credentials, and then ignore it. If unsure, keep 0.3.8 unopened; "
+            "0.3.9 refuses malformed proxy settings before model loading.</p></div>\n"
         )
         mac_button = (
             '<a class="button" href="https://github.com/rcourtman/presspeech/'
@@ -6377,6 +6398,18 @@ def run_self_test() -> None:
             required_mac_summary, install_page=mac_summary
         ):
             raise SyncError("self-test: complete macOS privacy decision was rejected")
+        mac_summary.write_text(
+            mac_warning.replace("Malformed proxy URLs are a separate risk", "Proxy note")
+            + mac_button,
+            encoding="utf-8",
+        )
+        if not any(
+            "malformed-proxy warning before download" in error
+            for error in check_macos_model_download_privacy_summary(
+                required_mac_summary, install_page=mac_summary
+            )
+        ):
+            raise SyncError("self-test: missing prominent malformed-proxy warning was accepted")
         mac_summary.write_text(mac_button + mac_warning, encoding="utf-8")
         mac_order_errors = check_macos_model_download_privacy_summary(
             required_mac_summary, install_page=mac_summary
