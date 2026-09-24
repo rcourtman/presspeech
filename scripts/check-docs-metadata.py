@@ -113,7 +113,10 @@ def has_delivery_boundary(description: object) -> bool:
     normalized = " ".join(description.lower().split())
     return all(
         phrase in normalized
-        for phrase in ("original destination", "clipboard", "manual paste")
+        for phrase in (
+            "original destination window", "field or browser tab",
+            "same window", "clipboard", "manual paste",
+        )
     )
 
 
@@ -399,7 +402,7 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
                 errors.append(f"{display}: {app_id} is missing {field}")
         if not has_delivery_boundary(app.get("description")):
             errors.append(
-                f"{display}: {app_id} description must state the verified original-destination "
+                f"{display}: {app_id} description must state the window-level delivery limit "
                 "and manual clipboard-paste boundary"
             )
         if "downloadUrl" in app:
@@ -490,12 +493,18 @@ def run_self_test() -> None:
         raise RuntimeError("self-test: unsafe sitemap URL was accepted")
 
     if not has_delivery_boundary(
-        "Pastes after verifying the original destination; otherwise the clipboard "
+        "Checks the original destination window, but a field or browser tab "
+        "change in the same window may be missed; otherwise the clipboard "
         "holds the text for manual paste."
     ):
         raise RuntimeError("self-test: valid delivery boundary was rejected")
     if has_delivery_boundary("Private dictation into any Mac app."):
         raise RuntimeError("self-test: universal delivery description was accepted")
+    if has_delivery_boundary(
+        "Pastes after verifying the original destination; otherwise the clipboard "
+        "holds the text for manual paste."
+    ):
+        raise RuntimeError("self-test: missing same-window limit was accepted")
 
     with tempfile.TemporaryDirectory() as tmp:
         broken = Path(tmp) / "broken.html"

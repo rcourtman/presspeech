@@ -18,6 +18,12 @@ https://rcourtman.github.io/presspeech/troubleshooting.html
 Target-app compatibility check:
 https://rcourtman.github.io/presspeech/app-compatibility.html
 
+Before inviting a public compatibility report, verify live GitHub issue-intake
+status and read https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md.
+New issue creation was restricted at the 24 September 2026 check. If no
+comparable existing thread accepts comments, keep the worksheet's
+local, unmonitored draft private; downloading it does not submit a report.
+
 Source:
 https://github.com/rcourtman/presspeech
 

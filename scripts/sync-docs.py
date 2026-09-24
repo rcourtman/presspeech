@@ -772,18 +772,40 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SCOPE_SURFACES = (
 # is part of the product contract rather than an exceptional implementation
 # detail.
 DELIVERY_BOUNDARY_GUIDANCE = {
-    ROOT / "README.md": ("original destination", "clipboard", "paste manually"),
+    ROOT / "README.md": (
+        "original destination", "clipboard", "paste manually",
+        "field or browser", "tab in the same window", "keep the starting field and tab selected",
+    ),
     ROOT / "windows" / "README.md": (
         "cannot verify that destination",
         "clipboard",
         "manual paste",
+        "field or browser tab in", "the same window", "keep the starting field and tab selected",
     ),
-    DOCS / "index.html": ("cannot safely verify the destination", "manual paste"),
-    DOCS / "getting-started.html": ("If Presspeech did not paste", "Windows 0.1.12", "only if it still holds the complete transcript"),
-    DOCS / "install.html": ("cannot verify that destination", "clipboard"),
-    DOCS / "windows.html": ("cannot verify that destination", "clipboard"),
-    DOCS / "faq.html": ("cannot verify that destination", "clipboard"),
-    DOCS / "llms.txt": ("cannot verify the same destination", "clipboard"),
+    DOCS / "index.html": (
+        "cannot safely verify the destination", "manual paste",
+        "field or browser tab in the same window", "keep the starting field and tab selected",
+    ),
+    DOCS / "getting-started.html": (
+        "If Presspeech did not paste", "Windows 0.1.12",
+        "only if it still holds the complete transcript", "same window", "browser tab",
+    ),
+    DOCS / "install.html": (
+        "cannot verify that destination", "clipboard",
+        "not the field or browser tab", "keep the starting field and tab selected",
+    ),
+    DOCS / "windows.html": (
+        "cannot verify that destination", "clipboard",
+        "field or browser tab in the same window", "keep the starting field and tab selected",
+    ),
+    DOCS / "faq.html": (
+        "cannot verify that destination", "clipboard",
+        "field or browser tab in the same window", "keep the starting field and tab selected",
+    ),
+    DOCS / "llms.txt": (
+        "cannot verify the same destination", "clipboard",
+        "field or browser tab in the same window", "keep the starting field and tab selected",
+    ),
     DOCS / "llms-full.txt": (
         "verify the original destination", "clipboard",
         "does not verify that the same field or browser tab",
@@ -1070,6 +1092,24 @@ COMMAND_SHELL_GUIDANCE = {
     DOCS / "faq.html": ("command shell", "Append newline", "review the exact command"),
     DOCS / "llms.txt": ("Command-shell safety", "Append newline", "reviewing the exact result"),
     DOCS / "llms-full.txt": ("execution surfaces", "Append newline", "reviewing the exact result"),
+}
+
+# Retrieval-facing briefs must not turn a local worksheet into an assumed
+# submission. Check the handoff beside the protocol, not an unrelated support
+# mention elsewhere in a long brief. Issue availability itself is checked live.
+AGENT_REPORTING_ROUTE_GUIDANCE = {
+    ROOT / "llms.txt": (
+        "Target-app compatibility check:", "Source:",
+        ("verify live GitHub issue-intake", "SUPPORT.md", "local, unmonitored draft", "does not submit"),
+    ),
+    DOCS / "llms.txt": (
+        "- Target-app check:", "- Deterministic voice tools:",
+        ("verify the live issue-intake", "SUPPORT.md", "local, unmonitored draft", "does not submit"),
+    ),
+    DOCS / "llms-full.txt": (
+        "Automatic insertion is target-specific.", "Both apps offer a focused",
+        ("verify live issue-intake", "SUPPORT.md", "local, unmonitored draft", "does not submit"),
+    ),
 }
 
 # GitHub renders repository Markdown as soon as a release commit reaches main,
@@ -3912,6 +3952,31 @@ def check_command_shell_guidance(
     return errors
 
 
+def check_agent_reporting_route_guidance(
+    surfaces: dict[Path, tuple[str, str, tuple[str, ...]]] = AGENT_REPORTING_ROUTE_GUIDANCE,
+) -> list[str]:
+    errors: list[str] = []
+    for path, (start_marker, end_marker, required) in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing agent reporting-route guidance")
+            continue
+        contents = read_text(path)
+        start = contents.find(start_marker)
+        end = contents.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+        if start < 0 or end < 0:
+            errors.append(f"{display}: missing compatibility handoff section")
+            continue
+        section = " ".join(contents[start:end].split())
+        missing = [phrase for phrase in required if phrase not in section]
+        if missing:
+            errors.append(
+                f"{display}: incomplete agent reporting-route guidance — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+    return errors
+
+
 def check_repository_install_guidance(
     required_surfaces: dict[Path, tuple[str, ...]] = REPOSITORY_INSTALL_GUIDANCE,
     forbidden_surfaces: dict[
@@ -6207,6 +6272,28 @@ def run_self_test() -> None:
         if check_command_shell_guidance(required_command_guidance):
             raise SyncError("self-test: complete command-shell guidance was rejected")
 
+        agent_handoff = Path(tmp) / "agent-handoff.txt"
+        handoff_surfaces = {
+            agent_handoff: (
+                "Target-app compatibility check:", "Source:",
+                ("verify live GitHub issue-intake", "SUPPORT.md", "local, unmonitored draft", "does not submit"),
+            ),
+        }
+        agent_handoff.write_text(
+            "Target-app compatibility check:\nShare the results publicly.\nSource:\n",
+            encoding="utf-8",
+        )
+        if not check_agent_reporting_route_guidance(handoff_surfaces):
+            raise SyncError("self-test: unconditional agent report request was accepted")
+        agent_handoff.write_text(
+            "Target-app compatibility check:\nBefore inviting a report, verify live GitHub "
+            "issue-intake and read SUPPORT.md. Keep a local, unmonitored draft if "
+            "restricted; downloading it does not submit anything.\nSource:\n",
+            encoding="utf-8",
+        )
+        if check_agent_reporting_route_guidance(handoff_surfaces):
+            raise SyncError("self-test: conditional agent reporting route was rejected")
+
         phase_copy = Path(tmp) / "release-phase.md"
         phase_copy.write_text(
             "Upcoming macOS **8.7.6** is the 8.7.6 candidate.\n",
@@ -6384,6 +6471,7 @@ def main() -> int:
             errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_compatibility_worksheet_contract())
             errors.extend(check_command_shell_guidance())
+            errors.extend(check_agent_reporting_route_guidance())
             errors.extend(check_repository_install_guidance())
             errors.extend(check_compare_freshness())
             errors.extend(check_cross_platform_compare_privacy())
@@ -6450,6 +6538,7 @@ def main() -> int:
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_compatibility_worksheet_contract())
         errors.extend(check_command_shell_guidance())
+        errors.extend(check_agent_reporting_route_guidance())
         errors.extend(check_repository_install_guidance())
         errors.extend(check_compare_freshness())
         errors.extend(check_cross_platform_compare_privacy())

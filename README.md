@@ -21,7 +21,10 @@ the original destination, it avoids automatic paste. On macOS and published
 Windows 0.1.12, a copied notice means the transcript was copied at completion;
 paste manually only if the clipboard still holds it. Upcoming Windows 0.1.13
 instead waits for an explicit Delivery Recovery Copy or Discard, without
-replacing the clipboard for an already-known invalid target.
+replacing the clipboard for an already-known invalid target. The destination
+check cannot always detect a move to another field or browser tab in the same
+window; keep the starting field and tab selected until insertion or a recovery
+notice appears.
 No account, subscription, or cloud transcription.
 
 **Start here:** [official website](https://rcourtman.github.io/presspeech/) ·

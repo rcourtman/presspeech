@@ -2,8 +2,12 @@
 
 Fast, private, local push-to-talk dictation for Windows — a Windows port of
 [presspeech](https://github.com/rcourtman/presspeech) (macOS). Hold a hotkey,
-speak, release, and the transcript is typed at the cursor. Speech recognition
-runs on your machine; Presspeech has no account or cloud transcription service.
+speak, and release. Presspeech normally pastes into the original window when
+it can verify that destination; otherwise published 0.1.12 leaves the transcript
+on the clipboard for manual paste. A move to another field or browser tab in
+the same window may go undetected, so keep the starting field and tab selected
+until insertion or recovery. Speech recognition runs on your machine; Presspeech
+has no account or cloud transcription service.
 The published Windows 0.1.12 build leaves Hugging Face Hub/Transformers default usage
 telemetry enabled during model downloads. These libraries may send usage data
 to Hugging Face, and model-request metadata includes a random per-process

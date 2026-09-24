@@ -49,7 +49,7 @@
             "@id": "https://rcourtman.github.io/presspeech/#software",
             "name": "Presspeech for macOS",
             "alternateName": "Presspeech push-to-talk dictation",
-            "description": "Free MIT-licensed menu-bar app for private push-to-talk dictation in everyday Mac text fields. Speech recognition runs locally on the Apple Neural Engine. Presspeech pastes only when it can verify the original destination; otherwise it leaves the transcript on the clipboard for manual paste. Speech-model downloads use the network; there is no account or cloud transcription, and bundled-library network behavior is documented by version.",
+            "description": "Free MIT-licensed menu-bar app for private push-to-talk dictation in everyday Mac text fields. Speech recognition runs locally on the Apple Neural Engine. Presspeech checks the original destination window before automatic paste, but a field or browser tab change in the same window may not be detected. If the window cannot be verified, it leaves the transcript on the clipboard for manual paste. Speech-model downloads use the network; there is no account or cloud transcription, and bundled-library network behavior is documented by version.",
             "operatingSystem": "macOS 14 Sonoma or later",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "Speech recognition, dictation, transcription",
@@ -84,7 +84,7 @@
             "@type": "SoftwareApplication",
             "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
             "name": "Presspeech for Windows",
-            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech pastes only when it can verify the original destination; otherwise it offers recovery for manual paste from the clipboard. Speech-model downloads use the network; there is no account or cloud transcription, and bundled-library network behavior is documented by version.",
+            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech checks the original destination window before automatic paste, but a field or browser tab change in the same window may not be detected. If the window cannot be verified, it offers recovery for manual paste from the clipboard. Speech-model downloads use the network; there is no account or cloud transcription, and bundled-library network behavior is documented by version.",
             "operatingSystem": "Windows 11 x64 recommended; Windows 10 x64 only while the specific edition remains supported or is enrolled in applicable Extended Security Updates",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "Speech recognition, dictation, transcription",
@@ -131,7 +131,7 @@
       <div class="wrap hero">
         <div class="hero-copy">
           <h1>Private push-to-talk dictation for Mac and Windows.</h1>
-          <p>Hold a key to speak and release by default, or choose <strong>Press to toggle</strong> to start and stop with separate presses. Presspeech transcribes locally, then pastes at the cursor or keeps a copy for manual paste when it cannot safely verify the destination. No account is required and dictation is not sent for cloud transcription. Speech-model downloads use the network; read the <a href="privacy.html#network-calls">version-specific privacy inventory</a> before installing.</p>
+          <p>Hold a key to speak and release by default, or choose <strong>Press to toggle</strong> to start and stop with separate presses. Presspeech transcribes locally, then pastes at the cursor or keeps a copy for manual paste when it cannot safely verify the destination. A switch to another field or browser tab in the same window may still send text to the new focus without a recovery notice; keep the starting field and tab selected until insertion or recovery. No account is required and dictation is not sent for cloud transcription. Speech-model downloads use the network; read the <a href="privacy.html#network-calls">version-specific privacy inventory</a> before installing.</p>
           <p class="quiet"><strong>macOS 0.3.8:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.12:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
           <div class="note warn launch-decision" role="region" aria-labelledby="launch-decision-title">
             <h2 id="launch-decision-title">Before opening a current build</h2>
@@ -203,12 +203,12 @@
           <h2>Hold. Speak. Release.</h2>
           <p>The video below shows the macOS build with its default <strong>Right Option</strong> hotkey. On Windows, use the same hold–speak–release gesture with <strong>Right Alt</strong> by default; if that key acts as AltGr for your keyboard layout, Setup lets you choose F8 or another available key. <strong>Press to toggle</strong> is available in macOS Settings → Dictation → Trigger and in Windows Settings.</p>
           <figure class="demo-figure">
-            <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — Presspeech checks the original destination before pasting." aria-describedby="demo-video-description">
+            <video controls muted loop playsinline preload="metadata" width="1920" height="1080" poster="demo-poster.jpg" aria-label="Demo video: hold Right Option, speak, release — Presspeech checks the original window before pasting." aria-describedby="demo-video-description">
               <source src="demo-video.webm" type="video/webm">
               <source src="demo-video.mp4" type="video/mp4">
-              <p>Your browser cannot play the demo video. The workflow is: hold Right Option, speak, and release; Presspeech pastes only after checking the original destination, otherwise it leaves the transcript available for manual paste.</p>
+              <p>Your browser cannot play the demo video. The workflow is: hold Right Option, speak, and release; Presspeech checks the original window before pasting, otherwise it leaves the transcript available for manual paste. Keep the starting field and tab selected until delivery finishes.</p>
             </video>
-            <figcaption class="demo-figure__caption" id="demo-video-description"><strong>Silent visual walkthrough:</strong> Right Option is held while Presspeech shows that it is listening, then released. After local transcription, the complete sentence appears in the same TextEdit document. If Presspeech cannot verify the original destination, it keeps the finished transcript available for manual paste instead.</figcaption>
+            <figcaption class="demo-figure__caption" id="demo-video-description"><strong>Silent visual walkthrough:</strong> Right Option is held while Presspeech shows that it is listening, then released. After local transcription, the complete sentence appears in the same TextEdit document. If Presspeech cannot verify the original window, it keeps the finished transcript available for manual paste instead. A field or browser tab switch inside that window may go undetected, so keep the starting field and tab selected.</figcaption>
           </figure>
           <div class="note">
             <p><strong>Check an app before relying on automatic paste.</strong> Target apps, including browser editors, Electron/Chromium apps, terminal-based editors, and remote sessions, expose focus and paste behavior differently. On macOS 0.3.8, some Electron/Chromium apps can show the copied/manual-paste notice even when focus looks unchanged; that is recovery, not an automatic-paste pass. Run the <a href="app-compatibility.html">privacy-safe target-app check</a> to separate automatic paste from clipboard recovery; it records outcomes, never your words.</p>
