@@ -36,6 +36,7 @@
     const focusCounts = countsFor(focus, FOCUS_OUTCOMES);
     const remaining = [...steady, ...focus].filter((value) => value === null).length;
     const completed = (value) => value !== null && value !== "notrun";
+    const observed = [...steady, ...focus].filter(completed).length;
     const steadyStopIndex = steady.findIndex((value) => value === "unsafe" || value === "notrun");
     const focusStopIndex = focus.findIndex((value) => value === "inserted" || value === "notrun");
     const stopCondition = steady.includes("unsafe") || focus.includes("inserted");
@@ -58,8 +59,9 @@
 
     return {
       complete: remaining === 0,
-      reportable: remaining === 0 && !sequenceViolation,
+      reportable: remaining === 0 && !sequenceViolation && observed > 0,
       remaining,
+      observed,
       stopCondition,
       sequenceViolation,
       steady: steadyCounts,
@@ -69,7 +71,7 @@
   }
 
   function formatSummary(result) {
-    if (!result.complete) return "";
+    if (!result.complete || result.observed === 0) return "";
     const lines = [
       "Five steady-focus results",
       `Pasted once: ${result.steady.pasted}`,
@@ -167,9 +169,9 @@
         doc.getElementById(id).textContent = String(result[group][outcome]);
       }
       summary.value = formatSummary(result);
-      copy.disabled = !result.complete;
-      save.disabled = !result.complete;
-      save.textContent = result.complete && !result.reportable
+      copy.disabled = !result.complete || result.observed === 0;
+      save.disabled = !result.complete || result.observed === 0;
+      save.textContent = result.complete && result.observed > 0 && !result.reportable
         ? "Download noncomparable draft"
         : "Download report draft";
       reportActions.hidden = !result.reportable;
@@ -178,6 +180,10 @@
           "A completed check follows a stop or Not completed slot. Do not repeat unsafe checks or " +
           "relabel completed attempts as unrun. These counts are noncomparable; " +
           "download a local draft and check SUPPORT.md for a suitable reporting route.";
+      } else if (result.complete && result.observed === 0) {
+        status.textContent =
+          "No checks were completed, so there is no compatibility result to copy or download. " +
+          "Run a safe check when possible, or leave the worksheet without reporting a result.";
       } else if (result.complete) {
         status.textContent = `All eight check slots classified. Overall: ${result.overall}.`;
       } else if (result.stopCondition) {

@@ -65,9 +65,9 @@
         <div class="wrap">
           <span class="section-eyebrow">p50 latency</span>
           <h2>Results</h2>
-          <div class="table-scroll">
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-1">
             <table>
-              <caption>Measured transcription latency by audio clip</caption>
+              <caption id="table-caption-1">Measured transcription latency by audio clip</caption>
               <thead>
                 <tr>
                   <th scope="col">Clip</th>
@@ -182,9 +182,9 @@
           <p>Upstream FluidAudio v0.15.7 changed Parakeet v3's default long-form chunking policy and added final-window re-decode/seam fixes; v0.15.8 added fresh per-window decoder state, blank-window recovery, and text-based seam reconciliation (<a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.7">v0.15.7 notes</a>, <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.8">v0.15.8 notes</a>). As checked on 2026-09-24, upstream's latest release is v0.17.1 (<a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.17.1">release notes</a>), a CocoaPods podspec metadata fix with no Swift Package Manager code change from <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.17.0">v0.17.0</a>. That code includes an ASR optimization that bulk-resets and copies <code>MLMultiArray</code> storage. The upstream PR reports warm median inference on an 11-second clip falling from 71.1 ms to 48.3 ms with identical transcripts, on an M3 Pro and its Parakeet v3 Orukeet bundle (<a href="https://github.com/FluidInference/FluidAudio/pull/941">PR #941 and measurements</a>). This is a candidate signal, not a Presspeech result: the app still pins v0.15.6 and has no same-input v0.17.0 quality or latency measurement. A separate <a href="https://github.com/FluidInference/FluidAudio/issues/825">German long-form report</a> on v0.15.5 exposed token-order corruption with mel-context chunking; upstream <a href="https://github.com/FluidInference/FluidAudio/pull/830">PR #830</a> fixed that specific merge-order defect, and the <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.6">v0.15.6 release notes</a> show it is already in Presspeech's current pin. The PR notes that first-chunk mel-context degradation is separate, so the fix does not establish that all multilingual seams are safe. Presspeech still explicitly uses its reviewed mel-context policy.</p>
           <p>A separate upstream <a href="https://github.com/FluidInference/FluidAudio/issues/760">Ukrainian right-context repro</a> isolated deterministic single-window word corruption to the shipped v3 CoreML encoder's 6-bit-LUT weights. FluidAudio's <a href="https://github.com/FluidInference/FluidAudio/pull/872">opt-in linear-int8 Encoder_v2</a> decoded all three reported cuts correctly in its controlled swap, but is larger (568 MB vs 425 MB) and still needs broad WER and Apple Neural Engine latency evaluation. Presspeech pins the original encoder today; its benchmark has a candidate-only comparison path, but no Presspeech result establishes a quality or latency gain. Evaluate the same Ukrainian FLEURS fixtures and human-reviewed local dictation, plus cache/memory and ANE latency, before considering promotion. This upstream case motivates testing; it is not a Presspeech reproduction or evidence to change production.</p>
           <p>The required Presspeech multi-window release corpus is English LibriSpeech with an English hint; it cannot validate the German failure class or upstream fix. The benchmark guide documents a pinned FLEURS German long-form probe. For an SDK update, save v0.15.6 baselines on both the required English corpus and the same composed German corpus, then compare v0.17.0 using <code>run-release-asr-checks.sh --sdk-upgrade-only --allow-candidate-dependency</code>, moving only the benchmark pin. Compare explicit production-config v3 against those baselines; the candidate SDK-default/no-mel path is also evaluated on German with an explicit <code>de</code> hint, alongside its English long-form and private/public checks. Match fixture digests, trial counts, and hints. Upstream speed figures and fixes motivate evaluation but do not establish a Presspeech quality or latency gain; candidate results are not a production release pass.</p>
-          <div class="table-scroll">
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-2">
             <table>
-              <caption>FluidAudio v0.15.5 public accuracy and latency recheck by speech-recognition backend</caption>
+              <caption id="table-caption-2">FluidAudio v0.15.5 public accuracy and latency recheck by speech-recognition backend</caption>
               <thead>
                 <tr>
                   <th scope="col">2026-07-22 v0.15.5 backend</th>
@@ -242,9 +242,9 @@
               <p>No vocabulary policy has cleared the product-candidate gate, so Presspeech still uses its deterministic Dictionary &amp; Shortcuts pass. The corrected full-audio evidence rules out enabling the tested standard policy, not just enabling it by default.</p>
             </article>
           </div>
-          <div class="table-scroll">
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-3">
             <table>
-              <caption>Corrected Polish vocabulary experiments against the production dependency</caption>
+              <caption id="table-caption-3">Corrected Polish vocabulary experiments against the production dependency</caption>
               <thead>
                 <tr>
                   <th scope="col">Question</th>

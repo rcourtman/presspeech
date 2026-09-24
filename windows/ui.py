@@ -1954,6 +1954,52 @@ class UpdateWindow:
         if path is not None:
             self._remove_downloaded_installer(path)
 
+    def _reset_download_action(self, status):
+        _set_accessible_text(self.status, status)
+        self.progress.config(value=0)
+        self.download_button.config(
+            text="Download Update", command=self._download, state="normal")
+
+    def _install_ready(self, path=None):
+        """Offer an already-verified installer without a second download."""
+        with self.download_lock:
+            ready_path = self.downloaded_installer
+        if (ready_path is None or (path is not None and path != ready_path) or
+                self.cancel_download.is_set()):
+            return
+        if not messagebox.askyesno(
+                "Install update",
+                "Close Presspeech and run the verified installer now?",
+                parent=self.root):
+            self._discard_completed_download()
+            self._reset_download_action("Ready to download")
+            return
+        # The dialog may have been closed while the confirmation was open.
+        with self.download_lock:
+            if (self.downloaded_installer != ready_path or
+                    self.cancel_download.is_set()):
+                return
+        try:
+            self.app.launch_update(ready_path, self.update)
+        except updates.UpdateInstallBusy as exc:
+            # A busy dictation is a safe, user-correctable delay, not a bad
+            # download. Keep the verified installer and expose a retry action.
+            message = str(exc)
+            _set_accessible_text(
+                self.status, message + " The verified installer remains ready.")
+            self.download_button.config(
+                text="Install Update", command=self._install_ready,
+                state="normal")
+            messagebox.showwarning("Update postponed", message, parent=self.root)
+        except Exception as exc:
+            self._discard_completed_download()
+            self._reset_download_action("Install failed")
+            messagebox.showerror(
+                "Update failed",
+                updates.user_facing_error(
+                    exc, "Could not start the verified installer."),
+                parent=self.root)
+
     def cancel_and_cleanup(self):
         """Cancel updater work and hand off cleanup if it stays blocked."""
         self.cancel_download.set()
@@ -2004,30 +2050,11 @@ class UpdateWindow:
                     self.progress.config(value=self.progress["maximum"])
                     _set_accessible_text(
                         self.status, "Verified and ready to install")
-                    if messagebox.askyesno(
-                            "Install update",
-                            "Close Presspeech and run the verified installer now?",
-                            parent=self.root):
-                        try:
-                            self.app.launch_update(event[1], self.update)
-                        except Exception as exc:
-                            self._discard_completed_download()
-                            _set_accessible_text(self.status, "Install failed")
-                            self.progress.config(value=0)
-                            self.download_button.config(state="normal")
-                            messagebox.showerror(
-                                "Update failed",
-                                updates.user_facing_error(
-                                    exc, "Could not start the verified installer."),
-                                parent=self.root)
-                    else:
-                        self._discard_completed_download()
-                        _set_accessible_text(self.status, "Ready to download")
-                        self.progress.config(value=0)
-                        self.download_button.config(state="normal")
+                    self._install_ready(event[1])
         except queue.Empty:
             pass
-        self.root.after(100, self._poll)
+        if not self.cancel_download.is_set():
+            self.root.after(100, self._poll)
 
     def _close(self):
         self.cancel_and_cleanup()

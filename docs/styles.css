@@ -1018,6 +1018,11 @@ pre code {
   box-shadow: var(--shadow-sm);
 }
 
+.table-scroll:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

@@ -681,14 +681,19 @@ class ParakeetConfigurationTests(unittest.TestCase):
         transformers.AutoModelForTDT = mock.Mock()
         model = mock.Mock()
         transformers.AutoModelForTDT.from_pretrained.side_effect = [
-            RuntimeError("half precision unavailable"), model,
+            RuntimeError("private-path-or-request-marker"), model,
         ]
+        notify = mock.Mock()
 
         with mock.patch.dict(sys.modules, {
                 "torch": torch,
                 "transformers": transformers,
         }):
-            engine.Transcriber(precision="fp16")._load_parakeet(None)
+            engine.Transcriber(precision="fp16")._load_parakeet(notify)
+
+        notify.assert_any_call(
+            "Presspeech", "Half-precision load failed; retrying FP32.")
+        self.assertNotIn("private-path-or-request-marker", str(notify.call_args_list))
 
         self.assertEqual(
             transformers.AutoModelForTDT.from_pretrained.call_args_list,

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Reject log calls that look like they may include private user input.
+"""Reject logs and Windows notifications that may include private user input.
 
 This is a conservative static guard. It does not prove privacy, but it
 catches the easy mistakes: interpolating or concatenating transcript
 text, correction sources/replacements, whole correction arrays, or audio
-buffers into Swift `log(...)` and Windows Python `_log(...)` calls. Exact
-microphone/device names, selectors, and focused executable names are also
+buffers into Swift `log(...)` and Windows Python `_log(...)`/`notify(...)`
+calls. Exact microphone/device names, selectors, and focused executable names are also
 private because they can contain personal or workplace labels. Raw global
 keycodes are forbidden because they can reveal typed characters.
 Swift error objects and localized descriptions are forbidden because NSError
@@ -16,7 +16,10 @@ chosen after `except ... as`; exception class names remain safe categories.
 Counts and other bounded metadata are allowed. Paths and benchmark-session
 labels are private too: a sanitized filename can still identify its user.
 
-The whole argument expression of each `log(...)` call is scanned —
+Windows notifications can persist in Notification Center and are checked with
+the same Python rules as logs. The reviewed updater error wrapper is allowed.
+
+The whole argument expression of each Swift `log(...)` call is scanned —
 string-literal prose is stripped first so only code (interpolations,
 concatenation operands, direct arguments, `String(format:)` arguments)
 is checked for forbidden identifiers.
@@ -280,16 +283,17 @@ def scan_text(path: Path, text: str) -> list[str]:
     return findings
 
 
-def is_python_log_call(node: ast.Call) -> bool:
+def is_python_private_sink_call(node: ast.Call) -> bool:
     if isinstance(node.func, ast.Name):
-        return node.func.id == "_log"
-    return isinstance(node.func, ast.Attribute) and node.func.attr == "_log"
+        return node.func.id in {"_log", "notify"}
+    return (isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"_log", "notify"})
 
 
 def contains_raw_exception_details(
     node: ast.AST, exception_names: frozenset[str] = frozenset()
 ) -> bool:
-    """Reject common unbounded exception renderings in persistent logs."""
+    """Reject common unbounded exception renderings in persistent output."""
     exception_identifiers = PYTHON_EXCEPTION_IDENTIFIERS | exception_names
     for current in ast.walk(node):
         if (isinstance(current, ast.Call) and isinstance(current.func, ast.Attribute)
@@ -316,6 +320,22 @@ def python_private_identifiers(
     exception_identifiers = PYTHON_EXCEPTION_IDENTIFIERS | exception_names
 
     def visit(current: ast.AST) -> None:
+        # The updater maps arbitrary exceptions to a fixed fallback and only
+        # returns deliberately authored UpdateError messages. Keep this one
+        # reviewed UI wrapper available without allowing generic formatters.
+        if (isinstance(current, ast.Call)
+                and isinstance(current.func, ast.Attribute)
+                and isinstance(current.func.value, ast.Name)
+                and current.func.value.id == "updates"
+                and current.func.attr == "user_facing_error"
+                and len(current.args) == 2
+                and isinstance(current.args[0], ast.Name)
+                and current.args[0].id in exception_identifiers
+                and isinstance(current.args[1], ast.Constant)
+                and isinstance(current.args[1].value, str)
+                and not current.keywords):
+            return
+
         # Exception class names are bounded diagnostic categories; the
         # exception object itself can contain machine-specific paths or
         # upstream/private content and must never be interpolated into logs.
@@ -365,7 +385,7 @@ def python_private_identifiers(
     return sorted(identifiers)
 
 
-class PythonLogCallCollector(ast.NodeVisitor):
+class PythonPrivateSinkCallCollector(ast.NodeVisitor):
     """Remember exception bindings only inside their handler suites.
 
     `except ... as e` exposes the same unbounded error details as `exc`; a
@@ -390,7 +410,7 @@ class PythonLogCallCollector(ast.NodeVisitor):
             self.exception_names = previous
 
     def visit_Call(self, node: ast.Call) -> None:
-        if is_python_log_call(node):
+        if is_python_private_sink_call(node):
             self.calls.append((node, self.exception_names))
         self.generic_visit(node)
 
@@ -399,10 +419,10 @@ def scan_python_text(path: Path, text: str) -> list[str]:
     try:
         tree = ast.parse(text, filename=str(path))
     except SyntaxError as exc:
-        return [f"{path}:{exc.lineno or 1}: could not parse Python log calls"]
+        return [f"{path}:{exc.lineno or 1}: could not parse Python privacy sinks"]
 
     findings: list[str] = []
-    collector = PythonLogCallCollector()
+    collector = PythonPrivateSinkCallCollector()
     collector.visit(tree)
     for node, exception_names in sorted(
         collector.calls, key=lambda item: (item[0].lineno, item[0].col_offset)
@@ -416,7 +436,8 @@ def scan_python_text(path: Path, text: str) -> list[str]:
             if raw_exception_details:
                 identifiers.add("raw exception details")
             findings.append(
-                f"{path}:{node.lineno}: suspicious log argument references "
+                f"{path}:{node.lineno}: suspicious log/notification argument "
+                "references "
                 f"{', '.join(sorted(identifiers))}"
             )
     return findings
@@ -528,6 +549,21 @@ self._log(sys.exception())
 self._log(sys.exc_info())
 self._log(traceback.format_exception_only(ValueError("private path")))
 """
+    python_notification_clean = """
+self.notify("Model", "Loading local model.")
+notify("Benchmark", "%d clips remaining" % len(audio))
+self.notify("Update failed", updates.user_facing_error(exc, "Could not check updates."))
+"""
+    python_notification_dirty = """
+try:
+    work()
+except RuntimeError as fault:
+    self.notify("Model failed", str(fault))
+    notify("Model failed", f"{fault}")
+self.notify("Clip saved", os.path.basename(output_path))
+self.notify("Clip saved", filename)
+self.notify("Update failed", updates.user_facing_error(updates.UpdateError(text), "fallback"))
+"""
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
         dirty_path = Path(tmp) / "dirty.swift"
@@ -536,6 +572,8 @@ self._log(traceback.format_exception_only(ValueError("private path")))
         python_dirty_path = Path(tmp) / "dirty.py"
         python_exception_alias_clean_path = Path(tmp) / "exception-alias-clean.py"
         python_exception_alias_dirty_path = Path(tmp) / "exception-alias-dirty.py"
+        python_notification_clean_path = Path(tmp) / "notification-clean.py"
+        python_notification_dirty_path = Path(tmp) / "notification-dirty.py"
         clean_path.write_text(clean, encoding="utf-8")
         dirty_path.write_text(dirty, encoding="utf-8")
         non_log_path.write_text(non_log_calls, encoding="utf-8")
@@ -545,6 +583,10 @@ self._log(traceback.format_exception_only(ValueError("private path")))
             python_exception_alias_clean, encoding="utf-8")
         python_exception_alias_dirty_path.write_text(
             python_exception_alias_dirty, encoding="utf-8")
+        python_notification_clean_path.write_text(
+            python_notification_clean, encoding="utf-8")
+        python_notification_dirty_path.write_text(
+            python_notification_dirty, encoding="utf-8")
         findings = scan_paths([clean_path])
         if findings:
             raise SystemExit(f"self-test rejected clean log calls: {findings}")
@@ -596,6 +638,20 @@ self._log(traceback.format_exception_only(ValueError("private path")))
                 raise SystemExit(
                     f"self-test did not catch exception alias/detail {identifier!r}"
                 )
+        findings = scan_paths([python_notification_clean_path])
+        if findings:
+            raise SystemExit(f"self-test rejected safe notifications: {findings}")
+        findings = scan_paths([python_notification_dirty_path])
+        if len(findings) != 5:
+            raise SystemExit(
+                f"self-test expected 5 unsafe notifications, got {len(findings)}: {findings}"
+            )
+        for identifier in (
+                "fault", "raw exception details", "output_path", "filename", "text"):
+            if not any(identifier in finding for finding in findings):
+                raise SystemExit(
+                    f"self-test did not catch notification leak {identifier!r}"
+                )
 
 
 def main() -> int:
@@ -606,17 +662,17 @@ def main() -> int:
 
     if args.self_test:
         run_self_test()
-        print("log privacy self-test passed")
+        print("log/notification privacy self-test passed")
         return 0
 
     paths = args.paths or DEFAULT_PATHS
     findings = scan_paths(paths)
     if findings:
-        print("log privacy check failed:", file=sys.stderr)
+        print("log/notification privacy check failed:", file=sys.stderr)
         for finding in findings:
             print(f"  {finding}", file=sys.stderr)
         return 1
-    print("log privacy check passed")
+    print("log/notification privacy check passed")
     return 0
 
 

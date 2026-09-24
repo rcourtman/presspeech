@@ -76,6 +76,8 @@ collaborator where noted:
   as **Not completed**; verify the block does not imply eight completed
   attempts and the overall
   result remains **An incorrect or unsafe result occurred**.
+  Mark all eight slots **Not completed** and verify no report block, copy, or
+  download is offered: zero observed checks are not compatibility evidence.
   Confirm the report draft and form distinguish matching issue threads from
   directly comparable observations: counts from different Presspeech or OS
   versions or conditions must not be pooled into a general success rate.
@@ -102,6 +104,13 @@ collaborator where noted:
   Menu button. Open the menu and focus a link; Escape should collapse it and
   return focus to Menu. Open it again, move focus into page content, then press
   Escape; the page control should keep focus and the menu should stay open.
+- At 360 CSS pixels and, separately, at 200% zoom, use only the keyboard on
+  the comparison, benchmark, and privacy tables. Tab to each scrollable table,
+  confirm its focus ring is visible, use Left/Right arrows to reach off-screen
+  columns, and Tab out without trapping focus. With a screen reader, confirm
+  the region is announced by its visible table caption. Repeat in Safari and
+  a Chromium or Firefox browser; static source checks cannot establish browser
+  scrolling or screen-reader behavior.
 
 A restricted public issue form is a failed support path, even when existing
 issues remain readable and the templates in source are valid. A candidate is
@@ -1461,6 +1470,15 @@ clipboard.
   scratchpad. Record only pass/fail; never save the test clipboard contents.
 - Choose Discard and Exit separately. Both forget private recovery; Discard must
   leave a newer external clipboard untouched. No late worker may retain after Exit.
+- With an in-app update's installer verified and a harmless recovery dictation
+  waiting, approve installation. Presspeech must postpone launch without
+  exiting or clearing the dictation, and the update window must offer **Install
+  Update** without another download. Resolve the dictation with Copy or
+  Discard, then invoke Install Update and verify the installer starts once.
+  Repeat the postponement while a dictation is recording and while it is
+  transcribing. If the update window is closed instead, its temporary verified
+  installer must be removed. Record this as native update/recovery behavior,
+  not as proof that an accepted paste reached the original field.
 - Force `SendInput` to return zero for modifier-down, V-down, V-up and
   modifier-up separately, and inject an exception after an event may have
   reached Windows. Every case must retain recovery and run applicable release

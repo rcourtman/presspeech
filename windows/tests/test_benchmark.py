@@ -26,6 +26,19 @@ def fixture_audio_by_path(audio, seconds=1.0, source_rate=16000):
 
 
 class CudaTimingTests(unittest.TestCase):
+    def test_environment_report_omits_raw_torch_exception_details(self):
+        torch = types.ModuleType("torch")
+
+        def private_error(_name):
+            raise RuntimeError("private-installation-path-marker")
+
+        torch.__getattr__ = private_error
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            environment = benchmark._environment()
+
+        self.assertEqual(environment["torch_error"], "RuntimeError")
+        self.assertNotIn("private-installation-path-marker", str(environment))
+
     def test_cpu_only_runtime_needs_no_cuda_barrier(self):
         with mock.patch.dict(sys.modules, {"torch": None}):
             benchmark._sync_cuda()

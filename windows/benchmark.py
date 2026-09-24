@@ -877,7 +877,9 @@ def _environment():
                             if torch.cuda.is_available() else None),
         })
     except Exception as exc:
-        result["torch_error"] = str(exc)
+        # Reports are routinely copied for review. Upstream error text can
+        # contain private installation paths or environment details.
+        result["torch_error"] = type(exc).__name__
     return result
 
 

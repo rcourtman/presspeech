@@ -681,6 +681,7 @@ class PresspeechApp:
         self._model_load_target = None
         self._model_load_generation = 0
         self._update_lock = threading.Lock()
+        self._update_installing = False
         self.icon = None
         self.listener = None
         self._hotkey_listener_lock = threading.Lock()
@@ -1444,14 +1445,24 @@ class PresspeechApp:
         # Claim the transition before model and foreground discovery. The
         # Settings window uses this same lock and lifecycle flag when saving.
         with self.lock:
-            if getattr(self, "_microphone_check_in_progress", False):
+            if getattr(self, "_update_installing", False):
+                update_installing = True
+                check_running = False
+            elif getattr(self, "_microphone_check_in_progress", False):
+                update_installing = False
                 check_running = True
             else:
+                update_installing = False
                 check_running = False
                 if getattr(self, "_starting_recording", False):
                     self._log("dictation ignored; another recording is starting")
                     return False
                 self._starting_recording = True
+        if update_installing:
+            self.notify(
+                "Update starting",
+                "Wait for the update installer before starting another dictation.")
+            return False
         if check_running:
             self.notify(
                 "Microphone check in progress",
@@ -1487,7 +1498,8 @@ class PresspeechApp:
             # Recheck after foreground-process discovery so simultaneous tray
             # and hotkey starts cannot cross the busy boundary. Cancellation
             # can also begin after the unlocked fast-path check above.
-            if (self.recording or getattr(self, "_canceling_recording", False)
+            if (getattr(self, "_update_installing", False) or self.recording or
+                    getattr(self, "_canceling_recording", False)
                     or getattr(self, "transcribing", False)):
                 return False
             self._rec_epoch += 1
@@ -2054,8 +2066,11 @@ class PresspeechApp:
             # this path. Keep them out of the persistent diagnostic log.
             self._log("benchmark audio saved")
             left = max(0, remaining - 1) if remaining > 0 else 0
-            self.notify("Benchmark clip saved", "%s (%d remaining)" %
-                        (os.path.basename(output_path), left))
+            # Session names may identify a speaker or workplace. Notifications
+            # can remain visible after this local benchmark has ended.
+            self.notify("Benchmark clip saved",
+                        "Saved in the local benchmarks/audio folder "
+                        "(%d remaining)." % left)
             return output_path
         except Exception as exc:
             self._log("benchmark capture failed: %s" % type(exc).__name__)
@@ -2995,18 +3010,40 @@ class PresspeechApp:
             self._update_lock.release()
 
     def launch_update(self, installer_path, update):
-        """Revalidate and run an installer after the second user approval."""
-        with updates.locked_verified_installer(update, installer_path):
-            subprocess.Popen([installer_path], cwd=os.path.dirname(installer_path))
+        """Revalidate and run only when exiting cannot discard a dictation."""
+        with self.lock:
+            if getattr(self, "_update_installing", False):
+                raise updates.UpdateInstallBusy(
+                    "An update installer is already starting.")
+            if (getattr(self, "_starting_recording", False) or
+                    getattr(self, "recording", False) or
+                    getattr(self, "_canceling_recording", False) or
+                    getattr(self, "transcribing", False)):
+                raise updates.UpdateInstallBusy(
+                    "Finish or cancel the current dictation before installing.")
+            if self.has_undelivered_dictation():
+                raise updates.UpdateInstallBusy(
+                    "Copy or discard the waiting dictation in Delivery Recovery "
+                    "before installing. Exiting now would discard it.")
+            # Exclude a new capture during verification, process launch, and
+            # the brief handoff to exit_app(). A failed launch releases this
+            # reservation so the user can continue dictating.
+            self._update_installing = True
         try:
-            updates.schedule_installer_cleanup(installer_path)
-        except Exception as exc:
-            # The installer is already running. Cleanup failure must not turn a
-            # successful, explicitly approved update into a second launch.
-            self._log("could not schedule update installer cleanup: %s" %
-                      type(exc).__name__)
-        time.sleep(0.15)
-        self.exit_app()
+            with updates.locked_verified_installer(update, installer_path):
+                subprocess.Popen([installer_path], cwd=os.path.dirname(installer_path))
+            try:
+                updates.schedule_installer_cleanup(installer_path)
+            except Exception as exc:
+                # The installer is already running. Cleanup failure must not turn a
+                # successful, explicitly approved update into a second launch.
+                self._log("could not schedule update installer cleanup: %s" %
+                          type(exc).__name__)
+            time.sleep(0.15)
+            self.exit_app()
+        finally:
+            with self.lock:
+                self._update_installing = False
 
     def diagnostics_text(self):
         """Return support state without user text, device labels, or raw errors."""

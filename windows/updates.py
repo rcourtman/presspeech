@@ -47,11 +47,15 @@ class UpdateError(RuntimeError):
     pass
 
 
+class UpdateInstallBusy(UpdateError):
+    """A local dictation must be resolved before an update exits the app."""
+
+
 def user_facing_error(error, fallback):
     """Return a curated updater error, never an arbitrary exception string.
 
-    UpdateError messages are authored by this module and must not interpolate
-    network, filesystem, or operating-system exception details.
+    UpdateError messages are authored by the updater or app install guard and
+    must not interpolate network, filesystem, or operating-system details.
     """
     if isinstance(error, UpdateError):
         return str(error)

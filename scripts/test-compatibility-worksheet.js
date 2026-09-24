@@ -128,6 +128,21 @@ async function main() {
     assert.equal(save.disabled, true);
     doc.outcomes.clear();
 
+    Array.from({ length: 5 }, (_, index) => `steady-${index + 1}`)
+      .concat(Array.from({ length: 3 }, (_, index) => `focus-${index + 1}`))
+      .forEach((name) => doc.outcomes.set(name, "notrun"));
+    form.listeners.change();
+    assert.equal(copy.disabled, true, "zero observed checks must not create a shareable result");
+    assert.equal(save.disabled, true);
+    assert.equal(reportActions.hidden, true);
+    assert.equal(summary.value, "");
+    assert.match(status.textContent, /No checks were completed/);
+    assert.equal(
+      worksheet.summarise(Array(5).fill("notrun"), Array(3).fill("notrun")).reportable,
+      false,
+    );
+    doc.outcomes.clear();
+
     ["pasted", "pasted", "recovered", "pasted", "recovered"].forEach(
       (value, index) => doc.outcomes.set(`steady-${index + 1}`, value),
     );

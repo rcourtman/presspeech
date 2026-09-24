@@ -260,13 +260,17 @@ routes, and advises keeping the file private if no suitable route is available.
 The browser or operating system controls the downloaded file. It can preserve
 a classified result and a reminder of useful context while no public reporting
 route is available. Once all eight check slots are classified *consistently
-with the stop-early instructions*, the worksheet reveals the existing-report
-search and a link to the GitHub issue list, where the current issue-creation
-status is visible. If completed outcomes follow a required stop or a **Not
-completed** slot, it instead marks the counts **Noncomparable** and offers a
-labelled local draft; do not relabel completed checks as unrun or submit that
-draft as an eight-check compatibility baseline. Keep the actual observations
-and follow [`SUPPORT.md`](../SUPPORT.md) for a suitable reporting route.
+with the stop-early instructions* and at least one check was run, the worksheet
+reveals the existing-report search and a link to the GitHub issue list, where
+the current issue-creation status is visible. If completed outcomes follow a
+required stop or a **Not completed** slot, it instead marks the counts
+**Noncomparable** and offers a labelled local draft; do not relabel completed
+checks as unrun or submit that draft as an eight-check compatibility baseline.
+Keep the actual observations and follow [`SUPPORT.md`](../SUPPORT.md) for a
+suitable reporting route.
+If all eight slots are **Not completed**, there is no observed result: the
+worksheet will not offer a report block or draft. Do not submit an all-unrun
+set of counts as compatibility evidence.
 Selections are not submitted; if intake is restricted, keep the draft locally
 and retry later.
 

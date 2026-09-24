@@ -2,6 +2,7 @@
 """Check static documentation conventions; not a browser accessibility audit.
 
 The skip link must be the body's first element and use plain visible text.
+Scrollable tables must have a keyboard focus target named by their caption.
 Positive tabindex is forbidden. These intentionally strict site conventions
 avoid approximating browser focus order with an HTML parser. CSS checks cover
 explicit site rules, not computed styles, responsive visibility, or scripting.
@@ -15,6 +16,7 @@ import re
 import sys
 import tempfile
 from collections import Counter
+from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -29,6 +31,12 @@ MIN_NAV_TARGET = 24
 MIN_MOBILE_NAV_TARGET = 44
 MIN_STICKY_HEADER_OFFSET = 64
 ERROR_PAGE = Path("404.html")
+
+
+@dataclass
+class TableScrollRegion:
+    attributes: dict[str, str | None]
+    captions: list[tuple[str | None, str]] = field(default_factory=list)
 
 
 class DocumentParser(HTMLParser):
@@ -70,6 +78,12 @@ class DocumentParser(HTMLParser):
         self.video_descriptions: list[str | None] = []
         self.hidden_ids: set[str] = set()
         self.worksheet_status_roles: list[str | None] = []
+        self.table_scroll_regions: list[TableScrollRegion] = []
+        self._div_depth = 0
+        self._active_table_regions: list[tuple[int, TableScrollRegion]] = []
+        self._caption_id: str | None = None
+        self._caption_text: list[str] | None = None
+        self._caption_region: TableScrollRegion | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
@@ -194,6 +208,18 @@ class DocumentParser(HTMLParser):
                 if attributes.get("role", "link") != "link":
                     self.skip_link_issues.append("skip link must retain link semantics")
         classes = (attributes.get("class") or "").split()
+        if tag == "div":
+            self._div_depth += 1
+            if "table-scroll" in classes:
+                region = TableScrollRegion(attributes)
+                self.table_scroll_regions.append(region)
+                self._active_table_regions.append((self._div_depth, region))
+        if tag == "caption":
+            self._caption_id = attributes.get("id")
+            self._caption_text = []
+            self._caption_region = (
+                self._active_table_regions[-1][1] if self._active_table_regions else None
+            )
         if "brand-mark" in classes:
             self.brand_mark_count += 1
             self._in_brand_mark = True
@@ -205,6 +231,8 @@ class DocumentParser(HTMLParser):
                 )
 
     def handle_data(self, data: str) -> None:
+        if self._caption_text is not None:
+            self._caption_text.append(data)
         if self._primary_nav_link is not None:
             self._primary_nav_link[1].append(data)
         if self._skip_link_text is not None:
@@ -215,6 +243,19 @@ class DocumentParser(HTMLParser):
             self._nav_toggle_text.append(data)
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "caption" and self._caption_text is not None:
+            if self._caption_region is not None:
+                self._caption_region.captions.append(
+                    (self._caption_id, " ".join("".join(self._caption_text).split()))
+                )
+            self._caption_id = None
+            self._caption_text = None
+            self._caption_region = None
+        if tag == "div":
+            if (self._active_table_regions and
+                    self._active_table_regions[-1][0] == self._div_depth):
+                self._active_table_regions.pop()
+            self._div_depth -= 1
         if tag == "nav" and self._in_primary_nav:
             self._in_primary_nav = False
         if tag == "body":
@@ -308,6 +349,17 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         errors.append(f"duplicate ids: {', '.join(duplicate_ids)}")
     if parser.missing_alt_count:
         errors.append(f"{parser.missing_alt_count} img element(s) lack alt")
+    for region in parser.table_scroll_regions:
+        if region.attributes.get("tabindex") != "0":
+            errors.append("scrollable table must have tabindex='0' for keyboard scrolling")
+        if region.attributes.get("role") != "region":
+            errors.append("scrollable table must have role='region'")
+        caption_id = region.attributes.get("aria-labelledby")
+        if (not caption_id or len(region.captions) != 1 or
+                region.captions[0][0] != caption_id or not region.captions[0][1]):
+            errors.append("scrollable table must be named by a visible caption")
+        elif caption_id in parser.hidden_ids:
+            errors.append("scrollable table caption must not be hidden")
     for description in parser.video_descriptions:
         references = description.split() if description is not None else []
         if not references:
@@ -566,19 +618,21 @@ def focus_indicator_errors(css: str) -> list[str]:
     if focus is None:
         return ["missing --focus CSS color"]
 
-    declarations = css_declarations(css, "a:focus-visible")
-    if declarations is None:
-        return ["missing a:focus-visible rules"]
-    outline = declarations.get("outline", "").strip()
-    match = re.fullmatch(
-        r"(?P<thickness>\d+(?:\.\d+)?)px\s+solid\s+var\(--focus\)", outline
-    )
-    if match is None:
-        errors.append("keyboard focus outline must use a solid --focus color")
-    elif float(match.group("thickness")) < MIN_FOCUS_THICKNESS:
-        errors.append(
-            f"keyboard focus outline must be at least {MIN_FOCUS_THICKNESS}px thick"
+    for selector in ("a:focus-visible", ".table-scroll:focus-visible"):
+        declarations = css_declarations(css, selector)
+        if declarations is None:
+            errors.append(f"missing {selector} rules")
+            continue
+        outline = declarations.get("outline", "").strip()
+        match = re.fullmatch(
+            r"(?P<thickness>\d+(?:\.\d+)?)px\s+solid\s+var\(--focus\)", outline
         )
+        if match is None:
+            errors.append(f"{selector} outline must use a solid --focus color")
+        elif float(match.group("thickness")) < MIN_FOCUS_THICKNESS:
+            errors.append(
+                f"{selector} outline must be at least {MIN_FOCUS_THICKNESS}px thick"
+            )
 
     # Links occur directly on each of these surfaces. Requiring the ring to
     # survive the least favourable one avoids a passing homepage check while
@@ -683,7 +737,10 @@ def run_self_test() -> None:
             + "<main id='main-content'><h1>Test</h1><img src='test.png' alt=''>"
             "<figure><video aria-describedby='video-description'></video>"
             "<figcaption id='video-description'>Silent demo description.</figcaption>"
-            "</figure></main>"
+            "</figure><div class='table-scroll' tabindex='0' role='region' "
+            "aria-labelledby='table-caption'>"
+            "<table><caption id='table-caption'>Test results</caption>"
+            "<tr><th scope='col'>Result</th></tr></table></div></main>"
             "</body></html>",
             encoding="utf-8",
         )
@@ -696,6 +753,12 @@ def run_self_test() -> None:
             (valid_index.replace("<body>", "<body><a href='#main-content'>Other</a>"), "first element"),
             (valid_index.replace("</main>", "</main><button tabindex='1'>Later</button>"), "positive tabindex"),
             (valid_index.replace("<body>", "<body hidden>"), "ancestors"),
+            (valid_index.replace("class='table-scroll' tabindex='0'", "class='table-scroll'"), "keyboard scrolling"),
+            (valid_index.replace("role='region'", "role='group'"), "role='region'"),
+            (valid_index.replace("aria-labelledby='table-caption'", "aria-labelledby='other'"), "visible caption"),
+            (valid_index.replace("id='table-caption'", "id='other'"), "visible caption"),
+            (valid_index.replace("Test results</caption>", "</caption>"), "visible caption"),
+            (valid_index.replace("id='table-caption'", "id='table-caption' hidden"), "caption must not be hidden"),
             (valid_index.replace("<html lang='en'>", "<html lang='en' inert>"), "ancestors"),
             (valid_index.replace("class='skip-link'", "class='skip-link' tabindex='-1'"), "tabindex"),
             (valid_index.replace("class='skip-link'", "class='skip-link' tabindex='nonsense'"), "tabindex"),
@@ -940,6 +1003,10 @@ def run_self_test() -> None:
       outline: 3px solid var(--focus);
       outline-offset: 3px;
     }
+    .table-scroll:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
     """
     if focus_indicator_errors(focus_css):
         raise RuntimeError("self-test: valid focus indicator was rejected")
@@ -953,6 +1020,15 @@ def run_self_test() -> None:
     errors = focus_indicator_errors(thin_focus_css)
     if not any("at least 2px thick" in error for error in errors):
         raise RuntimeError("self-test: thin focus indicator was accepted")
+    missing_table_focus_css = focus_css.replace(
+        "    .table-scroll:focus-visible {\n"
+        "      outline: 3px solid var(--focus);\n"
+        "      outline-offset: 3px;\n"
+        "    }\n", ""
+    )
+    if not any("missing .table-scroll:focus-visible" in error
+               for error in focus_indicator_errors(missing_table_focus_css)):
+        raise RuntimeError("self-test: missing table focus indicator was accepted")
 
     valid_skip_css = ".skip-link { transform: translateY(-100%); } .skip-link:focus { transform: translateY(0); }"
     if skip_link_style_errors(valid_skip_css):

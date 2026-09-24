@@ -49,6 +49,10 @@ class BenchmarkCapturePrivacyTests(unittest.TestCase):
             self.assertIn("private-session-label", Path(output).name)
         instance._log.assert_called_once_with("benchmark audio saved")
         self.assertNotIn("private-session-label", str(instance._log.call_args_list))
+        self.assertNotIn("private-session-label", str(instance.notify.call_args_list))
+        instance.notify.assert_called_once_with(
+            "Benchmark clip saved",
+            "Saved in the local benchmarks/audio folder (0 remaining).")
 
     def test_capture_failure_notice_omits_raw_exception_and_private_path(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -346,7 +350,50 @@ class UpdateWindowTests(unittest.TestCase):
         window.app.launch_update.assert_not_called()
         window.status.config.assert_called_with(text="Ready to download")
         window.progress.config.assert_called_with(value=0)
-        window.download_button.config.assert_called_with(state="normal")
+        window.download_button.config.assert_called_with(
+            text="Download Update", command=window._download, state="normal")
+
+    def test_busy_install_keeps_verified_installer_for_explicit_retry(self):
+        window = self.make_window()
+        installer = self.stage_ready_installer(window)
+        window.app.launch_update.side_effect = [
+            app.updates.UpdateInstallBusy(
+                "Copy or discard the waiting dictation before installing."),
+            None,
+        ]
+
+        with mock.patch.object(app.ui.messagebox, "askyesno", return_value=True), \
+                mock.patch.object(app.ui.messagebox, "showwarning") as warning:
+            window._poll()
+            self.assertEqual(window.downloaded_installer, installer)
+            self.assertTrue(app.os.path.exists(installer))
+            window.download_button.config.assert_called_with(
+                text="Install Update", command=window._install_ready,
+                state="normal")
+            self.assertIn(
+                "verified installer remains ready",
+                window.status.config.call_args.kwargs["text"].lower())
+            warning.assert_called_once_with(
+                "Update postponed",
+                "Copy or discard the waiting dictation before installing.",
+                parent=window.root)
+            window._install_ready()
+
+        self.assertEqual(window.app.launch_update.call_count, 2)
+        self.assertEqual(window.downloaded_installer, installer)
+        self.assertTrue(app.os.path.exists(installer))
+        window._close()
+        self.assertFalse(app.os.path.exists(installer))
+
+    def test_close_during_install_confirmation_cannot_launch_stale_installer(self):
+        window = self.make_window()
+        installer = self.stage_ready_installer(window)
+        with mock.patch.object(app.ui.messagebox, "askyesno") as approve:
+            approve.side_effect = lambda *_args, **_kwargs: (
+                window._close() or True)
+            window._poll()
+        window.app.launch_update.assert_not_called()
+        self.assertFalse(app.os.path.exists(installer))
 
     def test_failed_install_launch_discards_completed_download(self):
         window = self.make_window()
@@ -363,7 +410,8 @@ class UpdateWindowTests(unittest.TestCase):
         window.app.launch_update.assert_called_once_with(installer, window.update)
         window.status.config.assert_called_with(text="Install failed")
         window.progress.config.assert_called_with(value=0)
-        window.download_button.config.assert_called_with(state="normal")
+        window.download_button.config.assert_called_with(
+            text="Download Update", command=window._download, state="normal")
         showerror.assert_called_once_with(
             "Update failed", "Could not start the verified installer.",
             parent=window.root)
@@ -2610,6 +2658,7 @@ class TextRegressionTests(unittest.TestCase):
     def test_update_is_revalidated_after_approval_before_launch(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.exit_app = mock.Mock()
+        instance.lock = threading.Lock()
         update = {"installer_digest": "a" * 64}
         installer = r"C:\Temp\Presspeech-Setup-0.1.7-x64.exe"
         events = []
@@ -2636,6 +2685,59 @@ class TextRegressionTests(unittest.TestCase):
         cleanup.assert_called_once_with(installer)
         self.assertEqual(events, ["locked", "launched", "unlocked"])
         instance.exit_app.assert_called_once_with()
+        self.assertFalse(instance._update_installing)
+
+    def test_update_refuses_active_and_retained_dictation_before_process_launch(self):
+        for state in ("_starting_recording", "recording",
+                      "_canceling_recording", "transcribing", "retained"):
+            with self.subTest(state=state):
+                instance = app.PresspeechApp.__new__(app.PresspeechApp)
+                instance.lock = threading.Lock()
+                instance._undelivered_lock = threading.Lock()
+                instance._undelivered_dictations = (
+                    ["private transcript"] if state == "retained" else [])
+                if state != "retained":
+                    setattr(instance, state, True)
+                instance.exit_app = mock.Mock()
+                with mock.patch.object(
+                        app.updates, "locked_verified_installer") as verify, \
+                        mock.patch.object(app.subprocess, "Popen") as launch:
+                    with self.assertRaises(app.updates.UpdateInstallBusy) as caught:
+                        instance.launch_update("installer.exe", {})
+                verify.assert_not_called()
+                launch.assert_not_called()
+                instance.exit_app.assert_not_called()
+                self.assertFalse(getattr(instance, "_update_installing", False))
+                if state == "retained":
+                    self.assertEqual(
+                        instance._undelivered_dictations, ["private transcript"])
+                    self.assertNotIn(
+                        "private transcript", str(caught.exception))
+
+    def test_update_reservation_blocks_new_capture_and_clears_after_launch_failure(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.notify = mock.Mock()
+        instance._dictation_model_ready = mock.Mock()
+        instance.exit_app = mock.Mock()
+
+        def verify_while_reserved(_update, _path):
+            self.assertTrue(instance._update_installing)
+            self.assertFalse(instance.start_recording())
+            instance._dictation_model_ready.assert_not_called()
+            raise app.updates.UpdateError("Installer verification failed.")
+
+        with mock.patch.object(
+                app.updates, "locked_verified_installer",
+                side_effect=verify_while_reserved), \
+                mock.patch.object(app.subprocess, "Popen") as launch:
+            with self.assertRaises(app.updates.UpdateError):
+                instance.launch_update("installer.exe", {})
+        launch.assert_not_called()
+        instance.notify.assert_called_once_with(
+            "Update starting",
+            "Wait for the update installer before starting another dictation.")
+        self.assertFalse(instance._update_installing)
 
     def test_exit_discards_a_completed_update_before_hard_exit(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2657,6 +2759,7 @@ class TextRegressionTests(unittest.TestCase):
     def test_failed_launch_revalidation_never_runs_installer(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.exit_app = mock.Mock()
+        instance.lock = threading.Lock()
         with mock.patch.object(
                 app.updates, "locked_verified_installer",
                 side_effect=app.updates.UpdateError(

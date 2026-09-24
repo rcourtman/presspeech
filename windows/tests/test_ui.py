@@ -19,6 +19,78 @@ except ModuleNotFoundError:
 import ui
 
 
+class UpdateInstallRecoveryTests(unittest.TestCase):
+    """The verified installer stays available when dictation blocks an exit."""
+
+    def make_window(self):
+        window = ui.UpdateWindow.__new__(ui.UpdateWindow)
+        window.app = mock.Mock()
+        window.update = {"version": "0.1.13"}
+        window.root = mock.Mock()
+        window.events = queue.Queue()
+        window.cancel_download = threading.Event()
+        window.download_lock = threading.Lock()
+        window.downloaded_installer = "verified-installer.exe"
+        window._remove_downloaded_installer = mock.Mock()
+        window.download_finished = threading.Event()
+        window.download_finished.set()
+        window.status = mock.Mock()
+        window.progress = mock.MagicMock()
+        window.progress.__getitem__.return_value = 100
+        window.download_button = mock.Mock()
+        window.events.put(("ready", window.downloaded_installer))
+        return window
+
+    def test_busy_install_keeps_verified_file_and_exposes_retry(self):
+        window = self.make_window()
+        window.app.launch_update.side_effect = [
+            ui.updates.UpdateInstallBusy(
+                "Copy or discard the waiting dictation before installing."),
+            None,
+        ]
+        with mock.patch.object(ui.messagebox, "askyesno", return_value=True), \
+                mock.patch.object(ui.messagebox, "showwarning") as warning:
+            window._poll()
+            self.assertEqual(
+                window.downloaded_installer, "verified-installer.exe")
+            window._remove_downloaded_installer.assert_not_called()
+            window.download_button.config.assert_called_with(
+                text="Install Update", command=window._install_ready,
+                state="normal")
+            self.assertIn(
+                "verified installer remains ready",
+                window.status.config.call_args.kwargs["text"].lower())
+            warning.assert_called_once()
+            window._install_ready()
+        self.assertEqual(window.app.launch_update.call_count, 2)
+        window._remove_downloaded_installer.assert_not_called()
+
+    def test_decline_discards_verified_file_without_launch(self):
+        window = self.make_window()
+        with mock.patch.object(ui.messagebox, "askyesno", return_value=False):
+            window._poll()
+        window.app.launch_update.assert_not_called()
+        window._remove_downloaded_installer.assert_called_once_with(
+            "verified-installer.exe")
+        window.download_button.config.assert_called_with(
+            text="Download Update", command=window._download, state="normal")
+
+    def test_close_during_confirmation_cannot_launch(self):
+        window = self.make_window()
+
+        def close_then_approve(*_args, **_kwargs):
+            window._close()
+            return True
+
+        with mock.patch.object(
+                ui.messagebox, "askyesno", side_effect=close_then_approve):
+            window._poll()
+        window.app.launch_update.assert_not_called()
+        window._remove_downloaded_installer.assert_called_once_with(
+            "verified-installer.exe")
+        window.root.after.assert_not_called()
+
+
 class WindowHostPrivacyTests(unittest.TestCase):
     def make_host(self):
         host = ui._WindowHost.__new__(ui._WindowHost)

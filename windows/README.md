@@ -497,7 +497,11 @@ again; unsaved edits remain in place while it waits.
   attempts before connecting and offers unrestricted manual retries. Downloads
   and installation require approval, mutable releases are ignored, and the
   installer is verified by size and SHA-256 after download and again
-  immediately before launch
+  immediately before launch. Upcoming 0.1.13 postpones installer launch while
+  a dictation is starting, recording, canceling, transcribing, or waiting in
+  Delivery Recovery. The verified installer stays in the update window for an
+  explicit **Install Update** retry after the dictation is resolved; closing
+  the update window removes that temporary download
 - Dictionary: map a misheard phrase or spoken shortcut to exact text
   (e.g. "press speech" → `presspeech`), applied deterministically
 - Start with Windows (registry `HKCU\...\Run`)
