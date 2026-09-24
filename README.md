@@ -617,16 +617,25 @@ events, and CoreML inference.
 
 ```sh
 git clone https://github.com/rcourtman/presspeech.git
-cd presspeech/swift
-./dev-run.sh
+cd presspeech
+swift build --package-path swift
+swift/.build/debug/Presspeech --self-test all
 ```
 
-Useful checks:
+The build and model-free self-tests do not launch the app or download a model.
+`all` excludes the opt-in native keyboard and paste fixture. For an intentional
+signed app run, review the [macOS model-download warning](#install-on-macos)
+first: `swift/dev-run.sh` stops prior development and
+`/Applications/Presspeech.app` processes and launches the development app.
+Do not run it while an active dictation needs
+to be preserved. Native keyboard and delivery acceptance have separate
+[interaction](docs/native-interaction-qa.md) and
+[release qualification](docs/manual-qa.md#macos-release-qualification) protocols.
+
+Another useful release check, run from the repository root:
 
 ```sh
-swift build
-swift run Presspeech --self-test all
-../ship-swift.sh --dry-run   # release script lives at the repo root
+./ship-swift.sh --dry-run
 ```
 
 Before publishing a release, run the manual checklist in

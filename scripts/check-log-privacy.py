@@ -19,8 +19,9 @@ labels are private too: a sanitized filename can still identify its user.
 Windows notifications can persist in Notification Center and are checked with
 the same Python rules as logs. The reviewed updater error wrapper is allowed.
 The Python check follows simple local aliases into sinks, including aliases
-assigned on conditional, loop, and exception paths. It does not prove that
-arbitrary helper calls or containers are free of private data.
+assigned on conditional, loop, and exception paths, and checks literal-key
+`get`/`pop`/`setdefault` and `getattr` reads of private fields. It does not
+prove that arbitrary helper calls or containers are free of private data.
 
 The whole argument expression of each Swift `log(...)` call is scanned —
 string-literal prose is stripped first so only code (interpolations,
@@ -372,6 +373,24 @@ def python_private_identifiers(
         if (isinstance(current, ast.Attribute)
                 and current.attr in PYTHON_SAFE_METADATA_ATTRIBUTES):
             return
+
+        # A keyed lookup can expose the same private value as `mapping["name"]`.
+        # In particular, `settings.get("dictionary")` used to bypass the
+        # subscript check, including when assigned to a harmless-looking alias
+        # before a notification. `getattr(obj, "name")` is the attribute form.
+        if isinstance(current, ast.Call):
+            key = None
+            if (isinstance(current.func, ast.Attribute)
+                    and current.func.attr in {"get", "pop", "setdefault"}
+                    and current.args):
+                key = current.args[0]
+            elif (isinstance(current.func, ast.Name)
+                    and current.func.id == "getattr"
+                    and len(current.args) >= 2):
+                key = current.args[1]
+            if (isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    and python_private_name(key.value)):
+                identifiers.add(key.value)
 
         if (isinstance(current, ast.Name)
                 and (current.id in exception_names or
@@ -773,6 +792,20 @@ def outer(text):
     except OSError:
         self._log(message)
 """
+    python_keyed_clean = """
+self._log("model: %s" % settings.get("model"))
+self._log("dictionary rules: %d" % len(settings.get("dictionary", [])))
+self.notify("Status", getattr(info, "status", "unknown"))
+"""
+    python_keyed_dirty = """
+self.notify("Support", settings.get("dictionary"))
+message = settings.get("dictionary", [])
+self._log(message)
+self._log(device.get("name"))
+self.notify("Target", getattr(paste_target, "process_name", ""))
+self._log(request.pop("session"))
+self.notify("History", options.setdefault("history", []))
+"""
     with tempfile.TemporaryDirectory() as tmp:
         clean_path = Path(tmp) / "clean.swift"
         dirty_path = Path(tmp) / "dirty.swift"
@@ -787,6 +820,8 @@ def outer(text):
         python_alias_dirty_path = Path(tmp) / "alias-dirty.py"
         python_control_clean_path = Path(tmp) / "control-clean.py"
         python_control_dirty_path = Path(tmp) / "control-dirty.py"
+        python_keyed_clean_path = Path(tmp) / "keyed-clean.py"
+        python_keyed_dirty_path = Path(tmp) / "keyed-dirty.py"
         clean_path.write_text(clean, encoding="utf-8")
         dirty_path.write_text(dirty, encoding="utf-8")
         non_log_path.write_text(non_log_calls, encoding="utf-8")
@@ -804,6 +839,8 @@ def outer(text):
         python_alias_dirty_path.write_text(python_alias_dirty, encoding="utf-8")
         python_control_clean_path.write_text(python_control_clean, encoding="utf-8")
         python_control_dirty_path.write_text(python_control_dirty, encoding="utf-8")
+        python_keyed_clean_path.write_text(python_keyed_clean, encoding="utf-8")
+        python_keyed_dirty_path.write_text(python_keyed_dirty, encoding="utf-8")
         findings = scan_paths([clean_path])
         if findings:
             raise SystemExit(f"self-test rejected clean log calls: {findings}")
@@ -891,6 +928,20 @@ def outer(text):
             raise SystemExit(
                 f"self-test did not catch loop/handler aliases: {findings}"
             )
+        findings = scan_paths([python_keyed_clean_path])
+        if findings:
+            raise SystemExit(f"self-test rejected safe keyed lookups: {findings}")
+        findings = scan_paths([python_keyed_dirty_path])
+        if len(findings) != 6:
+            raise SystemExit(
+                f"self-test expected 6 unsafe keyed lookups, got {len(findings)}: {findings}"
+            )
+        for identifier in (
+                "dictionary", "message", "name", "process_name", "session", "history"):
+            if not any(identifier in finding for finding in findings):
+                raise SystemExit(
+                    f"self-test did not catch keyed private value {identifier!r}"
+                )
 
 
 def main() -> int:

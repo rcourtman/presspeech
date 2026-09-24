@@ -141,26 +141,41 @@ repeating selected clips to meet a threshold.
 
 ```sh
 git clone https://github.com/rcourtman/presspeech.git
-cd presspeech/swift
+cd presspeech
+swift build --package-path swift
+swift/.build/debug/Presspeech --self-test all
+```
+
+This build and model-free self-test do not launch the menu-bar app or start a
+model download. `all` excludes the opt-in native keyboard and paste fixture.
+Build requirements: Xcode 16+ (or a Swift 6.3+ toolchain) and macOS 14
+(Sonoma) or later. A Developer ID Application certificate is needed only for
+the signed development app, not for this build-only path.
+
+For an intentional signed native run, first review the
+[macOS model-download warning](README.md#install-on-macos) and make sure no
+running dictation needs to be preserved. Then run:
+
+```sh
+cd swift
 ./dev-run.sh
 ```
 
-`dev-run.sh` is idempotent — re-run it any time. It builds
-`Sources/Presspeech/main.swift` with `swift build`, wraps the binary
-in `/tmp/Presspeech-dev.app`, signs it with your Developer ID +
-hardened runtime + the production entitlements (so TCC permissions
-carry over from the Cask install — no manual re-grants), kills any
-prior dev instance, and relaunches via `open`.
+`dev-run.sh` wraps the debug binary in `/tmp/Presspeech-dev.app`, signs it
+with production entitlements, stops prior development and
+`/Applications/Presspeech.app` processes, clears the shared active-run marker,
+and launches the development app. A
+missing model can cause a request on launch, especially for an existing
+installation. For real keyboard, focus, and paste acceptance, follow
+[`docs/native-interaction-qa.md`](docs/native-interaction-qa.md) and the
+[macOS release qualification](docs/manual-qa.md#macos-release-qualification).
 
-Requirements: Xcode 16+ (or the Swift 6.3+ toolchain), macOS 14
-(Sonoma) or later, and a Developer ID Application certificate in your
-keychain.
-
-After editing `Sources/Presspeech/main.swift`:
+After editing `Sources/Presspeech/main.swift`, rebuild and run the model-free
+tests from `swift/` before deciding whether to relaunch:
 
 ```sh
-./dev-run.sh
-tail -f ~/Library/Logs/Presspeech.log
+swift build
+.build/debug/Presspeech --self-test all
 ```
 
 For Windows development, use Python 3.12 from the project virtual environment:
