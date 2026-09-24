@@ -189,14 +189,18 @@ containing this change keep the selected device closed until you choose
 **Check Microphone**. Speak during its local level check; if the input is
 silent, unmute it and choose **Check Again** in 0.1.12 or **Check Microphone**
 in 0.1.13. If the input cannot open, use Setup's links to Windows Microphone
-Privacy and Sound Input settings. Turn on **Microphone access** and **Let
-desktop apps access your microphone**, then confirm the input under
+Privacy and Sound Input settings. Turn on **Microphone access**, **Let apps
+access your microphone**, and **Let desktop apps access your microphone**,
+then confirm the input under
 **Settings -> System -> Sound -> Input**. Windows does not show a separate
-Presspeech toggle for this unpackaged desktop app on standard Windows builds.
-Some Windows 11 Experimental builds also offer per-app microphone controls for
-desktop apps; if that setting is present, allow Presspeech there too. Windows
-may ask for permission on first access; approve it only if you want Presspeech
-to use the microphone. If a USB or Bluetooth input
+Presspeech toggle or first-access prompt on standard builds. Some
+[Windows 11 Insider Experimental builds](https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26340-9233)
+offer per-app desktop microphone controls and may prompt on first access. If
+present, check the requesting app's identity before granting access; an
+unfamiliar or **Unsigned** label alone is not proof that it is Presspeech.
+Review the shared controls before opening published 0.1.12, which checks the
+selected input automatically during Setup, or before choosing **Check
+Microphone** in 0.1.13. If a USB or Bluetooth input
 was disconnected, reconnect it and choose **Check Again** in 0.1.12 or **Check
 Microphone** in 0.1.13; the check refreshes microphone discovery without
 requiring an app restart. Presspeech keeps an

@@ -221,10 +221,16 @@ not estimate a percentage or remaining time. Screen readers are notified of
 phase changes, not each changing byte count.
 Before recording, open Windows microphone privacy settings and turn on
 **Microphone access**, **Let apps access your microphone**, and **Let desktop
-apps access your microphone**. On Windows 11 builds that offer individual
-microphone controls for desktop apps, also allow Presspeech there if that
-control is shown. Windows may ask for microphone permission on first access;
-approve it only if you want Presspeech to use the microphone. If Windows says
+apps access your microphone**. On standard Windows builds, desktop apps use
+these shared controls rather than a separate Presspeech toggle or first-access
+prompt. [Windows 11 Insider Experimental build 26340.9233](https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26340-9233)
+introduced per-app desktop microphone controls and first-access prompts, with
+a gradual rollout. If one appears, check the requesting app's identity before
+granting access; Microsoft notes that some desktop apps may be listed as
+**Unsigned** or under an unexpected name. Do not approve an unfamiliar request
+based only on that label. Review microphone access before choosing **Check
+Microphone** or starting dictation; published 0.1.12 opens the selected input
+automatically during Setup. If Windows says
 the shared settings are managed by your organization, contact your
 administrator; Presspeech cannot override that policy. Also confirm the
 selected device under

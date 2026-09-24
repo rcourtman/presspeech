@@ -1989,7 +1989,7 @@ def sync_faq(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:<strong>macOS:</strong> )?Microphone, Accessibility(?: \(shown as Device Control and Data Access on macOS 27 and later\))?, and Input Monitoring\..*?</p>",
-        "<p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access and Let desktop apps access your microphone. Some Windows 11 Experimental builds also provide per-app microphone controls for desktop apps; if shown, allow Presspeech there too. Windows may ask for microphone permission on first access; approve it only if you want Presspeech to use the microphone.</p>",
+        "<p><strong>macOS:</strong> Microphone, Accessibility (shown as Device Control and Data Access on macOS 27 and later), and Input Monitoring. Setup Checklist tracks each grant. <strong>Windows:</strong> Turn on Microphone access, Let apps access your microphone, and Let desktop apps access your microphone. Standard Windows builds use these shared controls for desktop apps; <a href=\"https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26340-9233\">some Insider Experimental builds add per-app controls and first-access prompts</a>. If prompted, identify the requesting app before allowing it; an Unsigned label alone is not proof of Presspeech. Published 0.1.12 checks the microphone automatically during Setup, while upcoming 0.1.13 checks it only when you choose Check Microphone.</p>",
         path=path,
     )
     diagnostics_card = """            <article class="card">

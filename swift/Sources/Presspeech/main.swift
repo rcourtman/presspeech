@@ -6745,6 +6745,23 @@ private enum ClipboardPasteInserter {
                                                   expected: sourceChangeCount)
     }
 
+    /// `writeObjects` appends items. Another process can take ownership after
+    /// our `prepareForNewContents` call clears the pasteboard but before the
+    /// append. Do not add our text (or a saved snapshot) to that newer copy.
+    /// A second check also prevents a completed write from claiming success
+    /// when ownership changed during the pasteboard-server call.
+    static func writePreparedItems(_ items: [NSPasteboardItem],
+                                   to pb: NSPasteboard,
+                                   acquiredChangeCount: Int,
+                                   performWrite: (([NSPasteboardItem], NSPasteboard) -> Bool)? = nil) -> Bool {
+        guard pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                                 expected: acquiredChangeCount) else { return false }
+        // The injected writer is used only by the model-free interleaving test.
+        guard performWrite?(items, pb) ?? pb.writeObjects(items) else { return false }
+        return pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                                  expected: acquiredChangeCount)
+    }
+
     /// Writes the snapshot back onto the pasteboard, but only if
     /// `expectedChangeCount` still matches — otherwise something else owns the
     /// clipboard now and we leave it untouched. AppKit does not expose the
@@ -6768,10 +6785,14 @@ private enum ClipboardPasteInserter {
             }
         }
         #else
-        _ = pb.prepareForNewContents(with: restoreContentsOptions())
+        let ownedChangeCount = pb.prepareForNewContents(with: restoreContentsOptions())
         #endif
-        guard !snapshot.items.isEmpty else { return true }
-        return pb.writeObjects(snapshot.items)
+        guard !snapshot.items.isEmpty else {
+            return pasteboardChangeCountAllowsRestore(current: pb.changeCount,
+                                                      expected: ownedChangeCount)
+        }
+        return writePreparedItems(snapshot.items, to: pb,
+                                  acquiredChangeCount: ownedChangeCount)
     }
 
     /// Reading availability never writes clipboard data. A newer owner or
@@ -6986,7 +7007,8 @@ private enum ClipboardPasteInserter {
             }
         }
         #endif
-        let wrote = pb.writeObjects([item])
+        let wrote = writePreparedItems([item], to: pb,
+                                       acquiredChangeCount: ownedChangeCount)
         if wrote {
             // A successful replacement retires the old offer. A failed Copy
             // before ownership must not consume a still-valid option; if
@@ -19226,6 +19248,7 @@ private enum PresspeechSelfTest {
         try testManualClipboardRestoreSettings()
         try testManualClipboardRestoreLifecycle()
         try testBoundedClipboardSnapshots()
+        try testPreparedPasteboardOwnership()
         try expect(
             pastedText(from: "hello world", suffix: .appendSpace),
             equals: "hello world ",
@@ -20366,6 +20389,63 @@ private enum PresspeechSelfTest {
             equals: true,
             "clipboard snapshot should reject an unavailable representation instead of restoring partial data"
         )
+    }
+
+    private static func testPreparedPasteboardOwnership() throws {
+        let probe = MainActor.assumeIsolated {
+            let pb = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.prepared-write.\(UUID().uuidString)"
+            ))
+            defer { pb.releaseGlobally() }
+            let item = NSPasteboardItem()
+            let itemReady = item.setString("dictation fixture", forType: .string)
+            _ = ClipboardPasteInserter.write("older fixture", to: pb)
+
+            let acquiredBeforeCopy = pb.prepareForNewContents(with: .currentHostOnly)
+            pb.clearContents()
+            let newerCopyWritten = pb.setString("newer external fixture", forType: .string)
+            var staleWriteInvoked = false
+            let staleWriteAccepted = ClipboardPasteInserter.writePreparedItems(
+                [item], to: pb, acquiredChangeCount: acquiredBeforeCopy,
+                performWrite: { _, _ in
+                    staleWriteInvoked = true
+                    return true
+                }
+            )
+            let newerCopyPreserved = pb.string(forType: .string) == "newer external fixture"
+
+            let acquiredBeforeWrite = pb.prepareForNewContents(with: .currentHostOnly)
+            let currentWriteAccepted = ClipboardPasteInserter.writePreparedItems(
+                [item], to: pb, acquiredChangeCount: acquiredBeforeWrite
+            )
+            let currentText = pb.string(forType: .string)
+
+            let acquiredBeforeLateCopy = pb.prepareForNewContents(with: .currentHostOnly)
+            let lateCopyAccepted = ClipboardPasteInserter.writePreparedItems(
+                [item], to: pb, acquiredChangeCount: acquiredBeforeLateCopy,
+                performWrite: { items, board in
+                    let wrote = board.writeObjects(items)
+                    board.clearContents()
+                    _ = board.setString("late external fixture", forType: .string)
+                    return wrote
+                }
+            )
+            return (itemReady, newerCopyWritten, staleWriteAccepted,
+                    staleWriteInvoked, newerCopyPreserved, currentWriteAccepted,
+                    currentText, lateCopyAccepted, pb.string(forType: .string))
+        }
+        try expect(probe.0 && probe.1, equals: true,
+                   "the prepared-write fixture must install both pasteboard values")
+        try expect(probe.2 || probe.3, equals: false,
+                   "a newer owner before writeObjects must prevent even attempting the append")
+        try expect(probe.4, equals: true,
+                   "an interrupted prepared write must preserve the newer clipboard item")
+        try expect(probe.5 && probe.6 == "dictation fixture", equals: true,
+                   "a still-owned prepared write must keep the normal transcript path working")
+        try expect(probe.7, equals: false,
+                   "a newer owner during writeObjects must not be reported as a completed write")
+        try expect(probe.8, equals: "late external fixture",
+                   "a later copy must remain the current clipboard value")
     }
 
     private static func testRecentTranscriptLimit() throws {

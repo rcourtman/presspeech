@@ -3667,9 +3667,10 @@ class TextRegressionTests(unittest.TestCase):
             "Microphone error",
             "Presspeech couldn't open the selected input. Check Settings > "
             "System > Sound > Input and Windows microphone privacy settings, "
-            "including 'Let desktop apps access your microphone'. On Windows "
-            "11 builds with per-app desktop microphone controls, also allow "
-            "Presspeech there. Choose Check Microphone in Setup or another "
+            "including 'Let desktop apps access your microphone'. If your "
+            "build has per-app desktop controls, check a verified "
+            "Presspeech entry there. Choose Check "
+            "Microphone in Setup or another "
             "input in Settings, then try again.")
         self.assertNotIn("private", str(instance.notify.mock_calls))
 
@@ -3726,8 +3727,8 @@ class TextRegressionTests(unittest.TestCase):
             "Sound > Input. If two inputs have the same name, disconnect one; "
             "Presspeech cannot choose a specific one. Enable microphone "
             "access for desktop apps in Windows privacy settings and try again. "
-            "On Windows 11 builds with per-app desktop microphone controls, "
-            "also allow Presspeech there.")
+            "If per-app desktop controls are available, check a verified "
+            "Presspeech entry there.")
 
     def test_stale_microphone_error_does_not_cancel_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

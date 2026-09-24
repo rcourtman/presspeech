@@ -1864,9 +1864,8 @@ class PresspeechApp:
                                 "have the same name, disconnect one; Presspeech "
                                 "cannot choose a specific one. Enable microphone "
                                 "access for desktop apps in Windows privacy settings "
-                                "and try again. On Windows 11 builds with per-app "
-                                "desktop microphone controls, also allow Presspeech "
-                                "there.")
+                                "and try again. If per-app desktop controls are "
+                                "available, check a verified Presspeech entry there.")
                     return False
                 with self.lock:
                     if (not self.recording or epoch != self._rec_epoch or
@@ -1932,9 +1931,10 @@ class PresspeechApp:
                 "Microphone error",
                 "Presspeech couldn't open the selected input. Check Settings > "
                 "System > Sound > Input and Windows microphone privacy settings, "
-                "including 'Let desktop apps access your microphone'. On Windows "
-                "11 builds with per-app desktop microphone controls, also allow "
-                "Presspeech there. Choose Check Microphone in Setup or another "
+                "including 'Let desktop apps access your microphone'. If your "
+                "build has per-app desktop controls, check a verified "
+                "Presspeech entry there. Choose Check "
+                "Microphone in Setup or another "
                 "input in Settings, then try again.")
             return False
         self._log("mic open ok: %s" % (chosen,))
