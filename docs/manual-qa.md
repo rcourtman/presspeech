@@ -49,9 +49,10 @@ collaborator where noted:
 - After Pages deploys the intended main commit, run
   `python3 scripts/check-live-pages.py` from that exact commit. It compares the
   public home, first-dictation, install, privacy, help, compatibility, and FAQ
-  HTML, plus the served release metadata, network inventory, assistant-install
-  prompt, LLM guidance, and compatibility worksheet script, with the checked-in
-  files byte for byte. A passing source check or successful workflow run alone
+  HTML, plus the shared stylesheet and mobile-navigation script, served release
+  metadata, network inventory, assistant-install prompt, LLM guidance, and
+  compatibility worksheet script, with the checked-in files byte for byte.
+  A passing source check or successful workflow run alone
   does not show which copy visitors receive. If this check differs or cannot
   fetch a file, mark public guidance **Blocked**, inspect the live first-launch
   and support warnings directly, and verify again after Pages catches up. Do

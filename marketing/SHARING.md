@@ -247,31 +247,45 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    qualification](../docs/manual-qa.md#public-release-and-support-qualification).
    Confirm `main` is deployed to GitHub Pages and the README shows the direct
    download above Homebrew. From a signed-in non-collaborator account, confirm
-   all three public issue templates can actually be submitted before asking
-   users for bug, improvement, or compatibility reports. The visible
+   all three public issue templates open and can be filled without a restriction
+   banner before asking users for bug, improvement, or compatibility reports;
+   do not submit a test issue. The visible
    "Issue creation is restricted" banner is a stop, not an invitation to
    redirect private reports elsewhere. Apply the exact two-platform GitHub
    About description and missing discovery topics above; a Mac-only profile
    hides a shipped platform. Request correction of the third-party FluidAudio
    showcase wording above before relying on it as a discovery surface; neither
    repository source edits nor launch copy alter that upstream description.
-5. Record a baseline: latest release downloads, total release
-   downloads, repo stars, repo views, unique views, clones, and top
-   referrers.
+5. Record a UTC baseline by exact release tag and package asset: macOS ZIP,
+   Windows installer, the package-asset total across releases, and repo stars.
+   Use GitHub's release-asset `download_count`, excluding `.sha256` sidecars
+   from package totals. Record sidecar counts separately only if useful for
+   verification troubleshooting; checks and automation may fetch them without
+   fetching an installer. Package downloads are requests, not unique people,
+   installs, or successful first dictations. An authorized owner can also
+   record repo views, unique views, clones, and top referrers from GitHub's
+   traffic data; those figures require repository write access and must be marked
+   unavailable, not zero, when access is absent. Do not request credentials
+   just to complete the baseline.
 6. Rework and approve the draft against the release actually available that
    day; do not post the dated text above unchanged. Then post Show HN once,
    linking the repo or site depending on which preview looks cleaner.
 7. Stay available for the first few hours and answer only actual
    questions. Link the compare table for "why not X?" and the privacy
    page for trust questions.
-8. After 24 hours and 7 days, record the same metrics. Judge the post
-   by qualified installs and questions, not points alone.
+8. After 24 hours and 7 days, record the same fields and their changes from
+   baseline, retaining the tag and asset names so a new release does not get
+   mixed into the comparison. Judge the post by actual questions and voluntary,
+   privacy-safe evidence of successful first dictations, not points or raw
+   asset counts alone.
 
-If the direct download link materially outperforms the Homebrew command
-in release downloads, keep direct download first. If questions cluster
-around permissions, model download, or Gatekeeper wording, fix that copy
-once in README + install page + FAQ and rerun `scripts/sync-docs.py
---check`.
+GitHub's package-asset count cannot distinguish the direct macOS link from
+the Homebrew Cask: both use the published release ZIP. Do not claim one
+install route outperforms the other from that count. Keep the direct,
+version-pinned download and verification path visible alongside the optional
+Homebrew route. If questions cluster around permissions, model download, or
+Gatekeeper wording, fix that copy once in README + install page + FAQ and rerun
+`scripts/sync-docs.py --check`.
 
 ## Answer material (ongoing, demand-driven)
 

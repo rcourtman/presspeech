@@ -31,6 +31,11 @@ CRITICAL_FILES = (
     "troubleshooting.html",
     "app-compatibility.html",
     "faq.html",
+    # The shared assets determine whether the warnings remain readable and
+    # reachable on narrow screens. Fresh HTML alone does not prove that Pages
+    # serves the same navigation behavior and layout.
+    "styles.css",
+    "site-navigation.js",
     # These are also direct first-launch entry points. A fresh Pages HTML
     # deployment does not prove its versioned data, agent instructions, or
     # worksheet script were deployed with it.
@@ -94,6 +99,8 @@ def self_test() -> None:
 
     assert public_url("index.html") == SITE
     assert public_url("getting-started.html") == SITE + "getting-started.html"
+    assert public_url("styles.css") == SITE + "styles.css"
+    assert public_url("site-navigation.js") == SITE + "site-navigation.js"
     assert public_url("privacy/network-calls.json") == SITE + "privacy/network-calls.json"
     assert public_url("install/agents.md") == SITE + "install/agents.md"
     with patch(__name__ + ".urlopen", return_value=FakeResponse(SITE, b"current")):
@@ -122,7 +129,8 @@ def self_test() -> None:
         assert not compare_files(docs, lambda path: path.encode())
 
         for stale_path in (
-            "getting-started.html", "site-metadata.json",
+            "getting-started.html", "styles.css", "site-navigation.js",
+            "site-metadata.json",
             "privacy/network-calls.json", "install/agents.md",
             "llms.txt", "llms-full.txt", "compatibility-worksheet.js",
         ):
