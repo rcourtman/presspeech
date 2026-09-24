@@ -179,6 +179,22 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
                 self.assertIsNone(raised.exception.__cause__)
                 self.assertTrue(raised.exception.__suppress_context__)
 
+    def test_named_pre_submit_failure_never_injects_or_exposes_details(self):
+        for reason in ("focus-changed", "modifier-held", "clipboard-changed",
+                       "private clipboard contents", ["private clipboard contents"]):
+            with self.subTest(reason=reason):
+                api = self.backend()
+                with self.assertRaises(delivery.PreSubmitCheckError) as raised:
+                    delivery.Controller(api=api).shortcut(
+                        [delivery.VK_LCONTROL], delivery.VK_V,
+                        before_submit=lambda: reason)
+                expected = (reason if reason in (
+                    "focus-changed", "modifier-held", "clipboard-changed")
+                    else "delivery-check-unavailable")
+                self.assertEqual(raised.exception.reason, expected)
+                self.assertNotIn("private", str(raised.exception))
+                api.SendInput.assert_not_called()
+
     def test_partial_shortcut_batch_is_reported_as_uncertain(self):
         api = self.backend(inserted=2)
         with self.assertRaises(delivery.KeyboardDeliveryError):

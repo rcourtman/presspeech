@@ -19,6 +19,13 @@ After a live correction, reconcile the tracked notes and verify the rendered
 page from a signed-out browser. Do not imply the upcoming 0.3.9 or 0.1.13
 controls are present in these downloads.
 
+Run `python3 scripts/check-public-releases.py --notes-only` before and after
+any authorized correction. It audits public/tracked-note parity and flags
+missing disclosure markers on both archived release pages without modifying
+GitHub. A passing marker check is only a presence check; review the rendered
+warning, version-specific decision, and links manually. The audit is expected
+to fail while the current public entries remain uncorrected.
+
 ## macOS 0.3.8 — proposed lead notice
 
 > **Before opening macOS 0.3.8:** A missing speech model starts downloading

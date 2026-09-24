@@ -147,6 +147,17 @@ prove an accurate transcript. Hinted-language runs, English-only Whisper, and
 Parakeet have no automatic-language comparison. This is benchmark-only and
 does not change model inference or product behavior.
 
+Version 23 adds paired **first-word** loss and recovery counts to both
+Parakeet tail probes, using the same consecutive-boundary-word rule as the
+existing final-word diagnostics. Counts appear per pair, per clip, in pooled
+and labelled-group summaries, and by decode order. The synthetic probe now
+also reports clean and tailed first-word failure totals; the recorded probe
+reports full and trimmed totals. A tail can alter recognition of earlier
+speech, so unchanged total WER or a correct final word cannot establish that
+the first word survived. These text comparisons cannot prove acoustic
+alignment or that a crop is safe. Compare version 23 reports for these fields;
+recognition and inference inputs are unchanged.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -220,8 +231,8 @@ runner refuses the paired probe. Then run:
 .venv\Scripts\python benchmark.py --manifest benchmarks\public-parakeet-tail\manifest.json --model parakeet-tdt-0.6b-v3 --runs 5 --parakeet-tail-silence-ms 400 --output benchmarks\public-parakeet-tail-result.json
 ```
 
-Inspect paired blank transitions, word errors, final-word losses, and signed
-latency deltas, not just a single transcript. A result from one public voice
+Inspect paired blank transitions, word errors, first-/final-word losses,
+and signed latency deltas, not just a single transcript. A result from one public voice
 and synthetic zero tail cannot qualify an automatic trim/retry policy: also
 test multiple native captured short and quiet utterances, reviewed silence
 controls, and the actual Windows release-to-paste timing.
@@ -246,7 +257,7 @@ zero-valued 16 kHz samples appended, alternating which goes first across all
 reviewed pairs. Reviewed silence, unreviewed audio,
 and unscoreable references receive only the ordinary transcription. The JSON
 keeps ordered transcript pairs, paired word-error counts, blank regressions,
-paired final-word losses and recoveries, separate tailed inference times, and
+paired first-/final-word losses and recoveries, separate tailed inference times, and
 signed paired inference-time deltas.
 Each sample's `trial_order` is indexed like `pairs`, both inference-time arrays,
 and `paired_inference_delta_seconds.all`; aggregate order counts and paired
@@ -257,8 +268,8 @@ worsened-word-error trials for each first variant.
 first-variant timing distributions; an empty stratum has `null` medians. The
 console reports pooled and order-stratified counts, paired latency medians,
 and harm counts by labelled task/language group and intersection.
-Review `nonempty_to_empty_trial_count`, `final_word_lost_trial_count`, and
-worsened word errors by order,
+Review `nonempty_to_empty_trial_count`, `first_word_lost_trial_count`,
+`final_word_lost_trial_count`, and worsened word errors by order,
 and first/final-word failures by task group, not just pooled WER. A tailed
 output that differs from an already-wrong baseline is not automatically a
 regression. Counterbalancing reduces systematic second-run warming bias but
@@ -314,14 +325,14 @@ full captured input remains the product baseline for ordinary WER, boundary
 retention, and latency. The JSON includes full/trimmed transcripts, word errors,
 blank transitions in **both** directions, inference times, signed paired
 trimmed-minus-full inference deltas, and counterbalanced execution order for
-every pair. It also marks whether either variant retained the reviewed final
-word and counts newly lost and recovered final words separately. The corpus
-summary keeps both harm directions, final-word transitions, and latency deltas
-stratified by decode order; `recorded_tail_probe_groups` also repeats the
+every pair. It also marks whether either variant retained the reviewed first
+and final word runs and counts newly lost and recovered edge words separately.
+The corpus summary keeps both harm directions, edge-word transitions, and
+latency deltas stratified by decode order; `recorded_tail_probe_groups` also repeats the
 summary for labelled task/language groups and their intersections. Compare
 these strata as well as pooled medians.
-These final-word flags compare the normalized terminal word run with the
-reference's run, so a missing repeat cannot appear retained. They are
+These boundary flags compare the normalized initial or terminal word run with
+the reference's run, so a missing repeat cannot appear retained. They are
 diagnostic text matches, not acoustic proof that a particular spoken
 occurrence survived a crop.
 The cropped variant is a diagnostic only: an
@@ -329,7 +340,7 @@ improvement does not show that an automatic trim can locate this human-marked
 boundary, and a mistaken crop can delete a final word. Neither the manifest nor
 the report proves that the WAV came from Presspeech's capture path or that the
 endpoint is correctly marked. Compare order strata,
-short/quiet speech, final-word errors, and silence controls before considering
+short/quiet speech, first-/final-word errors, and silence controls before considering
 any production policy. Keep WAVs, manifests, references, and results private.
 
 ## Candidate watch: multilingual CPU recognition

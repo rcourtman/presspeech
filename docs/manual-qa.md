@@ -692,6 +692,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Active-layout Command-V hotkey conflict: recorder rejects it; an older binding that becomes Paste after a layout switch passes through | |
 | Electron issue #33: steady-focus paste once; a switch between two windows of the same app must use clipboard recovery | |
 | Ten TextEdit and ten slow Electron manual-restore trials for issue #36 | |
+| First macOS pasteboard-access prompt during opt-in clipboard preservation, when supported: correct-field delivery or explicit copy-only recovery, never insertion into the prompt or another window | |
 | Manual restore preserves a representative rich-text clipboard item, not just its plain-text fallback | |
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
@@ -1283,9 +1284,30 @@ item after the development-wrapper launch check.
   Command-V and **Restore Previous Clipboard…** restores the marker that
   preceded dictation. Recovery must not discard the opted-in snapshot merely
   because Presspeech declined to paste automatically.
-- On macOS 15.4 or later, first trigger the system pasteboard-access prompt,
-  then configure Presspeech as **Always Deny** in the corresponding System
-  Settings privacy pane. With previous-clipboard preservation still enabled,
+- Where macOS pasteboard-access alerts are active, use a disposable profile
+  without a prior Presspeech pasteboard decision for the **first-prompt** row.
+  Apple's [access-behavior documentation](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum)
+  says the default general-pasteboard behavior can ask on programmatic access;
+  the opt-in snapshot reads the previous clipboard during delivery. Seed a
+  harmless old marker, enable preservation, and dictate into a blank,
+  non-submitting TextEdit field. When the system prompt appears, answer it
+  without manually returning focus to the field before delivery completes.
+  Record the decision and whether focus returned to that same field. The exact
+  transcript must either arrive once in that field or remain available with an
+  explicit copy-only recovery notice; it must not enter the permission prompt
+  or another window. Inspect the field before any manual paste, then check the
+  clipboard in a separate disposable field. Confirm the restore row reflects
+  whether a complete previous-clipboard snapshot was available; denial must
+  not present an unusable or partial snapshot as restorable. Retain only the
+  decision, generic focus/delivery outcomes, and restore availability, never
+  the marker, transcript, clipboard contents, or window title. If the candidate
+  OS does not present this prompt, record **Not applicable** with the OS/build
+  and access-behavior condition; do not infer a pass from the later Always Deny
+  check.
+- On macOS 15.4 or later where pasteboard-access controls are active, complete
+  the first-prompt check above, then configure Presspeech as **Always Deny** in
+  the corresponding System Settings privacy pane. With previous-clipboard
+  preservation still enabled,
   dictate once and confirm the transcript is delivered normally, the system
   does not prompt again, and the disabled restore row says **Previous Clipboard
   Access Denied**. Confirm its help text explains that only the previous

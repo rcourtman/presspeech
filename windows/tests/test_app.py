@@ -4805,6 +4805,58 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertIn("no paste shortcut was sent",
                       str(self.instance.notify.mock_calls))
 
+    def test_focus_change_during_controller_creation_never_sends_paste(self):
+        replacement = app.PasteTarget("other.exe", 4321, 99)
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+
+        def construct():
+            self.foreground.return_value = replacement
+            return self.checked_controller(api=api)
+
+        self.controller.side_effect = construct
+        self.assertFalse(self.paste())
+        api.SendInput.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.assertIn("focused control could not be verified",
+                      str(self.instance.notify.mock_calls))
+        self.assertNotIn("partly completed", str(self.instance.notify.mock_calls))
+
+    def test_hook_key_pressed_during_shortcut_setup_never_sends_paste(self):
+        api = mock.Mock()
+
+        def map_key(_key, _mode):
+            self.instance._filter_pressed_vks = {app.keyboard_delivery.VK_V}
+            return 0x1D
+
+        api.MapVirtualKeyW.side_effect = map_key
+        api.GetAsyncKeyState.return_value = 0
+        self.controller.return_value = self.checked_controller(api=api)
+        self.assertFalse(self.paste())
+        api.SendInput.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.assertIn("key was held", str(self.instance.notify.mock_calls))
+        self.assertNotIn("partly completed", str(self.instance.notify.mock_calls))
+
+    def test_unavailable_final_check_never_sends_paste_or_error_detail(self):
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+
+        def construct():
+            self.foreground.side_effect = OSError("private window title")
+            return self.checked_controller(api=api)
+
+        self.controller.side_effect = construct
+        self.assertFalse(self.paste())
+        api.SendInput.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.assertIn("final delivery check could not be completed",
+                      str(self.instance.notify.mock_calls))
+        self.assertNotIn("private window title",
+                         str(self.instance.notify.mock_calls))
+
     def test_external_copy_during_shortcut_is_reported_uncertain(self):
         # A successful SendInput return is not a paste-consumed receipt.
         self.owned.side_effect = [True, True, True, True, False]

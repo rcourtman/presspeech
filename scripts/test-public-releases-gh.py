@@ -183,6 +183,7 @@ class GhTransportTests(unittest.TestCase):
                  patch.object(check, 'github_json', return_value=mac) as latest, \
                  patch.object(check, 'github_releases', return_value=releases) as listed, \
                  patch.object(check, 'release_note_parity_errors', return_value=note_errors) as parity, \
+                 patch.object(check, 'known_release_disclosure_errors', return_value=[]) as disclosure, \
                  patch.object(check, 'load_metadata') as metadata, \
                  patch.object(check, 'public_release_errors') as assets, \
                  contextlib.redirect_stdout(io.StringIO()), \
@@ -191,8 +192,22 @@ class GhTransportTests(unittest.TestCase):
                 latest.assert_called_once()
                 listed.assert_called_once()
                 parity.assert_called_once_with(mac, releases)
+                disclosure.assert_called_once_with(releases)
                 metadata.assert_not_called()
                 assets.assert_not_called()
+
+    def test_notes_only_fails_when_public_disclosure_is_missing_despite_parity(self):
+        mac = {'tag_name': 'v0.3.8', 'draft': False, 'body': 'mac note'}
+        releases = [mac, {'tag_name': 'windows-v0.1.12', 'draft': False, 'body': 'Windows note'}]
+        with patch.object(sys, 'argv', ['check', '--notes-only']), \
+             patch.object(check, 'github_json', return_value=mac), \
+             patch.object(check, 'github_releases', return_value=releases), \
+             patch.object(check, 'release_note_parity_errors', return_value=[]), \
+             contextlib.redirect_stdout(io.StringIO()), \
+             contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(check.main(), 1)
+        self.assertIn('v0.3.8 public release notes lack', stderr.getvalue())
+        self.assertIn('windows-v0.1.12 public release notes lack', stderr.getvalue())
 
 
 if __name__ == '__main__':

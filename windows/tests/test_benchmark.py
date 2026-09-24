@@ -439,6 +439,9 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["baseline_empty_trial_count"], 1)
         self.assertEqual(metrics["tailed_empty_trial_count"], 2)
         self.assertEqual(metrics["nonempty_to_empty_trial_count"], 1)
+        self.assertEqual(metrics["first_word_lost_trial_count"], 1)
+        self.assertEqual(metrics["first_word_recovered_trial_count"], 0)
+        self.assertEqual(metrics["baseline_first_word_failure_trial_count"], 1)
         self.assertEqual(metrics["final_word_lost_trial_count"], 2)
         self.assertEqual(metrics["final_word_recovered_trial_count"], 0)
         self.assertEqual(metrics["changed_text_trial_count"], 2)
@@ -456,6 +459,35 @@ class MetricTests(unittest.TestCase):
             [True, True, False])
         with self.assertRaisesRegex(ValueError, "matching non-empty trials"):
             benchmark.paired_tail_silence_metrics("alpha", ["alpha"], [])
+
+    def test_paired_tail_first_word_loss_survives_unchanged_wer_and_repeats(self):
+        metrics = benchmark.paired_tail_silence_metrics(
+            "go go home", ["go go wrong", "go home"],
+            ["go home", "go go wrong"])
+        self.assertEqual(metrics["baseline_word_error_count"],
+                         metrics["tailed_word_error_count"])
+        self.assertEqual(metrics["worsened_word_error_trial_count"], 0)
+        self.assertEqual(metrics["first_word_lost_trial_count"], 1)
+        self.assertEqual(metrics["first_word_recovered_trial_count"], 1)
+        self.assertEqual(metrics["baseline_first_word_failure_trial_count"], 1)
+        self.assertEqual(metrics["tailed_first_word_failure_trial_count"], 1)
+        self.assertEqual([pair["first_word_lost"] for pair in metrics["pairs"]],
+                         [True, False])
+        orders = ["baseline-first", "tailed-first"]
+        metrics["trial_order"] = orders
+        metrics["order_breakdown"] = benchmark.tail_probe_order_breakdown(
+            metrics["pairs"], orders)
+        metrics["paired_inference_delta_seconds"] = (
+            benchmark.paired_tail_latency_metrics(
+                [1.0, 1.0], [1.0, 1.0], orders))
+        summary = benchmark.summarise_tail_silence_probe([
+            {"tail_silence_probe": metrics}])
+        self.assertEqual(summary["first_word_lost_trial_count"], 1)
+        self.assertEqual(summary["first_word_recovered_trial_count"], 1)
+        self.assertEqual(summary["order_breakdown"]["baseline-first"][
+            "first_word_lost_trial_count"], 1)
+        self.assertEqual(summary["order_breakdown"]["tailed-first"][
+            "first_word_recovered_trial_count"], 1)
 
     def test_paired_tail_final_word_counts_only_new_losses_and_recoveries(self):
         metrics = benchmark.paired_tail_silence_metrics(
@@ -518,6 +550,8 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(summary["tailed_first_trial_count"], 0)
         self.assertEqual(summary["order_breakdown"]["baseline-first"], {
             "trial_count": 1, "nonempty_to_empty_trial_count": 1,
+            "first_word_lost_trial_count": 1,
+            "first_word_recovered_trial_count": 0,
             "final_word_lost_trial_count": 1,
             "worsened_word_error_trial_count": 1})
         self.assertEqual(summary["order_breakdown"]["tailed-first"]["trial_count"], 0)
@@ -727,6 +761,8 @@ class MetricTests(unittest.TestCase):
             samples, "tail_silence_probe", benchmark.summarise_tail_silence_probe)
         self.assertEqual(synthetic_groups["task_groups"]["short"][
             "nonempty_to_empty_trial_count"], 1)
+        self.assertEqual(synthetic_groups["task_groups"]["short"][
+            "first_word_lost_trial_count"], 1)
         self.assertNotIn("pl", synthetic_groups["language_groups"])
 
     def test_tail_probe_order_breakdown_rejects_misaligned_orders(self):
@@ -747,6 +783,10 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["trimmed_word_error_count"], 2)
         self.assertEqual(metrics["full_worsened_word_error_trial_count"], 2)
         self.assertEqual(metrics["trimmed_worsened_word_error_trial_count"], 1)
+        self.assertEqual(metrics["full_first_word_failure_trial_count"], 1)
+        self.assertEqual(metrics["trimmed_first_word_failure_trial_count"], 1)
+        self.assertEqual(metrics["first_word_lost_trial_count"], 1)
+        self.assertEqual(metrics["first_word_recovered_trial_count"], 1)
         self.assertEqual(metrics["full_final_word_failure_trial_count"], 2)
         self.assertEqual(metrics["trimmed_final_word_failure_trial_count"], 1)
         self.assertEqual(metrics["final_word_lost_trial_count"], 1)
@@ -757,6 +797,8 @@ class MetricTests(unittest.TestCase):
                     "trial_count": 2,
                     "trimmed_nonempty_to_full_empty_trial_count": 1,
                     "full_nonempty_to_trimmed_empty_trial_count": 0,
+                    "first_word_lost_trial_count": 0,
+                    "first_word_recovered_trial_count": 1,
                     "final_word_lost_trial_count": 0,
                     "final_word_recovered_trial_count": 2,
                     "full_worsened_word_error_trial_count": 2,
@@ -766,6 +808,8 @@ class MetricTests(unittest.TestCase):
                     "trial_count": 1,
                     "trimmed_nonempty_to_full_empty_trial_count": 0,
                     "full_nonempty_to_trimmed_empty_trial_count": 1,
+                    "first_word_lost_trial_count": 1,
+                    "first_word_recovered_trial_count": 0,
                     "final_word_lost_trial_count": 1,
                     "final_word_recovered_trial_count": 0,
                     "full_worsened_word_error_trial_count": 0,
@@ -774,6 +818,37 @@ class MetricTests(unittest.TestCase):
             })
         with self.assertRaisesRegex(ValueError, "valid order"):
             benchmark.recorded_tail_order_breakdown(metrics["pairs"], [])
+
+    def test_recorded_tail_first_word_loss_survives_unchanged_wer_and_repeats(self):
+        scored = benchmark.paired_recorded_tail_metrics(
+            "go go home", ["go go wrong", "go home"],
+            ["go home", "go go wrong"])
+        self.assertEqual(scored["full_word_error_count"],
+                         scored["trimmed_word_error_count"])
+        self.assertEqual(scored["trimmed_worsened_word_error_trial_count"], 0)
+        self.assertEqual(scored["first_word_lost_trial_count"], 1)
+        self.assertEqual(scored["first_word_recovered_trial_count"], 1)
+        self.assertEqual(scored["full_first_word_failure_trial_count"], 1)
+        self.assertEqual(scored["trimmed_first_word_failure_trial_count"], 1)
+        orders = ["full-first", "trimmed-first"]
+        scored["trial_order"] = orders
+        scored["order_breakdown"] = benchmark.recorded_tail_order_breakdown(
+            scored["pairs"], orders)
+        scored["paired_inference_delta_seconds"] = (
+            benchmark.paired_recorded_tail_latency_metrics(
+                [1.0, 1.0], [1.0, 1.0], orders))
+        samples = [{"task_group": "short", "language_group": "en",
+                    "recorded_tail_probe": scored}]
+        summary = benchmark.summarise_recorded_tail_probe(samples)
+        groups = benchmark.probe_group_metrics(
+            samples, "recorded_tail_probe",
+            benchmark.summarise_recorded_tail_probe)
+        self.assertEqual(summary["order_breakdown"]["full-first"][
+            "first_word_lost_trial_count"], 1)
+        self.assertEqual(summary["order_breakdown"]["trimmed-first"][
+            "first_word_recovered_trial_count"], 1)
+        self.assertEqual(groups["language_task_groups"]["en"]["short"][
+            "first_word_lost_trial_count"], 1)
 
     def test_recorded_tail_detects_final_word_loss_when_wer_is_unchanged(self):
         metrics = benchmark.paired_recorded_tail_metrics(
@@ -936,7 +1011,7 @@ class MetricTests(unittest.TestCase):
                          [16000, 9600, 9600, 16000, 16000, 16000])
         self.assertIs(calls[0].args[0], audio)
         self.assertIs(calls[3].args[0], audio)
-        self.assertEqual(result["benchmark_version"], 22)
+        self.assertEqual(result["benchmark_version"], 23)
         self.assertRegex(result["benchmark_order_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(result["aggregate_trial_wer"], 0.75)
         self.assertEqual(result["samples"][0]["transcript"], "")
@@ -945,6 +1020,8 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(probe["trim_at_sample"], 9600)
         self.assertEqual(probe["removed_tail_ms"], 400.0)
         self.assertEqual(probe["trimmed_nonempty_to_full_empty_trial_count"], 1)
+        self.assertEqual(probe["first_word_lost_trial_count"], 0)
+        self.assertEqual(probe["first_word_recovered_trial_count"], 1)
         self.assertEqual(probe["final_word_lost_trial_count"], 0)
         self.assertEqual(probe["final_word_recovered_trial_count"], 2)
         self.assertEqual(result["recorded_tail_probe"]["full_first_trial_count"], 1)
@@ -975,6 +1052,7 @@ class MetricTests(unittest.TestCase):
         self.assertIn("Paired inference trimmed-minus-full median",
                       output.getvalue())
         self.assertIn("trimmed worsened", output.getvalue())
+        self.assertIn("first word lost 0, recovered 1", output.getvalue())
         self.assertIn("final word lost 0, recovered 2", output.getvalue())
         self.assertIn("Recorded-tail crop:", output.getvalue())
         self.assertIn("Recorded tail language/task en / short: 1 clips / 2 pairs",
@@ -1131,7 +1209,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["recorded_tail_probe_groups"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 22)
+        self.assertEqual(result["benchmark_version"], 23)
         self.assertEqual(result["tail_silence_probe_groups"][
             "language_task_groups"]["en"]["short-command"][
                 "final_word_lost_trial_count"], 2)
@@ -1144,10 +1222,14 @@ class MetricTests(unittest.TestCase):
             result["tail_silence_probe"]["order_breakdown"], {
                 "baseline-first": {"trial_count": 1,
                                    "nonempty_to_empty_trial_count": 1,
+                                   "first_word_lost_trial_count": 1,
+                                   "first_word_recovered_trial_count": 0,
                                    "final_word_lost_trial_count": 1,
                                    "worsened_word_error_trial_count": 1},
                 "tailed-first": {"trial_count": 1,
                                  "nonempty_to_empty_trial_count": 0,
+                                 "first_word_lost_trial_count": 0,
+                                 "first_word_recovered_trial_count": 0,
                                  "final_word_lost_trial_count": 1,
                                  "worsened_word_error_trial_count": 1},
             })
@@ -1155,6 +1237,8 @@ class MetricTests(unittest.TestCase):
             result["tail_silence_probe"]["nonempty_to_empty_trial_count"], 1)
         self.assertEqual(
             result["tail_silence_probe"]["final_word_lost_trial_count"], 2)
+        self.assertEqual(
+            result["tail_silence_probe"]["first_word_lost_trial_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["tailed_word_error_count"], 3)
         sample_latency = result["samples"][0]["tail_silence_probe"][
             "paired_inference_delta_seconds"]
@@ -1180,6 +1264,7 @@ class MetricTests(unittest.TestCase):
                       output.getvalue())
         self.assertIn("order baseline-first 1, tailed-first 1",
                       output.getvalue())
+        self.assertIn("first word lost 1, recovered 0", output.getvalue())
         self.assertIn("final word lost 2, recovered 0", output.getvalue())
         self.assertIn("Synthetic tail language/task en / short-command: "
                       "1 clips / 2 pairs", output.getvalue())
@@ -1942,7 +2027,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 22)
+        self.assertEqual(result["benchmark_version"], 23)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

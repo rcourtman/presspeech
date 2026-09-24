@@ -11,8 +11,10 @@ to keep the existing site until the advertised downloads are available.
 Use ``--github-api-via-gh`` when a repository-scoped gh broker holds the API
 credentials; checksum sidecars still download over public HTTPS.
 With ``--check-release-notes``, also compare the latest public macOS and
-Windows release descriptions with their tracked notes. ``--notes-only`` runs
-just that read-only audit, without asset downloads or candidate metadata checks.
+Windows release descriptions with their tracked notes and check that the two
+published builds with known model-download risks carry their disclosure on
+their own release pages. ``--notes-only`` runs just that read-only audit,
+without asset downloads or candidate metadata checks.
 This remains useful while source metadata is preparing a newer release:
 visitors can still reach the preceding release pages. It is not a Pages gate:
 a source edit cannot correct an already-published GitHub release page.
@@ -48,6 +50,30 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 MAX_API_BYTES = 10 * 1024 * 1024
 MAX_CHECKSUM_BYTES = 4096
 MAX_RELEASE_PAGES = 100
+
+# These archived release pages remain direct download entry points after newer
+# versions ship. This is a coarse presence check, not a semantic privacy review.
+KNOWN_DISCLOSURE_MARKERS = {
+    "v0.3.8": (
+        "before opening",
+        "model",
+        "hugging face token",
+        "wait",
+        "0.3.9",
+        "privacy.html#network-calls",
+    ),
+    "windows-v0.1.12": (
+        "before launching",
+        "model",
+        "hugging face",
+        "token",
+        "telemetry",
+        "routing",
+        "wait",
+        "0.1.13",
+        "windows.html#model-download-privacy",
+    ),
+}
 
 
 class ReleaseCheckError(RuntimeError):
@@ -288,6 +314,37 @@ def release_note_parity_errors(
             errors.append(
                 f"{tag} public notes differ from {path.relative_to(root)}; "
                 "editing the tracked file does not update GitHub's published notes"
+            )
+    return errors
+
+
+def known_release_disclosure_errors(releases: object) -> list[str]:
+    """Spot missing decisions on the exact public builds with known download risks.
+
+    This never treats a matching tracked note as proof that the public wording
+    is sufficient. Marker presence still requires human review of the actual
+    rendered page, including whether its links and advice make sense.
+    """
+    if not isinstance(releases, list):
+        return ["public release list is missing; cannot audit model-download disclosures"]
+    errors: list[str] = []
+    for tag, markers in KNOWN_DISCLOSURE_MARKERS.items():
+        matching = [release for release in releases if isinstance(release, dict)
+                    and release.get("tag_name") == tag and release.get("draft") is False]
+        if len(matching) != 1:
+            errors.append(f"{tag} public release entry is missing or duplicated; cannot audit its disclosure")
+            continue
+        body = matching[0].get("body")
+        if not isinstance(body, str) or not body.strip():
+            errors.append(f"{tag} has no public release notes; cannot verify its model-download disclosure")
+            continue
+        # GitHub Markdown often wraps a lead notice in blockquotes and lines.
+        normalized = re.sub(r"\s+", " ", re.sub(r"(?m)^\s*>\s?", "", body).casefold())
+        missing = [marker for marker in markers if marker not in normalized]
+        if missing:
+            errors.append(
+                f"{tag} public release notes lack model-download disclosure markers: "
+                + ", ".join(missing)
             )
     return errors
 
@@ -635,6 +692,30 @@ def run_self_test() -> None:
             raise ReleaseCheckError("self-test skipped public notes during release preparation")
         windows["body"] = "Windows note"
 
+    # A release can match its tracked notes and still omit a necessary
+    # published-version decision. Check both named archived pages directly.
+    disclosed = [
+        {"tag_name": "v0.3.8", "draft": False, "body": (
+            "> Before opening macOS 0.3.8: a missing model download may include a\n"
+            "> Hugging Face token. If unsure, wait until 0.3.9. See\n"
+            "> https://rcourtman.github.io/presspeech/privacy.html#network-calls"
+        )},
+        {"tag_name": "windows-v0.1.12", "draft": False, "body": (
+            "Before launching Windows 0.1.12: model downloads may send Hugging Face "
+            "telemetry and a token; custom routing can change the destination. "
+            "If unsure, wait until 0.1.13. See "
+            "https://rcourtman.github.io/presspeech/windows.html#model-download-privacy"
+        )},
+    ]
+    if known_release_disclosure_errors(disclosed):
+        raise ReleaseCheckError("self-test rejected named release disclosures")
+    missing_warning = json.loads(json.dumps(disclosed))
+    missing_warning[1]["body"] = "Local recognition; download the installer."
+    if not any("windows-v0.1.12" in error for error in known_release_disclosure_errors(missing_warning)):
+        raise ReleaseCheckError("self-test missed a disclosure omitted from public Windows notes")
+    if not any("v0.3.8" in error for error in known_release_disclosure_errors(disclosed[1:])):
+        raise ReleaseCheckError("self-test missed an unauditable archived macOS release")
+
     draft = json.loads(json.dumps(windows))
     draft["tag_name"] = "windows-v9.9.9"
     draft["draft"] = True
@@ -771,8 +852,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help="run without network access")
     parser.add_argument("--require-published", action="store_true", help="block deployment while configured downloads are not public yet")
-    parser.add_argument("--check-release-notes", action="store_true", help="audit the latest published release notes for both platforms against tracked notes")
-    parser.add_argument("--notes-only", action="store_true", help="audit only the latest public release notes; skip package and candidate-metadata checks")
+    parser.add_argument("--check-release-notes", action="store_true", help="audit public release-note parity and known model-download disclosures")
+    parser.add_argument("--notes-only", action="store_true", help="audit only public release notes and known disclosures; skip package and candidate-metadata checks")
     parser.add_argument("--github-api-via-gh", action="store_true", help="read API JSON through repo-scoped gh api without exporting credentials; checksum downloads remain public HTTPS")
     args = parser.parse_args()
     if args.notes_only and (args.require_published or args.check_release_notes):
@@ -788,11 +869,12 @@ def main() -> int:
         releases = github_releases(token, via_gh=args.github_api_via_gh)
         if args.notes_only:
             errors = release_note_parity_errors(mac_release, releases)
+            errors.extend(known_release_disclosure_errors(releases))
             for error in errors:
                 print(f"check-public-releases: {error}", file=sys.stderr)
             if errors:
                 return 1
-            print("latest public macOS and Windows release notes match tracked files")
+            print("latest public macOS and Windows release notes match tracked files; known model-download disclosures are present")
             return 0
         metadata = load_metadata()
         errors, status = public_release_errors(
@@ -806,6 +888,7 @@ def main() -> int:
         )
         if args.check_release_notes:
             errors.extend(release_note_parity_errors(mac_release, releases))
+            errors.extend(known_release_disclosure_errors(releases))
         for line in status:
             print(line)
         if errors:

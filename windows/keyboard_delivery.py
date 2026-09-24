@@ -49,6 +49,16 @@ class ModifierStateError(KeyboardDeliveryError):
 class PreSubmitCheckError(KeyboardDeliveryError):
     """A caller's final delivery guard failed before any input was submitted."""
 
+    _REASONS = frozenset({
+        "clipboard-changed", "focus-changed", "modifier-held",
+        "delivery-check-unavailable",
+    })
+
+    def __init__(self, reason="delivery-check-unavailable"):
+        self.reason = (reason if isinstance(reason, str) and reason in self._REASONS
+                       else "delivery-check-unavailable")
+        super().__init__("delivery changed before the paste shortcut")
+
 
 # Win32 LONG and DWORD remain 32-bit when Python itself is 64-bit. Fixed-width
 # fields keep this ABI correct on both Windows architectures and make the
@@ -186,12 +196,15 @@ class Controller:
                 # Keep the last check immediately adjacent to SendInput. A
                 # failed/unavailable guard must not inject even a prefix.
                 try:
-                    allowed = before_submit()
+                    result = before_submit()
                 except Exception:
-                    allowed = False
-                if allowed is not True:
-                    raise PreSubmitCheckError(
-                        "delivery changed before the paste shortcut") from None
+                    result = "delivery-check-unavailable"
+                if result is not True:
+                    # Existing boolean guards use False for stale clipboard
+                    # ownership. New callers can supply fixed, content-free
+                    # failure codes for a more accurate recovery notice.
+                    reason = "clipboard-changed" if result is False else result
+                    raise PreSubmitCheckError(reason) from None
             inserted = int(self._api.SendInput(
                 len(inputs), inputs, ctypes.sizeof(_INPUT)))
         except (ModifierHeldError, ModifierStateError, PreSubmitCheckError):

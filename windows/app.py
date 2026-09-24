@@ -2866,6 +2866,9 @@ class PresspeechApp:
             "modifier-state-unavailable": (
                 "Keyboard modifier state could not be checked; no paste "
                 "shortcut was sent. "),
+            "delivery-check-unavailable": (
+                "The final delivery check could not be completed; no paste "
+                "shortcut was sent. "),
             "shortcut-uncertain": "The paste shortcut may have partly completed. ",
         }[reason]
         self.notify("Dictation needs review", prefix +
@@ -3010,6 +3013,18 @@ class PresspeechApp:
                 keyboard_delivery.VK_LSHIFT,
             ))
         failure = None
+
+        def before_submit():
+            # Controller setup and the physical-key scan can outlast the
+            # earlier checks. Fail closed at the last pre-SendInput boundary.
+            if not self._paste_target_still_focused(paste_target):
+                return "focus-changed"
+            if self._paste_keys_held_in_hook():
+                return "modifier-held"
+            if not clipboard_delivery.is_current(receipt):
+                return "clipboard-changed"
+            return True
+
         try:
             keyboard = keyboard_delivery.Controller()
             self._injecting_keys = True
@@ -3019,9 +3034,9 @@ class PresspeechApp:
             # separately injected input cannot interleave its chord events.
             keyboard.shortcut(
                 modifiers, keyboard_delivery.VK_V,
-                before_submit=lambda: clipboard_delivery.is_current(receipt))
-        except keyboard_delivery.PreSubmitCheckError:
-            failure = "clipboard-changed"
+                before_submit=before_submit)
+        except keyboard_delivery.PreSubmitCheckError as exc:
+            failure = exc.reason
         except keyboard_delivery.ModifierHeldError:
             failure = "modifier-held"
         except keyboard_delivery.ModifierStateError:
