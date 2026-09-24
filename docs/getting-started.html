@@ -59,6 +59,7 @@
             <li id="windows-launch-decision">
               <h3>Windows 0.1.12 — wait if privacy risks are unclear</h3>
               <p><strong>Wait for published 0.1.13</strong> if you want to avoid possible Hugging Face usage telemetry, an available token or custom download route may be configured, or you are unsure. A custom route can change where the request and token go; a TLS-inspecting proxy trusted by the client can read the token. If such a proxy's trust is unclear, do not launch while it is in use. If you install but wait, leave <strong>Launch Presspeech</strong> unchecked.</p>
+              <p>Published 0.1.12 also briefly opens the selected microphone for an automatic local readiness check in first-run Setup; samples are discarded, not saved or sent. If you do not want that check, leave 0.1.12 unopened. Upcoming 0.1.13 waits for an explicit <strong>Check Microphone</strong> choice.</p>
               <p>Read the <a href="windows.html#model-download-privacy">full Windows warning</a> before deciding to launch. The upcoming build disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings.</p>
             </li>
           </ul>

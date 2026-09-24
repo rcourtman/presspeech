@@ -3328,21 +3328,41 @@ class PresspeechApp:
         enable = bool(self.settings["autostart"])
         try:
             import winreg
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Run",
-                0,
-                winreg.KEY_SET_VALUE,
-            ) as key:
-                if enable:
+            run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            if enable:
+                # A clean profile need not have a per-user Run key yet.
+                # Preserve the existing-key path and create only when the
+                # user opts in and that key is actually absent.
+                try:
+                    key = winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER, run_key, 0,
+                        winreg.KEY_SET_VALUE,
+                    )
+                except FileNotFoundError:
+                    key = winreg.CreateKeyEx(
+                        winreg.HKEY_CURRENT_USER, run_key, 0,
+                        winreg.KEY_SET_VALUE,
+                    )
+                with key as registry_key:
                     winreg.SetValueEx(
-                        key, "Presspeech", 0, winreg.REG_SZ,
+                        registry_key, "Presspeech", 0, winreg.REG_SZ,
                         _autostart_command(
                             sys.executable, __file__,
                             frozen=bool(getattr(sys, "frozen", False))))
-                else:
+            else:
+                # With the default opt-out, an absent key or value already
+                # means success. Do not create a registry key merely to
+                # complete Setup, but still report permission errors.
+                try:
+                    key = winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER, run_key, 0,
+                        winreg.KEY_SET_VALUE,
+                    )
+                except FileNotFoundError:
+                    return True
+                with key as registry_key:
                     try:
-                        winreg.DeleteValue(key, "Presspeech")
+                        winreg.DeleteValue(registry_key, "Presspeech")
                     except FileNotFoundError:
                         pass
         except Exception as exc:

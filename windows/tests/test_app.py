@@ -3094,6 +3094,7 @@ class TextRegressionTests(unittest.TestCase):
         winreg.KEY_SET_VALUE = "set-value"
         winreg.REG_SZ = "string"
         winreg.OpenKey.return_value = key
+        winreg.CreateKeyEx.return_value = key
         return winreg
 
     def test_autostart_success_is_reported_after_registry_write(self):
@@ -3116,9 +3117,123 @@ class TextRegressionTests(unittest.TestCase):
             0,
             "set-value",
         )
+        winreg.CreateKeyEx.assert_not_called()
         winreg.SetValueEx.assert_called_once_with(
             "run-key", "Presspeech", 0, "string", '"Presspeech.exe"')
         instance.notify.assert_not_called()
+
+    def test_autostart_opt_in_creates_missing_run_key(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": True}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        key = mock.MagicMock()
+        key.__enter__.return_value = "new-run-key"
+        winreg = self.winreg_module(key)
+        winreg.OpenKey.side_effect = FileNotFoundError("Run key absent")
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}), \
+                mock.patch.object(app, "_autostart_command",
+                                  return_value='"Presspeech.exe"'):
+            self.assertTrue(instance.apply_autostart())
+
+        winreg.CreateKeyEx.assert_called_once_with(
+            "current-user",
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            "set-value",
+        )
+        winreg.SetValueEx.assert_called_once_with(
+            "new-run-key", "Presspeech", 0, "string", '"Presspeech.exe"')
+        instance.notify.assert_not_called()
+
+    def test_autostart_opt_in_reports_missing_key_creation_failure(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": True}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        winreg = self.winreg_module(mock.MagicMock())
+        winreg.OpenKey.side_effect = FileNotFoundError("Run key absent")
+        winreg.CreateKeyEx.side_effect = PermissionError("registry denied")
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}):
+            self.assertFalse(instance.apply_autostart())
+
+        winreg.SetValueEx.assert_not_called()
+        instance._log.assert_called_once_with(
+            "autostart error: PermissionError")
+        instance.notify.assert_called_once()
+
+    def test_autostart_opt_out_succeeds_when_run_key_is_absent(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": False}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        winreg = self.winreg_module(mock.MagicMock())
+        winreg.OpenKey.side_effect = FileNotFoundError("Run key absent")
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}):
+            self.assertTrue(instance.apply_autostart())
+
+        winreg.CreateKeyEx.assert_not_called()
+        winreg.DeleteValue.assert_not_called()
+        instance._log.assert_not_called()
+        instance.notify.assert_not_called()
+
+    def test_autostart_opt_out_succeeds_when_value_is_absent(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": False}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        key = mock.MagicMock()
+        key.__enter__.return_value = "run-key"
+        winreg = self.winreg_module(key)
+        winreg.DeleteValue.side_effect = FileNotFoundError("value absent")
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}):
+            self.assertTrue(instance.apply_autostart())
+
+        winreg.OpenKey.assert_called_once_with(
+            "current-user",
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            "set-value",
+        )
+        winreg.CreateKeyEx.assert_not_called()
+        winreg.DeleteValue.assert_called_once_with("run-key", "Presspeech")
+        instance.notify.assert_not_called()
+
+    def test_autostart_opt_out_removes_only_presspeech_value(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": False}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        key = mock.MagicMock()
+        key.__enter__.return_value = "run-key"
+        winreg = self.winreg_module(key)
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}):
+            self.assertTrue(instance.apply_autostart())
+
+        winreg.CreateKeyEx.assert_not_called()
+        winreg.DeleteValue.assert_called_once_with("run-key", "Presspeech")
+        instance.notify.assert_not_called()
+
+    def test_autostart_opt_out_reports_permission_failure(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"autostart": False}
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        winreg = self.winreg_module(mock.MagicMock())
+        winreg.OpenKey.side_effect = PermissionError("registry denied")
+
+        with mock.patch.dict("sys.modules", {"winreg": winreg}):
+            self.assertFalse(instance.apply_autostart())
+
+        winreg.CreateKeyEx.assert_not_called()
+        instance._log.assert_called_once_with(
+            "autostart error: PermissionError")
+        instance.notify.assert_called_once()
 
     def test_autostart_failure_is_reported_without_claiming_success(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

@@ -541,15 +541,18 @@ the background immediately. Settings shows whether the selected model is being
 prepared, is ready, or needs attention, and offers a retry after a failure.
 Dictation remains unavailable until the selected model reports ready; there is
 no need to sacrifice a hotkey press to start the change or restart Presspeech.
-A microphone selection saved during an active recording applies to the next
-dictation. The recording already in progress stays on the input it opened, so
-changing Settings cannot alter its timing or cut off its final words.
+A microphone selection can be edited during an active recording, but **Save**
+waits until capture, transcription, and delivery finish. Saving then applies
+the selection to the next dictation; the recording already in progress stays
+on the input it opened.
 
-If **Start with Windows** cannot be registered, **Finish Setup** keeps Setup
-open and Settings reports that the startup state was not updated instead of
-claiming success. Use **Open Startup Settings** to review Presspeech under
+If the **Start with Windows** choice cannot be applied, **Finish Setup** keeps
+Setup open and Settings reports that the startup state was not updated instead
+of claiming success. Use **Open Startup Settings** to review Presspeech under
 Windows **Settings → Apps → Startup**, then retry **Finish Setup** or **Save**.
-In the upcoming 0.1.13 build, a failed first-run registration also leaves
+In the upcoming 0.1.13 build, leaving Start with Windows off on a new profile
+does not require an existing per-user startup registry key; opting in creates
+it if needed. A failed first-run registration also leaves
 Setup incomplete, so it reopens on the next launch. **Set Up Later** can close
 Setup after an explicit warning if the startup setting cannot be fixed now.
 

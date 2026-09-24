@@ -503,7 +503,8 @@ let HOTKEY_COMBINATION_KEYCODES: Set<CGKeyCode> = Set(0...50).union([
     91, 92, 95, 102, 104, 117, 115, 119, 116, 121, 123, 124, 125, 126,
 ]).union(FUNCTION_KEY_NAMES_BY_KEYCODE.keys)
 
-func hotkeyKeyDisplayName(_ keycode: CGKeyCode) -> String {
+private func hotkeyKeyDisplayName(_ keycode: CGKeyCode,
+                                  layoutLabel: () -> String?) -> String {
     if let name = FUNCTION_KEY_NAMES_BY_KEYCODE[keycode] { return name }
     let names: [CGKeyCode: String] = [
         36: "Return", 48: "Tab", 49: "Space", 51: "Delete", 65: "Keypad Decimal",
@@ -516,12 +517,25 @@ func hotkeyKeyDisplayName(_ keycode: CGKeyCode) -> String {
         125: "Down Arrow", 126: "Up Arrow",
     ]
     if let name = names[keycode] { return name }
+    return layoutLabel() ?? "Physical Key \(keycode)"
+}
+
+func hotkeyKeyDisplayName(_ keycode: CGKeyCode) -> String {
     // Bindings track physical keys, while labels follow the current layout.
     // Reading a layout is not a keyboard event or an input-monitoring action.
-    let source = TISCopyCurrentKeyboardLayoutInputSource().takeRetainedValue()
-    if let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) {
+    // The menu must retain a usable physical-key label when an input source
+    // or its layout bytes are temporarily unavailable; paste resolution uses
+    // the same fail-closed rule rather than guessing the ANSI key position.
+    return hotkeyKeyDisplayName(keycode, layoutLabel: {
+        guard let copiedSource = TISCopyCurrentKeyboardLayoutInputSource() else { return nil }
+        let source = copiedSource.takeRetainedValue()
+        guard let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return nil
+        }
         let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue()
-        let layout = UnsafeRawPointer(CFDataGetBytePtr(data)).assumingMemoryBound(to: UCKeyboardLayout.self)
+        guard CFDataGetLength(data) > 0,
+              let bytes = CFDataGetBytePtr(data) else { return nil }
+        let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
         var deadKeyState: UInt32 = 0
         var characters = [UniChar](repeating: 0, count: 8)
         var length = 0
@@ -534,8 +548,8 @@ func hotkeyKeyDisplayName(_ keycode: CGKeyCode) -> String {
                 return label
             }
         }
-    }
-    return "Physical Key \(keycode)"
+        return nil
+    })
 }
 
 func isReservedHotkeyCombination(keycode: CGKeyCode, modifiers: CGEventFlags) -> Bool {
@@ -17115,6 +17129,20 @@ private enum PresspeechSelfTest {
                    "recording a combination must retain its modifier mask")
         try expect(combination.name.hasPrefix("Command + "), equals: true,
                    "custom shortcut names should include readable modifiers and a current-layout key label")
+        try expect(hotkeyKeyDisplayName(43, layoutLabel: { nil }),
+                   equals: "Physical Key 43",
+                   "unavailable layout data must leave a readable physical-key hotkey label")
+        try expect(hotkeyKeyDisplayName(43, layoutLabel: { "," }),
+                   equals: ",",
+                   "available layout data must retain the translated hotkey label")
+        var namedKeyLayoutReads = 0
+        try expect(hotkeyKeyDisplayName(96, layoutLabel: {
+            namedKeyLayoutReads += 1
+            return nil
+        }), equals: "F5",
+                   "known function keys must keep their stable label without consulting a layout")
+        try expect(namedKeyLayoutReads, equals: 0,
+                   "a stable function-key label must not require input-source access")
         for (keycode, modifiers): (CGKeyCode, CGEventFlags) in [
             (0, []), (0, .maskShift), (53, .maskCommand), (48, .maskCommand),
             (49, .maskCommand), (49, .maskControl), (12, [.maskControl, .maskCommand]),

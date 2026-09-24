@@ -105,6 +105,12 @@ or proxy. A proxy that only tunnels HTTPS cannot read the token.
 Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
 Do not include token values in logs or support requests.
 
+Published Windows 0.1.12 also briefly opens the selected microphone for an
+automatic local readiness check in first-run Setup. Its samples stay in memory
+and are discarded, not saved, sent, or transcribed. If you do not want that check,
+leave the app unopened; upcoming 0.1.13 waits until you choose **Check
+Microphone**. See the [first-launch steps](https://rcourtman.github.io/presspeech/windows.html#first-launch).
+
 The installer is currently unsigned, so SmartScreen may show **Unknown
 publisher**. Choose **More info → Run anyway** only after SHA-256 verification
 and if SmartScreen offers that choice. That option does not apply to a Smart

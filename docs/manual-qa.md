@@ -286,6 +286,14 @@ keyboard access testing in addition to assistive-technology testing.
   **Start Presspeech with Windows** is initially
   unchecked. Opt in, defer setup, and verify the saved choice is registered;
   then turn it off and confirm the choice remains off after completing setup.
+- In a separate disposable profile where the per-user
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` key is absent, leave
+  **Start Presspeech with Windows** unchecked and complete Setup. Confirm the
+  missing key does not block completion and is not created by opting out.
+  Then opt in from Settings and confirm Presspeech creates its startup value;
+  opt out again and confirm it removes only that value. Do not remove a shared
+  Run key or other applications' entries to construct this test. If an isolated
+  absent-key profile is unavailable, mark this sub-check **Not run**.
 - On a clean Windows x64 profile with usable NVIDIA CUDA and no cached pinned
   Parakeet snapshot, confirm Setup identifies the multilingual path and its
   approximate 2.5 GB first download. With keyboard-only navigation and Narrator,
@@ -349,11 +357,13 @@ keyboard access testing in addition to assistive-technology testing.
   second check until you activate **Check Microphone**.
 - On at least one configuration, select an input that diagnostics reports at
   44.1 or 48 kHz. Start a toggle-mode recording, open Settings while continuing
-  to speak, change the microphone selection, save, and then stop recording.
-  Confirm the complete transcript is at normal speed with its final words
-  present. Confirm the next dictation uses the saved selection; switching
-  between Automatic and that explicit input is sufficient when only one safe
-  physical microphone is available.
+  to speak, and change the microphone selection. Confirm **Save** is disabled;
+  press **Ctrl+S** and confirm it does not commit the change while recording.
+  Stop recording and wait for transcription and delivery to finish, then save
+  the pending selection. Confirm the complete first transcript is at normal
+  speed with its final words present and the next dictation uses the saved
+  selection; switching between Automatic and that explicit input is sufficient
+  when only one safe physical microphone is available.
 - Mute the selected microphone, choose **Check Microphone**, and confirm setup
   says it is connected but no input level was detected instead of claiming it
   is ready. Before any input buffer arrives, confirm Setup says **Connecting

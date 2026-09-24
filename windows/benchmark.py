@@ -16,6 +16,7 @@ import numpy as np
 import soundfile as sf
 
 import app
+from benchmark_alignment import word_error_alignment
 from benchmark_provenance import (
     asr_audio_sha256, benchmark_inputs_sha256, benchmark_order_sha256,
     recorded_tail_probe_inputs_sha256,
@@ -80,15 +81,17 @@ def edit_distance(reference, hypothesis):
 def accuracy_metrics(reference, hypothesis):
     ref_words = _normalise_words(reference)
     hyp_words = _normalise_words(hypothesis)
+    word_errors, max_deletion_run = word_error_alignment(ref_words, hyp_words)
     ref_chars = _normalise_chars(reference)
     hyp_chars = _normalise_chars(hypothesis)
     ref_case_chars = _normalise_case_chars(reference)
     hyp_case_chars = _normalise_case_chars(hypothesis)
     return {
-        "word_errors": edit_distance(ref_words, hyp_words),
+        "word_errors": word_errors,
         "reference_words": len(ref_words),
-        "wer": (edit_distance(ref_words, hyp_words) / len(ref_words)
+        "wer": (word_errors / len(ref_words)
                 if ref_words else None),
+        "max_reference_deletion_run": max_deletion_run,
         "character_errors": edit_distance(ref_chars, hyp_chars),
         "reference_characters": len(ref_chars),
         "cer": (edit_distance(ref_chars, hyp_chars) / len(ref_chars)
@@ -110,6 +113,7 @@ def trial_accuracy_metrics(reference, hypotheses):
         return None
     word_errors = [item["word_errors"] for item in metrics]
     word_error_rates = [item["wer"] for item in metrics]
+    deletion_runs = [item["max_reference_deletion_run"] for item in metrics]
     case_sensitive_cers = [item["case_sensitive_cer"] for item in metrics]
     return {
         "trials": len(metrics),
@@ -118,6 +122,8 @@ def trial_accuracy_metrics(reference, hypotheses):
         "median_word_errors": statistics.median(word_errors),
         "worst_word_errors": max(word_errors),
         "all_word_errors": word_errors,
+        "all_max_reference_deletion_runs": deletion_runs,
+        "worst_max_reference_deletion_run": max(deletion_runs),
         "best_wer": min(word_error_rates),
         "median_wer": statistics.median(word_error_rates),
         "worst_wer": max(word_error_rates),
@@ -1521,7 +1527,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 23,
+        "benchmark_version": 24,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "benchmark_order_sha256": benchmark_order_sha256(input_rows),
@@ -1581,6 +1587,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         "aggregate_worst_trial_wer": (
             total_worst_trial_errors / total_words if total_words else None
         ),
+        "worst_reference_deletion_run": (
+            max(item["trial_accuracy"]["worst_max_reference_deletion_run"]
+                for item in reviewed) if reviewed else None),
         "reviewed_silence_sample_count": len(reviewed_silence),
         "silence_false_positive_count": sum(
             item["silence"]["false_positive"] for item in reviewed_silence),
@@ -1820,6 +1829,8 @@ def _print_summary(result):
                   result["aggregate_best_trial_wer"] * 100,
                   result["aggregate_worst_trial_wer"] * 100,
               ))
+        print("Worst consecutive reference-word deletion: %d words across "
+              "reviewed trials" % result["worst_reference_deletion_run"])
         print("Reviewed edge words: first not retained %d/%d trials; "
               "final not retained %d/%d trials" % (
                   result["first_word_failure_trial_count"],
@@ -2035,6 +2046,11 @@ def _print_summary(result):
                 trial_accuracy["trials"],
                 sample["accuracy"]["cer"] * 100,
             ))
+            print("  Longest reference-word deletion: %d consensus / %d "
+                  "worst trial" % (
+                      sample["accuracy"]["max_reference_deletion_run"],
+                      trial_accuracy["worst_max_reference_deletion_run"],
+                  ))
             first_word = sample["first_word"]
             print("  First word: %s (%d/%d trials retained)" % (
                 "retained" if first_word["retained"] else "FAILED",

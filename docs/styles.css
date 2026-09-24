@@ -1016,6 +1016,29 @@ pre code {
   color: var(--muted);
 }
 
+.steps li .future-build {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.steps li .future-build summary {
+  display: list-item;
+  min-height: 44px;
+  padding: 9px 4px;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-weight: 640;
+}
+
+.steps li .future-build summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.steps li .future-build p {
+  padding: 0 4px 10px;
+}
+
 /* ---------- Tables ---------- */
 
 .table-scroll {

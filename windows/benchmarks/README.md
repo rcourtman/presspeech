@@ -158,6 +158,20 @@ the first word survived. These text comparisons cannot prove acoustic
 alignment or that a crop is safe. Compare version 23 reports for these fields;
 recognition and inference inputs are unchanged.
 
+Version 24 adds the longest consecutive reference-word deletion on a stable
+minimum-edit alignment. Each reviewed speech clip records the consensus value
+and every trial's value; the report and console also show the worst reviewed
+trial across the corpus. This catches a long internal omission that aggregate
+WER or first-/final-word checks can obscure, especially in multi-window
+Parakeet dictation. Equal-cost alignments prefer a diagonal, then a deletion,
+then an insertion, matching the macOS benchmark. The number is path-dependent:
+it does not locate an acoustic seam or prove the model caused the omission.
+It is a diagnostic, not a Windows release threshold; inspect the reviewed
+audio, references, individual transcripts, and window plan before changing
+model or chunking policy. Unreviewed clips and silence controls are excluded.
+Version 24 changes scoring only, not transcription or inference timing. Do not
+compare this field with older reports, which did not measure it.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -428,7 +442,8 @@ but canonical fixtures make runs easier to compare.
   final words, and representative microphone/background conditions. A Parakeet
   release corpus should also include human-reviewed speech longer than 60
   seconds, with words spoken continuously across several likely window seams;
-  inspect both WER and the reported window plan for duplication or loss.
+  inspect WER, the longest consecutive reference-word deletion in every trial,
+  and the reported window plan for duplication or loss.
 - Keep spontaneous dictation distinct from read-speech benchmark clips when
   comparing models: ASR error rates vary materially across speaking styles and
   spontaneity levels ([Szymański et al., 2020](https://aclanthology.org/2020.findings-emnlp.295/),

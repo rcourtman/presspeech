@@ -349,6 +349,19 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(metrics["word_errors"], 1)
         self.assertEqual(metrics["reference_words"], 2)
         self.assertEqual(metrics["wer"], 0.5)
+        self.assertEqual(metrics["max_reference_deletion_run"], 0)
+
+    def test_deletion_diagnostic_keeps_intermittent_internal_loss_visible(self):
+        reference = "one two three four five"
+        metrics = benchmark.trial_accuracy_metrics(
+            reference, [reference, "one five", reference])
+        self.assertEqual(metrics["all_max_reference_deletion_runs"], [0, 3, 0])
+        self.assertEqual(metrics["worst_max_reference_deletion_run"], 3)
+        self.assertEqual(
+            benchmark.accuracy_metrics(reference, "one five")[
+                "max_reference_deletion_run"], 3)
+        self.assertIsNone(benchmark.trial_accuracy_metrics(
+            "unreviewable...", []))
 
     def test_canonically_equivalent_polish_text_has_no_scoring_errors(self):
         reference = "Zażółć gęślą jaźń"
@@ -1011,7 +1024,7 @@ class MetricTests(unittest.TestCase):
                          [16000, 9600, 9600, 16000, 16000, 16000])
         self.assertIs(calls[0].args[0], audio)
         self.assertIs(calls[3].args[0], audio)
-        self.assertEqual(result["benchmark_version"], 23)
+        self.assertEqual(result["benchmark_version"], 24)
         self.assertRegex(result["benchmark_order_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(result["aggregate_trial_wer"], 0.75)
         self.assertEqual(result["samples"][0]["transcript"], "")
@@ -1209,7 +1222,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["recorded_tail_probe_groups"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 23)
+        self.assertEqual(result["benchmark_version"], 24)
         self.assertEqual(result["tail_silence_probe_groups"][
             "language_task_groups"]["en"]["short-command"][
                 "final_word_lost_trial_count"], 2)
@@ -1766,6 +1779,7 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["reviewed_trial_reference_word_count"], 2)
         self.assertEqual(result["reviewed_trial_word_error_count"], 1)
         self.assertEqual(result["aggregate_trial_wer"], 0.5)
+        self.assertEqual(result["worst_reference_deletion_run"], 1)
         self.assertEqual(result["reviewed_silence_sample_count"], 1)
         for sample in result["samples"][:3]:
             self.assertIsNone(sample["accuracy"])
@@ -2027,7 +2041,8 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 23)
+        self.assertEqual(result["benchmark_version"], 24)
+        self.assertIsNone(result["worst_reference_deletion_run"])
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])
@@ -2085,6 +2100,7 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["reviewed_trial_word_error_count"], 4)
         self.assertAlmostEqual(result["aggregate_best_trial_wer"], 1 / 6)
         self.assertAlmostEqual(result["aggregate_worst_trial_wer"], 3 / 6)
+        self.assertEqual(result["worst_reference_deletion_run"], 0)
         self.assertEqual(
             result["samples"][0]["trial_accuracy"]["all_word_errors"],
             [0, 1],
@@ -2137,6 +2153,45 @@ class MetricTests(unittest.TestCase):
             "final not retained 0/4 trials",
             output.getvalue(),
         )
+        self.assertIn(
+            "Worst consecutive reference-word deletion: 0 words across "
+            "reviewed trials", output.getvalue())
+
+    def test_long_form_deletion_diagnostic_survives_consensus_and_summary(self):
+        reference = "one two three four five"
+        manifest = {"runs": 3, "samples": [{
+            "id": "reviewed-long-form",
+            "audio": "long-form.wav",
+            "reference": reference,
+            "reference_reviewed": True,
+        }]}
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+        transcriber.transcribe.side_effect = [
+            reference, "one five", reference]
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = os.path.join(directory, "manifest.json")
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        side_effect=fixture_audio_by_path(mock.sentinel.audio)):
+                result = benchmark.run_benchmark(manifest_path)
+
+        sample = result["samples"][0]
+        self.assertEqual(sample["accuracy"]["max_reference_deletion_run"], 0)
+        self.assertEqual(sample["trial_accuracy"]["all_max_reference_deletion_runs"],
+                         [0, 3, 0])
+        self.assertEqual(result["worst_reference_deletion_run"], 3)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn("Longest reference-word deletion: 0 consensus / 3 "
+                      "worst trial", output.getvalue())
+        self.assertIn("Worst consecutive reference-word deletion: 3 words",
+                      output.getvalue())
 
     def test_reviewed_silence_scores_empty_output_as_clean(self):
         self.assertEqual(
