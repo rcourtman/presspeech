@@ -6214,7 +6214,10 @@ private func currentCommandVPasteKeyResolution() -> ClipboardPasteKeyResolution 
         var length = 0
         let status = UCKeyTranslate(layout,
                                     keycode,
-                                    UInt16(kUCKeyActionDisplay),
+                                    // Resolve the key-down that will actually be posted.
+                                    // Display translation is for key labels and can differ
+                                    // from the active Command-layer key press.
+                                    UInt16(kUCKeyActionDown),
                                     commandModifierState,
                                     UInt32(LMGetKbdType()),
                                     OptionBits(kUCKeyTranslateNoDeadKeysMask),

@@ -29,6 +29,29 @@ HOST_APIS = [
 ]
 
 
+class WindowOpenLifetimeTests(unittest.TestCase):
+    def test_close_before_constructor_returns_does_not_restore_dead_dialog(self):
+        for method, attribute, constructor in (
+                ("open_setup", "setup_window", "SetupWindow"),
+                ("open_settings", "settings_window", "SettingsWindow"),
+                ("open_scratchpad", "scratchpad", "ScratchpadWindow")):
+            with self.subTest(method=method):
+                instance = app.PresspeechApp.__new__(app.PresspeechApp)
+                instance._window_open_lock = threading.Lock()
+                setattr(instance, attribute, None)
+
+                def closes_before_return(owner):
+                    window = mock.Mock(root=None)
+                    setattr(owner, attribute, window)
+                    setattr(owner, attribute, None)
+                    return window
+
+                with mock.patch.object(
+                        app.ui, constructor, side_effect=closes_before_return):
+                    getattr(instance, method)()
+                self.assertIsNone(getattr(instance, attribute))
+
+
 class BenchmarkCapturePrivacyTests(unittest.TestCase):
     def test_capture_keeps_session_and_file_path_out_of_diagnostic_log(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

@@ -669,6 +669,10 @@ class PresspeechApp:
         self.settings_window = None
         self.setup_window = None
         self.update_window = None
+        # Open commands arrive from the tray, hotkey worker, activation event,
+        # and Tk. Serialize first construction so two callers cannot queue
+        # duplicate dialogs while the UI thread is still building one.
+        self._window_open_lock = threading.Lock()
         self.delivery_recovery_window = None
         self._delivery_recovery_window_lock = threading.Lock()
         self.pending_update = None
@@ -2949,22 +2953,25 @@ class PresspeechApp:
         return True
 
     def open_scratchpad(self, icon=None, item=None):
-        if self.scratchpad is None:
-            self.scratchpad = ui.ScratchpadWindow(self)
-        else:
-            ui.present_window(self.scratchpad)
+        with self._window_open_lock:
+            if self.scratchpad is None:
+                ui.ScratchpadWindow(self)
+            else:
+                ui.present_window(self.scratchpad)
 
     def open_settings(self, icon=None, item=None):
-        if self.settings_window is None:
-            self.settings_window = ui.SettingsWindow(self)
-        else:
-            ui.present_window(self.settings_window)
+        with self._window_open_lock:
+            if self.settings_window is None:
+                ui.SettingsWindow(self)
+            else:
+                ui.present_window(self.settings_window)
 
     def open_setup(self, icon=None, item=None):
-        if self.setup_window is None:
-            self.setup_window = ui.SetupWindow(self)
-        else:
-            ui.present_window(self.setup_window)
+        with self._window_open_lock:
+            if self.setup_window is None:
+                ui.SetupWindow(self)
+            else:
+                ui.present_window(self.setup_window)
 
     def check_for_updates(self, icon=None, item=None):
         if self.update_window is not None:
@@ -2998,7 +3005,7 @@ class PresspeechApp:
                 return
             self.pending_update = update
             if self.update_window is None:
-                self.update_window = ui.UpdateWindow(self, update)
+                ui.UpdateWindow(self, update)
         except Exception as exc:
             self._log("update check failed: %s" % type(exc).__name__)
             if manual:

@@ -100,9 +100,10 @@ echo '7edc7987d2bf6a47db10381f5b39bb740ae331c2a2a5b9780b1e57898baf291f  Presspee
               <details>
                 <summary>Verify the release attestation (optional)</summary>
                 <p>For an additional check, install <a href="https://cli.github.com/">GitHub CLI</a> and verify both the immutable release and the exact archive you downloaded. Replace the tag below if you downloaded a different version:</p>
-                <pre><code>gh release verify v0.3.8 --repo rcourtman/presspeech
-gh release verify-asset v0.3.8 ~/Downloads/Presspeech.zip --repo rcourtman/presspeech</code></pre>
-                <p>Both commands must succeed. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>
+                <pre><code>gh release verify v0.3.8 --repo rcourtman/presspeech &amp;&amp;
+gh release verify-asset v0.3.8 ~/Downloads/Presspeech.zip --repo rcourtman/presspeech &amp;&amp;
+echo 'Release and archive attestations verified'</code></pre>
+                <p>The success line appears only if both commands succeed. If either fails, stop: do not treat the archive as attested or launch it until you resolve the failure. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>
               </details>
             </li>
             <li>

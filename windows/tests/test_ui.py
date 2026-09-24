@@ -324,6 +324,92 @@ class WindowCallbackLifetimeTests(unittest.TestCase):
         self.assertFalse(self.lifetime._pending)
 
 
+class RegisteredDialogLifetimeTests(unittest.TestCase):
+    WINDOWS = (
+        (ui.SetupWindow, "setup_window"),
+        (ui.SettingsWindow, "settings_window"),
+        (ui.ScratchpadWindow, "scratchpad"),
+        (ui.UpdateWindow, "update_window"),
+    )
+
+    def test_dialog_closing_before_constructor_returns_is_not_re_registered(self):
+        for window_type, attribute in self.WINDOWS:
+            with self.subTest(window=window_type.__name__):
+                app = mock.Mock(recording=False)
+                setattr(app, attribute, None)
+                host = mock.Mock()
+
+                def close_during_submit(callback):
+                    window = callback.__self__
+                    self.assertIs(getattr(app, attribute), window)
+                    window._close()
+
+                host.submit.side_effect = close_during_submit
+                with mock.patch.object(ui, "_window_host", return_value=host):
+                    if window_type is ui.UpdateWindow:
+                        window_type(app, {"version": "0.1.13"})
+                    else:
+                        window_type(app)
+                self.assertIsNone(getattr(app, attribute))
+
+    def test_failed_build_destroys_partial_dialog_and_allows_reopen(self):
+        for window_type, attribute in self.WINDOWS:
+            with self.subTest(window=window_type.__name__):
+                app = mock.Mock(recording=False)
+                setattr(app, attribute, None)
+                root = mock.Mock()
+
+                def fail_build(window):
+                    window.root = root
+                    raise RuntimeError("synthetic private build detail")
+
+                host = mock.Mock()
+                host.submit.side_effect = lambda callback: callback()
+                with mock.patch.object(ui, "_window_host", return_value=host), \
+                        mock.patch.object(window_type, "_build", fail_build):
+                    with self.assertRaisesRegex(RuntimeError, "synthetic private"):
+                        if window_type is ui.UpdateWindow:
+                            window_type(app, {"version": "0.1.13"})
+                        else:
+                            window_type(app)
+                self.assertIsNone(getattr(app, attribute))
+                root.destroy.assert_called_once_with()
+
+    def test_failed_host_submission_does_not_leave_pending_dialog(self):
+        for window_type, attribute in self.WINDOWS:
+            with self.subTest(window=window_type.__name__):
+                app = mock.Mock(recording=False)
+                setattr(app, attribute, None)
+                host = mock.Mock()
+                host.submit.side_effect = RuntimeError("window host unavailable")
+
+                with mock.patch.object(ui, "_window_host", return_value=host):
+                    with self.assertRaisesRegex(RuntimeError, "host unavailable"):
+                        if window_type is ui.UpdateWindow:
+                            window_type(app, {"version": "0.1.13"})
+                        else:
+                            window_type(app)
+                self.assertIsNone(getattr(app, attribute))
+
+    def test_closing_an_older_dialog_cannot_clear_a_new_one(self):
+        for window_type, attribute in self.WINDOWS:
+            with self.subTest(window=window_type.__name__):
+                app = mock.Mock(recording=False)
+                newer = object()
+                setattr(app, attribute, newer)
+                older = window_type.__new__(window_type)
+                older.app = app
+                older.root = mock.Mock()
+                if window_type is ui.UpdateWindow:
+                    older.cancel_and_cleanup = mock.Mock()
+                if window_type is ui.ScratchpadWindow:
+                    older._append_lock = threading.Lock()
+                    older._pending_appends = {}
+                    older.window_handle = 0
+                older._close()
+                self.assertIs(getattr(app, attribute), newer)
+
+
 class AccessibleWindowTests(unittest.TestCase):
     def test_indicator_distinguishes_blank_decode_from_vad_rejection(self):
         self.assertEqual(
@@ -2131,6 +2217,25 @@ class UpdateWindowTests(unittest.TestCase):
         self.assertLessEqual(len(rendered), 8000)
         self.assertTrue(rendered.endswith("[Release notes shortened]"))
 
+    def test_malformed_mutable_release_notes_are_bounded_before_regexes(self):
+        # GitHub allows notes to change after immutable publication. A long
+        # unmatched link label used to make the old link regex quadratic on
+        # the UI thread, even though the eventual display was capped.
+        with mock.patch.object(ui.re, "sub", wraps=ui.re.sub) as substitute:
+            rendered = ui._release_notes_for_display("[" * 24000)
+
+        self.assertLessEqual(len(rendered), 8000)
+        self.assertTrue(rendered.endswith("[Release notes shortened]"))
+        self.assertTrue(substitute.call_args_list)
+        self.assertLessEqual(
+            max(len(call.args[2]) for call in substitute.call_args_list),
+            8000,
+        )
+        self.assertEqual(
+            ui._release_notes_for_display(" " * 9000),
+            "[Release notes shortened]",
+        )
+
     def test_update_dialog_shows_release_notes_before_download_controls(self):
         window = ui.UpdateWindow.__new__(ui.UpdateWindow)
         window.update = {
@@ -2168,6 +2273,10 @@ class UpdateWindowTests(unittest.TestCase):
             if text == "Ready to download")
         self.assertLess(notes_position, status_position)
         self.assertIn("inherited account credentials", displayed[notes_position])
+        disclosure = "\n".join(displayed)
+        self.assertIn("Release notes may change after publication", disclosure)
+        self.assertIn("not the publisher's identity", disclosure)
+        self.assertIn("Unknown publisher", disclosure)
 
     def test_download_moves_focus_before_disabling_its_command(self):
         window = ui.UpdateWindow.__new__(ui.UpdateWindow)

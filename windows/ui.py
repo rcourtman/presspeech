@@ -229,6 +229,43 @@ def _interactive_window(title):
     return root
 
 
+class _RegisteredDialog:
+    """Publish a dialog before its asynchronous build can close or fail."""
+
+    _app_window_attribute = None
+
+    def _queue_build(self):
+        attribute = self._app_window_attribute
+        setattr(self.app, attribute, self)
+        try:
+            _window_host().submit(self._build_guarded)
+        except Exception:
+            self._retire_failed_build()
+            raise
+
+    def _build_guarded(self):
+        try:
+            self._build()
+        except Exception:
+            self._retire_failed_build()
+            raise
+
+    def _retire_failed_build(self):
+        # A partially created Toplevel must not strand future Open actions.
+        # _close also retires its owned Tk callbacks and updater files.
+        if getattr(self, "_failed_build_retired", False):
+            return
+        self._failed_build_retired = True
+        try:
+            self._close()
+        except Exception:
+            pass
+        finally:
+            attribute = self._app_window_attribute
+            if getattr(self.app, attribute, None) is self:
+                setattr(self.app, attribute, None)
+
+
 def present_window(window):
     """Restore and foreground an existing interactive window on its UI thread."""
     def present():
@@ -1038,15 +1075,17 @@ class DictationIndicator:
             return
 
 
-class SetupWindow:
+class SetupWindow(_RegisteredDialog):
     """Small first-run readiness screen; all processing remains local."""
+
+    _app_window_attribute = "setup_window"
 
     def __init__(self, app):
         self.app = app
         self.root = None
         self.microphone_events = queue.Queue()
         self.microphone_checking = False
-        _window_host().submit(self._build)
+        self._queue_build()
 
     def _build(self):
         root = _interactive_window("Welcome to Presspeech")
@@ -1795,40 +1834,53 @@ class SetupWindow:
 
     def _close(self):
         try:
-            self.root.destroy()
+            if self.root is not None:
+                self.root.destroy()
         except Exception:
             pass
-        self.app.setup_window = None
+        if getattr(self.app, "setup_window", None) is self:
+            self.app.setup_window = None
 
 
 def _release_notes_for_display(body):
     """Render bounded GitHub Markdown as inert, readable update text."""
     if not isinstance(body, str):
         body = ""
+    # GitHub permits edits to release notes even after a release is made
+    # immutable. Bound work before running regexes on this network-supplied
+    # field; truncating only the rendered result leaves the UI thread open to
+    # pathological Markdown (for example, thousands of unmatched '[' chars).
+    max_chars = 8000
+    suffix = "\n\n[Release notes shortened]"
+    shortened = len(body) > max_chars
+    if shortened:
+        body = body[:max_chars]
     body = body.replace("\r\n", "\n").replace("\r", "\n")
     lines = []
     for line in body.split("\n"):
         line = re.sub(r"^\s*#{1,6}\s+", "", line)
         line = re.sub(r"^(\s*)[-*]\s+", r"\1• ", line)
         # Keep link labels but not active URLs. The update dialog is a plain
-        # text surface; users can consult the release page separately.
-        line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+        # text surface; users can consult the release page separately. Exclude
+        # nested '[' so a malformed run of opening brackets cannot make each
+        # candidate scan the rest of the line again.
+        line = re.sub(r"\[([^\[\]]+)\]\([^)]*\)", r"\1", line)
         line = re.sub(r"\*\*(.*?)\*\*|__(.*?)__",
                       lambda match: match.group(1) or match.group(2), line)
         line = re.sub(r"`([^`]*)`", r"\1", line)
         lines.append(line)
     rendered = "\n".join(lines).strip()
     if not rendered:
-        return "(No release notes available.)"
-    max_chars = 8000
-    if len(rendered) > max_chars:
-        suffix = "\n\n[Release notes shortened]"
+        return "[Release notes shortened]" if shortened else "(No release notes available.)"
+    if shortened or len(rendered) > max_chars:
         rendered = rendered[:max_chars - len(suffix)].rstrip() + suffix
     return rendered
 
 
-class UpdateWindow:
+class UpdateWindow(_RegisteredDialog):
     """Explicit, verified Windows update download and install prompt."""
+
+    _app_window_attribute = "update_window"
 
     def __init__(self, app, update):
         self.app = app
@@ -1842,7 +1894,7 @@ class UpdateWindow:
         self.active_staging_path = None
         self.download_finished = threading.Event()
         self.download_finished.set()
-        _window_host().submit(self._build)
+        self._queue_build()
 
     def _build(self):
         root = _interactive_window("Presspeech Update")
@@ -1856,7 +1908,10 @@ class UpdateWindow:
             frame,
             text=("Review the release notes before deciding. The installer is "
                   "downloaded only if you approve it; its size and SHA-256 "
-                  "checksum are verified before it runs."),
+                  "checksum are verified before it runs. Release notes may "
+                  "change after publication; hash verification confirms the "
+                  "installer bytes, not the publisher's identity. An unsigned "
+                  "installer may show Unknown publisher in Windows."),
             justify="left",
             wraplength=560,
         ).pack(anchor="w", pady=(6, 12))
@@ -2076,17 +2131,21 @@ class UpdateWindow:
     def _close(self):
         self.cancel_and_cleanup()
         try:
-            self.root.destroy()
+            if self.root is not None:
+                self.root.destroy()
         except Exception:
             pass
-        self.app.update_window = None
+        if getattr(self.app, "update_window", None) is self:
+            self.app.update_window = None
 
 
-class SettingsWindow:
+class SettingsWindow(_RegisteredDialog):
+    _app_window_attribute = "settings_window"
+
     def __init__(self, app):
         self.app = app
         self.root = None
-        _window_host().submit(self._build)
+        self._queue_build()
 
     def _build(self):
         s = self.app.settings
@@ -2500,10 +2559,12 @@ class SettingsWindow:
 
     def _close(self):
         try:
-            self.root.destroy()
+            if self.root is not None:
+                self.root.destroy()
         except Exception:
             pass
-        self.app.settings_window = None
+        if getattr(self.app, "settings_window", None) is self:
+            self.app.settings_window = None
 
 
 class DeliveryRecoveryWindow:
@@ -2696,7 +2757,9 @@ class DeliveryRecoveryWindow:
             self.app.delivery_recovery_window = None
 
 
-class ScratchpadWindow:
+class ScratchpadWindow(_RegisteredDialog):
+    _app_window_attribute = "scratchpad"
+
     def __init__(self, app):
         self.app = app
         self.root = None
@@ -2707,7 +2770,7 @@ class ScratchpadWindow:
         self._append_lock = threading.Lock()
         self._pending_appends = {}
         self._next_append_id = 0
-        _window_host().submit(self._build)
+        self._queue_build()
 
     def _build(self):
         root = _interactive_window("Presspeech - Try Dictation")

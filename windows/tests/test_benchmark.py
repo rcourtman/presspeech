@@ -440,6 +440,14 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(summary["order_breakdown"]["tailed-first"][
             "final_word_lost_trial_count"], 0)
 
+    def test_paired_tail_counts_repeated_final_word_shortfall(self):
+        metrics = benchmark.paired_tail_silence_metrics(
+            "please go go", ["please go go", "please go"],
+            ["please go", "please go go"])
+        self.assertEqual(metrics["final_word_lost_trial_count"], 1)
+        self.assertEqual(metrics["final_word_recovered_trial_count"], 1)
+        self.assertEqual(metrics["tailed_final_word_failure_trial_count"], 1)
+
     def test_tail_probe_aggregate_counts_only_probed_samples(self):
         probe = benchmark.paired_tail_silence_metrics(
             "spoken words", ["spoken words"], [""])
@@ -734,6 +742,15 @@ class MetricTests(unittest.TestCase):
         self.assertEqual([pair["final_word_lost"] for pair in metrics["pairs"]],
                          [True, False])
 
+    def test_recorded_tail_counts_repeated_final_word_shortfall(self):
+        metrics = benchmark.paired_recorded_tail_metrics(
+            "go now now", ["go now now", "go now"],
+            ["go now", "go now now"])
+        self.assertEqual(metrics["final_word_lost_trial_count"], 1)
+        self.assertEqual(metrics["final_word_recovered_trial_count"], 1)
+        self.assertEqual(metrics["full_final_word_failure_trial_count"], 1)
+        self.assertEqual(metrics["trimmed_final_word_failure_trial_count"], 1)
+
     def test_tail_probe_requires_one_unchanged_feature_bucket(self):
         rate = benchmark.engine.PARAKEET_SAMPLE_RATE
         # Exact boundaries are valid; one additional effective sample would
@@ -872,7 +889,7 @@ class MetricTests(unittest.TestCase):
                          [16000, 9600, 9600, 16000, 16000, 16000])
         self.assertIs(calls[0].args[0], audio)
         self.assertIs(calls[3].args[0], audio)
-        self.assertEqual(result["benchmark_version"], 19)
+        self.assertEqual(result["benchmark_version"], 20)
         self.assertEqual(result["aggregate_trial_wer"], 0.75)
         self.assertEqual(result["samples"][0]["transcript"], "")
         probe = result["samples"][0]["recorded_tail_probe"]
@@ -1063,7 +1080,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["recorded_tail_probe_groups"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 19)
+        self.assertEqual(result["benchmark_version"], 20)
         self.assertEqual(result["tail_silence_probe_groups"][
             "language_task_groups"]["en"]["short-command"][
                 "final_word_lost_trial_count"], 2)
@@ -1600,6 +1617,14 @@ class MetricTests(unittest.TestCase):
         )
         self.assertIsNone(benchmark.final_word_metrics("", [""]))
 
+    def test_final_word_metrics_require_repeated_terminal_word_count(self):
+        result = benchmark.final_word_metrics(
+            "say go go", ["say go go", "say go", "go go go", "say go stop"])
+        self.assertEqual(result, {
+            "retained": False, "retained_trials": 2,
+            "failed_trials": 2, "trials": 4,
+        })
+
     def test_first_word_metrics_normalise_case_and_punctuation(self):
         self.assertEqual(
             benchmark.first_word_metrics(
@@ -1624,6 +1649,14 @@ class MetricTests(unittest.TestCase):
             },
         )
         self.assertIsNone(benchmark.first_word_metrics("...", [""]))
+
+    def test_first_word_metrics_require_repeated_initial_word_count(self):
+        result = benchmark.first_word_metrics(
+            "go go now", ["go go now", "go now", "go go go now", "stop go now"])
+        self.assertEqual(result, {
+            "retained": False, "retained_trials": 2,
+            "failed_trials": 2, "trials": 4,
+        })
 
     def test_percentile_uses_observed_upper_value(self):
         self.assertEqual(benchmark._percentile([0.1, 0.2, 0.3, 0.4], 0.95), 0.4)
@@ -1804,7 +1837,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 19)
+        self.assertEqual(result["benchmark_version"], 20)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

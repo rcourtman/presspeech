@@ -1825,9 +1825,10 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         "              <details>\n"
         "                <summary>Verify the release attestation (optional)</summary>\n"
         "                <p>For an additional check, install <a href=\"https://cli.github.com/\">GitHub CLI</a> and verify both the immutable release and the exact archive you downloaded. Replace the tag below if you downloaded a different version:</p>\n"
-        f"                <pre><code>gh release verify v{version} --repo rcourtman/presspeech\n"
-        f"gh release verify-asset v{version} ~/Downloads/Presspeech.zip --repo rcourtman/presspeech</code></pre>\n"
-        "                <p>Both commands must succeed. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>\n"
+        f"                <pre><code>gh release verify v{version} --repo rcourtman/presspeech &amp;&amp;\n"
+        f"gh release verify-asset v{version} ~/Downloads/Presspeech.zip --repo rcourtman/presspeech &amp;&amp;\n"
+        "echo 'Release and archive attestations verified'</code></pre>\n"
+        "                <p>The success line appears only if both commands succeed. If either fails, stop: do not treat the archive as attested or launch it until you resolve the failure. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>\n"
         "              </details>",
         path=path,
         flags=re.S,
@@ -2529,6 +2530,46 @@ def check_windows_verified_download_flow(
         errors.append(
             f"{display}: visible installer links must follow #download-verify-run guidance"
         )
+    return errors
+
+
+def check_public_attestation_steps(
+    mac_path: Path = DOCS / "install.html",
+    windows_path: Path = DOCS / "windows.html",
+) -> list[str]:
+    """Do not let an optional failed verification look like a successful one."""
+    errors: list[str] = []
+    mac = read_text(mac_path)
+    detail = re.search(
+        r"<summary>Verify the release attestation \(optional\)</summary>(.*?)</details>",
+        mac, re.S,
+    )
+    mac_code = re.search(r"<pre><code>(.*?)</code></pre>", detail.group(1), re.S) if detail else None
+    if not mac_code or not re.search(
+        r"gh release verify v[\d.]+ --repo rcourtman/presspeech &amp;&amp;\s*"
+        r"gh release verify-asset v[\d.]+ ~/Downloads/Presspeech\.zip "
+        r"--repo rcourtman/presspeech &amp;&amp;\s*"
+        r"echo 'Release and archive attestations verified'",
+        mac_code.group(1),
+    ):
+        errors.append(f"{mac_path.name}: optional macOS attestation must stop after either failure")
+
+    windows = read_text(windows_path)
+    step = re.search(
+        r"<strong>Optionally verify the immutable release attestation</strong>(.*?)</li>",
+        windows, re.S,
+    )
+    windows_code = re.search(r"<pre><code>(.*?)</code></pre>", step.group(1), re.S) if step else None
+    if not windows_code or not re.search(
+        r"\$ErrorActionPreference = 'Stop'\s*"
+        r"gh release verify windows-v[\d.]+ --repo rcourtman/presspeech\s*"
+        r"if \(\$LASTEXITCODE -ne 0\) \{ throw [^}]+\}\s*"
+        r"gh release verify-asset windows-v[\d.]+ \$installer --repo rcourtman/presspeech\s*"
+        r"if \(\$LASTEXITCODE -ne 0\) \{ throw [^}]+\}\s*"
+        r"'Release and installer attestations verified\.'",
+        windows_code.group(1),
+    ):
+        errors.append(f"{windows_path.name}: optional Windows attestation must check both native exit codes")
     return errors
 
 
@@ -4469,6 +4510,28 @@ def run_self_test() -> None:
         "release_zip_size": "7.6 MB",
     }
     with tempfile.TemporaryDirectory() as tmp:
+        attestation_mac = Path(tmp) / "attestation-mac.html"
+        attestation_windows = Path(tmp) / "attestation-windows.html"
+        mac_attestation_copy = read_text(DOCS / "install.html")
+        windows_attestation_copy = read_text(DOCS / "windows.html")
+        attestation_mac.write_text(mac_attestation_copy, encoding="utf-8")
+        attestation_windows.write_text(windows_attestation_copy, encoding="utf-8")
+        if check_public_attestation_steps(attestation_mac, attestation_windows):
+            raise SyncError("self-test: safe public attestation steps were rejected")
+        attestation_mac.write_text(
+            mac_attestation_copy.replace(" --repo rcourtman/presspeech &amp;&amp;", " --repo rcourtman/presspeech", 1),
+            encoding="utf-8",
+        )
+        if not check_public_attestation_steps(attestation_mac, attestation_windows):
+            raise SyncError("self-test: macOS unchecked attestation was accepted")
+        attestation_mac.write_text(mac_attestation_copy, encoding="utf-8")
+        attestation_windows.write_text(
+            windows_attestation_copy.replace("if ($LASTEXITCODE -ne 0) { throw 'Release attestation failed; do not run the installer.' }", "", 1),
+            encoding="utf-8",
+        )
+        if not check_public_attestation_steps(attestation_mac, attestation_windows):
+            raise SyncError("self-test: Windows unchecked attestation was accepted")
+
         homepage = Path(tmp) / "homepage.html"
         safe_homepage = read_text(DOCS / "index.html")
         homepage.write_text(safe_homepage, encoding="utf-8")
@@ -6467,6 +6530,7 @@ def main() -> int:
             errors.extend(check_platform_orientation())
             errors.extend(check_windows_unsigned_guidance())
             errors.extend(check_windows_verified_download_flow())
+            errors.extend(check_public_attestation_steps())
             errors.extend(check_anchored_install_preflights(metadata))
             errors.extend(check_macos_upgrade_preflight(metadata))
             errors.extend(check_windows_language_guidance())
@@ -6534,6 +6598,7 @@ def main() -> int:
         errors.extend(check_platform_orientation())
         errors.extend(check_windows_unsigned_guidance())
         errors.extend(check_windows_verified_download_flow())
+        errors.extend(check_public_attestation_steps())
         errors.extend(check_anchored_install_preflights(metadata))
         errors.extend(check_macos_upgrade_preflight(metadata))
         errors.extend(check_windows_language_guidance())

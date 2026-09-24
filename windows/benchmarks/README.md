@@ -113,6 +113,14 @@ and order balance before interpreting a small group; grouping does not make
 clips independent or establish a statistically significant effect. Version 19
 does not change product recognition, capture, or benchmark inference inputs.
 
+Version 20 makes first-/final-word diagnostics require the full consecutive
+run of a repeated boundary word. For example, a reference ending `go go` and
+a hypothesis ending `go` now fails the final-word check rather than appearing
+retained. The same rule applies to paired tail loss/recovery counts; WER and
+product inference are unchanged. Compare version 20 reports when a reference
+starts or ends with repeated words. The check is deliberately conservative:
+it cannot identify which identical spoken occurrence was lost.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -284,9 +292,10 @@ summary keeps both harm directions, final-word transitions, and latency deltas
 stratified by decode order; `recorded_tail_probe_groups` also repeats the
 summary for labelled task/language groups and their intersections. Compare
 these strata as well as pooled medians.
-These final-word flags compare the last normalized transcript token with the
-reference's last token; they are diagnostic text matches, not acoustic proof
-that the final spoken sound survived a crop (especially for repeated words).
+These final-word flags compare the normalized terminal word run with the
+reference's run, so a missing repeat cannot appear retained. They are
+diagnostic text matches, not acoustic proof that a particular spoken
+occurrence survived a crop.
 The cropped variant is a diagnostic only: an
 improvement does not show that an automatic trim can locate this human-marked
 boundary, and a mistaken crop can delete a final word. Neither the manifest nor
@@ -438,6 +447,7 @@ but canonical fixtures make runs easier to compare.
   also depend on run count, so compare candidates with the same number of runs.
 - Inspect first- and final-word retention alongside WER. Each reviewed trial
   must begin with the reference's first word and end with its final word;
+  adjacent repeats at either boundary must retain the full run count;
   per-sample and corpus/task-group failure counts expose intermittent boundary
   differences that aggregate WER can dilute. These checks complement WER and do
   not replace listening review; a mismatch does not by itself prove clipping.

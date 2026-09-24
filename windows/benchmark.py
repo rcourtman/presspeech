@@ -129,6 +129,32 @@ def trial_accuracy_metrics(reference, hypotheses):
     }
 
 
+def _boundary_run_retained(reference_words, hypothesis_words, *, from_end):
+    """Check the entire repeated boundary word, not just its last occurrence.
+
+    A last-token match alone calls ``go`` a retained ending for ``go go``.
+    Requiring the consecutive boundary run catches that shortfall without
+    pretending to align individual repeated sounds to the recording.
+    """
+    reference_boundary = (reversed(reference_words) if from_end
+                          else iter(reference_words))
+    hypothesis_boundary = (reversed(hypothesis_words) if from_end
+                           else iter(hypothesis_words))
+    boundary_word = reference_words[-1] if from_end else reference_words[0]
+    required = 0
+    for word in reference_boundary:
+        if word != boundary_word:
+            break
+        required += 1
+    for word in hypothesis_boundary:
+        if word != boundary_word:
+            break
+        required -= 1
+        if required == 0:
+            return True
+    return False
+
+
 def paired_tail_silence_metrics(reference, baseline, tailed):
     """Score each clean/tailed Parakeet trial against the same reviewed words.
 
@@ -140,15 +166,16 @@ def paired_tail_silence_metrics(reference, baseline, tailed):
     reference_words = _normalise_words(reference)
     if not reference_words:
         raise ValueError("tail-silence probe needs a scoreable reference")
-    final_word = reference_words[-1]
     pairs = []
     for clean_text, tailed_text in zip(baseline, tailed):
         clean_errors = accuracy_metrics(reference, clean_text)["word_errors"]
         tailed_errors = accuracy_metrics(reference, tailed_text)["word_errors"]
         clean_words = _normalise_words(clean_text)
         tailed_words = _normalise_words(tailed_text)
-        clean_kept_final = bool(clean_words) and clean_words[-1] == final_word
-        tailed_kept_final = bool(tailed_words) and tailed_words[-1] == final_word
+        clean_kept_final = _boundary_run_retained(
+            reference_words, clean_words, from_end=True)
+        tailed_kept_final = _boundary_run_retained(
+            reference_words, tailed_words, from_end=True)
         pairs.append({
             "baseline_transcript": clean_text,
             "tailed_transcript": tailed_text,
@@ -272,16 +299,16 @@ def paired_recorded_tail_metrics(reference, full, trimmed):
     reference_words = _normalise_words(reference)
     if not reference_words:
         raise ValueError("recorded-tail probe needs a scoreable reference")
-    final_word = reference_words[-1]
     pairs = []
     for full_text, trimmed_text in zip(full, trimmed):
         full_errors = accuracy_metrics(reference, full_text)["word_errors"]
         trimmed_errors = accuracy_metrics(reference, trimmed_text)["word_errors"]
         full_words = _normalise_words(full_text)
         trimmed_words = _normalise_words(trimmed_text)
-        full_kept_final = bool(full_words) and full_words[-1] == final_word
-        trimmed_kept_final = (
-            bool(trimmed_words) and trimmed_words[-1] == final_word)
+        full_kept_final = _boundary_run_retained(
+            reference_words, full_words, from_end=True)
+        trimmed_kept_final = _boundary_run_retained(
+            reference_words, trimmed_words, from_end=True)
         pairs.append({
             "full_transcript": full_text,
             "trimmed_transcript": trimmed_text,
@@ -510,13 +537,13 @@ def _paired_latency_metrics(baseline_seconds, variant_seconds, trial_order,
 
 
 def final_word_metrics(reference, hypotheses):
-    """Score final-word retention across every trial of a reviewed clip."""
+    """Score terminal-word-run retention across every reviewed trial."""
     reference_words = _normalise_words(reference)
     if not reference_words:
         return None
-    expected = reference_words[-1]
     retained_trials = sum(
-        bool(words := _normalise_words(hypothesis)) and words[-1] == expected
+        _boundary_run_retained(
+            reference_words, _normalise_words(hypothesis), from_end=True)
         for hypothesis in hypotheses
     )
     trials = len(hypotheses)
@@ -531,13 +558,13 @@ def final_word_metrics(reference, hypotheses):
 
 
 def first_word_metrics(reference, hypotheses):
-    """Score first-word retention across every trial of a reviewed clip."""
+    """Score initial-word-run retention across every reviewed trial."""
     reference_words = _normalise_words(reference)
     if not reference_words:
         return None
-    expected = reference_words[0]
     retained_trials = sum(
-        bool(words := _normalise_words(hypothesis)) and words[0] == expected
+        _boundary_run_retained(
+            reference_words, _normalise_words(hypothesis), from_end=False)
         for hypothesis in hypotheses
     )
     trials = len(hypotheses)
@@ -1368,7 +1395,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 19,
+        "benchmark_version": 20,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "recorded_tail_probe_inputs_sha256": (

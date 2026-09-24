@@ -564,8 +564,9 @@ Setup after an explicit warning if the startup setting cannot be fixed now.
   any non-empty transcript as a silence false positive. Whisper reports also
   record the VAD-retained speech duration for every trial and count reviewed
   speech clips that VAD rejected, so silence fixes cannot hide quiet-speech
-  regressions behind aggregate WER. Reviewed speech clips score final-word
-  first- and final-word retention on every reviewed trial as well, so
+  regressions behind aggregate WER. Reviewed speech clips score
+  first- and final-word retention on every reviewed trial as well, including
+  the full count of adjacent repeated boundary words, so
   intermittent differences at either dictation boundary cannot be hidden by
   the consensus transcript. Inspect the audio to distinguish clipping from
   substitutions or insertions.

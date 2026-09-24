@@ -792,7 +792,12 @@ For the non-US keyboard-layout row, compare an English/US input source with at
 least one non-US source. When available, include Dvorak (or another layout that
 moves the letter V to a different key position), not only a non-Latin source
 such as Russian: this exercises layout-aware synthetic Command-V rather than
-only character labeling. In TextEdit and a current Electron/Chromium target,
+only character labeling. Distinguish ordinary Dvorak from
+[**Dvorak – QWERTY ⌘**](https://support.apple.com/en-bn/guide/mac-help/mh27976/mac):
+the latter uses QWERTY positions while Command is held, so it does not satisfy
+the moved-Command-V check; test it separately if available to catch a mismatch
+between a displayed key label and the Command key-down translation. In TextEdit
+and a current Electron/Chromium target,
 confirm a steady-focus dictation inserts once under each layout. Then cause a
 clipboard-only recovery by changing focus before delivery and confirm physical
 Command-V pastes that transcript once under each layout. A displayed hotkey
