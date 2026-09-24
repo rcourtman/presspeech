@@ -5692,12 +5692,14 @@ class DeliveryRecoveryTests(unittest.TestCase):
                          str(self.instance.notify.mock_calls))
 
     def test_external_copy_during_shortcut_is_reported_uncertain(self):
-        # A successful SendInput return is not a paste-consumed receipt.
-        self.owned.side_effect = [True, True, True, True, False]
+        # A copy after submission is still uncertain; pre-submit copies are
+        # now stopped by the guard after the final physical-key scan.
         api = mock.Mock()
         api.MapVirtualKeyW.return_value = 0x1D
         api.GetAsyncKeyState.return_value = 0
         api.SendInput.return_value = 4
+        self.owned.side_effect = (
+            lambda *_args, **_kwargs: api.SendInput.call_count == 0)
         self.controller.return_value = self.checked_controller(api=api)
 
         self.assertFalse(self.paste())
@@ -5711,10 +5713,11 @@ class DeliveryRecoveryTests(unittest.TestCase):
         # check. An external copy must not hide a simultaneous destination
         # change from the user-facing recovery instructions.
         replacement = app.PasteTarget("other.exe", 4321, 99)
-        self.owned.side_effect = [True, True, True, True, False]
         api = mock.Mock()
         api.MapVirtualKeyW.return_value = 0x1D
         api.GetAsyncKeyState.return_value = 0
+        self.owned.side_effect = (
+            lambda *_args, **_kwargs: api.SendInput.call_count == 0)
 
         def accept_then_change_both(count, _inputs, _size):
             self.foreground.return_value = replacement
