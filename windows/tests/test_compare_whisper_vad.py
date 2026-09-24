@@ -267,6 +267,95 @@ class CompareWhisperVadTests(unittest.TestCase):
             report["samples"][0]["passes_app_minimum_audio_duration"] = False
         result = compare.compare_reports(base, candidate)
         self.assertEqual(result["baseline"]["below_app_gate_clips"], 1)
+        self.assertEqual(result["app_eligible"]["baseline"]["reviewed_speech_clips"], 0)
+        self.assertIsNone(result["app_eligible"]["baseline"]["trial_wer"])
+        self.assertIsNone(result["app_eligible"]["baseline"]["trial_word_errors"])
+
+    def test_below_gate_changes_do_not_masquerade_as_app_eligible_quality(self):
+        base, candidate = reports()
+        for report in (base, candidate):
+            for sample in report["samples"]:
+                sample["passes_app_minimum_audio_duration"] = False
+            eligible_speech = copy.deepcopy(report["samples"][0])
+            eligible_speech["id"] = "another-private-clip"
+            eligible_speech["task_group"] = "ordinary"
+            eligible_speech["passes_app_minimum_audio_duration"] = True
+            eligible_silence = copy.deepcopy(report["samples"][1])
+            eligible_silence["id"] = "another-private-control"
+            eligible_silence["task_group"] = "ordinary"
+            eligible_silence["passes_app_minimum_audio_duration"] = True
+            report["samples"].extend((eligible_speech, eligible_silence))
+            report["sample_count"] = 4
+
+        candidate["samples"][0]["trial_accuracy"].update(
+            all_word_errors=[1, 1], worst_word_errors=1)
+        candidate["samples"][0]["speech_detection"]["all_seconds"] = [0.5, 0.5]
+        candidate["samples"][1]["silence"]["false_positive_trials"] = 1
+        result = compare.compare_reports(base, candidate)
+
+        self.assertEqual(result["candidate"]["trial_wer"], 2 / 12)
+        self.assertEqual(result["candidate"]["silence_false_positives"], 1)
+        self.assertEqual(result["regressions"]["word_errors"], [1])
+        self.assertEqual(result["regressions"]["silence_false_positives"], [2])
+        eligible = result["app_eligible"]
+        self.assertEqual(eligible["baseline"]["sample_count"], 2)
+        self.assertEqual(eligible["candidate"]["trial_wer"], 0)
+        self.assertEqual(eligible["candidate"]["silence_false_positives"], 0)
+        self.assertEqual(eligible["regressions"], {})
+        self.assertEqual(eligible["strata"]["task_group"], {
+            "count": 1, "regressed": 0})
+        self.assertEqual(eligible["vad_retention"]["speech"]["lower"], [])
+        self.assertEqual(result["vad_retention"]["speech"]["lower"], [1])
+
+        with tempfile.TemporaryDirectory() as root:
+            paths = [os.path.join(root, name) for name in ("base.json", "new.json")]
+            for path, report in zip(paths, (base, candidate)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", ["compare", *paths]), \
+                    redirect_stdout(output):
+                compare.main()
+            message = output.getvalue()
+            self.assertIn("trial_wer: 0.00% -> 16.67%", message)
+            self.assertIn("app_eligible_trial_wer: 0.00% -> 0.00%", message)
+            self.assertIn("App-duration-gate-eligible subset: 2 clips", message)
+            self.assertNotIn("App-eligible word_errors worsened", message)
+            for private in ("private speech", "private-path",
+                            "another-private-clip", root):
+                self.assertNotIn(private, message)
+
+        candidate["samples"][2]["trial_accuracy"].update(
+            all_word_errors=[0, 1], worst_word_errors=1)
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["app_eligible"]["regressions"]["word_errors"], [3])
+        self.assertEqual(result["app_eligible"]["strata"]["task_group"], {
+            "count": 1, "regressed": 1})
+
+    def test_no_app_eligible_clips_reports_missing_coverage_without_crashing(self):
+        base, candidate = reports()
+        for report in (base, candidate):
+            for sample in report["samples"]:
+                sample["passes_app_minimum_audio_duration"] = False
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["app_eligible"]["baseline"]["sample_count"], 0)
+        self.assertIsNone(result["app_eligible"]["baseline"][
+            "inference_median_seconds"])
+        with tempfile.TemporaryDirectory() as root:
+            paths = [os.path.join(root, name) for name in ("base.json", "new.json")]
+            for path, report in zip(paths, (base, candidate)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", ["compare", *paths]), \
+                    redirect_stdout(output):
+                compare.main()
+            self.assertIn("App-eligible quality comparison incomplete",
+                          output.getvalue())
+            self.assertIn("app_eligible_trial_wer: not evaluated -> not evaluated",
+                          output.getvalue())
+            self.assertIn("app_eligible_trial_word_errors: not evaluated -> not evaluated",
+                          output.getvalue())
 
     def test_rejects_incomplete_vad_or_trial_metrics(self):
         for mutation in (

@@ -253,9 +253,19 @@ language labels, the helper says language ID was not evaluated. It counts
 anonymous clip positions with worsened metrics and task/language/intersection
 strata containing a clip-level quality or language-ID regression, even if
 pooled errors improve. It does **not** print IDs, paths, references,
-transcripts, or group labels. Sub-250 ms clips remain in model scores and are
-counted separately as below the app's transcription gate, not product delivery
-evidence. The script does not certify the input digest or
+transcripts, or group labels. Sub-250 ms clips remain in the all-clips model
+scores and are counted separately as below the app's transcription gate. When
+any such clip is present, the helper also prints an app-duration-gate-eligible
+subset: reviewed speech/silence counts, all-trial quality and inference
+summaries, VAD-retention changes, anonymous clip regressions, and regressed
+labelled-stratum counts. Positions remain those of the original report. If no
+eligible reviewed speech or silence control remains, the helper says that this
+subset lacks the coverage needed for a quality comparison; it does not turn
+missing WER or latency into zero. Eligibility is taken from the benchmark's
+effective-16-kHz sample-count flag, not independently verified by this helper,
+and still is **not** product delivery evidence. This is a comparison-output
+change only; benchmark version 25 and model inference are unchanged. The
+script does not certify the input digest or
 hardware metadata independently and cannot prove identical thermal/background
 load, representative references, acoustic speech recall, or native delivery.
 Do not treat its zero-regression output as a release pass; review the private

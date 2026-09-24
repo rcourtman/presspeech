@@ -254,28 +254,30 @@ def _score(samples):
     latency = [value for item in samples
                for value in item["inference_seconds"]["all"]]
     return {
+        "sample_count": len(samples),
         "reviewed_speech_clips": len(speech),
         "reviewed_silence_clips": len(silence),
         "below_app_gate_clips": sum(
             not item["passes_app_minimum_audio_duration"] for item in samples),
-        "trial_word_errors": errors,
-        "trial_reference_words": words,
+        "trial_word_errors": errors if speech else None,
+        "trial_reference_words": words if speech else None,
         "trial_wer": errors / words if words else None,
         # Count clean decodes without pretending trial positions in separate
         # benchmark invocations are controlled pairs.
-        "error_free_trials": sum(
+        "error_free_trials": (sum(
             error == 0 for item in speech
-            for error in item["trial_accuracy"]["all_word_errors"]),
+            for error in item["trial_accuracy"]["all_word_errors"])
+            if speech else None),
         "worst_deletion_run": max((item["trial_accuracy"][
             "worst_max_reference_deletion_run"] for item in speech), default=None),
-        "first_word_failures": sum(item["first_word"]["failed_trials"]
-                                   for item in speech),
-        "final_word_failures": sum(item["final_word"]["failed_trials"]
-                                   for item in speech),
-        "vad_rejections": sum(item["speech_detection"]["rejected_trials"]
-                              for item in speech),
-        "vad_missing": sum(item["speech_detection"]["missing_trials"]
-                           for item in speech),
+        "first_word_failures": (sum(item["first_word"]["failed_trials"]
+                                    for item in speech) if speech else None),
+        "final_word_failures": (sum(item["final_word"]["failed_trials"]
+                                    for item in speech) if speech else None),
+        "vad_rejections": (sum(item["speech_detection"]["rejected_trials"]
+                               for item in speech) if speech else None),
+        "vad_missing": (sum(item["speech_detection"]["missing_trials"]
+                            for item in speech) if speech else None),
         "language_id_clips": len(language_ids),
         "language_id_matched": sum(item["matched_trials"]
                                    for item in language_ids),
@@ -285,9 +287,10 @@ def _score(samples):
                                    for item in language_ids),
         "language_id_vad_rejected": sum(item["vad_rejected_trials"]
                                         for item in language_ids),
-        "silence_false_positives": sum(item["silence"][
-            "false_positive_trials"] for item in silence),
-        "inference_median_seconds": statistics.median(latency),
+        "silence_false_positives": (sum(item["silence"][
+            "false_positive_trials"] for item in silence) if silence else None),
+        "inference_median_seconds": (
+            statistics.median(latency) if latency else None),
     }
 
 
@@ -334,7 +337,7 @@ def _worsened(base, candidate):
     return {}
 
 
-def _vad_retention_diagnostics(baseline, candidate):
+def _vad_retention_diagnostics(baseline, candidate, *, app_eligible_only=False):
     """Compare per-clip median VAD duration, not unpaired trial positions.
 
     A shorter retained duration on speech is not proof of a lost word, and a
@@ -348,6 +351,8 @@ def _vad_retention_diagnostics(baseline, candidate):
         for kind in ("speech", "silence")
     }
     for position, (base, changed) in enumerate(zip(baseline, candidate), 1):
+        if app_eligible_only and not base["passes_app_minimum_audio_duration"]:
+            continue
         kind = _sample_kind(base)
         if kind not in result:
             continue
@@ -365,6 +370,36 @@ def _vad_retention_diagnostics(baseline, candidate):
         else:
             result[kind]["unchanged"] += 1
     return result
+
+
+def _regressed_strata(samples, regressions, *, app_eligible_only=False):
+    """Count labelled strata without treating latency alone as a quality loss."""
+    measured_regression_positions = {
+        position for name, positions in regressions.items()
+        if name != "inference_median_seconds" for position in positions
+    }
+    positioned = [
+        (position, sample) for position, sample in enumerate(samples, 1)
+        if not app_eligible_only or sample["passes_app_minimum_audio_duration"]
+    ]
+    strata = {}
+    for field in ("task_group", "language_group", "language_task_group"):
+        def label(sample):
+            if field == "language_task_group":
+                language = sample.get("language_group")
+                task = sample.get("task_group")
+                return (language, task) if language and task else None
+            return sample.get(field)
+
+        groups = {label(sample) for _, sample in positioned
+                  if label(sample) is not None}
+        regressed = sum(
+            any(position in measured_regression_positions
+                for position, sample in positioned if label(sample) == group)
+            for group in groups
+        )
+        strata[field] = {"count": len(groups), "regressed": regressed}
+    return strata
 
 
 def compare_reports(baseline, candidate):
@@ -411,28 +446,26 @@ def compare_reports(baseline, candidate):
     if (not base_score["reviewed_speech_clips"]
             or not base_score["reviewed_silence_clips"]):
         raise ValueError("comparison needs reviewed speech and silence controls")
-    measured_regression_positions = {
-        position for name, positions in regressions.items()
-        if name != "inference_median_seconds" for position in positions
+    # The benchmark intentionally allows clips the app discards before ASR.
+    # Preserve their model-only diagnostics, but do not fold their errors or
+    # silence false positives into the app-duration-gate-eligible comparison.
+    eligible_baseline = [sample for sample in baseline["samples"]
+                         if sample["passes_app_minimum_audio_duration"]]
+    eligible_candidate = [sample for sample in candidate["samples"]
+                          if sample["passes_app_minimum_audio_duration"]]
+    eligible_positions = {
+        position for position, sample in enumerate(baseline["samples"], 1)
+        if sample["passes_app_minimum_audio_duration"]
     }
-    strata = {}
-    for field in ("task_group", "language_group", "language_task_group"):
-        def label(sample):
-            if field == "language_task_group":
-                language = sample.get("language_group")
-                task = sample.get("task_group")
-                return (language, task) if language and task else None
-            return sample.get(field)
-
-        groups = sorted({label(sample) for sample in baseline["samples"]
-                         if label(sample) is not None})
-        regressed = 0
-        for group in groups:
-            if any(position in measured_regression_positions for position, sample
-                   in enumerate(baseline["samples"], 1)
-                   if label(sample) == group):
-                regressed += 1
-        strata[field] = {"count": len(groups), "regressed": regressed}
+    eligible_regressions = {
+        name: [position for position in positions
+               if position in eligible_positions]
+        for name, positions in regressions.items()
+    }
+    eligible_regressions = {
+        name: positions for name, positions in eligible_regressions.items()
+        if positions
+    }
     return {
         "baseline_ms": base_policy["min_silence_duration_ms"],
         "candidate_ms": candidate_policy["min_silence_duration_ms"],
@@ -440,10 +473,64 @@ def compare_reports(baseline, candidate):
         "baseline": base_score,
         "candidate": candidate_score,
         "regressions": regressions,
-        "strata": strata,
+        "strata": _regressed_strata(baseline["samples"], regressions),
+        "app_eligible": {
+            "baseline": _score(eligible_baseline),
+            "candidate": _score(eligible_candidate),
+            "regressions": eligible_regressions,
+            "strata": _regressed_strata(
+                baseline["samples"], eligible_regressions,
+                app_eligible_only=True),
+            "vad_retention": _vad_retention_diagnostics(
+                baseline["samples"], candidate["samples"],
+                app_eligible_only=True),
+        },
         "vad_retention": _vad_retention_diagnostics(
             baseline["samples"], candidate["samples"]),
     }
+
+
+_PRINTED_SCORE_FIELDS = (
+    "trial_word_errors", "trial_reference_words", "trial_wer",
+    "error_free_trials",
+    "worst_deletion_run", "first_word_failures", "final_word_failures",
+    "vad_rejections", "vad_missing", "silence_false_positives",
+    "inference_median_seconds",
+)
+
+
+def _print_scores(before, after, *, prefix=""):
+    for key in _PRINTED_SCORE_FIELDS:
+        old = before[key]
+        new = after[key]
+        if key == "inference_median_seconds" and old is not None:
+            old, new = "%.3fs" % old, "%.3fs" % new
+        elif key == "trial_wer" and old is not None:
+            old, new = "%.2f%%" % (old * 100), "%.2f%%" % (new * 100)
+        print("%s%s: %s -> %s" % (
+            prefix, key, "not evaluated" if old is None else old,
+            "not evaluated" if new is None else new))
+
+
+def _print_regressions(regressions, strata, *, prefix=""):
+    for key, indexes in sorted(regressions.items()):
+        print("%s%s worsened: %d clips (positions %s)" % (
+            prefix, key, len(indexes), ",".join(map(str, indexes))))
+    for key, item in strata.items():
+        print("%s%s strata with any measured quality or language-ID regression: %d/%d" % (
+            prefix, key, item["regressed"], item["count"]))
+
+
+def _print_vad_retention(diagnostics, *, prefix=""):
+    for kind, counts in diagnostics.items():
+        print("%sVAD-retained duration on reviewed %s: %d lower, %d higher, "
+              "%d unchanged, %d unmeasured (median per clip)" % (
+                  prefix, kind, len(counts["lower"]), len(counts["higher"]),
+                  counts["unchanged"], len(counts["unmeasured"])))
+        for direction in ("lower", "higher", "unmeasured"):
+            if counts[direction]:
+                print("  %s positions: %s" % (
+                    direction, ",".join(map(str, counts[direction]))))
 
 
 def main():
@@ -469,21 +556,9 @@ def main():
         result["baseline"]["reviewed_silence_clips"]))
     if result["baseline"]["below_app_gate_clips"]:
         print("Model-only clips below the app duration gate: %d; included in "
-              "scores, not product delivery evidence" % (
+              "the all-clips scores below, not product delivery evidence" % (
                   result["baseline"]["below_app_gate_clips"]))
-    for key in ("trial_word_errors", "trial_wer", "error_free_trials",
-                "worst_deletion_run",
-                "first_word_failures", "final_word_failures", "vad_rejections",
-                "vad_missing", "silence_false_positives",
-                "inference_median_seconds"):
-        before = result["baseline"][key]
-        after = result["candidate"][key]
-        if key == "inference_median_seconds":
-            before, after = "%.3fs" % before, "%.3fs" % after
-        elif key == "trial_wer" and before is not None:
-            before, after = "%.2f%%" % (before * 100), "%.2f%%" % (after * 100)
-        print("%s: %s -> %s" % (
-            key, before, after))
+    _print_scores(result["baseline"], result["candidate"])
     if result["baseline"]["language_id_clips"]:
         print("Reviewed automatic language identification: %d clips" % (
             result["baseline"]["language_id_clips"]))
@@ -494,21 +569,32 @@ def main():
     elif baseline["model"] == "turbo" and baseline["requested_language"] == "auto":
         print("Automatic language identification not evaluated: no reviewed "
               "speech clips with comparable language labels")
-    for kind, counts in result["vad_retention"].items():
-        print("VAD-retained duration on reviewed %s: %d lower, %d higher, "
-              "%d unchanged, %d unmeasured (median per clip)" % (
-                  kind, len(counts["lower"]), len(counts["higher"]),
-                  counts["unchanged"], len(counts["unmeasured"])))
-        for direction in ("lower", "higher", "unmeasured"):
-            if counts[direction]:
-                print("  %s positions: %s" % (
-                    direction, ",".join(map(str, counts[direction]))))
-    for key, indexes in sorted(result["regressions"].items()):
-        print("%s worsened: %d clips (positions %s)" % (
-            key, len(indexes), ",".join(map(str, indexes))))
-    for key, item in result["strata"].items():
-        print("%s strata with any measured quality or language-ID regression: %d/%d" % (
-            key, item["regressed"], item["count"]))
+    _print_vad_retention(result["vad_retention"])
+    _print_regressions(result["regressions"], result["strata"])
+    if result["baseline"]["below_app_gate_clips"]:
+        eligible = result["app_eligible"]
+        before = eligible["baseline"]
+        after = eligible["candidate"]
+        print("App-duration-gate-eligible subset: %d clips; %d reviewed speech, "
+              "%d reviewed silence (still model-only, not native delivery)" % (
+                  before["sample_count"], before["reviewed_speech_clips"],
+                  before["reviewed_silence_clips"]))
+        if not before["reviewed_speech_clips"] or not before["reviewed_silence_clips"]:
+            print("App-eligible quality comparison incomplete: reviewed speech "
+                  "and silence controls must both pass the duration gate")
+        _print_scores(before, after, prefix="app_eligible_")
+        if before["language_id_clips"]:
+            for key in ("language_id_matched", "language_id_mismatched",
+                        "language_id_missing", "language_id_vad_rejected"):
+                print("app_eligible_%s: %d -> %d" % (
+                    key, before[key], after[key]))
+        elif baseline["model"] == "turbo" and baseline["requested_language"] == "auto":
+            print("App-eligible automatic language identification not evaluated: "
+                  "no reviewed eligible speech clips with comparable labels")
+        _print_vad_retention(eligible["vad_retention"],
+                             prefix="App-eligible ")
+        _print_regressions(eligible["regressions"], eligible["strata"],
+                           prefix="App-eligible ")
     print("VAD-retained duration is not acoustic speech recall or a quality "
           "verdict. Not a pass/fail result; review individual private reports, "
           "audio, thermal load, and native dictation before a policy change.")

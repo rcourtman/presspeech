@@ -141,9 +141,13 @@ tests or user-demand data. The current [Presspeech release list](https://github.
 still names macOS 0.3.8 and Windows 0.1.12 as published, so the inherited-token,
 routing, and telemetry controls described for 0.3.9/0.1.13 must not be presented
 as shipped. Keep the exact-version wait guidance beside download choices and
-refresh it only when the corrected model-download paths are actually published;
-the existing warnings already do this, so this is a release-readiness gate,
-not a reason to add more feature or reassurance copy.
+refresh it only when the corrected model-download paths are actually published.
+The checked-in install guides carry that guidance, but the standalone
+published release entries still omit their first-launch privacy decisions. An
+authorized release maintainer needs to correct those live entries. The bounded
+[release-entry draft](marketing/RELEASE_ENTRY_CORRECTIONS.md) is ready for
+review; editing source notes alone cannot do it. This is a publication gate,
+not a reason to add features or broader reassurance copy.
 
 Live-at-cursor speech is a distinct adjacent workflow, not yet a Presspeech
 priority. Superscribe Lite's launch page markets words appearing in the target
@@ -326,10 +330,13 @@ differs from the usual layout or helps explain a result, using its public name
 and never typed content. This improves comparability without expanding the
 protocol or inferring a new product requirement.
 
-Feedback intake is currently a measurement limitation: on 23 September,
-GitHub's [Presspeech issue list](https://github.com/rcourtman/presspeech/issues)
+Feedback intake is currently a measurement limitation: as rechecked on 24
+September, GitHub's [Presspeech issue list](https://github.com/rcourtman/presspeech/issues)
 shows issue creation restricted (and four open issues). New reports therefore
 cannot be treated as evidence of low demand or few compatibility failures.
+The live macOS 0.3.8 release entry still invites compatibility reports without
+explaining this restriction; its reporting handoff needs the same authorized
+release-page correction noted above.
 The local compatibility worksheet preserves aggregate counts without sending
 them; if a comparable open report accepts comments, users can add their result
 there, otherwise they should keep it privately and retry when intake returns.
