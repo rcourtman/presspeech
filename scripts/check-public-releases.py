@@ -12,7 +12,7 @@ Use ``--github-api-via-gh`` when a repository-scoped gh broker holds the API
 credentials; checksum sidecars still download over public HTTPS.
 With ``--check-release-notes``, also compare the latest public macOS and
 Windows release descriptions with their tracked notes and check that the two
-published builds with known model-download risks carry their disclosure on
+published builds with known first-use risks carry their disclosure on
 their own release pages. The macOS 0.3.8 compatibility-report invitation also
 needs a support-route handoff while new issue creation is restricted.
 ``--notes-only`` runs just that read-only audit,
@@ -64,6 +64,8 @@ KNOWN_DISCLOSURE_MARKERS = {
         "wait",
         "0.3.9",
         "privacy.html#network-calls",
+        "universal clipboard",
+        "privacy.html#operating-system-clipboard-services",
     ),
     "windows-v0.1.12": (
         ("before opening", "before launching"),
@@ -78,6 +80,12 @@ KNOWN_DISCLOSURE_MARKERS = {
         ("checked by default", "checked initially"),
         "finish",
         "windows.html#model-download-privacy",
+        "automatic local readiness check",
+        "start presspeech with windows",
+        "selected by default",
+        "clipboard history",
+        "cloud clipboard",
+        "privacy.html#operating-system-clipboard-services",
     ),
 }
 
@@ -338,24 +346,24 @@ def release_note_parity_errors(
 
 
 def known_release_disclosure_errors(releases: object) -> list[str]:
-    """Spot missing decisions on the exact public builds with known download risks.
+    """Spot missing decisions on exact public builds with known first-use risks.
 
     This never treats a matching tracked note as proof that the public wording
     is sufficient. Marker presence still requires human review of the actual
     rendered page, including whether its links and advice make sense.
     """
     if not isinstance(releases, list):
-        return ["public release list is missing; cannot audit model-download disclosures"]
+        return ["public release list is missing; cannot audit first-use disclosures"]
     errors: list[str] = []
     for tag, markers in KNOWN_DISCLOSURE_MARKERS.items():
         matching = [release for release in releases if isinstance(release, dict)
                     and release.get("tag_name") == tag and release.get("draft") is False]
         if len(matching) != 1:
-            errors.append(f"{tag} public release entry is missing or duplicated; cannot audit its disclosure")
+            errors.append(f"{tag} public release entry is missing or duplicated; cannot audit its first-use disclosure")
             continue
         body = matching[0].get("body")
         if not isinstance(body, str) or not body.strip():
-            errors.append(f"{tag} has no public release notes; cannot verify its model-download disclosure")
+            errors.append(f"{tag} has no public release notes; cannot verify its first-use disclosure")
             continue
         # GitHub Markdown often wraps a lead notice in blockquotes and lines.
         normalized = re.sub(r"\s+", " ", re.sub(r"(?m)^\s*>\s?", "", body).casefold())
@@ -366,7 +374,7 @@ def known_release_disclosure_errors(releases: object) -> list[str]:
                 missing.append(" / ".join(alternatives))
         if missing:
             errors.append(
-                f"{tag} public release notes lack model-download disclosure markers: "
+                f"{tag} public release notes lack first-use disclosure markers: "
                 + ", ".join(missing)
             )
     return errors
@@ -756,14 +764,20 @@ def run_self_test() -> None:
         {"tag_name": "v0.3.8", "draft": False, "body": (
             "> Before opening macOS 0.3.8: a missing model download may include a\n"
             "> Hugging Face token. If unsure, wait until 0.3.9. See\n"
-            "> https://rcourtman.github.io/presspeech/privacy.html#network-calls"
+            "> https://rcourtman.github.io/presspeech/privacy.html#network-calls. "
+            "Universal Clipboard may share text; see "
+            "https://rcourtman.github.io/presspeech/privacy.html#operating-system-clipboard-services"
         )},
         {"tag_name": "windows-v0.1.12", "draft": False, "body": (
             "Before launching Windows 0.1.12: model downloads may send Hugging Face "
             "telemetry and a token; custom routing can change the destination. "
             "If unsure, wait until 0.1.13. Launch Presspeech is checked by default; "
             "clear it before Finish if waiting. See "
-            "https://rcourtman.github.io/presspeech/windows.html#model-download-privacy"
+            "https://rcourtman.github.io/presspeech/windows.html#model-download-privacy. "
+            "Setup opens the microphone for an automatic local readiness check; "
+            "Start Presspeech with Windows is selected by default. "
+            "Clipboard History or Cloud Clipboard may retain text; see "
+            "https://rcourtman.github.io/presspeech/privacy.html#operating-system-clipboard-services"
         )},
     ]
     if known_release_disclosure_errors(disclosed):
@@ -779,6 +793,15 @@ def run_self_test() -> None:
     if not any("checked by default / checked initially" in error
                for error in known_release_disclosure_errors(missing_launch_warning)):
         raise ReleaseCheckError("self-test missed the default-on installer launch checkbox")
+    missing_clipboard = json.loads(json.dumps(disclosed))
+    missing_clipboard[0]["body"] = missing_clipboard[0]["body"].replace("Universal Clipboard", "clipboard")
+    if not any("universal clipboard" in error for error in known_release_disclosure_errors(missing_clipboard)):
+        raise ReleaseCheckError("self-test missed the macOS clipboard boundary")
+    missing_microphone = json.loads(json.dumps(disclosed))
+    missing_microphone[1]["body"] = missing_microphone[1]["body"].replace("automatic local readiness check", "check")
+    if not any("automatic local readiness check" in error for error in known_release_disclosure_errors(missing_microphone)):
+        raise ReleaseCheckError("self-test missed the Windows automatic microphone check")
+
     if not any("v0.3.8" in error for error in known_release_disclosure_errors(disclosed[1:])):
         raise ReleaseCheckError("self-test missed an unauditable archived macOS release")
 
@@ -944,7 +967,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help="run without network access")
     parser.add_argument("--require-published", action="store_true", help="block deployment while configured downloads are not public yet")
-    parser.add_argument("--check-release-notes", action="store_true", help="audit public release-note parity, known model-download disclosures, and the 0.3.8 reporting handoff")
+    parser.add_argument("--check-release-notes", action="store_true", help="audit public release-note parity, known first-use disclosures, and the 0.3.8 reporting handoff")
     parser.add_argument("--notes-only", action="store_true", help="audit only public release notes and known disclosures; skip package and candidate-metadata checks")
     parser.add_argument("--github-api-via-gh", action="store_true", help="read API JSON through repo-scoped gh api without exporting credentials; checksum downloads remain public HTTPS")
     args = parser.parse_args()

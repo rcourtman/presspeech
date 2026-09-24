@@ -4,6 +4,7 @@
 This is a deliberately small pre-publication guard, not a semantic privacy
 review. It catches a missing or buried model-download decision before a user
 can reach an asset directly from GitHub Releases without visiting the site.
+For published builds with known first-use caveats, it checks their lead too.
 """
 
 from __future__ import annotations
@@ -28,11 +29,16 @@ VERSION = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\Z")
 LEAD_CHARACTERS = 1800
 ROOT = Path(__file__).resolve().parents[1]
 KNOWN_RISKS = {
-    ("macos", "0.3.8"): ("hugging face token", "wait", "proxy"),
+    ("macos", "0.3.8"): ("hugging face token", "wait", "proxy", "universal clipboard"),
     ("macos", "0.3.9"): ("token", "proxy"),
-    ("windows", "0.1.12"): ("hugging face", "telemetry", "token", "routing", "wait", "proxy"),
+    ("windows", "0.1.12"): (
+        "hugging face", "telemetry", "token", "routing", "wait", "proxy",
+        "automatic local readiness check", "start presspeech with windows",
+        "selected by default", "clipboard history", "cloud clipboard",
+    ),
     ("windows", "0.1.13"): ("telemetry", "token", "proxy"),
 }
+CLIPBOARD_GUIDE = "https://rcourtman.github.io/presspeech/privacy.html#operating-system-clipboard-services"
 
 
 def entry_errors(platform: str, version: str, body: str) -> list[str]:
@@ -42,7 +48,8 @@ def entry_errors(platform: str, version: str, body: str) -> list[str]:
         raise ValueError(f"invalid release version: {version}")
     errors: list[str] = []
     lead = body[:LEAD_CHARACTERS]
-    prose = re.sub(r"https?://\S+", "", lead)
+    prose = re.sub(r"(?m)^\s*>\s?", "", lead)
+    prose = re.sub(r"https?://\S+", "", prose)
     # A previous version's warning must not satisfy this release's gate.
     if not re.search(rf"(?<!\d){re.escape(version)}(?!\d)", lead):
         errors.append("lead does not identify the exact release version")
@@ -58,6 +65,8 @@ def entry_errors(platform: str, version: str, body: str) -> list[str]:
     missing_risks = [term for term in KNOWN_RISKS.get((platform, version), ()) if term not in normalized]
     if missing_risks:
         errors.append("lead omits known version-specific caveats: " + ", ".join(missing_risks))
+    if (platform, version) in {("macos", "0.3.8"), ("windows", "0.1.12")} and CLIPBOARD_GUIDE not in lead:
+        errors.append("lead lacks the published build's clipboard-services guide link")
     return errors
 
 
@@ -87,6 +96,28 @@ def run_self_test() -> None:
     assert entry_errors("windows", "0.1.13", windows.replace("9.8.7", "0.1.13")) == [
         "lead omits known version-specific caveats: telemetry, token, proxy"
     ]
+    known_mac = (
+        mac.replace("9.8.7", "0.3.8")
+        + "A Hugging Face token may be sent via a proxy; wait if unsure. "
+        + "Universal Clipboard may share dictated text. " + CLIPBOARD_GUIDE
+    )
+    known_windows = (
+        windows.replace("9.8.7", "0.1.12")
+        + "Hugging Face telemetry and a token may use custom routing or a proxy; wait if unsure. "
+        + "Setup opens the microphone for an automatic local readiness check; "
+        + "Start Presspeech with Windows is selected by default. "
+        + "Clipboard History or Cloud Clipboard may retain dictated text. " + CLIPBOARD_GUIDE
+    )
+    assert not entry_errors("macos", "0.3.8", known_mac)
+    assert not entry_errors("windows", "0.1.12", known_windows)
+    wrapped_windows = known_windows.replace("automatic local readiness check", "automatic\n> local readiness check")
+    wrapped_windows = wrapped_windows.replace("Cloud Clipboard", "Cloud\n> Clipboard")
+    assert not entry_errors("windows", "0.1.12", wrapped_windows)
+    assert any("universal clipboard" in error for error in entry_errors(
+        "macos", "0.3.8", known_mac.replace("Universal Clipboard", "clipboard")))
+    assert any("clipboard-services" in error for error in entry_errors(
+        "windows", "0.1.12", known_windows.replace(CLIPBOARD_GUIDE, "")))
+
     for invalid in ("09.8.7", "9.8", "9.8.7-rc1"):
         try:
             entry_errors("macos", invalid, mac)

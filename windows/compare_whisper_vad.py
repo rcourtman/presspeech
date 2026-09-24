@@ -125,6 +125,58 @@ def _validate_sample(sample):
                 raise ValueError("inconsistent silence false positives")
 
 
+def _validate_language_evidence(report, sample):
+    """Do not mistake absent or inconsistent auto-language data for a pass."""
+    runs = sample["runs"]
+    detected = sample.get("detected_languages")
+    if detected is not None:
+        if not isinstance(detected, dict) or any(
+                not isinstance(code, str)
+                or not re.fullmatch(r"[a-z]{2,3}", code)
+                or _count(count, "detected language count", minimum=1) > runs
+                for code, count in detected.items()):
+            raise ValueError("invalid detected language counts")
+        if sum(detected.values()) > runs:
+            raise ValueError("inconsistent detected language counts")
+
+    label = sample.get("language_group")
+    comparable = (report["model"] == "turbo"
+                  and report["requested_language"] == "auto"
+                  and sample.get("accuracy") is not None
+                  and isinstance(label, str)
+                  and re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", label))
+    identification = sample.get("language_identification")
+    if not comparable:
+        if identification is not None:
+            raise ValueError("unexpected language identification evidence")
+        return
+    if not isinstance(identification, dict):
+        raise ValueError("missing reviewed language identification evidence")
+    expected = label.split("-", 1)[0]
+    if identification.get("expected_language") != expected:
+        raise ValueError("inconsistent expected language")
+    if _count(identification.get("trials"), "language trials") != runs:
+        raise ValueError("inconsistent language trials")
+    rejected = _count(identification.get("vad_rejected_trials"),
+                      "language VAD rejections")
+    observed = _count(identification.get("observed_trials"),
+                      "observed language trials")
+    matched = _count(identification.get("matched_trials"),
+                     "matched language trials")
+    mismatched = _count(identification.get("mismatched_trials"),
+                        "mismatched language trials")
+    missing = _count(identification.get("missing_trials"),
+                     "missing language trials")
+    if (rejected + observed + missing != runs
+            or matched + mismatched != observed
+            or rejected != sample["speech_detection"]["rejected_trials"]
+            or observed != sum((detected or {}).values())
+            or matched != (detected or {}).get(expected, 0)
+            or not isinstance(identification.get("coverage_complete"), bool)
+            or identification["coverage_complete"] != (rejected == 0 and missing == 0)):
+        raise ValueError("inconsistent language identification evidence")
+
+
 def _validate_report(report):
     if not isinstance(report, dict) or report.get("benchmark_version") != (
             _BENCHMARK_VERSION):
@@ -176,6 +228,7 @@ def _validate_report(report):
     runs = samples[0].get("runs") if isinstance(samples[0], dict) else None
     for sample in samples:
         _validate_sample(sample)
+        _validate_language_evidence(report, sample)
         if sample["runs"] != runs:
             raise ValueError("inconsistent report run counts")
 
@@ -192,6 +245,8 @@ def _sample_kind(sample):
 def _score(samples):
     speech = [item for item in samples if _sample_kind(item) == "speech"]
     silence = [item for item in samples if _sample_kind(item) == "silence"]
+    language_ids = [item["language_identification"] for item in speech
+                    if isinstance(item.get("language_identification"), dict)]
     words = sum(item["accuracy"]["reference_words"] * item["runs"]
                 for item in speech)
     errors = sum(sum(item["trial_accuracy"]["all_word_errors"])
@@ -221,6 +276,15 @@ def _score(samples):
                               for item in speech),
         "vad_missing": sum(item["speech_detection"]["missing_trials"]
                            for item in speech),
+        "language_id_clips": len(language_ids),
+        "language_id_matched": sum(item["matched_trials"]
+                                   for item in language_ids),
+        "language_id_mismatched": sum(item["mismatched_trials"]
+                                      for item in language_ids),
+        "language_id_missing": sum(item["missing_trials"]
+                                   for item in language_ids),
+        "language_id_vad_rejected": sum(item["vad_rejected_trials"]
+                                        for item in language_ids),
         "silence_false_positives": sum(item["silence"][
             "false_positive_trials"] for item in silence),
         "inference_median_seconds": statistics.median(latency),
@@ -230,7 +294,7 @@ def _score(samples):
 def _worsened(base, candidate):
     kind = _sample_kind(base)
     if kind == "speech":
-        return {
+        worsened = {
             "word_errors": sum(candidate["trial_accuracy"]["all_word_errors"])
             > sum(base["trial_accuracy"]["all_word_errors"]),
             "error_free_trials": sum(
@@ -252,6 +316,18 @@ def _worsened(base, candidate):
             "vad_missing": candidate["speech_detection"]["missing_trials"]
             > base["speech_detection"]["missing_trials"],
         }
+        if base.get("language_identification") is not None:
+            before = base["language_identification"]
+            after = candidate["language_identification"]
+            worsened.update({
+                "language_id_matched": after["matched_trials"]
+                < before["matched_trials"],
+                "language_id_mismatched": after["mismatched_trials"]
+                > before["mismatched_trials"],
+                "language_id_missing": after["missing_trials"]
+                > before["missing_trials"],
+            })
+        return worsened
     if kind == "silence":
         return {"silence_false_positives": candidate["silence"][
             "false_positive_trials"] > base["silence"]["false_positive_trials"]}
@@ -302,7 +378,7 @@ def compare_reports(baseline, candidate):
     if (not base_score["reviewed_speech_clips"]
             or not base_score["reviewed_silence_clips"]):
         raise ValueError("comparison needs reviewed speech and silence controls")
-    quality_regression_positions = {
+    measured_regression_positions = {
         position for name, positions in regressions.items()
         if name != "inference_median_seconds" for position in positions
     }
@@ -319,7 +395,7 @@ def compare_reports(baseline, candidate):
                          if label(sample) is not None})
         regressed = 0
         for group in groups:
-            if any(position in quality_regression_positions for position, sample
+            if any(position in measured_regression_positions for position, sample
                    in enumerate(baseline["samples"], 1)
                    if label(sample) == group):
                 regressed += 1
@@ -373,11 +449,21 @@ def main():
             before, after = "%.2f%%" % (before * 100), "%.2f%%" % (after * 100)
         print("%s: %s -> %s" % (
             key, before, after))
+    if result["baseline"]["language_id_clips"]:
+        print("Reviewed automatic language identification: %d clips" % (
+            result["baseline"]["language_id_clips"]))
+        for key in ("language_id_matched", "language_id_mismatched",
+                    "language_id_missing", "language_id_vad_rejected"):
+            print("%s: %d -> %d" % (
+                key, result["baseline"][key], result["candidate"][key]))
+    elif baseline["model"] == "turbo" and baseline["requested_language"] == "auto":
+        print("Automatic language identification not evaluated: no reviewed "
+              "speech clips with comparable language labels")
     for key, indexes in sorted(result["regressions"].items()):
         print("%s worsened: %d clips (positions %s)" % (
             key, len(indexes), ",".join(map(str, indexes))))
     for key, item in result["strata"].items():
-        print("%s strata with any measured quality regression: %d/%d" % (
+        print("%s strata with any measured quality or language-ID regression: %d/%d" % (
             key, item["regressed"], item["count"]))
     print("Not a pass/fail result; review individual private reports, audio, "
           "thermal load, and native dictation behavior before a policy change.")

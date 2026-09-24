@@ -19,9 +19,17 @@ After a live correction, reconcile the tracked notes and verify the rendered
 page from a signed-out browser. Do not imply the upcoming 0.3.9 or 0.1.13
 controls are present in these downloads.
 
+The tracked `swift/release-notes/v0.3.8.md` and
+`windows/release-notes/0.1.12.md` now include candidate first-use notices for
+model requests, clipboard services, and (on Windows) the automatic microphone
+check and sign-in startup default. They are **not** evidence of a public
+correction. Review the complete tracked bodies alongside the live notes before
+using them for an authorized release-page edit; do not overwrite release
+history with only the excerpts below.
+
 Run `python3 scripts/check-public-releases.py --notes-only` before and after
 any authorized correction. It audits public/tracked-note parity and flags
-missing disclosure markers on both archived release pages and the absent
+missing first-use disclosure markers on both archived release pages and the absent
 reporting handoff on macOS 0.3.8, without modifying GitHub. A passing marker
 check is only a presence check; review the rendered warnings, current support
 route, version-specific decisions, and links manually. The audit is expected

@@ -78,6 +78,23 @@ def reports():
     return base, candidate
 
 
+def auto_language_reports():
+    base, candidate = reports()
+    for report in (base, candidate):
+        report["model"] = "turbo"
+        report["requested_language"] = "auto"
+        speech = report["samples"][0]
+        speech["detected_languages"] = {"en": 2}
+        speech["language_identification"] = {
+            "expected_language": "en", "trials": 2,
+            "vad_rejected_trials": 0, "observed_trials": 2,
+            "matched_trials": 2, "mismatched_trials": 0,
+            "missing_trials": 0, "coverage_complete": True,
+        }
+        report["samples"][1]["detected_languages"] = None
+    return base, candidate
+
+
 class CompareWhisperVadTests(unittest.TestCase):
     def test_paired_comparison_exposes_regressions_without_private_content(self):
         base, candidate = reports()
@@ -116,6 +133,88 @@ class CompareWhisperVadTests(unittest.TestCase):
             "count": 1, "regressed": 1,
         })
         self.assertNotIn("private", repr(result))
+
+    def test_auto_language_regression_is_visible_when_wer_is_unchanged(self):
+        base, candidate = auto_language_reports()
+        speech = candidate["samples"][0]
+        speech["detected_languages"] = {"en": 1, "fr": 1}
+        speech["language_identification"].update(
+            matched_trials=1, mismatched_trials=1)
+
+        result = compare.compare_reports(base, candidate)
+
+        self.assertEqual(result["baseline"]["trial_wer"],
+                         result["candidate"]["trial_wer"])
+        self.assertEqual(result["baseline"]["language_id_matched"], 2)
+        self.assertEqual(result["candidate"]["language_id_matched"], 1)
+        self.assertEqual(result["candidate"]["language_id_mismatched"], 1)
+        self.assertEqual(result["regressions"]["language_id_mismatched"], [1])
+        self.assertEqual(result["regressions"]["language_id_matched"], [1])
+        self.assertEqual(result["strata"]["language_task_group"], {
+            "count": 1, "regressed": 1,
+        })
+        self.assertNotIn("private", repr(result))
+        self.assertNotIn("'fr'", repr(result))
+
+    def test_auto_language_missing_or_vad_rejected_is_not_a_match(self):
+        base, candidate = auto_language_reports()
+        speech = candidate["samples"][0]
+        speech["detected_languages"] = {"en": 1}
+        speech["language_identification"].update(
+            observed_trials=1, matched_trials=1, missing_trials=1,
+            coverage_complete=False)
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["candidate"]["language_id_missing"], 1)
+        self.assertEqual(result["regressions"]["language_id_missing"], [1])
+
+        speech["language_identification"].update(
+            missing_trials=0, vad_rejected_trials=1)
+        speech["speech_detection"].update(
+            rejected_trials=1, all_seconds=[1.5, 0.0])
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["candidate"]["language_id_vad_rejected"], 1)
+        self.assertEqual(result["regressions"]["vad_rejections"], [1])
+
+    def test_auto_language_evidence_must_be_complete_and_consistent(self):
+        mutations = (
+            lambda speech: speech.pop("language_identification"),
+            lambda speech: speech["language_identification"].update(
+                expected_language="pl"),
+            lambda speech: speech["language_identification"].update(
+                mismatched_trials=1),
+            lambda speech: speech["language_identification"].update(
+                coverage_complete=False),
+            lambda speech: speech.update(detected_languages={"en": 1}),
+            lambda speech: speech.update(detected_languages={"en": 1, "EN": 1}),
+            lambda speech: speech["language_identification"].update(
+                vad_rejected_trials=1, missing_trials=0, observed_trials=1,
+                matched_trials=1, coverage_complete=False),
+        )
+        for mutate in mutations:
+            base, candidate = auto_language_reports()
+            mutate(candidate["samples"][0])
+            with self.subTest(mutation=mutate), self.assertRaises(ValueError):
+                compare.compare_reports(base, candidate)
+
+    def test_unlabelled_auto_language_is_explicitly_not_evaluated(self):
+        base, candidate = auto_language_reports()
+        for report in (base, candidate):
+            speech = report["samples"][0]
+            speech["language_group"] = None
+            speech.pop("language_identification")
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["baseline"]["language_id_clips"], 0)
+        with tempfile.TemporaryDirectory() as root:
+            paths = [os.path.join(root, name) for name in ("base.json", "new.json")]
+            for path, report in zip(paths, (base, candidate)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", ["compare", *paths]), \
+                    redirect_stdout(output):
+                compare.main()
+            self.assertIn("not evaluated: no reviewed speech clips",
+                          output.getvalue())
 
     def test_refuses_noncomparable_inputs_settings_and_review_scope(self):
         for field, value in (
@@ -278,6 +377,28 @@ class CompareWhisperVadTests(unittest.TestCase):
                 compare.main()
             self.assertEqual(exit_info.exception.code, 2)
             self.assertNotIn(root, error.getvalue())
+
+    def test_auto_language_cli_prints_counts_not_codes_or_private_text(self):
+        base, candidate = auto_language_reports()
+        candidate["samples"][0]["detected_languages"] = {"en": 1, "fr": 1}
+        candidate["samples"][0]["language_identification"].update(
+            matched_trials=1, mismatched_trials=1)
+        with tempfile.TemporaryDirectory() as root:
+            paths = [os.path.join(root, name) for name in ("base.json", "new.json")]
+            for path, report in zip(paths, (base, candidate)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", ["compare", *paths]), \
+                    redirect_stdout(output):
+                compare.main()
+            message = output.getvalue()
+            self.assertIn("language_id_mismatched: 0 -> 1", message)
+            self.assertIn("language_id_mismatched worsened: 1 clips", message)
+            for private in ("private speech must not print",
+                            "private-path-must-not-print", "en-GB",
+                            "fr: 1", root):
+                self.assertNotIn(private, message)
 
 
 if __name__ == "__main__":

@@ -234,14 +234,18 @@ precision, recorded environment, run count, per-clip review scope, or any VAD
 setting other than the minimum silence duration. It compares all-trial WER,
 error-free speech-trial counts, longest deletion, first/final-word failures,
 VAD rejection and missing-duration counts, reviewed-silence false positives,
-and inference median. It also counts
+and inference median. An error-free-trial count can fall while total WER
+stays unchanged or the worst trial improves; trial positions in separate
+benchmark runs are not paired observations, so this does not prove a policy
+effect. For reviewed, comparably labelled Whisper-turbo automatic-language
+clips, it checks language-ID counts against detected-code counts and reports
+matches, mismatches, missing codes, and VAD-rejected trials. A new mismatch or
+missing code is visible even when WER does not change; a wrong language code
+is a diagnostic, not itself a word error. If no reviewed clips have comparable
+language labels, the helper says language ID was not evaluated. It counts
 anonymous clip positions with worsened metrics and task/language/intersection
-strata containing a clip-level quality regression, even if pooled errors improve.
-An error-free-trial count can fall while total WER stays unchanged or the worst
-trial improves; the helper flags this loss of clean-decode consistency. Trial
-positions in separate benchmark runs are not paired observations, so this count
-does not identify which individual run worsened or prove a policy effect.
-It does **not** print IDs, paths, references,
+strata containing a clip-level quality or language-ID regression, even if
+pooled errors improve. It does **not** print IDs, paths, references,
 transcripts, or group labels. Sub-250 ms clips remain in model scores and are
 counted separately as below the app's transcription gate, not product delivery
 evidence. The script does not certify the input digest or
