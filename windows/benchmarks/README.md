@@ -94,6 +94,13 @@ human-marked speech endpoint. Older reports do not have these fields; compare
 matching benchmark versions and inspect the order strata before interpreting
 the deltas. Version 17 does not change product recognition.
 
+Version 18 adds paired recorded-tail **final-word loss and recovery** counts,
+also split by decode order, plus full and trimmed final-word failure counts.
+A crop can correct an earlier word while losing the final one, leaving total
+word errors unchanged; pooled WER alone would miss that boundary regression.
+Compare version 18 reports for these fields. This is benchmark-only and does
+not change capture or recognition.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -258,8 +265,13 @@ full captured input remains the product baseline for ordinary WER, boundary
 retention, and latency. The JSON includes full/trimmed transcripts, word errors,
 blank transitions in **both** directions, inference times, signed paired
 trimmed-minus-full inference deltas, and counterbalanced execution order for
-every pair. The corpus summary keeps both harm directions and latency deltas
+every pair. It also marks whether either variant retained the reviewed final
+word and counts newly lost and recovered final words separately. The corpus
+summary keeps both harm directions, final-word transitions, and latency deltas
 stratified by decode order; compare these strata as well as pooled medians.
+These final-word flags compare the last normalized transcript token with the
+reference's last token; they are diagnostic text matches, not acoustic proof
+that the final spoken sound survived a crop (especially for repeated words).
 The cropped variant is a diagnostic only: an
 improvement does not show that an automatic trim can locate this human-marked
 boundary, and a mistaken crop can delete a final word. Neither the manifest nor

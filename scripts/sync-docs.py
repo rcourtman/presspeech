@@ -795,7 +795,11 @@ DELIVERY_BOUNDARY_GUIDANCE = {
 # candidate intentionally does not replace a known-invalid target's previous
 # clipboard item. Generic "already copied" advice could paste unrelated text.
 WINDOWS_DELIVERY_RECOVERY_GUIDANCE = {
-    ROOT / "README.md": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
+    ROOT / "README.md": (
+        "published Windows 0.1.12", "copied at completion",
+        "only if the clipboard still holds it", "Upcoming Windows 0.1.13",
+        "Delivery Recovery",
+    ),
     DOCS / "windows.html": ("Published 0.1.12", "Upcoming 0.1.13", "Delivery Recovery"),
     DOCS / "faq.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "getting-started.html": ("Windows 0.1.12", "Transcript copied, not pasted", "only if it still holds the complete transcript"),

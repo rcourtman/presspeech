@@ -4,12 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Get Started with Presspeech - Your First Dictation</title>
-    <meta name="description" content="Install Presspeech on macOS or Windows, finish local model and permission setup, then test the hotkey with harmless words in the in-app scratchpad.">
+    <meta name="description" content="Decide before Presspeech's first model download, reach Ready, then test harmless dictation in the scratchpad and a disposable Mac or Windows text field.">
     <link rel="canonical" href="https://rcourtman.github.io/presspeech/getting-started.html">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
     <meta property="og:title" content="Get Started with Presspeech - Your First Dictation">
-    <meta property="og:description" content="One short path from install to a successful local dictation on macOS or Windows.">
+    <meta property="og:description" content="A version-aware path from first-launch decision to a safe, local dictation test on Mac or Windows.">
     <meta property="og:url" content="https://rcourtman.github.io/presspeech/getting-started.html">
     <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:image:type" content="image/png">
@@ -78,19 +78,19 @@
           <ol class="checkpoints" role="list">
             <li>
               <strong>I need to install</strong>
-              <span>Choose the <a href="install.html">macOS release</a> or the <a href="windows.html">Windows prerelease guide</a>, then return here.</span>
+              <span>Read the launch decision above, then choose the <a href="install.html">macOS release</a> or <a href="windows.html">Windows prerelease guide</a>. Downloading alone does not start a model request.</span>
             </li>
             <li>
               <strong>Installed, not Ready</strong>
-              <span><a href="#model-download-preflight">Check the first-launch decision above</a>, then continue to Finish Setup below. Wait for the local model before testing the hotkey.</span>
+              <span>If you chose to wait, do not launch it. Otherwise <a href="#finish-setup">finish setup</a> and wait for the local model to report Ready before testing the hotkey.</span>
             </li>
             <li>
               <strong>Ready, not tested</strong>
-              <span><a href="#private-test">Use Try Dictation</a>. Continue when your sentence appears in Presspeech's scratchpad.</span>
+              <span><a href="#private-test">Use Try Dictation</a> with harmless words. The scratchpad may use the clipboard; continue when the complete sentence appears.</span>
             </li>
             <li>
               <strong>In-app test passed</strong>
-              <span><a href="#first-app">Try TextEdit or Notepad</a>. If you see a copied notice, check the field and clipboard before pasting manually.</span>
+              <span><a href="#first-app">Try a blank TextEdit or Notepad field</a>. Check for one complete paste in that field; if you get a copied notice, <a href="#copied-notice-recovery">check before recovering</a>.</span>
             </li>
           </ol>
           <p class="quiet">If a step fails, stop there. Use its guidance below or match the visible status to the <a href="troubleshooting.html">recovery guide</a>.</p>
@@ -205,16 +205,16 @@
           <span class="section-eyebrow">Ready to use</span>
           <h2>Dictate into a familiar text field</h2>
           <p>Open a blank TextEdit document on macOS or Notepad on Windows, click in it, and repeat hold–speak–release without changing windows. Keep that field selected until dictation finishes; a window-level check does not reliably establish the identity of a field or browser tab. Press <strong>Escape</strong> to cancel an active recording.</p>
-          <p>Before trying another app, use a blank, disposable field that cannot submit or execute text. Dictate harmless words once, then check whether the complete text appeared exactly once or Presspeech showed a recovery notice. A successful scratchpad or TextEdit/Notepad test does not establish automatic-paste support in a different app.</p>
+          <p>In every new target app, start with a blank, disposable field that cannot submit or execute text. Dictate harmless words once. Count automatic paste as working only if the complete text appears exactly once in the intended field without a recovery notice. A successful scratchpad or TextEdit/Notepad test does not establish automatic-paste support in another app.</p>
           <div class="note warn"><p><strong>Keep the original field and browser tab selected until Presspeech finishes.</strong> A switch within the same window may paste into the newly focused place without a copied/manual-paste notice. If you changed focus, inspect the destination before retrying; use only disposable fields for a target-app test.</p></div>
-          <div class="note">
+          <div class="note" id="copied-notice-recovery">
             <p><strong>If Presspeech did not paste:</strong> check the intended field first; text may already be there. A macOS 0.3.8 copied notice or Windows 0.1.12's <strong>Transcript copied, not pasted</strong> means the finished transcript was copied at completion, not that the clipboard still holds it for manual paste. A later copy can replace it without changing the notice.</p>
             <p>If unsure, paste into another blank, disposable text field to check what is currently on the clipboard. Paste into your intended field only if it still holds the complete transcript; do not dictate the same text again before checking. On macOS, if the clipboard changed, use <strong>Copy Last Transcript</strong> when Recent Transcripts is enabled. Otherwise, do not paste the newer clipboard item as your dictation.</p>
             <p>This is recovery, not a successful automatic paste. It can happen in some Electron/Chromium apps on macOS 0.3.8 even when the window appears unchanged. On Windows, reopen an administrator-level target normally rather than elevating Presspeech.</p>
           </div>
           <div class="note warn"><p><strong>If macOS 0.3.8 reports “Couldn't paste”:</strong> inspect the field before retrying. An input error does not prove nothing arrived; text may be partial or duplicated. If text is missing or incomplete, remove any partial text before using <strong>Copy Last Transcript</strong> when offered to paste the complete transcript deliberately. If no recovery copy is available, correct or remove partial text before another recording. Do not use that target for important text until you have checked repeatable delivery with harmless phrases. See the <a href="troubleshooting.html#macos-paste">paste recovery guide</a>.</p></div>
           <div class="note warn"><p><strong>Command shells can run pasted text.</strong> <strong>Append newline</strong>, Windows <strong>newline</strong>, or spoken formatting can submit text. Dictate commands into Try Dictation or a text editor, review the exact text, then paste and run deliberately. See <a href="https://support.apple.com/en-gb/127377">Apple</a> and <a href="https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings">Windows</a> terminal guidance.</p></div>
-          <p>Before relying on a browser editor, Electron app, terminal, or remote session, run the <a href="app-compatibility.html">privacy-safe target-app check</a>. It tests automatic paste and clipboard recovery without publishing your words.</p>
+          <p>One disposable-field try is a smoke check, not proof of repeatable delivery. Before relying on a browser editor, Electron app, terminal, or remote session, use the <a href="app-compatibility.html">eight-attempt privacy-safe target-app check</a>. It separates automatic paste from manual recovery without publishing your words.</p>
         </div>
       </section>
 

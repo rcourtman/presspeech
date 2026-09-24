@@ -269,12 +269,19 @@ def paired_recorded_tail_metrics(reference, full, trimmed):
     """
     if not full or len(full) != len(trimmed):
         raise ValueError("recorded-tail probe needs matching non-empty trials")
-    if not _normalise_words(reference):
+    reference_words = _normalise_words(reference)
+    if not reference_words:
         raise ValueError("recorded-tail probe needs a scoreable reference")
+    final_word = reference_words[-1]
     pairs = []
     for full_text, trimmed_text in zip(full, trimmed):
         full_errors = accuracy_metrics(reference, full_text)["word_errors"]
         trimmed_errors = accuracy_metrics(reference, trimmed_text)["word_errors"]
+        full_words = _normalise_words(full_text)
+        trimmed_words = _normalise_words(trimmed_text)
+        full_kept_final = bool(full_words) and full_words[-1] == final_word
+        trimmed_kept_final = (
+            bool(trimmed_words) and trimmed_words[-1] == final_word)
         pairs.append({
             "full_transcript": full_text,
             "trimmed_transcript": trimmed_text,
@@ -284,6 +291,12 @@ def paired_recorded_tail_metrics(reference, full, trimmed):
                 bool(trimmed_text.strip()) and not full_text.strip()),
             "full_nonempty_to_trimmed_empty": (
                 bool(full_text.strip()) and not trimmed_text.strip()),
+            # A crop can lose the final word while fixing another word, leaving
+            # WER unchanged. Track the boundary independently of aggregate WER.
+            "full_kept_final_word": full_kept_final,
+            "trimmed_kept_final_word": trimmed_kept_final,
+            "final_word_lost": full_kept_final and not trimmed_kept_final,
+            "final_word_recovered": not full_kept_final and trimmed_kept_final,
         })
     return {
         "trial_count": len(pairs),
@@ -293,6 +306,14 @@ def paired_recorded_tail_metrics(reference, full, trimmed):
             pair["trimmed_nonempty_to_full_empty"] for pair in pairs),
         "full_nonempty_to_trimmed_empty_trial_count": sum(
             pair["full_nonempty_to_trimmed_empty"] for pair in pairs),
+        "full_final_word_failure_trial_count": sum(
+            not pair["full_kept_final_word"] for pair in pairs),
+        "trimmed_final_word_failure_trial_count": sum(
+            not pair["trimmed_kept_final_word"] for pair in pairs),
+        "final_word_lost_trial_count": sum(
+            pair["final_word_lost"] for pair in pairs),
+        "final_word_recovered_trial_count": sum(
+            pair["final_word_recovered"] for pair in pairs),
         "changed_text_trial_count": sum(
             _canonical_text(full_text) != _canonical_text(trimmed_text)
             for full_text, trimmed_text in zip(full, trimmed)),
@@ -323,6 +344,12 @@ def recorded_tail_order_breakdown(pairs, trial_order):
             "full_nonempty_to_trimmed_empty_trial_count": sum(
                 value == order and pair["full_nonempty_to_trimmed_empty"]
                 for pair, value in zip(pairs, trial_order)),
+            "final_word_lost_trial_count": sum(
+                value == order and pair["final_word_lost"]
+                for pair, value in zip(pairs, trial_order)),
+            "final_word_recovered_trial_count": sum(
+                value == order and pair["final_word_recovered"]
+                for pair, value in zip(pairs, trial_order)),
             "full_worsened_word_error_trial_count": sum(
                 value == order
                 and pair["full_word_errors"] > pair["trimmed_word_errors"]
@@ -348,6 +375,9 @@ def summarise_recorded_tail_probe(samples):
         "trial_count", "full_empty_trial_count", "trimmed_empty_trial_count",
         "trimmed_nonempty_to_full_empty_trial_count",
         "full_nonempty_to_trimmed_empty_trial_count", "changed_text_trial_count",
+        "full_final_word_failure_trial_count",
+        "trimmed_final_word_failure_trial_count",
+        "final_word_lost_trial_count", "final_word_recovered_trial_count",
         "full_word_error_count", "trimmed_word_error_count",
         "full_worsened_word_error_trial_count",
         "trimmed_worsened_word_error_trial_count",
@@ -366,6 +396,8 @@ def summarise_recorded_tail_probe(samples):
                 for key in ("trial_count",
                             "trimmed_nonempty_to_full_empty_trial_count",
                             "full_nonempty_to_trimmed_empty_trial_count",
+                            "final_word_lost_trial_count",
+                            "final_word_recovered_trial_count",
                             "full_worsened_word_error_trial_count",
                             "trimmed_worsened_word_error_trial_count")
             }
@@ -1295,7 +1327,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 17,
+        "benchmark_version": 18,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "recorded_tail_probe_inputs_sha256": (
@@ -1458,7 +1490,9 @@ def _print_summary(result):
     if recorded_probe is not None:
         print("Parakeet recorded tail (benchmark-only): trimmed nonempty to "
               "full empty %d/%d paired trials, full nonempty to trimmed "
-              "empty %d/%d; word errors trimmed %d -> full %d; full worse "
+              "empty %d/%d; final word lost %d, recovered %d "
+              "(full missing %d, trimmed missing %d); "
+              "word errors trimmed %d -> full %d; full worse "
               "%d, trimmed worse %d trials across %d "
               "reviewed clips; order full-first %d, trimmed-first %d" % (
                   recorded_probe[
@@ -1467,6 +1501,10 @@ def _print_summary(result):
                   recorded_probe[
                       "full_nonempty_to_trimmed_empty_trial_count"],
                   recorded_probe["trial_count"],
+                  recorded_probe["final_word_lost_trial_count"],
+                  recorded_probe["final_word_recovered_trial_count"],
+                  recorded_probe["full_final_word_failure_trial_count"],
+                  recorded_probe["trimmed_final_word_failure_trial_count"],
                   recorded_probe["trimmed_word_error_count"],
                   recorded_probe["full_word_error_count"],
                   recorded_probe["full_worsened_word_error_trial_count"],
@@ -1477,12 +1515,17 @@ def _print_summary(result):
               ))
         for order, counts in recorded_probe["order_breakdown"].items():
             print("  %s: trimmed nonempty to full empty %d/%d; full "
-                  "nonempty to trimmed empty %d/%d; full worsened word "
+                  "nonempty to trimmed empty %d/%d; final word lost %d/%d, "
+                  "recovered %d/%d; full worsened word "
                   "errors %d/%d, trimmed worsened %d/%d trials" % (
                       order,
                       counts["trimmed_nonempty_to_full_empty_trial_count"],
                       counts["trial_count"],
                       counts["full_nonempty_to_trimmed_empty_trial_count"],
+                      counts["trial_count"],
+                      counts["final_word_lost_trial_count"],
+                      counts["trial_count"],
+                      counts["final_word_recovered_trial_count"],
                       counts["trial_count"],
                       counts["full_worsened_word_error_trial_count"],
                       counts["trial_count"],
@@ -1611,6 +1654,19 @@ def _print_summary(result):
                       sample_tail_probe["baseline_word_error_count"],
                       sample_tail_probe["tailed_word_error_count"],
                       sample_tail_probe["tailed_inference_seconds"]["median"],
+                  ))
+        sample_recorded_probe = sample.get("recorded_tail_probe")
+        if sample_recorded_probe is not None:
+            print("  Recorded-tail crop: final word lost %d, recovered %d "
+                  "across %d pairs; full/trimmed final-word failures %d/%d; "
+                  "word errors full %d -> trimmed %d" % (
+                      sample_recorded_probe["final_word_lost_trial_count"],
+                      sample_recorded_probe["final_word_recovered_trial_count"],
+                      sample_recorded_probe["trial_count"],
+                      sample_recorded_probe["full_final_word_failure_trial_count"],
+                      sample_recorded_probe["trimmed_final_word_failure_trial_count"],
+                      sample_recorded_probe["full_word_error_count"],
+                      sample_recorded_probe["trimmed_word_error_count"],
                   ))
         stages = sample.get("backend_stages")
         if stages is not None:
