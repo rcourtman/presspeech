@@ -711,9 +711,10 @@ def run_self_test() -> None:
                 "../" if relative.parts[0] == "compare" else "./"
             )
             brand_state = " aria-current='page'" if brand_current else ""
+            current_attr = ' aria-current="page"'
             links = "".join(
                 f"<a href='{href}'"
-                f"{' aria-current=\"page\"' if href == current_href else ''}>"
+                f"{current_attr if href == current_href else ''}>"
                 f"{label}</a>"
                 for href, label in expected_primary_nav(path, docs)
             )

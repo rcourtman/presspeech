@@ -7413,6 +7413,12 @@ def main() -> int:
             return 0
 
         metadata = build_metadata(args)
+        if not args.check:
+            # Refresh designed-artwork size captions before computing synced
+            # files: docs/demo.svg mirrors icon/demo.svg and must see the new
+            # caption in the same pass.
+            previous_size = str(load_metadata().get("release_zip_size", ""))
+            sync_icon_stats(previous_size, str(metadata["release_zip_size"]))
         expected = expected_files(metadata)
         errors: list[str] = []
         if args.check:
@@ -7484,12 +7490,10 @@ def main() -> int:
             print("docs are synced")
             return 0
 
-        previous_size = str(load_metadata().get("release_zip_size", ""))
         for path, text in expected.items():
             if not path.exists() or read_text(path) != text:
                 write_text(path, text)
                 print(f"updated {path.relative_to(ROOT)}")
-        sync_icon_stats(previous_size, str(metadata["release_zip_size"]))
 
         errors.extend(stale_copy_errors(public_release_paths() + EXTRA_STALE_SCAN))
         errors.extend(check_macos_about_privacy_copy())
