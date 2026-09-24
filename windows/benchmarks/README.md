@@ -172,6 +172,17 @@ model or chunking policy. Unreviewed clips and silence controls are excluded.
 Version 24 changes scoring only, not transcription or inference timing. Do not
 compare this field with older reports, which did not measure it.
 
+Version 25 marks clips whose **effective 16 kHz ASR audio** is shorter than
+the Windows app's 250 ms minimum transcription gate. These clips still count
+in model-only WER, silence, and inference summaries, but the per-clip
+release-to-paste estimates are `null`: the app would discard that capture
+before inference. The report and console give the below-gate clip count,
+and the console labels each such clip. A clip at exactly 250 ms passes this
+length gate. Passing it does not prove that a physical recording, hotkey,
+target-app paste, or post-roll timing would succeed; the other delivery
+figures remain estimates, not native measurements. Compare version 25 reports
+when interpreting these fields; no recognition or capture policy changed.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 

@@ -1377,6 +1377,17 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                 variant_timings.append(variant_seconds)
         consensus = collections.Counter(transcripts).most_common(1)[0][0]
         median_seconds = statistics.median(timings)
+        # The benchmark may deliberately exercise sub-threshold model inputs,
+        # but the app discards such captures before invoking any recognizer.
+        # Keep their model-only scores while never inventing delivery latency.
+        # The real loader returns effective 16 kHz samples; the source-file
+        # duration can round differently at the 250 ms boundary after resampling.
+        # Lightweight injected loaders may supply only a reported duration.
+        effective_sample_count = (
+            len(audio) if hasattr(audio, "__len__")
+            else round(audio_seconds * 16000))
+        passes_app_minimum = (
+            effective_sample_count >= app.MIN_TRANSCRIPTION_AUDIO_SAMPLES)
         result = {
             "id": sample["id"],
             "audio": os.path.relpath(audio_path, manifest_dir),
@@ -1393,12 +1404,13 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             },
             "realtime_factor": median_seconds / audio_seconds,
             "realtime_speedup": audio_seconds / median_seconds,
+            "passes_app_minimum_audio_duration": passes_app_minimum,
             "estimated_release_to_paste_seconds": (
                 app.POST_ROLL_SEC + median_seconds + app.PASTE_DELAY_SEC
-            ),
+                if passes_app_minimum else None),
             "estimated_adaptive_release_to_paste_seconds": (
                 app.POST_ROLL_MIN_SEC + median_seconds + app.PASTE_DELAY_SEC
-            ),
+                if passes_app_minimum else None),
             "reference_reviewed": sample.get("reference_reviewed", False),
             "speech_detection": speech_detection_metrics(
                 audio_seconds, backend_timings,
@@ -1527,7 +1539,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 24,
+        "benchmark_version": 25,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "benchmark_order_sha256": benchmark_order_sha256(input_rows),
@@ -1570,6 +1582,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         "load_seconds": load_seconds,
         "warmup_seconds": warmup_seconds,
         "sample_count": len(sample_results),
+        "app_minimum_audio_duration_seconds": app.MIN_TRANSCRIPTION_AUDIO_SECONDS,
+        "below_app_minimum_audio_duration_count": sum(
+            not item["passes_app_minimum_audio_duration"]
+            for item in sample_results),
         "reviewed_sample_count": len(reviewed),
         # The best/worst envelope combines each clip's extremum, potentially
         # from different repetitions; it is not an observed whole-corpus trial
@@ -1658,6 +1674,13 @@ def _print_summary(result):
         print("CUDA tensors: %.1f MiB" % result["cuda_allocated_mib"])
     print("Load: %.3fs | warm-up: %.3fs" %
           (result["load_seconds"], result["warmup_seconds"]))
+    if result["below_app_minimum_audio_duration_count"]:
+        print("Model-only clips below the app's %.0f ms transcription gate: "
+              "%d/%d; included in model scores, not delivery estimates" % (
+                  result["app_minimum_audio_duration_seconds"] * 1000,
+                  result["below_app_minimum_audio_duration_count"],
+                  result["sample_count"],
+              ))
     tail_probe = result.get("tail_silence_probe")
     if tail_probe is not None:
         print("Parakeet +%d ms silence (benchmark-only): nonempty-to-empty "
@@ -1934,12 +1957,20 @@ def _print_summary(result):
             print_group_language_id(metrics)
     for sample in result["samples"]:
         timing = sample["inference_seconds"]
-        print("\n%s: %.3fs median (%.1fx realtime; inference + min/max post-roll "
-              "+ paste delay %.3f/%.3fs, not measured delivery)" % (
-            sample["id"], timing["median"], sample["realtime_speedup"],
-            sample["estimated_adaptive_release_to_paste_seconds"],
-            sample["estimated_release_to_paste_seconds"],
-        ))
+        if sample["passes_app_minimum_audio_duration"]:
+            print("\n%s: %.3fs median (%.1fx realtime; inference + min/max post-roll "
+                  "+ paste delay %.3f/%.3fs, not measured delivery)" % (
+                sample["id"], timing["median"], sample["realtime_speedup"],
+                sample["estimated_adaptive_release_to_paste_seconds"],
+                sample["estimated_release_to_paste_seconds"],
+            ))
+        else:
+            print("\n%s: %.3fs median (%.1fx realtime; model-only clip below "
+                  "the app's %.0f ms transcription gate; no delivery estimate)" % (
+                      sample["id"], timing["median"],
+                      sample["realtime_speedup"],
+                      result["app_minimum_audio_duration_seconds"] * 1000,
+                  ))
         print("  %s" % sample["transcript"])
         sample_tail_probe = sample.get("tail_silence_probe")
         if sample_tail_probe is not None:

@@ -88,6 +88,8 @@ POST_ROLL_RELATIVE_SILENCE = 0.06
 POST_ROLL_MAX_SILENCE_RMS = 0.012
 # Backwards-compatible conservative value used by the benchmark's worst-case estimate.
 POST_ROLL_SEC = POST_ROLL_MAX_SEC
+MIN_TRANSCRIPTION_AUDIO_SECONDS = 0.25
+MIN_TRANSCRIPTION_AUDIO_SAMPLES = int(16000 * MIN_TRANSCRIPTION_AUDIO_SECONDS)
 MICROPHONE_CHECK_LISTEN_SEC = 2.0
 MICROPHONE_CHECK_AUDIO_RMS = POST_ROLL_ABS_SILENCE_RMS
 MICROPHONE_CHECK_LEVEL = "level"
@@ -2174,7 +2176,7 @@ class PresspeechApp:
             audio = audio.mean(axis=1)
         if recording_device is not None and recording_device[1] != 16000:
             audio = _resample_to_16k(audio, recording_device[1])
-        if audio.size / 16000.0 < 0.25:
+        if audio.size < MIN_TRANSCRIPTION_AUDIO_SAMPLES:
             self._finish_transcribing(NO_SPEECH_OUTCOME)
             self._log("recording stopped; too short (%.2fs)" % (audio.size / 16000.0))
             self._schedule_model_idle_unload()

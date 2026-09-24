@@ -846,6 +846,7 @@ WINDOWS_DELIVERY_UNSCOPED_CLAIMS = (
     "if it cannot verify that destination, it keeps the result on the clipboard",
     "if presspeech cannot verify the same destination, it copies the transcript",
     "otherwise it leaves the transcript on the clipboard for manual paste",
+    "otherwise it copies the transcript",
     "if delivery succeeded or presspeech showed its copied/manual-paste notice, paste",
 )
 
@@ -855,7 +856,8 @@ WINDOWS_DELIVERY_UNSCOPED_CLAIMS = (
 COPY_NOTICE_FRESHNESS_GUIDANCE = {
     DOCS / "index.html": (
         '<div class="hero-copy">', '<div class="hero-visual">',
-        ("copied at completion", "later copy can replace", "only if the clipboard still holds"),
+        ("a copied notice", "copied at completion", "later copy can replace",
+         "Other delivery-error notices do not guarantee", "only if the clipboard still holds"),
     ),
     DOCS / "getting-started.html": (
         '<section id="first-app">', '</section>',
@@ -3822,6 +3824,13 @@ def check_copy_notice_freshness_guidance(
                 f"{display}: copied-notice recovery must check clipboard freshness — "
                 f"missing {', '.join(repr(phrase) for phrase in missing)}"
             )
+        if re.search(
+            r"\b(?:a|any) recovery notice means (?:the )?transcript (?:was|is) copied\b",
+            section,
+        ):
+            errors.append(
+                f"{display}: a generic recovery notice must not imply a clipboard copy"
+            )
     return errors
 
 
@@ -4672,11 +4681,31 @@ def run_self_test() -> None:
         if check_copy_notice_freshness_guidance(homepage_copy_notice):
             raise SyncError("self-test: safe homepage copy notice was rejected")
         homepage.write_text(
-            safe_homepage.replace("Paste manually only if the clipboard still holds the transcript.", "", 1),
+            safe_homepage.replace("paste manually only if the clipboard still holds the complete transcript.", "", 1),
             encoding="utf-8",
         )
         if not check_copy_notice_freshness_guidance(homepage_copy_notice):
             raise SyncError("self-test: homepage copy notice omitted clipboard freshness")
+        homepage.write_text(
+            safe_homepage.replace("Other delivery-error notices do not guarantee", "Other delivery-error notices", 1),
+            encoding="utf-8",
+        )
+        if not check_copy_notice_freshness_guidance(homepage_copy_notice):
+            raise SyncError("self-test: homepage treated every recovery notice as a clipboard copy")
+        homepage.write_text(
+            safe_homepage.replace(
+                '<div class="hero-visual">',
+                '<p>A recovery notice means the transcript was copied at completion.</p>'
+                '<div class="hero-visual">',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "generic recovery notice" in error
+            for error in check_copy_notice_freshness_guidance(homepage_copy_notice)
+        ):
+            raise SyncError("self-test: generic recovery notice copy promise was accepted")
 
         preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.12"}
         preflight_surfaces = []
@@ -6238,6 +6267,17 @@ def run_self_test() -> None:
             for error in check_windows_delivery_recovery_guidance(scoped_recovery)
         ):
             raise SyncError("self-test: unsafe Windows clipboard advice was accepted")
+        recovery_page.write_text(
+            "Published Windows 0.1.12 copies for manual paste. "
+            "Upcoming Windows 0.1.13 uses Delivery Recovery Copy or Discard. "
+            "Presspeech normally pastes; otherwise it copies the transcript.\n",
+            encoding="utf-8",
+        )
+        if not any(
+            "unscoped clipboard-copy advice" in error
+            for error in check_windows_delivery_recovery_guidance(scoped_recovery)
+        ):
+            raise SyncError("self-test: generic step-four copy promise was accepted")
 
         compatibility_guidance = Path(tmp) / "compatibility.md"
         required_compatibility_guidance = {

@@ -3793,6 +3793,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertFalse(instance.transcribing)
 
     def test_too_short_recording_reports_no_speech_without_model_work(self):
+        self.assertEqual(app.MIN_TRANSCRIPTION_AUDIO_SAMPLES, 4000)
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = __import__("threading").Lock()
         instance.recording = True
@@ -3800,7 +3801,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._rec_epoch = 7
         instance._capture_ready = True
         instance.buffer = [
-            __import__("numpy").ones(1600, dtype="float32")]
+            __import__("numpy").ones(3999, dtype="float32")]
         instance.stream = None
         instance.icon = None
         instance.input_device = (0, 16000)
@@ -3959,7 +3960,8 @@ class TextRegressionTests(unittest.TestCase):
         instance.transcribing = False
         instance._rec_epoch = 7
         instance._capture_ready = True
-        audio = __import__("numpy").ones(4800, dtype="float32")
+        # Exactly 250 ms passes the same duration gate reported by the benchmark.
+        audio = __import__("numpy").ones(4000, dtype="float32")
         instance.buffer = [audio]
         instance.stream = None
         instance.icon = None

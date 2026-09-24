@@ -282,9 +282,14 @@ mode under **Settings → Dictation → Trigger** on macOS or in Windows Setting
 1. Hold the configured key, or press it once in toggle mode.
 2. Speak.
 3. Release the key, or press it again in toggle mode.
-4. Presspeech pastes the transcript at the cursor when it can verify the
-   original destination; otherwise it copies the transcript and tells you to
-   paste manually.
+4. Presspeech attempts to paste at the cursor when it can verify the original
+   destination. If it cannot, it avoids automatic paste. On macOS 0.3.8 and
+   published Windows 0.1.12, a **copied** notice means the transcript was copied
+   at completion for manual paste; other delivery-error notices do not prove
+   it was copied. Upcoming Windows 0.1.13 instead retains uncertain delivery
+   for an explicit **Delivery Recovery** Copy or Discard. Check the intended
+   field before recovering: a notice alone does not prove that the field stayed
+   empty or the clipboard still holds the transcript.
 
 The defaults and control surfaces differ:
 

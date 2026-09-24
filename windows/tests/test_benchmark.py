@@ -1024,7 +1024,7 @@ class MetricTests(unittest.TestCase):
                          [16000, 9600, 9600, 16000, 16000, 16000])
         self.assertIs(calls[0].args[0], audio)
         self.assertIs(calls[3].args[0], audio)
-        self.assertEqual(result["benchmark_version"], 24)
+        self.assertEqual(result["benchmark_version"], 25)
         self.assertRegex(result["benchmark_order_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(result["aggregate_trial_wer"], 0.75)
         self.assertEqual(result["samples"][0]["transcript"], "")
@@ -1222,7 +1222,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["recorded_tail_probe_groups"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 24)
+        self.assertEqual(result["benchmark_version"], 25)
         self.assertEqual(result["tail_silence_probe_groups"][
             "language_task_groups"]["en"]["short-command"][
                 "final_word_lost_trial_count"], 2)
@@ -1539,6 +1539,63 @@ class MetricTests(unittest.TestCase):
             checked = benchmark._preflight_audio(".", samples)
         self.assertEqual(len(checked), 2)
         self.assertEqual([row[3] for row in checked], ["0" * 64, "1" * 64])
+
+    def test_short_model_only_clips_have_no_app_delivery_estimate(self):
+        manifest = {"model": "base.en", "runs": 1, "samples": [
+            {"id": name, "audio": name + ".wav"}
+            for name in ("below", "exact", "above")
+        ]}
+        audio_by_name = {
+            "below.wav": np.zeros(3999, dtype=np.float32),
+            "exact.wav": np.zeros(4000, dtype=np.float32),
+            "above.wav": np.zeros(4001, dtype=np.float32),
+        }
+        # Source-file duration can disagree by a sample after resampling.
+        source_seconds = {
+            "below.wav": 0.25,
+            "exact.wav": 0.24999,
+            "above.wav": 0.2501,
+        }
+
+        def load(path):
+            name = os.path.basename(path)
+            audio = audio_by_name[name]
+            return (audio, source_seconds[name], 48000,
+                    benchmark.asr_audio_sha256(audio))
+
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "int8"
+        transcriber.transcribe.return_value = "yes"
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber",
+                                   return_value=transcriber), \
+                    mock.patch.object(benchmark, "load_audio", side_effect=load):
+                result = benchmark.run_benchmark(path)
+
+        self.assertEqual(result["benchmark_version"], 25)
+        self.assertEqual(result["app_minimum_audio_duration_seconds"], 0.25)
+        self.assertEqual(result["below_app_minimum_audio_duration_count"], 1)
+        below, exact, above = result["samples"]
+        self.assertFalse(below["passes_app_minimum_audio_duration"])
+        self.assertIsNone(below["estimated_release_to_paste_seconds"])
+        self.assertIsNone(below["estimated_adaptive_release_to_paste_seconds"])
+        for sample in (exact, above):
+            self.assertTrue(sample["passes_app_minimum_audio_duration"])
+            self.assertIsInstance(
+                sample["estimated_release_to_paste_seconds"], float)
+            self.assertIsInstance(
+                sample["estimated_adaptive_release_to_paste_seconds"], float)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn("1/3; included in model scores, not delivery estimates",
+                      output.getvalue())
+        self.assertIn("model-only clip below the app's 250 ms transcription gate",
+                      output.getvalue())
+        json.dumps(result, allow_nan=False)
 
     def test_invalid_precision_is_rejected_before_model_loading(self):
         manifest = {"model": "base.en", "samples": [
@@ -2041,7 +2098,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 24)
+        self.assertEqual(result["benchmark_version"], 25)
         self.assertIsNone(result["worst_reference_deletion_run"])
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
