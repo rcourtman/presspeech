@@ -2282,7 +2282,30 @@ class TextRegressionTests(unittest.TestCase):
         keyboard.shortcut.assert_called_once_with(
             [app.keyboard_delivery.VK_LCONTROL], app.keyboard_delivery.VK_V)
 
-    def test_unknown_integrity_fails_open_for_existing_paste_behavior(self):
+    def test_unknown_source_integrity_retains_without_replacing_clipboard(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        instance.open_delivery_recovery = mock.Mock(return_value=True)
+        target = app.PasteTarget("notepad.exe", 1234, 41, 0x2000)
+
+        with mock.patch.object(app.clipboard_delivery, "write_text") as copy, \
+                mock.patch.object(
+                    app, "_foreground_paste_target", return_value=target), \
+                mock.patch.object(
+                    app, "_process_integrity_level", return_value=0), \
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
+            self.assertFalse(instance._paste("private transcript", target))
+
+        copy.assert_not_called()
+        controller.assert_not_called()
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        self.assertIn("could not verify its input privilege boundary",
+                      str(instance.notify.mock_calls))
+        self.assertNotIn("private transcript", str(instance._log.mock_calls))
+
+    def test_unknown_target_integrity_preserves_existing_paste_behavior(self):
         unknown_target = app.PasteTarget("notepad.exe", 1234, 41)
 
         with mock.patch.object(
@@ -2295,7 +2318,7 @@ class TextRegressionTests(unittest.TestCase):
         known_target = app.PasteTarget("admin-tool.exe", 1234, 42, 0x3000)
         with mock.patch.object(
                 app, "_process_integrity_level", return_value=0) as source:
-            self.assertFalse(
+            self.assertTrue(
                 app._paste_target_blocks_simulated_input(known_target))
 
         source.assert_called_once_with(app.os.getpid())

@@ -592,6 +592,26 @@ Record this release-gate matrix against the exact installed candidate:
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
 | Menu-bar visibility preference, Dock fallback/restore, and dictation recovery with VoiceOver and keyboard-only navigation | |
 
+For each ten-attempt TextEdit, browser, and Electron delivery row, use distinct
+harmless phrases in blank, non-submitting fields and seed a harmless previous
+clipboard item before every attempt. After each attempt, inspect the target,
+then paste the current clipboard into a separate disposable local field before
+anything else copies to it. Compare the complete resulting transcript,
+including its configured suffix. Record **automatic paste once**, **safe manual
+recovery**, and **incorrect or unsafe** counts separately; they must sum to ten
+for each app class. Count an attempt as **safe manual recovery** only when
+nothing was inserted automatically, a recovery notice appeared, and the
+complete text could be pasted deliberately. This does not pass the
+automatic-paste row. Mark that row **Pass** only when all ten attempts paste
+once into the intended field. Stale, partial, duplicate,
+misdirected, silent-missing, or unrecoverable text fails the row; posting a
+paste event or showing a success notice is not proof that the target consumed
+the text. Inspect the original field before retrying or using recovery because
+it may already contain all or part of the transcript. Record a known external
+copy interruption and rerun it with a fresh phrase, but never exclude an
+unexplained failure. Retain only aggregate counts, app versions, and generic
+field types—not phrases, clipboard contents, or screenshots.
+
 For the synthetic-credential row, use a disposable macOS profile or VM with no
 Hugging Face login/cache. Launch the installed candidate executable directly
 with nonfunctional marker values in `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, and

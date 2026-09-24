@@ -180,6 +180,15 @@ def summarise_tail_silence_probe(samples):
               if sample.get("tail_silence_probe") is not None]
     return {
         "sample_count": len(probes),
+        "order_breakdown": {
+            order: {
+                key: sum(
+                    probe["order_breakdown"][order][key] for probe in probes)
+                for key in ("trial_count", "nonempty_to_empty_trial_count",
+                            "worsened_word_error_trial_count")
+            }
+            for order in ("baseline-first", "tailed-first")
+        },
         "baseline_first_trial_count": sum(
             order == "baseline-first"
             for probe in probes for order in probe["trial_order"]),
@@ -198,6 +207,27 @@ def summarise_tail_silence_probe(samples):
                 "tailed_final_word_failure_trial_count",
             )
         },
+    }
+
+
+def tail_probe_order_breakdown(pairs, trial_order):
+    """Stratify paired regressions by decode order, not pooled trial count."""
+    if len(pairs) != len(trial_order) or any(
+            order not in ("baseline-first", "tailed-first")
+            for order in trial_order):
+        raise ValueError("tail-silence probe needs one valid order per pair")
+    return {
+        order: {
+            "trial_count": sum(value == order for value in trial_order),
+            "nonempty_to_empty_trial_count": sum(
+                value == order and pair["nonempty_to_empty"]
+                for pair, value in zip(pairs, trial_order)),
+            "worsened_word_error_trial_count": sum(
+                value == order
+                and pair["tailed_word_errors"] > pair["baseline_word_errors"]
+                for pair, value in zip(pairs, trial_order)),
+        }
+        for order in ("baseline-first", "tailed-first")
     }
 
 
@@ -855,12 +885,15 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             "parakeet_windowing": parakeet_window_metrics(backend_timings),
         }
         if probe_this_sample:
+            paired_metrics = paired_tail_silence_metrics(
+                reference, transcripts, tail_transcripts)
             result["tail_silence_probe"] = {
                 "appended_silence_ms": parakeet_tail_silence_ms,
                 # Indexed like pairs and both timing arrays below.
                 "trial_order": trial_order,
-                **paired_tail_silence_metrics(
-                    reference, transcripts, tail_transcripts),
+                **paired_metrics,
+                "order_breakdown": tail_probe_order_breakdown(
+                    paired_metrics["pairs"], trial_order),
                 "tailed_inference_seconds": {
                     "min": min(tail_timings),
                     "median": statistics.median(tail_timings),
@@ -1061,6 +1094,15 @@ def _print_summary(result):
                   tail_probe["baseline_first_trial_count"],
                   tail_probe["tailed_first_trial_count"],
               ))
+        for order, counts in tail_probe["order_breakdown"].items():
+            print("  %s: nonempty-to-empty %d/%d; worsened word errors "
+                  "%d/%d trials" % (
+                      order,
+                      counts["nonempty_to_empty_trial_count"],
+                      counts["trial_count"],
+                      counts["worsened_word_error_trial_count"],
+                      counts["trial_count"],
+                  ))
     if result["aggregate_wer"] is not None:
         print("Reviewed corpus WER: %.2f%% consensus | %.2f%% all trials | "
               "%.2f/%.2f%% best/worst trial envelope" % (

@@ -236,8 +236,9 @@ writing, the previous clipboard item remains unchanged. Release the key and
 use Delivery Recovery to copy or discard the waiting text. Check the intended field
 first: an input error can happen after part or all of the paste has completed.
 If Presspeech already knows that the original window is missing, no longer
-focused, or elevated, it also leaves the previous clipboard item unchanged
-and waits for an explicit recovery choice. A change after that check may still
+focused, or elevated, or cannot verify its own integrity level against a known
+target level, it also leaves the previous clipboard item unchanged and waits
+for an explicit recovery choice. A change after that check may still
 leave the dictated text on the current clipboard.
 
 If a clipboard write fails after replacement begins, Windows cannot restore
@@ -251,7 +252,9 @@ or copying the dictated words. Check the intended field first, then choose
 **Copy for Manual Paste** to copy explicitly or **Discard Dictation** to forget
 the recovery copy without changing the clipboard. **Leave Waiting** closes the
 window while Presspeech keeps the recovery copy and pauses new recording. A
-blocked hotkey or a second launch reopens the window. Equivalent **Review
+blocked hotkey or a second launch reopens the window. If **Try Dictation** is
+open, its **Review Delivery…** button also reopens the window without copying
+anything; it is enabled only while a dictation is waiting. Equivalent **Review
 Undelivered Dictation…**, **Copy Undelivered Dictation**, and **Discard
 Undelivered Dictation** commands remain in the notification-area menu; exiting
 discards the recovery copy. None of these navigation actions silently
@@ -415,7 +418,9 @@ The Try Dictation scratchpad also keeps its Dictate command and live status in
 sync when recording is stopped by the hotkey, Escape, the recording limit, or
 an input failure. While a model is preparing, transcription is finishing, or
 delivery recovery is required, it explains why another recording is not yet
-available instead of leaving a stale actionable label. Its named editor and
+available instead of leaving a stale actionable label. Its **Review Delivery…**
+command gives an in-window keyboard path back to the recovery choices if that
+window was closed. Its named editor and
 visible transcript scrollbar remain reachable with Narrator and keyboard-only
 navigation, and its initial size scales up without extending beyond the current
 desktop.

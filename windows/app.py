@@ -537,13 +537,16 @@ def _process_integrity_level(process_identifier):
 
 
 def _paste_target_blocks_simulated_input(paste_target, source_integrity=None):
-    """Return whether Windows UIPI blocks input into this higher-IL target."""
+    """Fail closed when a known target cannot be proven reachable under UIPI."""
     target_integrity = getattr(paste_target, "integrity_level", 0)
     if not target_integrity:
         return False
     if source_integrity is None:
         source_integrity = _process_integrity_level(os.getpid())
-    return bool(source_integrity and target_integrity > source_integrity)
+    # A failed own-token query is not evidence that the target has equal or
+    # lower integrity. Do not replace the user's clipboard before discovering
+    # that SendInput cannot cross this boundary; retain the text for recovery.
+    return not source_integrity or target_integrity > source_integrity
 
 
 def _paste_route(process_name):
@@ -2628,7 +2631,9 @@ class PresspeechApp:
             "focus-changed": (
                 "The original window or focused control could not be "
                 "verified; no paste shortcut was sent. "),
-            "target-elevated": "Windows blocks simulated input into this elevated app. ",
+            "input-integrity-boundary": (
+                "The original app is elevated or Presspeech could not verify "
+                "its input privilege boundary; no paste shortcut was sent. "),
             "scratchpad-unavailable": (
                 "Try Dictation could not confirm that the transcript reached "
                 "its private editor; no paste shortcut was sent. "),
@@ -2730,7 +2735,7 @@ class PresspeechApp:
             self._remember_undelivered_dictation(text, "focus-changed")
             return False
         if _paste_target_blocks_simulated_input(paste_target):
-            self._remember_undelivered_dictation(text, "target-elevated")
+            self._remember_undelivered_dictation(text, "input-integrity-boundary")
             return False
         try:
             receipt = clipboard_delivery.write_text(text)
@@ -2750,7 +2755,7 @@ class PresspeechApp:
             self._remember_undelivered_dictation(text, "focus-changed")
             return False
         if _paste_target_blocks_simulated_input(paste_target):
-            self._remember_undelivered_dictation(text, "target-elevated")
+            self._remember_undelivered_dictation(text, "input-integrity-boundary")
             return False
         # Keep these checks adjacent to the single input submission. The
         # earlier checks protect the delay and integrity lookup, which can both

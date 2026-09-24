@@ -35,6 +35,11 @@ Windows UI, UIA integration, or Tk version.
    that command becomes disabled. Have Narrator read and invoke controls; names,
    roles, values, and checked/disabled states should agree with the visible UI.
    A status update must not steal focus.
+   In Try Dictation, leave a harmless dictation waiting for recovery and close
+   Delivery Recovery with **Leave Waiting**. Confirm **Review Delivery…** is
+   enabled, reachable by Tab and Left Alt+R, and reopens Recovery without
+   copying. After resolving the item, confirm Review disables, focus does not
+   remain on the disabled button, and Dictate becomes available again.
 
 3. **Live status.** In Accessibility Insights, use **Listen to Events** on a
    status control and record its UIA events. Trigger a safe status transition,

@@ -294,6 +294,16 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertIn('font="TkDefaultFont"', source)
         self.assertIn('root.bind("<Configure>", resize_status', source)
 
+    def test_scratchpad_recovery_is_an_explicit_keyboard_command(self):
+        source = inspect.getsource(ui.ScratchpadWindow._build)
+        self.assertIn('text="Review Delivery…"', source)
+        self.assertIn('command=self.app.open_delivery_recovery', source)
+        self.assertIn('_add_access_key(root, self.review_button, "r")', source)
+        self.assertIn('"Open Delivery Recovery for a waiting dictation', source)
+        self.assertLess(
+            source.index('text="Dictate (or use the hotkey)"'),
+            source.index('text="Review Delivery…"'))
+
     def test_win32_system_colours_are_converted_from_bgr(self):
         self.assertEqual(ui._colourref_hex(0x00332211), "#112233")
 
@@ -1875,9 +1885,42 @@ class ScratchpadWindowTests(unittest.TestCase):
         window.app.has_undelivered_dictation.return_value = waiting
         window.root = mock.Mock()
         window.btn = mock.Mock()
+        window.review_button = mock.Mock()
         window.status = mock.Mock()
         window.text = mock.Mock()
         return window
+
+    def test_waiting_dictation_enables_review_without_reenabling_dictate(self):
+        window = self.make_window(waiting=True)
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._refresh_controls()
+
+        window.btn.config.assert_called_once_with(state="disabled")
+        window.review_button.config.assert_called_once_with(state="normal")
+        set_text.assert_any_call(
+            window.status,
+            "An undelivered dictation needs review before recording again. "
+            "Choose Review Delivery to copy or discard it.")
+        window.app.open_delivery_recovery.assert_not_called()
+
+    def test_resolved_dictation_disables_focused_review_before_next_capture(self):
+        window = self.make_window(waiting=True)
+        window.root.focus_get.return_value = window.review_button
+        order = []
+        window.text.focus_set.side_effect = lambda: order.append("focus")
+        window.review_button.config.side_effect = (
+            lambda **values: order.append(values["state"]))
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._refresh_controls()
+            window.app.has_undelivered_dictation.return_value = False
+            window._refresh_controls()
+
+        self.assertEqual(order, ["normal", "focus", "disabled"])
+        self.assertEqual(window.btn.config.call_args_list, [
+            mock.call(state="disabled"), mock.call(state="normal")])
+        window.app.open_delivery_recovery.assert_not_called()
 
     def test_connecting_microphone_does_not_invite_speech_before_ready(self):
         window = self.make_window(recording=True, capture_ready=False)

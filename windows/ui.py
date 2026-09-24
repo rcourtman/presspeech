@@ -2645,8 +2645,13 @@ class ScratchpadWindow:
         self.btn = ttk.Button(
             frame, text="Dictate (or use the hotkey)", command=self.toggle)
         self.btn.grid(row=3, column=0, columnspan=2, pady=(0, 2))
+        self.review_button = ttk.Button(
+            frame, text="Review Delivery…",
+            command=self.app.open_delivery_recovery, state="disabled")
+        self.review_button.grid(row=4, column=0, columnspan=2, pady=(0, 2))
         root.protocol("WM_DELETE_WINDOW", self._close)
         _add_access_key(root, self.btn, "d")
+        _add_access_key(root, self.review_button, "r")
         _bind_window_command(root, "<Escape>", self._close)
 
         def resize_status(event):
@@ -2657,6 +2662,9 @@ class ScratchpadWindow:
         root.update_idletasks()
         _label_control(scratchpad_label, self.text)
         _name_control(self.text, "Private dictation scratchpad")
+        _describe_control(
+            self.review_button,
+            "Open Delivery Recovery for a waiting dictation without copying it.")
         self._refresh_controls()
         _mark_live_region(self.status)
         root.after_idle(self.text.focus_set)
@@ -2674,7 +2682,7 @@ class ScratchpadWindow:
             self.app.start_recording()
         self._refresh_controls()
 
-    def _control_state(self):
+    def _control_state(self, waiting):
         """Return a truthful command and status for the app lifecycle."""
         if getattr(self.app, "recording", False):
             if not getattr(self.app, "_capture_ready", True):
@@ -2697,12 +2705,11 @@ class ScratchpadWindow:
                 "Dictate (or use the hotkey)", "disabled",
                 "Canceling dictation… Dictation will be available when cleanup finishes.",
             )
-        has_undelivered = getattr(
-            self.app, "has_undelivered_dictation", None)
-        if callable(has_undelivered) and has_undelivered():
+        if waiting:
             return (
                 "Dictate (or use the hotkey)", "disabled",
-                "An undelivered dictation needs review before recording again.",
+                "An undelivered dictation needs review before recording again. "
+                "Choose Review Delivery to copy or discard it.",
             )
         if getattr(self.app, "_microphone_check_in_progress", False) is True:
             return (
@@ -2738,7 +2745,10 @@ class ScratchpadWindow:
         )
 
     def _refresh_controls(self):
-        label, state, status = self._control_state()
+        has_undelivered = getattr(
+            self.app, "has_undelivered_dictation", None)
+        waiting = bool(has_undelivered()) if callable(has_undelivered) else False
+        label, state, status = self._control_state(waiting)
         # Do not leave keyboard focus on a control as it becomes disabled.
         # The editor remains a useful, non-destructive focus destination while
         # transcription, cancellation, or recovery blocks another recording.
@@ -2748,6 +2758,9 @@ class ScratchpadWindow:
         except (AttributeError, tk.TclError):
             pass
         self.btn.config(state=state)
+        _set_control_state(
+            self.root, self.review_button,
+            "normal" if waiting else "disabled", self.text)
         _set_accessible_text(self.btn, label, announce=False)
         _set_accessible_text(self.status, status)
 

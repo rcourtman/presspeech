@@ -70,6 +70,25 @@ Keep the existing topics and include `windows`, `offline`, and `on-device-ai`;
 otherwise GitHub search presents Presspeech as a Mac-only project even while a
 Windows build is available.
 
+### Third-party showcase wording to correct
+
+**Observed 24 September 2026:** the [FluidAudio README showcase](https://github.com/FluidInference/FluidAudio/blob/main/README.md)
+describes Presspeech as pasting at the cursor "in about 100 ms." This is not
+the measured claim: the [Presspeech benchmark](../docs/benchmarks.html) reports
+92–152 ms p50 for **warm model inference** on four synthetic clips on an M4;
+microphone capture and clipboard/paste delivery are excluded. macOS 0.3.8
+also requires the original focused window to be verifiable before automatic
+paste, otherwise it leaves the transcript for manual clipboard recovery.
+This is an upstream page, not a repository-controlled asset. Do not cite it
+as evidence for release-to-paste timing or assume editing this file will change it.
+For a maintainer-requested upstream correction, prefer version-independent
+copy without a paste-time promise:
+
+> Open-source macOS push-to-talk dictation using FluidAudio's Parakeet TDT v3
+> locally on Apple Silicon. Automatic paste requires verification of the
+> original window; otherwise the transcript is available for manual paste.
+> Published benchmarks time model inference, not end-to-end insertion.
+
 ## Claims and where they're backed
 
 - **~100 ms model transcription on the documented clips** — benchmarks page,
@@ -230,7 +249,9 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    "Issue creation is restricted" banner is a stop, not an invitation to
    redirect private reports elsewhere. Apply the exact two-platform GitHub
    About description and missing discovery topics above; a Mac-only profile
-   hides a shipped platform.
+   hides a shipped platform. Request correction of the third-party FluidAudio
+   showcase wording above before relying on it as a discovery surface; neither
+   repository source edits nor launch copy alter that upstream description.
 5. Record a baseline: latest release downloads, total release
    downloads, repo stars, repo views, unique views, clones, and top
    referrers.

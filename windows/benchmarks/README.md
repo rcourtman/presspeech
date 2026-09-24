@@ -122,8 +122,10 @@ and unscoreable references receive only the ordinary transcription. The JSON
 keeps ordered transcript pairs, paired word-error counts, blank regressions,
 and separate tailed inference times. Each sample's `trial_order` is indexed
 like `pairs` and both inference-time arrays; aggregate order counts are also
-reported. The console reports aggregate and per-clip counts. Review
-`nonempty_to_empty_trial_count`, worsened word errors,
+reported. The `order_breakdown` in each sample and the aggregate report
+separately count nonempty-to-empty and worsened-word-error trials for each
+first variant. The console reports pooled and order-stratified counts. Review
+`nonempty_to_empty_trial_count` and worsened word errors by order,
 and first/final-word failures by task group, not just pooled WER. A tailed
 output that differs from an already-wrong baseline is not automatically a
 regression. Counterbalancing reduces systematic second-run warming bias but

@@ -384,6 +384,8 @@ class MetricTests(unittest.TestCase):
     def test_tail_probe_aggregate_counts_only_probed_samples(self):
         probe = benchmark.paired_tail_silence_metrics(
             "spoken words", ["spoken words"], [""])
+        probe["order_breakdown"] = benchmark.tail_probe_order_breakdown(
+            probe["pairs"], ["baseline-first"])
         summary = benchmark.summarise_tail_silence_probe([
             {"tail_silence_probe": {
                 **probe, "trial_order": ["baseline-first"]}},
@@ -395,6 +397,18 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(summary["trial_count"], 1)
         self.assertEqual(summary["baseline_first_trial_count"], 1)
         self.assertEqual(summary["tailed_first_trial_count"], 0)
+        self.assertEqual(summary["order_breakdown"]["baseline-first"], {
+            "trial_count": 1, "nonempty_to_empty_trial_count": 1,
+            "worsened_word_error_trial_count": 1})
+        self.assertEqual(summary["order_breakdown"]["tailed-first"]["trial_count"], 0)
+
+    def test_tail_probe_order_breakdown_rejects_misaligned_orders(self):
+        pairs = benchmark.paired_tail_silence_metrics(
+            "spoken words", ["spoken words"], [""])["pairs"]
+        with self.assertRaisesRegex(ValueError, "valid order"):
+            benchmark.tail_probe_order_breakdown(pairs, [])
+        with self.assertRaisesRegex(ValueError, "valid order"):
+            benchmark.tail_probe_order_breakdown(pairs, ["unknown"])
 
     def test_tail_probe_requires_one_unchanged_feature_bucket(self):
         rate = benchmark.engine.PARAKEET_SAMPLE_RATE
@@ -525,6 +539,15 @@ class MetricTests(unittest.TestCase):
             ["baseline-first", "tailed-first"])
         self.assertEqual(result["tail_silence_probe"]["baseline_first_trial_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["tailed_first_trial_count"], 1)
+        self.assertEqual(
+            result["tail_silence_probe"]["order_breakdown"], {
+                "baseline-first": {"trial_count": 1,
+                                   "nonempty_to_empty_trial_count": 1,
+                                   "worsened_word_error_trial_count": 1},
+                "tailed-first": {"trial_count": 1,
+                                 "nonempty_to_empty_trial_count": 0,
+                                 "worsened_word_error_trial_count": 0},
+            })
         self.assertEqual(
             result["tail_silence_probe"]["nonempty_to_empty_trial_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["tailed_word_error_count"], 3)
