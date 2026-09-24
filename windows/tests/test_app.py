@@ -2516,8 +2516,11 @@ class TextRegressionTests(unittest.TestCase):
             instance._paste("transcript", target)
 
         keyboard = controller.return_value
-        keyboard.shortcut.assert_called_once_with(
-            [app.keyboard_delivery.VK_LCONTROL], app.keyboard_delivery.VK_V)
+        keyboard.shortcut.assert_called_once()
+        self.assertEqual(keyboard.shortcut.call_args.args, (
+            [app.keyboard_delivery.VK_LCONTROL], app.keyboard_delivery.VK_V))
+        self.assertTrue(callable(
+            keyboard.shortcut.call_args.kwargs["before_submit"]))
         keyboard.release.assert_not_called()
 
     def test_higher_integrity_target_retains_without_replacing_clipboard(self):
@@ -2562,8 +2565,11 @@ class TextRegressionTests(unittest.TestCase):
             instance._paste("transcript", target)
 
         keyboard = controller.return_value
-        keyboard.shortcut.assert_called_once_with(
-            [app.keyboard_delivery.VK_LCONTROL], app.keyboard_delivery.VK_V)
+        keyboard.shortcut.assert_called_once()
+        self.assertEqual(keyboard.shortcut.call_args.args, (
+            [app.keyboard_delivery.VK_LCONTROL], app.keyboard_delivery.VK_V))
+        self.assertTrue(callable(
+            keyboard.shortcut.call_args.kwargs["before_submit"]))
 
     def test_unknown_source_integrity_retains_without_replacing_clipboard(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -4783,6 +4789,37 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertFalse(self.instance._injecting_keys)
         self.assert_retained_without_content_logs()
 
+    def test_external_copy_at_controller_submission_stops_shortcut(self):
+        # Construction and the modifier query happen after the app's final
+        # receipt check. The controller's own guard closes that interval.
+        self.owned.side_effect = [True, True, True, False]
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+        self.controller.return_value = self.checked_controller(api=api)
+
+        self.assertFalse(self.paste())
+        api.SendInput.assert_not_called()
+        self.assertFalse(self.instance._injecting_keys)
+        self.assert_retained_without_content_logs()
+        self.assertIn("no paste shortcut was sent",
+                      str(self.instance.notify.mock_calls))
+
+    def test_external_copy_during_shortcut_is_reported_uncertain(self):
+        # A successful SendInput return is not a paste-consumed receipt.
+        self.owned.side_effect = [True, True, True, True, False]
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+        api.SendInput.return_value = 4
+        self.controller.return_value = self.checked_controller(api=api)
+
+        self.assertFalse(self.paste())
+        api.SendInput.assert_called_once()
+        self.assert_retained_without_content_logs()
+        self.assertIn("may have partly completed",
+                      str(self.instance.notify.mock_calls))
+
     def test_target_becomes_elevated_after_preflight_still_blocks_paste(self):
         self.blocked.side_effect = [False, True]
 
@@ -4868,11 +4905,14 @@ class DeliveryRecoveryTests(unittest.TestCase):
 
         self.assertTrue(self.paste())
 
-        self.keyboard.shortcut.assert_called_once_with([
+        self.keyboard.shortcut.assert_called_once()
+        self.assertEqual(self.keyboard.shortcut.call_args.args, ([
             app.keyboard_delivery.VK_LCONTROL,
             app.keyboard_delivery.VK_LMENU,
             app.keyboard_delivery.VK_LSHIFT,
-        ], app.keyboard_delivery.VK_V)
+        ], app.keyboard_delivery.VK_V))
+        self.assertTrue(callable(
+            self.keyboard.shortcut.call_args.kwargs["before_submit"]))
         self.keyboard.press.assert_not_called()
 
     def test_explicit_copy_failure_or_new_owner_preserves_recovery(self):

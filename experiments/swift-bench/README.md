@@ -1166,11 +1166,19 @@ models retained audio, not the app's live RMS decision.
 The release wrapper also records a production-v3-only short-clip baseline at
 80 ms and 400 ms synthetic capture grace. This brackets the app's minimum and
 maximum post-release windows without treating fixed grace as a simulation of
-the live RMS endpointer. The default release check records WER, final-word
-retention, and p50 latency but applies no short-clip quality threshold; the
-multi-window public regression remains the production quality gate. The
-candidate Unified acceptance gate still requires the explicit
-`--include-candidate-models` option.
+the live RMS endpointer. A separate matched-input diagnostic starts from the
+same complete, amplitude-trimmed speech and appends 0, 80, or 400 ms of zero
+samples *before v3 inference*, with three measured trials per variant. It
+records empty-trial counts alongside worst WER, final-word retention, and p50
+latency. This distinguishes a clipped final phoneme from the
+[upstream Parakeet TDT trailing-silence failure mode](https://github.com/NVIDIA-NeMo/Speech/issues/15757),
+which was reported in NeMo CPU inference, **not** demonstrated in Presspeech's
+CoreML path. The input-tail rows are report-only and independent model runs,
+not paired decodes or a quality threshold. TTS cannot qualify natural speech;
+if a row worsens, investigate on the pinned native app with reviewed speech
+before proposing a production change. The multi-window public regression
+remains the production quality gate. The candidate Unified acceptance gate
+still requires the explicit `--include-candidate-models` option.
 
 ```sh
 ./run-tail-word-regression.sh --production-v3-only

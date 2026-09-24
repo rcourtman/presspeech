@@ -64,7 +64,8 @@ passed.
   physical Command-V recovery on a layout that moves V to another key position
   (such as Dvorak); hotkey labels alone do not exercise the paste chord. The
   current source resolves synthetic Command-V through the active layout, but
-  this still needs the native release checks below.
+  this still needs native release checks. Include a non-Latin input source as a
+  separate case; a Dvorak pass alone does not qualify it.
 - Qualify the Windows 0.1.13 retained-dictation recovery and audio-device
   rescan on clean CPU and NVIDIA installations. A failed or uncertain delivery
   must keep reviewable text in process memory without silently replacing a
@@ -289,7 +290,16 @@ One recent [Handy macOS report](https://github.com/cjpais/Handy/issues/1904)
 describes the active Dvorak layout turning the synthetic Command-V paste into
 Command-K, while QWERTY worked. This is a single report about Handy, not a
 Presspeech defect or a measure of prevalence. Presspeech's native macOS
-qualification already checks a non-US layout and physical Command-V recovery.
+qualification checks a layout that moves V and physical Command-V recovery.
+An independent [Codex Desktop report](https://github.com/openai/codex/issues/19710)
+describes a Russian input source preventing insertion while English worked;
+its proposed physical-key workaround cannot simply be generalized to Dvorak.
+That is one Codex-specific report, not evidence of a Presspeech defect or of
+prevalence. It does expose two distinct layout cases, so macOS qualification
+now requires a non-Latin input source in addition to a layout that moves V.
+Presspeech must either paste into the verified target once or recover visibly
+when the active Command-layer Paste key cannot be resolved; do not guess the
+US physical key. Neither layout is qualified by a source-level fixture alone.
 The community form now asks for the active layout/input source only when it
 differs from the usual layout or helps explain a result, using its public name
 and never typed content. This improves comparability without expanding the

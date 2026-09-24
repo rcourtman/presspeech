@@ -96,8 +96,9 @@ Options:
 
 The default run performs:
   1. helper parser/self-tests,
-  2. a report-only production-v3 short-clip tail diagnostic at 80 and 400 ms
-     synthetic capture grace,
+  2. a report-only production-v3 short-clip diagnostic at 80 and 400 ms
+     synthetic capture grace, plus complete-speech input-tail checks at 0,
+     80, and 400 ms of appended silence,
   3. required production v3 regression over private real-dictation fixtures,
      including at least five audited non-speech controls with zero emitted text,
   4. production v3 regression if public speech fixtures exist,

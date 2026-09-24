@@ -288,7 +288,11 @@ current clipboard for Ctrl+V. This operating-system control does not prevent
 another local process or third-party clipboard manager from reading the current
 item. Clipboard sequence checks reduce replacement races; they do not make
 Ctrl+V atomic or acknowledge that the target application consumed the text.
-Another copy after the final check remains possible.
+The upcoming build also checks the clipboard receipt immediately before
+`SendInput` and after the shortcut returns. A detected change before submission
+skips the shortcut; a detected change afterward keeps an in-memory recovery
+copy and reports uncertain delivery. A copy after either check can still race
+the target's asynchronous paste handling.
 Before replacing the clipboard, the upcoming build checks the physical state
 of Ctrl, Shift, Alt, Windows, and V as well as its keyboard-hook state. A key
 already held at this preflight leaves the previous clipboard item unchanged and

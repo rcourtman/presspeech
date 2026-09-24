@@ -5,6 +5,9 @@
 # private dictation audio. It trims trailing silence, cuts the end of each
 # phrase to simulate an early key release, then runs presspeech-bench with
 # configurable backends, capture grace, and Unified trailing-silence padding.
+# The production-v3-only diagnostic separately appends silence to complete
+# speech, so a blank decode caused by a retained tail cannot be mistaken for
+# a clipped final phoneme.
 
 set -euo pipefail
 
@@ -19,6 +22,8 @@ IFS=$'\t' read -r FLUID_REVISION PRODUCTION_FLUID_REVISION BASELINE_DEPENDENCY <
 OUTDIR="tail-results"
 VOICE="Samantha"
 TRIALS="1"
+V3_TAIL_TRIALS=3
+V3_INPUT_TAIL_MS_LIST="0 80 400"
 CUT_MS_LIST="100 150 200"
 CAPTURE_GRACE_MS_LIST="0"
 UNIFIED_TRAILING_MS_LIST="0 250"
@@ -51,8 +56,9 @@ Options:
                                 post-release capture grace to simulate, comma or space separated (default: 0)
   --unified-trailing-ms-list <list>
                                 Unified silence padding sweep, comma or space separated (default: 0 250)
-  --production-v3-only          record the production-v3 short-clip baseline only;
-                                defaults capture-grace coverage to 80 and 400 ms
+  --production-v3-only          record production-v3 short-clip and input-tail
+                                diagnostics; defaults capture-grace coverage to
+                                80 and 400 ms
   --skip-v3-baseline            do not run the v3 baseline rows
   --no-threshold                write the report but do not fail on candidate-threshold misses
   --keep-temp                   keep generated audio and raw bench logs
@@ -62,9 +68,10 @@ Options:
 The candidate threshold is checked for the Unified evaluation setting:
 250 ms synthetic trailing silence, 0 ms capture grace, final word retained,
 and max WER <= 20.0% on the known regression cases.
-The production-v3-only mode checks evidence completeness and SDK environment,
-but is report-only for WER and final-word retention; it does not qualify the
-model or reproduce the app's live RMS endpointer.
+The production-v3-only mode also compares complete speech with 0, 80, and
+400 ms of appended input silence (3 trials each). It checks evidence
+completeness and SDK environment, but is report-only for speech quality;
+it does not qualify the model or reproduce the app's live RMS endpointer.
 USAGE
 }
 
@@ -133,6 +140,25 @@ extract_p50_ms() {
     sed -nE 's/.*latency:[[:space:]]+p50=[[:space:]]*([0-9.]+) ms.*/\1/p' "$log_file" | head -n 1
 }
 
+extract_empty_trial_count() {
+    local log_file="$1"
+    local expected="$2"
+    awk -v expected="$expected" '
+        BEGIN { expected += 0 }
+        /^[[:space:]]*output: trial=/ {
+            n++
+            if ($1 != "output:" || $2 != "trial=" n "/" expected ||
+                $3 !~ /^empty=(true|false)$/ ||
+                $4 !~ /^characters=[0-9]+$/ || NF != 4) bad = 1
+            split($3, empty_field, "=")
+            split($4, count_field, "=")
+            if ((empty_field[2] == "true") != (count_field[2] + 0 == 0)) bad = 1
+            if (empty_field[2] == "true") blanks++
+        }
+        END { if (bad || n != expected) print "unknown"; else print blanks + 0 }
+    ' "$log_file"
+}
+
 validate_metrics() {
     local name
     local value
@@ -194,8 +220,9 @@ write_wav_variant() {
     local output="$2"
     local cut_ms="$3"
     local trim_mode="$4"
+    local append_ms="${5:-0}"
 
-    python3 - "$input" "$output" "$cut_ms" "$trim_mode" <<'PY'
+    python3 - "$input" "$output" "$cut_ms" "$trim_mode" "$append_ms" <<'PY'
 import array
 import struct
 import sys
@@ -205,6 +232,7 @@ input_path = Path(sys.argv[1])
 output_path = Path(sys.argv[2])
 cut_ms = int(sys.argv[3])
 trim_mode = sys.argv[4] == "trim"
+append_ms = int(sys.argv[5])
 
 blob = input_path.read_bytes()
 if blob[:4] != b"RIFF" or blob[8:12] != b"WAVE":
@@ -229,7 +257,8 @@ if fmt is None or data is None:
     raise SystemExit(f"{input_path} is missing fmt or data chunks")
 
 audio_format, channels, sample_rate, _, _, bits_per_sample = struct.unpack_from("<HHIIHH", fmt, 0)
-if audio_format not in (3, 65534) or channels != 1 or bits_per_sample != 32:
+if (audio_format not in (3, 65534) or channels != 1 or
+        sample_rate != 16000 or bits_per_sample != 32):
     raise SystemExit(
         f"{input_path} must be 16 kHz mono Float32 WAV; got format={audio_format}, "
         f"channels={channels}, bits={bits_per_sample}"
@@ -256,6 +285,9 @@ if cut_ms > 0 and samples:
         samples = array.array("f")
     else:
         samples = samples[:-cut_samples]
+
+if append_ms > 0:
+    samples.extend([0.0] * int(round(sample_rate * append_ms / 1000.0)))
 
 if sys.byteorder != "little":
     samples.byteswap()
@@ -329,7 +361,8 @@ append_production_v3_baseline() {
             for grace_ms in $(normalize_list "$CAPTURE_GRACE_MS_LIST"); do
                 count="$(awk -F '\t' -v phrase="$phrase" -v cut="$cut_ms" \
                     -v grace="$grace_ms" \
-                    '$1 == phrase && $2 == cut && $3 == grace && $5 == "v3" && $6 == "na" { n++ }
+                    '$1 == phrase && $2 == cut && $3 == grace && $5 == "v3" &&
+                     $6 == "na" && $10 == "na" { n++ }
                      END { print n + 0 }' "$results")"
                 if [[ "$count" != "1" ]]; then
                     blockers+=("expected one production-v3 row for $phrase cut=$cut_ms grace=$grace_ms; found $count")
@@ -356,6 +389,51 @@ append_production_v3_baseline() {
     [[ "${#blockers[@]}" -eq 0 ]]
 }
 
+append_v3_input_tail_diagnostic() {
+    local report="$1"
+    local results="$2"
+    local -a blockers=()
+    local entry phrase tail_ms state
+
+    for entry in "${CLIPS[@]}"; do
+        phrase="${entry%%|*}"
+        for tail_ms in $V3_INPUT_TAIL_MS_LIST; do
+            state="$(awk -F '\t' -v phrase="$phrase" -v tail="$tail_ms" \
+                -v trials="$V3_TAIL_TRIALS" '
+                NR > 1 && $1 == phrase && $2 == "0" && $3 == "0" &&
+                $5 == "v3" && $6 == "na" && $10 == tail {
+                    rows++
+                    if ($11 != trials || $12 !~ /^[0-9]+$/ || $12 + 0 > trials ||
+                        $7 !~ /^[0-9]+([.][0-9]+)?$/ ||
+                        $8 !~ /^(true|false)$/ ||
+                        $9 !~ /^[0-9]+([.][0-9]+)?$/) bad = 1
+                }
+                END { print rows + 0 ":" bad + 0 }
+            ' "$results")"
+            if [[ "$state" != "1:0" ]]; then
+                blockers+=("expected one scored v3 input-tail row for $phrase tail=${tail_ms}ms; found state $state")
+            fi
+        done
+    done
+    if [[ "$EXPERIMENT_ENVIRONMENT_STATE" != "default" ]]; then
+        blockers+=("inherited SDK environment is $EXPERIMENT_ENVIRONMENT_STATE")
+    fi
+
+    {
+        echo
+        echo "## Production-v3 input-tail diagnostic"
+        echo
+        echo "The input-tail rows use the same complete, amplitude-trimmed speech for 0, 80, and 400 ms of appended zeros. Compare empty-trial counts, worst WER, final-word retention, and p50 for each phrase. These are independent model trials on matched audio, not paired decodes. An increased blank count or lost final word is a finding for native follow-up, not an automatic model-policy change."
+        if [[ "${#blockers[@]}" -gt 0 ]]; then
+            echo "Input-tail evidence incomplete:"
+            printf '%s\n' "${blockers[@]}" | sed 's/^/- /'
+        else
+            echo "Input-tail evidence complete; report-only, not a model qualification pass."
+        fi
+    } >>"$report"
+    [[ "${#blockers[@]}" -eq 0 ]]
+}
+
 run_self_test() {
     local self_tmp
     self_tmp="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-tail-self-test.XXXXXX")"
@@ -372,6 +450,43 @@ run_self_test() {
     assert_eq "$(extract_p50_ms "$mock")" "123.4" "latency parser"
     assert_eq "$(extract_max_wer_percent /dev/null)" "unknown" "missing WER parser"
     validate_metrics max-WER 16.7 final-word-retained false p50 123.4
+
+    local outputs="$self_tmp/outputs.log"
+    printf '    output: trial=1/3 empty=false characters=5\n    output: trial=2/3 empty=true characters=0\n    output: trial=3/3 empty=false characters=5\n' >"$outputs"
+    assert_eq "$(extract_empty_trial_count "$outputs" 3)" "1" "intermittent blank parser"
+    assert_eq "$(extract_empty_trial_count "$outputs" 2)" "unknown" "wrong trial count"
+    printf '    output: trial=1/1 empty=true characters=2\n' >"$outputs"
+    assert_eq "$(extract_empty_trial_count "$outputs" 1)" "unknown" "contradictory blank receipt"
+    printf '    output: trial=1/2 empty=false characters=5\n    output: trial=1/2 empty=false characters=5\n' >"$outputs"
+    assert_eq "$(extract_empty_trial_count "$outputs" 2)" "unknown" "duplicate trial receipt"
+
+    local speech_wav="$self_tmp/speech.wav" tailed_wav="$self_tmp/tailed.wav"
+    python3 - "$speech_wav" <<'PY'
+import array
+import struct
+import sys
+from pathlib import Path
+
+samples = array.array("f", [0.25] * 1600).tobytes()
+fmt = struct.pack("<HHIIHH", 3, 1, 16000, 64000, 4, 32)
+Path(sys.argv[1]).write_bytes(
+    b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt) + 8 + len(samples)) +
+    b"WAVEfmt " + struct.pack("<I", len(fmt)) + fmt +
+    b"data" + struct.pack("<I", len(samples)) + samples)
+PY
+    write_wav_variant "$speech_wav" "$tailed_wav" 0 notrim 80
+    python3 - "$speech_wav" "$tailed_wav" <<'PY'
+import struct
+import sys
+from pathlib import Path
+
+speech = Path(sys.argv[1]).read_bytes()[44:]
+tailed = Path(sys.argv[2]).read_bytes()[44:]
+assert tailed.startswith(speech)
+assert len(tailed) - len(speech) == 1280 * 4
+assert tailed[len(speech):] == b"\0" * (1280 * 4)
+assert struct.unpack_from("<I", Path(sys.argv[2]).read_bytes(), 4)[0] == 36 + len(tailed)
+PY
 
     local validation_log="$self_tmp/validation.log"
     if validate_metrics max-WER unknown p50 "" >"$validation_log" 2>&1; then
@@ -473,14 +588,14 @@ run_self_test() {
 
     local baseline_tsv="$self_tmp/baseline.tsv"
     local baseline_report="$self_tmp/baseline.md"
-    printf 'phrase\tcut_ms\tcapture_grace_ms\teffective_cut_ms\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\n' >"$baseline_tsv"
+    printf 'phrase\tcut_ms\tcapture_grace_ms\teffective_cut_ms\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\tinput_tail_silence_ms\ttrials\tempty_trials\n' >"$baseline_tsv"
     local entry phrase cut_ms grace_ms effective
     for entry in "${CLIPS[@]}"; do
         phrase="${entry%%|*}"
         for cut_ms in 100 150 200; do
             for grace_ms in 80 400; do
                 effective="$(effective_cut_ms "$cut_ms" "$grace_ms")"
-                printf '%s\t%s\t%s\t%s\tv3\tna\t0.0\ttrue\t1\n' \
+                printf '%s\t%s\t%s\t%s\tv3\tna\t0.0\ttrue\t1\tna\t1\t0\n' \
                     "$phrase" "$cut_ms" "$grace_ms" "$effective" >>"$baseline_tsv"
             done
         done
@@ -502,6 +617,33 @@ run_self_test() {
     EXPERIMENT_ENVIRONMENT_STATE="configured"
     if append_production_v3_baseline "$baseline_report" "$baseline_tsv"; then
         echo "self-test accepted configured SDK environment for production-v3 baseline" >&2
+        exit 1
+    fi
+    for entry in "${CLIPS[@]}"; do
+        phrase="${entry%%|*}"
+        for tail_ms in $V3_INPUT_TAIL_MS_LIST; do
+            printf '%s\t0\t0\t0\tv3\tna\t0.0\ttrue\t1\t%s\t%s\t0\n' \
+                "$phrase" "$tail_ms" "$V3_TAIL_TRIALS" >>"$baseline_tsv"
+        done
+    done
+    EXPERIMENT_ENVIRONMENT_STATE="default"
+    : >"$baseline_report"
+    if ! append_v3_input_tail_diagnostic "$baseline_report" "$baseline_tsv" ||
+        ! grep -Fq 'Input-tail evidence complete; report-only' "$baseline_report"; then
+        echo "self-test expected complete v3 input-tail evidence" >&2
+        exit 1
+    fi
+    sed '$d' "$baseline_tsv" >"$self_tmp/incomplete-input-tail.tsv"
+    if append_v3_input_tail_diagnostic "$baseline_report" "$self_tmp/incomplete-input-tail.tsv"; then
+        echo "self-test accepted incomplete v3 input-tail evidence" >&2
+        exit 1
+    fi
+    awk -F '\t' 'BEGIN { OFS = "\t" }
+        $1 == "why" && $10 == "80" { $12 = 4 }
+        { print }
+    ' "$baseline_tsv" >"$self_tmp/invalid-input-tail.tsv"
+    if append_v3_input_tail_diagnostic "$baseline_report" "$self_tmp/invalid-input-tail.tsv"; then
+        echo "self-test accepted impossible empty-trial count" >&2
         exit 1
     fi
     EXPERIMENT_ENVIRONMENT_STATE="unreported"
@@ -663,6 +805,10 @@ tsv="$stage_dir/results.tsv"
     echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
     echo "- Voice: $VOICE"
     echo "- Trials per case: $TRIALS"
+    if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
+        echo "- v3 input-tail trials per case: $V3_TAIL_TRIALS"
+        echo "- v3 appended input-silence ms list: $V3_INPUT_TAIL_MS_LIST"
+    fi
     echo "- Cut ms list: $CUT_MS_LIST"
     echo "- Capture grace ms list: $CAPTURE_GRACE_MS_LIST"
     if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
@@ -680,16 +826,16 @@ tsv="$stage_dir/results.tsv"
     fi
     echo
     if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
-        echo "Production-v3 baseline: requested cut/grace matrix, report-only for WER and final-word retention."
+        echo "Production-v3 baseline: requested cut/grace matrix plus complete-speech input-tail sweep; report-only for WER, blank decodes, and final-word retention."
     else
         echo "Candidate threshold: Unified @ ${CANDIDATE_UNIFIED_TRAILING_MS} ms, 0 ms capture grace, final word retained, max WER <= ${MAX_CANDIDATE_WER}% on the known regression cases."
     fi
     echo
-    echo "| Phrase | Cut ms | Grace ms | Effective cut ms | Backend | Unified trailing ms | Max WER % | Final word retained | p50 ms |"
-    echo "|---|---:|---:|---:|---|---:|---:|---|---:|"
+    echo "| Phrase | Cut ms | Grace ms | Effective cut ms | Backend | Unified trailing ms | Max WER % | Final word retained | p50 ms | Input zero-tail ms | Trials | Empty trials |"
+    echo "|---|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---:|"
 } >"$report"
 
-printf 'phrase\tcut_ms\tcapture_grace_ms\teffective_cut_ms\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\n' >"$tsv"
+printf 'phrase\tcut_ms\tcapture_grace_ms\teffective_cut_ms\tbackend\tunified_trailing_ms\tmax_wer_percent\tfinal_word_retained\tp50_ms\tinput_tail_silence_ms\ttrials\tempty_trials\n' >"$tsv"
 
 EXPERIMENT_ENVIRONMENT_STATE="pending"
 
@@ -740,31 +886,74 @@ for entry in "${CLIPS[@]}"; do
                     exit 1
                 fi
 
-                python3 ./audio-input-evidence.py --audio "$case_wav" --log "$log_file" >>"$log_file"
+                audio_receipt="$(python3 ./audio-input-evidence.py --audio "$case_wav" --log "$log_file")"
+                printf '%s\n' "$audio_receipt" >>"$log_file"
                 EXPERIMENT_ENVIRONMENT_STATE="$(python3 ./experiment-environment.py --log "$log_file" --previous "$EXPERIMENT_ENVIRONMENT_STATE")"
 
                 wer="$(extract_max_wer_percent "$log_file")"
                 retained="$(extract_final_word_retained "$log_file")"
                 p50="$(extract_p50_ms "$log_file")"
+                empty_trials="$(extract_empty_trial_count "$log_file" "$TRIALS")"
                 [[ -n "$p50" ]] || p50="unknown"
-                if ! validate_metrics max-WER "$wer" final-word-retained "$retained" p50 "$p50"; then
+                if ! validate_metrics max-WER "$wer" final-word-retained "$retained" p50 "$p50" empty-trials "$empty_trials"; then
                     echo "invalid benchmark output for $phrase cut=$cut_ms grace=$grace_ms backend=$backend trailing=$trailing_ms" >&2
                     exit 1
                 fi
 
-                printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-                    "$phrase" "$cut_ms" "$grace_ms" "$effective_cut" "$backend" "$trailing_ms" "$wer" "$retained" "$p50" >>"$tsv"
-                printf '| `%s` | %s | %s | %s | `%s` | %s | %s | %s | %s |\n' \
-                    "$phrase" "$cut_ms" "$grace_ms" "$effective_cut" "$backend" "$trailing_ms" "$wer" "$retained" "$p50" >>"$report"
+                printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tna\t%s\t%s\n' \
+                    "$phrase" "$cut_ms" "$grace_ms" "$effective_cut" "$backend" "$trailing_ms" "$wer" "$retained" "$p50" "$TRIALS" "$empty_trials" >>"$tsv"
+                printf '| `%s` | %s | %s | %s | `%s` | %s | %s | %s | %s | na | %s | %s |\n' \
+                    "$phrase" "$cut_ms" "$grace_ms" "$effective_cut" "$backend" "$trailing_ms" "$wer" "$retained" "$p50" "$TRIALS" "$empty_trials" >>"$report"
 
             done
         done
     done
 done
 
+if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
+    for entry in "${CLIPS[@]}"; do
+        phrase="${entry%%|*}"
+        text="${entry#*|}"
+        trimmed_wav="$tmpdir/$phrase.trimmed.wav"
+        for input_tail_ms in $V3_INPUT_TAIL_MS_LIST; do
+            case_wav="$tmpdir/$phrase-input-tail${input_tail_ms}.wav"
+            write_wav_variant "$trimmed_wav" "$case_wav" 0 notrim "$input_tail_ms"
+            python3 ./audio-input-evidence.py --audio "$case_wav" >/dev/null
+            log_file="$tmpdir/$phrase-input-tail${input_tail_ms}-v3.log"
+            echo "benchmarking $phrase complete speech + ${input_tail_ms}ms input silence, v3..."
+            if ! .build/release/presspeech-bench --file "$case_wav" --backend v3 \
+                --trials "$V3_TAIL_TRIALS" --ref "$text" --redact-transcripts \
+                >"$log_file" 2>&1; then
+                cat "$log_file" >&2
+                echo "benchmark failed for $phrase input tail=${input_tail_ms}ms" >&2
+                exit 1
+            fi
+            audio_receipt="$(python3 ./audio-input-evidence.py --audio "$case_wav" --log "$log_file")"
+            printf '%s\n' "$audio_receipt" >>"$log_file"
+            EXPERIMENT_ENVIRONMENT_STATE="$(python3 ./experiment-environment.py --log "$log_file" --previous "$EXPERIMENT_ENVIRONMENT_STATE")"
+            wer="$(extract_max_wer_percent "$log_file")"
+            retained="$(extract_final_word_retained "$log_file")"
+            p50="$(extract_p50_ms "$log_file")"
+            empty_trials="$(extract_empty_trial_count "$log_file" "$V3_TAIL_TRIALS")"
+            [[ -n "$p50" ]] || p50="unknown"
+            if ! validate_metrics max-WER "$wer" final-word-retained "$retained" p50 "$p50" empty-trials "$empty_trials"; then
+                echo "invalid benchmark output for $phrase input tail=${input_tail_ms}ms" >&2
+                exit 1
+            fi
+            printf '%s\t0\t0\t0\tv3\tna\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$phrase" "$wer" "$retained" "$p50" "$input_tail_ms" "$V3_TAIL_TRIALS" "$empty_trials" >>"$tsv"
+            printf '| `%s` | 0 | 0 | 0 | `v3` | na | %s | %s | %s | %s | %s | %s |\n' \
+                "$phrase" "$wer" "$retained" "$p50" "$input_tail_ms" "$V3_TAIL_TRIALS" "$empty_trials" >>"$report"
+        done
+    done
+fi
+
 candidate_gate_passed=1
 if [[ "$PRODUCTION_V3_ONLY" -eq 1 ]]; then
     if ! append_production_v3_baseline "$report" "$tsv"; then
+        candidate_gate_passed=0
+    fi
+    if ! append_v3_input_tail_diagnostic "$report" "$tsv"; then
         candidate_gate_passed=0
     fi
 elif ! append_candidate_gate "$report" "$tsv"; then

@@ -74,8 +74,12 @@
             <div class="fact"><strong>Apple Silicon</strong><span>M1 or newer. Intel Macs are not supported.</span></div>
             <div class="fact"><strong>macOS 14+</strong><span>Sonoma or later.</span></div>
             <div class="fact"><strong>Direct or Homebrew</strong><span>Download the signed zip manually, or use Homebrew for install and updates. Presspeech has no Homebrew runtime dependency after installation.</span></div>
-            <div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts the first download on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models load automatically.</span></div>
+            <div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts a missing-model download on launch and cannot defer it in Setup. A valid cached model loads without another download.</span></div>
           </div>
+          <details>
+            <summary>What changes in macOS 0.3.9 (not yet published)</summary>
+            <p>For a clean install, the planned 0.3.9 Setup asks you to choose <strong>Download Model</strong> or <strong>Set Up Later</strong> to defer a missing-model download. Existing installs with a valid cached model continue loading automatically. <strong>These choices are not in published 0.3.8.</strong> Check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a> before following 0.3.9 instructions; source changes alone do not make a new download available.</p>
+          </details>
         </div>
       </section>
 
@@ -112,7 +116,7 @@ echo 'Release and archive attestations verified'</code></pre>
             </li>
             <li>
               <strong>Finish Setup Checklist</strong>
-              <p>The macOS 0.3.8 release starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; choose Set Up Later to defer. Keep Presspeech open while the model prepares, then use Setup Checklist for the remaining checks.</p>
+              <p>macOS 0.3.8 starts a missing ~500–600 MB model download on launch; Setup cannot defer it. Keep Presspeech open while the model prepares, then use Setup Checklist for the remaining checks.</p>
             </li>
           </ol>
         </div>
@@ -128,7 +132,7 @@ echo 'Release and archive attestations verified'</code></pre>
           <pre><code>brew install --cask rcourtman/presspeech/presspeech</code></pre>
           <p>If you decide to launch published 0.3.8 after reviewing the <a href="#model-download-privacy">model-download privacy warning</a>, run:</p>
           <pre><code>open /Applications/Presspeech.app</code></pre>
-          <p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; choose <strong>Set Up Later</strong> to defer. Existing installs and cached models load automatically. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>
+          <p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch; Setup cannot defer it. Existing installs with a valid cached model load without another download. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>
           <div class="note"><p>To deliberately free menu-bar space, choose <strong>Settings → Behavior → Show Presspeech in Menu Bar</strong>. Presspeech enables its Dock icon if needed, and the Dock menu can restore the item. If a crowded or notched menu bar temporarily omits the item, open <strong>Presspeech.app</strong> again from Applications, Finder, or Spotlight. The already-running app opens Setup Checklist; enable <strong>Show in Dock</strong> there for a persistent alternative. Right-click its Dock icon to reach dictation controls, Settings, and Support.</p></div>
         </div>
       </section>
@@ -211,7 +215,7 @@ echo 'Release and archive attestations verified'</code></pre>
             </li>
             <li>
               <strong>Decide whether to launch 0.3.8</strong>
-              <p>If you chose to wait after reading the <a href="#model-download-privacy">privacy warning</a>, leave the app unopened. Otherwise, run <code>open /Applications/Presspeech.app</code>. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; choose Set Up Later to defer. Upgrades and cached models load automatically.</p>
+              <p>If you chose to wait after reading the <a href="#model-download-privacy">privacy warning</a>, leave the app unopened. Otherwise, run <code>open /Applications/Presspeech.app</code>. macOS 0.3.8 starts a missing ~500–600 MB model download on launch; Setup cannot defer it. A valid cached model loads without another download.</p>
             </li>
             <li>
               <strong>Finish Setup Checklist</strong>
@@ -253,7 +257,9 @@ Otherwise offer the direct notarised zip using the current version-pinned downlo
 Only after the user makes an informed choice to launch 0.3.8:
   open /Applications/Presspeech.app
 
-After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.</code></pre>
+After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch; its Setup cannot defer that request. Existing installs with a valid cached model load without another download. Do not tell the user to choose Download Model or Set Up Later in 0.3.8. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.
+
+Only if the user asks about a future build: a clean install of 0.3.9 is planned to choose Download Model in Setup or Set Up Later to defer. That behavior is not in published 0.3.8; check GitHub Releases before describing it as available.</code></pre>
           </details>
           <p>Plain-text prompts for both macOS and Windows: <a href="install/agents.md">install/agents.md</a>.</p>
         </div>

@@ -687,10 +687,12 @@ Record this release-gate matrix against the exact installed candidate:
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current browser text field, plus three two-window focus-change recoveries, with the previous-clipboard option off | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
-| Automatic insertion and clipboard-only Command-V recovery with a non-US keyboard layout | |
+| Automatic insertion and clipboard-only Command-V recovery on ordinary Dvorak, or another layout that moves V under Command | |
+| Automatic insertion or visible safe recovery on a non-Latin input source such as Russian, plus physical Command-V recovery | |
 | Active-layout Command-V hotkey conflict: recorder rejects it; an older binding that becomes Paste after a layout switch passes through | |
 | Electron issue #33: steady-focus paste once; a switch between two windows of the same app must use clipboard recovery | |
 | Ten TextEdit and ten slow Electron manual-restore trials for issue #36 | |
+| Manual restore preserves a representative rich-text clipboard item, not just its plain-text fallback | |
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
@@ -814,23 +816,27 @@ do not retain phrases, hostnames, remote clipboard contents, or screenshots.
 This qualifies only the tested configuration, not all remote desktop apps or
 clipboard-sharing modes.
 
-For the non-US keyboard-layout row, compare an English/US input source with at
-least one non-US source. When available, include Dvorak (or another layout that
-moves the letter V to a different key position), not only a non-Latin source
-such as Russian: this exercises layout-aware synthetic Command-V rather than
-only character labeling. Distinguish ordinary Dvorak from
+For the keyboard-layout rows, compare an English/US input source with two
+distinct cases: ordinary Dvorak (or another layout that moves V under Command)
+and a non-Latin input source such as Russian. One cannot stand in for the
+other. Establish the physical Command-V baseline in each target under each
+active input source before scoring Presspeech delivery. The non-Latin case
+checks a different Command-layer mapping; a source-level Dvorak fixture does
+not establish its behavior. Distinguish ordinary Dvorak from
 [**Dvorak – QWERTY ⌘**](https://support.apple.com/en-bn/guide/mac-help/mh27976/mac):
 the latter uses QWERTY positions while Command is held, so it does not satisfy
 the moved-Command-V check; test it separately if available to catch a mismatch
 between a displayed key label and the Command key-down translation. In TextEdit
 and a current Electron/Chromium target,
-confirm a steady-focus dictation inserts once under each layout. Then cause a
-clipboard-only recovery by changing focus before delivery and confirm physical
-Command-V pastes that transcript once under each layout. A displayed hotkey
-label or successful physical-hotkey test alone does not establish that
-synthetic paste and manual recovery work. Record only the input-source names
-and aggregate outcomes; do not retain dictated phrases, transcripts, or field
-contents.
+confirm a steady-focus dictation inserts once under each layout when the active
+Command-layer Paste key is resolvable. If it is not, require a visible
+clipboard-only recovery instead of a guessed US-position shortcut. Then cause
+a clipboard-only recovery by changing focus before delivery and confirm
+physical Command-V pastes that transcript once under each layout. A displayed
+hotkey label or successful physical-hotkey test alone does not establish that
+synthetic paste and manual recovery work. Record only the input-source names,
+whether automatic insertion or safe recovery occurred, and aggregate outcomes;
+do not retain dictated phrases, transcripts, or field contents.
 
 If an already-installed input source exposes no usable Command-V key mapping,
 confirm Presspeech reports clipboard-only recovery and posts no guessed US-layout
@@ -1254,6 +1260,22 @@ item after the development-wrapper launch check.
   Universal Clipboard on the second test device.
   No fixed delay is a substitute for observing consumption. This is the manual
   qualification boundary for [issue #36](https://github.com/rcourtman/presspeech/issues/36).
+- Separately test representation fidelity with disposable content, not a real
+  document. In TextEdit rich-text mode, copy harmless text with two visibly
+  different styles. Before dictation, paste it into a second rich-text document
+  and a plain-text field to establish both baselines; if the source supplies
+  only plain text, choose another local rich-text source. Copy the styled source
+  again, dictate into a blank field, observe the complete transcript there,
+  then explicitly choose **Restore Previous Clipboard…**. Paste into fresh
+  rich-text and plain-text fields. The restored item must reproduce the
+  baseline words and styling, without a transcript or missing format. Record
+  the source app, generic content class, and result only, not content or
+  clipboard bytes. If Presspeech reports that a representation was unavailable
+  and offers no restore, record **Blocked** for that source, not a fidelity
+  pass; use another source to complete this row. A plain-marker restore or the
+  synthetic pasteboard self-test alone cannot qualify a real app's rich-content
+  provider. AppKit pasteboard items can carry
+  [multiple representations](https://developer.apple.com/documentation/appkit/nspasteboard).
 - With preservation still enabled, seed a new old marker and force
   clipboard-only recovery twice: once by changing windows during transcription
   and once in a target that does not expose exact focused-window identity.
@@ -1486,7 +1508,9 @@ clipboard.
 - Replace the clipboard after its write, during the route delay, and just
   before the one-batch shortcut submission. Confirm detected changes skip the
   shortcut and retain text without replacing the newer copy automatically.
-  A change during or after SendInput remains an unguarded race.
+  Replace it during submission or within the brief post-shortcut check and
+  confirm an uncertain-delivery notice, with no automatic second write.
+  A later copy can still race the target's asynchronous paste consumption.
 - Switch to a different target window before delivery. Confirm the recovery
   notice appears and the Presspeech-authored target-verification log message is
   the fixed status `paste skipped; original target could not be verified`, not either executable

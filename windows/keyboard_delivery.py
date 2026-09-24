@@ -2,10 +2,10 @@
 
 A complete shortcut is submitted in one SendInput call so Windows cannot
 interleave physical or separately injected input between its events. The
-current modifier state is checked immediately before submission; a later key
-press can still race it. The caller can attempt key-up cleanup when Windows
-does not accept the whole batch. Importing this module does not load a Windows
-DLL or inject input.
+current modifier state and optional caller guard are checked immediately before
+submission; a later key press or clipboard copy can still race them. The caller
+can attempt key-up cleanup when Windows does not accept the whole batch.
+Importing this module does not load a Windows DLL or inject input.
 """
 import ctypes
 
@@ -44,6 +44,10 @@ class ModifierHeldError(KeyboardDeliveryError):
 
 class ModifierStateError(KeyboardDeliveryError):
     """The physical modifier snapshot could not be read."""
+
+
+class PreSubmitCheckError(KeyboardDeliveryError):
+    """A caller's final delivery guard failed before any input was submitted."""
 
 
 # Win32 LONG and DWORD remain 32-bit when Python itself is 64-bit. Fixed-width
@@ -160,7 +164,7 @@ class Controller:
     def _modifiers_down(self):
         return paste_keys_held(api=self._api)
 
-    def _send(self, events, *, check_modifiers=False):
+    def _send(self, events, *, check_modifiers=False, before_submit=None):
         events = tuple(events)
         for virtual_key, _flags in events:
             self._validate_virtual_key(virtual_key)
@@ -176,9 +180,21 @@ class Controller:
             if check_modifiers and self._modifiers_down():
                 raise ModifierHeldError(
                     "a paste key is held; paste was not attempted")
+            if before_submit is not None:
+                # The caller's clipboard receipt may become stale while this
+                # controller is built or Win32 modifier state is queried.
+                # Keep the last check immediately adjacent to SendInput. A
+                # failed/unavailable guard must not inject even a prefix.
+                try:
+                    allowed = before_submit()
+                except Exception:
+                    allowed = False
+                if allowed is not True:
+                    raise PreSubmitCheckError(
+                        "delivery changed before the paste shortcut") from None
             inserted = int(self._api.SendInput(
                 len(inputs), inputs, ctypes.sizeof(_INPUT)))
-        except (ModifierHeldError, ModifierStateError):
+        except (ModifierHeldError, ModifierStateError, PreSubmitCheckError):
             raise
         except Exception:
             raise KeyboardDeliveryError(
@@ -193,7 +209,7 @@ class Controller:
     def release(self, virtual_key):
         self._send(((virtual_key, _KEYEVENTF_KEYUP),))
 
-    def shortcut(self, modifiers, virtual_key):
+    def shortcut(self, modifiers, virtual_key, *, before_submit=None):
         """Insert one non-interleavable modifier/key shortcut transaction."""
         modifiers = tuple(modifiers)
         if (not modifiers or virtual_key in modifiers or
@@ -204,4 +220,5 @@ class Controller:
         ), (virtual_key, 0), (virtual_key, _KEYEVENTF_KEYUP), *(
             (modifier, _KEYEVENTF_KEYUP) for modifier in reversed(modifiers)
         )]
-        self._send(events, check_modifiers=True)
+        self._send(events, check_modifiers=True,
+                   before_submit=before_submit)

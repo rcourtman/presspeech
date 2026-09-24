@@ -939,13 +939,14 @@ FIRST_RUN_ACTION_COPY = {
         "<strong>Decide whether to launch 0.1.12</strong>",
         "leave the installer’s final <strong>Launch Presspeech</strong> option unchecked and do not open the app",
         "a missing model starts downloading without another prompt",
-        "<strong>Published 0.1.12:</strong> Setup shows",
-        "0.1.12 does not offer dictation style in Setup",
-        "open <strong>Settings</strong>, select <strong>Press to toggle</strong> under <strong>Trigger</strong>",
-        "<strong>Upcoming 0.1.13 (not yet published):</strong> Setup also offers",
-        "<strong>Set Up Later</strong> defers completing setup, not that download.",
+        "<h2>First launch of published Windows 0.1.12</h2>",
+        "Set Up Later does not defer that request",
+        "0.1.12 does not offer this choice in Setup",
+        "finish Setup, open <strong>Settings</strong>",
+        "What changes in Windows 0.1.13 (not yet published)",
+        "not available in the current 0.1.12 download",
         "A new profile starts with <strong>Start Presspeech with Windows</strong> off",
-        "<strong>Set Up Later</strong>, or closing Setup if you do not want the app at sign-in",
+        "<strong>Set Up Later</strong>, or closing Setup if you do not want Presspeech at sign-in",
     ),
     DOCS / "llms-full.txt": (
         "Only after the user decides to launch published 0.3.8 despite the model-download warning above:",
@@ -1386,7 +1387,9 @@ Otherwise offer the direct notarised zip using the current version-pinned downlo
 Only after the user makes an informed choice to launch 0.3.8:
   open /Applications/Presspeech.app
 
-After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project."""
+After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch; its Setup cannot defer that request. Existing installs with a valid cached model load without another download. Do not tell the user to choose Download Model or Set Up Later in 0.3.8. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.
+
+Only if the user asks about a future build: a clean install of 0.3.9 is planned to choose Download Model in Setup or Set Up Later to defer. That behavior is not in published 0.3.8; check GitHub Releases before describing it as available."""
 
 README_MAC_PROMPT_START = (
     "### Assistant Install Prompt\n\n"
@@ -1431,7 +1434,7 @@ Run these read-only checks in PowerShell:
 
 Stop if the architecture is not X64. Windows 11 is recommended. If this is Windows 10, explain that general support has ended and continue only if the user confirms the PC has Extended Security Updates or an edition that remains supported.
 
-Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Published Windows 0.1.12 starts the selected model download on first launch. Upcoming 0.1.13 asks before downloading missing first-run default model files on either path; Setup offers deferral on both and the smaller CPU model on the Parakeet path. Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
+Before downloading, explain the language and hardware split: a fresh system with usable NVIDIA CUDA selects multilingual Parakeet (~2.5 GB), while a fresh system without usable CUDA selects English-only Whisper base.en on CPU (~141 MiB). Published Windows 0.1.12 starts the selected model download on first launch; Setup cannot defer it. Other local models remain selectable in Settings, but the multilingual alternatives are intended for a supported NVIDIA GPU. If the user needs a language other than English and does not have usable NVIDIA CUDA, show them https://rcourtman.github.io/presspeech/windows.html#language-support and ask whether they still want to continue.
 
 Download the installer and its checksum from the same official release, then verify both the checksum-file shape and the installer hash:
   $ErrorActionPreference = 'Stop'
@@ -1476,7 +1479,9 @@ Once the checksum succeeds and any requested attestation check also succeeds—o
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button. Before choosing Finish Setup, Set Up Later, or closing Setup, explain that a new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off; upcoming 0.1.13 defaults it off. Published 0.1.12 offers Press to toggle in Settings, not Setup; upcoming 0.1.13 offers it in Setup. If the user chooses Set Up Later, leave setup incomplete; in 0.1.12 this does not defer an already-started model download. Otherwise, finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Focus on setup and the first test; do not ask the user to star, review, or otherwise endorse the project."""
+After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). In published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically during Setup and when its selection changes; its retry button is Check Again, not Check Microphone. Before choosing Finish Setup, Set Up Later, or closing Setup, explain that a new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off. Published 0.1.12 offers Press to toggle in Settings, not Setup. If the user chooses Set Up Later, leave setup incomplete; in 0.1.12 this does not defer an already-started model download. Otherwise, finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Focus on setup and the first test; do not ask the user to star, review, or otherwise endorse the project.
+
+Only if the user asks about a future build: planned 0.1.13 asks before downloading either missing first-run default model and offers Set Up Later to defer; the Parakeet path also offers the smaller CPU model. It leaves the microphone closed until the user chooses Check Microphone and defaults Start with Windows off. Upcoming 0.1.13 offers Press to toggle in Setup. None of those controls is in the published 0.1.12 download. Verify GitHub Releases before describing them as available."""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
@@ -1821,13 +1826,13 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:The Presspeech icon appears in the menu bar|Homebrew is the easiest path if you already use it or want command-line updates)\..*?</p>",
-        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch. In 0.3.9, a clean install must choose <strong>Download Model</strong> in Setup; choose <strong>Set Up Later</strong> to defer. Existing installs and cached models load automatically. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
+        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch; Setup cannot defer it. Existing installs with a valid cached model load without another download. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
         path=path,
     )
     text = replace_regex(
         text,
         r'<div class="fact"><strong>(?:Model download|First model download)</strong><span>.*?</span></div>',
-        '<div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts the first download on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models load automatically.</span></div>',
+        '<div class="fact"><strong>First model download</strong><span>Internet is required for the local model, about 500–600 MB. macOS 0.3.8 starts a missing-model download on launch and cannot defer it in Setup. A valid cached model loads without another download.</span></div>',
         path=path,
     )
     text = replace_regex(
@@ -3154,6 +3159,38 @@ def check_first_run_action_copy(
     return errors
 
 
+def check_published_step_scoping(
+    mac_path: Path = DOCS / "install.html",
+    windows_path: Path = DOCS / "windows.html",
+) -> list[str]:
+    """Keep unreleased controls out of the ordered steps for current downloads."""
+    errors: list[str] = []
+    for path, section_id, future_version in (
+        (mac_path, "direct-download", "0.3.9"),
+        (windows_path, "first-launch", "0.1.13"),
+    ):
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        try:
+            contents = read_text(path)
+        except OSError as exc:
+            errors.append(f"{display}: cannot read published install steps: {exc}")
+            continue
+        section = re.search(
+            rf'<section id="{section_id}">(.*?)</section>', contents, re.DOTALL
+        )
+        steps = (
+            re.search(r'<ol class="steps">(.*?)</ol>', section.group(1), re.DOTALL)
+            if section else None
+        )
+        if steps is None:
+            errors.append(f"{display}: missing ordered published steps in #{section_id}")
+        elif future_version in steps.group(1):
+            errors.append(
+                f"{display}: unreleased {future_version} instructions appear inside published #{section_id} steps"
+            )
+    return errors
+
+
 def check_onboarding_release_scope(
     metadata: dict[str, object],
     reviewed: dict[str, str] = ONBOARDING_RELEASE_COPY_REVIEWED,
@@ -4456,7 +4493,7 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
         "Before choosing Finish Setup, Set Up Later, or closing Setup",
         "new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off",
         "Published 0.1.12 offers Press to toggle in Settings, not Setup",
-        "upcoming 0.1.13 offers it in Setup",
+        "Upcoming 0.1.13 offers Press to toggle in Setup",
         "If the user chooses Set Up Later, leave setup incomplete",
     )
     missing_windows_setup_choice = [
@@ -6532,6 +6569,35 @@ def run_self_test() -> None:
         action_copy.write_text("Upcoming 0.1.13 asks before downloading\n", encoding="utf-8")
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
             raise SyncError("self-test: missing published first-run action was accepted")
+        scoped_mac = Path(tmp) / "install.html"
+        scoped_windows = Path(tmp) / "windows.html"
+        scoped_mac.write_text(
+            '<section id="direct-download"><ol class="steps"><li>0.3.8</li></ol></section>',
+            encoding="utf-8",
+        )
+        scoped_windows.write_text(
+            '<section id="first-launch"><ol class="steps"><li>0.1.12</li></ol>'
+            '<details>0.1.13</details></section>',
+            encoding="utf-8",
+        )
+        if check_published_step_scoping(scoped_mac, scoped_windows):
+            raise SyncError("self-test: separated future controls were rejected")
+        scoped_mac.write_text(
+            '<section id="direct-download"><ol class="steps"><li>0.3.9</li></ol></section>',
+            encoding="utf-8",
+        )
+        if not check_published_step_scoping(scoped_mac, scoped_windows):
+            raise SyncError("self-test: future Mac controls inside current steps were accepted")
+        scoped_mac.write_text(
+            '<section id="direct-download"><ol class="steps"><li>0.3.8</li></ol></section>',
+            encoding="utf-8",
+        )
+        scoped_windows.write_text(
+            '<section id="first-launch"><ol class="steps"><li>0.1.13</li></ol></section>',
+            encoding="utf-8",
+        )
+        if not check_published_step_scoping(scoped_mac, scoped_windows):
+            raise SyncError("self-test: future controls inside current steps were accepted")
         action_copy.write_text(
             "Published 0.1.12 starts without asking\n"
             "brew install --cask rcourtman/presspeech/presspeech\n"
@@ -6602,6 +6668,7 @@ def main() -> int:
             errors.extend(check_mac_release_phase_copy(metadata))
             errors.extend(check_mac_model_download_guidance())
             errors.extend(check_first_run_action_copy())
+            errors.extend(check_published_step_scoping())
             errors.extend(check_onboarding_release_scope(metadata))
             errors.extend(check_windows_release_phase_copy(metadata))
             errors.extend(check_windows_release_references(metadata))
@@ -6670,6 +6737,7 @@ def main() -> int:
         errors.extend(check_mac_release_phase_copy(metadata))
         errors.extend(check_mac_model_download_guidance())
         errors.extend(check_first_run_action_copy())
+        errors.extend(check_published_step_scoping())
         errors.extend(check_onboarding_release_scope(metadata))
         errors.extend(check_windows_release_phase_copy(metadata))
         errors.extend(check_windows_release_references(metadata))

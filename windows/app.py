@@ -3017,7 +3017,11 @@ class PresspeechApp:
             # guards, not acknowledgement that the target consumed the text.
             # Submit the complete chord in one SendInput call so physical or
             # separately injected input cannot interleave its chord events.
-            keyboard.shortcut(modifiers, keyboard_delivery.VK_V)
+            keyboard.shortcut(
+                modifiers, keyboard_delivery.VK_V,
+                before_submit=lambda: clipboard_delivery.is_current(receipt))
+        except keyboard_delivery.PreSubmitCheckError:
+            failure = "clipboard-changed"
         except keyboard_delivery.ModifierHeldError:
             failure = "modifier-held"
         except keyboard_delivery.ModifierStateError:
@@ -3041,6 +3045,14 @@ class PresspeechApp:
             self._injecting_keys = False
         if failure:
             self._remember_undelivered_dictation(text, failure)
+            return False
+        # SendInput accepts events, not a paste-consumed acknowledgement. If
+        # a newer clipboard owner appeared during submission or its brief
+        # cleanup, do not silently report success. The shortcut might already
+        # have reached the target; keep a recovery copy without overwriting
+        # the newer clipboard item or trying another insertion strategy.
+        if not clipboard_delivery.is_current(receipt):
+            self._remember_undelivered_dictation(text, "shortcut-uncertain")
             return False
         return True
 

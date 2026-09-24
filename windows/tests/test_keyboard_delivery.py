@@ -145,6 +145,40 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         self.assertNotIn("private", str(raised.exception))
         self.assertIsNone(raised.exception.__cause__)
 
+    def test_pre_submit_guard_runs_after_modifier_check_and_before_input(self):
+        api = self.backend()
+        observed = []
+
+        def final_guard():
+            observed.append(api.GetAsyncKeyState.call_count)
+            api.SendInput.assert_not_called()
+            return True
+
+        delivery.Controller(api=api).shortcut(
+            [delivery.VK_LCONTROL], delivery.VK_V,
+            before_submit=final_guard)
+
+        self.assertEqual(observed, [len(delivery._MODIFIER_KEYS)])
+        api.SendInput.assert_called_once()
+
+    def test_failed_or_unavailable_pre_submit_guard_injects_nothing(self):
+        def unavailable():
+            raise OSError("private clipboard detail")
+
+        for guard in (lambda: False,
+                      lambda: None,
+                      unavailable):
+            with self.subTest(guard=guard):
+                api = self.backend()
+                with self.assertRaises(delivery.PreSubmitCheckError) as raised:
+                    delivery.Controller(api=api).shortcut(
+                        [delivery.VK_LCONTROL], delivery.VK_V,
+                        before_submit=guard)
+                api.SendInput.assert_not_called()
+                self.assertNotIn("private", str(raised.exception))
+                self.assertIsNone(raised.exception.__cause__)
+                self.assertTrue(raised.exception.__suppress_context__)
+
     def test_partial_shortcut_batch_is_reported_as_uncertain(self):
         api = self.backend(inserted=2)
         with self.assertRaises(delivery.KeyboardDeliveryError):
