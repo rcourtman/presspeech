@@ -149,3 +149,10 @@ local monitor, not its modal confirmation UI, persistence, or the full app's
 Command-comma Settings-menu precedence; the existing pure hotkey suite covers
 the decision policy and persistence, while the manual hotkey checklist covers
 the actual app-menu interaction.
+It also does not force a production event tap to time out while recording.
+The model-free hotkey suite checks that a timeout clears hold and toggle
+latches and requests cancellation; a Mac run must still verify the
+app actually discards audio, shows the recovery notice, and accepts a new
+hotkey press after the release safety latch clears. Do not stall the
+system-wide tap or revoke privacy grants solely to manufacture that condition
+in a user's session.

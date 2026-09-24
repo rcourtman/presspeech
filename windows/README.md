@@ -509,6 +509,8 @@ pasted text when it contains a newline. The default After pasting value is
 In the current source (not yet a published Windows build), a transcript with a
 line break headed for a recognized local command-terminal window goes to
 Delivery Recovery *before* Presspeech changes the clipboard or sends Ctrl+V.
+The current exact-name check includes Windows Terminal, Console Host, WezTerm,
+MinTTY, and Alacritty; it does not identify every terminal.
 Choose **Copy for Manual Paste**, paste into **Try Dictation** or a
 non-executing editor, and review it there before deliberately running any
 command. This check cannot identify embedded or remote consoles and does not

@@ -209,11 +209,10 @@ class Controller:
             if check_modifiers and self._modifiers_down():
                 raise ModifierHeldError(
                     "a paste key is held; paste was not attempted")
-            if before_submit is not None:
-                # The caller's clipboard receipt may become stale while this
-                # controller is built or Win32 modifier state is queried.
-                # Keep the last check immediately adjacent to SendInput. A
-                # failed/unavailable guard must not inject even a prefix.
+            def check_before_submit():
+                # The caller's focus/clipboard receipt may become stale while
+                # this controller or a Win32 key-state query runs. A failed
+                # or unavailable guard must not inject even a prefix.
                 try:
                     result = before_submit()
                 except Exception:
@@ -224,12 +223,20 @@ class Controller:
                     # failure codes for a more accurate recovery notice.
                     reason = "clipboard-changed" if result is False else result
                     raise PreSubmitCheckError(reason) from None
+            if before_submit is not None:
+                check_before_submit()
             # A focus/clipboard guard can wait on another process. A physical
             # key pressed while it ran must not modify the shortcut we submit.
             # This remains a point-in-time check, not an atomic key-state lock.
-            if check_modifiers and before_submit is not None and self._modifiers_down():
-                raise ModifierHeldError(
-                    "a paste key is held; paste was not attempted")
+            if check_modifiers and before_submit is not None:
+                if self._modifiers_down():
+                    raise ModifierHeldError(
+                        "a paste key is held; paste was not attempted")
+                # The second key-state scan can itself outlive the focus and
+                # clipboard checks above. Revalidate those just before the
+                # one-batch SendInput call; this still cannot make a later
+                # focus change or clipboard copy atomic with delivery.
+                check_before_submit()
         except (ModifierHeldError, ModifierStateError, PreSubmitCheckError):
             raise
         except Exception:

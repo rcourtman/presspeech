@@ -1332,6 +1332,15 @@ item after the development-wrapper launch check.
   Confirm ordinary typing is not converted into dictation midway through.
 - In toggle mode, test start/stop, a declined press during model loading or
   transcription, and Escape cancellation. The next ready press must work.
+- If macOS naturally times out the keyboard event tap during a harmless hold
+  or toggle recording, require **Recording canceled — keyboard listener
+  interrupted** in the menu and no transcription, paste, or history entry from
+  that recording. Release the original trigger and confirm a fresh hotkey
+  press works; if macOS missed the release too, one extra press/release may be
+  needed to clear the safety latch. Record this as a
+  conditional observation, not a pass when no timeout occurred; do not block
+  the system-wide tap or revoke privacy grants to manufacture one. A separate
+  permission-revocation check below retains its clipboard-only recovery path.
 - Test a second keyboard layout. Confirm the physical key remains the trigger,
   its displayed label follows the layout, and Caps Lock does not change matching.
 - Try recording an unmodified letter, Shift-only letter, Escape, Command-Tab,
@@ -1798,7 +1807,11 @@ clipboard.
   process owner so an unrecognized embedded or remote console is not mistaken
   for a pass; this guard is not a universal command-execution boundary. Use
   benign text only, and review any recovered transcript in a non-executing
-  editor before manually pasting it into a terminal.
+  editor before manually pasting it into a terminal. On a disposable
+  configuration for each installed app, repeat the line-break check in WezTerm
+  (`wezterm-gui.exe`), MinTTY (`mintty.exe`), and Alacritty (`alacritty.exe`).
+  Record each owner separately as Pass, Fail, or Not run; a Windows Terminal
+  result does not qualify these additional names.
 - Hold the clipboard from a separate process during delivery. Confirm retained
   text is recoverable, recording is paused, the Delivery Recovery window opens
   above ordinary apps, and no transcript appears in the window, logs or files.

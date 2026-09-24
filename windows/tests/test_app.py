@@ -5401,21 +5401,27 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertNotIn("private transcript", str(self.instance.notify.mock_calls))
 
     def test_terminal_newline_is_retained_before_clipboard_or_input(self):
-        self.target = self.target._replace(process_name="WindowsTerminal.exe")
-        self.foreground.return_value = self.target
         text = "private command\n"
+        for owner in ("WindowsTerminal.exe", "wezterm-gui.exe",
+                      "mintty.exe", "alacritty.exe"):
+            with self.subTest(owner=owner):
+                self.instance._undelivered_dictations.clear()
+                self.instance.notify.reset_mock()
+                self.instance._log.reset_mock()
+                self.target = self.target._replace(process_name=owner)
+                self.foreground.return_value = self.target
 
-        self.assertFalse(self.instance._paste(text, self.target))
+                self.assertFalse(self.instance._paste(text, self.target))
 
-        self.assertEqual(self.instance._undelivered_dictations, [text])
-        self.copy.assert_not_called()
-        self.controller.assert_not_called()
-        self.physical_keys_held.assert_not_called()
-        notice = str(self.instance.notify.mock_calls)
-        self.assertIn("Pasting could run a command", notice)
-        self.assertIn("non-executing editor", notice)
-        self.assertNotIn(text, notice)
-        self.assertNotIn(text, str(self.instance._log.mock_calls))
+                self.assertEqual(self.instance._undelivered_dictations, [text])
+                self.copy.assert_not_called()
+                self.controller.assert_not_called()
+                self.physical_keys_held.assert_not_called()
+                notice = str(self.instance.notify.mock_calls)
+                self.assertIn("Pasting could run a command", notice)
+                self.assertIn("non-executing editor", notice)
+                self.assertNotIn(text, notice)
+                self.assertNotIn(text, str(self.instance._log.mock_calls))
 
     def test_single_line_terminal_and_multiline_editor_keep_normal_delivery(self):
         for name, text in (("WindowsTerminal.exe", "private command "),

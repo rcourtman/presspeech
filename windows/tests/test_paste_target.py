@@ -14,15 +14,19 @@ class TerminalReviewTests(unittest.TestCase):
         for owner in (
                 "conhost.exe", "OpenConsole.exe", "WindowsTerminal.exe",
                 "WindowsTerminalPreview.exe", "WindowsTerminalCanary.exe",
-                "cmd.exe", "powershell.exe", "pwsh.exe"):
+                "cmd.exe", "powershell.exe", "pwsh.exe",
+                "wezterm-gui.exe", "mintty.exe", "alacritty.exe"):
             for text in ("say hello\n", "say hello\r", "one\r\ntwo"):
                 with self.subTest(owner=owner, text=text):
                     self.assertTrue(paste_target.requires_terminal_review(
                         text, owner))
 
     def test_single_line_terminal_and_multiline_editor_remain_automatic(self):
-        self.assertFalse(paste_target.requires_terminal_review(
-            "say hello ", "WindowsTerminal.exe"))
+        for owner in ("WindowsTerminal.exe", "wezterm-gui.exe",
+                      "mintty.exe", "alacritty.exe"):
+            with self.subTest(owner=owner):
+                self.assertFalse(paste_target.requires_terminal_review(
+                    "say hello ", owner))
         self.assertFalse(paste_target.requires_terminal_review(
             "first\nsecond", "notepad.exe"))
         self.assertFalse(paste_target.requires_terminal_review(

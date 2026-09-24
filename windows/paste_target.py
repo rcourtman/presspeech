@@ -27,7 +27,8 @@ _MAX_CAPTION_CHARS = 8192
 _COMMAND_TERMINAL_PROCESSES = frozenset({
     "conhost.exe", "openconsole.exe", "windowsterminal.exe",
     "windowsterminalpreview.exe", "windowsterminalcanary.exe", "cmd.exe",
-    "powershell.exe", "pwsh.exe",
+    "powershell.exe", "pwsh.exe", "wezterm-gui.exe", "mintty.exe",
+    "alacritty.exe",
 })
 
 # These are foreground window owners whose editable page fields commonly

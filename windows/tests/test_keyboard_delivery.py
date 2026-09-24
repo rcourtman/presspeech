@@ -145,7 +145,7 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
         self.assertNotIn("private", str(raised.exception))
         self.assertIsNone(raised.exception.__cause__)
 
-    def test_pre_submit_guard_runs_after_modifier_check_and_before_input(self):
+    def test_pre_submit_guard_brackets_final_modifier_check_before_input(self):
         api = self.backend()
         observed = []
 
@@ -158,10 +158,38 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
             [delivery.VK_LCONTROL], delivery.VK_V,
             before_submit=final_guard)
 
-        self.assertEqual(observed, [len(delivery._MODIFIER_KEYS)])
+        self.assertEqual(observed, [len(delivery._MODIFIER_KEYS),
+                                    2 * len(delivery._MODIFIER_KEYS)])
         self.assertEqual(api.GetAsyncKeyState.call_count,
                          2 * len(delivery._MODIFIER_KEYS))
         api.SendInput.assert_called_once()
+
+    def test_focus_change_during_final_modifier_scan_blocks_shortcut(self):
+        api = self.backend()
+        state = {"focused": True, "guard_calls": 0}
+        key_queries = 0
+
+        def key_state(_key):
+            nonlocal key_queries
+            key_queries += 1
+            if key_queries > len(delivery._MODIFIER_KEYS):
+                state["focused"] = False
+            return 0
+
+        def final_guard():
+            state["guard_calls"] += 1
+            return True if state["focused"] else "focus-changed"
+
+        api.GetAsyncKeyState.side_effect = key_state
+        with self.assertRaises(delivery.PreSubmitCheckError) as raised:
+            delivery.Controller(api=api).shortcut(
+                [delivery.VK_LCONTROL], delivery.VK_V,
+                before_submit=final_guard)
+
+        self.assertEqual(raised.exception.reason, "focus-changed")
+        self.assertEqual(state["guard_calls"], 2)
+        self.assertEqual(key_queries, 2 * len(delivery._MODIFIER_KEYS))
+        api.SendInput.assert_not_called()
 
     def test_key_pressed_during_pre_submit_guard_blocks_shortcut(self):
         api = self.backend()

@@ -295,6 +295,7 @@ enum DictationNotice: Equatable {
     case noTextToInsert
     case noAudioCaptured
     case recordingTooShort
+    case hotkeyInterrupted
 
     var statusTitle: String {
         switch self {
@@ -322,6 +323,8 @@ enum DictationNotice: Equatable {
             return "No microphone audio — choose Check Microphone"
         case .recordingTooShort:
             return "Recording too short — speak a little longer"
+        case .hotkeyInterrupted:
+            return "Recording canceled — keyboard listener interrupted"
         }
     }
 
@@ -351,6 +354,8 @@ enum DictationNotice: Equatable {
             return "No mic audio — check setup"
         case .recordingTooShort:
             return "Too short — speak longer"
+        case .hotkeyInterrupted:
+            return "Canceled — keyboard listener interrupted"
         }
     }
 
@@ -380,6 +385,8 @@ enum DictationNotice: Equatable {
             return "No microphone audio was captured. Choose Check Microphone in the Presspeech menu, select an input, then try again."
         case .recordingTooShort:
             return "The recording was too short. Try again and speak a little longer."
+        case .hotkeyInterrupted:
+            return "The keyboard listener was interrupted, so Presspeech canceled this recording without transcribing or pasting it. Release the hotkey, then try again. A missed release may require one extra press and release before a new recording starts."
         }
     }
 
@@ -4203,6 +4210,15 @@ private enum HotkeyTransitionAction: Equatable, Sendable {
     case press
     case release
     case cancel
+    case tapInterrupted
+}
+
+private func shouldCancelRecordingAfterHotkeyTapTimeout(
+    isRecording: Bool,
+    isFinishingRecording: Bool,
+    isTerminating: Bool
+) -> Bool {
+    isRecording && !isFinishingRecording && !isTerminating
 }
 
 private enum RecordingStartBlocker: String, Sendable {
@@ -4243,6 +4259,7 @@ private struct HotkeyTransitionState {
     private var plainKeyDown = false
     private var toggleActive = false
     private var suppressEscapeKeyUp = false
+    private var awaitingTriggerReleaseAfterInterruption = false
 
     mutating func resetAll() {
         hotkeyModifierDown = false
@@ -4250,6 +4267,23 @@ private struct HotkeyTransitionState {
         plainKeyDown = false
         toggleActive = false
         suppressEscapeKeyUp = false
+        awaitingTriggerReleaseAfterInterruption = false
+    }
+
+    /// A disabled event tap may have missed the trigger's release. Discard
+    /// that recording rather than letting the maximum-duration timer later
+    /// transcribe audio captured after the user thought dictation had stopped.
+    /// Clear all latches even when idle so a delayed key-up cannot stop a
+    /// subsequent recording.
+    mutating func interrupt(isRecording: Bool) -> [HotkeyTransitionAction] {
+        let triggerWasDown = hotkeyModifierDown || combinationKeyDown || plainKeyDown
+        resetAll()
+        // If macOS re-enables the tap while a physical F-key is still held,
+        // even an unmarked repeat must not begin a new recording. A missed
+        // release may cost one deliberate press/release cycle, but cannot
+        // create another unattended capture.
+        awaitingTriggerReleaseAfterInterruption = triggerWasDown
+        return isRecording ? [.tapInterrupted] : []
     }
 
     mutating func resetToggleState() {
@@ -4279,6 +4313,13 @@ private struct HotkeyTransitionState {
         }
 
         guard event.keycode == hotkey.keycode else { return .pass }
+        if awaitingTriggerReleaseAfterInterruption {
+            if event.typeRawValue == CGEventType.keyUp.rawValue
+                || (hotkey.isModifier && event.typeRawValue == CGEventType.flagsChanged.rawValue) {
+                awaitingTriggerReleaseAfterInterruption = false
+            }
+            return .suppressOnly
+        }
 
         // Modifier masks are side-agnostic, so the physical keycode's
         // own down state is the source of truth for right-side releases.
@@ -4394,6 +4435,8 @@ final class HotkeyListener {
     /// configured hotkey. Only modifier names are safe to persist; logging an
     /// arbitrary global keycode could disclose part of something the user typed.
     private var didLogFirstUnmatchedModifier = false
+    private var tapInterruptionPending = false
+    private var actionGeneration: UInt64 = 0
 
     /// User's current hotkey (set via Settings → Hotkey submenu).
     var hotkey: HotkeyChoice = hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
@@ -4406,6 +4449,7 @@ final class HotkeyListener {
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
     var onCancel: (() -> Void)?
+    var onTapInterrupted: (() -> Void)?
     var isRecordingActive: (() -> Bool)?
     /// True only when the normal Presspeech App menu (and its Settings key
     /// equivalent) is exposed. Read dynamically so toggling Show in Dock takes
@@ -4467,6 +4511,8 @@ final class HotkeyListener {
     }
 
     func stop() {
+        actionGeneration &+= 1
+        tapInterruptionPending = false
         if let tap {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFMachPortInvalidate(tap)
@@ -4498,12 +4544,29 @@ final class HotkeyListener {
     private func handleTapCallback(_ event: HotkeyEventSnapshot) -> Bool {
         if event.typeRawValue == CGEventType.tapDisabledByTimeout.rawValue
             || event.typeRawValue == CGEventType.tapDisabledByUserInput.rawValue {
+            var actions: [HotkeyTransitionAction] = []
+            if event.typeRawValue == CGEventType.tapDisabledByTimeout.rawValue {
+                // A timeout can lose the release and also leave a press or
+                // release queued off the callback. Never run that stale
+                // action after the tap's event stream lost continuity.
+                // Keep user-input disable's existing behavior so a separate
+                // permission-loss/menu-stop path is not changed to discard.
+                actionGeneration &+= 1
+                actions = transitionState.interrupt(isRecording: isRecordingActive?() ?? false)
+                tapInterruptionPending = !actions.isEmpty
+            }
             if let tap {
                 CGEvent.tapEnable(tap: tap, enable: true)
                 log("HotkeyListener: event tap re-enabled after \(event.typeRawValue)")
             }
+            dispatchHotkeyActions(actions)
             return false
         }
+
+        // Cancellation runs off the event-tap callback. Until it completes,
+        // pass input through rather than accepting another hotkey press while
+        // the app still believes the interrupted recording is live.
+        if tapInterruptionPending { return false }
 
         if !didLogFirstEvent {
             didLogFirstEvent = true
@@ -4565,9 +4628,12 @@ final class HotkeyListener {
 
     private func dispatchHotkeyActions(_ actions: [HotkeyTransitionAction]) {
         guard !actions.isEmpty else { return }
+        let generation = actionGeneration
 
         Task { @MainActor [weak self] in
-            self?.performHotkeyActions(actions)
+            guard let self, self.actionGeneration == generation else { return }
+            self.performHotkeyActions(actions)
+            if actions.contains(.tapInterrupted) { self.tapInterruptionPending = false }
         }
     }
 
@@ -4577,6 +4643,7 @@ final class HotkeyListener {
             case .press: onPress?()
             case .release: onRelease?()
             case .cancel: onCancel?()
+            case .tapInterrupted: onTapInterrupted?()
             }
         }
     }
@@ -6530,6 +6597,17 @@ private func postFocusBoundClipboardPasteSteps(
             }
             guard modifiersClear else {
                 return releasePressedKeys() ? .modifierChanged : .deliveryUncertain
+            }
+            // Reading physical HID state is another time-of-check boundary:
+            // focus may move while that query runs. Recheck the original
+            // destination after it, then ownership again because AX can wait
+            // on the target app. Neither check makes posting atomic.
+            let focusedAfterModifiers = targetStillFocused()
+            guard clipboardStillOwned() else {
+                return releasePressedKeys() ? .clipboardChanged : .deliveryUncertain
+            }
+            guard focusedAfterModifiers else {
+                return releasePressedKeys() ? .targetChanged : .deliveryUncertain
             }
         }
         guard postStep(step) else {
@@ -9519,6 +9597,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.onPress = { [weak self] in self?.handleHotkeyPress() }
         hotkey.onRelease = { [weak self] in self?.handleRelease() }
         hotkey.onCancel = { [weak self] in self?.cancelActiveRecording(reason: "escape") }
+        hotkey.onTapInterrupted = { [weak self] in self?.handleHotkeyTapInterruption() }
         hotkey.isRecordingActive = { [weak self] in self?.isRecording == true }
         // Missing permissions are deliberately not a blocker here: that press
         // enters the permission-blocked state and provides its own feedback.
@@ -9534,6 +9613,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             hotkey.onPress = nil
             hotkey.onRelease = nil
             hotkey.onCancel = nil
+            hotkey.onTapInterrupted = nil
             hotkey.isRecordingActive = nil
             hotkey.recordingStartBlocker = nil
             hotkey.resetToggleState()
@@ -9934,6 +10014,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
+        hotkey.onTapInterrupted = nil
         hotkey.isRecordingActive = nil
         hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
@@ -10006,6 +10087,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
+        hotkey.onTapInterrupted = nil
         hotkey.isRecordingActive = nil
         hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
@@ -10117,6 +10199,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
+        hotkey.onTapInterrupted = nil
         hotkey.isRecordingActive = nil
         hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
@@ -10175,6 +10258,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
+        hotkey.onTapInterrupted = nil
         hotkey.isRecordingActive = nil
         hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
@@ -10225,6 +10309,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
+        hotkey.onTapInterrupted = nil
         hotkey.isRecordingActive = nil
         hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
@@ -11142,6 +11227,21 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
     }
 
+    private func handleHotkeyTapInterruption() {
+        // Once the release has entered its bounded audio tail, the recording
+        // no longer depends on another keyboard event and can finish normally.
+        // Before that point a disabled tap may have missed the release, so
+        // discard the audio rather than transcribing an overlong capture.
+        guard shouldCancelRecordingAfterHotkeyTapTimeout(
+            isRecording: isRecording,
+            isFinishingRecording: isFinishingRecording,
+            isTerminating: isTerminating
+        ) else { return }
+        cancelActiveRecording(reason: "keyboard listener interrupted")
+        signalDictationFailure(.hotkeyInterrupted)
+        rebuildMenu()
+    }
+
     // Quit cancels any in-flight recording instead of releasing it:
     // release intentionally starts transcription/paste/history work,
     // while termination only needs to discard audio and restore mute.
@@ -11152,6 +11252,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.onPress = nil
         hotkey.onRelease = nil
         hotkey.onCancel = nil
+        hotkey.onTapInterrupted = nil
         hotkey.isRecordingActive = nil
         hotkey.recordingStartBlocker = nil
         hotkey.stop()
@@ -17555,6 +17656,7 @@ private enum PresspeechSelfTest {
 
     private static func testHotkey() throws {
         try testCustomHotkeyBindings()
+        try testHotkeyTapInterruption()
         try testApplicationSettingsShortcutPrecedence()
         try testHotkeyRecorderModifierReleaseOrdering()
         try testHotkeyRecorderEventSnapshot()
@@ -17573,6 +17675,78 @@ private enum PresspeechSelfTest {
         try testToggleGatedPressDoesNotFlipToggleState()
         try testEscapePassesThroughWhenNotRecording()
         try testEscapeSuppressesCancelRepeatAndKeyUpWhileRecording()
+    }
+
+    private static func testHotkeyTapInterruption() throws {
+        try expect(shouldCancelRecordingAfterHotkeyTapTimeout(
+            isRecording: true, isFinishingRecording: false, isTerminating: false
+        ), equals: true, "a live recording must be discarded after a tap timeout")
+        try expect(shouldCancelRecordingAfterHotkeyTapTimeout(
+            isRecording: true, isFinishingRecording: true, isTerminating: false
+        ), equals: false, "a recording whose release already arrived may finish its audio tail")
+        try expect(shouldCancelRecordingAfterHotkeyTapTimeout(
+            isRecording: false, isFinishingRecording: false, isTerminating: false
+        ), equals: false, "an idle timeout must not show a recording-canceled notice")
+        try expect(shouldCancelRecordingAfterHotkeyTapTimeout(
+            isRecording: true, isFinishingRecording: false, isTerminating: true
+        ), equals: false, "termination already owns recording cancellation")
+        let f5 = hotkeyChoice(forKeycode: 96)
+        var hold = HotkeyTransitionState()
+        try expect(hold.transition(for: event(.keyDown, keycode: f5.keycode),
+                                   hotkey: f5, triggerMode: .hold, isRecording: false),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+                   "the hold fixture must have started a recording")
+        try expect(hold.interrupt(isRecording: true), equals: [.tapInterrupted],
+                   "losing the event stream during a recording must request cancellation")
+        try expect(hold.transition(for: event(.keyDown, keycode: f5.keycode),
+                                   hotkey: f5, triggerMode: .hold, isRecording: false),
+                   equals: .suppressOnly,
+                   "an unmarked key repeat after timeout must not start a second recording")
+        try expect(hold.transition(for: event(.keyUp, keycode: f5.keycode),
+                                   hotkey: f5, triggerMode: .hold, isRecording: false),
+                   equals: .suppressOnly,
+                   "a late release must only clear the timeout recovery latch")
+        try expect(hold.transition(for: event(.keyDown, keycode: f5.keycode),
+                                   hotkey: f5, triggerMode: .hold, isRecording: false),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+                   "a fresh hold press must remain usable after interruption")
+
+        let rightOption = hotkeyChoice(forKeycode: DEFAULT_HOTKEY_KEYCODE)
+        var modifierHold = HotkeyTransitionState()
+        _ = modifierHold.transition(for: event(.flagsChanged, keycode: rightOption.keycode,
+                                               flags: CGEventFlags.maskAlternate.rawValue),
+                                    hotkey: rightOption, triggerMode: .hold, isRecording: false)
+        try expect(modifierHold.interrupt(isRecording: true), equals: [.tapInterrupted],
+                   "the default right-modifier hold must cancel on a lost event stream")
+        try expect(modifierHold.transition(for: event(.flagsChanged, keycode: rightOption.keycode),
+                                           hotkey: rightOption, triggerMode: .hold, isRecording: false),
+                   equals: .suppressOnly,
+                   "a late right-modifier release must not stop canceled audio")
+        try expect(modifierHold.transition(for: event(.flagsChanged, keycode: rightOption.keycode,
+                                                    flags: CGEventFlags.maskAlternate.rawValue),
+                                           hotkey: rightOption, triggerMode: .hold, isRecording: false),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+                   "a new right-modifier press must work after interruption")
+
+        var toggle = HotkeyTransitionState()
+        _ = toggle.transition(for: event(.keyDown, keycode: f5.keycode),
+                              hotkey: f5, triggerMode: .toggle, isRecording: false)
+        try expect(toggle.interrupt(isRecording: true), equals: [.tapInterrupted],
+                   "an interrupted toggle recording must be canceled instead of waiting for a second press")
+        try expect(toggle.transition(for: event(.keyUp, keycode: f5.keycode),
+                                     hotkey: f5, triggerMode: .toggle, isRecording: false),
+                   equals: .suppressOnly,
+                   "interruption must clear the old toggle key latch")
+        try expect(toggle.transition(for: event(.keyDown, keycode: f5.keycode),
+                                     hotkey: f5, triggerMode: .toggle, isRecording: false),
+                   equals: HotkeyTransitionResult(suppress: true, actions: [.press]),
+                   "the next toggle press must start, not stop, a recording")
+        try expect(toggle.interrupt(isRecording: false), equals: [],
+                   "an idle tap interruption must not announce a canceled recording")
+        try expect(toggle.transition(for: event(.keyUp, keycode: f5.keycode),
+                                     hotkey: f5, triggerMode: .toggle, isRecording: false),
+                   equals: .suppressOnly,
+                   "even an idle interruption must clear a stale trigger latch")
     }
 
     private static func testCustomHotkeyBindings() throws {
@@ -20151,6 +20325,37 @@ private enum PresspeechSelfTest {
             KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
             KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
         ], "newer clipboard ownership must unwind Command without posting Paste")
+        let focusDuringModifierProbe = MainActor.assumeIsolated {
+            var focused = true
+            var focusChecks = 0
+            var posted: [KeyboardEventStep] = []
+            let outcome = postFocusBoundClipboardPasteSteps(
+                clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                pasteKey: 0x09,
+                targetStillFocused: {
+                    focusChecks += 1
+                    return focused
+                },
+                clipboardStillOwned: { true },
+                unrelatedPhysicalModifiersClear: {
+                    focused = false
+                    return true
+                },
+                postStep: {
+                    posted.append($0)
+                    return true
+                }
+            )
+            return (outcome: outcome, focusChecks: focusChecks, posted: posted)
+        }
+        try expect(focusDuringModifierProbe.outcome, equals: .targetChanged,
+                   "focus lost during modifier lookup must block Paste key-down")
+        try expect(focusDuringModifierProbe.focusChecks, equals: 2,
+                   "focus must be rechecked after the physical modifier lookup")
+        try expect(focusDuringModifierProbe.posted, equals: [
+            KeyboardEventStep(virtualKey: 0x37, keyDown: true, flags: .maskCommand),
+            KeyboardEventStep(virtualKey: 0x37, keyDown: false, flags: []),
+        ], "focus loss during modifier lookup must unwind Command without posting Paste")
 
         // A post failure before V-down is safe to retry with Unicode typing
         // only when the partial shortcut's keys were released successfully.
@@ -23676,6 +23881,12 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.insertionFailedWithoutHistory.hudTitle,
                    equals: "Check field before retrying",
                    "the failure HUD without history should check the destination before retrying")
+        try expect(DictationNotice.hotkeyInterrupted.statusTitle,
+                   equals: "Recording canceled — keyboard listener interrupted",
+                   "a lost release must be visible as a canceled recording, not a completed paste")
+        try expect(DictationNotice.hotkeyInterrupted.accessibilityValue.contains(
+            "without transcribing or pasting"), equals: true,
+                   "assistive users must know an interrupted recording was discarded")
         try expect(DictationNotice.noTextToInsert.hudTitle,
                    equals: "No text to insert — try again",
                    "empty recognition should not claim that speech was absent")
