@@ -85,6 +85,9 @@
       "",
       "This download does not submit a report or notify maintainers; saved drafts are not monitored. " +
         "Your browser or operating system controls the downloaded file.",
+      "These counts describe only the exact tested setup. Fill in public versions, generic " +
+        "field type, and relevant conditions below before sharing. Do not pool counts across " +
+        "different versions or conditions or infer a general success rate.",
       "Before sharing, open the rcourtman/presspeech repository on GitHub and read " +
         "SUPPORT.md for current reporting routes; search for a matching report first.",
       "If no suitable route is available, keep this draft private and retry later. Do not post private data elsewhere to work around a restriction.",

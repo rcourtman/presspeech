@@ -82,14 +82,16 @@ the intended text lands once, and every unsafe path leaves an explicit manual
 paste recovery instead. The
 [target-app compatibility protocol](docs/app-compatibility.md) gives community
 reports from published builds the same small, privacy-safe baseline. Passing
-reports provide the denominator that failure-only issues cannot, but community
-reports supplement rather than replace native release testing.
+reports document successful delivery or safe recovery that failure-only issues
+cannot, but only for each exact tested version and condition. Do not pool
+self-selected reports into a general success rate; community reports supplement
+rather than replace native release testing.
 
 There is currently an intake constraint: GitHub's [issue index](https://github.com/rcourtman/presspeech/issues)
 says new issue creation is restricted. Existing matching threads may still
 accept comments; otherwise, as described in [SUPPORT.md](SUPPORT.md), worksheet
-results remain local, unmonitored drafts. This limits the planned passing-report
-denominator. Treat missing public reports as missing evidence—not evidence of
+results remain local, unmonitored drafts. This limits observed passing evidence.
+Treat missing public reports as missing evidence—not evidence of
 low demand or reliable delivery—and keep direct native qualification in force
 until a usable reporting route returns.
 

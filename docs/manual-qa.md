@@ -39,7 +39,10 @@ collaborator where noted:
   Confirm its before-test privacy warning matches the currently published
   builds and links to their version-specific model-download guidance; update
   or retire the warning when those releases change. Do not recruit a fresh
-  install for compatibility testing without showing that decision point.
+  install for compatibility testing without showing that decision point. Before
+  the first check action, confirm the page also states whether new public
+  reports can currently be submitted and that the worksheet saves only a local,
+  unmonitored draft while intake is restricted.
   Confirm **Copy report block** and **Download report draft** become available
   only when all slots are classified. Copy must contain only the eight aggregate
   counts and
@@ -57,6 +60,9 @@ collaborator where noted:
   as **Not completed**; verify the block does not imply eight completed
   attempts and the overall
   result remains **An incorrect or unsafe result occurred**.
+  Confirm the report draft and form distinguish matching issue threads from
+  directly comparable observations: counts from different Presspeech or OS
+  versions or conditions must not be pooled into a general success rate.
 - In a signed-out browser, confirm the repository About description and topics
   expose both the released macOS app and Windows prerelease instead of
   presenting a Mac-only project. Confirm the Pages home page, Get started,
@@ -474,6 +480,13 @@ keyboard access testing in addition to assistive-technology testing.
   restored, the listening indicator disappears, and no hidden recording or
   transcription continues. Repeat while Try Dictation is open but a recording
   belongs to Notepad; closing the scratchpad must not cancel that recording.
+- Stop a harmless Try Dictation recording, then close its window while the
+  model is still transcribing. Confirm the completed text is retained in
+  Delivery Recovery, is not pasted into whichever app now has focus, and can
+  be copied or discarded exactly once. Repeat several times near the
+  Transcribing-to-ready transition; no transcript should disappear or be
+  duplicated. A close during active capture must still cancel without
+  creating a recovery copy.
 - In hold mode, release directly on the final consonant of several short
   phrases; in toggle mode, press the hotkey at the same boundary. Confirm the
   final word is retained. Repeat with quiet room tone and steady background

@@ -449,15 +449,20 @@ slots as aggregate counts: successful delivery, safe recovery,
 incorrect or unsafe results, and checks not completed after an early stop.
 Never publish the phrases or transcripts.
 
-Passing reports matter as much as failures because they provide the denominator
-for platform/app/version/field combinations. If no app is already in mind, the
-protocol's live coverage links separate native, browser, and Electron/Chromium
-reports so an unrepresented target class is easy to choose. GitHub still
-reported new issue creation as restricted on 24 September 2026. [Browse existing
+Passing reports matter as much as failures because they document successful
+delivery or safe recovery for an exact Presspeech, operating-system, target-app
+version, field type, and set of conditions. These self-selected reports cannot
+establish a general paste-success rate. If no app is already in
+mind, the protocol's live coverage links separate native, browser, and
+Electron/Chromium reports so an unrepresented target class is easy to choose.
+GitHub still reported new issue creation as restricted on 24 September 2026.
+[Browse existing
 compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22);
 if one matches the platform, app version, and generic field type and accepts
 comments, add the worksheet's eight counts and overall result with your
 Presspeech/OS versions and relevant conditions—even when your outcome differs.
+The matching thread groups observations; do not pool counts across different
+versions or conditions.
 Otherwise, the worksheet's **Download report draft** saves those counts and
 their overall classification with blank prompts for public versions and generic
 target context; it does not collect or save phrases or transcripts. Keep the

@@ -160,6 +160,10 @@ async function main() {
     );
     assert.match(
       worksheet.formatReportDraft(summary.value),
+      /Fill in public versions, generic field type, and relevant conditions below before sharing\. Do not pool counts across different versions or conditions or infer a general success rate/,
+    );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
       /open the rcourtman\/presspeech repository on GitHub and read SUPPORT\.md for current reporting routes/,
     );
     assert.match(

@@ -16,7 +16,9 @@ body:
         yours, comment there with the worksheet block, Presspeech and OS
         versions, generic hardware if useful, and relevant conditions instead
         of opening a duplicate. Add the observation even when its outcome
-        differs.
+        differs. Matching threads group reports; they do not make results from
+        different Presspeech or OS versions or conditions directly comparable.
+        Do not pool their counts into a general paste-success rate.
 
         For a new report, put the platform, public app name/version, and field
         type after the fixed `[Compatibility]:` title prefix. Include no

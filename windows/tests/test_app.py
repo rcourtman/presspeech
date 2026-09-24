@@ -1868,13 +1868,13 @@ class TextRegressionTests(unittest.TestCase):
 
         self.assertIsNone(instance._recording_scratchpad)
 
-    def test_closed_scratchpad_transcript_is_discarded_not_pasted(self):
+    def test_closed_scratchpad_transcript_is_retained_not_pasted(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         original_scratchpad = mock.Mock()
         original_scratchpad.root = None
         instance.scratchpad = None
         instance._paste = mock.Mock()
-        instance._log = mock.Mock()
+        instance._remember_undelivered_dictation = mock.Mock()
 
         instance._deliver_text(
             "private test transcript", app.PasteTarget("notepad.exe", 1234),
@@ -1882,8 +1882,26 @@ class TextRegressionTests(unittest.TestCase):
 
         original_scratchpad.append_text.assert_not_called()
         instance._paste.assert_not_called()
-        instance._log.assert_called_once_with(
-            "scratchpad transcription discarded; window closed")
+        instance._remember_undelivered_dictation.assert_called_once_with(
+            "private test transcript", "scratchpad-unavailable")
+
+    def test_replaced_scratchpad_cannot_receive_old_transcript(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        original_scratchpad = mock.Mock()
+        original_scratchpad.root = mock.Mock()
+        instance.scratchpad = mock.Mock()
+        instance._paste = mock.Mock()
+        instance._remember_undelivered_dictation = mock.Mock()
+
+        instance._deliver_text(
+            "private test transcript", app.PasteTarget("presspeech.exe", 1234),
+            original_scratchpad)
+
+        original_scratchpad.append_text.assert_not_called()
+        instance.scratchpad.append_text.assert_not_called()
+        instance._paste.assert_not_called()
+        instance._remember_undelivered_dictation.assert_called_once_with(
+            "private test transcript", "scratchpad-unavailable")
 
     def test_captured_open_scratchpad_receives_its_transcript(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -1920,6 +1938,24 @@ class TextRegressionTests(unittest.TestCase):
         scratchpad.append_text.assert_called_once_with(
             "private test transcript")
         instance._paste.assert_not_called()
+
+    def test_failed_scratchpad_append_retains_text_without_pasting(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        scratchpad = mock.Mock()
+        scratchpad.root = mock.Mock()
+        scratchpad.append_text.side_effect = RuntimeError("synthetic UI error")
+        instance.scratchpad = scratchpad
+        instance._paste = mock.Mock()
+        instance._remember_undelivered_dictation = mock.Mock()
+        target = app.PasteTarget("presspeech.exe", 1234, app.os.getpid())
+
+        with mock.patch.object(
+                app, "_foreground_paste_target", return_value=target):
+            instance._deliver_text("private test transcript", target, scratchpad)
+
+        instance._paste.assert_not_called()
+        instance._remember_undelivered_dictation.assert_called_once_with(
+            "private test transcript", "scratchpad-unavailable")
 
     def test_focus_change_does_not_append_to_captured_scratchpad(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -4050,6 +4086,16 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertEqual(self.instance._undelivered_dictations, ["private transcript"])
         self.assertNotIn("private transcript", str(self.instance._log.mock_calls))
         self.assertNotIn("private transcript", str(self.instance.notify.mock_calls))
+
+    def test_unavailable_scratchpad_uses_private_recovery_without_clipboard(self):
+        self.instance._remember_undelivered_dictation(
+            "private transcript", "scratchpad-unavailable")
+
+        self.assert_retained_without_content_logs()
+        self.assertIn("private editor", str(self.instance.notify.mock_calls))
+        self.instance.open_delivery_recovery.assert_called_once_with()
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
 
     def test_clipboard_failure_retains_text_and_never_constructs_keyboard(self):
         self.copy.side_effect = RuntimeError("private clipboard detail")

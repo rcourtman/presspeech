@@ -307,6 +307,11 @@ For a private, click-driven test that does not type into another app, open
 upcoming 0.1.13 change also provide a **Try Dictation…** button in Settings.
 In the scratchpad, use **Dictate** to start and stop; the transcript stays in
 that private window.
+In builds containing the upcoming 0.1.13 recovery change, closing Try
+Dictation while a finished recording is still transcribing keeps its completed
+text in Delivery Recovery instead of silently losing it or pasting into another
+app. Choose Copy or Discard there before recording again. Closing the window
+while it is still recording cancels that capture without a transcript to recover.
 
 The configured key is reserved for Presspeech while it is running, so it does
 not also open a Windows surface or invoke an F8–F12 command in the focused app.

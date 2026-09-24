@@ -2196,6 +2196,10 @@ class ScratchpadCloseTests(unittest.TestCase):
         window.app.scratchpad = window
         window.root = mock.Mock()
         window.window_handle = 1234
+        window.text = mock.Mock()
+        window._append_lock = threading.Lock()
+        window._pending_appends = {}
+        window._next_append_id = 0
         return window
 
     def test_close_cancels_recording_owned_by_private_scratchpad(self):
@@ -2223,6 +2227,94 @@ class ScratchpadCloseTests(unittest.TestCase):
         window._close()
 
         window.app.cancel_recording.assert_not_called()
+
+    def test_close_retains_queued_insert_and_late_callback_cannot_duplicate_it(self):
+        window = self.make_window(recording=False, owns_recording=True)
+        root = window.root
+        window.append_text("private test transcript")
+        callback = root.after.call_args.args[1]
+
+        window._close()
+        callback()  # A queued callback must be harmless even if Tk did not cancel it.
+
+        window.text.insert.assert_not_called()
+        window.app._remember_undelivered_dictation.assert_called_once_with(
+            "private test transcript", "scratchpad-unavailable")
+
+    def test_successful_editor_insert_is_not_recovered_on_later_close(self):
+        window = self.make_window(recording=False, owns_recording=True)
+        root = window.root
+        window.append_text("private test transcript")
+        root.after.call_args.args[1]()
+
+        window._close()
+
+        window.text.insert.assert_called_once_with(
+            "end", "private test transcript")
+        window.app._remember_undelivered_dictation.assert_not_called()
+
+    def test_close_during_editor_insert_recovers_without_deadlock(self):
+        window = self.make_window(recording=False, owns_recording=True)
+        root = window.root
+        window.text.insert.side_effect = lambda *_args: window._close()
+        window.append_text("private test transcript")
+
+        root.after.call_args.args[1]()
+
+        window.app._remember_undelivered_dictation.assert_called_once_with(
+            "private test transcript", "scratchpad-unavailable")
+
+    def test_scrolling_failure_after_insert_does_not_duplicate_recovery(self):
+        window = self.make_window(recording=False, owns_recording=True)
+        root = window.root
+        window.text.see.side_effect = RuntimeError("synthetic scroll failure")
+        window.append_text("private test transcript")
+
+        root.after.call_args.args[1]()
+        window._close()
+
+        window.text.insert.assert_called_once_with(
+            "end", "private test transcript")
+        window.app._remember_undelivered_dictation.assert_not_called()
+
+    def test_failed_scheduling_or_insert_retains_text_exactly_once(self):
+        for failure in ("schedule", "insert"):
+            with self.subTest(failure=failure):
+                window = self.make_window(recording=False, owns_recording=True)
+                root = window.root
+                if failure == "schedule":
+                    root.after.side_effect = RuntimeError("synthetic Tk failure")
+                else:
+                    window.text.insert.side_effect = RuntimeError(
+                        "synthetic editor failure")
+
+                window.append_text("private test transcript")
+                if failure == "insert":
+                    root.after.call_args.args[1]()
+                window._close()
+
+                window.app._remember_undelivered_dictation.assert_called_once_with(
+                    "private test transcript", "scratchpad-unavailable")
+
+    def test_append_after_close_is_recovered_without_scheduling(self):
+        window = self.make_window(recording=False, owns_recording=True)
+        root = window.root
+        window._close()
+
+        window.append_text("private test transcript")
+
+        root.after.assert_not_called()
+        window.app._remember_undelivered_dictation.assert_called_once_with(
+            "private test transcript", "scratchpad-unavailable")
+
+    def test_old_close_does_not_clear_newer_scratchpad(self):
+        window = self.make_window(recording=False, owns_recording=True)
+        newer = object()
+        window.app.scratchpad = newer
+
+        window._close()
+
+        self.assertIs(window.app.scratchpad, newer)
 
 
 class PasteSuffixGuidanceTests(unittest.TestCase):

@@ -2561,17 +2561,23 @@ class PresspeechApp:
             # scratchpad must not divert its transcript to the clipboard.
             if _paste_target_same_window(
                     paste_target, _foreground_paste_target()):
-                scratchpad_target.append_text(text)
+                try:
+                    scratchpad_target.append_text(text)
+                except Exception:
+                    # A failed in-process sink is still a delivery failure;
+                    # never expose Tk error details or paste elsewhere.
+                    self._remember_undelivered_dictation(
+                        text, "scratchpad-unavailable")
             else:
                 # Preserve the same focus-change behavior as normal app
                 # delivery. _paste copies the transcript, rechecks the target,
                 # and refuses to inject Ctrl+V into the newly focused window.
                 self._paste(text, paste_target)
             return
-        # Try Dictation is a private sink. If its window disappeared while the
-        # model was working, dropping the result is safer than pasting it into
-        # whichever unrelated application has focus now.
-        self._log("scratchpad transcription discarded; window closed")
+        # Try Dictation is a private sink. Its window can close while the model
+        # is working; retain the completed text for explicit recovery rather
+        # than paste into an unrelated app or silently lose the dictation.
+        self._remember_undelivered_dictation(text, "scratchpad-unavailable")
 
     def _apply_text(self, text):
         text = _apply_dictionary_rules(text, self.settings["dictionary"])
@@ -2621,6 +2627,9 @@ class PresspeechApp:
                 "The original window or focused control could not be "
                 "verified; no paste shortcut was sent. "),
             "target-elevated": "Windows blocks simulated input into this elevated app. ",
+            "scratchpad-unavailable": (
+                "Try Dictation could not confirm that the transcript reached "
+                "its private editor; no paste shortcut was sent. "),
             "modifier-held": (
                 "A Ctrl, Shift, Alt, Windows, or V key was held; no paste "
                 "shortcut was sent. Release it before a manual paste. "),

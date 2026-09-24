@@ -2594,6 +2594,12 @@ class ScratchpadWindow:
         self.app = app
         self.root = None
         self.window_handle = 0
+        # A model worker schedules editor insertion on Tk's thread. Window
+        # destruction cancels pending Tk callbacks, so keep the text until
+        # insertion actually succeeds or the close path retains it for review.
+        self._append_lock = threading.Lock()
+        self._pending_appends = {}
+        self._next_append_id = 0
         _window_host().submit(self._build)
 
     def _build(self):
@@ -2744,13 +2750,57 @@ class ScratchpadWindow:
         self.root.after(100, self._poll_controls)
 
     def append_text(self, text):
+        with self._append_lock:
+            root = self.root
+            if root is None or self.app.scratchpad is not self:
+                append_id = None
+            else:
+                self._next_append_id += 1
+                append_id = self._next_append_id
+                self._pending_appends[append_id] = text
+        if append_id is None:
+            self.app._remember_undelivered_dictation(
+                text, "scratchpad-unavailable")
+            return
+
         def do():
-            self.text.insert("end", text)
-            self.text.see("end")
+            with self._append_lock:
+                pending_text = self._pending_appends.pop(append_id, None)
+                available = self.root is root
+            if pending_text is None:
+                return  # The close path already retained it.
+            if not available:
+                self.app._remember_undelivered_dictation(
+                    pending_text, "scratchpad-unavailable")
+                return
+            try:
+                self.text.insert("end", pending_text)
+            except Exception:
+                self.app._remember_undelivered_dictation(
+                    pending_text, "scratchpad-unavailable")
+                return
+            # A close that raced an insertion may have destroyed the editor
+            # before anyone could review it. Scrolling is cosmetic and must
+            # not turn a successful insert into a duplicate recovery copy.
+            with self._append_lock:
+                still_open = self.root is root
+            if not still_open:
+                self.app._remember_undelivered_dictation(
+                    pending_text, "scratchpad-unavailable")
+                return
+            try:
+                self.text.see("end")
+            except Exception:
+                pass
+
         try:
-            self.root.after(0, do)
+            root.after(0, do)
         except Exception:
-            pass
+            with self._append_lock:
+                failed_text = self._pending_appends.pop(append_id, None)
+            if failed_text is not None:
+                self.app._remember_undelivered_dictation(
+                    failed_text, "scratchpad-unavailable")
 
     def _close(self):
         # A recording started in Try Dictation has no safe destination after
@@ -2761,12 +2811,19 @@ class ScratchpadWindow:
         if (getattr(self.app, "recording", False) and
                 getattr(self.app, "_recording_scratchpad", None) is self):
             self.app.cancel_recording()
-        root = self.root
-        self.root = None
+        with self._append_lock:
+            root = self.root
+            self.root = None
+            pending = tuple(self._pending_appends.values())
+            self._pending_appends.clear()
         try:
             if root is not None:
                 root.destroy()
         except Exception:
             pass
         self.window_handle = 0
-        self.app.scratchpad = None
+        if self.app.scratchpad is self:
+            self.app.scratchpad = None
+        for text in pending:
+            self.app._remember_undelivered_dictation(
+                text, "scratchpad-unavailable")

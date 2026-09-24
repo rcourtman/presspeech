@@ -76,11 +76,14 @@ the eight counts, Presspeech/OS/target-app versions, and generic field type.
 Otherwise keep the draft private. A community report does not replace native
 release qualification.
 
-Comparable means the same platform, app version, and generic field type. Add
-another observation to a matching report even when the outcome differs. Open
-a separate report when any of those boundaries differs. The class links search
-standardized compatibility-report bodies; older general bug reports are not
-counted as completed protocol evidence.
+Use the same issue thread for the same platform, target-app version, and
+generic field type, even when the outcome differs; open a separate report when
+one of those boundaries differs. This is thread matching, not evidence pooling.
+Keep each observation labelled with its exact Presspeech and operating-system
+versions and relevant conditions. Do not add counts across different versions
+or conditions or infer a general paste-success rate from self-selected reports.
+The class links search standardized compatibility-report bodies; older general
+bug reports are not counted as completed protocol evidence.
 
 ## Before testing
 
@@ -308,8 +311,9 @@ per platform, target app, version, and generic field type. If issue creation is
 restricted, check whether comments are enabled on a matching report; otherwise,
 retain the result locally and retry when a public route returns. Do not send
 reports or private data elsewhere as a workaround. Reports in which every
-attempt passed are useful: they provide the denominator that failure-only bug
-reports cannot. For a new report, put the platform, public app name/version,
+attempt passed are useful: they document successful delivery and safe recovery
+for that exact tested configuration. Self-selected reports cannot establish a
+population success rate. For a new report, put the platform, public app name/version,
 and generic field type after the fixed `[Compatibility]:` title prefix; include
 no private document, tab, account, server, form, or window name. Paste the
 worksheet output into **Eight-check outcome counts** and select the overall

@@ -56,7 +56,7 @@ class DocumentParser(HTMLParser):
         self.brand_mark_issues: list[str] = []
         self._brand_link_text: list[str] | None = None
         self._in_brand_mark = False
-        self.current_links: list[tuple[str | None, str]] = []
+        self.primary_nav_current_links: list[tuple[str | None, str]] = []
         self.skip_links: list[str | None] = []
         self.skip_link_names: list[str] = []
         self.skip_link_orders: list[int] = []
@@ -174,8 +174,8 @@ class DocumentParser(HTMLParser):
             if self._in_primary_nav and attributes.get("href") is not None:
                 if "brand" not in classes:
                     self._primary_nav_link = (attributes["href"], [])
-            if attributes.get("aria-current") is not None:
-                self.current_links.append(
+            if self._in_primary_nav and attributes.get("aria-current") is not None:
+                self.primary_nav_current_links.append(
                     (attributes.get("href"), attributes["aria-current"] or "")
                 )
             if "skip-link" in classes:
@@ -242,19 +242,18 @@ class DocumentParser(HTMLParser):
 
 def expected_current_href(path: Path, docs: Path) -> str | None:
     relative = path.relative_to(docs)
-    if relative == ERROR_PAGE:
-        return None
     if relative == Path("index.html"):
         return "./"
-    if relative.parts[0] == "compare":
+    if relative == Path("compare/index.html"):
         return "./"
-    if relative == Path("app-compatibility.html"):
-        return "troubleshooting.html"
-    if relative == Path("benchmarks.html"):
-        return "compare/"
-    if relative == Path("faq.html"):
-        return "troubleshooting.html"
-    return relative.name
+    if relative.name in {
+        "getting-started.html", "install.html", "windows.html",
+        "privacy.html", "troubleshooting.html",
+    } and relative.parent == Path("."):
+        return relative.name
+    # A parent section link is not the current page. Secondary pages have no
+    # exact match in the shared navigation, so none should claim aria-current.
+    return None
 
 
 def expected_primary_nav(path: Path, docs: Path) -> list[tuple[str, str]]:
@@ -367,9 +366,10 @@ def document_errors(path: Path, docs: Path) -> list[str]:
         )
     current_href = expected_current_href(path, docs)
     expected_current = [] if current_href is None else [(current_href, "page")]
-    if parser.current_links != expected_current:
+    if parser.primary_nav_current_links != expected_current:
         errors.append(
-            f"current navigation must be {expected_current!r}, found {parser.current_links!r}"
+            "current navigation must be "
+            f"{expected_current!r}, found {parser.primary_nav_current_links!r}"
         )
     if parser.skip_links != ["#main-content"]:
         errors.append(
@@ -652,7 +652,10 @@ def run_self_test() -> None:
             path: Path, *, current_href: str | None = None, brand_current: bool = False
         ) -> str:
             relative = path.relative_to(docs)
-            brand_href = "/presspeech/" if relative == ERROR_PAGE else "./"
+            brand_href = (
+                "/presspeech/" if relative == ERROR_PAGE else
+                "../" if relative.parts[0] == "compare" else "./"
+            )
             brand_state = " aria-current='page'" if brand_current else ""
             links = "".join(
                 f"<a href='{href}'"
@@ -746,7 +749,7 @@ def run_self_test() -> None:
             "<!doctype html><html lang='en'><head><title>Compatibility</title>"
             "<script src='site-navigation.js' defer></script></head><body>"
             "<a class='skip-link' href='#main-content'>Skip to content</a>"
-            + primary_nav(compatibility, current_href="troubleshooting.html")
+            + primary_nav(compatibility)
             + "<main id='main-content'><h1>Compatibility</h1>"
             "<p id='worksheet-status' role='status'>Results update here.</p></main>"
             "</body></html>",
@@ -755,6 +758,18 @@ def run_self_test() -> None:
         if document_errors(compatibility, docs):
             raise RuntimeError("self-test: Help subsection navigation was rejected")
         compatibility_markup = compatibility.read_text(encoding="utf-8")
+        compatibility.write_text(
+            compatibility_markup.replace(
+                "<a href='troubleshooting.html'>Help</a>",
+                "<a href='troubleshooting.html' aria-current='page'>Help</a>",
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "current navigation" in error
+            for error in document_errors(compatibility, docs)
+        ):
+            raise RuntimeError("self-test: false Help current page was accepted")
         for markup in (
             compatibility_markup.replace(" role='status'", ""),
             compatibility_markup.replace(" id='worksheet-status' role='status'", ""),
@@ -766,6 +781,43 @@ def run_self_test() -> None:
             ):
                 raise RuntimeError("self-test: inaccessible worksheet status was accepted")
         compatibility.write_text(compatibility_markup, encoding="utf-8")
+        compatibility.write_text(
+            compatibility_markup.replace(
+                "<main id='main-content'>",
+                "<main id='main-content'><nav aria-label='Breadcrumb'>"
+                "<a href='app-compatibility.html' aria-current='page'>"
+                "Compatibility</a></nav>",
+            ),
+            encoding="utf-8",
+        )
+        if document_errors(compatibility, docs):
+            raise RuntimeError("self-test: valid breadcrumb current page was rejected")
+
+        comparison = docs / "compare" / "handy.html"
+        comparison.parent.mkdir()
+        comparison.write_text(
+            "<!doctype html><html lang='en'><head><title>Comparison</title>"
+            "<script src='../site-navigation.js' defer></script></head><body>"
+            "<a class='skip-link' href='#main-content'>Skip to content</a>"
+            + primary_nav(comparison)
+            + "<main id='main-content'><h1>Comparison</h1></main>"
+            "</body></html>",
+            encoding="utf-8",
+        )
+        if document_errors(comparison, docs):
+            raise RuntimeError("self-test: comparison subsection navigation was rejected")
+        comparison.write_text(
+            comparison.read_text(encoding="utf-8").replace(
+                "<a href='./'>Compare</a>",
+                "<a href='./' aria-current='page'>Compare</a>",
+            ),
+            encoding="utf-8",
+        )
+        if not any(
+            "current navigation" in error
+            for error in document_errors(comparison, docs)
+        ):
+            raise RuntimeError("self-test: false Compare current page was accepted")
 
         index.write_text(
             index.read_text(encoding="utf-8").replace(" aria-current='page'", ""),
