@@ -765,6 +765,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Physical Command-V into each chosen native, browser, and Electron target works before Presspeech delivery is scored | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current browser text field, plus three two-window focus-change recoveries, with the previous-clipboard option off | |
+| Three same-window browser tab switches during dictation: no insertion into the new tab and complete manual recovery | |
 | Ten consecutive dictations into a current Electron/Chromium target with the previous-clipboard option off | |
 | Automatic insertion and clipboard-only Command-V recovery on ordinary Dvorak, or another layout that moves V under Command | |
 | Automatic insertion or visible safe recovery on a non-Latin input source such as Russian, plus physical Command-V recovery | |
@@ -873,6 +874,25 @@ dictations and require clipboard-only recovery with no insertion in either
 window. Record the browser version and generic field type, not page or tab
 names. This does not qualify a desktop Electron app or same-window tab moves.
 
+For the separate same-window tab row, use two tabs of that browser, each with a
+blank, non-submitting field. Establish ordinary physical Command-V in each
+field before scoring. In toggle mode, begin each of three dictations in the
+first tab, switch to the second tab before stopping, and leave it focused
+through delivery. Inspect both fields before any recovery paste or other copy,
+then check the current clipboard in a disposable local field. Pass only if
+neither tab received automatic text, Presspeech showed a recovery notice, and
+the complete transcript can be pasted deliberately. Insertion into the second
+tab is unsafe even when the transcript remains on the clipboard. In a separate
+dry run, use Accessibility Inspector to classify whether the two fields expose
+distinct focused AX controls, reuse an identity, or expose none; do not open
+the inspector during a scored dictation because it can change focus. An
+unavailable or reused control explains a window-only limitation but does not
+turn misdirected insertion into a pass.
+Do not switch back to the first tab before delivery, because that would not
+exercise the hazard. Keep only aggregate outcomes and generic field types,
+not tab titles, URLs, field contents, or transcripts. This tab check does not
+replace the required two-window check.
+
 Separately observe a same-window focus move using two harmless, non-submitting
 fields in one native or browser window. Confirm with Accessibility Inspector,
 without reading or retaining field contents, whether the two fields expose
@@ -882,10 +902,9 @@ and whether a recovery notice appears. If the first field exposed a focused
 control and the second has a distinct identity, require no automatic insertion
 and a complete clipboard-only recovery. If the app exposes no focused control
 at recording start or reuses one identity, record the window-only limitation
-instead of claiming field safety. If available, repeat across two tabs of one
-browser window; tabs can reuse a control. This diagnostic is not a substitute
-for the required two-window focus gate. Record only aggregate outcomes and
-generic field types, never text or tab names.
+instead of claiming field safety. This field-identity diagnostic does not
+replace the required tab-switch or two-window focus gates. Record only
+aggregate outcomes and generic field types, never text or tab names.
 
 For the Screen Sharing row, use a disposable remote Mac with a blank,
 non-executing text field, not a shell, message composer, or real document.

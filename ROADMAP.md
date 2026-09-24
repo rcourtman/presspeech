@@ -48,7 +48,12 @@ passed.
   #33](https://github.com/rcourtman/presspeech/issues/33) stays open until a
   steady-focus Electron target can paste automatically while a switch between
   two windows of that same process still recovers to the clipboard. Process
-  identity alone is not an acceptable substitute for the same-window check.
+  identity alone is not an acceptable substitute for the exact-window check.
+  Separately, qualify a switch between two browser tabs in one window: when a
+  target exposes no distinct focused-control identity, window equality cannot
+  prove that the original tab is still selected. A two-window pass must not be
+  reported as same-window tab safety; misdirected insertion fails the release
+  gate even if the transcript is also recoverable from the clipboard.
 - Qualify the macOS 0.3.8 manual clipboard-recovery replacement against both
   fast native and slow Electron targets. It retires automatic timer restoration
   rather than choosing another delay: no timeout proves that another app has
