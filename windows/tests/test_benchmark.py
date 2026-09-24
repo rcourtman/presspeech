@@ -291,6 +291,53 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(benchmark._reviewed_speech_vad_metrics([])[
             "reviewed_speech_vad_complete"])
 
+    def test_auto_language_id_separates_wrong_codes_missing_codes_and_vad(self):
+        result = benchmark.language_identification_metrics("pl-PL", [
+            {"speech_seconds": 1.0, "detected_language": "pl"},
+            {"speech_seconds": 1.0, "detected_language": "en"},
+            {"speech_seconds": 0.0, "detected_language": "en"},
+            {"speech_seconds": None, "detected_language": "PL"},
+            {},
+        ])
+
+        self.assertEqual(result, {
+            "expected_language": "pl", "trials": 5,
+            "vad_rejected_trials": 1, "observed_trials": 2,
+            "matched_trials": 1, "mismatched_trials": 1,
+            "missing_trials": 2, "coverage_complete": False,
+        })
+        self.assertIsNone(benchmark.language_identification_metrics(
+            "spontaneous-dictation", [{}]))
+        self.assertIsNone(benchmark.language_identification_metrics(
+            "en GB", [{}]))
+        self.assertEqual(benchmark.language_identification_metrics(
+            "en-GB", [{"speech_seconds": 0.5,
+                       "detected_language": "en"}])["coverage_complete"],
+            True)
+
+    def test_auto_language_id_group_aggregation_does_not_hide_missing_trials(self):
+        reviewed = [
+            {"language_identification": benchmark.language_identification_metrics(
+                "pl", [{"speech_seconds": 1.0, "detected_language": "pl"},
+                       {"speech_seconds": 1.0, "detected_language": "en"}])},
+            {"language_identification": benchmark.language_identification_metrics(
+                "en-GB", [{"speech_seconds": 0.0}, {}])},
+            {"language_identification": None},
+        ]
+
+        result = benchmark._reviewed_language_identification_metrics(reviewed)
+
+        self.assertEqual(result["reviewed_language_id_sample_count"], 2)
+        self.assertEqual(result["reviewed_language_id_trial_count"], 4)
+        self.assertEqual(result["reviewed_language_id_observed_trial_count"], 2)
+        self.assertEqual(result["reviewed_language_id_matched_trial_count"], 1)
+        self.assertEqual(result["reviewed_language_id_mismatched_trial_count"], 1)
+        self.assertEqual(result["reviewed_language_id_missing_trial_count"], 1)
+        self.assertEqual(result["reviewed_language_id_vad_rejected_trial_count"], 1)
+        self.assertFalse(result["reviewed_language_id_coverage_complete"])
+        self.assertIsNone(benchmark._reviewed_language_identification_metrics([])[
+            "reviewed_language_id_coverage_complete"])
+
     def test_identical_text_has_zero_error(self):
         metrics = benchmark.accuracy_metrics("It works well.", "It works well.")
         self.assertEqual(metrics["wer"], 0)
@@ -889,7 +936,7 @@ class MetricTests(unittest.TestCase):
                          [16000, 9600, 9600, 16000, 16000, 16000])
         self.assertIs(calls[0].args[0], audio)
         self.assertIs(calls[3].args[0], audio)
-        self.assertEqual(result["benchmark_version"], 21)
+        self.assertEqual(result["benchmark_version"], 22)
         self.assertRegex(result["benchmark_order_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(result["aggregate_trial_wer"], 0.75)
         self.assertEqual(result["samples"][0]["transcript"], "")
@@ -1084,7 +1131,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["recorded_tail_probe_groups"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 21)
+        self.assertEqual(result["benchmark_version"], 22)
         self.assertEqual(result["tail_silence_probe_groups"][
             "language_task_groups"]["en"]["short-command"][
                 "final_word_lost_trial_count"], 2)
@@ -1456,7 +1503,10 @@ class MetricTests(unittest.TestCase):
             "model": "turbo",
             "language": "auto",
             "runs": 1,
-            "samples": [{"id": "polish", "audio": "ignored.wav"}],
+            "samples": [{"id": "polish", "audio": "ignored.wav",
+                         "language_group": " pl-PL ",
+                         "reference": "Dzie\u0144 dobry",
+                         "reference_reviewed": True}],
         }
         transcriber = mock.Mock()
         transcriber.model.dtype = "float16"
@@ -1486,11 +1536,62 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["requested_language"], "auto")
         self.assertEqual(
             result["samples"][0]["detected_languages"], {"pl": 1})
+        self.assertEqual(result["samples"][0]["language_identification"], {
+            "expected_language": "pl", "trials": 1,
+            "vad_rejected_trials": 0, "observed_trials": 1,
+            "matched_trials": 1, "mismatched_trials": 0,
+            "missing_trials": 0, "coverage_complete": True,
+        })
+        self.assertEqual(result["reviewed_language_id_matched_trial_count"], 1)
+        self.assertEqual(result["language_groups"]["pl-PL"][
+            "reviewed_language_id_matched_trial_count"], 1)
         output = io.StringIO()
         with redirect_stdout(output):
             benchmark._print_summary(result)
         self.assertIn("Language: automatic detection", output.getvalue())
         self.assertIn("Detected language trials: pl 1", output.getvalue())
+        self.assertIn("Reviewed auto-language ID (pl): matched 1/1 observed",
+                      output.getvalue())
+
+    def test_language_id_diagnostic_requires_auto_turbo_reviewed_label(self):
+        cases = (
+            ("turbo", "pl", True, "pl"),
+            ("turbo", "auto", False, "pl"),
+            ("base.en", "auto", True, "pl"),
+            ("turbo", "auto", True, None),
+        )
+        for model, language, reviewed, label in cases:
+            with self.subTest(model=model, language=language,
+                              reviewed=reviewed, label=label):
+                sample = {"id": "speech", "audio": "ignored.wav",
+                          "reference": "speech", "reference_reviewed": reviewed}
+                if label is not None:
+                    sample["language_group"] = label
+                manifest = {"model": model, "language": language, "runs": 1,
+                            "samples": [sample]}
+                transcriber = mock.Mock()
+                transcriber.model.dtype = "int8"
+                transcriber.transcribe.return_value = "speech"
+                transcriber.last_timing = {
+                    "backend": "whisper", "speech_seconds": 0.8,
+                    "detected_language": "pl",
+                }
+                with tempfile.TemporaryDirectory() as directory:
+                    path = os.path.join(directory, "manifest.json")
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump(manifest, handle)
+                    with mock.patch.object(
+                            benchmark.engine, "Transcriber",
+                            return_value=transcriber), \
+                            mock.patch.object(
+                                benchmark, "load_audio",
+                                return_value=(mock.sentinel.audio, 1.0,
+                                              16000, "0" * 64)):
+                        result = benchmark.run_benchmark(path)
+
+                self.assertNotIn("language_identification", result["samples"][0])
+                self.assertEqual(result["reviewed_language_id_sample_count"], 0)
+                self.assertIsNone(result["reviewed_language_id_coverage_complete"])
 
     def test_whisper_pause_override_is_benchmark_only_and_reported(self):
         manifest = {
@@ -1841,7 +1942,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 21)
+        self.assertEqual(result["benchmark_version"], 22)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

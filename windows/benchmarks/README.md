@@ -133,6 +133,20 @@ prove representative audio, human-review quality, or identical thermal and
 background-load conditions. Version 21 changes report provenance only, not
 recognition or the probe execution order.
 
+Version 22 compares Whisper turbo's automatic language code with the primary
+language in each **human-reviewed speech** clip's `language_group` label (for
+example `pl-PL` compares with `pl`). The JSON report and console summary count
+matches, mismatches, missing/invalid codes, and VAD-rejected trials separately
+for each clip, the corpus, and task/language/intersection groups. Only
+two/three-letter primary language labels with ordinary BCP-47 subtags are
+comparable; unlabelled or custom-group clips are excluded from this diagnostic,
+not silently treated as matches. A VAD-rejected clip has no meaningful
+language result. `coverage_complete` is false if any code is missing or any
+trial was VAD-rejected; even complete coverage and correct language IDs do not
+prove an accurate transcript. Hinted-language runs, English-only Whisper, and
+Parakeet have no automatic-language comparison. This is benchmark-only and
+does not change model inference or product behavior.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -450,7 +464,11 @@ but canonical fixtures make runs easier to compare.
   Whisper's per-dictation detection, matching Presspeech's Whisper turbo path.
   Reports preserve the requested policy and count each speech-bearing trial's
   returned language code; compare accuracy and latency because detection itself
-  is measured work. Codes inferred from VAD-rejected silence are discarded.
+  is measured work. On reviewed Whisper-turbo speech with a comparable
+  `language_group`, also inspect the version-20 language-ID match, mismatch,
+  missing, and VAD-rejected counts in each stratum. A wrong code can help
+  diagnose an error, but it is not by itself a WER result. Codes inferred from
+  VAD-rejected silence are discarded.
 - Inspect `aggregate_worst_trial_wer` as well as consensus `aggregate_wer` when
   screening regressions: it sums each clip's worst observed word-error count,
   exposing intermittent internal substitutions that a modal transcript can hide.

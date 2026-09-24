@@ -146,7 +146,7 @@ async function main() {
     ["pasted", "pasted", "recovered", "pasted", "recovered"].forEach(
       (value, index) => doc.outcomes.set(`steady-${index + 1}`, value),
     );
-    ["copied", "failed", "copied"].forEach((value, index) =>
+    ["copied", "copied", "failed"].forEach((value, index) =>
       doc.outcomes.set(`focus-${index + 1}`, value),
     );
     form.listeners.change();
@@ -314,6 +314,31 @@ async function main() {
       worksheet.summarise(Array(5).fill("pasted"), ["copied", "notrun", "copied"]).reportable,
       false,
       "a focus-check gap cannot be called a comparable baseline",
+    );
+
+    ["copied", "failed"].forEach((value, index) =>
+      doc.outcomes.set(`focus-${index + 1}`, value),
+    );
+    doc.outcomes.delete("focus-3");
+    form.listeners.change();
+    assert.match(status.textContent, /Stop testing after this result/);
+    doc.outcomes.set("focus-3", "notrun");
+    form.listeners.change();
+    assert.equal(reportActions.hidden, false, "a stopped failed recovery remains reportable");
+    assert.equal(save.textContent, "Download report draft");
+    assert.equal(
+      worksheet.summarise(Array(5).fill("pasted"), ["copied", "failed", "notrun"]).reportable,
+      true,
+    );
+
+    doc.outcomes.set("focus-3", "copied");
+    form.listeners.change();
+    assert.equal(reportActions.hidden, true, "continuing after failed recovery is noncomparable");
+    assert.equal(save.textContent, "Download noncomparable draft");
+    assert.match(summary.value, /Protocol status: Noncomparable/);
+    assert.equal(
+      worksheet.summarise(Array(5).fill("pasted"), ["copied", "failed", "copied"]).reportable,
+      false,
     );
 
     globalThis.Blob = undefined;

@@ -2146,6 +2146,30 @@ func runBenchSelfTests() throws {
         ).maxReferenceDeletionRun == 3,
         "an empty hypothesis should report the complete reference as dropped"
     )
+    let repeatedEndingReference = "turn left go go"
+    let baselineEnding = "turn right go go"
+    let lostEnding = "turn left go"
+    try expect(
+        wordErrorScore(reference: repeatedEndingReference,
+                       hypothesis: baselineEnding).errors ==
+        wordErrorScore(reference: repeatedEndingReference,
+                       hypothesis: lostEnding).errors,
+        "a corrected earlier word can conceal a lost repeated final word in total WER"
+    )
+    try expect(
+        finalWordRetention(reference: repeatedEndingReference,
+                           hypothesis: baselineEnding)?.retained == true &&
+        finalWordRetention(reference: repeatedEndingReference,
+                           hypothesis: lostEnding)?.retained == false,
+        "final-word retention must require the complete consecutive terminal run"
+    )
+    try expect(
+        finalWordRetention(reference: "Go, go!", hypothesis: "go go.")?.retained == true &&
+        finalWordRetention(reference: "Go, go!", hypothesis: "go")?.retained == false &&
+        finalWordRetention(reference: "go", hypothesis: "")?.retained == false &&
+        finalWordRetention(reference: "", hypothesis: "go") == nil,
+        "terminal-run retention should use WER token normalization and handle empty text"
+    )
     let preflightMetrics = referenceMetrics(
         reference: "Szypański met Nowy Sącz. Szypański returned.",
         criticalTerms: ["Szypański", "Nowy Sącz", "Absent"]
@@ -2197,9 +2221,16 @@ func runBenchSelfTests() throws {
 }
 
 func finalWordRetention(reference: String, hypothesis: String) -> (retained: Bool, expected: String, actualLast: String?)? {
-    guard let expected = werTokens(reference).last else { return nil }
-    let actualLast = werTokens(hypothesis).last
-    return (actualLast == expected, expected, actualLast)
+    let referenceWords = werTokens(reference)
+    guard let expected = referenceWords.last else { return nil }
+    let hypothesisWords = werTokens(hypothesis)
+    // A last-token match alone mislabels "go" as retaining the ending of
+    // "go go". Require the full consecutive terminal run so a candidate that
+    // fixes another word cannot hide a lost final occurrence behind equal WER.
+    // This remains a conservative text diagnostic, not an acoustic alignment.
+    let required = referenceWords.reversed().prefix { $0 == expected }.count
+    let observed = hypothesisWords.reversed().prefix { $0 == expected }.count
+    return (observed >= required, expected, hypothesisWords.last)
 }
 
 // MARK: - Memory

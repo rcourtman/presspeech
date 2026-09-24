@@ -853,6 +853,10 @@ WINDOWS_DELIVERY_UNSCOPED_CLAIMS = (
 # manual paste. Keep this warning in the actionable section on each first-use
 # and recovery surface; a matching phrase elsewhere on the page is not enough.
 COPY_NOTICE_FRESHNESS_GUIDANCE = {
+    DOCS / "index.html": (
+        '<div class="hero-copy">', '<div class="hero-visual">',
+        ("copied at completion", "later copy can replace", "only if the clipboard still holds"),
+    ),
     DOCS / "getting-started.html": (
         '<section id="first-app">', '</section>',
         ("copied at completion", "later copy can replace", "only if it still holds the complete transcript", "Copy Last Transcript"),
@@ -3276,7 +3280,7 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
 
 
 def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str]:
-    """Keep the first-launch choice scannable and ahead of homepage actions."""
+    """Keep the first-launch choice ahead of actions and visible in the first-run card."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     if not path.exists():
         return [f"{display}: missing homepage launch decision"]
@@ -3311,6 +3315,13 @@ def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str
             f"{display}: incomplete homepage first-launch decision — missing "
             + ", ".join(repr(phrase) for phrase in missing)
         ]
+    card_start = contents.find('<aside class="start-card"', end)
+    card_end = contents.find("</aside>", card_start) if card_start >= 0 else -1
+    if card_end < 0 or (
+        'href="#launch-decision-title"' not in contents[card_start:card_end]
+        or "Open only if you chose to proceed" not in contents[card_start:card_end]
+    ):
+        return [f"{display}: first-run card bypasses the launch decision"]
     return []
 
 
@@ -4565,6 +4576,24 @@ def run_self_test() -> None:
         )
         if not check_homepage_launch_decision(homepage):
             raise SyncError("self-test: missing Windows privacy link was accepted")
+        homepage.write_text(
+            safe_homepage.replace('href="#launch-decision-title"', 'href="install.html"', 1),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: first-run card bypassed the launch decision")
+        homepage_copy_notice = {
+            homepage: COPY_NOTICE_FRESHNESS_GUIDANCE[DOCS / "index.html"],
+        }
+        homepage.write_text(safe_homepage, encoding="utf-8")
+        if check_copy_notice_freshness_guidance(homepage_copy_notice):
+            raise SyncError("self-test: safe homepage copy notice was rejected")
+        homepage.write_text(
+            safe_homepage.replace("Paste manually only if the clipboard still holds the transcript.", "", 1),
+            encoding="utf-8",
+        )
+        if not check_copy_notice_freshness_guidance(homepage_copy_notice):
+            raise SyncError("self-test: homepage copy notice omitted clipboard freshness")
 
         preflight_metadata = {"version": "0.3.8", "windows_version": "0.1.12"}
         preflight_surfaces = []

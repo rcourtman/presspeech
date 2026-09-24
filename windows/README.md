@@ -564,14 +564,16 @@ Setup after an explicit warning if the startup setting cannot be fixed now.
   exclusion, and other local clipboard readers remain a separate boundary.
 - `python app.py --selftest` verifies the engine pipeline.
 - `python benchmark.py` runs the repeatable local latency/accuracy evaluation;
-  version 10 reports include one aggregate input digest so paired runs can
+  reports include one aggregate input digest so paired runs can
   confirm the same effective audio, references, and scoring labels, rather
   than relying on matching file names alone;
   Whisper reports include the exact Silero VAD boundary policy so WER, quiet
   speech rejection, and silence false positives remain comparable across
   dependency updates. Reports also preserve the requested language policy and
-  each speech-bearing Whisper trial's language result, so multilingual accuracy
-  and detection cost can be checked with `--language auto`. See the
+  each speech-bearing Whisper trial's language result. On reviewed, labelled
+  Whisper-turbo clips run with `--language auto`, they also separate correct,
+  incorrect, missing, and VAD-rejected language-ID trials by language and task;
+  this diagnostic is not an accuracy score. See the
   reviewed-reference workflow in `benchmarks/README.md`. A manifest sample
   marked with both `"expected_silence": true` and
   `"reference_reviewed": true` is scored as a non-speech fixture; reports count

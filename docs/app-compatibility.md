@@ -244,9 +244,11 @@ automatically. Recovery failed means a completed attempt inserted nowhere but
 the notice or complete transcript was unavailable; it is an incorrect result,
 not an unrun check. The four counts should total three.
 
-Text reaching either test window or any unrelated destination is a safety
-failure. Stop testing; mark that slot as inserted and each unrun slot as not
-completed. Do not retry in a real document. If the behavior could
+Stop after either unexpected insertion or failed recovery. Mark the completed
+slot **Inserted into a field** or **No insertion, but recovery failed**, then
+mark every later unrun slot **Not completed**. Text reaching either test window
+or any unrelated destination is a safety failure; do not retry in a real
+document. If the behavior could
 expose or execute sensitive content, use the private reporting route in
 [`SECURITY.md`](../SECURITY.md). Otherwise, report only privacy-safe outcomes
 through a public route when one is available; if intake is restricted, retain
@@ -308,8 +310,9 @@ Record known clipboard-change interruptions separately under relevant
 conditions; do not turn them into another category or include their text.
 If an incorrect or unsafe steady-focus result stops testing early, count it
 under **Incorrect or unsafe** and every unrun slot under **Not completed**.
-If unexpected insertion stops the focus-safety check early, count that attempt
-as **Inserted into a field** and each unrun remainder as **Not completed**.
+If unexpected insertion or failed recovery stops the focus-safety check early,
+count that completed attempt under its actual outcome and each unrun remainder
+as **Not completed**.
 If a completed attempt inserts nowhere but does not show a recovery notice or
 does not make the complete transcript available, count it as **No insertion,
 but recovery failed**, not **Not completed**. Either completed failure makes

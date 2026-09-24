@@ -992,7 +992,12 @@ recorded, hand-audited non-speech controls and rejects any candidate text on
 those controls. Final-word retention is evaluated conservatively
 and independently of total WER: the candidate's worst observed retention is
 compared with production's best, so an equal-error substitution or one
-unstable production trial cannot mask a new utterance-tail failure.
+unstable production trial cannot mask a new utterance-tail failure. For a
+reference ending in a repeated word (such as “go go”), retention requires the
+entire consecutive terminal run, not merely one matching last word. This is a
+text diagnostic, not proof that a particular spoken occurrence survived;
+older reports used a last-token-only check and should not be compared on clips
+with repeated terminal words without re-running them.
 The public comparison wrapper accepts and forwards the gate, for example:
 
 ```sh

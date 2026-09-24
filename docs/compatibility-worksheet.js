@@ -38,8 +38,11 @@
     const completed = (value) => value !== null && value !== "notrun";
     const observed = [...steady, ...focus].filter(completed).length;
     const steadyStopIndex = steady.findIndex((value) => value === "unsafe" || value === "notrun");
-    const focusStopIndex = focus.findIndex((value) => value === "inserted" || value === "notrun");
-    const stopCondition = steady.includes("unsafe") || focus.includes("inserted");
+    const focusStopIndex = focus.findIndex(
+      (value) => value === "inserted" || value === "failed" || value === "notrun",
+    );
+    const stopCondition =
+      steady.includes("unsafe") || focus.includes("inserted") || focus.includes("failed");
     const sequenceViolation =
       (steadyStopIndex >= 0 &&
         (steady.slice(steadyStopIndex + 1).some(completed) || focus.some(completed))) ||

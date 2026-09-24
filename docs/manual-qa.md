@@ -74,7 +74,10 @@ collaborator where noted:
   are not restored after reload. Classify a completed focus-change attempt
   with no insertion but missing notice or recovery text as **No insertion, but
   recovery failed** and verify the overall result is **An incorrect or unsafe
-  result occurred**. A genuinely unrun slot with no completed failure must
+  result occurred**. Verify the worksheet says to stop, accepts later
+  **Not completed** slots as a reportable early stop, and marks a later
+  completed focus-change check as noncomparable instead. A genuinely unrun
+  slot with no completed failure must
   instead yield **Testing could not be completed**. Classify the first
   steady-focus attempt as **Incorrect or unsafe** and the seven remaining slots
   as **Not completed**; verify the block does not imply eight completed

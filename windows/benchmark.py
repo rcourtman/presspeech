@@ -638,6 +638,51 @@ def detected_language_metrics(backend_timings):
     return dict(collections.Counter(values)) if values else None
 
 
+def language_identification_metrics(language_group, backend_timings):
+    """Compare auto-detected codes with a reviewed clip's language label.
+
+    Only a BCP-47-like label with a two/three-letter primary language can be
+    compared with faster-whisper's short codes. A VAD-rejected trial has no
+    meaningful language result; keep it visible rather than calling it a
+    correct detection or a mismatch. Missing/invalid codes on other trials
+    likewise cannot count as successful identification.
+    """
+    if (not isinstance(language_group, str) or not re.fullmatch(
+            r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", language_group)):
+        return None
+    expected = language_group.split("-", 1)[0]
+    rejected = 0
+    matched = 0
+    mismatched = 0
+    for timing in backend_timings:
+        if not isinstance(timing, dict):
+            continue
+        speech_seconds = timing.get("speech_seconds")
+        if (isinstance(speech_seconds, (int, float))
+                and not isinstance(speech_seconds, bool)
+                and math.isfinite(speech_seconds) and speech_seconds == 0):
+            rejected += 1
+            continue
+        detected = timing.get("detected_language")
+        if isinstance(detected, str) and re.fullmatch(r"[a-z]{2,3}", detected):
+            if detected == expected:
+                matched += 1
+            else:
+                mismatched += 1
+    observed = matched + mismatched
+    missing = len(backend_timings) - rejected - observed
+    return {
+        "expected_language": expected,
+        "trials": len(backend_timings),
+        "vad_rejected_trials": rejected,
+        "observed_trials": observed,
+        "matched_trials": matched,
+        "mismatched_trials": mismatched,
+        "missing_trials": missing,
+        "coverage_complete": rejected == 0 and missing == 0,
+    }
+
+
 BACKEND_STAGE_NAMES = ("prepare", "transfer", "generate", "decode")
 
 
@@ -731,6 +776,30 @@ def _reviewed_speech_vad_metrics(reviewed):
     }
 
 
+def _reviewed_language_identification_metrics(reviewed):
+    """Aggregate only reviewed auto-language trials with comparable labels."""
+    labelled = [sample["language_identification"] for sample in reviewed
+                if isinstance(sample.get("language_identification"), dict)]
+    return {
+        "reviewed_language_id_sample_count": len(labelled),
+        "reviewed_language_id_trial_count": sum(
+            item["trials"] for item in labelled),
+        "reviewed_language_id_observed_trial_count": sum(
+            item["observed_trials"] for item in labelled),
+        "reviewed_language_id_matched_trial_count": sum(
+            item["matched_trials"] for item in labelled),
+        "reviewed_language_id_mismatched_trial_count": sum(
+            item["mismatched_trials"] for item in labelled),
+        "reviewed_language_id_missing_trial_count": sum(
+            item["missing_trials"] for item in labelled),
+        "reviewed_language_id_vad_rejected_trial_count": sum(
+            item["vad_rejected_trials"] for item in labelled),
+        "reviewed_language_id_coverage_complete": (
+            all(item["coverage_complete"] for item in labelled)
+            if labelled else None),
+    }
+
+
 def _summarise_group(members):
     """Summarise accuracy, delivery boundaries, silence, and latency."""
     reviewed = [sample for sample in members
@@ -768,6 +837,7 @@ def _summarise_group(members):
         "sample_count": len(members),
         "reviewed_sample_count": len(reviewed),
         **_reviewed_speech_vad_metrics(reviewed),
+        **_reviewed_language_identification_metrics(reviewed),
         "reviewed_reference_word_count": reference_words,
         "reviewed_word_error_count": word_errors,
         "aggregate_wer": (word_errors / reference_words
@@ -1357,6 +1427,12 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             result["first_word"] = None
             result["final_word"] = None
             result["accuracy_note"] = "Reference transcript requires human review."
+        if (model_name == "turbo" and requested_language == "auto"
+                and result["accuracy"] is not None):
+            language_id = language_identification_metrics(
+                result.get("language_group"), backend_timings)
+            if language_id is not None:
+                result["language_identification"] = language_id
         sample_results.append(result)
 
     reviewed = [item for item in sample_results if item["accuracy"] is not None]
@@ -1395,7 +1471,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 21,
+        "benchmark_version": 22,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "benchmark_order_sha256": benchmark_order_sha256(input_rows),
@@ -1464,6 +1540,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             item["silence"]["false_positive_trials"]
             for item in reviewed_silence),
         **_reviewed_speech_vad_metrics(reviewed),
+        **_reviewed_language_identification_metrics(reviewed),
         "reviewed_final_word_sample_count": len(reviewed_final_words),
         "final_word_failure_count": sum(
             not item["final_word"]["retained"]
@@ -1700,7 +1777,25 @@ def _print_summary(result):
                   else "incomplete",
               ))
 
+    def print_group_language_id(metrics):
+        if not metrics["reviewed_language_id_sample_count"]:
+            return
+        print("  Reviewed auto-language ID: matched %d/%d observed trials; "
+              "%d mismatched, %d missing, %d VAD-rejected across %d clips "
+              "(%d total trials; %s coverage)" % (
+                  metrics["reviewed_language_id_matched_trial_count"],
+                  metrics["reviewed_language_id_observed_trial_count"],
+                  metrics["reviewed_language_id_mismatched_trial_count"],
+                  metrics["reviewed_language_id_missing_trial_count"],
+                  metrics["reviewed_language_id_vad_rejected_trial_count"],
+                  metrics["reviewed_language_id_sample_count"],
+                  metrics["reviewed_language_id_trial_count"],
+                  "complete" if metrics["reviewed_language_id_coverage_complete"]
+                  else "incomplete",
+              ))
+
     print_group_vad(result)
+    print_group_language_id(result)
 
     for dimension, groups in (
             ("Task group", result.get("task_groups", {})),
@@ -1726,6 +1821,7 @@ def _print_summary(result):
                       metrics["silence_false_positive_trial_count"],
                       metrics["reviewed_silence_trial_count"]))
             print_group_vad(metrics)
+            print_group_language_id(metrics)
 
     for language, tasks in result.get("language_task_groups", {}).items():
         for task, metrics in tasks.items():
@@ -1749,6 +1845,7 @@ def _print_summary(result):
                       metrics["silence_false_positive_trial_count"],
                       metrics["reviewed_silence_trial_count"]))
             print_group_vad(metrics)
+            print_group_language_id(metrics)
     for sample in result["samples"]:
         timing = sample["inference_seconds"]
         print("\n%s: %.3fs median (%.1fx realtime; inference + min/max post-roll "
@@ -1818,6 +1915,20 @@ def _print_summary(result):
             print("  Detected language trials: %s" % " | ".join(
                 "%s %d" % item for item in sorted(detected_languages.items())
             ))
+        language_id = sample.get("language_identification")
+        if language_id is not None:
+            print("  Reviewed auto-language ID (%s): matched %d/%d observed "
+                  "trials; %d mismatched, %d missing, %d VAD-rejected "
+                  "(%s coverage)" % (
+                      language_id["expected_language"],
+                      language_id["matched_trials"],
+                      language_id["observed_trials"],
+                      language_id["mismatched_trials"],
+                      language_id["missing_trials"],
+                      language_id["vad_rejected_trials"],
+                      "complete" if language_id["coverage_complete"]
+                      else "incomplete",
+                  ))
         if sample["silence"] is not None:
             if sample["silence"]["evaluated"]:
                 if sample["silence"]["false_positive"]:
