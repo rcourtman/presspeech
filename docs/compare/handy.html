@@ -84,12 +84,17 @@
                 <tr>
                   <th scope="row">Privacy posture</th>
                   <td>No cloud transcription, Presspeech-authored analytics, account, or crash reporter. Speech-library network behavior varies by published platform build: Windows 0.1.12 leaves Hugging Face libraries' default usage telemetry enabled during model downloads. See the <a href="../privacy.html#network-calls">version-specific network-call inventory</a>. Dictation audio is held in memory and discarded.</td>
-                  <td>Core transcription happens on the computer without uploading audio. Model downloads and update checks use the network; optional post-processing can call a configured local or cloud LLM provider.</td>
+                  <td>Core transcription happens on the computer without uploading audio. Handy's privacy policy says update checks are enabled by default and model downloads may fall back from Hugging Face to its Cloudflare-delivered model host; optional post-processing can call a configured local or cloud provider.</td>
                 </tr>
                 <tr>
                   <th scope="row">Text handling</th>
                   <td>Deterministic dictionary corrections, shortcuts, and filler removal on both platforms; macOS also has opt-in spoken formatting. No AI rewriting.</td>
-                  <td>Core local transcription plus model and language selection, a dictionary, transcript history, and optional post-processing controls.</td>
+                  <td>Core local transcription plus model and language selection, a dictionary, and optional post-processing controls.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Transcript and audio retention</th>
+                  <td>On macOS, optional recent transcripts stay in memory and clear on quit. Windows has no in-app transcript history. Completed audio is discarded on both platforms; the system clipboard and third-party clipboard managers have separate retention behavior.</td>
+                  <td>Handy's privacy policy says official releases keep a limited number of recent local history entries and their audio recordings by default. Saved entries may remain until deleted; users can change retention or set the history limit to zero.</td>
                 </tr>
                 <tr>
                   <th scope="row">Implementation and scope</th>
@@ -105,9 +110,9 @@
             </table>
           </div>
           <div class="note">
-            <p>Choose Handy if Linux or Intel Mac support, one cross-platform application, model switching, or a much larger open-source community matters most. Choose Presspeech if you want the smaller native macOS surface and its published model-transcription benchmark, or its intentionally fixed engine and deterministic text pipeline. On Windows, test both on the actual hardware: their packaging and acceleration paths differ substantially.</p>
+            <p>Choose Handy if Linux or Intel Mac support, one cross-platform application, model switching, or a configurable local transcript and audio history matters most. Choose Presspeech if you want the smaller native macOS surface and its published model-transcription benchmark, or its intentionally fixed engine and no persistent transcript archive. On Windows, test both on the actual hardware: their packaging and acceleration paths differ substantially.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, Handy's <a href="https://github.com/cjpais/Handy#linux-notes">Linux notes</a> and <a href="https://github.com/cjpais/Handy#previous-clipboard-content-is-pasted-instead-of-the-transcription">clipboard troubleshooting guidance</a> (checked 23 September 2026), and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.7">Handy v0.9.7 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.9.7">release assets</a> (checked 22 September 2026). No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, Handy's <a href="https://github.com/cjpais/Handy#linux-notes">Linux notes</a> and <a href="https://github.com/cjpais/Handy#previous-clipboard-content-is-pasted-instead-of-the-transcription">clipboard troubleshooting guidance</a> (checked 23 September 2026), its <a href="https://handy.computer/privacy">privacy policy</a> (effective 18 September; checked 24 September 2026), and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.7">Handy v0.9.7 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.9.7">release assets</a> (checked 22 September 2026). These are the projects' published claims, not independent privacy or performance tests. No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
         </div>
       </section>
     </main>

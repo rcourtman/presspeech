@@ -8,9 +8,10 @@ import paste_target
 
 
 class FocusedChildTests(unittest.TestCase):
-    def backend(self, *, active=100, focused=101, foreground=100):
+    def backend(self, *, active=100, focused=101, foreground=100, root=100):
         user32 = mock.Mock()
         user32.GetForegroundWindow.return_value = foreground
+        user32.GetAncestor.return_value = root
 
         def query(thread_identifier, pointer):
             self.assertEqual(thread_identifier, 77)
@@ -36,6 +37,33 @@ class FocusedChildTests(unittest.TestCase):
         self.assertEqual(user32.GetGUIThreadInfo.argtypes, (
             ctypes.c_uint32, ctypes.POINTER(paste_target._GUIThreadInfo)))
         self.assertIs(user32.GetGUIThreadInfo.restype, ctypes.c_int)
+        self.assertEqual(user32.GetAncestor.argtypes,
+                         (ctypes.c_void_p, ctypes.c_uint32))
+        self.assertIs(user32.GetAncestor.restype, ctypes.c_void_p)
+        user32.GetAncestor.assert_called_once_with(101, 2)
+
+    def test_accepts_focus_on_the_foreground_window_itself(self):
+        user32 = self.backend(focused=100)
+        self.assertEqual(paste_target.focused_child_handle(user32, 100, 77), 100)
+        user32.GetAncestor.assert_called_once_with(100, 2)
+
+    def test_refuses_focus_outside_active_window_or_invalid_focus_handle(self):
+        for root in (200, 0):
+            with self.subTest(root=root):
+                user32 = self.backend(root=root)
+                self.assertIsNone(
+                    paste_target.focused_child_handle(user32, 100, 77))
+        user32 = self.backend()
+        user32.GetAncestor.side_effect = OSError("private window title")
+        self.assertIsNone(paste_target.focused_child_handle(user32, 100, 77))
+
+    def test_two_incoherent_focus_roots_cannot_authorize_window_only_paste(self):
+        user32 = self.backend(root=200)
+        captured_focus = paste_target.focused_child_handle(user32, 100, 77)
+        delivery_focus = paste_target.focused_child_handle(user32, 100, 77)
+        captured = paste_target.PasteTarget("notepad.exe", 100, 41, 0, captured_focus)
+        delivery = paste_target.PasteTarget("notepad.exe", 100, 41, 0, delivery_focus)
+        self.assertFalse(paste_target.matches(captured, delivery))
 
     def test_refuses_focus_from_another_active_or_foreground_window(self):
         for active, foreground in ((200, 100), (100, 200)):
@@ -44,9 +72,15 @@ class FocusedChildTests(unittest.TestCase):
                 self.assertIsNone(
                     paste_target.focused_child_handle(user32, 100, 77))
 
+    def test_refuses_foreground_change_during_focus_validation(self):
+        user32 = self.backend()
+        user32.GetForegroundWindow.side_effect = [100, 200]
+        self.assertIsNone(paste_target.focused_child_handle(user32, 100, 77))
+
     def test_completed_query_without_child_preserves_window_level_fallback(self):
-        self.assertEqual(paste_target.focused_child_handle(
-            self.backend(focused=0), 100, 77), 0)
+        user32 = self.backend(focused=0)
+        self.assertEqual(paste_target.focused_child_handle(user32, 100, 77), 0)
+        user32.GetAncestor.assert_not_called()
 
     def test_failed_query_and_missing_thread_are_not_adopted(self):
         user32 = self.backend()

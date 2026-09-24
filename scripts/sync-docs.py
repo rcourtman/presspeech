@@ -1388,6 +1388,34 @@ Only after the user makes an informed choice to launch 0.3.8:
 
 After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project."""
 
+README_MAC_PROMPT_START = (
+    "### Assistant Install Prompt\n\n"
+    "<details>\n"
+    "<summary>Have a shell-capable coding assistant install Presspeech for you</summary>\n\n"
+    "```text\n"
+)
+README_MAC_PROMPT_END = "\n```\n\n</details>"
+
+
+def readme_mac_prompt(text: str, path: Path) -> str:
+    """Extract the README's copyable prompt without accepting a missing boundary."""
+    if text.count(README_MAC_PROMPT_START) != 1:
+        raise SyncError(f"{path}: expected one macOS README assistant-prompt start")
+    after_start = text.split(README_MAC_PROMPT_START, 1)[1]
+    if README_MAC_PROMPT_END not in after_start:
+        raise SyncError(f"{path}: missing macOS README assistant-prompt end")
+    return after_start.split(README_MAC_PROMPT_END, 1)[0]
+
+
+def sync_readme_mac_prompt(text: str, path: Path) -> str:
+    current = readme_mac_prompt(text, path)
+    return text.replace(
+        README_MAC_PROMPT_START + current + README_MAC_PROMPT_END,
+        README_MAC_PROMPT_START + MAC_INSTALL_PROMPT + README_MAC_PROMPT_END,
+        1,
+    )
+
+
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
 Before installing or launching published Windows 0.1.12, explain that its model downloads may send Hugging Face usage telemetry and an already-configured or locally saved Hugging Face token; custom download routing can change where a request—and any token it carries—goes. The bundled HTTP client also honors configured HTTPS proxies; a TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. Upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings. If the user cannot confirm that a TLS-inspection proxy is trusted, don't launch while it is in use. These public models need no account token. Offer to wait until Windows 0.1.13 is published if the user prefers to avoid this possible usage telemetry, is concerned that a Hugging Face token or custom download route may be configured on this PC, or is unsure. Downloading the installer and checksum from GitHub does not make a model request; 0.1.12 starts its selected model download when Presspeech launches. If the user chooses to wait but still wants to install, tell them to uncheck the installer's final "Launch Presspeech" option; do not start the app. Do not inspect or display token values, change credential settings, or launch 0.1.12 without the user's informed choice. Dictation audio and transcripts are not sent in model downloads. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
@@ -1619,7 +1647,7 @@ def sync_readme(path: Path, metadata: dict[str, object]) -> str:
         "- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, microphone availability, and update state; exact device names, raw error details, and logs stay local",
         path=path,
     )
-    return text
+    return sync_readme_mac_prompt(text, path)
 
 
 def sync_windows_readme(path: Path, metadata: dict[str, object]) -> str:
@@ -4361,26 +4389,20 @@ def check_macos_agent_install_order(
     """Require a compatibility stop before either install path or launch."""
     if readme is None:
         readme = read_text(ROOT / "README.md")
-    if "### Assistant Install Prompt" in readme:
-        readme = readme.split("### Assistant Install Prompt", 1)[1].split(
-            "</details>", 1
-        )[0]
+    try:
+        readme = readme_mac_prompt(readme, ROOT / "README.md")
+    except SyncError as exc:
+        return [str(exc)]
+    markers = (
+        "Before installing or launching macOS 0.3.8", "uname -m",
+        "sw_vers -productVersion", "Stop if", "command -v brew",
+        "brew install --cask", "current version-pinned download",
+        "Only after the user makes an informed choice to launch 0.3.8",
+        "open /Applications/Presspeech.app",
+    )
     sequences = (
-        ("macOS assistant prompt", prompt, (
-            "Before installing or launching macOS 0.3.8", "uname -m",
-            "sw_vers -productVersion", "Stop if", "command -v brew",
-            "brew install --cask", "current version-pinned download",
-            "Only after the user makes an informed choice to launch 0.3.8",
-            "open /Applications/Presspeech.app",
-        )),
-        ("README assistant prompt", readme, (
-            "Before downloading or installing, run these read-only compatibility checks",
-            "uname -m", "sw_vers -productVersion", "Stop if this is not",
-            "command -v brew", "brew install --cask",
-            "current version-pinned notarised ZIP",
-            "Only after the user makes an informed choice to launch 0.3.8",
-            "open /Applications/Presspeech.app",
-        )),
+        ("macOS assistant prompt", prompt, markers),
+        ("README assistant prompt", readme, markers),
     )
     errors = []
     for display, content, markers in sequences:
@@ -4393,6 +4415,13 @@ def check_macos_agent_install_order(
 def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     errors: list[str] = []
     errors.extend(check_macos_agent_install_order())
+    try:
+        readme_prompt = readme_mac_prompt(read_text(ROOT / "README.md"), ROOT / "README.md")
+    except SyncError as exc:
+        errors.append(str(exc))
+    else:
+        if readme_prompt != MAC_INSTALL_PROMPT:
+            errors.append("README.md: embedded macOS install prompt is out of sync")
     required_mac_launch_choice = (
         "installing the app without opening it does not make the model request",
         "If the user chooses to wait, skip the `open` command below",
@@ -4501,6 +4530,23 @@ def diff_text(path: Path, current: str, expected: str) -> str:
 
 
 def run_self_test() -> None:
+    readme_fixture = (
+        "before\n" + README_MAC_PROMPT_START + "stale prompt"
+        + README_MAC_PROMPT_END + "\nafter\n"
+    )
+    synced_readme = sync_readme_mac_prompt(readme_fixture, ROOT / "README.md")
+    if (
+        readme_mac_prompt(synced_readme, ROOT / "README.md") != MAC_INSTALL_PROMPT
+        or not synced_readme.startswith("before\n")
+        or not synced_readme.endswith("\nafter\n")
+    ):
+        raise SyncError("self-test: README macOS prompt was not synced within its boundaries")
+    try:
+        sync_readme_mac_prompt("missing prompt", ROOT / "README.md")
+    except SyncError:
+        pass
+    else:
+        raise SyncError("self-test: missing README prompt boundary was accepted")
     if check_macos_agent_install_order():
         raise SyncError("self-test: safe macOS assistant install order was rejected")
     early_install = MAC_INSTALL_PROMPT.replace(
@@ -5093,7 +5139,11 @@ def run_self_test() -> None:
             "https://rcourtman.github.io/presspeech/install.html#direct-download\n"
             "https://rcourtman.github.io/presspeech/windows.html#download-verify-run\n"
             "**1.0 MB release zip**\n"
-            "- **Copy Diagnostics** — old summary\n",
+            "- **Copy Diagnostics** — old summary\n"
+            + README_MAC_PROMPT_START
+            + "old assistant prompt"
+            + README_MAC_PROMPT_END
+            + "\n",
             encoding="utf-8",
         )
         synced_release_safe_readme = sync_readme(release_safe_readme, metadata)

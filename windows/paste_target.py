@@ -48,7 +48,8 @@ def focused_child_handle(user32, window_handle, thread_identifier):
     """Return keyboard focus only if it still belongs to the captured window.
 
     GetFocus reads the caller's queue, not the target app's. A failed or
-    incoherent GetGUIThreadInfo query is not equivalent to a successful query
+    incoherent GetGUIThreadInfo query, including a focused HWND outside the
+    foreground window's parent tree, is not equivalent to a successful query
     with no focus HWND. Mark it unavailable so two failures cannot authorize
     a window-only paste into a different field of the same window.
     """
@@ -65,7 +66,18 @@ def focused_child_handle(user32, window_handle, thread_identifier):
         if (int(info.hwndActive or 0) != window_handle or
                 int(user32.GetForegroundWindow() or 0) != window_handle):
             return None
-        return int(info.hwndFocus or 0)
+        focus_handle = int(info.hwndFocus or 0)
+        if focus_handle:
+            # GetGUIThreadInfo can report invalid HWNDs during activation
+            # changes. A focus handle from another top-level window must not
+            # authorize a paste merely because hwndActive still looks right.
+            user32.GetAncestor.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+            user32.GetAncestor.restype = ctypes.c_void_p
+            if int(user32.GetAncestor(focus_handle, 2) or 0) != window_handle:
+                return None  # GA_ROOT walks parents, not owned popups.
+        if int(user32.GetForegroundWindow() or 0) != window_handle:
+            return None
+        return focus_handle
     except Exception:
         return None
 
