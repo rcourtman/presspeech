@@ -4,266 +4,67 @@
 
 <p align="center">
   <a href="https://rcourtman.github.io/presspeech/install.html#model-download-privacy"><img src="https://img.shields.io/github/v/release/rcourtman/presspeech?label=release&color=10B981" alt="Latest macOS release: review the first-launch privacy warning"></a>
-  <a href="https://github.com/rcourtman/presspeech/actions/workflows/check.yml"><img src="https://github.com/rcourtman/presspeech/actions/workflows/check.yml/badge.svg" alt="Build status"></a>
   <a href="https://github.com/rcourtman/presspeech/blob/main/LICENSE"><img src="https://img.shields.io/github/license/rcourtman/presspeech?color=10B981" alt="MIT licensed"></a>
-  <a href="https://rcourtman.github.io/presspeech/install.html"><img src="https://img.shields.io/badge/macOS-Released%20%C2%B7%20notarised-10B981" alt="macOS: released and notarised"></a>
-  <a href="https://rcourtman.github.io/presspeech/windows.html"><img src="https://img.shields.io/badge/Windows-Prerelease%20%C2%B7%20unsigned-D97706" alt="Windows: prerelease and unsigned"></a>
   <a href="https://rcourtman.github.io/presspeech/install.html"><img src="https://img.shields.io/badge/Homebrew-Cask-10B981?logo=homebrew&logoColor=white" alt="Homebrew Cask: review macOS install warning"></a>
-  <a href="https://rcourtman.github.io/presspeech/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-10B981" alt="Documentation site"></a>
 </p>
 
 # Presspeech
 
-**Private push-to-talk dictation for Mac and Windows.** Hold is the default;
-choose **Press to toggle** to start and stop with separate presses. Presspeech
-transcribes locally before pasting at the cursor. If it cannot safely identify
-the original destination, it avoids automatic paste. On macOS and published
-Windows 0.1.12, a copied notice means the transcript was copied at completion;
-paste manually only if the clipboard still holds it. Upcoming Windows 0.1.13
-instead waits for an explicit Delivery Recovery Copy or Discard, without
-replacing the clipboard for an already-known invalid target. The destination
-check cannot always detect a move to another field or browser tab in the same
-window; keep the starting field and tab selected until insertion or a recovery
-notice appears.
-No account, subscription, or cloud transcription.
+**Hold a key, speak, let go — your words appear at the cursor.** Speech
+recognition runs entirely on your computer. Free, open source, no account, no
+subscription, no cloud transcription.
 
-> **Before opening the published builds (macOS 0.3.8 / Windows 0.1.12):**
-> A missing speech-model download starts on launch, not when you download the
-> app. macOS 0.3.8 may include an inherited Hugging Face token in that request;
-> Windows 0.1.12 may send Hugging Face usage telemetry or an available token,
-> including to a custom download route. If you are unsure, leave the app
-> unopened and read the [macOS launch decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy)
-> or [Windows launch decision](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
-> before choosing to launch. If you install Windows but wait, clear the
-> installer's final **Launch Presspeech** option. If an older copy is already
-> installed and set to open at sign-in, turn off its macOS login item or Windows
-> startup entry in system settings without opening Presspeech; on Mac, also
-> prevent the old app from reopening after sign-out or restart. Check
-> [GitHub Releases](https://github.com/rcourtman/presspeech/releases) in a browser
-> for the new build instead of opening the old app to check for updates. The
-> [wait-path guide](https://rcourtman.github.io/presspeech/getting-started.html#model-download-preflight)
-> gives the system-setting steps.
+> **Before opening the published builds (macOS 0.3.8 / Windows 0.1.12):** a
+> missing speech-model download starts on launch. macOS 0.3.8 may include an
+> inherited Hugging Face token in that request; Windows 0.1.12 may send Hugging
+> Face usage telemetry or an available token, including to a custom download
+> route. Audio and transcripts are never sent. If you are unsure, install but
+> leave the app unopened (on Windows, clear the installer's final **Launch
+> Presspeech** option, which starts checked) and read the [macOS](https://rcourtman.github.io/presspeech/install.html#model-download-privacy)
+> or [Windows](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy) launch decision first.
 
-**Start here:** [official website](https://rcourtman.github.io/presspeech/) ·
-[first dictation guide](https://rcourtman.github.io/presspeech/getting-started.html) ·
+**Start here:** [first dictation guide](https://rcourtman.github.io/presspeech/getting-started.html) ·
 [macOS install](https://rcourtman.github.io/presspeech/install.html) ·
 [Windows install](https://rcourtman.github.io/presspeech/windows.html)
-
-Choose the build that matches your computer:
-
-| | macOS | Windows |
-| --- | --- | --- |
-| **Status** | Released, signed, and notarised | Prerelease; installer is currently unsigned |
-| **System** | Apple Silicon, macOS 14+ | x64 PC; Windows 11 recommended |
-| **Default language path** | Multilingual Parakeet | Multilingual Parakeet with usable NVIDIA CUDA; English-only Whisper base.en otherwise |
-| **First model download** | About 500–600 MB | About 141 MiB on CPU or 2.5 GB with CUDA |
-| **Start** | [Install on macOS](https://rcourtman.github.io/presspeech/install.html) | [Verify and install the Windows prerelease](https://rcourtman.github.io/presspeech/windows.html) |
-
-**New to Presspeech?** Follow the
-[four-checkpoint first-dictation guide](https://rcourtman.github.io/presspeech/getting-started.html)
-from install, through Ready and an in-app scratchpad test, to one simple target
-app. Use harmless practice words: the scratchpad can still use the system
-clipboard.
-
-> **Published downloads and source can differ.** The `main` branch can contain
-> an unreleased candidate. The install links below resolve only to published
-> artifacts; features labelled **Upcoming** are not in those downloads yet.
-
-> Presspeech now uses the `com.local.presspeech` identity throughout.
-> When upgrading from an earlier identity, saved preferences and local
-> dictionary rules migrate automatically. macOS privacy permissions must
-> be granted once to the current identity.
 
 <p align="center">
   <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence quickly lands at the cursor." width="900">
 </p>
 
-The released macOS build is a native Swift menu-bar app for Apple Silicon. Under
-the hood, speech recognition runs locally through
-[FluidAudio](https://github.com/FluidInference/FluidAudio), CoreML,
-and the Apple Neural Engine. The default model is multilingual
-[Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3).
-
 > **~90–150 ms warm ASR inference** · **8.4 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
 
-> Measured p50 is 92–152 ms across four synthetic TTS clips (2.5–9.5 s) on a
-> Mac mini M4; the first inference after model load is excluded. This excludes
-> microphone capture and paste, so it is not end-to-end dictation latency. See
-> the [benchmark methodology and results](docs/benchmarks.html).
+- **Fast and small.** A native Swift menu-bar app running NVIDIA's multilingual
+  [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) on the
+  Apple Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio).
+  See the [benchmark methodology](https://rcourtman.github.io/presspeech/benchmarks.html).
+- **No cloud path.** Audio stays in memory and is discarded after
+  transcription. Transcripts are never logged.
+- **Pastes where you started.** If you switch windows, or Presspeech cannot
+  verify the original destination, it skips automatic paste so you can paste
+  manually from the clipboard instead of it typing into the wrong place. It
+  cannot always detect a move to another field or browser tab in the same
+  window, so keep the starting field and tab selected until the text lands.
+- **Yours to tune.** Hold-to-talk or press-to-toggle, a custom hotkey, local
+  correction rules and text shortcuts, spoken formatting, filler-word removal.
 
-## Install on Windows
+## Install
 
-**Before installing or launching Windows 0.1.12:** its model downloads may send
-Hugging Face usage telemetry and include an already-configured or locally saved
-Hugging Face token. Custom download routing can change where the model
-request—and a token it carries—goes.
-The bundled Windows HTTP client also honors configured HTTPS proxies. A
-TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it
-receives; upcoming 0.1.13 removes account-token authentication but still honors
-proxy and CA settings. If a TLS-inspecting HTTPS proxy is in use and its trust
-is unclear, don't launch while it is in use.
-The Hugging Face request starts when Presspeech launches to fetch a missing
-model; downloading the installer and checksum from GitHub does not make that
-request. If you install 0.1.12 but choose to wait, leave **Launch Presspeech**
-unchecked at the end of setup. This final-screen option starts checked by
-default; clear it before choosing **Finish**.
-If you prefer to avoid this possible usage telemetry, are concerned that a
-Hugging Face token or custom download route may be configured on this PC, or
-are unsure, wait until Windows 0.1.13 is published. The public models need no
-account token; dictation audio and transcripts are not sent in model
-downloads. See the
-[Windows privacy decision and technical details](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
-and the [version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
-
-Already used Windows 0.1.12? If you ran a model download with a token available
-and an inherited `HF_ENDPOINT` or staging setting may have sent it to a
-destination you do not trust—or a TLS-inspecting HTTPS proxy you do not trust
-could read the HTTPS request—treat the token as disclosed to that destination
-or proxy. A proxy that only tunnels HTTPS cannot read the token.
-Revoke the token and create a replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
-Do not include token values in logs or support requests.
-
-Published Windows 0.1.12 also briefly opens the selected microphone for an
-automatic local readiness check in first-run Setup. Its samples stay in memory
-and are discarded, not saved, sent, or transcribed. If you do not want that check,
-leave the app unopened; upcoming 0.1.13 waits until you choose **Check
-Microphone**. See the [first-launch steps](https://rcourtman.github.io/presspeech/windows.html#first-launch).
-
-The installer is currently unsigned, so SmartScreen may show **Unknown
-publisher**. Choose **More info → Run anyway** only after SHA-256 verification
-and if SmartScreen offers that choice. That option does not apply to a Smart
-App Control block, which has no per-app exception. If Smart App Control or
-managed policy blocks the installer, stop; do not try to circumvent the block.
-
-The installed app is about 4.4 GB. Published 0.1.12 downloads a missing
-selected model on launch without asking first: about 2.5 GB for multilingual
-Parakeet with usable NVIDIA CUDA, or about 141 MiB for English-only Whisper
-base.en otherwise. Upcoming 0.1.13 asks before either first-run download.
-Other local models remain selectable in Settings; review the
-[Windows language and hardware split](https://rcourtman.github.io/presspeech/windows.html#language-support)
-before downloading if you need another language.
-
-Download the self-contained installer—Python is not required:
-
-- Open the [current Windows download and verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run).
-  The deployed guide keeps the versioned installer, matching checksum, and
-  guarded PowerShell commands together while the next prerelease is prepared.
-- After verification, run the installer. If you choose to wait for 0.1.13,
-  clear **Launch Presspeech** on the final installer screen and leave the app
-  unopened. It starts checked by default; confirm it is clear before choosing
-  **Finish**. If you choose to launch 0.1.12 after reviewing the privacy
-  decision above, use that installer option or open it from the Start Menu;
-  a missing selected-model download begins without another prompt. Wait for
-  **Preparing speech model…** to disappear before the first dictation.
-- Published 0.1.12 does not offer a pre-download choice. In upcoming 0.1.13,
-  Setup asks before downloading missing
-  first-run default model files: multilingual Parakeet (up to ~2.5 GB) with
-  usable CUDA or English-only Whisper base.en on CPU (~141 MiB) without it.
-  Choose the offered download, another model in Settings, or **Set Up Later**;
-  the Parakeet path also offers the smaller CPU model.
-- On a new 0.1.12 profile, Setup selects **Start Presspeech with Windows** by
-  default; turn it off before choosing **Finish Setup**, **Set Up Later**, or
-  closing Setup if you do not want the app at sign-in.
-  Choose **Press to toggle** in Settings, not Setup. Upcoming 0.1.13 defaults
-  startup off and offers the dictation-style choice in Setup.
-- If a shell-capable assistant is doing the installation, give it the
-  [guarded Windows prompt](https://rcourtman.github.io/presspeech/install/agents.md).
-  It checks x64 compatibility, pins the current release, verifies the checksum,
-  asks before launch, and stops rather than weakening Windows security policy.
-
-See [`windows/README.md`](windows/README.md) for Windows usage, hardware, and
-source-build details.
-
-## Install on macOS
-
-**Before installing or launching macOS 0.3.8:** its model-download requests
-may include a Hugging Face token inherited by Presspeech. The public model
-needs no account token. If a token may be present in the environment that
-launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published.
-The bundled FluidAudio client also honors an inherited lowercase
-`https_proxy` setting. A TLS-inspecting HTTPS proxy trusted by macOS can read
-any 0.3.8 token it receives; a tunnelling proxy cannot read the HTTPS request.
-If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while
-it is in use. Upcoming 0.3.9 removes account-token authentication but still
-honors proxy settings.
-The 0.3.8 client can also log a malformed inherited `https_proxy` or
-`http_proxy` URL verbatim, including embedded proxy credentials, then ignore
-it and make a model request without the expected proxy. If you depend on an
-inherited proxy and are unsure its URL is valid, leave 0.3.8 unopened;
-upcoming 0.3.9 refuses malformed proxy settings before model loading. Do not
-share proxy URLs or log excerpts containing them.
-Downloading the macOS ZIP from GitHub does not make a model request; the first
-download of a missing model starts when the app launches. You can keep the
-downloaded app unopened while waiting for 0.3.9.
-Dictation audio and transcripts are not sent in these requests. See the
-[version-specific network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
-Already used macOS 0.3.8? See the
-[follow-up guidance before another model download](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).
-
-Download the notarised app:
-
-- Use the [current macOS install guide](https://rcourtman.github.io/presspeech/install.html#direct-download)
-  for a version-pinned archive and its matching SHA-256. The repository source
-  can be ahead of the published download; do not substitute a moving download
-  URL for the archive named in that guide.
-- Unzip it and move **Presspeech.app** to **Applications**. If you choose to wait
-  after reading the warning above, leave it unopened.
-
-Or install with Homebrew, which is the easiest path for updates:
+**macOS** — Released, signed, and notarised. Apple Silicon, macOS 14+.
 
 ```sh
 brew install --cask rcourtman/presspeech/presspeech
 ```
 
-If you decide to launch published 0.3.8 after reviewing the model-download
-warning above, open the installed app:
+Or use the [version-pinned download and checksum](https://rcourtman.github.io/presspeech/install.html#direct-download).
+When you open the app, Setup Checklist covers the ~500–600 MB speech model and
+the Microphone, Accessibility, and Input Monitoring permissions
+([why each is needed](https://rcourtman.github.io/presspeech/install.html#permissions)).
 
-```sh
-open /Applications/Presspeech.app
-```
+**Windows** — Prerelease, unsigned installer, x64.
+[Verify and install the Windows prerelease](https://rcourtman.github.io/presspeech/windows.html#download-verify-run).
 
-On first launch, macOS shows its standard downloaded-app confirmation.
-Choose **Open** after checking that it says Apple found no malicious software;
-Presspeech then appears in the menu bar.
-
-Requirements:
-
-- Apple Silicon Mac
-- macOS 14 (Sonoma) or later
-
-The macOS 0.3.8 release starts its first local speech-model download
-(about 500–600 MB) on launch. In upcoming macOS 0.3.9 (not yet published),
-a clean install must choose
-**Download Model** in Setup; choose **Set Up Later** to defer. CoreML also needs
-free space to prepare the model. Setup shows the current estimated space before
-the download starts. Existing installs and cached models continue loading
-automatically. Use **Setup Checklist…** to finish the
-model, permission, and hotkey checks. The checklist stays incomplete until the
-configured hotkey actually reaches Presspeech; if it does not respond or
-controls another Mac feature, choose a different key under Settings.
-Presspeech asks for Microphone,
-Accessibility (shown as **Device Control and Data Access** on macOS 27 and
-later), and Input Monitoring because it records while the hotkey is active,
-observes the global hotkey, and pastes text at the cursor.
-Accessibility is a broad system-control grant; review its scope and Apple's
-guidance in the [macOS permission section](https://rcourtman.github.io/presspeech/install.html#permissions)
-before granting it.
-
-macOS's **Input Monitoring** grant can let an app monitor input, including
-typed keys. Presspeech receives keyboard events to detect the configured
-hotkey and Escape only to cancel an active recording; it does not inspect
-mouse or trackpad events, and other keys pass through without their values
-being saved, logged, or sent. See [Apple's description of Input
-Monitoring](https://support.apple.com/guide/mac-help/mchl4cedafb6/mac).
-
-To deliberately free menu-bar space, choose **Settings → Behavior → Show
-Presspeech in Menu Bar** to hide the item. Presspeech enables its Dock icon if
-needed, and the Dock menu can restore the menu-bar item. If macOS temporarily
-omits the item because the menu bar is crowded or notched, open
-**Presspeech.app** again from Applications, Finder, or Spotlight. The running
-app opens Setup Checklist instead of starting a second copy; enable **Show in
-Dock** there for a persistent alternative. Right-clicking the Dock icon exposes
-dictation controls, Settings, and Support.
+Install links resolve to published releases. The `main` branch can contain
+an unreleased candidate.
 
 ### Assistant Install Prompt
 
@@ -301,400 +102,30 @@ Only if the user asks about a future build: a clean install of 0.3.9 is planned 
 
 </details>
 
-## Use
+## Learn more
 
-Hold-to-talk is the default on both platforms. In **Press to toggle** mode,
-press the configured key once to start recording and again to stop. Choose the
-mode under **Settings → Dictation → Trigger** on macOS or in Windows Settings
-(also in Setup in the upcoming 0.1.13 build).
-
-1. Hold the configured key, or press it once in toggle mode.
-2. Speak.
-3. Release the key, or press it again in toggle mode.
-4. Presspeech attempts to paste at the cursor when it can verify the original
-   destination. If it cannot, it avoids automatic paste. On macOS 0.3.8 and
-   published Windows 0.1.12, a **copied** notice means the transcript was copied
-   at completion for manual paste; other delivery-error notices do not prove
-   it was copied. Upcoming Windows 0.1.13 instead retains uncertain delivery
-   for an explicit **Delivery Recovery** Copy or Discard. Check the intended
-   field before recovering: a notice alone does not prove that the field stayed
-   empty or the clipboard still holds the transcript.
-
-The defaults and control surfaces differ:
-
-- **macOS default:** **Right Option**. Open Presspeech from its menu-bar or
-  optional Dock item; setup and app controls are grouped under
-  **Setup Checklist…**, **Settings**, and **Support**.
-- **Windows default:** **Right Alt**. Open Presspeech from its notification-area
-  icon; if Right Alt acts as AltGr for your keyboard layout, choose F8 or
-  another available key in Setup.
-
-Each recording stays bound to the window that was focused when it began. If
-you change windows while Presspeech is transcribing—or the destination does not
-expose enough focused-window information—it avoids automatic paste. The latter
-can happen in some Electron/Chromium-based apps even when the window appears
-unchanged. The macOS 0.3.8 release copies the transcript and shows **Copied —
-press ⌘V to paste** after a focus change or a later window-verification
-failure. If it could not verify the window when recording began, its HUD
-instead shows **Can’t verify window — use ⌘V**. Builds containing the revised
-notice say **⌘V if clipboard unchanged**; the menu identifies an unverified
-starting window. A copied notice records that Presspeech copied the transcript
-at completion, not that it still owns the clipboard later. If another app or
-the user has copied since, use **Copy Last Transcript** when Recent Transcripts
-is enabled instead of pasting the newer clipboard item. Published Windows
-0.1.12 copies the transcript and shows **Transcript copied, not pasted**. If
-the clipboard still holds the transcript,
-return to the intended field and paste manually with ⌘V on macOS or Ctrl+V on Windows.
-Upcoming Windows 0.1.13 retains uncertain delivery for an explicit **Delivery
-Recovery** Copy or Discard. Check the field before copying, and do not dictate
-the same text again first.
-
-macOS 0.3.8 verifies the original window, not the field or browser tab within
-it. The 0.3.9 implementation also compares the focused Accessibility
-control when an app exposes one at recording start. If no control is exposed
-then, or two fields reuse one identity, a same-window move can still send the
-transcript to the new focus without clipboard-only recovery. Keep the original
-field and tab focused until insertion or a recovery notice appears.
-
-Treat a command shell as an execution surface, not an ordinary text field.
-Terminal, PowerShell, Command Prompt, and remote consoles may run pasted text
-as soon as it contains a newline. The default paste suffix is a space; if you
-choose **Append newline**, it can submit a transcript before you inspect it.
-On macOS, spoken formatting can also add line breaks. Dictate command text into
-**Try Dictation** or a plain-text editor, review the exact result, then paste
-and run it deliberately.
-
-Both builds provide an in-app **Try Dictation** scratchpad, hold and toggle
-trigger modes, configurable hotkeys, deterministic dictionary replacements,
-filler removal, paste suffix choices, startup controls, update checks, and
-privacy-safe diagnostics. Their menus and settings are intentionally native to
-each platform rather than identical.
-
-### macOS controls
-
-- **Start Dictation / Stop and Transcribe** — control a recording from the
-  menu without using the global hotkey; these named actions also work with
-  macOS Voice Control
-- **Setup Checklist…** — model, permissions, and hotkey readiness
-- **Settings → Behavior → Show Presspeech in Menu Bar** — hide the status item
-  to free space; this enables Dock access when needed, and the Dock menu can
-  restore the item
-- **Support → Try Dictation…** — an in-app scratchpad for verifying the
-  hotkey and first transcription without switching apps; use harmless words
-  because delivery can still use the system clipboard
-- **Support → Test App Compatibility… (macOS 0.3.8 and later)** —
-  open the privacy-safe repeated test for automatic paste and focus-change
-  recovery in one exact target app
-- **Support → Report a Problem… / Suggest an Improvement…** — open the
-  repository's `SUPPORT.md` guide; neither action submits a report or sends
-  diagnostics. **Copy Diagnostics** stays local until you choose what to share.
-  GitHub reported that issue creation is restricted on 23 September 2026;
-  follow the guide and keep any draft private while no public route is available
-- **Presspeech → Settings…** or **Command-comma** — when **Show in Dock** is
-  enabled, open the same settings hierarchy from the standard macOS app menu;
-  if Command-comma is also the dictation hotkey, this Settings command wins
-  while Presspeech is active and the hotkey remains global in other apps. That
-  menu also exposes standard Edit and Window commands for Presspeech's
-  scratchpad and manager windows
-- **Settings → Dictation → Hotkey** — choose Right Option, Right Control, Right
-  Command, selected F-keys, or **Record Hotkey…** for another F-key/right
-  modifier or a key combined with Command, Control or Option (plus optional
-  Shift), such as Command-comma. Confirm the preview before saving. Custom
-  combinations take precedence over the same shortcut in other apps; conflicts
-  cannot all be detected. Presspeech's Command-comma Settings command takes
-  precedence while Presspeech is active and **Show in Dock** is enabled.
-  Escape remains reserved for cancellation, and the active layout's Command-V
-  remains available for Paste recovery. A saved binding that becomes Paste
-  after an input-source change yields to Paste. Bindings track physical keys,
-  and their labels follow the current keyboard layout.
-  Hold mode ends when the trigger key is released, even if its modifiers were
-  released first. Apple keyboards may require **Fn** to send an F-key
-- **Settings → Dictation → Trigger** — hold-to-talk or press-to-toggle
-- **Settings → Dictation → Language Hint** — auto-detect (default) or pin to one of
-  the model's 25 supported European languages to bias decoding toward that
-  script and reduce wrong-script bleed-through; this is a hint, not a guarantee
-  of language identification or translation. Bosnian, Belarusian, and Serbian
-  script hints are also available as script-filter aliases. Supported-language
-  coverage does not guarantee uniform recognition accuracy; see the
-  [multilingual benchmark scope and caveat](docs/benchmarks.html#language-coverage)
-- **Settings → Text → After Pasting** — append space, append newline, or no
-  suffix
-- **Settings → Text → Dictionary & Shortcuts** — correct recurring
-  mishearings or map a spoken phrase to exact reusable text after
-  transcription; rules are deterministic, local, searchable in a dedicated
-  manager, and portable through export/import or a user-chosen sync file. They
-  do not train or bias the speech model, so each distinct mishearing or
-  inflected form that needs correction requires its own rule
-- **Settings → Text → Spoken formatting commands** — opt in to exact
-  commands such as “new line”, “new paragraph”, “bullet point”, “comma”,
-  and “open quote”; when the Language Hint is French, the command set follows
-  canonical French phrases such as “nouvelle ligne”, “nouveau paragraphe”,
-  “virgule”, and “guillemet ouvrant”
-- **Settings → Text → Remove filler words** — opt-in deterministic strip of
-  "um", "uh", "ah", "er", "erm", "hm" (and elongated variants)
-- **Settings → Behavior → Keep Previous Clipboard for Manual Restore
-  (macOS 0.3.8 and later)** — off by default. Keeps a complete copy of the
-  previous macOS clipboard in memory for up to five minutes, whether the
-  transcript is pasted automatically or copied for manual paste. After
-  checking that your latest dictated text arrived, choose **Restore Previous
-  Clipboard…** from the main or Dock menu and confirm. Expiry only discards
-  the saved copy; it never rewrites the clipboard. Another copy, disabling
-  the option, or quitting retires the offer.
-  Consecutive dictations preserve the original copy and original deadline.
-  A complete snapshot is limited to 64 MB and 256 representations so an
-  unusually large or complex clipboard cannot be retained without bound. If
-  macOS or the source app cannot provide every representation, or either limit
-  is exceeded, dictation continues without a partial snapshot while clipboard
-  ownership remains stable, and the restore row explains why the previous
-  clipboard is unavailable. Newer macOS versions may ask before Presspeech can
-  read another app's clipboard for this opt-in feature.
-  Builds containing the local-only clipboard protection restore the original
-  items and representations on the current Mac only. The snapshot cannot retain
-  the previous cross-device scope, so Presspeech does not risk making restored
-  content newly available through Universal Clipboard.
-  The automatic-restore option and delay presets from macOS 0.3.7 are retired;
-  existing users must opt in again because manual recovery retains bytes
-  longer.
-  Confirmation is your decision, not proof that macOS acknowledged consumption
-- **Settings → Behavior → Launch at Login** — keep dictation available after
-  sign-in; if macOS needs approval, selecting the marked setting opens Login
-  Items
-- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, microphone availability, and update state; exact device names, raw error details, and logs stay local
-
-### Windows controls
-
-- **Dictate / Cancel Dictation (Esc)** — start, stop, or cancel from the
-  notification-area menu without using the global hotkey
-- **Try Dictation… / Setup… / Settings…** — test in-app with harmless words,
-  revisit first-run readiness, or configure the hotkey, microphone, local model, text handling,
-  audio feedback, and Start with Windows. In upcoming 0.1.13, **Try
-  Dictation…** is also available beside the hotkey selector in Settings, where
-  it opens the in-app scratchpad without starting a recording
-- **Repair Global Hotkey** — replace the keyboard listener if menu-based
-  Dictate still works but the configured key does not
-- **Copy Diagnostics / Report a Problem… / Suggest an Improvement…** — copy a
-  privacy-safe report locally, or open the repository's `SUPPORT.md` guide;
-  these actions do not submit or attach anything. Upcoming 0.1.13 / builds
-  containing **Test App Compatibility…** also open the repeated target-app
-  test. GitHub reported issue creation restricted on 23 September 2026; follow
-  [SUPPORT.md](SUPPORT.md) for local-draft guidance and never post dictated
-  text, audio, or dictionary contents
-
-See the [Windows guide](https://rcourtman.github.io/presspeech/windows.html#first-launch)
-for model readiness, AltGr-safe hotkey selection, and every Windows setting.
-
-## Help qualify target apps
-
-Automatic paste depends on how the destination exposes its focused window and
-consumes clipboard content. Before relying on Presspeech in an important app,
-run the [eight-check target-app
-protocol](https://rcourtman.github.io/presspeech/app-compatibility.html) in
-blank disposable fields. It records five steady-focus and three focus-change
-slots as aggregate counts: successful delivery, safe recovery,
-incorrect or unsafe results, and checks not completed after an early stop.
-Never publish the phrases or transcripts.
-
-Passing reports matter as much as failures because they document successful
-delivery or safe recovery for an exact Presspeech, operating-system, target-app
-version, field type, and set of conditions. These self-selected reports cannot
-establish a general paste-success rate. If no app is already in
-mind, the protocol's live coverage links separate native, browser, and
-Electron/Chromium reports so an unrepresented target class is easy to choose.
-GitHub still reported new issue creation as restricted on 24 September 2026.
-[Browse existing
-compatibility reports](https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22);
-if one matches the platform, app version, and generic field type and accepts
-comments, add the worksheet's eight counts and overall result with your
-Presspeech/OS versions and relevant conditions—even when your outcome differs.
-The matching thread groups observations; do not pool counts across different
-versions or conditions.
-Otherwise, the worksheet's **Download report draft** saves those counts and
-their overall classification with blank prompts for public versions and generic
-target context; it does not collect or save phrases or transcripts. Keep the
-draft private and retry later rather than posting sensitive data elsewhere.
-Only when GitHub accepts new issues, check for a matching report first, then
-use the focused [compatibility report
-form](https://github.com/rcourtman/presspeech/issues/new?template=compatibility_report.yml).
-Community observations are exploratory evidence, not a promise of universal
-support or a substitute for native release qualification.
-
-## Privacy
-
-Presspeech is local-first:
-
-- Audio is captured in memory, transcribed locally, then discarded.
-- No cloud transcription.
-- No Presspeech-authored analytics, accounts, or crash reporter. Bundled
-  speech-library network behavior differs by published version; see the
-  [privacy inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
-- macOS 0.3.8 may attach an inherited Hugging Face token to model
-  downloads even though its public model needs no account token. Upcoming
-  macOS 0.3.9 removes those inherited credentials from its own download
-  process; do not attribute that change to 0.3.8. Dictation audio and
-  transcripts are not sent in model downloads. For an existing 0.3.8 install,
-  leave a working model cache in place and use 0.3.9 before a planned download;
-  see the [follow-up guidance](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).
-- Published Windows 0.1.12 may include a locally available Hugging Face account
-  token in model-download requests and honors inherited `HF_ENDPOINT` and
-  `HUGGINGFACE_CO_STAGING` settings; a configured endpoint may therefore
-  receive that token. An inherited `HF_HUB_USER_AGENT_ORIGIN` is also added to
-  request metadata. Its pinned Hub 1.29.0 client may also fetch
-  `/api/agent-harnesses` when its local registry cache is missing or stale and
-  may add an `agent/<id>` label based on inherited agent-related environment
-  markers. Upcoming 0.1.13 disables Hub telemetry before imports, checks for
-  agent attribution, fixes the endpoint, and removes inherited values. See the
-  version-scoped [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
-- Windows 0.1.12 and upcoming Windows 0.1.13 honor inherited HTTPX proxy and CA
-  configuration (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`,
-  `SSL_CERT_FILE`, `SSL_CERT_DIR`; the Hub client uses `trust_env=True`). A
-  TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token
-  it receives. Upcoming 0.1.13 still honors these proxy and CA settings but does
-  not send account tokens. A proxy that only tunnels HTTPS sees connection
-  metadata, not request contents. Upcoming 0.1.13 also verifies every allowed
-  inference file before model loading using its pinned SHA-256 manifest.
-  On Windows, Presspeech rehashes the reviewed files on every load rather
-  than trusting a metadata-only verification record; a mismatch fails closed. Published
-  Windows 0.1.12 does not independently
-  verify model-file contents against SHA-256. A proxy can still observe request
-  metadata or block a download; see the
-  [network inventory](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
-- Separately, Windows in-app GitHub update checks and approved installer
-  downloads honor Python `urllib.request` proxy settings, including inherited
-  `https_proxy`/`HTTPS_PROXY` or Windows Internet Settings. A trusted
-  TLS-inspecting proxy can replace release metadata and asset bytes together;
-  the in-app SHA-256 check is not independent attestation verification. No
-  dictation audio or transcript is sent in update requests. See the
-  [updater proxy boundary](https://rcourtman.github.io/presspeech/privacy.html#windows-updater-proxy).
-- Transcript content is never written to logs.
-- On macOS, optional Recent Transcripts are in memory only and clear on quit;
-  Windows has no in-app transcript history.
-- Text corrections stay local unless you choose a sync file yourself.
-- Completed transcripts pass through the operating-system clipboard. macOS
-  0.3.8 can expose those entries to macOS Universal Clipboard. Builds containing
-  local-only transcript clipboard writes prevent Universal Clipboard transfer
-  for Presspeech transcripts and add standard transient, auto-generated, and
-  concealed markers for cooperating clipboard managers while preserving local
-  Command-V. They also republish a restored previous clipboard on the current
-  Mac only. macOS Clipboard History in Spotlight on macOS 26 or later and other
-  local clipboard readers remain separate boundaries. Apple's
-  [Screen Sharing](https://support.apple.com/guide/mac-help/mh14066/mac) has a
-  separate shared-clipboard setting that can transfer copied text to a remote
-  Mac; local-only transcript writes are not a tested guarantee against that
-  feature. Turn shared clipboard off when remote transfer is not intended.
-  Published Windows 0.1.12 writes to the Windows clipboard can be retained or synced.
-  Upcoming Windows 0.1.13 asks Windows to exclude every
-  dictation write from Clipboard History and Cloud Clipboard while preserving
-  local Ctrl-V.
-
-Network calls made by Presspeech are limited to:
-
-- Speech-model downloads normally use the public Hugging Face Hub and its storage CDN (first launch,
-  integrity-failure re-download, or user-triggered cache reset). Upcoming macOS 0.3.9 asks new
-  installs before the first download and removes inherited Hugging Face account tokens from its
-  own download process. Published Windows 0.1.12 honors inherited `HF_ENDPOINT` /
-  `HUGGINGFACE_CO_STAGING` routing and `HF_HUB_USER_AGENT_ORIGIN` metadata; it may send a
-  configured or cached token to the configured endpoint and may request `/api/agent-harnesses`
-  or add an `agent/<id>` label. Published Windows 0.1.12 also leaves implicit authentication
-  enabled. The Windows 0.1.13 candidate is not yet published; it disables Hub telemetry and
-  implicit authentication, fixes the endpoint and inherited settings, checks agent attribution,
-  bypasses `hf-xet`, and uses a fixed non-unique Transformers session ID. Do not attribute these
-  candidate controls to 0.1.12.
-- optional GitHub release checks (fixed `presspeech-update-check` on macOS or `presspeech-windows-update-check` on Windows; no version, device, or user identifiers; mutable release responses are ignored),
-- user-triggered bug-report and feature-request links, plus the compatibility
-  guide link in macOS 0.3.8 / upcoming Windows 0.1.13 or builds containing that
-  action; these open fixed public pages in the default browser without adding
-  app or user data to the URL,
-- user-approved install/update downloads from GitHub Releases directly or through Homebrew (formulae.brew.sh, the GitHub APIs, the tap). Windows accepts only release metadata marked immutable and verifies the release asset's size and SHA-256 before offering to run it and again immediately before launch.
-
-## How It Works
-
-```text
-CGEventTap hotkey or accessible menu action
-  → AVAudioEngine capture
-  → 16 kHz mono Float32 audio
-  → FluidAudio / Parakeet TDT v3 CoreML model / ANE
-  → local dictionary rules and voice shortcuts
-  → optional spoken formatting and filler removal
-  → clipboard paste at cursor
-```
-
-The app is intentionally small: one SwiftPM target, one main Swift app
-file, AppKit menu-bar UI, AVFoundation audio capture, CoreGraphics
-events, and CoreML inference.
+- [Getting started](https://rcourtman.github.io/presspeech/getting-started.html) ·
+  [Troubleshooting](https://rcourtman.github.io/presspeech/troubleshooting.html) ·
+  [FAQ](https://rcourtman.github.io/presspeech/faq.html)
+- [Privacy and every network call](https://rcourtman.github.io/presspeech/privacy.html)
+- [App compatibility](https://rcourtman.github.io/presspeech/app-compatibility.html) —
+  test automatic paste in the apps you use
+- [Compare with other dictation apps](https://rcourtman.github.io/presspeech/compare/)
+- [Windows guide](https://rcourtman.github.io/presspeech/windows.html) ·
+  [Roadmap](ROADMAP.md) · [Support](SUPPORT.md)
 
 ## Develop
 
 ```sh
 git clone https://github.com/rcourtman/presspeech.git
-cd presspeech
-swift build --package-path swift
-swift/.build/debug/Presspeech --self-test all
+cd presspeech/swift
+./dev-run.sh
+swift run Presspeech --self-test all
 ```
 
-The build and model-free self-tests do not launch the app or download a model.
-`all` excludes the opt-in native keyboard and paste fixture. For an intentional
-signed app run, review the [macOS model-download warning](#install-on-macos)
-first: `swift/dev-run.sh` stops prior development and
-`/Applications/Presspeech.app` processes and launches the development app.
-Do not run it while an active dictation needs
-to be preserved. Native keyboard and delivery acceptance have separate
-[interaction](docs/native-interaction-qa.md) and
-[release qualification](docs/manual-qa.md#macos-release-qualification) protocols.
-
-Another useful release check, run from the repository root:
-
-```sh
-./ship-swift.sh --dry-run
-```
-
-Before publishing a release, run the manual checklist in
-`docs/manual-qa.md`. User-facing recovery help lives on the
-[troubleshooting page](https://rcourtman.github.io/presspeech/troubleshooting.html);
-its concise Markdown reference is `docs/troubleshooting.md`.
-
-Key files:
-
-- `swift/Sources/Presspeech/main.swift` — app implementation
-- `swift/Package.swift` — SwiftPM manifest
-- `swift/dev-run.sh` — signed local dev build
-- `ship-swift.sh` — signed, notarised release workflow
-- `entitlements.plist` — hardened-runtime microphone entitlements
-- `experiments/swift-bench/` — latency benchmark harness
-
-Release notes live in `swift/release-notes/`.
-
-For the Windows implementation:
-
-```bat
-cd windows
-py -3.12 -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m pip install -r requirements-cuda.txt
-.venv\Scripts\python -m unittest discover -s tests -v
-run.bat
-```
-
-See [`windows/README.md`](windows/README.md) for hardware, setup, and usage
-details. Before treating a candidate as stable, complete the artifact-bound CPU
-and NVIDIA qualification record in [`docs/manual-qa.md`](docs/manual-qa.md).
-
-## Links
-
-- [Support and troubleshooting](SUPPORT.md)
-- [Contributing](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Test target-app compatibility](https://rcourtman.github.io/presspeech/app-compatibility.html)
-- [Product roadmap](ROADMAP.md)
-- [Getting started and first dictation](https://rcourtman.github.io/presspeech/getting-started.html)
-- [macOS install, first-launch privacy decision, and verified download](https://rcourtman.github.io/presspeech/install.html#model-download-privacy)
-- [Windows install guide](https://rcourtman.github.io/presspeech/windows.html)
-- [Documentation site](https://rcourtman.github.io/presspeech/)
-- [Benchmarks and methodology](https://rcourtman.github.io/presspeech/benchmarks.html)
-- [Compare Mac and Windows dictation options](https://rcourtman.github.io/presspeech/compare/)
-- [Homebrew tap](https://github.com/rcourtman/homebrew-presspeech)
-- [FluidAudio](https://github.com/FluidInference/FluidAudio)
-- [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
-
-If Presspeech saves you keystrokes, a star helps other people find it.
+The macOS app is `swift/Sources/Presspeech/main.swift`; the Windows build lives
+in [`windows/`](windows/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for
+checks, release steps, and the Windows toolchain.
 
 ## License
 
