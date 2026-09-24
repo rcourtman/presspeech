@@ -52,7 +52,8 @@ MAX_CHECKSUM_BYTES = 4096
 MAX_RELEASE_PAGES = 100
 
 # These archived release pages remain direct download entry points after newer
-# versions ship. This is a coarse presence check, not a semantic privacy review.
+# versions ship. A tuple within a release's marker list accepts equivalent
+# wording; this is a coarse presence check, not a semantic privacy review.
 KNOWN_DISCLOSURE_MARKERS = {
     "v0.3.8": (
         "before opening",
@@ -63,12 +64,12 @@ KNOWN_DISCLOSURE_MARKERS = {
         "privacy.html#network-calls",
     ),
     "windows-v0.1.12": (
-        "before launching",
+        ("before opening", "before launching"),
         "model",
         "hugging face",
         "token",
         "telemetry",
-        "routing",
+        ("routing", "route"),
         "wait",
         "0.1.13",
         "windows.html#model-download-privacy",
@@ -340,7 +341,11 @@ def known_release_disclosure_errors(releases: object) -> list[str]:
             continue
         # GitHub Markdown often wraps a lead notice in blockquotes and lines.
         normalized = re.sub(r"\s+", " ", re.sub(r"(?m)^\s*>\s?", "", body).casefold())
-        missing = [marker for marker in markers if marker not in normalized]
+        missing = []
+        for marker in markers:
+            alternatives = (marker,) if isinstance(marker, str) else marker
+            if not any(phrase in normalized for phrase in alternatives):
+                missing.append(" / ".join(alternatives))
         if missing:
             errors.append(
                 f"{tag} public release notes lack model-download disclosure markers: "

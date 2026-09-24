@@ -2475,7 +2475,7 @@ class TextRegressionTests(unittest.TestCase):
         instance.notify = mock.Mock()
         # Moonlight has the longest shortcut (Ctrl+Alt+Shift+V), making
         # modifier cleanup and the final pre-V check especially important.
-        target = app.PasteTarget("moonlight.exe", 1234, 41)
+        target = app.PasteTarget("moonlight.exe", 1234, 41, 0x2000)
         replacement = app.PasteTarget("calculator.exe", 5678, 42)
 
         with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
@@ -2486,6 +2486,8 @@ class TextRegressionTests(unittest.TestCase):
                     side_effect=[target, replacement]), \
                 mock.patch.object(app.keyboard_delivery, "paste_keys_held",
                                   return_value=False), \
+                mock.patch.object(
+                    app, "_process_integrity_level", return_value=0x2000), \
                 mock.patch.object(
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
@@ -2502,7 +2504,7 @@ class TextRegressionTests(unittest.TestCase):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._injecting_keys = False
         instance._log = mock.Mock()
-        target = app.PasteTarget("notepad.exe", 1234, 41)
+        target = app.PasteTarget("notepad.exe", 1234, 41, 0x2000)
 
         with mock.patch.object(app.clipboard_delivery, "is_current", return_value=True), \
                 mock.patch.object(app.clipboard_delivery, "write_text"), \
@@ -2511,6 +2513,8 @@ class TextRegressionTests(unittest.TestCase):
                     app, "_foreground_paste_target", return_value=target), \
                 mock.patch.object(app.keyboard_delivery, "paste_keys_held",
                                   return_value=False), \
+                mock.patch.object(
+                    app, "_process_integrity_level", return_value=0x2000), \
                 mock.patch.object(
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("transcript", target)
@@ -2590,16 +2594,16 @@ class TextRegressionTests(unittest.TestCase):
         copy.assert_not_called()
         controller.assert_not_called()
         self.assertEqual(instance._undelivered_dictations, ["private transcript"])
-        self.assertIn("could not verify its input privilege boundary",
+        self.assertIn("input privilege boundary blocks automatic paste or could not be verified",
                       str(instance.notify.mock_calls))
         self.assertNotIn("private transcript", str(instance._log.mock_calls))
 
-    def test_unknown_target_integrity_preserves_existing_paste_behavior(self):
+    def test_unknown_target_integrity_blocks_unverified_input(self):
         unknown_target = app.PasteTarget("notepad.exe", 1234, 41)
 
         with mock.patch.object(
                 app, "_process_integrity_level") as process_integrity:
-            self.assertFalse(
+            self.assertTrue(
                 app._paste_target_blocks_simulated_input(unknown_target))
 
         process_integrity.assert_not_called()
@@ -2611,6 +2615,28 @@ class TextRegressionTests(unittest.TestCase):
                 app._paste_target_blocks_simulated_input(known_target))
 
         source.assert_called_once_with(app.os.getpid())
+
+    def test_unknown_target_integrity_retains_without_replacing_clipboard(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        instance.open_delivery_recovery = mock.Mock(return_value=True)
+        target = app.PasteTarget("notepad.exe", 1234, 41)
+
+        with mock.patch.object(
+                app, "_foreground_paste_target", return_value=target), \
+                mock.patch.object(
+                    app.clipboard_delivery, "write_text") as copy, \
+                mock.patch.object(
+                    app.keyboard_delivery, "Controller") as controller:
+            self.assertFalse(instance._paste("private transcript", target))
+
+        copy.assert_not_called()
+        controller.assert_not_called()
+        self.assertEqual(instance._undelivered_dictations, ["private transcript"])
+        self.assertIn("input privilege boundary blocks automatic paste or could not be verified",
+                      str(instance.notify.mock_calls))
+        self.assertNotIn("private transcript", str(instance._log.mock_calls))
 
     def test_recording_is_blocked_while_startup_model_is_loading(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

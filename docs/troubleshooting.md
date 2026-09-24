@@ -294,9 +294,9 @@ memory and pauses new recording. Check the intended field before retrying: a
 shortcut error does not prove that nothing was pasted.
 
 If the original target is already missing, unfocused, or elevated before
-delivery, Presspeech retains the dictation without replacing the prior
-clipboard item. A later change can still leave the dictated text on the
-current clipboard.
+delivery, or Windows cannot verify either app's input integrity level,
+Presspeech retains the dictation without replacing the prior clipboard item.
+A later change can still leave the dictated text on the current clipboard.
 
 The **Delivery Recovery** window opens without showing or copying the dictated
 words. Choose **Copy for Manual Paste** to copy explicitly, **Discard

@@ -1204,6 +1204,8 @@ public read-speech results alone cannot establish push-to-talk quality. Keep
 private audio and references out of version control. Before any helper tests
 or model work, it requires at least 25 clips with non-empty references and
 1,000 normalized reference words, and rejects byte-identical source audio.
+The preflight word count retains combining marks even where NFC cannot form a
+precomposed letter, matching the benchmark scorer's word boundaries.
 These volume floors match the product-candidate screen; they do not establish speaker/category diversity, reference
 accuracy, or an acceptable WER. The references still need human review, and
 the private short-dictation WER/final-word/latency rows remain evidence for

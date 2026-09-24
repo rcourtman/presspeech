@@ -244,9 +244,9 @@ writing, the previous clipboard item remains unchanged. Release the key and
 use Delivery Recovery to copy or discard the waiting text. Check the intended field
 first: an input error can happen after part or all of the paste has completed.
 If Presspeech already knows that the original window is missing, no longer
-focused, or elevated, or cannot verify its own integrity level against a known
-target level, it also leaves the previous clipboard item unchanged and waits
-for an explicit recovery choice. A change after that check may still
+focused, or elevated, or cannot verify either app's input integrity level,
+it also leaves the previous clipboard item unchanged and waits for an explicit
+recovery choice. A change after that check may still
 leave the dictated text on the current clipboard.
 
 If a clipboard write fails after replacement begins, Windows cannot restore

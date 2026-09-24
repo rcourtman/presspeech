@@ -19,6 +19,18 @@ class PasteTarget(NamedTuple):
     focus_handle: int | None = 0
 
 
+def input_integrity_blocks_delivery(target_level, source_level):
+    """Require two known integrity levels before trusting simulated input.
+
+    SendInput cannot cross upward through UIPI, and its result cannot identify
+    UIPI as the cause of a failure. An unreadable target or source label is
+    therefore not evidence that copying a transcript before SendInput is safe.
+    """
+    return (type(target_level) is not int or target_level <= 0 or
+            type(source_level) is not int or source_level <= 0 or
+            target_level > source_level)
+
+
 class _RECT(ctypes.Structure):
     _fields_ = (
         ("left", ctypes.c_int32),

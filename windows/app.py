@@ -34,6 +34,7 @@ import session_events
 from paste_target import (
     PasteTarget, focused_child_handle as _focused_child_handle,
     matches as _paste_target_matches, same_window as _paste_target_same_window,
+    input_integrity_blocks_delivery as _input_integrity_blocks_delivery,
 )
 from pynput import keyboard as pkb
 from PIL import Image, ImageDraw
@@ -539,16 +540,18 @@ def _process_integrity_level(process_identifier):
 
 
 def _paste_target_blocks_simulated_input(paste_target, source_integrity=None):
-    """Fail closed when a known target cannot be proven reachable under UIPI."""
+    """Fail closed unless the target is proven reachable under UIPI."""
     target_integrity = getattr(paste_target, "integrity_level", 0)
-    if not target_integrity:
-        return False
+    if type(target_integrity) is not int or target_integrity <= 0:
+        # A failed target-token query can be exactly the elevated/protected
+        # destination that rejects SendInput. Keep the prior clipboard item
+        # until the user explicitly chooses Copy in Delivery Recovery.
+        return True
     if source_integrity is None:
         source_integrity = _process_integrity_level(os.getpid())
-    # A failed own-token query is not evidence that the target has equal or
-    # lower integrity. Do not replace the user's clipboard before discovering
-    # that SendInput cannot cross this boundary; retain the text for recovery.
-    return not source_integrity or target_integrity > source_integrity
+    # An unreadable own-token query is likewise not evidence of equal or
+    # lower target privilege. Retain the text before replacing the clipboard.
+    return _input_integrity_blocks_delivery(target_integrity, source_integrity)
 
 
 def _paste_route(process_name):
@@ -2855,8 +2858,8 @@ class PresspeechApp:
                 "The original window or focused control could not be "
                 "verified; no paste shortcut was sent. "),
             "input-integrity-boundary": (
-                "The original app is elevated or Presspeech could not verify "
-                "its input privilege boundary; no paste shortcut was sent. "),
+                "The original app's input privilege boundary blocks automatic "
+                "paste or could not be verified; no paste shortcut was sent. "),
             "scratchpad-unavailable": (
                 "Try Dictation could not confirm that the transcript reached "
                 "its private editor; no paste shortcut was sent. "),

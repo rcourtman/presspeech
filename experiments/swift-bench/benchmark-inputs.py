@@ -49,10 +49,10 @@ def require_regular_file(path: Path, label: str) -> None:
 
 
 def wer_tokens(text: str) -> list[str]:
-    """Count reference words with the benchmark's Unicode letter/number rule."""
+    """Count reference words with the Swift scorer's letter/mark/number rule."""
     lowered = unicodedata.normalize("NFC", text.lower())
     normalized = "".join(
-        character if unicodedata.category(character)[0] in "LN" else " "
+        character if unicodedata.category(character)[0] in "LMN" else " "
         for character in lowered
     )
     return normalized.split()
@@ -329,6 +329,14 @@ def verify(snapshot_dir: Path) -> str:
 
 
 def run_self_test() -> None:
+    # NFC cannot compose every base-plus-mark sequence. The Swift benchmark's
+    # CharacterSet.alphanumerics includes marks, so the evidence floor must not
+    # split one accented word or erase a distinction its WER scorer retains.
+    if wer_tokens("x\u0301ample") != ["x\u0301ample"]:
+        raise AssertionError("uncomposed accent inflated the reference word count")
+    if wer_tokens("q\u0307") == wer_tokens("q"):
+        raise AssertionError("uncomposed accent was lost from a reference word")
+
     with tempfile.TemporaryDirectory(prefix="presspeech-benchmark-inputs-test-") as temporary:
         root = Path(temporary)
         source = root / "Private Client Name"

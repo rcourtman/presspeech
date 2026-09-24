@@ -5885,9 +5885,12 @@ enum DictationPasteTargetCaptureFailure: Error, Equatable {
     var allowsFocusedElementWindowFallback: Bool {
         switch self {
         case .focusedWindowQueryFailed(let code):
-            // AXError.noValue means this attribute had no value. Other AX
-            // failures may be permission or messaging problems.
+            // An app can omit the recommended AXFocusedWindow attribute
+            // entirely (attributeUnsupported) or publish it without a value
+            // (noValue). Both may use the focused control's exact AXWindow;
+            // other AX errors may be permission or messaging problems.
             return code == AXError.noValue.rawValue
+                || code == AXError.attributeUnsupported.rawValue
         case .focusedWindowValueUnavailable:
             // A successful query with no value also leaves no app-level
             // focused window to compare against.
@@ -16946,6 +16949,7 @@ private enum PresspeechSelfTest {
                        "normal capture should not add a bounded AXWindow round-trip")
             for missingWindow in [
                 DictationPasteTargetCaptureFailure.focusedWindowQueryFailed(-25212),
+                .focusedWindowQueryFailed(AXError.attributeUnsupported.rawValue),
                 .focusedWindowValueUnavailable
             ] {
                 let recovered = captureDictationPasteTarget(

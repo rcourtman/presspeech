@@ -145,5 +145,23 @@ class PasteTargetMatchTests(unittest.TestCase):
             self.target(process=0, name=""), self.target(process=0, name="")))
 
 
+class InputIntegrityPolicyTests(unittest.TestCase):
+    def test_only_known_equal_or_lower_target_level_allows_delivery(self):
+        for target, source, blocked in (
+                (0x2000, 0x2000, False),
+                (0x1000, 0x2000, False),
+                (0x3000, 0x2000, True),
+                (0, 0x2000, True),
+                (0x2000, 0, True),
+                (None, 0x2000, True),
+                (0x2000, None, True),
+                (True, 0x2000, True),
+                (0x2000, True, True)):
+            with self.subTest(target=target, source=source):
+                self.assertEqual(
+                    paste_target.input_integrity_blocks_delivery(target, source),
+                    blocked)
+
+
 if __name__ == "__main__":
     unittest.main()

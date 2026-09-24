@@ -209,6 +209,29 @@ class GhTransportTests(unittest.TestCase):
         self.assertIn('v0.3.8 public release notes lack', stderr.getvalue())
         self.assertIn('windows-v0.1.12 public release notes lack', stderr.getvalue())
 
+    def test_tracked_known_risk_notes_satisfy_disclosure_markers(self):
+        root = Path(__file__).resolve().parents[1]
+        releases = [
+            {'tag_name': 'v0.3.8', 'draft': False,
+             'body': (root / 'swift/release-notes/v0.3.8.md').read_text()},
+            {'tag_name': 'windows-v0.1.12', 'draft': False,
+             'body': (root / 'windows/release-notes/0.1.12.md').read_text()},
+        ]
+        self.assertEqual(check.known_release_disclosure_errors(releases), [])
+
+    def test_windows_disclosure_accepts_launch_and_route_alternatives(self):
+        mac = {'tag_name': 'v0.3.8', 'draft': False,
+               'body': 'Before opening model Hugging Face token wait 0.3.9 privacy.html#network-calls'}
+        windows = {'tag_name': 'windows-v0.1.12', 'draft': False,
+                   'body': 'Before launching model Hugging Face token telemetry custom route wait '
+                           '0.1.13 windows.html#model-download-privacy'}
+        self.assertEqual(check.known_release_disclosure_errors([mac, windows]), [])
+        windows['body'] = windows['body'].replace('Before launching', 'Ready to use').replace('route', 'path')
+        errors = check.known_release_disclosure_errors([mac, windows])
+        self.assertEqual(len(errors), 1)
+        self.assertIn('before opening / before launching', errors[0])
+        self.assertIn('routing / route', errors[0])
+
 
 if __name__ == '__main__':
     unittest.main()

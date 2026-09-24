@@ -34,6 +34,27 @@ def files_digest(directory):
             for p in directory.rglob("*") if p.is_file()}
 
 
+class BenchmarkInputWordCountTests(unittest.TestCase):
+    def test_uncomposed_marks_match_benchmark_word_boundaries(self):
+        self.assertEqual(benchmark_inputs.wer_tokens("x\u0301ample"), ["x\u0301ample"])
+        self.assertEqual(benchmark_inputs.wer_tokens("n\u0301"),
+                         benchmark_inputs.wer_tokens("\u0144"))
+        self.assertNotEqual(benchmark_inputs.wer_tokens("q\u0307"),
+                            benchmark_inputs.wer_tokens("q"))
+
+    def test_uncomposed_mark_cannot_inflate_release_word_floor(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "clip.wav").write_bytes(b"synthetic audio")
+            (directory / "clip.txt").write_text("x\u0301ample", encoding="utf-8")
+            self.assertEqual(
+                benchmark_inputs.validate_private_reference_corpus(directory, 1, 1),
+                (1, 1))
+            with self.assertRaisesRegex(benchmark_inputs.InputError,
+                                        "1 reference words \\(minimum 2\\)"):
+                benchmark_inputs.validate_private_reference_corpus(directory, 1, 2)
+
+
 class ContextInputTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

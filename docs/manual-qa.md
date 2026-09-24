@@ -33,6 +33,16 @@ collaborator where noted:
   asset downloads or candidate metadata checks, run
   `python3 scripts/check-public-releases.py --notes-only` separately; it does
   not block Pages deployment.
+- After Pages deploys the intended main commit, run
+  `python3 scripts/check-live-pages.py` from that exact commit. It compares the
+  public home, first-dictation, install, privacy, help, compatibility, and FAQ
+  HTML with the checked-in files byte for byte. A passing source check or
+  successful workflow run alone does not show which copy visitors receive.
+  If this check differs or cannot fetch a page, mark public guidance
+  **Blocked**, inspect the live first-launch and support warnings directly,
+  and verify again after Pages catches up. Do not run it against an unreleased
+  candidate worktree and mistake expected source-ahead-of-site drift for a
+  deployment failure.
 - Review each candidate's release notes before publication, then inspect the
   rendered GitHub release page as a standalone download entry point. Check its
   notes against that exact version's model-download privacy inventory and
@@ -784,7 +794,10 @@ control exposes `AXWindow`, if one is available. Check steady focus, a different
 field in the same window with a distinct AX identity, and a second window. The
 fallback must paste only with the original control and window still focused;
 missing or changed identity must stay copy-only. Record only attribute
-availability and aggregate outcomes, never AX values, window titles, or text.
+availability (including whether the app-level query returned no value or
+attribute unsupported) and aggregate outcomes, never AX values, window titles,
+or text. Other AX errors, including a disabled API or messaging failure, must
+not authorize this fallback.
 
 For the separate browser row, use a disposable, non-submitting field in a
 current browser. Keep its field and tab selected for ten steady-focus attempts
@@ -1550,7 +1563,11 @@ clipboard.
   when the changed focus is known before delivery, it must remain current until
   Copy is chosen in Delivery Recovery. Repeat with the original window closed,
   a different process reusing its HWND if reproducible, a different child edit
-  control, and an elevated target. A focus or clipboard change after the
+  control, and an elevated target. In a controlled candidate build, also make
+  the target integrity-level query fail while its window and focused control
+  stay valid; this must leave the prior clipboard item current and open
+  Delivery Recovery without sending input. Repeat for an unreadable Presspeech
+  integrity level. A focus or clipboard change after the
   preflight may still leave transcript text on the current clipboard; inspect
   the field before deciding to Copy or Discard. Record only pass/fail, not the
   raw log or clipboard content.
