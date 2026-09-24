@@ -107,11 +107,11 @@ and if SmartScreen offers that choice. That option does not apply to a Smart
 App Control block, which has no per-app exception. If Smart App Control or
 managed policy blocks the installer, stop; do not try to circumvent the block.
 
-The installed app is about 4.4 GB. On a fresh PC with NVIDIA CUDA, the
-upcoming Windows build asks before downloading missing multilingual Parakeet
-files (about 2.5 GB); without usable CUDA, it asks before downloading the
-English-only Whisper base.en CPU model (about 141 MiB). Other local models
-remain selectable in Settings; review the
+The installed app is about 4.4 GB. Published 0.1.12 downloads a missing
+selected model on launch without asking first: about 2.5 GB for multilingual
+Parakeet with usable NVIDIA CUDA, or about 141 MiB for English-only Whisper
+base.en otherwise. Upcoming 0.1.13 asks before either first-run download.
+Other local models remain selectable in Settings; review the
 [Windows language and hardware split](https://rcourtman.github.io/presspeech/windows.html#language-support)
 before downloading if you need another language.
 
@@ -120,15 +120,18 @@ Download the self-contained installer—Python is not required:
 - Open the [current Windows download and verification steps](https://rcourtman.github.io/presspeech/windows.html#download-verify-run).
   The deployed guide keeps the versioned installer, matching checksum, and
   guarded PowerShell commands together while the next prerelease is prepared.
-- After verification, run the installer and launch Presspeech from the Start
-  Menu.
-- In the upcoming Windows build, Setup asks before downloading missing
+- After verification, run the installer. If you choose to wait for 0.1.13,
+  clear **Launch Presspeech** on the final installer screen and leave the app
+  unopened. If you choose to launch 0.1.12 after reviewing the privacy
+  decision above, use that installer option or open it from the Start Menu;
+  a missing selected-model download begins without another prompt. Wait for
+  **Preparing speech model…** to disappear before the first dictation.
+- Published 0.1.12 does not offer a pre-download choice. In upcoming 0.1.13,
+  Setup asks before downloading missing
   first-run default model files: multilingual Parakeet (up to ~2.5 GB) with
   usable CUDA or English-only Whisper base.en on CPU (~141 MiB) without it.
   Choose the offered download, another model in Settings, or **Set Up Later**;
-  the Parakeet path also offers the smaller CPU model. Published 0.1.12 does
-  not include this prompt. Wait for **Preparing speech model…** to disappear
-  before the first dictation.
+  the Parakeet path also offers the smaller CPU model.
 - On a new 0.1.12 profile, Setup selects **Start Presspeech with Windows** by
   default; turn it off before choosing **Finish Setup**, **Set Up Later**, or
   closing Setup if you do not want the app at sign-in.

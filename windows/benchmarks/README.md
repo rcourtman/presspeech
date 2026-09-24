@@ -62,6 +62,14 @@ slower with the tail; a negative delta is faster. These are diagnostics, not
 release-to-paste timings, and small or imbalanced order strata cannot establish
 an inference-speed effect. Compare identical input digests, run counts,
 hardware, model settings, and manifest order before interpreting them.
+Version 15 rejects byte-identical **effective 16 kHz mono ASR audio** under
+different fixture IDs before loading a model. Rewrapped or differently sourced
+files that decode to identical ASR samples cannot inflate the number of
+independent clips or overweight aggregate WER and silence results. Older
+reports could include exact duplicates; their aggregate input digest preserved
+that multiplicity but did not reject it. This check does not detect
+near-duplicates, repeated takes, or unrepresentative
+speakers and cannot replace human review of corpus independence.
 
 Version 15 adds a separate, opt-in *recorded-tail* probe. Its ordinary WER and
 latency remain based on the full captured audio; the human-marked crop is only
@@ -82,6 +90,8 @@ It reads each clip again just before inference and aborts if those values have
 changed during model setup. Preflight is not a human reference review and does
 not establish that the corpus is representative; it also adds an untimed read
 and resample pass to benchmark startup, not to reported inference latency.
+Duplicate-audio errors omit fixture names and paths because those may reveal
+private dictation content.
 
 For a local Whisper pause-policy experiment, compare the release's 160 ms
 minimum silence split with explicit alternatives without editing product code:

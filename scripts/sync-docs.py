@@ -856,6 +856,8 @@ FIRST_RUN_ACTION_COPY = {
         "**Finish Setup**, **Set Up Later**, or",
     ),
     ROOT / "windows" / "README.md": (
+        "Published 0.1.12 starts a missing selected-model download automatically",
+        "Only upcoming 0.1.13 asks you to confirm",
         "Start with Windows is on for a new profile.",
         "Choose **Press to toggle** in Settings",
         "**Finish Setup**, **Set Up Later**, or closing Setup",
@@ -3008,7 +3010,7 @@ def check_readme_windows_install_decision_order(
     )
     actions = (
         "Download the self-contained installer",
-        "- After verification, run the installer and launch Presspeech",
+        "- After verification, run the installer.",
         "- If a shell-capable assistant is doing the installation",
     )
     warning_positions: list[tuple[str, int]] = []
@@ -3032,6 +3034,25 @@ def check_readme_windows_install_decision_order(
                     "installer download, run, and assistant instructions"
                 )
                 break
+    launch_start = section.find("- After verification, run the installer.")
+    if launch_start >= 0:
+        launch_end = section.find("\n- ", launch_start + 1)
+        launch_step = " ".join(
+            (section[launch_start:launch_end] if launch_end >= 0 else section[launch_start:]).split()
+        )
+        decision_markers = (
+            "If you choose to wait for 0.1.13",
+            "clear **Launch Presspeech**",
+            "leave the app unopened",
+            "If you choose to launch 0.1.12 after reviewing the privacy decision above",
+            "a missing selected-model download begins without another prompt",
+        )
+        positions = [launch_step.find(marker) for marker in decision_markers]
+        if any(position < 0 for position in positions) or positions != sorted(positions):
+            errors.append(
+                f"{display}: Windows installer step must keep the wait/unopened choice "
+                "before the explicit launch and automatic model-download instructions"
+            )
     return errors
 
 
@@ -3105,6 +3126,7 @@ def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str
         '<strong>Unsure? Leave it unopened.</strong>',
         "Downloading the ZIP or installer does not start a speech-model request",
         "first launch with a missing model does",
+        "On Windows, clear the installer’s final <strong>Launch Presspeech</strong> option if you choose to wait",
         "macOS 0.3.8 — inherited token",
         "wait until macOS 0.3.9 is published",
         'href="install.html#model-download-privacy"',
@@ -5334,7 +5356,10 @@ def run_self_test() -> None:
             "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
             "The installer is currently unsigned; stop if managed policy blocks it.\n"
             "Download the self-contained installer.\n"
-            "- After verification, run the installer and launch Presspeech from the Start Menu.\n"
+            "- After verification, run the installer. If you choose to wait for 0.1.13, "
+            "clear **Launch Presspeech** and leave the app unopened. "
+            "If you choose to launch 0.1.12 after reviewing the privacy decision above, "
+            "a missing selected-model download begins without another prompt.\n"
             "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
             "\n## Install on macOS\n",
             encoding="utf-8",
@@ -5343,8 +5368,27 @@ def run_self_test() -> None:
             raise SyncError("self-test: ordered README Windows warnings were rejected")
         readme_install.write_text(
             "## Install on Windows\n"
+            "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
+            "The installer is currently unsigned; stop if managed policy blocks it.\n"
             "Download the self-contained installer.\n"
-            "- After verification, run the installer and launch Presspeech from the Start Menu.\n"
+            "- After verification, run the installer. If you choose to launch 0.1.12 "
+            "after reviewing the privacy decision above, start it now. "
+            "If you choose to wait for 0.1.13, clear **Launch Presspeech** and "
+            "leave the app unopened; a missing selected-model download begins "
+            "without another prompt.\n"
+            "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
+            "\n## Install on macOS\n",
+            encoding="utf-8",
+        )
+        if not check_readme_windows_install_decision_order(readme_install):
+            raise SyncError("self-test: README launch-before-wait instruction was accepted")
+        readme_install.write_text(
+            "## Install on Windows\n"
+            "Download the self-contained installer.\n"
+            "- After verification, run the installer. If you choose to wait for 0.1.13, "
+            "clear **Launch Presspeech** and leave the app unopened. "
+            "If you choose to launch 0.1.12 after reviewing the privacy decision above, "
+            "a missing selected-model download begins without another prompt.\n"
             "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
             "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
             "The installer is currently unsigned; stop if managed policy blocks it.\n"

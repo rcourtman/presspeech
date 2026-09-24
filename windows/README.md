@@ -96,9 +96,11 @@ cached snapshot loads without another prompt. Published 0.1.12 does not include
 this choice.
 
 First launch detects whether the packaged Torch runtime can use NVIDIA CUDA.
-It selects Parakeet for usable CUDA or Whisper base.en otherwise; after you
-confirm a missing first-run default-model download, pinned files are fetched into
-`%USERPROFILE%\.cache\huggingface` and loaded and warmed in the background.
+It selects Parakeet for usable CUDA or Whisper base.en otherwise.
+Published 0.1.12 starts a missing selected-model download automatically
+on launch, without asking first. Only upcoming 0.1.13 asks you to confirm a
+missing first-run default-model download. Once it starts, pinned files are fetched
+into `%USERPROFILE%\.cache\huggingface` and loaded and warmed in the background.
 Each Presspeech release pins every Windows Hugging Face model to an exact
 repository commit reviewed for that app version, so a fresh install cannot
 silently receive a different snapshot. Published Windows 0.1.12 does not
@@ -371,6 +373,18 @@ When a Moonlight stream is focused, Presspeech automatically uses Moonlight's
 clipboard-typing shortcut so transcripts reach the remote host, including macOS.
 Microsoft Remote Desktop is also detected automatically and uses its redirected
 clipboard with a small reliability delay. Normal Windows apps retain fast Ctrl+V.
+These routes depend on the remote client, not just Presspeech: RDP requires
+client-to-remote plain-text clipboard redirection to be allowed by the
+connection and host policy. If an ordinary local-to-remote text paste fails,
+Presspeech cannot override that restriction. Moonlight instead types the local
+clipboard text into the remote session through its own shortcut; it does not
+require a synchronized remote clipboard. Before relying on either route, test
+it with harmless text in a blank, non-submitting remote editor, then keep that
+field focused until delivery finishes and inspect it before retrying. The
+remote host can receive the text you intentionally deliver. A successful local
+Notepad test does not qualify either remote path. See Microsoft's
+[RDP clipboard-redirection guidance](https://learn.microsoft.com/en-us/azure/virtual-desktop/redirection-configure-clipboard)
+and the [native remote-delivery checklist](../docs/manual-qa.md#windows-release-qualification).
 Each recording is bound to the window that was focused when it began. If focus
 changes while the model is transcribing, Presspeech does not paste private text
 into the wrong window. Published 0.1.12 leaves it on the clipboard; upcoming

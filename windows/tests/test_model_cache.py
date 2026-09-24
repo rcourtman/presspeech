@@ -168,6 +168,40 @@ class CacheFirstTests(unittest.TestCase):
         self.assertEqual(self.resolve(), str(self.snapshot))
         self.assertEqual(self.flags(), [True, False]); self.assert_pinned_anonymous()
 
+    def test_hub_incomplete_snapshot_path_is_checked_before_online_retry(self):
+        (self.snapshot / 'model.safetensors').unlink()
+        (self.snapshot / 'config.json').write_text('{invalid')
+        incomplete = self.missing('cached snapshot is incomplete')
+        incomplete.snapshot_path = str(self.snapshot)
+        self.download.side_effect = [incomplete, AssertionError('online retry')]
+        with self.assertRaises(model_cache.ModelCacheCorruptError):
+            self.resolve()
+        self.assertEqual(self.flags(), [True])
+
+    def test_hub_incomplete_snapshot_with_only_missing_required_file_can_fetch(self):
+        (self.snapshot / 'model.safetensors').unlink()
+        incomplete = self.missing('cached snapshot is incomplete')
+        incomplete.snapshot_path = str(self.snapshot)
+        def download(*_args, **kwargs):
+            if kwargs['local_files_only']:
+                raise incomplete
+            self.complete()
+            return str(self.snapshot)
+        self.download.side_effect = download
+        self.assertEqual(self.resolve(), str(self.snapshot))
+        self.assertEqual(self.flags(), [True, False])
+        self.assert_pinned_anonymous()
+
+    def test_broken_cached_required_symlink_is_corruption_not_download_consent(self):
+        (self.snapshot / 'model.safetensors').unlink()
+        try:
+            (self.snapshot / 'model.safetensors').symlink_to('missing-blob')
+        except OSError as exc:
+            self.skipTest('symlinks unavailable: ' + type(exc).__name__)
+        with self.assertRaises(model_cache.ModelCacheCorruptError):
+            self.resolve()
+        self.assertEqual(self.flags(), [True])
+
     def test_incomplete_online_result_is_not_retried_or_returned(self):
         (self.snapshot / 'model.safetensors').unlink()
         with self.assertRaises(model_cache.ModelCacheMissingError): self.resolve()
@@ -227,15 +261,36 @@ class CacheFirstTests(unittest.TestCase):
         self.assertEqual(model_cache.resolve_snapshot(
             'fixture/public', self.revision, self.files, optional_files=optional), str(self.snapshot))
         self.assertEqual(self.flags(), [True])
-        self.assertEqual(self.download.call_args.kwargs['allow_patterns'], list(self.files + optional))
+        self.assertEqual(self.download.call_args.kwargs['allow_patterns'], list(self.files))
+
+    def test_missing_optional_cache_entry_does_not_authorize_network(self):
+        optional = ('generation_config.json',)
+
+        def hub_download(*_args, **kwargs):
+            # Pinned Hub 1.29.0 checks all requested patterns against a cached
+            # tree listing, so an absent optional pattern would raise here.
+            # Its presence must not be necessary for the local-only probe.
+            if optional[0] in kwargs['allow_patterns']:
+                if kwargs['local_files_only']:
+                    raise self.missing('requested optional file is uncached')
+                self.fail('optional-only cache miss initiated a network request')
+            return str(self.snapshot)
+
+        self.download.side_effect = hub_download
+        self.assertEqual(model_cache.resolve_snapshot(
+            'fixture/public', self.revision, self.files,
+            optional_files=optional), str(self.snapshot))
+        self.assertEqual(self.flags(), [True])
+        self.assert_pinned_anonymous()
 
     def test_missing_required_file_fetches_reviewed_optional_files_too(self):
         optional = ('generation_config.json',)
         self.download.side_effect = [self.missing('no cache'), str(self.snapshot)]
         model_cache.resolve_snapshot('fixture/public', self.revision, self.files, optional_files=optional)
         self.assertEqual(self.flags(), [True, False])
+        self.assertEqual(self.download.call_args_list[0].kwargs['allow_patterns'], list(self.files))
+        self.assertEqual(self.download.call_args_list[1].kwargs['allow_patterns'], list(self.files + optional))
         for call in self.download.call_args_list:
-            self.assertEqual(call.kwargs['allow_patterns'], list(self.files + optional))
             self.assertEqual(call.kwargs['revision'], self.revision)
             self.assertIs(call.kwargs['token'], False)
 
@@ -245,6 +300,17 @@ class CacheFirstTests(unittest.TestCase):
         with self.assertRaises(model_cache.ModelCacheCorruptError):
             model_cache.resolve_snapshot('fixture/public', self.revision, self.files,
                                          optional_files=('generation_config.json',))
+        self.assertEqual(self.flags(), [True])
+
+    def test_present_optional_file_still_requires_its_manifest_digest(self):
+        optional = 'generation_config.json'
+        (self.snapshot / optional).write_text('{"changed":true}')
+        manifest = self.checksums()
+        manifest[optional] = hashlib.sha256(b'{}').hexdigest()
+        with self.assertRaises(model_cache.ModelCacheIntegrityError):
+            model_cache.resolve_snapshot(
+                'fixture/public', self.revision, self.files,
+                optional_files=(optional,), expected_sha256s=manifest)
         self.assertEqual(self.flags(), [True])
 
     def test_either_feature_config_layout_satisfies_local_contract(self):

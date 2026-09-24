@@ -1,5 +1,6 @@
-import json
+import hashlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -12,6 +13,16 @@ from unittest import mock
 import numpy as np
 
 import benchmark
+
+
+def fixture_audio_by_path(audio, seconds=1.0, source_rate=16000):
+    """Mock distinct fixture digests while tests exercise unrelated metrics."""
+
+    def load(path):
+        digest = hashlib.sha256(os.fsencode(path)).hexdigest()
+        return audio, seconds, source_rate, digest
+
+    return load
 
 
 class CudaTimingTests(unittest.TestCase):
@@ -726,7 +737,7 @@ class MetricTests(unittest.TestCase):
         ]
         with mock.patch.object(
                 benchmark, "load_audio",
-                return_value=(audio, 16.0, 16000, "0" * 64)):
+                side_effect=fixture_audio_by_path(audio, 16.0)):
             checked = benchmark._preflight_audio(
                 ".", samples, parakeet_tail_silence_ms=400)
         self.assertEqual(len(checked), 2)
@@ -777,7 +788,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                        side_effect=fixture_audio_by_path(audio)):
                 result = benchmark.run_benchmark(
                     path, parakeet_tail_silence_ms=400)
                 calls = list(transcriber.transcribe.call_args_list)
@@ -881,7 +892,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                        side_effect=fixture_audio_by_path(audio)):
                 result = benchmark.run_benchmark(
                     path, parakeet_tail_silence_ms=400)
 
@@ -1065,6 +1076,44 @@ class MetricTests(unittest.TestCase):
                 constructor.assert_not_called()
                 self.assertEqual(load_audio.call_count, 2)
 
+    def test_duplicate_effective_audio_aborts_before_model_loading(self):
+        manifest = {"samples": [
+            {"id": "private-first", "audio": "private-first.wav",
+             "reference": "first", "reference_reviewed": True},
+            {"id": "private-second", "audio": "private-second.wav",
+             "reference": "second", "reference_reviewed": True},
+        ]}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            # The source files may have different rates or containers while
+            # normalising to exactly the same samples sent to ASR.
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor, \
+                    mock.patch.object(benchmark, "load_audio", side_effect=[
+                        (mock.sentinel.first, 1.0, 16000, "0" * 64),
+                        (mock.sentinel.second, 1.0, 48000, "0" * 64),
+                    ]):
+                with self.assertRaisesRegex(
+                        ValueError, "duplicate effective ASR audio") as caught:
+                    benchmark.run_benchmark(path)
+                constructor.assert_not_called()
+        self.assertNotIn("private-first", str(caught.exception))
+        self.assertNotIn("private-second", str(caught.exception))
+
+    def test_preflight_accepts_distinct_effective_audio(self):
+        samples = [
+            {"id": "first", "audio": "first.wav"},
+            {"id": "second", "audio": "second.wav"},
+        ]
+        with mock.patch.object(benchmark, "load_audio", side_effect=[
+                (mock.sentinel.first, 1.0, 16000, "0" * 64),
+                (mock.sentinel.second, 1.0, 16000, "1" * 64),
+        ]):
+            checked = benchmark._preflight_audio(".", samples)
+        self.assertEqual(len(checked), 2)
+        self.assertEqual([row[3] for row in checked], ["0" * 64, "1" * 64])
+
     def test_invalid_precision_is_rejected_before_model_loading(self):
         manifest = {"model": "base.en", "samples": [
             {"id": "speech", "audio": "speech.wav"}]}
@@ -1225,13 +1274,13 @@ class MetricTests(unittest.TestCase):
 
     def test_unscoreable_and_unreviewed_references_do_not_pollute_trial_wer(self):
         manifest = {"runs": 1, "samples": [
-            {"id": "punctuation", "audio": "ignored.wav", "reference": "...",
+            {"id": "punctuation", "audio": "punctuation.wav", "reference": "...",
              "reference_reviewed": True},
-            {"id": "unreviewed", "audio": "ignored.wav", "reference": "private placeholder",
+            {"id": "unreviewed", "audio": "unreviewed.wav", "reference": "private placeholder",
              "reference_reviewed": False},
-            {"id": "silence", "audio": "ignored.wav", "expected_silence": True,
+            {"id": "silence", "audio": "silence.wav", "expected_silence": True,
              "reference_reviewed": True},
-            {"id": "scored", "audio": "ignored.wav", "reference": "one two",
+            {"id": "scored", "audio": "scored.wav", "reference": "one two",
              "reference_reviewed": True},
         ]}
         transcriber = mock.Mock()
@@ -1243,7 +1292,7 @@ class MetricTests(unittest.TestCase):
                 json.dump(manifest, handle)
             with mock.patch.object(benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(benchmark, "load_audio",
-                                      return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
+                                      side_effect=fixture_audio_by_path(mock.sentinel.audio)):
                 result = benchmark.run_benchmark(path)
         self.assertEqual(result["reviewed_sample_count"], 1)
         self.assertEqual(result["reviewed_reference_word_count"], 2)
@@ -1467,7 +1516,7 @@ class MetricTests(unittest.TestCase):
                     return_value=transcriber) as transcriber_type, \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
+                        side_effect=fixture_audio_by_path(mock.sentinel.audio)):
                 result = benchmark.run_benchmark(manifest_path)
 
         transcriber_type.assert_called_once_with(measure_stages=True)
@@ -1543,7 +1592,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
+                        side_effect=fixture_audio_by_path(mock.sentinel.audio)):
                 result = benchmark.run_benchmark(manifest_path)
 
         self.assertAlmostEqual(result["aggregate_wer"], 1 / 6)
@@ -1670,7 +1719,7 @@ class MetricTests(unittest.TestCase):
                     benchmark.engine, "Transcriber", return_value=transcriber), \
                     mock.patch.object(
                         benchmark, "load_audio",
-                        return_value=(mock.sentinel.audio, 1.0, 16000, "0" * 64)):
+                        side_effect=fixture_audio_by_path(mock.sentinel.audio)):
                 result = benchmark.run_benchmark(manifest_path)
 
         self.assertIsNone(result["aggregate_wer"])

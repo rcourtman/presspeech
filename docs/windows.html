@@ -296,7 +296,7 @@ After the user completes the installer, launch Presspeech from the Start Menu on
             </article>
             <article class="card">
               <h3>Remote desktop aware</h3>
-              <p>Moonlight and Microsoft Remote Desktop receive dedicated clipboard paste handling. Normal Windows apps retain the standard fast Ctrl+V path.</p>
+              <p>Moonlight and Microsoft Remote Desktop receive different remote-delivery handling. RDP requires client-to-remote plain-text clipboard redirection to be allowed; Presspeech cannot bypass a client or host restriction. Moonlight uses its client-side shortcut to type local clipboard text into the remote session instead of synchronizing a remote clipboard. Both routes can send the text to the remote host. Try harmless text in a blank, non-submitting remote editor and inspect the result before relying on the route. Normal Windows apps retain the standard fast Ctrl+V path. See <a href="https://learn.microsoft.com/en-us/azure/virtual-desktop/redirection-configure-clipboard">Microsoft's RDP clipboard guidance</a> and the <a href="app-compatibility.html">target-app compatibility check</a>.</p>
             </article>
             <article class="card">
               <h3>Updates require approval</h3>

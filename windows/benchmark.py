@@ -788,14 +788,23 @@ def _preflight_audio(manifest_dir, samples, *, parakeet_tail_silence_ms=None,
 
     The second read for inference must match the exact signal checked here;
     otherwise an edited fixture could make a partially paired report appear
-    valid. Only digests and non-sensitive audio metadata remain in memory.
+    valid. Distinct IDs must not count the same effective recording twice as
+    independent evidence. Only digests and non-sensitive audio metadata remain
+    in memory.
     """
     checked = []
+    audio_digests = set()
     for sample in samples:
         path = sample["audio"]
         if not os.path.isabs(path):
             path = os.path.join(manifest_dir, path)
         audio, seconds, source_rate, digest = load_audio(path)
+        if digest in audio_digests:
+            # Do not include paths or IDs: local benchmark names can reveal
+            # private dictation content, even in an error message.
+            raise ValueError(
+                "benchmark contains duplicate effective ASR audio fixtures")
+        audio_digests.add(digest)
         if _tail_probe_applies(sample, parakeet_tail_silence_ms):
             _validate_tail_probe_bucket(len(audio), parakeet_tail_silence_ms)
         if _recorded_tail_probe_applies(sample, parakeet_recorded_tail_probe):

@@ -227,11 +227,19 @@ def _validate_snapshot(
     for name in (*required_files, *optional_files):
         item = path / name
         try:
-            metadata = item.stat()
+            item.lstat()
         except FileNotFoundError:
             if name in required_files:
                 missing.append(name)
             continue
+        try:
+            metadata = item.stat()
+        except FileNotFoundError as exc:
+            # Hub snapshots may contain symlinks to blobs. A broken link (or
+            # a file removed after lstat) is present but corrupt, not consent
+            # to contact the network for a supposedly missing model file.
+            raise ModelCacheCorruptError(
+                "cached model input cannot be resolved: " + name) from exc
         present.add(name)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_size == 0:
             raise ModelCacheCorruptError("cached model input is empty or not a file: " + name)
@@ -290,17 +298,7 @@ def resolve_snapshot(
     from huggingface_hub import snapshot_download
     from huggingface_hub.errors import LocalEntryNotFoundError
 
-    def attempt(local_only):
-        model_network.harden_loaded_runtime()
-        options = {}
-        if progress is not None and not local_only:
-            options["tqdm_class"] = _download_progress_class(
-                lambda done, total: _report_progress(
-                    progress, "downloading", done, total))
-        snapshot = snapshot_download(
-            repository, revision=revision, token=False,
-            local_files_only=local_only, allow_patterns=list(all_files),
-            **options)
+    def validate(snapshot):
         if expected_sha256s is not None:
             _report_progress(progress, "verifying")
         return _validate_snapshot(
@@ -308,11 +306,46 @@ def resolve_snapshot(
             expected_sha256s=expected_sha256s, repository=repository,
             integrity_cache_dir=integrity_cache_dir)
 
+    def attempt(local_only):
+        model_network.harden_loaded_runtime()
+        options = {}
+        if progress is not None and not local_only:
+            options["tqdm_class"] = _download_progress_class(
+                lambda done, total: _report_progress(
+                    progress, "downloading", done, total))
+        # The Hub's local-only snapshot check treats every requested pattern
+        # as required when a cached tree listing exists. Asking it for an
+        # optional file that is absent locally can therefore trigger the
+        # online fallback even when every required inference file is ready.
+        # Probe only the required set; our validator below still checks any
+        # optional files that are present. A real miss downloads the complete
+        # reviewed set so optional files remain available after that fetch.
+        patterns = required_files if local_only else all_files
+        snapshot = snapshot_download(
+            repository, revision=revision, token=False,
+            local_files_only=local_only, allow_patterns=list(patterns),
+            **options)
+        return validate(snapshot)
+
     try:
         snapshot = attempt(True)
         _report_progress(progress, "loading")
         return snapshot
     except (LocalEntryNotFoundError, ModelCacheMissingError) as exc:
+        if isinstance(exc, LocalEntryNotFoundError):
+            # With a cached tree listing, the pinned Hub raises an incomplete
+            # snapshot error before returning its path. Inspect that partial
+            # folder before allowing an online retry: malformed *present*
+            # input must not be hidden by a different required file's absence.
+            partial = getattr(exc, "snapshot_path", None)
+            if partial is not None:
+                try:
+                    snapshot = validate(partial)
+                except ModelCacheMissingError:
+                    pass
+                else:
+                    _report_progress(progress, "loading")
+                    return snapshot
         if local_only:
             if isinstance(exc, LocalEntryNotFoundError):
                 raise ModelCacheMissingError(

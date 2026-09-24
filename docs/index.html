@@ -135,7 +135,7 @@
           <p class="quiet"><strong>macOS 0.3.8:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.12:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
           <div class="note warn launch-decision" role="region" aria-labelledby="launch-decision-title">
             <h2 id="launch-decision-title">Before opening a current build</h2>
-            <p class="decision-lead"><strong>Unsure? Leave it unopened.</strong> Downloading the ZIP or installer does not start a speech-model request; first launch with a missing model does.</p>
+            <p class="decision-lead"><strong>Unsure? Leave it unopened.</strong> Downloading the ZIP or installer does not start a speech-model request; first launch with a missing model does. On Windows, clear the installer’s final <strong>Launch Presspeech</strong> option if you choose to wait.</p>
             <ul>
               <li><strong>macOS 0.3.8 — inherited token:</strong> A model request may include a Hugging Face token. If one may be inherited—or you are unsure—wait until macOS 0.3.9 is published. Do not launch through a TLS-inspecting proxy whose trust is unclear. <a href="install.html#model-download-privacy">Read the macOS launch decision.</a></li>
               <li><strong>Windows 0.1.12 — telemetry or token:</strong> Model downloads may send usage telemetry or an available Hugging Face token; custom routing can change the request destination. If you want to avoid possible telemetry, a token or custom route may be configured, or you are unsure, wait until Windows 0.1.13 is published. Do not launch through a TLS-inspecting proxy whose trust is unclear. <a href="windows.html#model-download-privacy">Read the Windows launch decision.</a></li>

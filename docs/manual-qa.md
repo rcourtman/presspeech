@@ -161,7 +161,7 @@ For each configuration, also record this release-gate matrix:
 | Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
 | Try Dictation Copy/Cut uses protected clipboard and failed Cut leaves text intact | |
 | Microphone disconnect/reconnect rescan and in-flight selection change | |
-| Microsoft Remote Desktop and Moonlight insertion routes | |
+| Microsoft Remote Desktop and Moonlight insertion routes: repeated distinct text, original-field check, and focus-change recovery | |
 | Sleep/resume, then microphone, hotkey, and dictation recovery | |
 | In-place candidate install over the preceding public Windows release | |
 | In-app update, cancelled/failed update recovery, uninstall, and reinstall | |
@@ -187,6 +187,36 @@ known external copy interrupted an attempt, record the interruption and rerun
 with a fresh phrase; never exclude an unexplained failure. Retain only
 aggregate counts, app versions, and generic field types, not the phrases,
 clipboard contents, or screenshots.
+
+For the remote-delivery row, use disposable local and remote machines and a
+blank, non-submitting plain-text editor on the remote host—not a shell,
+message composer, or real document. Record the client executable/version,
+remote operating-system version, generic field type, and—for RDP—whether
+client-to-host clipboard redirection is allowed; never record host or account
+names. Qualify an RDP client and Moonlight separately, not as interchangeable
+paste paths.
+Before dictating into RDP, verify that an ordinary harmless local-to-remote
+plain-text clipboard paste works. If client or host policy blocks redirection,
+record **Blocked** for that configuration rather than treating local insertion
+or Presspeech's local recovery copy as a remote pass; do not change managed
+policy to make the test pass. Before Moonlight dictation, verify its own
+client-side clipboard-typing shortcut with a harmless local marker; remote
+clipboard synchronization is not its prerequisite. For each usable route,
+make five consecutive dictations with distinct harmless phrases, including a
+longer phrase and non-ASCII text where the selected model supports it. Clear
+the remote editor between attempts, inspect it before any retry, and compare
+with a separate local scratch paste before another copy. Count automatic
+paste-once, safe manual recovery, and incorrect/unsafe outcomes separately;
+stale, partial, duplicate, missing, or misdirected text fails the row. Then
+start in the remote editor, switch to a blank local window before stopping,
+and require no automatic insertion in either field plus complete deliberate
+recovery. A local Notepad pass, posted shortcut, or intact local clipboard does
+not establish that the remote host received fresh text. This qualifies only
+the recorded client, host, policy, and field combination. Microsoft's
+[RDP clipboard guidance](https://learn.microsoft.com/en-us/azure/virtual-desktop/redirection-configure-clipboard)
+documents policy-dependent redirection; Moonlight's
+[client implementation](https://github.com/moonlight-stream/moonlight-qt/blob/master/app/streaming/input/keyboard.cpp)
+types local clipboard text into the host.
 
 A **Fail**, **Blocked**, or **Not run** result in either table blocks promotion
 from prerelease to stable. An unsigned candidate also remains a prerelease.
