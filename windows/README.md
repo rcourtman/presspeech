@@ -281,9 +281,10 @@ copying again. The upcoming build also compares a private fingerprint of a
 nonempty foreground-window title at each delivery check. If switching tabs
 changes that title, Presspeech uses Delivery Recovery rather than knowingly
 pasting into the changed tab; a title change within the original tab may also
-cause recovery. For recognized browser executables, it also requires the same
-focused UI Automation Edit element at capture and delivery. A missing or
-changed element uses Recovery before replacing the clipboard if detected at
+cause recovery. For recognized browser executables, it also requires a
+nonempty window title fingerprint and the same focused UI Automation Edit
+element at capture and delivery. An unavailable title or edit element, or a
+changed edit element, uses Recovery before replacing the clipboard if detected at
 preflight; two fields or same-title tabs that expose different Edit elements
 are no longer treated as one destination. Presspeech reads only the element
 type, password flag, and opaque runtime identifier—not its name or text.
@@ -477,11 +478,13 @@ browser and Electron fields can share one Win32 control handle, so this is not
 a guarantee of field identity within those apps. Upcoming 0.1.13 additionally
 compares a private fingerprint of the top-level window title, catching a tab
 switch when it changes the title. Recognized browser executables also require
-a matching UI Automation Edit-element identity, including when two tabs have
-the same title. If the browser does not expose a distinct editable element,
+a nonempty title fingerprint and a matching UI Automation Edit-element
+identity, including when two tabs have the same title. If the browser's title
+is unavailable or it does not expose a distinct editable element,
 Presspeech uses Delivery Recovery instead of guessing from its Win32 handle.
 This extra check does not cover every browser derivative or embedded webview;
-runtime identifiers can also be reused. Native qualification remains required.
+[UI Automation runtime identifiers can also be reused](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-usefortesting).
+Native qualification remains required.
 An original tab whose title changes for another reason may also require
 manual recovery. Keep the intended field
 focused until delivery finishes, and review where the text landed.

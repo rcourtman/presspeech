@@ -5,7 +5,8 @@ focused child control. Querying the owning GUI thread adds a useful guard for
 classic Win32 edit controls; custom-rendered fields may share one HWND. A
 private fingerprint of a nonempty window caption catches some same-HWND tab
 changes. Recognized browsers additionally require an editable UI Automation
-element identity; neither captions nor HWNDs identify every browser field.
+element identity, and recover if the caption is unavailable: UIA runtime
+identifiers may be reused. Neither signal identifies every browser field.
 """
 
 import ctypes
@@ -303,7 +304,8 @@ def matches(expected, current):
     or incoherent query is not evidence of no focused child; recover instead
     of treating two failures as a match. Browsers need matching UIA Edit
     RuntimeIds as well, because matching captions can still name different
-    tabs or fields. RuntimeIds can be reused, so native checks remain required.
+    tabs or fields. RuntimeIds can be reused, so browsers also need a nonempty
+    caption fingerprint as an independent signal. Native checks remain required.
     """
     return (same_window(expected, current) and
             expected.focus_handle is not None and
@@ -311,5 +313,6 @@ def matches(expected, current):
             current.focus_handle == expected.focus_handle and
             current.caption_fingerprint == expected.caption_fingerprint and
             (not requires_edit_identity(expected.process_name) or
-             (expected.edit_identity is not None and
+             (bool(expected.caption_fingerprint) and
+              expected.edit_identity is not None and
               expected.edit_identity == current.edit_identity)))

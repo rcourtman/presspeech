@@ -35,6 +35,11 @@ A missing model downloads on launch and may include an inherited Hugging Face
 token. If one may be present, or you are unsure, leave the app unopened and
 wait until 0.3.9 is published. Downloading or installing without opening the
 app does not start that request. Do not inspect or display token values.
+The pinned 0.3.8 client may log a malformed inherited lowercase
+`https_proxy` or `http_proxy` URL verbatim, including embedded proxy
+credentials, then ignore it and make a model request without the expected
+proxy. If you depend on that proxy but cannot confirm its URL is valid,
+leave 0.3.8 unopened; do not inspect or share proxy values or logs.
 
 If you are installing the unsigned Windows 0.1.12 prerelease, read the
 [Windows privacy decision and verification steps](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)

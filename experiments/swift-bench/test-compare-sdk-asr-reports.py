@@ -33,7 +33,9 @@ def report(*, candidate=False, digest=INPUT_DIGEST, order=ORDER_DIGEST,
            hint="auto", trials=3,
            state="default", controls=True, scored=True, revision=None,
            errors=None, app_pin=APP_PIN, kind="Real-Dictation",
-           latency=None, speech_max="71.0"):
+           latency=None, speech_max="71.0", host_model="Mac16,11",
+           host_chip="Apple M4", host_memory="17179869184",
+           macos_version="26.5.2"):
     pin = revision or (CANDIDATE_PIN if candidate else APP_PIN)
     dependency = "candidate-dependency" if candidate else "production-dependency"
     if errors is None:
@@ -94,6 +96,10 @@ def report(*, candidate=False, digest=INPUT_DIGEST, order=ORDER_DIGEST,
         f"- Benchmark inputs SHA-256: {digest}\n"
         f"- Benchmark order SHA-256: {order}\n"
         f"- Benchmark harness SHA-256: {harness}\n"
+        f"- Host model: {host_model}\n"
+        f"- Host chip: {host_chip}\n"
+        f"- Host memory bytes: {host_memory}\n"
+        f"- macOS version: {macos_version}\n"
         f"- Trials per clip: {trials}\n"
         f"- Parakeet TDT v3 language/script hint: {hint}\n"
         f"- Clips: {clip_count}\n"
@@ -293,6 +299,10 @@ class ReportComparisonTests(unittest.TestCase):
             (dict(digest="d" * 64), "benchmark inputs SHA-256"),
             (dict(order="d" * 64), "benchmark order SHA-256"),
             (dict(harness="d" * 64), "benchmark harness SHA-256"),
+            (dict(host_model="Mac15,3"), "host model"),
+            (dict(host_chip="Apple M4 Pro"), "host chip"),
+            (dict(host_memory="34359738368"), "host memory"),
+            (dict(macos_version="26.5.1"), "macOS version"),
             (dict(hint="de"), "language hint"),
             (dict(trials=5, controls=False), "trial count"),
             (dict(kind="Public-Speech"), "corpus kind"),
@@ -333,6 +343,16 @@ class ReportComparisonTests(unittest.TestCase):
         with self.assertRaisesRegex(comparator.ComparisonError, "comparison provenance"):
             comparator.parse_report(report().replace(
                 f"- Benchmark harness SHA-256: {HARNESS_DIGEST}\n", ""))
+        with self.assertRaisesRegex(comparator.ComparisonError, "comparison provenance"):
+            comparator.parse_report(report().replace(
+                "- Host model: Mac16,11\n", ""))
+        for kwargs in (dict(host_model="unreported"),
+                       dict(host_chip="Intel Core i9"),
+                       dict(host_memory="0"),
+                       dict(macos_version="unknown")):
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(
+                    comparator.ComparisonError, "generic host receipt"):
+                comparator.parse_report(report(**kwargs))
         with self.assertRaisesRegex(comparator.ComparisonError, "clip WER conflicts"):
             comparator.parse_report(report(errors=4))
         with self.assertRaisesRegex(comparator.ComparisonError, "non-speech control receipt"):

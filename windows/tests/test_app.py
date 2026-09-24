@@ -5521,6 +5521,29 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.controller.assert_not_called()
         self.assert_retained_without_content_logs()
 
+    def test_browser_missing_caption_preserves_prior_clipboard(self):
+        self.target = app.PasteTarget(
+            "chrome.exe", 1234, 41, 0x2000, 101, None, (7, 11))
+        self.foreground.return_value = self.target
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+
+    def test_browser_caption_disappears_after_copy_never_sends_shortcut(self):
+        self.target = app.PasteTarget(
+            "chrome.exe", 1234, 41, 0x2000, 101, b"original", (7, 11))
+        self.foreground.side_effect = [
+            self.target, self.target._replace(caption_fingerprint=None)]
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_called_once()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+
     def test_browser_edit_change_after_copy_never_sends_shortcut(self):
         self.target = app.PasteTarget(
             "chrome.exe", 1234, 41, 0x2000, 101, b"same-title", (7, 11))

@@ -211,6 +211,7 @@ For each configuration, also record this release-gate matrix:
 | Five consecutive dictations into a current Chromium browser text field | |
 | Same-window Chromium tab switch with different titles uses Delivery Recovery before paste | |
 | Same-title Chromium tab switch and same-tab field switch: no insertion into the new destination | |
+| Chromium title unavailable at capture or delivery: Recovery, no automatic paste | |
 | Five consecutive dictations into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
 | Held-modifier shortcut guard and manual recovery | |
@@ -1878,6 +1879,12 @@ clipboard.
   Neither case may send the paste shortcut. The pre-write case must preserve
   the prior clipboard item; the late failure may leave transcript text current
   but must retain Delivery Recovery. Record outcomes without content.
+- In a controlled Chromium candidate run, make the window caption read return
+  no usable title while the HWND, Win32 focus, and UI Automation Edit identity
+  remain stable. Repeat with failure at capture and only after the clipboard
+  write. Neither case may send Ctrl+V; pre-write failure must preserve the prior
+  clipboard item, and late failure must retain Delivery Recovery. Do not record
+  the title, field contents, or transcript.
 - With F8 as the dictation hotkey, hold each of Ctrl, Shift, Alt, Windows and V in
   turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
   does not release the physically held key, explains the retained dictation,

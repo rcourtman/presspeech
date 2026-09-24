@@ -541,6 +541,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     DOCS / "llms.txt": (
         "Before installing or launching macOS 0.3.8",
         "model-download requests may include a Hugging Face token inherited by Presspeech",
+        "malformed inherited lowercase", "embedded proxy credentials",
+        "leave 0.3.8 unopened",
         "install.html#model-download-privacy",
         "macOS 0.3.8 may attach an inherited Hugging Face token",
         "public model needs no account token",
@@ -552,6 +554,8 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     DOCS / "llms-full.txt": (
         "Before installing or launching macOS 0.3.8",
         "model-download requests may include a Hugging Face token inherited by Presspeech",
+        "malformed inherited lowercase", "embedded proxy credentials",
+        "leave 0.3.8 unopened",
         "install.html#model-download-privacy",
         "macOS 0.3.8 can attach an inherited `HF_TOKEN`",
         "public model needs no account token",
@@ -2049,6 +2053,10 @@ LLMS_SHORT_ANSWER = (
     "or custom route, or are unsure, wait for Windows 0.1.13. Neither newer build "
     "is published yet. A TLS-inspecting HTTPS proxy trusted by the client can read "
     "any token sent through it; do not launch through one whose trust is unclear. "
+    "On macOS 0.3.8, a malformed inherited proxy URL can be logged with embedded "
+    "credentials and ignored, allowing a model request without the expected proxy; "
+    "if you depend on that proxy but cannot confirm "
+    "its URL is valid, leave the app unopened. Do not inspect or share proxy values or logs. "
     "Downloading the app alone does not start a model request, but opening it with a "
     "missing model does. Installing without opening it does not start the request "
     "either. If installing Windows 0.1.12 while waiting, leave the final "
@@ -2096,11 +2104,23 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "are unsure—wait until macOS 0.3.9 is published. The pinned FluidAudio client "
         "honors inherited lowercase `https_proxy`; an untrusted TLS-inspecting proxy could "
         "read a 0.3.8 token, while a tunnelling proxy cannot. If the proxy's trust is unclear, "
-        "do not launch 0.3.8 while it is in use. Upcoming 0.3.9 removes account-token "
-        "authentication but still honors proxy settings. See "
+        "do not launch 0.3.8 while it is in use. A malformed inherited lowercase "
+        "`https_proxy` or `http_proxy` URL can be logged verbatim, including embedded "
+        "proxy credentials, then ignored, allowing a model request without the expected "
+        "proxy. If you depend on the proxy but cannot confirm "
+        "its URL is valid, leave 0.3.8 unopened; do not inspect or share proxy values or "
+        "logs. Upcoming 0.3.9 removes account-token authentication and rejects malformed "
+        "proxy settings before model loading, but still honors proxy settings when valid. See "
         "https://rcourtman.github.io/presspeech/install.html#model-download-privacy.\n"
     )
-    if download_privacy_notice not in text:
+    if re.search(r"(?m)^- Before installing or launching macOS 0\.3\.8,.*\n", text):
+        text = re.sub(
+            r"(?m)^- Before installing or launching macOS 0\.3\.8,.*\n",
+            lambda _: download_privacy_notice,
+            text,
+            count=1,
+        )
+    else:
         marker = "- macOS download and matching SHA-256:"
         if marker not in text:
             marker = "- Homebrew install:"
@@ -2208,17 +2228,34 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         "The pinned FluidAudio client also honors inherited lowercase `https_proxy`; "
         "an untrusted TLS-inspecting proxy could read a 0.3.8 token, while a tunnelling "
         "proxy cannot. If the proxy's trust is unclear, do not launch 0.3.8 while it is "
-        "in use. Upcoming 0.3.9 removes account-token authentication but still honors "
-        "proxy settings. Review the "
+        "in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL "
+        "can be logged verbatim, including embedded proxy credentials, then ignored, "
+        "allowing a model request without the expected proxy. "
+        "If you depend on the proxy but cannot confirm its URL is valid, leave 0.3.8 "
+        "unopened; do not inspect or share proxy values or logs. Upcoming 0.3.9 "
+        "removes account-token authentication and rejects malformed proxy settings "
+        "before model loading, but still honors proxy settings when valid. Review the "
         "[current privacy decision](https://rcourtman.github.io/presspeech/"
         "install.html#model-download-privacy) first.\n\n"
     )
     macos_install_heading = "### macOS\n\n"
-    if macos_install_heading in text and macos_install_notice not in text:
-        text = replace_literal(
-            text, macos_install_heading,
-            macos_install_heading + macos_install_notice, path=path,
+    if macos_install_heading in text:
+        old_notice = re.search(
+            r"(?s)(### macOS\n\n)Before installing or launching macOS 0\.3\.8,.*?\n\n",
+            text,
         )
+        if old_notice:
+            text = (
+                text[:old_notice.start()]
+                + macos_install_heading
+                + macos_install_notice
+                + text[old_notice.end():]
+            )
+        else:
+            text = replace_literal(
+                text, macos_install_heading,
+                macos_install_heading + macos_install_notice, path=path,
+            )
     # Keep the checked-in assistant reference's published-build disclosure when
     # refreshing other generated facts; this copy is not a release claim for 0.1.13.
     privacy_marker = "model-request metadata includes a random per-process session ID. "
@@ -3981,6 +4018,44 @@ def check_agent_brief_preflight_order(
     return errors
 
 
+def check_agent_malformed_proxy_preflight(
+    briefs: tuple[tuple[Path, str], ...] = (
+        (ROOT / "llms.txt", "If you are installing the unsigned Windows"),
+        (DOCS / "llms.txt", "- macOS download and matching SHA-256:"),
+        (DOCS / "llms-full.txt", "brew install --cask"),
+    ),
+) -> list[str]:
+    """Require the published Mac proxy failure decision before agent install steps."""
+    required = (
+        "malformed inherited lowercase",
+        "`https_proxy` or `http_proxy`",
+        "embedded proxy credentials",
+        "without the expected proxy",
+        "leave 0.3.8 unopened",
+        "do not inspect or share proxy values or logs",
+    )
+    errors: list[str] = []
+    for path, boundary in briefs:
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing agent-facing install brief")
+            continue
+        contents = read_text(path)
+        start = contents.find("Before installing or launching macOS 0.3.8")
+        end = contents.find(boundary)
+        if start < 0 or end < 0 or start >= end:
+            errors.append(f"{display}: macOS proxy decision must precede {boundary!r}")
+            continue
+        lead = " ".join(contents[start:end].split()).casefold()
+        missing = [phrase for phrase in required if phrase not in lead]
+        if missing:
+            errors.append(
+                f"{display}: pre-install macOS proxy decision omits "
+                + ", ".join(repr(phrase) for phrase in missing)
+            )
+    return errors
+
+
 def check_macos_model_download_privacy_summary(
     surfaces: dict[Path, tuple[str, ...]] = MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY,
     install_page: Path = DOCS / "install.html",
@@ -5477,6 +5552,8 @@ def run_self_test() -> None:
             or "Leave a working model cache in place" not in synced_llms
             or "https_proxy" not in synced_llms
             or "TLS-inspecting" not in synced_llms
+            or "malformed inherited lowercase" not in synced_llms
+            or "without the expected proxy" not in synced_llms
             or "macos-0-3-8-after-use" not in synced_llms
             or "rehashes the reviewed files on every load" not in synced_llms
             or "reuses a local verification record" in synced_llms
@@ -5502,6 +5579,7 @@ def run_self_test() -> None:
                 "leave the final Launch Presspeech option unchecked",
                 "install.html#model-download-privacy",
                 "windows.html#model-download-privacy",
+                "a malformed inherited proxy URL can be logged",
             )
         ):
             raise SyncError("self-test: short agent answer omitted a launch or delivery decision")
@@ -5807,6 +5885,8 @@ def run_self_test() -> None:
                 or "releases/latest/download/Presspeech.zip" in synced_llms_full
                 or "install.html#direct-download" not in synced_llms_full
                 or "Before installing or launching macOS 0.3.8" not in synced_llms_full
+                or "malformed inherited lowercase" not in synced_llms_full
+                or "without the expected proxy" not in synced_llms_full
                 or "The macOS 0.3.8 release starts its first speech-model download" not in synced_llms_full
                 or "In upcoming macOS 0.3.9 (not yet published), a clean install must choose Download Model" not in synced_llms_full
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
@@ -5814,6 +5894,9 @@ def run_self_test() -> None:
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
                 > synced_llms_full.find("Direct download and matching SHA-256")):
             raise SyncError("self-test: llms-full diagnostics paragraph was not replaced")
+        llms_full.write_text(synced_llms_full, encoding="utf-8")
+        if sync_llms_full(llms_full, metadata) != synced_llms_full:
+            raise SyncError("self-test: llms-full privacy correction is not idempotent")
 
         compare_dir = Path(tmp) / "compare"
         compare_dir.mkdir()
@@ -6886,6 +6969,38 @@ def run_self_test() -> None:
         if not check_agent_brief_preflight_order(short_brief, full_brief):
             raise SyncError("self-test: missing full-brief Windows preflight was accepted")
 
+        compact_brief = Path(tmp) / "compact-brief.txt"
+        compact_contents = read_text(DOCS / "llms.txt")
+        compact_brief.write_text(compact_contents, encoding="utf-8")
+        short_brief.write_text(short_contents, encoding="utf-8")
+        full_brief.write_text(full_contents, encoding="utf-8")
+        proxy_briefs = (
+            (short_brief, "If you are installing the unsigned Windows"),
+            (compact_brief, "- macOS download and matching SHA-256:"),
+            (full_brief, "brew install --cask"),
+        )
+        if check_agent_malformed_proxy_preflight(proxy_briefs):
+            raise SyncError("self-test: complete agent proxy preflights were rejected")
+        for path, original in (
+            (short_brief, short_contents),
+            (compact_brief, compact_contents),
+            (full_brief, full_contents),
+        ):
+            path.write_text(
+                original.replace("malformed inherited lowercase", "malformed inherited setting", 1),
+                encoding="utf-8",
+            )
+            if not check_agent_malformed_proxy_preflight(proxy_briefs):
+                raise SyncError(f"self-test: missing proxy disclosure in {path.name} was accepted")
+            path.write_text(original, encoding="utf-8")
+        compact_brief.write_text(
+            compact_contents.replace("without the expected proxy", "without the intended route", 1)
+            + "\nThe model might run without the expected proxy.\n",
+            encoding="utf-8",
+        )
+        if not check_agent_malformed_proxy_preflight(proxy_briefs):
+            raise SyncError("self-test: late proxy disclosure was accepted")
+
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {
             delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
@@ -7462,6 +7577,7 @@ def main() -> int:
             errors.extend(check_scratchpad_privacy_claims())
             errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_agent_brief_preflight_order())
+            errors.extend(check_agent_malformed_proxy_preflight())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_copy_notice_freshness_guidance())
             errors.extend(check_windows_delivery_recovery_guidance())
@@ -7536,6 +7652,7 @@ def main() -> int:
         errors.extend(check_scratchpad_privacy_claims())
         errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_agent_brief_preflight_order())
+        errors.extend(check_agent_malformed_proxy_preflight())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_copy_notice_freshness_guidance())
         errors.extend(check_windows_delivery_recovery_guidance())

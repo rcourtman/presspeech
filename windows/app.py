@@ -3016,7 +3016,7 @@ class PresspeechApp:
             "focus-changed": (
                 "The original window or focused control could not be "
                 "verified (including browser edit identity), or the window "
-                "title changed; no paste shortcut "
+                "title changed or was unavailable; no paste shortcut "
                 "was sent. "),
             "input-integrity-boundary": (
                 "The original app's input privilege boundary blocks automatic "

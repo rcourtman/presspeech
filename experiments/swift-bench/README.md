@@ -134,15 +134,15 @@ python3 ./compare-sdk-asr-reports.py \
 ```
 
 The helper refuses mismatched fixture-set SHA-256, execution order, benchmark
-harness SHA-256, app pin, trial count, clip count, language hint, corpus kind,
-or non-default SDK environment; it also requires a distinct candidate
-dependency pin. The harness receipt covers the local runner, Swift benchmark
+harness SHA-256, generic Mac model/chip/memory, macOS version, app pin, trial
+count, clip count, language hint, corpus kind, or non-default SDK environment;
+it also requires a distinct candidate dependency pin. The harness receipt
+covers the local runner, Swift benchmark
 source, input/provenance helpers, and benchmark package manifest with only
 the FluidAudio revision normalized (the reviewed SDK revision must differ).
-Reports made
-before this receipt was added, or after any covered source change, need a new
-production baseline rather than an assumed like-for-like pair. It checks
-numbered clip sections,
+Reports made before the generic host receipt was added, or after any covered
+source change, need a new production baseline rather than an assumed
+like-for-like pair. It checks numbered clip sections,
 per-trial output receipts, scored speech and non-speech rows, and summary
 arithmetic before comparing a report. It prints aggregate WER, worst
 clip WER, first-/final-word failures, consecutive-deletion run, latency, and paired
@@ -168,6 +168,11 @@ latency, and a slowdown is an observation rather than a significance test.
 Latency deltas need same-machine, comparable-load measurement, and the app
 still needs native qualification. Run the parser's model-free tests
 with `python3 ./test-compare-sdk-asr-reports.py`.
+The host receipt records only generic `hw.model`, Apple chip name, total memory,
+and macOS product version; it never reads a hostname, user name, serial number,
+or machine UUID. Matching these fields narrows an avoidable latency confound but
+does not prove the same physical Mac, power state, thermals, background load,
+CoreML compilation state, or audio-device conditions.
 
 `Package.resolved` is committed for the benchmark for the same reason as the
 app: dependency changes should be visible in review. When promoting a

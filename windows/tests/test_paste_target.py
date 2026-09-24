@@ -386,6 +386,22 @@ class PasteTargetMatchTests(unittest.TestCase):
         self.assertTrue(paste_target.matches(
             self.target()._replace(edit_identity=None), self.target()))
 
+    def test_browser_without_usable_caption_cannot_authorize_paste(self):
+        # UIA RuntimeIds may be reused. When the independent tab-title
+        # signal is unavailable, matching edit IDs alone are not enough.
+        for owner in ("chrome.exe", "msedge.exe", "firefox.exe"):
+            with self.subTest(owner=owner):
+                captured = paste_target.PasteTarget(
+                    owner, 100, 41, 0, 101, None, (7, 11))
+                self.assertFalse(paste_target.matches(captured, captured))
+                self.assertFalse(paste_target.matches(
+                    captured._replace(caption_fingerprint=b"title"),
+                    captured))
+        # A genuinely untitled native editor retains the window/control
+        # fallback; this restriction is specific to recognized browsers.
+        untitled_editor = self.target()._replace(caption_fingerprint=None)
+        self.assertTrue(paste_target.matches(untitled_editor, untitled_editor))
+
     def test_executable_fallback_and_unidentified_owner(self):
         expected = self.target(process=0)
         self.assertTrue(paste_target.matches(expected, self.target(process=0)))

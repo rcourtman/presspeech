@@ -43,6 +43,10 @@ MAX_NON_SPEECH_EMISSIONS=""
 BENCHMARK_INPUT_SHA256="unreported"
 BENCHMARK_ORDER_SHA256="unreported"
 BENCHMARK_HARNESS_SHA256="unreported"
+HOST_MODEL="unreported"
+HOST_CHIP="unreported"
+HOST_MEMORY_BYTES="unreported"
+HOST_MACOS_VERSION="unreported"
 WINDOW_SHIFT_CORPUS=0
 SILENCE_GAP_CORPUS=0
 
@@ -126,6 +130,19 @@ report_title() {
     else
         printf 'Presspeech Real-Dictation Regression'
     fi
+}
+
+capture_benchmark_host() {
+    # Only generic hardware/OS classes enter a report. Never collect a host
+    # name, user name, serial number, or machine UUID from private evaluators.
+    HOST_MODEL="$(sysctl -n hw.model 2>/dev/null)" || return 1
+    HOST_CHIP="$(sysctl -n machdep.cpu.brand_string 2>/dev/null)" || return 1
+    HOST_MEMORY_BYTES="$(sysctl -n hw.memsize 2>/dev/null)" || return 1
+    HOST_MACOS_VERSION="$(sw_vers -productVersion 2>/dev/null)" || return 1
+    [[ "$HOST_MODEL" =~ ^(Mac|iMac)[A-Za-z0-9,]+$ &&
+       "$HOST_CHIP" =~ ^Apple\ [A-Za-z0-9\ .+-]+$ &&
+       "$HOST_MEMORY_BYTES" =~ ^[1-9][0-9]*$ &&
+       "$HOST_MACOS_VERSION" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]
 }
 
 backend_uses_unified() {
@@ -539,6 +556,10 @@ write_report_header() {
         echo "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
         echo "- Benchmark order SHA-256: $BENCHMARK_ORDER_SHA256"
         echo "- Benchmark harness SHA-256: $BENCHMARK_HARNESS_SHA256"
+        echo "- Host model: $HOST_MODEL"
+        echo "- Host chip: $HOST_CHIP"
+        echo "- Host memory bytes: $HOST_MEMORY_BYTES"
+        echo "- macOS version: $HOST_MACOS_VERSION"
         echo "- Trials per clip: $TRIALS"
         if backend_uses_parakeet_v3; then
             echo "- Parakeet TDT v3 language/script hint: $LANGUAGE"
@@ -655,6 +676,25 @@ run_self_test() {
     BENCHMARK_INPUT_SHA256="$(printf 'a%.0s' {1..64})"
     BENCHMARK_ORDER_SHA256="$(printf 'b%.0s' {1..64})"
     BENCHMARK_HARNESS_SHA256="$(printf 'c%.0s' {1..64})"
+    local mock_host_model="Mac16,11"
+    sysctl() {
+        case "$*" in
+            '-n hw.model') printf '%s\n' "$mock_host_model" ;;
+            '-n machdep.cpu.brand_string') printf 'Apple M4\n' ;;
+            '-n hw.memsize') printf '17179869184\n' ;;
+            *) return 1 ;;
+        esac
+    }
+    sw_vers() { [[ "$*" == '-productVersion' ]] && printf '26.5.2\n'; }
+    capture_benchmark_host || { echo "self-test could not collect host receipt" >&2; exit 1; }
+    mock_host_model="private-machine-name"
+    if capture_benchmark_host; then
+        echo "self-test accepted an invalid host receipt" >&2
+        exit 1
+    fi
+    mock_host_model="Mac16,11"
+    capture_benchmark_host || { echo "self-test could not restore host receipt" >&2; exit 1; }
+    unset -f sysctl sw_vers
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
     MAX_REFERENCE_DELETION_RUN=""
@@ -670,6 +710,10 @@ run_self_test() {
     assert_contains "$report" "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
     assert_contains "$report" "- Benchmark order SHA-256: $BENCHMARK_ORDER_SHA256"
     assert_contains "$report" "- Benchmark harness SHA-256: $BENCHMARK_HARNESS_SHA256"
+    assert_contains "$report" "- Host model: Mac16,11"
+    assert_contains "$report" "- Host chip: Apple M4"
+    assert_contains "$report" "- Host memory bytes: 17179869184"
+    assert_contains "$report" "- macOS version: 26.5.2"
     assert_not_contains "$report" "Unified trailing silence"
     WINDOW_SHIFT_CORPUS=1
     write_report_header "$report" "20260101T000000Z" 1
@@ -1238,6 +1282,11 @@ for clip in "${clips[@]}"; do
 done
 if [[ -n "$MAX_NON_SPEECH_EMISSIONS" && "$control_count" -eq 0 ]]; then
     echo "--max-non-speech-emissions requires zero-byte non-speech reference sidecars" >&2
+    exit 1
+fi
+
+if ! capture_benchmark_host; then
+    echo "could not collect the generic Mac hardware/OS benchmark receipt" >&2
     exit 1
 fi
 
