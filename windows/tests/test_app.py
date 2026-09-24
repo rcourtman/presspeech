@@ -5400,9 +5400,20 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.controller.side_effect = RuntimeError("synthetic controller failure")
         self.assertFalse(self.paste())
         self.assert_retained_without_content_logs()
+        self.keyboard.shortcut.assert_not_called()
+        self.keyboard.release.assert_not_called()
+        self.assertFalse(self.instance._injecting_keys)
+        self.assertNotIn("synthetic controller failure",
+                         str(self.instance.notify.mock_calls))
         self.assertNotIn("remains on the clipboard", str(self.instance.notify.mock_calls))
-        self.assertIn("delivery could not be verified",
+        self.assertIn("could not prepare the paste shortcut",
                       str(self.instance.notify.mock_calls))
+        self.assertIn("no paste key events were sent",
+                      str(self.instance.notify.mock_calls))
+        self.assertNotIn("Windows accepted no",
+                         str(self.instance.notify.mock_calls))
+        self.assertNotIn("may have run fully or partly",
+                         str(self.instance.notify.mock_calls))
 
     def test_held_modifier_retains_text_without_shortcut_or_keyup_cleanup(self):
         self.keyboard.shortcut.side_effect = (

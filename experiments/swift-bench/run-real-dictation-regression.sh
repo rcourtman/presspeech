@@ -42,6 +42,7 @@ MAX_CORPUS_WER=""
 MAX_NON_SPEECH_EMISSIONS=""
 BENCHMARK_INPUT_SHA256="unreported"
 BENCHMARK_ORDER_SHA256="unreported"
+BENCHMARK_HARNESS_SHA256="unreported"
 WINDOW_SHIFT_CORPUS=0
 
 usage() {
@@ -536,6 +537,7 @@ write_report_header() {
         echo "- Baseline dependency: $BASELINE_DEPENDENCY (not whole-app qualification)"
         echo "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
         echo "- Benchmark order SHA-256: $BENCHMARK_ORDER_SHA256"
+        echo "- Benchmark harness SHA-256: $BENCHMARK_HARNESS_SHA256"
         echo "- Trials per clip: $TRIALS"
         if backend_uses_parakeet_v3; then
             echo "- Parakeet TDT v3 language/script hint: $LANGUAGE"
@@ -626,6 +628,7 @@ assert_not_contains() {
 
 run_self_test() {
     python3 ./benchmark-inputs.py --self-test
+    python3 ./benchmark-harness.py --self-test
     local tmpdir
     tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/presspeech-real-self-test.XXXXXX")"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -647,6 +650,7 @@ run_self_test() {
     NEMOTRON_MULTILINGUAL_CHUNK_MS="2240"
     BENCHMARK_INPUT_SHA256="$(printf 'a%.0s' {1..64})"
     BENCHMARK_ORDER_SHA256="$(printf 'b%.0s' {1..64})"
+    BENCHMARK_HARNESS_SHA256="$(printf 'c%.0s' {1..64})"
     REDACT_TRANSCRIPTS=1
     REDACT_PATHS=1
     MAX_REFERENCE_DELETION_RUN=""
@@ -661,6 +665,7 @@ run_self_test() {
     assert_contains "$report" "- Parakeet TDT v3 language/script hint: auto"
     assert_contains "$report" "- Benchmark inputs SHA-256: $BENCHMARK_INPUT_SHA256"
     assert_contains "$report" "- Benchmark order SHA-256: $BENCHMARK_ORDER_SHA256"
+    assert_contains "$report" "- Benchmark harness SHA-256: $BENCHMARK_HARNESS_SHA256"
     assert_not_contains "$report" "Unified trailing silence"
     WINDOW_SHIFT_CORPUS=1
     write_report_header "$report" "20260101T000000Z" 1
@@ -1241,6 +1246,16 @@ for index in "${!clips[@]}"; do
     clips[index]="$tmpdir/inputs/$(printf '%06d' "$((index + 1))")/audio.$extension"
 done
 
+# Pin the benchmark implementation as well as its inputs. An SDK-only pair
+# must not conflate changed local inference or preprocessing code with an
+# upstream library difference. The hash normalizes only Package.swift's
+# FluidAudio revision, which is recorded separately and must differ in a pair.
+if ! BENCHMARK_HARNESS_SHA256="$(python3 ./benchmark-harness.py)" ||
+   ! [[ "$BENCHMARK_HARNESS_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "could not fingerprint benchmark harness" >&2
+    exit 1
+fi
+
 echo "building presspeech-bench..."
 swift_build_args=( -c release )
 if [[ "$BACKEND" == "v3-int8-v2" ]]; then
@@ -1253,6 +1268,10 @@ swift build "${swift_build_args[@]}" >/dev/null
 built_dependency_provenance="$(python3 ./dependency-provenance.py --verify-built)" || exit 1
 if [[ "$built_dependency_provenance" != "$dependency_provenance" ]]; then
     echo "dependency provenance changed during benchmark build" >&2
+    exit 1
+fi
+if [[ "$(python3 ./benchmark-harness.py)" != "$BENCHMARK_HARNESS_SHA256" ]]; then
+    echo "benchmark harness changed during build" >&2
     exit 1
 fi
 
@@ -1349,6 +1368,10 @@ IFS=$'\t' read -r observed_input_sha256 observed_order_sha256 <<< "$observed_rec
 if [[ "$observed_input_sha256" != "$BENCHMARK_INPUT_SHA256" || \
       "$observed_order_sha256" != "$BENCHMARK_ORDER_SHA256" ]]; then
     echo "frozen real-dictation inputs changed during the benchmark" >&2
+    exit 1
+fi
+if [[ "$(python3 ./benchmark-harness.py)" != "$BENCHMARK_HARNESS_SHA256" ]]; then
+    echo "benchmark harness changed during the benchmark" >&2
     exit 1
 fi
 

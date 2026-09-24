@@ -4,7 +4,8 @@
 This is a comparison aid, not an ASR quality or release gate. It consumes the
 Markdown artifacts emitted by run-real-dictation-regression.sh, requires both
 matching input-set and execution-order receipts, and never prints fixture
-names, reference text, hypotheses, or input paths.
+names, reference text, hypotheses, or input paths. The benchmark harness
+receipt must also match so an SDK change is not confounded with local code.
 """
 
 from __future__ import annotations
@@ -72,6 +73,7 @@ class Report:
     dependency: str
     digest: str
     order_digest: str
+    harness_digest: str
     trials: int
     clips: int
     language: str
@@ -191,7 +193,8 @@ def parse_report(source: str) -> Report:
     required = (
         "Backend", "FluidAudio revision", "App FluidAudio revision",
         "Baseline dependency", "Benchmark inputs SHA-256",
-        "Benchmark order SHA-256", "Trials per clip",
+        "Benchmark order SHA-256", "Benchmark harness SHA-256",
+        "Trials per clip",
         "Parakeet TDT v3 language/script hint", "Clips",
     )
     if any(key not in fields for key in required):
@@ -202,12 +205,15 @@ def parse_report(source: str) -> Report:
     app_revision = fields["App FluidAudio revision"]
     digest = fields["Benchmark inputs SHA-256"]
     order = fields["Benchmark order SHA-256"]
+    harness = fields["Benchmark harness SHA-256"]
     if not REVISION.fullmatch(revision) or not REVISION.fullmatch(app_revision):
         raise ComparisonError("report has an invalid FluidAudio revision")
     if not DIGEST.fullmatch(digest):
         raise ComparisonError("report has an invalid input fingerprint")
     if not DIGEST.fullmatch(order):
         raise ComparisonError("report has an invalid input-order fingerprint")
+    if not DIGEST.fullmatch(harness):
+        raise ComparisonError("report has an invalid benchmark harness fingerprint")
     dependency = fields["Baseline dependency"].split(" ", 1)[0]
     if dependency not in ("production-dependency", "candidate-dependency"):
         raise ComparisonError("report has an unknown dependency classification")
@@ -291,6 +297,7 @@ def parse_report(source: str) -> Report:
     return Report(
         kind=kind, revision=revision, app_revision=app_revision,
         dependency=dependency, digest=digest, order_digest=order,
+        harness_digest=harness,
         trials=trials, clips=clips,
         language=language, corpus_wer=corpus_wer, corpus_errors=errors,
         reference_words=words, worst_wer=Decimal(row.group(3)),
@@ -312,6 +319,7 @@ def validate_pair(baseline: Report, candidate: Report) -> None:
         ("corpus kind", baseline.kind, candidate.kind),
         ("benchmark inputs SHA-256", baseline.digest, candidate.digest),
         ("benchmark order SHA-256", baseline.order_digest, candidate.order_digest),
+        ("benchmark harness SHA-256", baseline.harness_digest, candidate.harness_digest),
         ("trial count", baseline.trials, candidate.trials),
         ("clip count", baseline.clips, candidate.clips),
         ("language hint", baseline.language, candidate.language),
@@ -383,7 +391,7 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
     rows = [
         f"Pair {index}: {baseline.kind} corpus; {baseline.clips} clips; "
         f"{baseline.trials} trials/clip; hint {baseline.language}; "
-        "matching input and execution-order fingerprints.",
+        "matching input, execution-order, and benchmark-harness fingerprints.",
         "| Metric | Production pin | Candidate SDK | Delta |",
         "|---|---:|---:|---:|",
         f"| Conservative corpus WER | {baseline.corpus_wer}% "

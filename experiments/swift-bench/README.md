@@ -133,9 +133,16 @@ python3 ./compare-sdk-asr-reports.py \
   --pair baseline-german-long-v3.md candidate-german-long-v3.md
 ```
 
-The helper refuses mismatched fixture-set SHA-256, app pin, trial count, clip
-count, language hint, corpus kind, or non-default SDK environment; it also
-requires a distinct candidate dependency pin. It checks numbered clip sections,
+The helper refuses mismatched fixture-set SHA-256, execution order, benchmark
+harness SHA-256, app pin, trial count, clip count, language hint, corpus kind,
+or non-default SDK environment; it also requires a distinct candidate
+dependency pin. The harness receipt covers the local runner, Swift benchmark
+source, input/provenance helpers, and benchmark package manifest with only
+the FluidAudio revision normalized (the reviewed SDK revision must differ).
+Reports made
+before this receipt was added, or after any covered source change, need a new
+production baseline rather than an assumed like-for-like pair. It checks
+numbered clip sections,
 per-trial output receipts, scored speech and non-speech rows, and summary
 arithmetic before comparing a report. It prints aggregate WER, worst
 clip WER, first-/final-word failures, consecutive-deletion run, latency, and paired

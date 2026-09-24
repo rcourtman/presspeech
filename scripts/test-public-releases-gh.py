@@ -223,11 +223,17 @@ class GhTransportTests(unittest.TestCase):
 
     def test_windows_disclosure_accepts_launch_and_route_alternatives(self):
         mac = {'tag_name': 'v0.3.8', 'draft': False,
-               'body': 'Before opening model Hugging Face token wait 0.3.9 privacy.html#network-calls'}
+               'body': ('Before opening model Hugging Face token wait 0.3.9 '
+                        'privacy.html#network-calls Universal Clipboard '
+                        'privacy.html#operating-system-clipboard-services')}
         windows = {'tag_name': 'windows-v0.1.12', 'draft': False,
                    'body': 'Before launching model Hugging Face token telemetry custom route wait '
                            '0.1.13 Launch Presspeech is checked initially; clear before Finish. '
-                           'windows.html#model-download-privacy'}
+                           'windows.html#model-download-privacy. '
+                           'Setup has an automatic local readiness check. '
+                           'Start Presspeech with Windows is selected by default. '
+                           'Clipboard History and Cloud Clipboard may retain text. '
+                           'privacy.html#operating-system-clipboard-services'}
         self.assertEqual(check.known_release_disclosure_errors([mac, windows]), [])
         windows['body'] = windows['body'].replace('Before launching', 'Ready to use').replace('route', 'path')
         errors = check.known_release_disclosure_errors([mac, windows])

@@ -2949,6 +2949,9 @@ class PresspeechApp:
             "shortcut-rejected": (
                 "Windows accepted no Presspeech paste key events; automatic "
                 "paste did not run. The clipboard may have changed. "),
+            "shortcut-unavailable": (
+                "Presspeech could not prepare the paste shortcut; no paste "
+                "key events were sent. The clipboard may have changed. "),
             "shortcut-focus-uncertain": (
                 "The original focused field or window title could not be "
                 "verified after the paste shortcut was sent. Text may have "
@@ -3094,13 +3097,19 @@ class PresspeechApp:
         if self._paste_keys_held_in_hook():
             self._remember_undelivered_dictation(text, "modifier-held")
             return False
-        keyboard = None
         modifiers = [keyboard_delivery.VK_LCONTROL]
         if route == "moonlight":
             modifiers.extend((
                 keyboard_delivery.VK_LMENU,
                 keyboard_delivery.VK_LSHIFT,
             ))
+        try:
+            keyboard = keyboard_delivery.Controller()
+        except Exception:
+            # Controller construction cannot have submitted any input. Do not
+            # tell the user the paste may already have reached a field.
+            self._remember_undelivered_dictation(text, "shortcut-unavailable")
+            return False
         failure = None
         cleanup_required = True
 
@@ -3116,7 +3125,6 @@ class PresspeechApp:
             return True
 
         try:
-            keyboard = keyboard_delivery.Controller()
             self._injecting_keys = True
             # Sequence equality and focused-window identity are last-point
             # guards, not acknowledgement that the target consumed the text.
