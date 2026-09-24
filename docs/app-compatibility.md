@@ -34,6 +34,10 @@ delivery, it stops and preserves that newer copy;
 0.3.8 shows **Couldn't paste**, while builds with revised wording say
 **Delivery uncertain**. A failed input event does not prove that no text reached
 the destination, so inspect the target before retrying or using recovery.
+After a copied notice, a later copy can also replace the transcript without
+updating that notice; use Command-V only if the clipboard still holds the
+dictation, or use **Copy Last Transcript** when available. Revised macOS copy
+notices make this condition explicit.
 
 On macOS, this is a window-level identity check, not a field- or tab-level
 check. Moving to another field or browser tab within that same window while
@@ -155,8 +159,10 @@ For each attempt:
    before copying anything else and compare the complete text, including its
    suffix. After a macOS copied notice or published Windows 0.1.12's
    **Transcript copied, not pasted**, check the clipboard copy in the scratch
-   field before manual paste. After upcoming Windows 0.1.13's **Delivery
-   Recovery** notice, do **not** treat the current clipboard as the transcript:
+   field before manual paste. A notice reflects the copy at completion, not a
+   guarantee that a later clipboard change left the transcript current. After
+   upcoming Windows 0.1.13's **Delivery Recovery** notice, do **not** treat the
+   current clipboard as the transcript:
    choose **Copy for Manual Paste** explicitly, then paste that copy into the
    scratch field. The previous clipboard item may still be current. On macOS,
    **Couldn't paste** or **Delivery uncertain** also does not prove the

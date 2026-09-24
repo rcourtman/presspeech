@@ -23,9 +23,12 @@ collaborator where noted:
   preceding published release. A source candidate may be ahead, but Pages must
   not expose its pinned URL, checksum, version, or structured data yet.
 - After publication, run
-  `python3 scripts/check-public-releases.py --require-published` with read-only
-  GitHub API access. Confirm the deployed platform guide names the new version
-  and that its pinned package and checksum downloads succeed in a clean browser.
+  `python3 scripts/check-public-releases.py --require-published --check-release-notes`
+  with read-only GitHub API access. Confirm the deployed platform guide names
+  the new version and that its pinned package and checksum downloads succeed
+  in a clean browser. The notes audit compares the published GitHub body with
+  the tracked file for each advertised version; a mismatch needs a correction
+  on the public release page, not only a source edit.
 - Review each candidate's release notes before publication, then inspect the
   rendered GitHub release page as a standalone download entry point. Check its
   notes against that exact version's model-download privacy inventory and
@@ -36,6 +39,9 @@ collaborator where noted:
   imply that new issues can be submitted while issue creation is restricted.
   Editing a tracked release-notes file does not update notes already published
   on GitHub, and unreleased fixes must not be described as shipped.
+  For the known 0.3.8 and 0.1.12 gaps, review the
+  [internal correction draft](../marketing/RELEASE_ENTRY_CORRECTIONS.md) against
+  the live pages; it is not evidence that either public page was corrected.
 - From the non-collaborator account, open the Bug report, Feature request, and
   Target-app compatibility report templates. Confirm each form renders and can
   be filled without an “issue creation is restricted” message; do not submit a
@@ -421,7 +427,10 @@ keyboard access testing in addition to assistive-technology testing.
   finishes and playback muting is applied, **Listening…** appears and speech
   is accepted. Tap and release before readiness: there must be no false
   **Listening…** or stop cue, and the result must say the microphone was not
-  ready. If an input starts but supplies no buffers, it must close and report
+  ready. The early release must stop without a post-roll wait; if a slow input
+  opens afterward, it must not revive the old recording or accept its audio.
+  Press again and confirm a fresh dictation can start normally. If an input
+  starts but supplies no buffers, it must close and report
   **Microphone not responding** rather than leaving a stuck recording. Check
   the selected input and repeat, without retaining audio or transcripts.
 - On each clean CPU and NVIDIA configuration, use **Try Dictation** to repeat
@@ -610,6 +619,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
+| Clipboard-only recovery notice after a later harmless copy: no unconditional ⌘V promise; Copy Last Transcript restores the dictation when history is on | |
 | Same-window focus change between two controls with distinct AX identities: clipboard-only recovery | |
 | Permission loss while recording: captured speech completes to clipboard-only recovery | |
 | Screen Sharing shared-clipboard path: consecutive remote pastes stay fresh; a focus change recovers safely | |
@@ -1001,13 +1011,22 @@ item after the development-wrapper launch check.
 - Repeat the focus-change check immediately after pressing the hotkey, before
   the waveform appears, so a cold or rebuilding audio engine cannot retarget
   the transcript during startup.
-- In each focus-change case, confirm the HUD says **Copied — press ⌘V to
-  paste**, the menu keeps the same recovery instruction after the HUD closes,
-  and copying the last transcript clears the notice.
+- In each focus-change case on a 0.3.9 candidate, confirm the HUD says
+  **Copied — ⌘V if unchanged**, the menu says **Transcript copied — ⌘V if
+  clipboard unchanged** after the HUD closes, and copying the last transcript
+  clears the notice. Published 0.3.8 uses **Copied — press ⌘V to paste**.
+- After a clipboard-only recovery with Recent Transcripts on, copy a different
+  harmless marker before opening the menu. Confirm its notice does not promise
+  unconditionally that ⌘V will paste the dictation. Choose **Copy Last
+  Transcript** and verify the original dictation, including its suffix, is
+  available for deliberate paste. Do not paste the newer marker into a real
+  document; repeat with Recent Transcripts off to confirm no menu copy is
+  promised. This checks guidance, not live clipboard-change detection.
 - Stop a long harmless dictation and revoke Input Monitoring while it is still
   transcribing. Confirm Presspeech does not paste into System Settings or any
   other newly focused window, leaves the complete transcript on the clipboard,
-  shows **Copied — press ⌘V to paste**, and returns to the missing-permission
+  shows **Copied — ⌘V if unchanged** on a 0.3.9 candidate (published 0.3.8
+  says **Copied — press ⌘V to paste**), and returns to the missing-permission
   setup state. Regrant the permission and confirm a fresh dictation can paste
   automatically; the interrupted dictation must never paste later.
 - In a disposable test account, begin a harmless recording in a target field,
@@ -1050,10 +1069,13 @@ item after the development-wrapper launch check.
   during focused-window query` means window-server focus changed during the
   bounded lookup. Other categories must be retained verbatim for triage.
   When the target was unavailable at recording start, confirm the HUD says
-  **Can’t verify window — use ⌘V**, the menu keeps **Can’t verify window — press
-  ⌘V to paste**, and VoiceOver explains that the window could not be verified
-  and the transcript was copied for manual paste. A focus change after a valid
-  capture must retain the ordinary **Copied — press ⌘V to paste** recovery.
+  **Unverified — ⌘V if unchanged** on a 0.3.9 candidate, the menu keeps **Can’t
+  verify window — ⌘V if clipboard unchanged**, and VoiceOver explains that the
+  window could not be verified and the transcript was copied for manual paste
+  only while the clipboard is unchanged. Published 0.3.8 says **Can’t verify
+  window — use ⌘V** in the HUD and **Can’t verify window — press ⌘V to paste**
+  in the menu. A focus change after a valid capture must retain the ordinary
+  copied recovery rather than the unverified-starting-window reason.
   Do not add the target name, window title, field contents, or transcript to
   that log extract. Every fallback is still an automatic-paste failure.
 - Confirm Settings → Text → Recent Transcripts labels **Off — No Copy Last

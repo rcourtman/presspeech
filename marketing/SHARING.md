@@ -44,6 +44,10 @@ warning instead. Editing tracked release-notes files or this kit alone does
 not change GitHub's published notes; see the [public release
 qualification](../docs/manual-qa.md#public-release-and-support-qualification).
 
+For owner review, [bounded, version-specific proposed additions](RELEASE_ENTRY_CORRECTIONS.md)
+cover the missing pre-launch decisions and the currently restricted reporting
+route. They are not live corrections; recheck both release pages before use.
+
 Recheck release-size and benchmark numbers against `docs/site-metadata.json`
 and the benchmarks page. Run `python3 scripts/sync-docs.py --check` and
 `python3 scripts/check-public-assets.py` before any future posting; these
@@ -87,7 +91,8 @@ Windows build is available.
 ### Third-party showcase wording to correct
 
 **Observed 24 September 2026:** the [FluidAudio README showcase](https://github.com/FluidInference/FluidAudio/blob/main/README.md)
-describes Presspeech as pasting at the cursor "in about 100 ms." This is not
+has both a stale Parakey entry and a Presspeech entry, each describing paste
+at the cursor "in about 100 ms." This is not
 the measured claim: the [Presspeech benchmark](../docs/benchmarks.html) reports
 92–152 ms p50 for **warm model inference** on four synthetic clips on an M4;
 microphone capture and clipboard/paste delivery are excluded. macOS 0.3.8
@@ -95,6 +100,8 @@ also requires the original focused window to be verifiable before automatic
 paste, otherwise it leaves the transcript for manual clipboard recovery.
 This is an upstream page, not a repository-controlled asset. Do not cite it
 as evidence for release-to-paste timing or assume editing this file will change it.
+An upstream correction should remove the duplicate legacy Parakey listing too,
+not leave the same claim attached to the former name.
 For a maintainer-requested upstream correction, prefer version-independent
 copy without a paste-time promise:
 

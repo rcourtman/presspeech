@@ -10,6 +10,10 @@ commits reach ``main`` before publication. Pages uses ``--require-published``
 to keep the existing site until the advertised downloads are available.
 Use ``--github-api-via-gh`` when a repository-scoped gh broker holds the API
 credentials; checksum sidecars still download over public HTTPS.
+With ``--check-release-notes``, also compare the public release descriptions
+with the tracked notes for the versions advertised by the site. This is a
+manual post-publication audit, not a Pages gate: a source edit cannot correct
+an already-published GitHub release page.
 """
 
 from __future__ import annotations
@@ -225,6 +229,53 @@ def compare_versions(
             f"public docs advertise {platform} {configured}, but GitHub has newer release {published}"
         )
     return "current" if published_value == configured_value else "upcoming"
+
+
+def release_note_parity_errors(
+    metadata: dict[str, object],
+    mac_release: object,
+    releases: object,
+    *,
+    root: Path = ROOT,
+) -> list[str]:
+    """Check only the versions currently advertised by Pages.
+
+    A release-preparation commit can put tracked notes ahead of public assets;
+    ``--require-published`` handles that separately. Never print release bodies
+    or a diff here, because this audit only needs to identify a stale entry.
+    """
+    checks: list[tuple[str, object, Path]] = []
+    mac_version = metadata.get("version")
+    if isinstance(mac_version, str) and isinstance(mac_release, dict):
+        tag = f"v{mac_version}"
+        if mac_release.get("tag_name") == tag and mac_release.get("draft") is False:
+            checks.append((tag, mac_release, root / "swift" / "release-notes" / f"{tag}.md"))
+
+    windows_version = metadata.get("windows_version")
+    if isinstance(windows_version, str) and isinstance(releases, list):
+        tag = f"windows-v{windows_version}"
+        for release in releases:
+            if isinstance(release, dict) and release.get("tag_name") == tag and release.get("draft") is False:
+                checks.append((tag, release, root / "windows" / "release-notes" / f"{windows_version}.md"))
+                break
+
+    errors: list[str] = []
+    for tag, release, path in checks:
+        body = release.get("body") if isinstance(release, dict) else None
+        if not isinstance(body, str) or not body.strip():
+            errors.append(f"{tag} has no public release notes")
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            errors.append(f"cannot read tracked notes for {tag}: {exc}")
+            continue
+        if source.replace("\r\n", "\n").strip() != body.replace("\r\n", "\n").strip():
+            errors.append(
+                f"{tag} public notes differ from {path.relative_to(root)}; "
+                "editing the tracked file does not update GitHub's published notes"
+            )
+    return errors
 
 
 class GithubRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -535,6 +586,27 @@ def run_self_test() -> None:
     if errors or len(status) != 2:
         raise ReleaseCheckError(f"self-test rejected valid releases: {errors!r}")
 
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "swift" / "release-notes").mkdir(parents=True)
+        (root / "windows" / "release-notes").mkdir(parents=True)
+        (root / "swift" / "release-notes" / "v1.2.3.md").write_text("mac note\n", encoding="utf-8")
+        (root / "windows" / "release-notes" / "4.5.6.md").write_text("Windows note\n", encoding="utf-8")
+        mac["body"] = "mac note"
+        windows["body"] = "Windows note\r\n"
+        if release_note_parity_errors(metadata, mac, [mac, windows], root=root):
+            raise ReleaseCheckError("self-test rejected matching public release notes")
+        windows["body"] = "older Windows note"
+        note_errors = release_note_parity_errors(metadata, mac, [mac, windows], root=root)
+        if len(note_errors) != 1 or "windows-v4.5.6" not in note_errors[0]:
+            raise ReleaseCheckError("self-test did not identify stale public release notes")
+        windows["body"] = "Windows note"
+        ahead_notes = dict(metadata, version="1.2.4", windows_version="4.5.7")
+        if release_note_parity_errors(ahead_notes, mac, [mac, windows], root=root):
+            raise ReleaseCheckError("self-test checked unpublished candidate notes")
+
     draft = json.loads(json.dumps(windows))
     draft["tag_name"] = "windows-v9.9.9"
     draft["draft"] = True
@@ -671,6 +743,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help="run without network access")
     parser.add_argument("--require-published", action="store_true", help="block deployment while configured downloads are not public yet")
+    parser.add_argument("--check-release-notes", action="store_true", help="audit published release descriptions against tracked notes for advertised versions")
     parser.add_argument("--github-api-via-gh", action="store_true", help="read API JSON through repo-scoped gh api without exporting credentials; checksum downloads remain public HTTPS")
     args = parser.parse_args()
     try:
@@ -692,6 +765,8 @@ def main() -> int:
             ),
             require_published=args.require_published,
         )
+        if args.check_release_notes:
+            errors.extend(release_note_parity_errors(metadata, mac_release, releases))
         for line in status:
             print(line)
         if errors:

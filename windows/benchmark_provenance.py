@@ -9,6 +9,7 @@ import json
 
 
 _DOMAIN = b"presspeech-windows-benchmark-inputs-v1\0"
+_RECORDED_TAIL_DOMAIN = b"presspeech-windows-recorded-tail-probe-v1\0"
 
 
 def asr_audio_sha256(audio):
@@ -46,6 +47,33 @@ def benchmark_inputs_sha256(rows):
         row_hashes.append(hashlib.sha256(encoded).digest())
 
     digest = hashlib.sha256(_DOMAIN)
+    for row_hash in sorted(row_hashes):
+        digest.update(row_hash)
+    return digest.hexdigest()
+
+
+def recorded_tail_probe_inputs_sha256(rows):
+    """Identify paired recorded-tail inputs without publishing per-clip hashes.
+
+    Compare this *and* benchmark_inputs_sha256 when comparing recorded-tail
+    reports: the ordinary corpus digest deliberately excludes probe endpoints.
+    """
+    row_hashes = []
+    for row in rows:
+        audio_digest = row["asr_audio_sha256"]
+        trim_at_sample = row["trim_at_sample"]
+        if (not isinstance(audio_digest, str) or len(audio_digest) != 64
+                or any(char not in "0123456789abcdef" for char in audio_digest)):
+            raise ValueError("ASR audio SHA-256 must be lowercase hexadecimal")
+        if (isinstance(trim_at_sample, bool) or not isinstance(trim_at_sample, int)
+                or trim_at_sample < 1):
+            raise ValueError("recorded-tail trim point must be a positive sample count")
+        encoded = json.dumps(
+            [audio_digest, trim_at_sample], separators=(",", ":")
+        ).encode("utf-8")
+        row_hashes.append(hashlib.sha256(encoded).digest())
+
+    digest = hashlib.sha256(_RECORDED_TAIL_DOMAIN)
     for row_hash in sorted(row_hashes):
         digest.update(row_hash)
     return digest.hexdigest()

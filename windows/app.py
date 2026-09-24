@@ -733,6 +733,9 @@ class PresspeechApp:
         self._last_audio_callback_started_at = 0.0
         self._capture_ready = False
         self._capture_ready_at = 0.0
+        # A release during microphone startup is a failed attempt, not a
+        # request to begin accepting audio during the post-roll window.
+        self._stop_before_ready = False
         self._first_audio_callback = None
         self._last_model_use = 0.0
         self._wake_in_progress = False
@@ -1497,6 +1500,7 @@ class PresspeechApp:
             self._last_audio_callback_started_at = 0.0
             self._capture_ready = False
             self._capture_ready_at = 0.0
+            self._stop_before_ready = False
             self._first_audio_callback = threading.Event()
             self._model_idle_epoch += 1
             self._recording_paste_target = paste_target
@@ -1522,7 +1526,8 @@ class PresspeechApp:
 
     def _recording_epoch_active(self, epoch):
         with self.lock:
-            return self.recording and epoch == self._rec_epoch
+            return (self.recording and epoch == self._rec_epoch and
+                    not getattr(self, "_stop_before_ready", False))
 
     def _start_audio_worker(self, epoch):
         # A cue or Listening indicator must not claim that capture has begun
@@ -1554,7 +1559,8 @@ class PresspeechApp:
             return
         self._mute_playback_for_recording(epoch)
         with self.lock:
-            if not self.recording or epoch != self._rec_epoch:
+            if (not self.recording or epoch != self._rec_epoch or
+                    getattr(self, "_stop_before_ready", False)):
                 return
             self._capture_ready_at = time.perf_counter()
             self._capture_ready = True
@@ -1613,7 +1619,8 @@ class PresspeechApp:
             return
         with self._playback_mute_lock:
             with self.lock:
-                if not self.recording or epoch != self._rec_epoch:
+                if (not self.recording or epoch != self._rec_epoch or
+                        getattr(self, "_stop_before_ready", False)):
                     return
             if self._playback_restore is not None:
                 return
@@ -1654,7 +1661,8 @@ class PresspeechApp:
                     return False
                 if chosen is None:
                     with self.lock:
-                        if not self.recording or epoch != self._rec_epoch:
+                        if (not self.recording or epoch != self._rec_epoch or
+                                getattr(self, "_stop_before_ready", False)):
                             return False
                         self.recording = False
                     self._cancel_recording_limit(epoch)
@@ -1672,7 +1680,8 @@ class PresspeechApp:
                                 "there.")
                     return False
                 with self.lock:
-                    if not self.recording or epoch != self._rec_epoch:
+                    if (not self.recording or epoch != self._rec_epoch or
+                            getattr(self, "_stop_before_ready", False)):
                         return False
                     # Capture the rate before starting the stream: native
                     # backends may invoke the audio callback from start(), and
@@ -1686,7 +1695,8 @@ class PresspeechApp:
                 )
                 stream.start()
                 with self.lock:
-                    if not self.recording or epoch != self._rec_epoch:
+                    if (not self.recording or epoch != self._rec_epoch or
+                            getattr(self, "_stop_before_ready", False)):
                         accepted = False
                     else:
                         self.stream = stream
@@ -1703,7 +1713,8 @@ class PresspeechApp:
                     return False
         except Exception as exc:
             with self.lock:
-                if not self.recording or epoch != self._rec_epoch:
+                if (not self.recording or epoch != self._rec_epoch or
+                        getattr(self, "_stop_before_ready", False)):
                     stale = True
                 else:
                     stale = False
@@ -1745,7 +1756,8 @@ class PresspeechApp:
         chunk = indata.copy()
         chunk_rms = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
         with self.lock:
-            if self.recording and epoch == self._rec_epoch:
+            if (self.recording and epoch == self._rec_epoch and
+                    not getattr(self, "_stop_before_ready", False)):
                 if chunk.size:
                     self._first_audio_callback.set()
                 # A callback can begin copying cue-era samples before the
@@ -1765,7 +1777,21 @@ class PresspeechApp:
             if not self.recording:
                 return
             epoch = self._rec_epoch
-            release_audio_sequence = getattr(self, "_audio_sequence", 0)
+            # A quick tap can end while PortAudio is opening or the start cue
+            # is playing. Do not let the later callback/cue turn that released
+            # gesture into a new Listening session. Compare the timestamp too:
+            # the startup worker may have published readiness while this
+            # release was waiting for the lock.
+            before_ready = (getattr(self, "_stop_before_ready", False) or
+                            not self._capture_ready or
+                            self._capture_ready_at > released_at)
+            if before_ready:
+                self._stop_before_ready = True
+            else:
+                release_audio_sequence = getattr(self, "_audio_sequence", 0)
+        if before_ready:
+            self.stop_recording(expected_epoch=epoch)
+            return
         self._schedule_post_roll(
             POST_ROLL_MIN_SEC, epoch, released_at,
             release_audio_sequence)
@@ -1928,9 +1954,14 @@ class PresspeechApp:
                      expected_epoch != self._rec_epoch)):
                 return False
             self.recording = False
-            capture_was_ready = self._capture_ready
+            capture_was_ready = (self._capture_ready and
+                                 not getattr(self, "_stop_before_ready", False))
             self._capture_ready = False
-            audio = np.concatenate(self.buffer) if self.buffer else np.zeros(0, dtype=np.float32)
+            # A callback can arrive between an early release and this lock.
+            # Its post-release samples must not become a dictation.
+            audio = (np.concatenate(self.buffer)
+                     if capture_was_ready and self.buffer else
+                     np.zeros(0, dtype=np.float32))
             # Claim the delivery lifecycle before releasing the recording lock.
             # This closes the small window in which another hotkey press could
             # start capture while this method prepares and queues model work.

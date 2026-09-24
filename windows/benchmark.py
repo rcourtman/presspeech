@@ -16,7 +16,10 @@ import numpy as np
 import soundfile as sf
 
 import app
-from benchmark_provenance import asr_audio_sha256, benchmark_inputs_sha256
+from benchmark_provenance import (
+    asr_audio_sha256, benchmark_inputs_sha256,
+    recorded_tail_probe_inputs_sha256,
+)
 import config as cfg
 import engine
 
@@ -238,6 +241,107 @@ def tail_probe_order_breakdown(pairs, trial_order):
         }
         for order in ("baseline-first", "tailed-first")
     }
+
+
+def paired_recorded_tail_metrics(reference, full, trimmed):
+    """Compare a real captured tail with a reviewed speech-end crop.
+
+    The full capture remains the product baseline. A better trimmed result is
+    only a candidate signal, not proof that trimming is safe for other speech.
+    """
+    if not full or len(full) != len(trimmed):
+        raise ValueError("recorded-tail probe needs matching non-empty trials")
+    if not _normalise_words(reference):
+        raise ValueError("recorded-tail probe needs a scoreable reference")
+    pairs = []
+    for full_text, trimmed_text in zip(full, trimmed):
+        full_errors = accuracy_metrics(reference, full_text)["word_errors"]
+        trimmed_errors = accuracy_metrics(reference, trimmed_text)["word_errors"]
+        pairs.append({
+            "full_transcript": full_text,
+            "trimmed_transcript": trimmed_text,
+            "full_word_errors": full_errors,
+            "trimmed_word_errors": trimmed_errors,
+            "trimmed_nonempty_to_full_empty": (
+                bool(trimmed_text.strip()) and not full_text.strip()),
+            "full_nonempty_to_trimmed_empty": (
+                bool(full_text.strip()) and not trimmed_text.strip()),
+        })
+    return {
+        "trial_count": len(pairs),
+        "full_empty_trial_count": sum(not value.strip() for value in full),
+        "trimmed_empty_trial_count": sum(not value.strip() for value in trimmed),
+        "trimmed_nonempty_to_full_empty_trial_count": sum(
+            pair["trimmed_nonempty_to_full_empty"] for pair in pairs),
+        "full_nonempty_to_trimmed_empty_trial_count": sum(
+            pair["full_nonempty_to_trimmed_empty"] for pair in pairs),
+        "changed_text_trial_count": sum(
+            _canonical_text(full_text) != _canonical_text(trimmed_text)
+            for full_text, trimmed_text in zip(full, trimmed)),
+        "full_word_error_count": sum(pair["full_word_errors"] for pair in pairs),
+        "trimmed_word_error_count": sum(
+            pair["trimmed_word_errors"] for pair in pairs),
+        "full_worsened_word_error_trial_count": sum(
+            pair["full_word_errors"] > pair["trimmed_word_errors"]
+            for pair in pairs),
+        "trimmed_worsened_word_error_trial_count": sum(
+            pair["trimmed_word_errors"] > pair["full_word_errors"]
+            for pair in pairs),
+        "pairs": pairs,
+    }
+
+
+def recorded_tail_order_breakdown(pairs, trial_order):
+    if len(pairs) != len(trial_order) or any(
+            order not in ("full-first", "trimmed-first")
+            for order in trial_order):
+        raise ValueError("recorded-tail probe needs one valid order per pair")
+    return {
+        order: {
+            "trial_count": sum(value == order for value in trial_order),
+            "trimmed_nonempty_to_full_empty_trial_count": sum(
+                value == order and pair["trimmed_nonempty_to_full_empty"]
+                for pair, value in zip(pairs, trial_order)),
+            "full_worsened_word_error_trial_count": sum(
+                value == order
+                and pair["full_word_errors"] > pair["trimmed_word_errors"]
+                for pair, value in zip(pairs, trial_order)),
+        }
+        for order in ("full-first", "trimmed-first")
+    }
+
+
+def summarise_recorded_tail_probe(samples):
+    probes = [sample["recorded_tail_probe"] for sample in samples
+              if sample.get("recorded_tail_probe") is not None]
+    count_keys = (
+        "trial_count", "full_empty_trial_count", "trimmed_empty_trial_count",
+        "trimmed_nonempty_to_full_empty_trial_count",
+        "full_nonempty_to_trimmed_empty_trial_count", "changed_text_trial_count",
+        "full_word_error_count", "trimmed_word_error_count",
+        "full_worsened_word_error_trial_count",
+        "trimmed_worsened_word_error_trial_count",
+    )
+    return {
+        "sample_count": len(probes),
+        "full_first_trial_count": sum(
+            order == "full-first"
+            for probe in probes for order in probe["trial_order"]),
+        "trimmed_first_trial_count": sum(
+            order == "trimmed-first"
+            for probe in probes for order in probe["trial_order"]),
+        "order_breakdown": {
+            order: {
+                key: sum(probe["order_breakdown"][order][key] for probe in probes)
+                for key in ("trial_count",
+                            "trimmed_nonempty_to_full_empty_trial_count",
+                            "full_worsened_word_error_trial_count")
+            }
+            for order in ("full-first", "trimmed-first")
+        },
+        **{key: sum(probe[key] for probe in probes) for key in count_keys},
+    }
+
 
 
 def _paired_delta_summary(deltas, trial_order):
@@ -624,6 +728,13 @@ def _tail_probe_applies(sample, appended_silence_ms):
             and bool(_normalise_words(sample.get("reference", ""))))
 
 
+def _recorded_tail_probe_applies(sample, enabled):
+    return (enabled and "speech_end_ms" in sample
+            and sample.get("reference_reviewed", False)
+            and not sample.get("expected_silence", False)
+            and bool(_normalise_words(sample.get("reference", ""))))
+
+
 def _validate_tail_probe_bucket(sample_count, appended_silence_ms):
     """Keep the paired inputs on one identical Parakeet feature shape.
 
@@ -646,7 +757,33 @@ def _validate_tail_probe_bucket(sample_count, appended_silence_ms):
             "feature bucket; shorten the clip or reduce appended silence")
 
 
-def _preflight_audio(manifest_dir, samples, *, parakeet_tail_silence_ms=None):
+def _validate_recorded_tail_probe_bucket(sample_count, speech_end_ms):
+    """Validate a listened-to endpoint against the *effective* 16 kHz audio."""
+    trim_at = speech_end_ms * engine.PARAKEET_SAMPLE_RATE // 1000
+    removed = sample_count - trim_at
+    minimum_removed = engine.PARAKEET_SAMPLE_RATE // 1000
+    maximum_removed = int(app.POST_ROLL_MAX_SEC * engine.PARAKEET_SAMPLE_RATE)
+    if trim_at < 1 or removed < minimum_removed or removed > maximum_removed:
+        raise ValueError(
+            "recorded-tail probe needs 1–%d ms of audio after speech_end_ms"
+            % int(app.POST_ROLL_MAX_SEC * 1000))
+    maximum = engine.PARAKEET_MAX_WINDOW_SECONDS * engine.PARAKEET_SAMPLE_RATE
+    if sample_count > maximum:
+        raise ValueError(
+            "recorded-tail probe needs both variants in one Parakeet window")
+    trimmed_bucket = engine._parakeet_bucket_seconds(
+        trim_at / engine.PARAKEET_SAMPLE_RATE)
+    full_bucket = engine._parakeet_bucket_seconds(
+        sample_count / engine.PARAKEET_SAMPLE_RATE)
+    if trimmed_bucket != full_bucket:
+        raise ValueError(
+            "recorded-tail probe needs both variants in the same Parakeet "
+            "feature bucket; use a shorter clip")
+    return trim_at
+
+
+def _preflight_audio(manifest_dir, samples, *, parakeet_tail_silence_ms=None,
+                     parakeet_recorded_tail_probe=False):
     """Decode every fixture before costly model setup without retaining audio.
 
     The second read for inference must match the exact signal checked here;
@@ -661,6 +798,9 @@ def _preflight_audio(manifest_dir, samples, *, parakeet_tail_silence_ms=None):
         audio, seconds, source_rate, digest = load_audio(path)
         if _tail_probe_applies(sample, parakeet_tail_silence_ms):
             _validate_tail_probe_bucket(len(audio), parakeet_tail_silence_ms)
+        if _recorded_tail_probe_applies(sample, parakeet_recorded_tail_probe):
+            _validate_recorded_tail_probe_bucket(
+                len(audio), sample["speech_end_ms"])
         checked.append((path, seconds, source_rate, digest))
     return checked
 
@@ -741,7 +881,8 @@ def _benchmark_language(manifest, override):
 
 def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                   language=None, whisper_vad_min_silence_ms=None,
-                  parakeet_tail_silence_ms=None):
+                  parakeet_tail_silence_ms=None,
+                  parakeet_recorded_tail_probe=False):
     manifest_path = os.path.abspath(manifest_path)
     manifest_dir = os.path.dirname(manifest_path)
     with open(manifest_path, "r", encoding="utf-8") as handle:
@@ -776,6 +917,16 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                 raise ValueError("silence sample must not have reference text")
         elif sample.get("reference_reviewed", False) and not reference.strip():
             raise ValueError("reviewed speech sample needs reference text")
+        if "speech_end_ms" in sample:
+            endpoint = sample["speech_end_ms"]
+            if (isinstance(endpoint, bool) or not isinstance(endpoint, int)
+                    or endpoint < 1):
+                raise ValueError("sample speech_end_ms must be a positive integer")
+            if (sample.get("expected_silence", False)
+                    or not sample.get("reference_reviewed", False)
+                    or not _normalise_words(reference)):
+                raise ValueError(
+                    "sample speech_end_ms needs reviewed, scoreable speech")
         sample_id = sample.get("id")
         if not isinstance(sample_id, str) or not sample_id.strip():
             raise ValueError("sample id must be a non-empty string")
@@ -792,6 +943,10 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             and model_name not in engine.WHISPER_MODELS):
         raise ValueError(
             "Whisper VAD experiments require a faster-whisper model")
+    if not isinstance(parakeet_recorded_tail_probe, bool):
+        raise ValueError("recorded-tail probe must be a boolean")
+    if parakeet_recorded_tail_probe and parakeet_tail_silence_ms is not None:
+        raise ValueError("choose only one Parakeet tail probe")
     if parakeet_tail_silence_ms is not None:
         maximum_ms = int(app.POST_ROLL_MAX_SEC * 1000)
         if (isinstance(parakeet_tail_silence_ms, bool)
@@ -802,12 +957,23 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                 % maximum_ms)
         if not engine.is_parakeet(model_name):
             raise ValueError("tail-silence probe requires a Parakeet model")
+        if any("speech_end_ms" in sample for sample in samples):
+            raise ValueError(
+                "synthetic tail-silence probe requires endpoint-cropped clips; "
+                "use the recorded-tail probe for annotated full captures")
         if not any(sample.get("reference_reviewed", False)
                    and not sample.get("expected_silence", False)
                    and _normalise_words(sample.get("reference", ""))
                    for sample in samples):
             raise ValueError(
                 "tail-silence probe needs reviewed speech with scoreable words")
+    if parakeet_recorded_tail_probe:
+        if not engine.is_parakeet(model_name):
+            raise ValueError("recorded-tail probe requires a Parakeet model")
+        if not any(_recorded_tail_probe_applies(sample, True)
+                   for sample in samples):
+            raise ValueError(
+                "recorded-tail probe needs reviewed speech with speech_end_ms")
     whisper_vad_policy = (
         engine.whisper_vad_parameters(whisper_vad_min_silence_ms)
         if model_name in engine.WHISPER_MODELS else None
@@ -820,7 +986,8 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         raise ValueError("precision experiments currently support Parakeet only")
     checked_audio = _preflight_audio(
         manifest_dir, samples,
-        parakeet_tail_silence_ms=parakeet_tail_silence_ms)
+        parakeet_tail_silence_ms=parakeet_tail_silence_ms,
+        parakeet_recorded_tail_probe=parakeet_recorded_tail_probe)
 
     # Stage barriers are benchmark-only: they make CUDA timings factual while
     # keeping synchronization overhead out of interactive dictation.
@@ -845,7 +1012,8 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
 
     sample_results = []
     input_rows = []
-    tail_pair_index = 0
+    recorded_probe_rows = []
+    probe_pair_index = 0
     for sample, (audio_path, checked_seconds, checked_rate, checked_digest) in zip(
             samples, checked_audio):
         task_group = sample.get("task_group")
@@ -869,39 +1037,57 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         transcripts = []
         backend_timings = []
         reference = sample.get("reference", "")
-        probe_this_sample = _tail_probe_applies(
+        synthetic_probe = _tail_probe_applies(
             sample, parakeet_tail_silence_ms)
-        tail_audio = (np.concatenate((audio, np.zeros(
+        recorded_probe = _recorded_tail_probe_applies(
+            sample, parakeet_recorded_tail_probe)
+        variant_audio = (np.concatenate((audio, np.zeros(
             parakeet_tail_silence_ms * engine.PARAKEET_SAMPLE_RATE // 1000,
             dtype=np.float32)))
-            if probe_this_sample else None)
-        tail_timings = []
-        tail_transcripts = []
+            if synthetic_probe else None)
+        trim_at = None
+        if recorded_probe:
+            # Already validated before model load. The preflight digest above
+            # proves this is still the same full captured signal.
+            trim_at = _validate_recorded_tail_probe_bucket(
+                len(audio), sample["speech_end_ms"])
+            variant_audio = audio[:trim_at]
+            recorded_probe_rows.append({
+                "asr_audio_sha256": audio_digest,
+                "trim_at_sample": trim_at,
+            })
+        probe_this_sample = synthetic_probe or recorded_probe
+        variant_timings = []
+        variant_transcripts = []
         trial_order = []
         for _run in range(runs):
             # Alternate across *all* reviewed probe pairs, not just within a
             # clip. This keeps corpus order counts within one even when runs
-            # is odd. Otherwise the tailed condition is always measured second.
-            tailed_first = probe_this_sample and tail_pair_index % 2 == 1
+            # is odd. Otherwise the variant is always measured second.
+            variant_first = probe_this_sample and probe_pair_index % 2 == 1
             if probe_this_sample:
-                trial_order.append(
-                    "tailed-first" if tailed_first else "baseline-first")
-                tail_pair_index += 1
-            if tailed_first:
-                tail_text, tail_seconds, _ = _timed_transcription(
-                    transcriber, tail_audio, language_hint)
-                tail_transcripts.append(tail_text)
-                tail_timings.append(tail_seconds)
+                if synthetic_probe:
+                    trial_order.append(
+                        "tailed-first" if variant_first else "baseline-first")
+                else:
+                    trial_order.append(
+                        "trimmed-first" if variant_first else "full-first")
+                probe_pair_index += 1
+            if variant_first:
+                variant_text, variant_seconds, _ = _timed_transcription(
+                    transcriber, variant_audio, language_hint)
+                variant_transcripts.append(variant_text)
+                variant_timings.append(variant_seconds)
             transcript, seconds, backend_timing = _timed_transcription(
                 transcriber, audio, language_hint)
             timings.append(seconds)
             transcripts.append(transcript)
             backend_timings.append(backend_timing)
-            if probe_this_sample and not tailed_first:
-                tail_text, tail_seconds, _ = _timed_transcription(
-                    transcriber, tail_audio, language_hint)
-                tail_transcripts.append(tail_text)
-                tail_timings.append(tail_seconds)
+            if probe_this_sample and not variant_first:
+                variant_text, variant_seconds, _ = _timed_transcription(
+                    transcriber, variant_audio, language_hint)
+                variant_transcripts.append(variant_text)
+                variant_timings.append(variant_seconds)
         consensus = collections.Counter(transcripts).most_common(1)[0][0]
         median_seconds = statistics.median(timings)
         result = {
@@ -935,9 +1121,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             "backend_stages": backend_stage_metrics(backend_timings),
             "parakeet_windowing": parakeet_window_metrics(backend_timings),
         }
-        if probe_this_sample:
+        if synthetic_probe:
             paired_metrics = paired_tail_silence_metrics(
-                reference, transcripts, tail_transcripts)
+                reference, transcripts, variant_transcripts)
             result["tail_silence_probe"] = {
                 "appended_silence_ms": parakeet_tail_silence_ms,
                 # Indexed like pairs and both timing arrays below.
@@ -946,15 +1132,35 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
                 "order_breakdown": tail_probe_order_breakdown(
                     paired_metrics["pairs"], trial_order),
                 "tailed_inference_seconds": {
-                    "min": min(tail_timings),
-                    "median": statistics.median(tail_timings),
-                    "p95": _percentile(tail_timings, 0.95),
-                    "all": tail_timings,
+                    "min": min(variant_timings),
+                    "median": statistics.median(variant_timings),
+                    "p95": _percentile(variant_timings, 0.95),
+                    "all": variant_timings,
                 },
                 # Signed per-trial deltas distinguish a tail cost from the
                 # ordinary first/second decode effect in a paired probe.
                 "paired_inference_delta_seconds": paired_tail_latency_metrics(
-                    timings, tail_timings, trial_order),
+                    timings, variant_timings, trial_order),
+            }
+        if recorded_probe:
+            paired_metrics = paired_recorded_tail_metrics(
+                reference, transcripts, variant_transcripts)
+            result["recorded_tail_probe"] = {
+                "speech_end_ms": sample["speech_end_ms"],
+                "trim_at_sample": trim_at,
+                "removed_tail_ms": (
+                    (len(audio) - trim_at) * 1000
+                    / engine.PARAKEET_SAMPLE_RATE),
+                "trial_order": trial_order,
+                **paired_metrics,
+                "order_breakdown": recorded_tail_order_breakdown(
+                    paired_metrics["pairs"], trial_order),
+                "trimmed_inference_seconds": {
+                    "min": min(variant_timings),
+                    "median": statistics.median(variant_timings),
+                    "p95": _percentile(variant_timings, 0.95),
+                    "all": variant_timings,
+                },
             }
         if task_group is not None:
             result["task_group"] = task_group.strip()
@@ -1025,9 +1231,12 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 14,
+        "benchmark_version": 15,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
+        "recorded_tail_probe_inputs_sha256": (
+            recorded_tail_probe_inputs_sha256(recorded_probe_rows)
+            if parakeet_recorded_tail_probe else None),
         "model": model_name,
         "model_snapshot": snapshot,
         # "auto" means faster-whisper received no language hint. The detected
@@ -1042,9 +1251,13 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             else "Presspeech product default"
         ) if whisper_vad_policy is not None else None,
         "parakeet_tail_silence_ms": parakeet_tail_silence_ms,
+        "parakeet_recorded_tail_probe": parakeet_recorded_tail_probe,
         "tail_silence_probe": (
             summarise_tail_silence_probe(sample_results)
             if parakeet_tail_silence_ms is not None else None),
+        "recorded_tail_probe": (
+            summarise_recorded_tail_probe(sample_results)
+            if parakeet_recorded_tail_probe else None),
         "precision": precision,
         "model_dtype": model_dtype,
         "cuda_allocated_mib": cuda_allocated_mib,
@@ -1113,6 +1326,9 @@ def _print_summary(result):
     print("Snapshot: %s@%s" %
           (snapshot["repository"], snapshot["revision"]))
     print("Benchmark inputs SHA-256: %s" % result["benchmark_inputs_sha256"])
+    if result.get("recorded_tail_probe_inputs_sha256") is not None:
+        print("Recorded-tail probe inputs SHA-256: %s" %
+              result["recorded_tail_probe_inputs_sha256"])
     vad_policy = result.get("whisper_vad_policy")
     if vad_policy is not None:
         origin = result.get("whisper_vad_policy_origin")
@@ -1168,6 +1384,32 @@ def _print_summary(result):
                         order, latency["median"], latency["trial_count"]))
         else:
             print("  Paired inference tail-minus-clean: no reviewed speech pairs")
+    recorded_probe = result.get("recorded_tail_probe")
+    if recorded_probe is not None:
+        print("Parakeet recorded tail (benchmark-only): trimmed nonempty to "
+              "full empty %d/%d paired trials; word errors trimmed %d -> "
+              "full %d; full worse %d, trimmed worse %d trials across %d "
+              "reviewed clips; order full-first %d, trimmed-first %d" % (
+                  recorded_probe[
+                      "trimmed_nonempty_to_full_empty_trial_count"],
+                  recorded_probe["trial_count"],
+                  recorded_probe["trimmed_word_error_count"],
+                  recorded_probe["full_word_error_count"],
+                  recorded_probe["full_worsened_word_error_trial_count"],
+                  recorded_probe["trimmed_worsened_word_error_trial_count"],
+                  recorded_probe["sample_count"],
+                  recorded_probe["full_first_trial_count"],
+                  recorded_probe["trimmed_first_trial_count"],
+              ))
+        for order, counts in recorded_probe["order_breakdown"].items():
+            print("  %s: trimmed nonempty to full empty %d/%d; full "
+                  "worsened word errors %d/%d trials" % (
+                      order,
+                      counts["trimmed_nonempty_to_full_empty_trial_count"],
+                      counts["trial_count"],
+                      counts["full_worsened_word_error_trial_count"],
+                      counts["trial_count"],
+                  ))
     if result["aggregate_wer"] is not None:
         print("Reviewed corpus WER: %.2f%% consensus | %.2f%% all trials | "
               "%.2f/%.2f%% best/worst trial envelope" % (
@@ -1366,13 +1608,19 @@ def main():
         help=("benchmark-only paired speech probe: append up to the app's "
               "maximum post-roll duration of zero-valued samples; does not "
               "change capture or recognition"))
+    parser.add_argument(
+        "--parakeet-recorded-tail-probe", action="store_true",
+        help=("benchmark-only paired probe: compare full captured audio to "
+              "human-marked speech_end_ms crops (1–400 ms tail); does not "
+              "change capture or recognition"))
     parser.add_argument("--output", help="JSON output path")
     args = parser.parse_args()
     result = run_benchmark(
         args.manifest, model_name=args.model, runs=args.runs,
         precision=args.precision, language=args.language,
         whisper_vad_min_silence_ms=args.whisper_vad_min_silence_ms,
-        parakeet_tail_silence_ms=args.parakeet_tail_silence_ms)
+        parakeet_tail_silence_ms=args.parakeet_tail_silence_ms,
+        parakeet_recorded_tail_probe=args.parakeet_recorded_tail_probe)
     _print_summary(result)
     if args.output:
         output_path = os.path.abspath(args.output)

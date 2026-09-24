@@ -301,13 +301,18 @@ Each recording stays bound to the window that was focused when it began. If
 you change windows while Presspeech is transcribing—or the destination does not
 expose enough focused-window information—it avoids automatic paste. The latter
 can happen in some Electron/Chromium-based apps even when the window appears
-unchanged. macOS copies the transcript and shows **Copied — press ⌘V to paste**
-after a focus change or a later window-verification failure. If it could not
-verify the window when recording began, it instead shows **Can’t verify window
-— use ⌘V**. The menu keeps **Can’t verify window — press ⌘V to paste** until
-the next dictation. Published Windows 0.1.12 copies the transcript and shows
-**Transcript copied, not pasted**. For these copied-transcript notices, return
-to the intended field and paste manually with ⌘V on macOS or Ctrl+V on Windows.
+unchanged. The macOS 0.3.8 release copies the transcript and shows **Copied —
+press ⌘V to paste** after a focus change or a later window-verification
+failure. If it could not verify the window when recording began, its HUD
+instead shows **Can’t verify window — use ⌘V**. Builds containing the revised
+notice say **⌘V if clipboard unchanged**; the menu identifies an unverified
+starting window. A copied notice records that Presspeech copied the transcript
+at completion, not that it still owns the clipboard later. If another app or
+the user has copied since, use **Copy Last Transcript** when Recent Transcripts
+is enabled instead of pasting the newer clipboard item. Published Windows
+0.1.12 copies the transcript and shows **Transcript copied, not pasted**. If
+the clipboard still holds the transcript,
+return to the intended field and paste manually with ⌘V on macOS or Ctrl+V on Windows.
 Upcoming Windows 0.1.13 retains uncertain delivery for an explicit **Delivery
 Recovery** Copy or Discard. Check the field before copying, and do not dictate
 the same text again first.

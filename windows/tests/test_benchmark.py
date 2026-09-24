@@ -475,6 +475,32 @@ class MetricTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "valid order"):
             benchmark.tail_probe_order_breakdown(pairs, ["unknown"])
 
+    def test_recorded_tail_metrics_show_both_tail_harm_and_unsafe_trim(self):
+        metrics = benchmark.paired_recorded_tail_metrics(
+            "hello world", ["", "hello world", "hello there"],
+            ["hello world", "", "hello world"])
+        self.assertEqual(metrics["trimmed_nonempty_to_full_empty_trial_count"], 1)
+        self.assertEqual(metrics["full_nonempty_to_trimmed_empty_trial_count"], 1)
+        self.assertEqual(metrics["full_word_error_count"], 3)
+        self.assertEqual(metrics["trimmed_word_error_count"], 2)
+        self.assertEqual(metrics["full_worsened_word_error_trial_count"], 2)
+        self.assertEqual(metrics["trimmed_worsened_word_error_trial_count"], 1)
+        self.assertEqual(benchmark.recorded_tail_order_breakdown(
+            metrics["pairs"], ["full-first", "trimmed-first", "full-first"]), {
+                "full-first": {
+                    "trial_count": 2,
+                    "trimmed_nonempty_to_full_empty_trial_count": 1,
+                    "full_worsened_word_error_trial_count": 2,
+                },
+                "trimmed-first": {
+                    "trial_count": 1,
+                    "trimmed_nonempty_to_full_empty_trial_count": 0,
+                    "full_worsened_word_error_trial_count": 0,
+                },
+            })
+        with self.assertRaisesRegex(ValueError, "valid order"):
+            benchmark.recorded_tail_order_breakdown(metrics["pairs"], [])
+
     def test_tail_probe_requires_one_unchanged_feature_bucket(self):
         rate = benchmark.engine.PARAKEET_SAMPLE_RATE
         # Exact boundaries are valid; one additional effective sample would
@@ -488,6 +514,184 @@ class MetricTests(unittest.TestCase):
                          else "same Parakeet feature bucket")
                 with self.assertRaisesRegex(ValueError, error):
                     benchmark._validate_tail_probe_bucket(clean_count + 1, 400)
+
+    def test_recorded_tail_probe_requires_bounded_same_bucket_crop(self):
+        rate = benchmark.engine.PARAKEET_SAMPLE_RATE
+        self.assertEqual(
+            benchmark._validate_recorded_tail_probe_bucket(rate, 600),
+            600 * rate // 1000)
+        for count, endpoint, error in (
+                (rate, 1000, "1–400 ms"),
+                (rate, 599, "1–400 ms"),
+                (rate, 1, "1–400 ms"),
+                (rate + 15, 1000, "1–400 ms"),
+                (15 * rate + 1, 14900, "feature bucket"),
+                (60 * rate + 1, 59999, "Parakeet window")):
+            with self.subTest(count=count, endpoint=endpoint):
+                with self.assertRaisesRegex(ValueError, error):
+                    benchmark._validate_recorded_tail_probe_bucket(
+                        count, endpoint)
+
+    def test_recorded_tail_probe_validates_manifest_and_audio_before_loading(self):
+        sample = {"id": "speech", "audio": "speech.wav",
+                  "reference": "spoken words", "reference_reviewed": True,
+                  "speech_end_ms": 600}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            for endpoint, error in ((True, "positive integer"),
+                                    (600.0, "positive integer"),
+                                    (0, "positive integer"),
+                                    (1000, "1–400 ms"),
+                                    (599, "1–400 ms")):
+                with self.subTest(endpoint=endpoint):
+                    with open(path, "w", encoding="utf-8") as handle:
+                        json.dump({"model": "parakeet-tdt-0.6b-v3",
+                                   "samples": [dict(sample, speech_end_ms=endpoint)]},
+                                  handle)
+                    with mock.patch.object(
+                            benchmark, "load_audio",
+                            return_value=(np.ones(16000, dtype=np.float32),
+                                          1.0, 16000, "0" * 64)), \
+                            mock.patch.object(
+                                benchmark.engine, "Transcriber") as constructor:
+                        with self.assertRaisesRegex(ValueError, error):
+                            benchmark.run_benchmark(
+                                path, parakeet_recorded_tail_probe=True)
+                        constructor.assert_not_called()
+
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "base.en", "samples": [sample]}, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "Parakeet model"):
+                    benchmark.run_benchmark(
+                        path, parakeet_recorded_tail_probe=True)
+                constructor.assert_not_called()
+
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "parakeet-tdt-0.6b-v3",
+                           "samples": [sample]}, handle)
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "only one"):
+                    benchmark.run_benchmark(
+                        path, parakeet_recorded_tail_probe=True,
+                        parakeet_tail_silence_ms=400)
+                constructor.assert_not_called()
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "endpoint-cropped"):
+                    benchmark.run_benchmark(
+                        path, parakeet_tail_silence_ms=400)
+                constructor.assert_not_called()
+
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "parakeet-tdt-0.6b-v3",
+                           "samples": [dict(sample, speech_end_ms=14900)]},
+                          handle)
+            with mock.patch.object(
+                    benchmark, "load_audio", return_value=(
+                        np.ones(15 * 16000 + 1, dtype=np.float32),
+                        15.0, 16000, "0" * 64)), \
+                    mock.patch.object(
+                        benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "feature bucket"):
+                    benchmark.run_benchmark(
+                        path, parakeet_recorded_tail_probe=True)
+                constructor.assert_not_called()
+
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "parakeet-tdt-0.6b-v3",
+                           "samples": [dict(sample, reference_reviewed=False)]},
+                          handle)
+            with mock.patch.object(benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "reviewed, scoreable"):
+                    benchmark.run_benchmark(
+                        path, parakeet_recorded_tail_probe=True)
+                constructor.assert_not_called()
+
+    def test_recorded_tail_probe_keeps_full_capture_as_baseline(self):
+        manifest = {"model": "parakeet-tdt-0.6b-v3", "runs": 2, "samples": [
+            {"id": "speech", "audio": "speech.wav", "reference": "hello world",
+             "reference_reviewed": True, "speech_end_ms": 600},
+            {"id": "silence", "audio": "silence.wav",
+             "expected_silence": True, "reference_reviewed": True},
+        ]}
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+        # Full, trimmed, trimmed, full, then two ordinary silence controls.
+        transcriber.transcribe.side_effect = [
+            "", "hello world", "hello world", "hello there", "", ""]
+        audio = np.ones(16000, dtype=np.float32)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                result = benchmark.run_benchmark(
+                    path, parakeet_recorded_tail_probe=True)
+
+        calls = list(transcriber.transcribe.call_args_list)
+        self.assertEqual([len(call.args[0]) for call in calls],
+                         [16000, 9600, 9600, 16000, 16000, 16000])
+        self.assertIs(calls[0].args[0], audio)
+        self.assertIs(calls[3].args[0], audio)
+        self.assertEqual(result["benchmark_version"], 15)
+        self.assertEqual(result["aggregate_trial_wer"], 0.75)
+        self.assertEqual(result["samples"][0]["transcript"], "")
+        probe = result["samples"][0]["recorded_tail_probe"]
+        self.assertEqual(probe["trial_order"], ["full-first", "trimmed-first"])
+        self.assertEqual(probe["trim_at_sample"], 9600)
+        self.assertEqual(probe["removed_tail_ms"], 400.0)
+        self.assertEqual(probe["trimmed_nonempty_to_full_empty_trial_count"], 1)
+        self.assertEqual(result["recorded_tail_probe"]["full_first_trial_count"], 1)
+        self.assertEqual(result["recorded_tail_probe"]["trimmed_first_trial_count"], 1)
+        self.assertRegex(result["recorded_tail_probe_inputs_sha256"],
+                         r"^[0-9a-f]{64}$")
+        self.assertNotIn("recorded_tail_probe", result["samples"][1])
+        output = io.StringIO()
+        with redirect_stdout(output):
+            benchmark._print_summary(result)
+        self.assertIn("Parakeet recorded tail (benchmark-only)",
+                      output.getvalue())
+        json.dumps(result, allow_nan=False)
+
+    def test_recorded_tail_probe_balances_odd_runs_across_clips(self):
+        manifest = {"model": "parakeet-tdt-0.6b-v3", "runs": 3, "samples": [
+            {"id": name, "audio": name + ".wav", "reference": "spoken words",
+             "reference_reviewed": True, "speech_end_ms": 600}
+            for name in ("first", "second")
+        ]}
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+        transcriber.transcribe.return_value = "spoken words"
+        audio = np.ones(16000, dtype=np.float32)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                result = benchmark.run_benchmark(
+                    path, parakeet_recorded_tail_probe=True)
+
+        self.assertEqual([
+            sample["recorded_tail_probe"]["trial_order"]
+            for sample in result["samples"]], [
+                ["full-first", "trimmed-first", "full-first"],
+                ["trimmed-first", "full-first", "trimmed-first"],
+            ])
+        self.assertEqual(result["recorded_tail_probe"]["full_first_trial_count"], 3)
+        self.assertEqual(result["recorded_tail_probe"]["trimmed_first_trial_count"], 3)
+        self.assertEqual([len(call.args[0]) for call in
+                          transcriber.transcribe.call_args_list], [
+                              16000, 9600, 9600, 16000, 16000, 9600,
+                              9600, 16000, 16000, 9600, 9600, 16000,
+                          ])
 
     def test_tail_probe_rejects_cross_bucket_audio_before_model_loading(self):
         sample = {"id": "speech", "audio": "speech.wav",
@@ -598,7 +802,7 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["tail_silence_probe"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
-        self.assertEqual(result["benchmark_version"], 14)
+        self.assertEqual(result["benchmark_version"], 15)
         self.assertEqual(
             result["samples"][0]["tail_silence_probe"]["trial_order"],
             ["baseline-first", "tailed-first"])
@@ -1291,7 +1495,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 14)
+        self.assertEqual(result["benchmark_version"], 15)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

@@ -1960,6 +1960,7 @@ class TextRegressionTests(unittest.TestCase):
         instance._rec_epoch = 0
         instance._audio_sequence = 9
         instance._last_audio_callback_started_at = 9.0
+        instance._stop_before_ready = True
         instance._model_idle_epoch = 0
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
         instance.model_status = "ready"
@@ -1979,6 +1980,7 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(instance._audio_sequence, 0)
         self.assertEqual(instance._last_audio_callback_started_at, 0.0)
         self.assertFalse(instance._capture_ready)
+        self.assertFalse(instance._stop_before_ready)
         self.assertFalse(instance._first_audio_callback.is_set())
         instance.indicator.show.assert_called_once_with("connecting")
         instance._schedule_recording_limit.assert_called_once_with(1)
@@ -3031,6 +3033,31 @@ class TextRegressionTests(unittest.TestCase):
         instance._set_indicator.assert_not_called()
         self.assertFalse(instance._capture_ready)
 
+    def test_early_release_marker_prevents_late_listening_after_start_cue(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"audio_cues": True}
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._rec_epoch = 4
+        instance._capture_ready = False
+        instance._stop_before_ready = False
+        instance._first_audio_callback = threading.Event()
+        instance._first_audio_callback.set()
+        instance.icon = None
+        instance._log = mock.Mock()
+        instance._open_mic_worker = mock.Mock(return_value=True)
+        instance._play_cue_worker = mock.Mock(
+            side_effect=lambda _name: setattr(instance, "_stop_before_ready", True))
+        instance._mute_playback_for_recording = mock.Mock()
+        instance._set_indicator = mock.Mock()
+
+        instance._start_audio_worker(4)
+
+        instance._play_cue_worker.assert_called_once_with("start")
+        instance._mute_playback_for_recording.assert_not_called()
+        instance._set_indicator.assert_not_called()
+        self.assertFalse(instance._capture_ready)
+
     def test_stale_audio_worker_cannot_attach_to_a_new_recording(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = __import__("threading").Lock()
@@ -3329,6 +3356,36 @@ class TextRegressionTests(unittest.TestCase):
         instance._show_no_speech_feedback.assert_not_called()
         instance._show_not_ready_feedback.assert_called_once_with()
 
+    def test_early_release_discards_audio_that_arrived_before_stop_claimed_lock(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.lock = threading.Lock()
+        instance.recording = True
+        instance._rec_epoch = 7
+        # Readiness and even a buffer can race the stop cleanup after the
+        # physical release was observed during the start cue.
+        instance._capture_ready = True
+        instance._stop_before_ready = True
+        instance.buffer = [app.np.ones(4800, dtype=app.np.float32)]
+        instance.stream = None
+        instance.icon = None
+        instance._recording_input_device = (0, 16000)
+        instance._recording_paste_target = app.PasteTarget("notepad.exe", 1234)
+        instance._recording_limit_timer = None
+        instance._restore_playback_after_recording = mock.Mock()
+        instance._play_cue = mock.Mock()
+        instance._show_not_ready_feedback = mock.Mock()
+        instance._set_indicator = mock.Mock()
+        instance._log = mock.Mock()
+        instance._schedule_model_idle_unload = mock.Mock()
+        instance._model_executor = mock.Mock()
+
+        self.assertTrue(instance.stop_recording(expected_epoch=7))
+
+        instance._show_not_ready_feedback.assert_called_once_with()
+        instance._play_cue.assert_not_called()
+        instance._model_executor.submit.assert_not_called()
+        self.assertFalse(instance.transcribing)
+
     def test_too_short_recording_reports_no_speech_without_model_work(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.lock = __import__("threading").Lock()
@@ -3613,12 +3670,48 @@ class PostRollTests(unittest.TestCase):
         instance = self.make_app(0.03)
         instance.recording = True
         instance._rec_epoch = 7
+        instance._capture_ready = True
+        instance._capture_ready_at = 9.0
         instance._schedule_post_roll = mock.Mock()
         with mock.patch.object(app.time, "perf_counter", return_value=10.0):
             instance.request_stop()
         self.assertEqual(instance._rec_epoch, 7)
         instance._schedule_post_roll.assert_called_once_with(
             app.POST_ROLL_MIN_SEC, 7, 10.0, 3)
+
+    def test_release_while_connecting_stops_without_post_roll(self):
+        instance = self.make_app(0.03)
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance._capture_ready = False
+        instance._capture_ready_at = 0.0
+        instance._stop_before_ready = False
+        instance.stop_recording = mock.Mock()
+        instance._schedule_post_roll = mock.Mock()
+
+        with mock.patch.object(app.time, "perf_counter", return_value=10.0):
+            instance.request_stop()
+
+        self.assertTrue(instance._stop_before_ready)
+        instance.stop_recording.assert_called_once_with(expected_epoch=7)
+        instance._schedule_post_roll.assert_not_called()
+
+    def test_release_timestamp_before_readiness_still_stops_immediately(self):
+        instance = self.make_app(0.03)
+        instance.recording = True
+        instance._rec_epoch = 7
+        instance._capture_ready = True
+        instance._capture_ready_at = 10.01
+        instance._stop_before_ready = False
+        instance.stop_recording = mock.Mock()
+        instance._schedule_post_roll = mock.Mock()
+
+        with mock.patch.object(app.time, "perf_counter", return_value=10.0):
+            instance.request_stop()
+
+        self.assertTrue(instance._stop_before_ready)
+        instance.stop_recording.assert_called_once_with(expected_epoch=7)
+        instance._schedule_post_roll.assert_not_called()
 
     def test_post_roll_timer_keeps_the_release_audio_sequence(self):
         instance = self.make_app(0.03)

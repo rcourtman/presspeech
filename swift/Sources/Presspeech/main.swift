@@ -285,9 +285,9 @@ enum DictationNotice: Equatable {
     var statusTitle: String {
         switch self {
         case .copiedToClipboard:
-            return "Transcript copied — press ⌘V to paste"
+            return "Transcript copied — ⌘V if clipboard unchanged"
         case .pasteTargetUnavailable:
-            return "Can’t verify window — press ⌘V to paste"
+            return "Can’t verify window — ⌘V if clipboard unchanged"
         case .insertionFailed:
             return "Delivery uncertain — check field before retrying"
         case .insertionFailedWithoutHistory:
@@ -306,9 +306,9 @@ enum DictationNotice: Equatable {
     var hudTitle: String {
         switch self {
         case .copiedToClipboard:
-            return "Copied — press ⌘V to paste"
+            return "Copied — ⌘V if unchanged"
         case .pasteTargetUnavailable:
-            return "Can’t verify window — use ⌘V"
+            return "Unverified — ⌘V if unchanged"
         case .insertionFailed:
             return "Check field; copy from menu if needed"
         case .insertionFailedWithoutHistory:
@@ -327,9 +327,9 @@ enum DictationNotice: Equatable {
     var accessibilityValue: String {
         switch self {
         case .copiedToClipboard:
-            return "Transcript copied. Press Command V to paste."
+            return "Transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available."
         case .pasteTargetUnavailable:
-            return "Presspeech couldn't verify the window for automatic paste. Transcript copied. Press Command V to paste in the intended field."
+            return "Presspeech couldn't verify the window for automatic paste. The transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available."
         case .insertionFailed:
             return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu."
         case .insertionFailedWithoutHistory:
@@ -22430,14 +22430,17 @@ private enum PresspeechSelfTest {
                    equals: true,
                    "the completed ready state should reach assistive apps")
         try expect(DictationNotice.copiedToClipboard.statusTitle,
-                   equals: "Transcript copied — press ⌘V to paste",
-                   "focus-safe delivery should explain immediate clipboard recovery")
+                   equals: "Transcript copied — ⌘V if clipboard unchanged",
+                   "focus-safe delivery must not promise that a later copy left the transcript available")
         try expect(DictationNotice.pasteTargetUnavailable.statusTitle,
-                   equals: "Can’t verify window — press ⌘V to paste",
+                   equals: "Can’t verify window — ⌘V if clipboard unchanged",
                    "an unverified destination should not look like an ordinary focus change")
+        try expect(DictationNotice.copiedToClipboard.hudTitle,
+                   equals: "Copied — ⌘V if unchanged",
+                   "the copied-transcript HUD must not promise stale clipboard contents")
         try expect(DictationNotice.pasteTargetUnavailable.hudTitle,
-                   equals: "Can’t verify window — use ⌘V",
-                   "the transient recovery HUD should identify the unverified window")
+                   equals: "Unverified — ⌘V if unchanged",
+                   "the transient recovery HUD should retain the window warning without promising stale clipboard contents")
         try expect(DictationNotice.insertionFailed.statusTitle,
                    equals: "Delivery uncertain — check field before retrying",
                    "failed insertion should prompt a destination check before retrying")
@@ -22466,11 +22469,11 @@ private enum PresspeechSelfTest {
                    equals: "The recording was too short. Try again and speak a little longer.",
                    "short-capture recovery should be explicit to VoiceOver")
         try expect(DictationNotice.copiedToClipboard.accessibilityValue,
-                   equals: "Transcript copied. Press Command V to paste.",
-                   "clipboard recovery should be explicit without relying on the Command glyph")
+                   equals: "Transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available.",
+                   "clipboard recovery should explain the newer-copy boundary to VoiceOver")
         try expect(DictationNotice.pasteTargetUnavailable.accessibilityValue,
-                   equals: "Presspeech couldn't verify the window for automatic paste. Transcript copied. Press Command V to paste in the intended field.",
-                   "VoiceOver should explain both the safety fallback and manual paste action")
+                   equals: "Presspeech couldn't verify the window for automatic paste. The transcript was copied. If the clipboard has not changed, press Command V in the intended field. Otherwise, use Copy Last Transcript if it is available.",
+                   "VoiceOver should explain the safety fallback without promising stale clipboard contents")
         try expect(DictationNotice.insertionFailed.accessibilityValue,
                    equals: "Presspeech couldn't confirm text delivery. Check the destination field before trying again. If text is absent or incomplete, remove any partial text before using Copy Last Transcript in the Presspeech menu.",
                    "uncertain delivery should prevent duplicate insertion during in-memory recovery")

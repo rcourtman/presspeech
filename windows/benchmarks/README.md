@@ -63,6 +63,14 @@ release-to-paste timings, and small or imbalanced order strata cannot establish
 an inference-speed effect. Compare identical input digests, run counts,
 hardware, model settings, and manifest order before interpreting them.
 
+Version 15 adds a separate, opt-in *recorded-tail* probe. Its ordinary WER and
+latency remain based on the full captured audio; the human-marked crop is only
+a paired experimental variant. Its `recorded_tail_probe_inputs_sha256` covers
+the full effective audio and exact crop sample for each probed clip. Compare it
+**and** `benchmark_inputs_sha256`, model, language, hardware, run count, and
+manifest order between reports. Changing `speech_end_ms` does not change the
+ordinary corpus digest. Version 15 does not change product recognition.
+
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
 
@@ -144,6 +152,59 @@ times remain diagnostics, not a release-to-paste comparison.
 Synthetic zeros also do not represent microphone room tone or prove the live
 post-roll behavior. Any product trim/retry policy still needs paired native
 Windows dictation, silence controls, and a latency check before adoption.
+
+## Parakeet recorded-tail probe
+
+Use this probe to check *actual captured* post-release audio instead of
+appending zeros. For a **source-run Windows app**, close Presspeech, set
+`"capture_next_benchmark": true` in the local
+`%APPDATA%\Presspeech\config.json`, then relaunch and dictate a short phrase.
+There is no Settings control for this capture flag. The app resets the flag
+after saving the next captured WAV under the ignored `benchmarks/audio/`
+directory beside the source code. Keep both the WAV and local config private;
+the latter can contain personal dictionary rules. Do not assume the packaged
+installer has a writable benchmark directory. Listen to the full recording
+and set a reviewed reference. Mark `speech_end_ms` at the boundary **after
+the entire final spoken sound**, including a quiet final consonant; do not
+equate the hotkey release with speech end. For example, a reviewed 1,000 ms
+capture with its last speech sample before 600 ms can use:
+
+```json
+{
+  "id": "recorded-tail-001",
+  "audio": "audio/recorded-tail-001.wav",
+  "reference": "Turn on the lights",
+  "reference_reviewed": true,
+  "speech_end_ms": 600,
+  "task_group": "short-command"
+}
+```
+
+Then run the pinned model and reviewed corpus with the opt-in probe; the full
+capture is also scored as the ordinary baseline in the same run:
+
+```bat
+.venv\Scripts\python benchmark.py --manifest benchmarks\manifest.json --model parakeet-tdt-0.6b-v3 --runs 5 --parakeet-recorded-tail-probe --output benchmarks\recorded-tail.json
+```
+
+The runner rejects non-integer, unreviewed, or unscoreable endpoints, a crop
+that removes no audio or more than the app's 400 ms maximum post-roll, and a
+pair that crosses a 15/30/60 s feature bucket or the 60 s windowing boundary.
+The recorded-tail and synthetic-zero probe flags cannot be combined; a
+manifest with `speech_end_ms` also cannot enter the synthetic-zero probe,
+which requires endpoint-cropped clips rather than already-tailed captures.
+Only reviewed speech rows with `speech_end_ms` are paired; other rows,
+including silence controls, still receive ordinary full-audio trials. The
+full captured input remains the product baseline for ordinary WER, boundary
+retention, and latency. The JSON includes full/trimmed transcripts, word errors,
+blank transitions in **both** directions, inference times, and counterbalanced
+execution order for every pair. The cropped variant is a diagnostic only: an
+improvement does not show that an automatic trim can locate this human-marked
+boundary, and a mistaken crop can delete a final word. Neither the manifest nor
+the report proves that the WAV came from Presspeech's capture path or that the
+endpoint is correctly marked. Compare order strata,
+short/quiet speech, final-word errors, and silence controls before considering
+any production policy. Keep WAVs, manifests, references, and results private.
 
 ## Candidate watch: multilingual CPU recognition
 

@@ -90,11 +90,16 @@ field, then dictate without changing apps before transcription finishes. The
 row remains Missing if either focused-window access or keyboard-event posting
 is unavailable, even when System Settings already shows Presspeech enabled; use
 **Try Again** in that case. If the HUD or menu says
-**Copied — press Command-V to paste**, the finished transcript is already on
-the clipboard. In builds with a separate starting-window warning,
-**Can’t verify window — use Command-V** means Presspeech could not identify the
-exact window when recording began; the transcript is likewise copied. Return
-to the intended field and paste it manually instead of dictating it again.
+**Copied — press Command-V to paste** in published 0.3.8, Presspeech copied the
+finished transcript when dictation completed. In builds with a separate
+starting-window warning, **Can’t verify window — use Command-V** means it could
+not identify the exact window when recording began; the transcript was likewise
+copied. Builds with the revised notice say **Command-V if clipboard unchanged**.
+These notices do not track later clipboard changes. If the clipboard still
+holds the transcript, return to the intended field and paste manually instead
+of dictating again. If the clipboard changed, use **Copy Last Transcript** when
+Recent Transcripts is enabled; otherwise the earlier copy may no longer be
+recoverable in Presspeech.
 
 Presspeech also uses this fallback when it cannot verify the same destination.
 Some Electron/Chromium-based apps do not consistently expose the focused-window

@@ -1,7 +1,10 @@
 import array
 import unittest
 
-from benchmark_provenance import asr_audio_sha256, benchmark_inputs_sha256
+from benchmark_provenance import (
+    asr_audio_sha256, benchmark_inputs_sha256,
+    recorded_tail_probe_inputs_sha256,
+)
 
 
 class BenchmarkProvenanceTests(unittest.TestCase):
@@ -69,3 +72,32 @@ class BenchmarkProvenanceTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaisesRegex(ValueError, "ASR audio SHA-256"):
                     benchmark_inputs_sha256([self.row(asr_audio_sha256=invalid)])
+
+    def test_recorded_tail_digest_tracks_exact_trim_point_and_duplicates(self):
+        first = {"asr_audio_sha256": self.row()["asr_audio_sha256"],
+                 "trim_at_sample": 9600}
+        second = {"asr_audio_sha256": self.row(samples=(0.1, 0.2))[
+            "asr_audio_sha256"], "trim_at_sample": 8000}
+        digest = recorded_tail_probe_inputs_sha256([first, second])
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        self.assertEqual(digest,
+                         recorded_tail_probe_inputs_sha256([second, first]))
+        self.assertNotEqual(digest, recorded_tail_probe_inputs_sha256(
+            [dict(first, trim_at_sample=9601), second]))
+        self.assertNotEqual(digest, recorded_tail_probe_inputs_sha256(
+            [first, second, second]))
+        # A probe annotation must not silently change the baseline corpus
+        # digest used to compare ordinary speech WER.
+        self.assertEqual(benchmark_inputs_sha256([self.row()]),
+                         benchmark_inputs_sha256([
+                             dict(self.row(), trim_at_sample=9601)]))
+
+    def test_recorded_tail_digest_rejects_invalid_identity(self):
+        for row in ({"asr_audio_sha256": "x" * 64, "trim_at_sample": 10},
+                    {"asr_audio_sha256": self.row()["asr_audio_sha256"],
+                     "trim_at_sample": True},
+                    {"asr_audio_sha256": self.row()["asr_audio_sha256"],
+                     "trim_at_sample": 0}):
+            with self.subTest(row=row):
+                with self.assertRaises(ValueError):
+                    recorded_tail_probe_inputs_sha256([row])
