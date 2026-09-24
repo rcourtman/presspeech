@@ -248,13 +248,23 @@ WINDOWS_LANGUAGE_GUIDANCE = {
 # top-of-page model-download warning. Review the local reminder for each newly
 # published release instead of silently carrying the old first-launch decision
 # into a new version.
+# Release-review gates name every configured version whose copy was reviewed.
+# The release script validates docs at the new version before its commit, while
+# main CI validates the same docs at the published version, so copy reviewed for
+# an upcoming release must list both the current and the upcoming version.
+def release_copy_reviewed(version: object, reviewed: object) -> bool:
+    if isinstance(reviewed, str):
+        return version == reviewed
+    return version in tuple(reviewed)
+
+
 ANCHORED_INSTALL_PREFLIGHTS = (
     {
         "path": DOCS / "install.html",
         "anchor": "direct-download",
         "platform": "macos",
         "version_key": "version",
-        "reviewed_version": "0.3.8",
+        "reviewed_version": ("0.3.8", "0.3.9"),
         "required": (
             "Before opening macOS 0.3.8",
             "missing-model download starts on launch",
@@ -586,7 +596,7 @@ MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
         "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "treat the token as disclosed"
     ),
     DOCS / "privacy" / "network-calls.json": (
-        "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "0.3.9 still honors proxy settings"
+        "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "0.3.9, Presspeech still honors proxy settings"
     ),
     DOCS / "llms.txt": (
         "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
@@ -850,19 +860,19 @@ MAC_MODEL_DOWNLOAD_GUIDANCE = {
     DOCS / "install.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
     DOCS / "faq.html": (
         "0.3.8", "0.3.9", "500", "clean install", "Download Model",
-        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
+        "Set Up Later", "defer", "macOS 0.3.9 and later",
     ),
     DOCS / "privacy.html": (
         "0.3.8", "0.3.9", "500", "clean install", "Download Model",
-        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
+        "Set Up Later", "defer", "macOS 0.3.9 and later",
     ),
     DOCS / "privacy" / "network-calls.json": (
         "0.3.8", "0.3.9", "500", "clean install", "Download Model",
-        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
+        "Set Up Later", "defer", "macOS 0.3.9 and later",
     ),
     DOCS / "llms-full.txt": (
         "0.3.8", "0.3.9", "500", "clean install", "Download Model",
-        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
+        "Set Up Later", "defer", "macOS 0.3.9 and later",
     ),
     DOCS / "install" / "agents.md": (
         "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
@@ -937,8 +947,8 @@ FIRST_RUN_ACTION_FORBIDDEN = {
 # are not rewritten by sync_index/sync_getting_started. Require a human review
 # when release metadata advances so the old steps cannot be published beneath
 # a new version heading.
-ONBOARDING_RELEASE_COPY_REVIEWED = {
-    "version": "0.3.8",
+ONBOARDING_RELEASE_COPY_REVIEWED: dict[str, str | tuple[str, ...]] = {
+    "version": ("0.3.8", "0.3.9"),
     "windows_version": "0.1.12",
 }
 
@@ -1331,7 +1341,7 @@ class SyncError(RuntimeError):
 
 MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
-Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. Upcoming 0.3.9 removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. From 0.3.9, Presspeech removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Before downloading or installing, run these read-only compatibility checks:
   uname -m
@@ -1854,8 +1864,8 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         "<p>In the 0.3.8 download, follow the permission controls shown in Setup Checklist. "
         "If a row remains Missing, choose <strong>Try Again</strong>; an Accessibility "
         "row that appears granted does not separately verify keyboard-event posting. "
-        "Upcoming 0.3.9 (not in "
-        "0.3.8) labels the first microphone prompt <strong>Continue</strong> and an "
+        "From 0.3.9 (not in "
+        "0.3.8), Presspeech labels the first microphone prompt <strong>Continue</strong> and an "
         "earlier denial <strong>Open Settings</strong>, and checks both focused-window "
         "access and keyboard-event posting before reporting Accessibility granted. "
         "The main menu also shows clickable permission rows while anything is missing, "
@@ -2031,7 +2041,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "proxy credentials, then ignored, allowing a model request without the expected "
         "proxy. If you depend on the proxy but cannot confirm "
         "its URL is valid, leave 0.3.8 unopened; do not inspect or share proxy values or "
-        "logs. Upcoming 0.3.9 removes account-token authentication and rejects malformed "
+        "logs. From 0.3.9, Presspeech removes account-token authentication and rejects malformed "
         "proxy settings before model loading, but still honors proxy settings when valid. See "
         "https://rcourtman.github.io/presspeech/install.html#model-download-privacy.\n"
     )
@@ -2154,7 +2164,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         "can be logged verbatim, including embedded proxy credentials, then ignored, "
         "allowing a model request without the expected proxy. "
         "If you depend on the proxy but cannot confirm its URL is valid, leave 0.3.8 "
-        "unopened; do not inspect or share proxy values or logs. Upcoming 0.3.9 "
+        "unopened; do not inspect or share proxy values or logs. From 0.3.9, Presspeech "
         "removes account-token authentication and rejects malformed proxy settings "
         "before model loading, but still honors proxy settings when valid. Review the "
         "[current privacy decision](https://rcourtman.github.io/presspeech/"
@@ -2680,7 +2690,7 @@ def check_anchored_install_preflights(
         display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
         platform = str(surface["platform"])
         version = metadata.get(str(surface["version_key"]))
-        if version != surface["reviewed_version"]:
+        if not release_copy_reviewed(version, surface["reviewed_version"]):
             errors.append(
                 f"{display}: review the {platform} anchored install preflight "
                 f"for release {version} before publishing"
@@ -2785,11 +2795,11 @@ def check_anchored_install_preflights(
 def check_macos_upgrade_preflight(
     metadata: dict[str, object],
     page: Path = DOCS / "install.html",
-    reviewed_version: str = "0.3.8",
+    reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9"),
 ) -> list[str]:
     """An upgrade can fetch a missing/invalid model, so deep links need a stop choice."""
     display = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page.name
-    if metadata.get("version") != reviewed_version:
+    if not release_copy_reviewed(metadata.get("version"), reviewed_version):
         return [f"{display}: review the macOS upgrade launch decision for release {metadata.get('version')}"]
     if not page.exists():
         return [f"{display}: missing macOS upgrade guide"]
@@ -3019,7 +3029,7 @@ MODEL_DOWNLOAD_SCHEMA_DESCRIPTION = (
 
 MODEL_DOWNLOAD_FIRST_RUN_GUIDANCE = (
     "macOS 0.3.8 and Windows 0.1.12 start a missing-model download automatically",
-    "a clean install in upcoming macOS 0.3.9 asks you to choose Download Model or Set Up Later to defer",
+    "a clean install of macOS 0.3.9 or later asks you to choose Download Model or Set Up Later to defer",
     "upcoming Windows 0.1.13 asks before fetching missing files for either first-run default",
     "cached models load without a prompt",
     "Existing macOS installs keep automatic startup",
@@ -3118,7 +3128,10 @@ def check_model_download_first_run_controls(
 
         published = by_status["published"]
         upcoming = by_status["upcoming"]
-        if published.get("version") != expected_current:
+        # During release validation the configured version is the entry that
+        # is being published; main CI sees the preceding published entry.
+        in_flight = upcoming.get("version") == expected_current
+        if published.get("version") != expected_current and not in_flight:
             errors.append(
                 f"{inventory_display}: {call_name} published controls must match "
                 f"current version {expected_current}"
@@ -3130,7 +3143,7 @@ def check_model_download_first_run_controls(
             errors.append(
                 f"{inventory_display}: {call_name} upcoming version is not canonical"
             )
-        elif tuple(int(part) for part in upcoming_version.split(".")) <= current_parts:
+        elif not in_flight and tuple(int(part) for part in upcoming_version.split(".")) <= current_parts:
             errors.append(
                 f"{inventory_display}: {call_name} upcoming controls must be newer than "
                 f"{expected_current}"
@@ -3241,7 +3254,7 @@ def check_published_step_scoping(
     """Keep unreleased controls out of the ordered steps for current downloads."""
     errors: list[str] = []
     for path, section_id, future_version in (
-        (mac_path, "direct-download", "0.3.9"),
+        (mac_path, "direct-download", "0.3.10"),
         (windows_path, "first-launch", "0.1.13"),
     ):
         display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
@@ -3268,11 +3281,11 @@ def check_published_step_scoping(
 
 def check_onboarding_release_scope(
     metadata: dict[str, object],
-    reviewed: dict[str, str] = ONBOARDING_RELEASE_COPY_REVIEWED,
+    reviewed: dict[str, str | tuple[str, ...]] = ONBOARDING_RELEASE_COPY_REVIEWED,
 ) -> list[str]:
     errors: list[str] = []
     for key, version in reviewed.items():
-        if metadata.get(key) != version:
+        if not release_copy_reviewed(metadata.get(key), version):
             errors.append(
                 "docs/index.html and docs/getting-started.html: first-run steps "
                 f"reviewed for {key} {version}, not {metadata.get(key)!r}; "
@@ -3430,7 +3443,7 @@ def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str
         "Downloading the ZIP or installer does not start a speech-model request",
         "installing without opening Presspeech does not either",
         "first launch with a missing model does",
-        "neither published build lets Setup defer that request",
+        "neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer that request",
         "On Windows, clear the installer’s final <strong>Launch Presspeech</strong> option if you choose to wait",
         "macOS 0.3.8 — inherited token",
         "wait until macOS 0.3.9 is published",
@@ -3486,7 +3499,7 @@ def check_getting_started_preflight_order(
         "macOS 0.3.8 and Windows 0.1.12 start a missing-model request when Presspeech opens, not when you download the ZIP or installer",
         "You can download a build and leave it unopened",
         "installing without opening it also does not start the request",
-        "Neither published build lets Setup defer a missing-model request after launch",
+        "Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch",
         "Unsure about a token, telemetry, or proxy? Keep it closed",
         '<p><strong>Safe stopping point:</strong>',
         "If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option",
@@ -3783,9 +3796,9 @@ def check_macos_permission_recovery_scope(
             continue
         visible = " ".join(html.unescape(re.sub(r"<[^>]+>|[*_`]", "", raw[start:end])).split()).casefold()
         current = visible.find("in the 0.3.8 download")
-        future = visible.find("upcoming 0.3.9 (not in 0.3.8)")
+        future = visible.find("from 0.3.9 (not in 0.3.8)")
         if current < 0 or future <= current:
-            errors.append(f"{display}: {start_marker!r} must distinguish 0.3.8 from upcoming 0.3.9")
+            errors.append(f"{display}: {start_marker!r} must distinguish 0.3.8 from 0.3.9 and later")
             continue
         current_copy = visible[current:future]
         future_copy = visible[future:]
@@ -3947,7 +3960,7 @@ def check_macos_model_download_privacy_summary(
                     "Malformed proxy URLs are a separate risk",
                     "https_proxy", "http_proxy", "including embedded proxy credentials",
                     "then ignore it", "keep 0.3.8 unopened",
-                    "0.3.9 refuses malformed proxy settings",
+                    "0.3.9, Presspeech refuses malformed proxy settings",
                 ):
                     if phrase not in warning:
                         errors.append(
@@ -5207,7 +5220,7 @@ def run_self_test() -> None:
         preflight_surfaces = tuple(preflight_surfaces)
         if check_anchored_install_preflights(preflight_metadata, preflight_surfaces):
             raise SyncError("self-test: valid anchored install preflights were rejected")
-        stale_preflight_metadata = dict(preflight_metadata, version="0.3.9")
+        stale_preflight_metadata = dict(preflight_metadata, version="0.3.10")
         if not any(
             "review the macos anchored install preflight" in error
             for error in check_anchored_install_preflights(
@@ -6423,7 +6436,7 @@ def run_self_test() -> None:
             "network inventory. Malformed proxy URLs are a separate risk: "
             "https_proxy or http_proxy can be logged verbatim, including embedded "
             "proxy credentials, and then ignore it. If unsure, keep 0.3.8 unopened; "
-            "0.3.9 refuses malformed proxy settings before model loading.</p></div>\n"
+            "from 0.3.9, Presspeech refuses malformed proxy settings before model loading.</p></div>\n"
         )
         mac_button = (
             '<a class="button" href="https://github.com/rcourtman/presspeech/'
@@ -6523,7 +6536,7 @@ def run_self_test() -> None:
             '<h2 id="launch-decision-heading">Decide before opening a current build</h2>'
             '<p><strong>Downloading is not launching:</strong> macOS 0.3.8 and Windows 0.1.12 '
             'start a missing-model request when Presspeech opens, not when you download the ZIP or installer. '
-            'Neither published build lets Setup defer a missing-model request after launch. '
+            'Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch; '
             '<strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong></p>'
             '<p><strong>Safe stopping point:</strong> You can download a build and leave it unopened; '
             'installing without opening it also does not start the request. '
@@ -6562,7 +6575,7 @@ def run_self_test() -> None:
         if check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: safe getting-started preflight was rejected")
         getting_started.write_text(
-            safe_getting_started.replace("Neither published build lets Setup defer a missing-model request after launch.", ""),
+            safe_getting_started.replace("Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch;", ""),
             encoding="utf-8",
         )
         if not check_getting_started_preflight_order(getting_started):
@@ -6775,7 +6788,7 @@ def run_self_test() -> None:
                 raise SyncError(f"self-test: unscoped Mac permission claim was accepted: {phrase!r}")
             path.write_text(contents, encoding="utf-8")
         permission_html.write_text(
-            safe_recovery_html.replace("Upcoming 0.3.9 (not in 0.3.8):", "In 0.3.8:", 1),
+            safe_recovery_html.replace("From 0.3.9 (not in 0.3.8):", "In 0.3.8:", 1),
             encoding="utf-8",
         )
         if not permission_scope_errors():
@@ -7303,7 +7316,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: versioned first-run action was rejected")
         if check_onboarding_release_scope({"version": "0.3.8", "windows_version": "0.1.12"}):
             raise SyncError("self-test: reviewed onboarding release scope was rejected")
-        if len(check_onboarding_release_scope({"version": "0.3.9", "windows_version": "0.1.13"})) != 2:
+        if len(check_onboarding_release_scope({"version": "0.3.10", "windows_version": "0.1.13"})) != 2:
             raise SyncError("self-test: onboarding steps were not gated on a new release")
         action_copy.write_text("Upcoming 0.1.13 asks before downloading\n", encoding="utf-8")
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
@@ -7322,7 +7335,7 @@ def run_self_test() -> None:
         if check_published_step_scoping(scoped_mac, scoped_windows):
             raise SyncError("self-test: separated future controls were rejected")
         scoped_mac.write_text(
-            '<section id="direct-download"><ol class="steps"><li>0.3.9</li></ol></section>',
+            '<section id="direct-download"><ol class="steps"><li>0.3.10</li></ol></section>',
             encoding="utf-8",
         )
         if not check_published_step_scoping(scoped_mac, scoped_windows):

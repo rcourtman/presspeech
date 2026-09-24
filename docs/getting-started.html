@@ -48,7 +48,7 @@
         <p>Choose your platform, finish setup, and try an in-app dictation with harmless words before using Presspeech in another app. Speech is transcribed on-device; model downloads use the network. The in-app scratchpad is not isolated from the system clipboard.</p>
         <div class="note warn" id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">
           <h2 id="launch-decision-heading">Decide before opening a current build</h2>
-          <p class="decision-lead"><strong>Downloading is not launching:</strong> macOS 0.3.8 and Windows 0.1.12 start a missing-model request when Presspeech opens, not when you download the ZIP or installer. Neither published build lets Setup defer a missing-model request after launch. <strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong></p>
+          <p class="decision-lead"><strong>Downloading is not launching:</strong> macOS 0.3.8 and Windows 0.1.12 start a missing-model request when Presspeech opens, not when you download the ZIP or installer. Neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer a missing-model request after launch; macOS 0.3.9 and later ask before a clean install’s first download. <strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong></p>
           <p><strong>Safe stopping point:</strong> You can download a build and leave it unopened; installing without opening it also does not start the request. If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option. It starts checked by default; confirm it is clear before choosing <strong>Finish</strong>. Before choosing to open it, read the <a href="#macos-launch-decision">macOS decision</a> or <a href="#windows-launch-decision">Windows decision</a>.</p>
           <p><strong>Waiting with an existing install?</strong> Quit any running copy. Without opening Presspeech again, turn off its entry, if enabled, in <a href="https://support.apple.com/guide/mac-help/mh15189/mac">macOS System Settings → General → Login Items &amp; Extensions</a> or <a href="https://support.microsoft.com/en-gb/windows/experience/startup-boot/configure-startup-applications-in-windows">Windows Settings → Apps → Startup</a>. On Mac, also deselect <a href="https://support.apple.com/en-ie/102318">Reopen windows when logging back in</a> at sign-out or restart. Check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases in a browser</a> rather than opening the old app to look for updates; follow the new build's instructions before launching it. These steps cannot undo a model request already started.</p>
           <ul role="list">
@@ -56,7 +56,7 @@
               <h3>macOS 0.3.8 — wait if a token may be inherited</h3>
               <p><strong>Wait for published 0.3.9</strong> if a Hugging Face token may be inherited by Presspeech, or you are unsure. Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear.</p>
               <p><strong>Download on launch:</strong> a missing model is about 500–600 MB. A model request can include the inherited token; the bundled client honors lowercase <code>https_proxy</code>, and a TLS-inspecting proxy trusted by macOS can read that token.</p>
-              <p><strong>Proxy URL risk:</strong> 0.3.8 can log a malformed inherited <code>https_proxy</code> or <code>http_proxy</code> URL verbatim, including credentials in that URL, then ignore the proxy. If you depend on one and are unsure its URL is valid, leave 0.3.8 unopened. Upcoming 0.3.9 refuses malformed proxy settings before model loading; it still honors valid proxies.</p>
+              <p><strong>Proxy URL risk:</strong> 0.3.8 can log a malformed inherited <code>https_proxy</code> or <code>http_proxy</code> URL verbatim, including credentials in that URL, then ignore the proxy. If you depend on one and are unsure its URL is valid, leave 0.3.8 unopened. From 0.3.9, Presspeech refuses malformed proxy settings before model loading; it still honors valid proxies.</p>
               <p>Read the <a href="install.html#model-download-privacy">full macOS warning</a> before deciding to launch.</p>
             </li>
             <li id="windows-launch-decision">
@@ -81,7 +81,7 @@
         <div class="wrap">
           <span class="section-eyebrow">Your next step</span>
           <h2>Start from the first state that describes you</h2>
-          <p>These steps describe the <strong>macOS 0.3.8 release</strong> and <strong>Windows 0.1.12 prerelease</strong>, not features planned for later downloads.</p>
+          <p>These steps describe the <strong>macOS 0.3.8 and 0.3.9 releases</strong> and <strong>Windows 0.1.12 prerelease</strong>, not features planned for later downloads.</p>
           <ol class="checkpoints" role="list">
             <li>
               <strong>I need to install</strong>
@@ -150,7 +150,7 @@
               <ol class="steps">
                 <li>
                   <strong>Prepare the speech model</strong>
-                  <p>A missing model begins downloading when you launch 0.3.8. Keep Presspeech open while it prepares, and reopen Setup Checklist from the menu-bar item if needed. Continue when the model reports Ready.</p>
+                  <p>A missing model begins downloading when you launch 0.3.8; in 0.3.9 and later, a clean install waits until you choose <strong>Download Model</strong>. Keep Presspeech open while it prepares, and reopen Setup Checklist from the menu-bar item if needed. Continue when the model reports Ready.</p>
                 </li>
                 <li>
                   <strong>Grant the three permissions</strong>
