@@ -263,6 +263,7 @@ assert_not_contains() {
 
 run_self_test() {
     python3 ./benchmark-inputs.py --self-test
+    python3 ./test-compare-sdk-asr-reports.py
     ./run-spanish-language-probe.sh --self-test
     # Long-form fixtures are a default release-gate precondition, not an
     # optional candidate helper. Keep their composition and validation tests
@@ -821,6 +822,7 @@ validate_fluid_dependency_alignment \
 
 echo "running helper self-tests..."
 python3 ./benchmark-inputs.py --self-test
+python3 ./test-compare-sdk-asr-reports.py
 ./run-tail-word-regression.sh --self-test
 ./add-real-dictation-fixture.sh --self-test
 ./fetch-public-speech-fixtures.sh --self-test

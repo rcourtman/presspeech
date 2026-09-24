@@ -6169,6 +6169,24 @@ func unicodeInsertionChunks(for text: String, maxUTF16UnitsPerEvent maxUnits: In
     return chunks
 }
 
+private let MAX_DIRECT_UNICODE_EVENT_UTF16_UNITS = 20
+
+/// Chromium's macOS input injector records an observed 20-UTF-16-unit limit
+/// for CGEventKeyboardSetUnicodeString. The chunker keeps a grapheme together even
+/// when it exceeds that limit. Refuse the *whole* Direct Unicode attempt in
+/// that case: typing a prefix before discovering an unpostable cluster could
+/// leave a silent, incomplete transcript in the target field.
+private func postableUnicodeInsertionChunks(for text: String) -> [[UInt16]]? {
+    let chunks = unicodeInsertionChunks(
+        for: text, maxUTF16UnitsPerEvent: MAX_DIRECT_UNICODE_EVENT_UTF16_UNITS
+    )
+    guard !chunks.isEmpty,
+          chunks.allSatisfy({ !$0.isEmpty && $0.count <= MAX_DIRECT_UNICODE_EVENT_UTF16_UNITS }) else {
+        return nil
+    }
+    return chunks
+}
+
 private struct KeyboardEventStep: Equatable {
     let virtualKey: CGKeyCode
     let keyDown: Bool
@@ -7308,17 +7326,19 @@ private func directUnicodeInsertionOutcome(
 
 @MainActor
 private enum DirectUnicodeInserter {
-    private static let maxUTF16UnitsPerEvent = 20
-
     static func insert(_ text: String,
                        preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
         let clipboardAtStart = NSPasteboard.general.changeCount
+        guard let chunks = postableUnicodeInsertionChunks(for: text) else {
+            log("direct Unicode typing skipped: a grapheme exceeds the event limit")
+            return TextInserter.copyWithoutPasting(
+                text,
+                preserveClipboard: preserveClipboard,
+                expectedSourceChangeCount: clipboardAtStart
+            )
+        }
         let source = CGEventSource(stateID: .combinedSessionState)
-        let chunks = unicodeInsertionChunks(
-            for: text,
-            maxUTF16UnitsPerEvent: maxUTF16UnitsPerEvent
-        )
         return directUnicodeInsertionOutcome(
             chunks: chunks,
             targetStillFocused: {
@@ -19181,11 +19201,38 @@ private enum PresspeechSelfTest {
             equals: ["ab", "👩‍💻", "cd"],
             "direct Unicode insertion should keep extended grapheme clusters together while chunking"
         )
+        let postableUnicodeChunks = postableUnicodeInsertionChunks(for: "ab👩‍💻cd")
+        try expect(
+            postableUnicodeChunks?.map { String(decoding: $0, as: UTF16.self) } ?? [],
+            equals: ["ab👩‍💻cd"],
+            "ordinary multi-scalar text should remain eligible for Direct Unicode typing"
+        )
+        let limitSizedCluster = "a" + String(repeating: "\u{0301}", count: 19)
+        try expect(
+            postableUnicodeInsertionChunks(for: limitSizedCluster)?.map(\.count) ?? [],
+            equals: [20],
+            "a grapheme at the Quartz event limit should remain postable"
+        )
+        let oversizedCluster = limitSizedCluster + "\u{0301}"
+        let oversizedText = "prefix " + oversizedCluster + " suffix"
+        try expect(
+            unicodeInsertionChunks(for: oversizedText, maxUTF16UnitsPerEvent: 20)
+                .contains { $0.count > 20 },
+            equals: true,
+            "the grapheme-preserving chunker can produce an event larger than Quartz processes"
+        )
+        try expect(
+            postableUnicodeInsertionChunks(for: oversizedText),
+            equals: nil,
+            "an oversized later grapheme must refuse Direct Unicode before any prefix is posted"
+        )
         try expect(
             unicodeInsertionChunks(for: "abc", maxUTF16UnitsPerEvent: 0),
             equals: [],
             "direct Unicode chunking should reject invalid chunk sizes"
         )
+        try expect(postableUnicodeInsertionChunks(for: ""), equals: nil,
+                   "an empty Direct Unicode attempt must not claim text was inserted")
         let preChunkFocusLossProbe = MainActor.assumeIsolated {
             var copied = false
             let outcome = directUnicodeInsertionOutcome(

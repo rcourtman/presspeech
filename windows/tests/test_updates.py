@@ -104,6 +104,31 @@ class UpdateSelectionTests(unittest.TestCase):
                 "windows-v0.1.1", "windows-v00.1.1")
         self.assertIsNone(updates.select_update([candidate], "0.1.0"))
 
+    def test_ignores_plain_release_tag_even_with_matching_assets(self):
+        candidate = release("0.1.1")
+        candidate["tag_name"] = "0.1.1"
+        for asset in candidate["assets"]:
+            asset["browser_download_url"] = (
+                asset["browser_download_url"].replace(
+                    "windows-v0.1.1/", "0.1.1/"))
+        self.assertIsNone(updates.select_update([candidate], "0.1.0"))
+
+    def test_version_parser_rejects_unicode_digits(self):
+        for version in ("1١.1.1", "windows-v1١.1.1"):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                updates.parse_version(version)
+
+    def test_ignores_release_without_explicit_published_draft_state(self):
+        for state in (None, 0, ""):
+            with self.subTest(draft=state):
+                candidate = release("0.1.1")
+                candidate["draft"] = state
+                self.assertIsNone(
+                    updates.select_update([candidate], "0.1.0"))
+        candidate = release("0.1.1")
+        del candidate["draft"]
+        self.assertIsNone(updates.select_update([candidate], "0.1.0"))
+
     def test_selects_newest_complete_windows_release(self):
         releases = [
             release("0.1.1"),

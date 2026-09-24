@@ -21,7 +21,7 @@ RELEASES_API_PATH = "/repos/rcourtman/presspeech/releases"
 MAX_RELEASE_PAGES = 10
 USER_AGENT = "presspeech-windows-update-check"
 API_VERSION = "2026-03-10"
-VERSION_COMPONENT_RE = r"(0|[1-9]\d*)"
+VERSION_COMPONENT_RE = r"(0|[1-9][0-9]*)"
 TAG_RE = re.compile(
     r"^windows-v%s\.%s\.%s$" % ((VERSION_COMPONENT_RE,) * 3))
 PLAIN_VERSION_RE = re.compile(
@@ -103,12 +103,18 @@ def select_update(releases, current_version):
     current = parse_version(current_version)
     candidates = []
     for release in releases:
-        if (not isinstance(release, dict) or release.get("draft") or
+        if (not isinstance(release, dict) or release.get("draft") is not False or
                 release.get("prerelease") is not True or
                 release.get("immutable") is not True):
             continue
+        # parse_version also accepts the installed app's plain X.Y.Z value.
+        # A release in this shared macOS/Windows repository must instead use
+        # the exact platform tag produced by the Windows release workflow.
+        tag = release.get("tag_name")
+        if not isinstance(tag, str) or TAG_RE.fullmatch(tag) is None:
+            continue
         try:
-            version = parse_version(release.get("tag_name", ""))
+            version = parse_version(tag)
         except ValueError:
             continue
         if version <= current:
@@ -123,7 +129,6 @@ def select_update(releases, current_version):
         checksum = assets.get(checksum_name)
         installer_url = installer.get("browser_download_url", "")
         checksum_url = checksum.get("browser_download_url", "")
-        tag = release.get("tag_name", "")
         if (installer_url != _canonical_asset_url(tag, installer_name) or
                 checksum_url != _canonical_asset_url(tag, checksum_name)):
             continue

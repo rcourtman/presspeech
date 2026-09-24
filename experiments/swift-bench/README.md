@@ -123,6 +123,29 @@ download or evaluate Unified, v2, Nemotron, or the candidate int8 encoder; use
 The result remains candidate evidence and cannot report a production release
 pass while the app and benchmark dependency pins differ.
 
+Compare the **explicit `v3`** Markdown regression reports across the two SDK
+pins with the model-free helper, pairing each corpus separately:
+
+```sh
+python3 ./compare-sdk-asr-reports.py \
+  --pair baseline-private-v3.md candidate-private-v3.md \
+  --pair baseline-english-long-v3.md candidate-english-long-v3.md \
+  --pair baseline-german-long-v3.md candidate-german-long-v3.md
+```
+
+The helper refuses mismatched fixture-set SHA-256, app pin, trial count, clip
+count, language hint, corpus kind, or non-default SDK environment; it also
+requires a distinct candidate dependency pin. It prints aggregate WER, worst
+clip WER, final-word failures, consecutive-deletion run, latency, and any
+non-speech-emission changes without printing text or paths. Compare the
+`v3-sdk-default` reports separately against candidate-revision `v3` to isolate
+the SDK's chunking-policy change. This is **not** a pass/fail gate: inspect
+per-clip regressions and the absolute release checks too. Report files do not
+attest identical hardware, thermal load, model-cache bytes, or reference
+quality; latency deltas need same-machine, comparable-load measurement and
+the app still needs native qualification. Run the parser's model-free tests
+with `python3 ./test-compare-sdk-asr-reports.py`.
+
 `Package.resolved` is committed for the benchmark for the same reason as the
 app: dependency changes should be visible in review. When promoting a
 validated FluidAudio revision to production, update the app and benchmark
