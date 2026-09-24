@@ -488,9 +488,15 @@ Treat command shells as execution surfaces, not ordinary text fields.
 PowerShell, Command Prompt, Windows Terminal, and remote consoles can run
 pasted text when it contains a newline. The default After pasting value is
 **space**; selecting **newline** can submit a transcript before you inspect it.
-Dictate command text into **Try Dictation** or a plain-text editor, review it,
-then paste and run it deliberately. Windows Terminal's multiline-paste warning
-depends on its settings; do not rely on it as a Presspeech safety boundary.
+In the current source (not yet a published Windows build), a transcript with a
+line break headed for a recognized local command-terminal window goes to
+Delivery Recovery *before* Presspeech changes the clipboard or sends Ctrl+V.
+Choose **Copy for Manual Paste**, paste into **Try Dictation** or a
+non-executing editor, and review it there before deliberately running any
+command. This check cannot identify embedded or remote consoles and does not
+make manual pastes safe. Windows Terminal's
+[multiline-paste warning](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/interaction#paste-warnings)
+can be disabled, so do not rely on it as a Presspeech safety boundary.
 
 The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Dictate** (toggle), **Cancel Dictation (Esc)** while recording,

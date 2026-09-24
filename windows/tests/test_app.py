@@ -5339,6 +5339,34 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertNotIn("private transcript", str(self.instance._log.mock_calls))
         self.assertNotIn("private transcript", str(self.instance.notify.mock_calls))
 
+    def test_terminal_newline_is_retained_before_clipboard_or_input(self):
+        self.target = self.target._replace(process_name="WindowsTerminal.exe")
+        self.foreground.return_value = self.target
+        text = "private command\n"
+
+        self.assertFalse(self.instance._paste(text, self.target))
+
+        self.assertEqual(self.instance._undelivered_dictations, [text])
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.physical_keys_held.assert_not_called()
+        notice = str(self.instance.notify.mock_calls)
+        self.assertIn("Pasting could run a command", notice)
+        self.assertIn("non-executing editor", notice)
+        self.assertNotIn(text, notice)
+        self.assertNotIn(text, str(self.instance._log.mock_calls))
+
+    def test_single_line_terminal_and_multiline_editor_keep_normal_delivery(self):
+        for name, text in (("WindowsTerminal.exe", "private command "),
+                           ("notepad.exe", "private line\nnext line")):
+            with self.subTest(name=name):
+                self.target = self.target._replace(process_name=name)
+                self.foreground.return_value = self.target
+                self.assertTrue(self.instance._paste(text, self.target))
+                self.assertFalse(self.instance.has_undelivered_dictation())
+        self.assertEqual(self.copy.call_count, 2)
+        self.assertEqual(self.keyboard.shortcut.call_count, 2)
+
     def test_unavailable_scratchpad_uses_private_recovery_without_clipboard(self):
         self.instance._remember_undelivered_dictation(
             "private transcript", "scratchpad-unavailable")

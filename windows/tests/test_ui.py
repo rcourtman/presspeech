@@ -2734,6 +2734,8 @@ class DeliveryRecoveryWindowTests(unittest.TestCase):
         self.assertIn("images or formatted content", warning)
         self.assertIn("does not restore it", warning)
         self.assertIn("Leave Waiting", warning)
+        self.assertIn("non-executing editor", warning)
+        self.assertIn("pasted line breaks can run commands", warning)
         body = inspect.getsource(ui.DeliveryRecoveryWindow._build_window)
         self.assertLess(
             body.index("text=RECOVERY_COPY_CLIPBOARD_WARNING"),

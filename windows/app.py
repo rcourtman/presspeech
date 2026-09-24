@@ -36,6 +36,7 @@ from paste_target import (
     PasteTarget, stable_focus_and_caption as _stable_focus_and_caption,
     matches as _paste_target_matches, same_window as _paste_target_same_window,
     input_integrity_blocks_delivery as _input_integrity_blocks_delivery,
+    requires_terminal_review as _requires_terminal_review,
 )
 from pynput import keyboard as pkb
 from PIL import Image, ImageDraw
@@ -3013,6 +3014,10 @@ class PresspeechApp:
             "audio-overflow": (
                 "The microphone dropped audio during dictation, so this "
                 "transcript may be incomplete; no paste shortcut was sent. "),
+            "terminal-newline": (
+                "The transcript contains a line break and the original "
+                "window appears to be a command terminal. Pasting could run "
+                "a command; no paste shortcut was sent. "),
             "modifier-held": (
                 "A Ctrl, Shift, Alt, Windows, or V key was held; no paste "
                 "shortcut was sent. Release it before a manual paste. "),
@@ -3041,6 +3046,9 @@ class PresspeechApp:
             "Paste into a private editor to inspect them, or Discard and "
             "dictate again. "
             if reason == "audio-overflow" else
+            "Review the words in a non-executing editor before any manual "
+            "paste into a command terminal. "
+            if reason == "terminal-newline" else
             "Check the intended field and any field that may have gained "
             "focus, then check the current clipboard before choosing Copy or "
             "Discard. "
@@ -3137,6 +3145,13 @@ class PresspeechApp:
             return False
         if _paste_target_blocks_simulated_input(paste_target):
             self._remember_undelivered_dictation(text, "input-integrity-boundary")
+            return False
+        # A newline is executable input in many shells. The default space
+        # suffix is no guarantee: the recognizer, dictionary, or a selected
+        # newline suffix can all put a line break in the final transcript.
+        # Defer before replacing the user's clipboard, not just before input.
+        if _requires_terminal_review(text, paste_target.process_name):
+            self._remember_undelivered_dictation(text, "terminal-newline")
             return False
         # The hook may not have observed a key already held before delivery.
         # Check the physical state before replacing the user's clipboard;

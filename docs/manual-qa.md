@@ -1732,6 +1732,17 @@ clipboard.
   the recognizer produces one. Record an unrecognized phrase as **Not run** for
   this check, not a pass. A deliberate single-space dictionary replacement
   must remain deliverable; do not treat all whitespace as removed content.
+- On a disposable Windows desktop, set **After pasting** to **newline** and
+  deliver harmless synthetic text to Windows Terminal and a legacy Console
+  Host window. Confirm Delivery Recovery opens before the previous clipboard
+  item changes, no Ctrl+V is sent, and the terminal receives no command. Repeat
+  with a line break inside the synthetic text while the suffix is **space**;
+  that must also defer. A single-line terminal dictation and multiline text
+  into Notepad should keep normal automatic delivery. Inspect the foreground
+  process owner so an unrecognized embedded or remote console is not mistaken
+  for a pass; this guard is not a universal command-execution boundary. Use
+  benign text only, and review any recovered transcript in a non-executing
+  editor before manually pasting it into a terminal.
 - Hold the clipboard from a separate process during delivery. Confirm retained
   text is recoverable, recording is paused, the Delivery Recovery window opens
   above ordinary apps, and no transcript appears in the window, logs or files.

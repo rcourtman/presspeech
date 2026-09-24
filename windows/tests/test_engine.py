@@ -125,6 +125,28 @@ class ParakeetConfigurationTests(unittest.TestCase):
              engine.WHISPER_MODELS["base.en"][1]))
         self.assertTrue(self.resolve_snapshot.call_args.kwargs["local_only"])
 
+    def test_other_transformers_loads_honor_cache_only_request(self):
+        torch = types.ModuleType("torch")
+        torch.cuda = mock.Mock()
+        torch.cuda.is_available.return_value = False
+        torch.float32 = "float32"
+        transformers = types.ModuleType("transformers")
+        transformers.AutoProcessor = mock.Mock()
+        transformers.AutoModelForRNNT = mock.Mock()
+        transformers.MoonshineStreamingForConditionalGeneration = mock.Mock()
+
+        with mock.patch.dict(sys.modules, {
+                "torch": torch, "transformers": transformers}), \
+                mock.patch.object(engine.model_network, "harden_loaded_runtime"):
+            for model_name in (engine.NEMOTRON_NAME, engine.MOONSHINE_NAME):
+                with self.subTest(model=model_name):
+                    self.resolve_snapshot.reset_mock()
+                    engine.Transcriber().load(model_name, local_only=True)
+                    self.resolve_snapshot.assert_called_once()
+                    self.assertIs(
+                        self.resolve_snapshot.call_args.kwargs["local_only"],
+                        True)
+
     def test_model_cache_progress_callback_keeps_snapshot_pin_unchanged(self):
         progress = mock.Mock()
         self.assertEqual(engine._cached_model_path(

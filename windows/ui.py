@@ -166,7 +166,9 @@ RECOVERY_COPY_CLIPBOARD_WARNING = (
     "Copy for Manual Paste replaces the current clipboard item, including "
     "images or formatted content. Presspeech does not restore it afterward. "
     "Choose Leave Waiting if you need to save that item first; the dictation "
-    "stays in memory while Presspeech runs."
+    "stays in memory while Presspeech runs. If the destination is a command "
+    "terminal, inspect the words in a non-executing editor first: pasted line "
+    "breaks can run commands."
 )
 
 

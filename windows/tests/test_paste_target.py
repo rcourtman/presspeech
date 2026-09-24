@@ -7,6 +7,26 @@ from unittest import mock
 import paste_target
 
 
+class TerminalReviewTests(unittest.TestCase):
+    def test_line_breaks_require_review_for_known_console_window_owners(self):
+        for owner in (
+                "conhost.exe", "OpenConsole.exe", "WindowsTerminal.exe",
+                "WindowsTerminalPreview.exe", "WindowsTerminalCanary.exe",
+                "cmd.exe", "powershell.exe", "pwsh.exe"):
+            for text in ("say hello\n", "say hello\r", "one\r\ntwo"):
+                with self.subTest(owner=owner, text=text):
+                    self.assertTrue(paste_target.requires_terminal_review(
+                        text, owner))
+
+    def test_single_line_terminal_and_multiline_editor_remain_automatic(self):
+        self.assertFalse(paste_target.requires_terminal_review(
+            "say hello ", "WindowsTerminal.exe"))
+        self.assertFalse(paste_target.requires_terminal_review(
+            "first\nsecond", "notepad.exe"))
+        self.assertFalse(paste_target.requires_terminal_review(
+            "first\nsecond", ""))
+
+
 class FocusedChildTests(unittest.TestCase):
     def backend(self, *, active=100, focused=101, foreground=100, root=100):
         user32 = mock.Mock()

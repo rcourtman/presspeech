@@ -31,7 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 KNOWN_RISKS = {
     ("macos", "0.3.8"): (
         "hugging face token", "wait", "proxy", "malformed", "https_proxy",
-        "http_proxy", "proxy credentials", "ignore it", "universal clipboard",
+        "http_proxy", "proxy credentials", "ignore it",
+        "without the expected proxy", "universal clipboard",
     ),
     ("macos", "0.3.9"): ("token", "proxy"),
     ("windows", "0.1.12"): (
@@ -103,7 +104,7 @@ def run_self_test() -> None:
         mac.replace("9.8.7", "0.3.8")
         + "A Hugging Face token may be sent via a proxy; wait if unsure. "
         + "A malformed https_proxy or http_proxy URL may log proxy credentials; "
-        + "the client can ignore it. "
+        + "the client can ignore it and request a model without the expected proxy. "
         + "Universal Clipboard may share dictated text. " + CLIPBOARD_GUIDE
     )
     known_windows = (
@@ -122,6 +123,8 @@ def run_self_test() -> None:
         "macos", "0.3.8", known_mac.replace("Universal Clipboard", "clipboard")))
     assert any("malformed" in error for error in entry_errors(
         "macos", "0.3.8", known_mac.replace("malformed", "invalid")))
+    assert any("without the expected proxy" in error for error in entry_errors(
+        "macos", "0.3.8", known_mac.replace("without the expected proxy", "safely")))
     assert any("clipboard-services" in error for error in entry_errors(
         "windows", "0.1.12", known_windows.replace(CLIPBOARD_GUIDE, "")))
 

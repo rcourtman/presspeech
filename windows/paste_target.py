@@ -19,6 +19,27 @@ from typing import NamedTuple
 _CAPTION_KEY = secrets.token_bytes(32)
 _MAX_CAPTION_CHARS = 8192
 
+# These are foreground window owners, not necessarily the shell process
+# running inside them. A trailing newline can submit a command even when the
+# configured suffix is normally a space. Do not infer terminal identity from
+# a window caption, which may contain private document or command text.
+_COMMAND_TERMINAL_PROCESSES = frozenset({
+    "conhost.exe", "openconsole.exe", "windowsterminal.exe",
+    "windowsterminalpreview.exe", "windowsterminalcanary.exe", "cmd.exe",
+    "powershell.exe", "pwsh.exe",
+})
+
+
+def requires_terminal_review(text, process_name):
+    """Defer automatic multiline paste into a recognized command terminal.
+
+    This is a narrow precaution, not proof that other apps cannot submit text
+    on paste: embedded terminals and remote sessions may have other owners.
+    """
+    return (isinstance(text, str) and ("\n" in text or "\r" in text) and
+            isinstance(process_name, str) and
+            process_name.lower() in _COMMAND_TERMINAL_PROCESSES)
+
 
 class PasteTarget(NamedTuple):
     process_name: str

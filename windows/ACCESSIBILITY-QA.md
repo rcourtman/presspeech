@@ -70,6 +70,9 @@ Windows UI, UIA integration, or Tk version.
    In Delivery Recovery, confirm the warning that Copy replaces the current
    clipboard item—including non-text content—is visible and that Narrator
    announces the same consequence when **Copy for Manual Paste** is focused.
+   Confirm the visible warning and Copy description also explain that pasted
+   line breaks can run commands in a terminal and recommend reviewing words
+   in a non-executing editor first.
    The notification-area Copy label must also say it replaces the clipboard.
    Leave Waiting must remain reachable without copying or discarding.
 

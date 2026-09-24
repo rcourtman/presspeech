@@ -494,9 +494,11 @@ class Transcriber:
                         notify, local_only=local_only,
                         progress_callback=progress_callback)
                 elif is_nemotron(model_name):
-                    self._load_nemotron(notify, progress_callback)
+                    self._load_nemotron(
+                        notify, progress_callback, local_only=local_only)
                 elif is_moonshine(model_name):
-                    self._load_moonshine(notify, progress_callback)
+                    self._load_moonshine(
+                        notify, progress_callback, local_only=local_only)
                 else:
                     self._load_whisper(
                         model_name, notify, progress_callback,
@@ -548,7 +550,7 @@ class Transcriber:
         self.backend = "parakeet"
         self._device = device
 
-    def _load_nemotron(self, notify, progress_callback=None):
+    def _load_nemotron(self, notify, progress_callback=None, *, local_only=False):
         import torch
         from transformers import AutoModelForRNNT, AutoProcessor
         model_network.harden_loaded_runtime()
@@ -558,6 +560,7 @@ class Transcriber:
         dtype = torch.float16 if device == "cuda" else torch.float32
         model_path = _cached_model_path(
             "nemotron-speech-streaming-en-0.6b",
+            local_only=local_only,
             progress_callback=progress_callback)
         self.processor = AutoProcessor.from_pretrained(
             model_path, local_files_only=True, revision=NEMOTRON_REVISION,
@@ -569,7 +572,7 @@ class Transcriber:
         self.backend = "nemotron"
         self._device = device
 
-    def _load_moonshine(self, notify, progress_callback=None):
+    def _load_moonshine(self, notify, progress_callback=None, *, local_only=False):
         import torch
         from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
         model_network.harden_loaded_runtime()
@@ -578,7 +581,8 @@ class Transcriber:
             notify("Presspeech", "Loading Moonshine Medium on %s..." % device)
         dtype = torch.float16 if device == "cuda" else torch.float32
         model_path = _cached_model_path(
-            "moonshine-streaming-medium", progress_callback=progress_callback)
+            "moonshine-streaming-medium", local_only=local_only,
+            progress_callback=progress_callback)
         self.processor = AutoProcessor.from_pretrained(
             model_path, local_files_only=True, revision=MOONSHINE_REVISION,
             token=False, trust_remote_code=False)
