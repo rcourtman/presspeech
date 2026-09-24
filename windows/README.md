@@ -164,7 +164,9 @@ Presspeech ready after sign-in. Existing saved choices are retained. The hotkey
 and style apply immediately and remain selected if setup is deferred. When you
 choose **Check Microphone**, the check briefly opens the selected input,
 discards its samples in memory, and distinguishes an input level from a
-connected-but-silent device or one that cannot be opened. If it is silent,
+connected-but-silent device or one that cannot be opened. Setup says
+**Connecting microphone…** until the input has delivered its first audio
+buffer; speak when it says **Listening — speak a few words…**. If it is silent,
 unmute it and choose **Check Microphone** again (in published 0.1.12, use
 **Check Again** to repeat its automatic check); if it cannot be opened, use the
 window's direct links to Windows Microphone Privacy or Sound Input settings
@@ -330,10 +332,12 @@ it and reports a microphone error instead of claiming to listen. Releasing
 before readiness reports that the microphone was not ready. A lower tone
 confirms an active recording has stopped. Audio cues are enabled by default
 and can be disabled in Settings.
-If a press captures too little audio or the local recognizer detects no speech,
+If a press captures too little audio, or Whisper's VAD rejects the recording,
 the indicator briefly says **No speech detected — try again** and a Windows
-notification points back to Setup's microphone check instead of failing
-silently. A quick retry cannot be hidden by the previous message's timeout.
+notification points back to Setup's microphone check. If a recognizer instead
+returns blank text without a VAD rejection, the indicator says **No text
+recognized — try again**; that does not claim the microphone captured silence.
+A quick retry cannot be hidden by the previous message's timeout.
 
 After release, silence-aware post-roll stops as early as 80 ms while retaining
 the original 400 ms safety ceiling whenever speech is still present. This keeps

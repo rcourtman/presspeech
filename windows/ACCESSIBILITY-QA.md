@@ -44,8 +44,11 @@ Windows UI, UIA integration, or Tk version.
 3. **Live status.** In Accessibility Insights, use **Listen to Events** on a
    status control and record its UIA events. Trigger a safe status transition,
    such as Setup's global-hotkey startup or a permitted microphone check, and
-   confirm the changed status is exposed and Narrator announces it. If a model
-   download is already part of the test, verify that phase changes are
+   confirm the changed status is exposed and Narrator announces it. For a
+   microphone check, confirm **Connecting microphone…** precedes **Listening —
+   speak a few words…**, and Listening is not announced before the first input
+   buffer arrives. If a model download is already part of the test, verify
+   that phase changes are
    announced but byte-count updates do not repeatedly interrupt speech. For
    the on-screen indicator, use a short harmless Try Dictation phrase and
    confirm its state is accessible and does not take focus.

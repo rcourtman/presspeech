@@ -161,6 +161,16 @@ def whisper_vad_parameters(min_silence_duration_ms=None):
     return policy
 
 
+def whisper_vad_rejected(timing):
+    """True only when Whisper explicitly reports zero audio after VAD."""
+    if not isinstance(timing, dict) or timing.get("backend") != "whisper":
+        return False
+    speech_seconds = timing.get("speech_seconds")
+    return (isinstance(speech_seconds, (int, float))
+            and not isinstance(speech_seconds, bool)
+            and speech_seconds == 0)
+
+
 # Stable feature shapes avoid a roughly one-second CUDA/cuDNN setup cost for
 # every previously unseen recording length. The attention mask ensures padded
 # audio is ignored, so this does not change the decoded speech.

@@ -23,6 +23,18 @@ class ParakeetConfigurationTests(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"torch": None}):
             self.assertFalse(engine.cuda_available())
 
+    def test_only_explicit_whisper_vad_zero_supports_no_speech_diagnosis(self):
+        self.assertTrue(engine.whisper_vad_rejected({
+            "backend": "whisper", "speech_seconds": 0.0}))
+        for timing in (
+                {"backend": "parakeet", "speech_seconds": 0.0},
+                {"backend": "whisper", "speech_seconds": 0.4},
+                {"backend": "whisper", "speech_seconds": None},
+                {"backend": "whisper", "speech_seconds": False},
+                {}, None):
+            with self.subTest(timing=timing):
+                self.assertFalse(engine.whisper_vad_rejected(timing))
+
     def test_cuda_probe_uses_packaged_torch_capability(self):
         torch = types.ModuleType("torch")
         torch.cuda = mock.Mock()

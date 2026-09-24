@@ -738,6 +738,7 @@ class DictationIndicator:
         "listening": ("Listening\u2026", "#ff5a5f"),
         "transcribing": ("Transcribing\u2026", "#ffb340"),
         "no_speech": ("No speech detected \u2014 try again", "#ffb340"),
+        "no_text": ("No text recognized \u2014 try again", "#ffb340"),
         "not_ready": ("Microphone was not ready \u2014 try again", "#ffb340"),
     }
 
@@ -1563,7 +1564,8 @@ class SetupWindow:
         _set_control_state(
             self.root, self.check_microphone_button, "disabled", self.device)
         _set_accessible_text(
-            self.microphone_status, "Listening — speak a few words…")
+            self.microphone_status,
+            "Connecting microphone… Wait for Listening before speaking.")
         threading.Thread(
             target=self._check_microphone_worker,
             args=(selected,),
@@ -1572,8 +1574,12 @@ class SetupWindow:
         ).start()
 
     def _check_microphone_worker(self, selected):
+        def listening():
+            self.microphone_events.put((selected, "listening", None))
+
         try:
-            result = self.app.check_input_device(selected)
+            result = self.app.check_input_device(
+                selected, on_listening=listening)
         except Exception:
             # The app normally converts audio-backend failures to "unavailable".
             # Keep the asynchronous UI state recoverable if an unexpected
@@ -1617,6 +1623,13 @@ class SetupWindow:
         if latest is None:
             return
         selected, result, options = latest
+        if result == "listening":
+            current = self.device_values.get(
+                self.device.get(), cfg.DEFAULTS["input_device"])
+            if self.microphone_checking and selected == current:
+                _set_accessible_text(
+                    self.microphone_status, "Listening — speak a few words…")
+            return
         self.microphone_checking = False
         _set_control_state(
             self.root, self.check_microphone_button,

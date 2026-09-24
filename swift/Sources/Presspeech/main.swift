@@ -278,7 +278,7 @@ enum DictationNotice: Equatable {
     case insertionFailed
     case insertionFailedWithoutHistory
     case transcriptionFailed
-    case noSpeechDetected
+    case noTextToInsert
     case noAudioCaptured
     case recordingTooShort
 
@@ -294,8 +294,8 @@ enum DictationNotice: Equatable {
             return "Delivery uncertain — no menu copy; check field"
         case .transcriptionFailed:
             return "Transcription failed — try again"
-        case .noSpeechDetected:
-            return "No speech detected — try again"
+        case .noTextToInsert:
+            return "No text to insert — try again"
         case .noAudioCaptured:
             return "No microphone audio — choose Check Microphone"
         case .recordingTooShort:
@@ -315,8 +315,8 @@ enum DictationNotice: Equatable {
             return "Check field before retrying"
         case .transcriptionFailed:
             return "Transcription failed — try again"
-        case .noSpeechDetected:
-            return "No speech detected — try again"
+        case .noTextToInsert:
+            return "No text to insert — try again"
         case .noAudioCaptured:
             return "No mic audio — check setup"
         case .recordingTooShort:
@@ -336,8 +336,8 @@ enum DictationNotice: Equatable {
             return "Presspeech couldn't confirm text delivery. Check the destination field before trying again. No transcript is available in the Presspeech menu; correct or remove any partial text before dictating again."
         case .transcriptionFailed:
             return "Transcription failed. Try again."
-        case .noSpeechDetected:
-            return "No speech detected. Try again."
+        case .noTextToInsert:
+            return "No text was available to insert. Try again."
         case .noAudioCaptured:
             return "No microphone audio was captured. Choose Check Microphone in the Presspeech menu, select an input, then try again."
         case .recordingTooShort:
@@ -5827,7 +5827,7 @@ func dictationCompletionNotice(processedText: String,
                                 insertionOutcome: TextInsertionOutcome?,
                                 keepsRecentTranscripts: Bool,
                                 pasteTargetUnavailableAtStart: Bool = false) -> DictationNotice? {
-    guard !processedText.isEmpty else { return .noSpeechDetected }
+    guard !processedText.isEmpty else { return .noTextToInsert }
     guard let insertionOutcome else { return nil }
     switch insertionOutcome {
     case .copiedWithoutPasting:
@@ -10534,7 +10534,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 // recovery instruction.
                 enterPermissionBlockedState(missing: currentlyMissingPermissions,
                                             reason: "transcription complete")
-                if let completionNotice, completionNotice != .noSpeechDetected {
+                if let completionNotice, completionNotice != .noTextToInsert {
                     signalDictationFailure(completionNotice)
                     rebuildMenu()
                 }
@@ -22400,9 +22400,12 @@ private enum PresspeechSelfTest {
         try expect(DictationNotice.insertionFailedWithoutHistory.hudTitle,
                    equals: "Check field before retrying",
                    "the failure HUD without history should check the destination before retrying")
-        try expect(DictationNotice.noSpeechDetected.hudTitle,
-                   equals: "No speech detected — try again",
-                   "empty recognition should not look like a successful dictation")
+        try expect(DictationNotice.noTextToInsert.hudTitle,
+                   equals: "No text to insert — try again",
+                   "empty recognition should not claim that speech was absent")
+        try expect(DictationNotice.noTextToInsert.accessibilityValue,
+                   equals: "No text was available to insert. Try again.",
+                   "VoiceOver should not claim that speech was absent")
         try expect(DictationNotice.noAudioCaptured.statusTitle,
                    equals: "No microphone audio — choose Check Microphone",
                    "an empty capture should point to microphone recovery")
@@ -22455,8 +22458,8 @@ private enum PresspeechSelfTest {
         try expect(dictationCompletionNotice(processedText: "",
                                               insertionOutcome: nil,
                                               keepsRecentTranscripts: false),
-                   equals: .noSpeechDetected,
-                   "an empty processed transcript should produce the no-speech notice")
+                   equals: .noTextToInsert,
+                   "an empty processed transcript should produce the no-text notice")
         try expect(dictationCompletionNotice(processedText: "hello",
                                               insertionOutcome: .failed,
                                               keepsRecentTranscripts: false),

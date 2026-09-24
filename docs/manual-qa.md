@@ -26,6 +26,16 @@ collaborator where noted:
   `python3 scripts/check-public-releases.py --require-published` with read-only
   GitHub API access. Confirm the deployed platform guide names the new version
   and that its pinned package and checksum downloads succeed in a clean browser.
+- Review each candidate's release notes before publication, then inspect the
+  rendered GitHub release page as a standalone download entry point. Check its
+  notes against that exact version's model-download privacy inventory and
+  current support-route status. If a build has a pre-launch token,
+  telemetry, routing, or proxy caveat, make the decision and its detailed guide
+  discoverable from the release page itself; do not assume visitors first read
+  the README or install guide. A request for compatibility reports must not
+  imply that new issues can be submitted while issue creation is restricted.
+  Editing a tracked release-notes file does not update notes already published
+  on GitHub, and unreleased fixes must not be described as shipped.
 - From the non-collaborator account, open the Bug report, Feature request, and
   Target-app compatibility report templates. Confirm each form renders and can
   be filled without an “issue creation is restricted” message; do not submit a
@@ -281,7 +291,12 @@ keyboard access testing in addition to assistive-technology testing.
   physical microphone is available.
 - Mute the selected microphone, choose **Check Microphone**, and confirm setup
   says it is connected but no input level was detected instead of claiming it
-  is ready. Unmute it, speak, and check again successfully.
+  is ready. Before any input buffer arrives, confirm Setup says **Connecting
+  microphone…** rather than inviting speech; once buffers arrive, confirm it
+  announces **Listening — speak a few words…** without moving focus. Unmute
+  it, speak during that Listening state, and check again successfully. If a
+  device cannot deliver a buffer, confirm Listening is never announced. Record
+  **Not run** for the no-buffer case if no suitable test device is available.
 - Select a specific USB or Bluetooth microphone, disconnect and reconnect it
   while Presspeech remains open, then choose **Check Microphone**. Confirm the
   check detects input without a dictation attempt or app restart and the
@@ -515,11 +530,14 @@ keyboard access testing in addition to assistive-technology testing.
   limit while monitoring GPU memory; transcription must stay on Parakeet and
   complete without an out-of-memory error.
 - Tap the hotkey too briefly to produce a usable recording, then make a longer
-  silent recording. Confirm both leave **No speech detected — try again** on
-  the indicator briefly and issue a Windows notification with microphone-check
-  recovery instead of disappearing silently. Retry immediately and confirm the
-  new **Listening…** state is not hidden when the old message expires. Repeat
-  with the visual indicator disabled and confirm the notification remains.
+  silent recording. The short clip should show **No speech detected — try
+  again**. On Whisper, a VAD-zero result should show the same; a blank decode
+  without VAD-zero evidence should instead show **No text recognized — try
+  again**, including on Parakeet. Any invented words on silence are a separate
+  recognition failure to record, not a pass. Confirm the applicable indicator
+  and notification do not disappear silently. Retry immediately and confirm
+  the new **Listening…** state is not hidden when the old message expires.
+  Repeat with the visual indicator disabled and confirm the notification remains.
 - Open Notepad normally and confirm dictation pastes automatically. Then open a
   separate Notepad instance with **Run as administrator**, dictate into it, and
   confirm Presspeech sends no simulated paste shortcut and reports the Windows
@@ -1044,8 +1062,9 @@ item after the development-wrapper launch check.
   an entry still places the complete transcript on the clipboard. Do not put
   the test phrase in the qualification record.
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
-  and menu report **No speech detected — try again** rather than playing the
-  successful-dictation cue.
+  and menu report **No text to insert — try again** rather than playing the
+  successful-dictation cue. An empty decoder result does not prove that speech
+  was absent; also try short audible speech and record any unexplained blank.
 - Tap the hotkey too briefly to reach the short-clip cutoff and confirm the HUD,
   menu, error cue, and VoiceOver report that the recording was too short instead
   of returning silently to Ready. Retry immediately and confirm the old notice

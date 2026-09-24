@@ -158,6 +158,14 @@ class WindowCallbackLifetimeTests(unittest.TestCase):
 
 
 class AccessibleWindowTests(unittest.TestCase):
+    def test_indicator_distinguishes_blank_decode_from_vad_rejection(self):
+        self.assertEqual(
+            ui.DictationIndicator._STATES["no_text"][0],
+            "No text recognized \u2014 try again")
+        self.assertEqual(
+            ui.DictationIndicator._STATES["no_speech"][0],
+            "No speech detected \u2014 try again")
+
     def test_dialog_viewport_uses_content_size_until_screen_margin(self):
         self.assertEqual(ui._bounded_viewport(500, 1920, 96, 320), 500)
         self.assertEqual(ui._bounded_viewport(1900, 1920, 96, 320), 1824)
@@ -1581,7 +1589,8 @@ class SetupWindowTests(unittest.TestCase):
         window.check_microphone_button.config.assert_called_once_with(
             state="disabled")
         set_text.assert_called_once_with(
-            window.microphone_status, "Listening — speak a few words…")
+            window.microphone_status,
+            "Connecting microphone… Wait for Listening before speaking.")
         thread.assert_called_once_with(
             target=window._check_microphone_worker,
             args=("auto",),
@@ -1665,7 +1674,10 @@ class SetupWindowTests(unittest.TestCase):
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_microphone_events()
 
-        window.app.check_input_device.assert_called_once_with("auto")
+        window.app.check_input_device.assert_called_once()
+        self.assertEqual(window.app.check_input_device.call_args.args, ("auto",))
+        self.assertTrue(callable(
+            window.app.check_input_device.call_args.kwargs["on_listening"]))
         window.app.input_device_options.assert_called_once_with()
         self.assertFalse(window.microphone_checking)
         window.check_microphone_button.config.assert_called_once_with(
@@ -1686,7 +1698,8 @@ class SetupWindowTests(unittest.TestCase):
         with mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._poll_microphone_events()
 
-        window.app.check_input_device.assert_called_once_with("auto")
+        window.app.check_input_device.assert_called_once()
+        self.assertEqual(window.app.check_input_device.call_args.args, ("auto",))
         self.assertTrue(window.microphone_events.empty())
         self.assertFalse(window.microphone_checking)
         window.check_microphone_button.config.assert_called_once_with(
@@ -1714,6 +1727,61 @@ class SetupWindowTests(unittest.TestCase):
             "Connected, but no input level detected — unmute and "
             "choose Check Microphone again",
         )
+
+    def test_setup_says_listening_only_after_probe_reports_audio_buffers(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.microphone_events.put(("auto", "listening", None))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        self.assertTrue(window.microphone_checking)
+        window.check_microphone_button.config.assert_not_called()
+        set_text.assert_called_once_with(
+            window.microphone_status, "Listening — speak a few words…")
+
+    def test_worker_queues_listening_before_final_microphone_result(self):
+        window = self.make_window("ready")
+
+        def check(_selected, on_listening):
+            on_listening()
+            return "silent"
+
+        window.app.check_input_device.side_effect = check
+        window._check_microphone_worker("auto")
+
+        self.assertEqual(
+            window.microphone_events.get_nowait(),
+            ("auto", "listening", None))
+        selected, result, _options = window.microphone_events.get_nowait()
+        self.assertEqual((selected, result), ("auto", "silent"))
+
+    def test_stale_listening_event_does_not_invite_speech_on_new_selection(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.device_values["Desk microphone"] = "desk"
+        window.device.get.return_value = "Desk microphone"
+        window.microphone_events.put(("auto", "listening", None))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        set_text.assert_not_called()
+        self.assertTrue(window.microphone_checking)
+
+    def test_completed_check_supersedes_unshown_listening_event(self):
+        window = self.make_window("ready")
+        window.microphone_checking = True
+        window.microphone_events.put(("auto", "listening", None))
+        window.microphone_events.put(("auto", "level", None))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        self.assertFalse(window.microphone_checking)
+        set_text.assert_called_once_with(
+            window.microphone_status, "Ready — input level detected")
 
     def test_failed_microphone_result_points_to_recovery_controls(self):
         window = self.make_window("ready")

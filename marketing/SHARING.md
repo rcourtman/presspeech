@@ -30,6 +30,20 @@ already using Presspeech asks how to help, point to the privacy-safe
 draft is submitted or monitored. Community results supplement, not replace,
 native release checks.
 
+**Observed 24 September 2026:** the published [macOS 0.3.8 release
+notes](https://github.com/rcourtman/presspeech/releases/tag/v0.3.8) invite
+compatibility reports but do not mention that new issues are restricted or
+surface the inherited-token model-download warning. The published [Windows
+0.1.12 release notes](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12)
+likewise omit that build's model-download telemetry, token, and routing caveat.
+The README and install guides carry the version-specific decisions, but a
+visitor can download from a release page without reading them. Before linking
+directly to either release page, the repository owner should correct its
+published notes; until then, send users through the exact-version install
+warning instead. Editing tracked release-notes files or this kit alone does
+not change GitHub's published notes; see the [public release
+qualification](../docs/manual-qa.md#public-release-and-support-qualification).
+
 Recheck release-size and benchmark numbers against `docs/site-metadata.json`
 and the benchmarks page. Run `python3 scripts/sync-docs.py --check` and
 `python3 scripts/check-public-assets.py` before any future posting; these

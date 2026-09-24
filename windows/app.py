@@ -101,6 +101,7 @@ RDP_PASTE_DELAY_SEC = 0.08
 NO_SPEECH_FEEDBACK_SEC = 2.5
 NOT_READY_FEEDBACK_SEC = 2.5
 NO_SPEECH_OUTCOME = "no_speech"
+NO_TEXT_OUTCOME = "no_text"
 
 VK_ESCAPE = 0x1B
 WM_KEYDOWN = 0x0100
@@ -2283,7 +2284,7 @@ class PresspeechApp:
                       type(exc).__name__)
             return False
 
-    def check_input_device(self, selected):
+    def check_input_device(self, selected, on_listening=None):
         """Open an input and distinguish audible samples from silent buffers."""
         # The explicit Setup probe and dictation must never open inputs at the
         # same time. Claim this operation before taking the audio-backend lease;
@@ -2298,18 +2299,20 @@ class PresspeechApp:
                 return MICROPHONE_CHECK_BUSY
             self._microphone_check_in_progress = True
         try:
-            return self._check_input_device_claimed(selected)
+            return self._check_input_device_claimed(
+                selected, on_listening=on_listening)
         finally:
             with self.lock:
                 self._microphone_check_in_progress = False
 
-    def _check_input_device_claimed(self, selected):
+    def _check_input_device_claimed(self, selected, on_listening=None):
         """Probe a microphone after claiming the exclusive check lifecycle."""
         levels = []
 
         def probe(idx, rate):
             level = self._probe_input_level(
-                idx, rate, listen_for=MICROPHONE_CHECK_LISTEN_SEC)
+                idx, rate, listen_for=MICROPHONE_CHECK_LISTEN_SEC,
+                on_listening=on_listening)
             if level is None:
                 return False
             levels.append(level)
@@ -2389,7 +2392,7 @@ class PresspeechApp:
         return PresspeechApp._probe_input_level(idx, rate) is not None
 
     @staticmethod
-    def _probe_input_level(idx, rate, listen_for=0.0):
+    def _probe_input_level(idx, rate, listen_for=0.0, on_listening=None):
         """Return peak RMS from a short in-memory probe, or None if it cannot open."""
         got = threading.Event()
         heard = threading.Event()
@@ -2411,6 +2414,16 @@ class PresspeechApp:
             stream.start()
             if not got.wait(0.8):
                 return None
+            # A successful open is not proof that capture has delivered a
+            # buffer. Let Setup invite speech only after that first callback;
+            # no audio or device detail is passed to the UI.
+            if on_listening is not None:
+                try:
+                    on_listening()
+                except Exception:
+                    # A status notification must not turn a working input into
+                    # a failed check (for example, if Setup was just closed).
+                    pass
             # Return early once a meaningful input level arrives. Otherwise
             # retain the stream briefly so a person has time to speak during
             # the explicit first-run check.
@@ -2454,14 +2467,16 @@ class PresspeechApp:
         # indicator's generation guard prevents a delayed result hide from
         # erasing that newer recording state.
         with self.lock:
-            if outcome == NO_SPEECH_OUTCOME:
+            if outcome in (NO_SPEECH_OUTCOME, NO_TEXT_OUTCOME):
                 self._set_temporary_indicator(
-                    "no_speech", NO_SPEECH_FEEDBACK_SEC)
+                    outcome, NO_SPEECH_FEEDBACK_SEC)
             else:
                 self._set_indicator(None)
             self.transcribing = False
         if outcome == NO_SPEECH_OUTCOME:
             self._notify_no_speech()
+        elif outcome == NO_TEXT_OUTCOME:
+            self._notify_no_text()
 
     def _transcribe_worker_inner(
             self, audio, paste_target=PasteTarget("", 0),
@@ -2541,7 +2556,13 @@ class PresspeechApp:
             self._log("transcription returned empty (model %.3fs)" % model_seconds)
             if timing_summary is not None:
                 self._log(timing_summary)
-            return NO_SPEECH_OUTCOME
+            # Only Silero's explicit zero-speech result supports a no-speech
+            # diagnosis. Parakeet (and a Whisper decoder after retained audio)
+            # can return blank text despite audible speech; do not blame the
+            # microphone or silently treat that as a confirmed VAD rejection.
+            if engine.whisper_vad_rejected(timing):
+                return NO_SPEECH_OUTCOME
+            return NO_TEXT_OUTCOME
         text = self._apply_text(text)
         # Dictation is private: retain performance data without persisting the
         # user's words in the diagnostic log. Whisper's detected-speech duration
@@ -3102,6 +3123,12 @@ class PresspeechApp:
             "No speech detected",
             "Try again and speak after the start cue. If this keeps happening, "
             "run the microphone check in Setup.")
+
+    def _notify_no_text(self):
+        self.notify(
+            "No text recognized",
+            "The local recognizer returned no text. Try again. If this keeps "
+            "happening, check the microphone in Setup or try another model.")
 
     def _show_no_speech_feedback(self):
         self._set_temporary_indicator("no_speech", NO_SPEECH_FEEDBACK_SEC)

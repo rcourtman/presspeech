@@ -875,6 +875,59 @@ class InputSelectionTests(unittest.TestCase):
 
         self.assertAlmostEqual(level, 0.02, places=5)
 
+    def test_setup_probe_invites_speech_only_after_first_audio_buffer(self):
+        stream = mock.Mock()
+        callback = {}
+        ready = mock.Mock()
+
+        def input_stream(**kwargs):
+            callback["audio"] = kwargs["callback"]
+
+            def start():
+                ready.assert_not_called()
+                callback["audio"](
+                    app.np.zeros((80, 1), dtype="float32"),
+                    80, None, None)
+
+            stream.start.side_effect = start
+            return stream
+
+        with mock.patch.object(app.AUDIO_BACKEND, "open_input_stream",
+                               side_effect=input_stream):
+            self.assertEqual(
+                app.PresspeechApp._probe_input_level(
+                    3, 16000, listen_for=0, on_listening=ready),
+                0.0)
+
+        ready.assert_called_once_with()
+        stream.close.assert_called_once_with()
+
+    def test_setup_probe_never_invites_speech_without_audio(self):
+        stream = mock.Mock()
+        ready = mock.Mock()
+        with mock.patch.object(app.AUDIO_BACKEND, "open_input_stream",
+                               return_value=stream):
+            self.assertIsNone(app.PresspeechApp._probe_input_level(
+                3, 16000, listen_for=0, on_listening=ready))
+
+        ready.assert_not_called()
+        stream.close.assert_called_once_with()
+
+    def test_closed_setup_status_callback_cannot_fail_a_working_probe(self):
+        stream = mock.Mock()
+
+        def input_stream(**kwargs):
+            stream.start.side_effect = lambda: kwargs["callback"](
+                app.np.zeros((80, 1), dtype="float32"),
+                80, None, None)
+            return stream
+
+        with mock.patch.object(app.AUDIO_BACKEND, "open_input_stream",
+                               side_effect=input_stream):
+            self.assertEqual(app.PresspeechApp._probe_input_level(
+                3, 16000, listen_for=0,
+                on_listening=mock.Mock(side_effect=RuntimeError("closed"))), 0.0)
+
     def test_setup_check_freshly_probes_without_replacing_cached_input(self):
         instance = self.make_app()
         instance.input_device = (9, 48000)
@@ -895,6 +948,25 @@ class InputSelectionTests(unittest.TestCase):
             ("MME::USB microphone",))
         self.assertIn("probe", instance._find_input_device.call_args.kwargs)
         self.assertEqual(instance.input_device, (9, 48000))
+
+    def test_setup_check_passes_audio_readiness_to_probe(self):
+        instance = self.make_app()
+        ready = mock.Mock()
+
+        def probe_level(_idx, _rate, *, listen_for, on_listening):
+            self.assertEqual(listen_for, app.MICROPHONE_CHECK_LISTEN_SEC)
+            on_listening()
+            return 0.02
+
+        instance._probe_input_level = mock.Mock(side_effect=probe_level)
+        instance._find_input_device = mock.Mock(
+            side_effect=lambda _selected, probe: (1, 16000)
+            if probe(1, 16000) else None)
+
+        self.assertEqual(
+            instance.check_input_device("auto", on_listening=ready),
+            app.MICROPHONE_CHECK_LEVEL)
+        ready.assert_called_once_with()
 
     def test_setup_check_reports_connected_but_silent_input(self):
         instance = self.make_app()
@@ -2708,6 +2780,24 @@ class TextRegressionTests(unittest.TestCase):
         instance.indicator.show_temporary.assert_not_called()
         instance.notify.assert_called_once()
 
+    def test_no_text_feedback_does_not_claim_silence(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"visual_indicator": True}
+        instance.indicator = mock.Mock()
+        instance.notify = mock.Mock()
+
+        instance.lock = threading.Lock()
+        instance.transcribing = True
+        instance._finish_transcribing(app.NO_TEXT_OUTCOME)
+
+        instance.indicator.show_temporary.assert_called_once_with(
+            "no_text", app.NO_SPEECH_FEEDBACK_SEC)
+        instance.notify.assert_called_once_with(
+            "No text recognized",
+            "The local recognizer returned no text. Try again. If this keeps "
+            "happening, check the microphone in Setup or try another model.")
+        self.assertFalse(instance.transcribing)
+
     def test_frozen_autostart_runs_only_the_packaged_executable(self):
         command = app._autostart_command(
             r"C:\Program Files\Presspeech\Presspeech.exe",
@@ -3679,7 +3769,7 @@ class ModelIdleTests(unittest.TestCase):
         instance.notify.assert_called_once()
         self.assertFalse(instance.transcribing)
 
-    def test_empty_recognizer_result_is_classified_as_no_speech(self):
+    def test_whisper_vad_zero_result_is_classified_as_no_speech(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"model": "base.en"}
         instance.transcriber = mock.Mock()
@@ -3696,6 +3786,27 @@ class ModelIdleTests(unittest.TestCase):
             "transcription returned empty" in call.args[0]
             for call in instance._log.call_args_list))
         instance.transcriber.transcribe.assert_called_once_with([])
+
+    def test_blank_decode_without_vad_rejection_is_not_called_no_speech(self):
+        for model, timing in (
+                ("parakeet-tdt-0.6b-v3", {"backend": "parakeet"}),
+                ("base.en", {"backend": "whisper", "speech_seconds": 0.8}),
+                ("base.en", {"backend": "whisper", "speech_seconds": None}),
+        ):
+            with self.subTest(model=model, timing=timing):
+                instance = app.PresspeechApp.__new__(app.PresspeechApp)
+                instance.settings = {"model": model}
+                instance.transcriber = mock.Mock()
+                instance.transcriber.loaded.return_value = True
+                instance.transcriber.transcribe.return_value = ""
+                instance.transcriber.last_timing = timing
+                instance._log = mock.Mock()
+
+                self.assertEqual(
+                    instance._transcribe_worker_inner(mock.sentinel.audio),
+                    app.NO_TEXT_OUTCOME)
+                instance.transcriber.transcribe.assert_called_once_with(
+                    mock.sentinel.audio)
 
     def test_multilingual_model_is_not_forced_to_english(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
