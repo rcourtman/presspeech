@@ -125,12 +125,12 @@ def _cached_model_path(model_name, *, local_only=False, progress_callback=None):
         **options)
 
 
-# Pin the complete Silero boundary policy used for push-to-talk clips. In
-# faster-whisper 1.2.1, passing only vad_filter=True selects a special 160 ms
-# silence split even though VadOptions itself defaults to 2,000 ms. Depending
-# on that implicit override would let a library update silently change which
-# quiet words reach Whisper. These values preserve the reviewed 1.2.1
-# behaviour; change them only alongside real-dictation and silence benchmarks.
+# Pin Presspeech's Silero boundary policy for push-to-talk clips. In the
+# faster-whisper 1.2.1 release, WhisperModel.transcribe (used here) defaults to
+# VadOptions' 2,000 ms silence split when options are omitted; the separate
+# BatchedInferencePipeline defaults to 160 ms. Presspeech explicitly uses
+# 160 ms, not an implicit WhisperModel default. Change this reviewed product
+# policy only alongside real-dictation and silence benchmarks.
 WHISPER_VAD_POLICY = {
     "threshold": 0.5,
     "neg_threshold": 0.35,

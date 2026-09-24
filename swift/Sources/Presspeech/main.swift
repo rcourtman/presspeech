@@ -1805,8 +1805,16 @@ func availableImportantDiskSpaceBytes(containing url: URL) -> Int64? {
     return Int64(capacity)
 }
 
-func speechModelCacheExists(for profile: SpeechModelProfile) -> Bool {
-    FileManager.default.fileExists(atPath: speechModelCacheDirectory(for: profile).path)
+func speechModelCacheIsComplete(at directory: URL) -> Bool {
+    // A partially created cache directory is not a local model. The pinned
+    // FluidAudio downloader checks these same required bundles and vocabulary
+    // before deciding whether to fetch missing files from the network. This
+    // is structural only; SHA-256 validation still runs under the offline gate.
+    AsrModels.modelsExist(at: directory, version: .v3)
+}
+
+func speechModelCacheIsComplete(for profile: SpeechModelProfile) -> Bool {
+    speechModelCacheIsComplete(at: speechModelCacheDirectory(for: profile))
 }
 
 func requiresInitialSpeechModelDownloadChoice(downloadApproved: Bool,
@@ -1814,9 +1822,10 @@ func requiresInitialSpeechModelDownloadChoice(downloadApproved: Bool,
     !downloadApproved && !cacheExists
 }
 
-func initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: Bool,
-                                                  cacheExists: Bool) -> Bool {
-    hadPriorLaunch || cacheExists
+func initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: Bool) -> Bool {
+    // A preinstalled cache permits an offline first load, not an open-ended
+    // permission to fetch again if that cache later becomes incomplete.
+    hadPriorLaunch
 }
 
 func assertSufficientDiskSpaceForSpeechModelDownload(profile: SpeechModelProfile) throws {
@@ -5169,6 +5178,7 @@ actor TranscriptionWorker {
     private var inFlight = false
 
     func load(profile requestedProfile: SpeechModelProfile,
+              allowDownload: Bool,
               progressHandler: ProgressHandler? = nil) async throws {
         let profile = requestedProfile.productionProfile
         if requestedProfile != profile {
@@ -5183,17 +5193,27 @@ actor TranscriptionWorker {
             await unload()
         }
 
-        log("ASR: downloading + verifying + loading \(profile.shortName) CoreML weights…")
+        let loadMode = allowDownload ? "download if needed, verify, and load" : "verify and load cached"
+        log("ASR: \(loadMode) \(profile.shortName) CoreML weights…")
         // Wall-clock adjustments must not skew model-load timing.
         let t0 = ProcessInfo.processInfo.systemUptime
-        engine = .parakeetV3(try await loadParakeetV3(progressHandler: progressHandler))
+        engine = .parakeetV3(try await loadParakeetV3(
+            allowDownload: allowDownload, progressHandler: progressHandler))
         loadedProfile = profile
         ready = true
         log("ASR: \(profile.shortName) ready in \(String(format: "%.2f", ProcessInfo.processInfo.systemUptime - t0)) s")
     }
 
-    private func loadParakeetV3(progressHandler: ProgressHandler?) async throws -> AsrManager {
-        if !speechModelCacheExists(for: .multilingualV3) {
+    private func loadParakeetV3(allowDownload: Bool,
+                                progressHandler: ProgressHandler?) async throws -> AsrManager {
+        // FluidAudio's load path can fetch or re-fetch missing/corrupt files,
+        // including after our startup cache check. Keep every such path offline
+        // until the person explicitly approves the first model download.
+        let wasOffline = ModelHub.offlineMode
+        ModelHub.offlineMode = wasOffline || !allowDownload
+        defer { ModelHub.offlineMode = wasOffline }
+
+        if !speechModelCacheIsComplete(for: .multilingualV3) && allowDownload {
             try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
         }
         var modelDirectory = try await AsrModels.download(version: .v3,
@@ -5201,6 +5221,10 @@ actor TranscriptionWorker {
         do {
             try ModelIntegrity.verifyParakeetV3Model(at: modelDirectory)
         } catch {
+            guard allowDownload && !ModelHub.offlineMode else {
+                log("ASR: cached model failed integrity verification; redownload blocked by offline policy")
+                throw error
+            }
             log("ASR: model integrity check failed; redownloading once: \(privacySafeErrorLogDetail(error))")
             try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
             modelDirectory = try await AsrModels.download(force: true,
@@ -9138,11 +9162,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         migrateLegacyIdentityFilesIfNeeded(settings: settings)
         if !settings.hasSpeechModelDownloadDecision {
             // Keep automatic startup for existing installs. A genuinely new
-            // install with no local model gets a choice before a large transfer.
+            // install without a complete local model gets a choice before a
+            // large transfer.
             let hadPriorLaunch = !settings.lastSeenVersion.isEmpty
             settings.speechModelDownloadApproved = initialSpeechModelDownloadApprovalForLaunch(
-                hadPriorLaunch: hadPriorLaunch,
-                cacheExists: speechModelCacheExists(for: settings.speechModelProfile)
+                hadPriorLaunch: hadPriorLaunch
             )
         }
         if settings.didMigrateLegacyIdentity {
@@ -9423,7 +9447,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let speechModelProfile = settings.speechModelProfile
         if requiresInitialSpeechModelDownloadChoice(
             downloadApproved: settings.speechModelDownloadApproved,
-            cacheExists: speechModelCacheExists(for: speechModelProfile)
+            cacheExists: speechModelCacheIsComplete(for: speechModelProfile)
         ) {
             startupStatusTitle = "Waiting for your speech-model download choice."
             log("startup paused (\(reason)): first speech-model download awaits user choice")
@@ -9448,7 +9472,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             }
 
             do {
-                try await asr.load(profile: speechModelProfile) { [weak self] progress in
+                try await asr.load(profile: speechModelProfile,
+                                   allowDownload: settings.speechModelDownloadApproved) { [weak self] progress in
                     Task { @MainActor in
                         self?.updateSpeechModelStartupProgress(progress)
                     }
@@ -11887,7 +11912,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var initialSpeechModelDownloadChoiceIsRequired: Bool {
         requiresInitialSpeechModelDownloadChoice(
             downloadApproved: settings.speechModelDownloadApproved,
-            cacheExists: speechModelCacheExists(for: settings.speechModelProfile)
+            cacheExists: speechModelCacheIsComplete(for: settings.speechModelProfile)
         )
     }
 
@@ -21212,23 +21237,45 @@ private enum PresspeechSelfTest {
             equals: false,
             "an explicitly approved download should resume on a later launch"
         )
+        let fixtureRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("presspeech-model-consent-\(UUID().uuidString)",
+                                    isDirectory: true)
+        let fixtureCache = fixtureRoot.appendingPathComponent(
+            speechModelCacheDirectory(for: .multilingualV3).lastPathComponent,
+            isDirectory: true)
+        try FileManager.default.createDirectory(at: fixtureCache,
+                                                withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fixtureRoot) }
+        try expect(speechModelCacheIsComplete(at: fixtureCache),
+                   equals: false,
+                   "a directory left by an interrupted download must not bypass consent")
+        for name in ["Preprocessor.mlmodelc", "Encoder.mlmodelc",
+                     "Decoder.mlmodelc", "JointDecisionv3.mlmodelc"] {
+            try FileManager.default.createDirectory(
+                at: fixtureCache.appendingPathComponent(name, isDirectory: true),
+                withIntermediateDirectories: true)
+        }
+        try expect(speechModelCacheIsComplete(at: fixtureCache),
+                   equals: false,
+                   "model bundles without the vocabulary must not bypass consent")
+        let fixtureVocabulary = fixtureCache.appendingPathComponent("parakeet_vocab.json")
+        try Data("[]".utf8).write(to: fixtureVocabulary)
+        try expect(speechModelCacheIsComplete(at: fixtureCache),
+                   equals: true,
+                   "a complete preinstalled model may load without network approval")
+        try FileManager.default.removeItem(at: fixtureVocabulary)
+        try expect(speechModelCacheIsComplete(at: fixtureCache),
+                   equals: false,
+                   "a previously complete cache needs consent after a required file disappears")
         try expect(
-            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: false,
-                                                        cacheExists: false),
+            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: false),
             equals: false,
             "a first install without a cached model should await user approval"
         )
         try expect(
-            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: true,
-                                                        cacheExists: false),
+            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: true),
             equals: true,
             "existing installations should keep their established automatic startup"
-        )
-        try expect(
-            initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: false,
-                                                        cacheExists: true),
-            equals: true,
-            "a preinstalled local model should not prompt for a download"
         )
         try expect(
             productionParakeetASRConfig().melChunkContext,

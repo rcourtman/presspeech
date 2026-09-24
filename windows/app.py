@@ -30,6 +30,7 @@ import soxr
 import sounddevice as sd
 import clipboard_delivery
 import keyboard_delivery
+import session_events
 from paste_target import (
     PasteTarget, focused_child_handle as _focused_child_handle,
     matches as _paste_target_matches, same_window as _paste_target_same_window,
@@ -691,6 +692,11 @@ class PresspeechApp:
         self._hotkey_listener_lock = threading.Lock()
         self._hotkey_status = "not started"
         self._hotkey_status_detail = "Global hotkey has not started"
+        self._session_repair_lock = threading.Lock()
+        self._session_repair_generation = 0
+        self._session_repair_running = False
+        self._session_monitor = None
+        self._session_available = True
         self._exiting = False
         self._mutex_handle = None
         self._activation_event_handle = None
@@ -708,6 +714,7 @@ class PresspeechApp:
         # transaction bookkeeping, a non-blocking enqueue, and suppression;
         # target discovery, logging, UI work, and recording control run here.
         self._hotkey_action_lock = threading.Lock()
+        self._hotkey_repairing = False
         # Listener replacement clears the raw-hook transaction atomically.
         # Keep this separate from _hotkey_action_lock: a slow recording action
         # must never make the time-limited native hook wait behind the worker.
@@ -814,6 +821,19 @@ class PresspeechApp:
         )
         threading.Thread(target=self.icon.run, daemon=True).start()
         hotkey_started = self._start_hotkey_listener()
+        self._session_monitor = session_events.SessionEventMonitor(
+            self._on_windows_session_pause,
+            self._on_windows_session_resume,
+            self._log,
+        )
+        try:
+            self._session_monitor.start()
+        except Exception:
+            # A missing notification channel must not prevent ordinary
+            # dictation; the tray's manual Repair action remains available.
+            self._log("Windows session monitor unavailable")
+            self._session_monitor.stop()
+            self._session_monitor = None
         self._log("running; hotkey=%s trigger=%s" % (self.settings["hotkey"], self.settings["trigger"]))
         with self._model_retry_lock:
             self._queue_model_load_locked(None)
@@ -917,6 +937,9 @@ class PresspeechApp:
 
     def exit_app(self, icon=None, item=None):
         self._exiting = True
+        monitor = getattr(self, "_session_monitor", None)
+        if monitor is not None:
+            monitor.stop()
         self._clear_undelivered_dictations()
         self._restore_playback_after_recording()
         self.indicator.close()
@@ -1076,25 +1099,54 @@ class PresspeechApp:
             # after the worker starts recording, leaving no release to stop it.
             # Menu starts bypass the action lock, so also respect their claimed
             # start transition before replacing the listener.
-            if (getattr(self, "recording", False) or
+            if (getattr(self, "_hotkey_repairing", False) or
+                    getattr(self, "recording", False) or
                     getattr(self, "_starting_recording", False) or
                     getattr(self, "_canceling_recording", False) or
                     getattr(self, "transcribing", False)):
                 return False
+            # Close the gap between the idle check and listener replacement.
+            # The worker drops later actions in this generation; menu starts
+            # also check this flag before claiming a recording transition.
+            self._hotkey_repairing = True
             transaction_lock = getattr(self, "_hotkey_transaction_lock", None)
             with transaction_lock if transaction_lock is not None else nullcontext():
                 self._hotkey_action_generation = (
                     getattr(self, "_hotkey_action_generation", 0) + 1)
             return True
 
+    def _attempt_hotkey_repair(self):
+        """Return ready, busy, or failed without displaying a notification."""
+        if not self._retire_queued_hotkey_actions_for_repair():
+            return "busy"
+        try:
+            return ("ready" if self._start_hotkey_listener(force=True)
+                    else "failed")
+        except Exception:
+            self._hotkey_status = "error"
+            self._hotkey_status_detail = (
+                "Global hotkey needs repair. Choose Repair Global Hotkey.")
+            self._log("global hotkey repair failed")
+            return "failed"
+        finally:
+            action_lock = getattr(self, "_hotkey_action_lock", None)
+            with action_lock if action_lock is not None else nullcontext():
+                self._hotkey_repairing = False
+
     def repair_hotkey(self, icon=None, item=None):
         """Attempt user-requested recovery with a new pynput listener."""
-        if not self._retire_queued_hotkey_actions_for_repair():
+        # A missing resume notification must not leave a returned desktop
+        # permanently unable to dictate. The user can only choose this menu
+        # action from an interactive session.
+        with self.lock:
+            self._session_available = True
+        result = self._attempt_hotkey_repair()
+        if result == "busy":
             self.notify(
                 "Finish the active dictation first",
                 "Stop or cancel dictation, then choose Repair Global Hotkey.")
             return False
-        if self._start_hotkey_listener(force=True):
+        if result == "ready":
             self.notify(
                 "Global hotkey ready",
                 "%s is ready for dictation." % self.settings["hotkey"].title())
@@ -1103,6 +1155,94 @@ class PresspeechApp:
             "Global hotkey still unavailable",
             "Try another key in Settings, or exit and reopen Presspeech.")
         return False
+
+    def _on_windows_session_pause(self):
+        """Discard a held capture if Windows takes the user's desktop away."""
+        if getattr(self, "_exiting", False):
+            return
+        with self.lock:
+            self._session_available = False
+        if self.cancel_recording():
+            self._log("Windows session unavailable; active capture discarded")
+
+    def _on_windows_session_resume(self):
+        """Queue a fresh hook; an alive pynput thread is not proof it survived."""
+        with self._session_repair_lock:
+            if getattr(self, "_exiting", False):
+                return
+            with self.lock:
+                self._session_available = True
+            self._session_repair_generation += 1
+            self._hotkey_status = "starting"
+            self._hotkey_status_detail = "Reconnecting global hotkey…"
+            if self._session_repair_running:
+                return
+            self._session_repair_running = True
+        try:
+            threading.Thread(
+                target=self._repair_hotkey_after_session,
+                name="presspeech-session-hotkey-repair", daemon=True,
+            ).start()
+        except Exception:
+            with self._session_repair_lock:
+                self._session_repair_running = False
+            self._hotkey_status = "error"
+            self._hotkey_status_detail = (
+                "Global hotkey needs repair. Choose Repair Global Hotkey.")
+            self._log("global hotkey session repair could not start")
+
+    def _repair_hotkey_after_session(self):
+        finished = False
+        try:
+            while not getattr(self, "_exiting", False):
+                with self._session_repair_lock:
+                    generation = self._session_repair_generation
+                deadline = time.monotonic() + 60
+                while not getattr(self, "_exiting", False):
+                    result = self._attempt_hotkey_repair()
+                    if result != "busy":
+                        break
+                    if time.monotonic() >= deadline:
+                        self._hotkey_status = "error"
+                        self._hotkey_status_detail = (
+                            "Global hotkey needs repair. Choose Repair Global Hotkey.")
+                        self.notify(
+                            "Global hotkey needs repair",
+                            "Finish dictation, then choose Repair Global Hotkey "
+                            "from the notification-area menu.")
+                        break
+                    time.sleep(0.25)
+                if getattr(self, "_exiting", False):
+                    break
+                if result == "ready":
+                    self._log("global hotkey reconnected after Windows session change")
+                elif result == "failed":
+                    self.notify(
+                        "Global hotkey needs repair",
+                        "Choose Repair Global Hotkey from the notification-area "
+                        "menu, or exit and reopen Presspeech.")
+                with self._session_repair_lock:
+                    if generation == self._session_repair_generation:
+                        self._session_repair_running = False
+                        finished = True
+                        return
+        except Exception:
+            self._hotkey_status = "error"
+            self._hotkey_status_detail = (
+                "Global hotkey needs repair. Choose Repair Global Hotkey.")
+            try:
+                self._log("global hotkey session repair failed")
+                self.notify(
+                    "Global hotkey needs repair",
+                    "Choose Repair Global Hotkey from the notification-area menu.")
+            except Exception:
+                pass
+        finally:
+            # A new event arriving after the success path's atomic generation
+            # check starts its own worker; do not clear that new worker's flag.
+            if not finished:
+                with self._session_repair_lock:
+                    self._session_repair_running = False
 
     def _is_hotkey(self, key):
         return key in KEY_MAP.get(self.settings["hotkey"], set())
@@ -1126,6 +1266,7 @@ class PresspeechApp:
             generation, callback, key = self._hotkey_action_queue.get()
             with self._hotkey_action_lock:
                 if (getattr(self, "_exiting", False) or
+                        getattr(self, "_hotkey_repairing", False) or
                         generation != self._hotkey_action_generation):
                     continue
                 self._perform_hotkey_action(callback, key)
@@ -1449,6 +1590,10 @@ class PresspeechApp:
         # Claim the transition before model and foreground discovery. The
         # Settings window uses this same lock and lifecycle flag when saving.
         with self.lock:
+            if not getattr(self, "_session_available", True):
+                return False
+            if getattr(self, "_hotkey_repairing", False):
+                return False
             if getattr(self, "_update_installing", False):
                 update_installing = True
                 check_running = False
@@ -1502,7 +1647,9 @@ class PresspeechApp:
             # Recheck after foreground-process discovery so simultaneous tray
             # and hotkey starts cannot cross the busy boundary. Cancellation
             # can also begin after the unlocked fast-path check above.
-            if (getattr(self, "_update_installing", False) or self.recording or
+            if (not getattr(self, "_session_available", True) or
+                    getattr(self, "_hotkey_repairing", False) or
+                    getattr(self, "_update_installing", False) or self.recording or
                     getattr(self, "_canceling_recording", False)
                     or getattr(self, "transcribing", False)):
                 return False

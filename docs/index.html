@@ -283,10 +283,11 @@
           <div class="facts">
             <div class="fact"><strong>Benchmarked</strong><span>FluidAudio on the Apple Neural Engine is measured against the prior GPU path on the same WAV clips.</span></div>
             <div class="fact"><strong>Auditable</strong><span>The macOS app is a single Swift source file; the separate Windows implementation is readable Python. Release scripts and packaging metadata are public.</span></div>
-            <div class="fact"><strong>Private by design</strong><span>The full network surface is documented: model download, update check, and user-triggered install/update downloads.</span></div>
+            <div class="fact"><strong>Private by design</strong><span>The <a href="privacy.html#network-calls">version-specific network inventory</a> covers model downloads and bundled-library behavior, optional update checks, and user-triggered support and install links.</span></div>
             <div class="fact"><strong>Delivery is testable</strong><span>The <a href="app-compatibility.html">eight-check target-app protocol</a> distinguishes automatic paste, safe clipboard recovery, and incorrect results without publishing anyone's words.</span></div>
             <div class="fact"><strong>Agent-readable</strong><span>Install instructions, benchmark results, privacy facts, and comparison pages are available as plain HTML, Markdown, JSON, and text.</span></div>
           </div>
+          <div class="note warn"><p><strong>Feedback availability checked 24 September 2026:</strong> <a href="https://github.com/rcourtman/presspeech/issues">GitHub currently restricts new issues</a>. The target-app worksheet can save aggregate results as a local, unmonitored draft; downloading it does not submit a report. Test for your own decision, then check the <a href="https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md">current support route</a> before sharing counts. If no comparable open thread accepts comments, keep the draft private until a suitable route reopens.</p></div>
           <div class="actions">
             <a class="button secondary" href="app-compatibility.html">Test one target app</a>
             <a class="button secondary" href="https://github.com/rcourtman/presspeech/issues?q=is%3Aissue%20in%3Atitle%20%22%5BCompatibility%5D%22">Browse compatibility reports</a>

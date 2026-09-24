@@ -172,12 +172,14 @@ minimum silence split with explicit alternatives without editing product code:
 `--whisper-vad-min-silence-ms` changes only the benchmark's Whisper policy;
 the report records the full effective policy and labels it as a benchmark-only
 override. Omitting it records the unchanged Presspeech product default. The
-option is rejected for non-Whisper models. The 160 ms and 2,000 ms cases match
-the distinct defaults in the pinned faster-whisper 1.2.1 transcription path
-and `VadOptions` ([transcribe.py](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/transcribe.py),
-[vad.py](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/vad.py));
-neither default is evidence that one is better for dictation. Use identical
-reviewed audio, references, model, language, hardware, and run count; include
+option is rejected for non-Whisper models. Presspeech calls
+`WhisperModel.transcribe` with an explicit 160 ms policy; without those
+parameters, that unbatched API uses the 2,000 ms `VadOptions` default in
+faster-whisper 1.2.1. The separate `BatchedInferencePipeline` has a 160 ms
+implicit default ([transcribe.py](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/transcribe.py),
+[vad.py](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/vad.py)).
+Neither upstream default is evidence that one is better for dictation. Use
+identical reviewed audio, references, model, language, hardware, and run count; include
 natural pauses, quiet speech, short commands, and silence controls. Compare WER,
 per-trial errors, VAD-retained duration, rejected-speech trials, boundary-word
 retention, silence false positives, and latency by task group before proposing

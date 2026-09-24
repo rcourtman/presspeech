@@ -481,6 +481,13 @@ thread still appears healthy, then reports whether the new listener started.
 Upcoming 0.1.13 also dispatches ordered press/release actions to a dedicated
 worker so target discovery, recording setup, logging and recovery UI never run
 inside Windows' time-limited low-level keyboard-hook callback.
+In source builds preparing 0.1.13, locking or disconnecting the Windows session
+or suspending the PC discards an active capture without transcribing it. After
+unlocking, reconnecting, or an interactive resume, Presspeech replaces the
+global hotkey listener even if its thread still appears alive; an in-progress
+dictation or cancellation defers replacement until it finishes. If automatic
+reconnection cannot complete, the status and notification point back to
+**Repair Global Hotkey**. This is not part of the published 0.1.12 build.
 Listener failures are also announced and included in privacy-safe diagnostics;
 callback details and pressed keys are not included.
 

@@ -56,6 +56,10 @@ collaborator where noted:
   Confirm each opens the documented fixed destination without app, version,
   diagnostics, or user data in the URL.
 - On the target-app compatibility page, classify all eight worksheet slots.
+  From the homepage's **Test one target app** invitation, confirm the current
+  issue-intake status and the worksheet's local, unmonitored-draft boundary are
+  visible before following the link; do not present a downloaded draft as a
+  submitted or monitored community report.
   Confirm its before-test privacy warning matches the currently published
   builds and links to their version-specific model-download guidance; update
   or retire the warning when those releases change. Do not recruit a fresh
@@ -470,6 +474,19 @@ keyboard access testing in addition to assistive-technology testing.
   default key and, on a layout where Right Alt acts as AltGr, the selected
   alternative key. Record only pass/fail, not dictated content. The model-free
   autorepeat test does not replace this native input check.
+- With the configured hotkey idle, lock and unlock Windows, then dictate into a
+  blank local field without choosing manual Repair. Repeat after sleep/resume
+  with a desktop that does not require unlock, and after disconnect/reconnect
+  of a remote Windows session when available. Confirm the hotkey is again
+  reserved and starts exactly one capture; menu-based Dictate must still work.
+  Lock once while an active harmless Try Dictation recording is held: the
+  capture must be discarded, not transcribed or pasted after unlock, and a
+  fresh press must start a new capture. Repeat with a slow cancellation or
+  transcription in progress; automatic listener replacement must wait for it
+  rather than interrupting delivery. If the automatic path reports failure,
+  verify that **Repair Global Hotkey** restores the listener manually. Record
+  event delivery and recovery separately; mock tests cannot establish either
+  on a packaged Windows build.
 - On the upcoming 0.1.13 candidate, repeat a cold microphone start with cues
   on and off and with a USB or Bluetooth input after reconnect/resume. Confirm
   **Connecting microphone…** appears first; neither the high cue nor

@@ -212,6 +212,13 @@ Confirm the model is ready and check the selected key in Setup or Settings. If
 Right Alt types `@`, `€`, or accented letters, the keyboard uses it as AltGr;
 Presspeech deliberately leaves that chord alone. Choose F8 or another available
 modifier or F-key and retry in **Try Dictation**.
+If the key stops working after lock/unlock or sleep/resume but notification-area
+**Dictate** still works, choose **Repair Global Hotkey** in the menu, Setup, or
+Settings. Published 0.1.12 needs this manual action. Source builds preparing
+0.1.13 attempt to replace the listener automatically after unlock or an
+interactive resume; they discard an active capture when the session locks or
+suspends. If reconnection fails or is deferred too long, use the same manual
+repair action after any dictation has finished.
 
 ### Try Dictation Works But Text Is Not Inserted
 

@@ -1274,6 +1274,7 @@ class HotkeyRegressionTests(unittest.TestCase):
     def make_app(self, hotkey="right alt", trigger="hold"):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"hotkey": hotkey, "trigger": trigger}
+        instance.lock = threading.Lock()
         instance._key_held = False
         instance._pressed_keys = set()
         instance._held_hotkey_keys = frozenset()
@@ -1724,6 +1725,7 @@ class HotkeyListenerLifecycleTests(unittest.TestCase):
     def make_app(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.settings = {"hotkey": "f8", "trigger": "hold"}
+        instance.lock = threading.Lock()
         instance.listener = None
         instance._hotkey_listener_lock = app.threading.Lock()
         instance._hotkey_status = "not started"
@@ -1827,6 +1829,112 @@ class HotkeyListenerLifecycleTests(unittest.TestCase):
         instance.notify.assert_called_once_with(
             "Finish the active dictation first",
             "Stop or cancel dictation, then choose Repair Global Hotkey.")
+
+    def test_repair_prevents_a_tray_start_during_listener_replacement(self):
+        instance = self.make_app()
+        instance._hotkey_action_lock = threading.Lock()
+        instance._hotkey_transaction_lock = threading.Lock()
+        instance._hotkey_action_generation = 1
+        instance.recording = False
+        starts = []
+
+        def replace(*, force):
+            self.assertTrue(force)
+            starts.append(instance.start_recording())
+            return True
+
+        instance._start_hotkey_listener = mock.Mock(side_effect=replace)
+        self.assertEqual(instance._attempt_hotkey_repair(), "ready")
+        self.assertEqual(starts, [False])
+        self.assertFalse(instance._hotkey_repairing)
+
+    def test_lock_discards_capture_and_rejects_a_new_start(self):
+        instance = self.make_app()
+        instance.cancel_recording = mock.Mock(return_value=True)
+
+        instance._on_windows_session_pause()
+
+        self.assertFalse(instance._session_available)
+        instance.cancel_recording.assert_called_once_with()
+        self.assertFalse(instance.start_recording())
+        instance._log.assert_called_once_with(
+            "Windows session unavailable; active capture discarded")
+
+    def test_pause_during_start_rejects_late_recording_claim(self):
+        instance = self.make_app()
+        instance.recording = False
+        instance.cancel_recording = mock.Mock(return_value=False)
+        instance.has_undelivered_dictation = mock.Mock(return_value=False)
+        instance._dictation_model_ready = mock.Mock(return_value=True)
+        instance._on_windows_session_pause()
+
+        with mock.patch.object(app, "_foreground_paste_target"):
+            self.assertFalse(instance._start_recording_claimed())
+        self.assertFalse(instance.recording)
+
+    def test_unlock_replaces_even_an_apparently_ready_hook_without_toast(self):
+        instance = self.make_app()
+        instance._session_repair_lock = threading.Lock()
+        instance._session_repair_generation = 0
+        instance._session_repair_running = False
+        instance._session_available = False
+        instance._hotkey_status = "ready"
+        instance._attempt_hotkey_repair = mock.Mock(return_value="ready")
+
+        with mock.patch.object(app.threading, "Thread") as thread:
+            instance._on_windows_session_resume()
+        thread.return_value.start.assert_called_once_with()
+        self.assertEqual(instance.hotkey_listener_status()[0], "starting")
+        self.assertTrue(instance._session_available)
+
+        instance._repair_hotkey_after_session()
+
+        instance._attempt_hotkey_repair.assert_called_once_with()
+        self.assertFalse(instance._session_repair_running)
+        instance.notify.assert_not_called()
+        instance._log.assert_called_once_with(
+            "global hotkey reconnected after Windows session change")
+
+    def test_resume_waits_for_cleanup_and_rechecks_newer_session_event(self):
+        instance = self.make_app()
+        instance._session_repair_lock = threading.Lock()
+        instance._session_repair_generation = 0
+        instance._session_repair_running = False
+        outcomes = iter(("busy", "ready", "ready"))
+
+        def attempt():
+            outcome = next(outcomes)
+            if outcome == "ready" and instance._session_repair_generation == 1:
+                instance._on_windows_session_resume()
+            return outcome
+
+        instance._attempt_hotkey_repair = mock.Mock(side_effect=attempt)
+        with mock.patch.object(app.threading, "Thread"), \
+                mock.patch.object(app.time, "sleep") as sleep:
+            instance._on_windows_session_resume()
+            instance._repair_hotkey_after_session()
+
+        self.assertEqual(instance._attempt_hotkey_repair.call_count, 3)
+        sleep.assert_called_once_with(0.25)
+        self.assertFalse(instance._session_repair_running)
+        instance.notify.assert_not_called()
+
+    def test_session_repair_timeout_exposes_manual_fallback(self):
+        instance = self.make_app()
+        instance._session_repair_lock = threading.Lock()
+        instance._session_repair_generation = 1
+        instance._session_repair_running = True
+        instance._attempt_hotkey_repair = mock.Mock(return_value="busy")
+
+        with mock.patch.object(app.time, "monotonic", side_effect=(0, 61)):
+            instance._repair_hotkey_after_session()
+
+        self.assertEqual(instance.hotkey_listener_status()[0], "error")
+        self.assertFalse(instance._session_repair_running)
+        instance.notify.assert_called_once_with(
+            "Global hotkey needs repair",
+            "Finish dictation, then choose Repair Global Hotkey "
+            "from the notification-area menu.")
 
 
 class AudioResamplingTests(unittest.TestCase):
