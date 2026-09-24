@@ -50,7 +50,7 @@ services represented by that row and asks macOS again.
 **In the 0.3.8 download:** An Accessibility row that appears granted does not separately
 verify permission to post the paste shortcut. Do not treat that row as proof
 that text reached the target; inspect the field and follow the paste recovery
-steps below if delivery fails. **Upcoming 0.3.9 (not in 0.3.8):** The row checks
+steps below if delivery fails. **From 0.3.9 (not in 0.3.8):** The row checks
 both focused-window access and keyboard-event posting, and **Copy Diagnostics**
 reports those checks separately. Check [GitHub Releases](https://github.com/rcourtman/presspeech/releases)
 before relying on that change.
@@ -93,7 +93,7 @@ granted in Setup Checklist, click the destination text
 field, then dictate without changing apps before transcription finishes. In the
 0.3.8 download, Setup does not separately check keyboard-event posting, so an
 Accessibility row that appears granted does not prove the paste shortcut was accepted.
-If the row itself says Missing, use **Try Again**. Upcoming 0.3.9 (not in 0.3.8)
+If the row itself says Missing, use **Try Again**. From 0.3.9 (not in 0.3.8), Presspeech
 keeps the row Missing if either focused-window access or keyboard-event posting
 is unavailable, even when System Settings shows Presspeech enabled; its
 diagnostics identify both checks. If the HUD or menu says

@@ -14,14 +14,16 @@
 recognition runs entirely on your computer. Free, open source, no account, no
 subscription, no cloud transcription.
 
-> **Before opening the published builds (macOS 0.3.8 / Windows 0.1.12):** a
-> missing speech-model download starts on launch. macOS 0.3.8 may include an
-> inherited Hugging Face token in that request; Windows 0.1.12 may send Hugging
-> Face usage telemetry or an available token, including to a custom download
-> route. Audio and transcripts are never sent. If you are unsure, install but
-> leave the app unopened (on Windows, clear the installer's final **Launch
-> Presspeech** option, which starts checked) and read the [macOS](https://rcourtman.github.io/presspeech/install.html#model-download-privacy)
-> or [Windows](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy) launch decision first.
+> **Before opening the published builds (macOS 0.3.8 or 0.3.9 / Windows 0.1.12):**
+> on macOS 0.3.8 and Windows 0.1.12, a missing speech-model download starts on
+> launch; macOS 0.3.9 asks first on a clean install. macOS 0.3.8 may include an
+> inherited Hugging Face token in that request (0.3.9 does not); Windows 0.1.12
+> may send Hugging Face usage telemetry or an available token, including to a
+> custom download route. Audio and transcripts are never sent. If you are
+> unsure, install but leave the app unopened (on Windows, clear the installer's
+> final **Launch Presspeech** option, which starts checked) and read the
+> [macOS](https://rcourtman.github.io/presspeech/install.html#model-download-privacy) or
+> [Windows](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy) launch decision first.
 
 **Start here:** [first dictation guide](https://rcourtman.github.io/presspeech/getting-started.html) ·
 [macOS install](https://rcourtman.github.io/presspeech/install.html) ·
@@ -74,7 +76,7 @@ an unreleased candidate.
 ```text
 Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
-Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. Upcoming 0.3.9 removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. From 0.3.9, Presspeech removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Before downloading or installing, run these read-only compatibility checks:
   uname -m

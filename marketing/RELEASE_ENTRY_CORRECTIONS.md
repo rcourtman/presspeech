@@ -19,8 +19,8 @@ release maintainer must correct the live notes; editing a tracked notes file or
 this draft does not do so. Do not edit the published Windows notes file alone:
 the Windows release-state validator compares it with the live release body.
 After a live correction, reconcile the tracked notes and verify the rendered
-page from a signed-out browser. Do not imply the upcoming 0.3.9 or 0.1.13
-controls are present in these downloads.
+page from a signed-out browser. Do not imply the 0.3.9 or upcoming 0.1.13
+controls are present in the 0.3.8 and 0.1.12 downloads.
 
 The tracked `swift/release-notes/v0.3.8.md` and
 `windows/release-notes/0.1.12.md` now include candidate first-use notices for
@@ -56,7 +56,7 @@ public entries remain uncorrected.
 > credentials, then ignore it and make a model request without the proxy you
 > expected. If you depend on an inherited proxy and are unsure its URL is
 > valid, leave 0.3.8 unopened. Do not share proxy URLs or log excerpts
-> containing them. Upcoming 0.3.9 refuses malformed proxy settings before
+> containing them. From 0.3.9, Presspeech refuses malformed proxy settings before
 > model loading.
 > Dictation audio and transcripts are not sent in model downloads. See the
 > [version-specific privacy guide](https://rcourtman.github.io/presspeech/privacy.html#network-calls)

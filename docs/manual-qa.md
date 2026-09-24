@@ -1397,7 +1397,7 @@ item after the development-wrapper launch check.
   observed timing and result, not dictated words or window titles. An ordinary
   switch before delivery tests the earlier guard, not this narrow interval;
   mark the late-focus case **Not run** if its timing cannot be established.
-- In each focus-change case on a 0.3.9 candidate, confirm the HUD says
+- In each focus-change case on 0.3.9 or later, confirm the HUD says
   **Copied — ⌘V if unchanged**, the menu says **Transcript copied — ⌘V if
   clipboard unchanged** after the HUD closes, and copying the last transcript
   clears the notice. Published 0.3.8 uses **Copied — press ⌘V to paste**.
@@ -1411,7 +1411,7 @@ item after the development-wrapper launch check.
 - Stop a long harmless dictation and revoke Input Monitoring while it is still
   transcribing. Confirm Presspeech does not paste into System Settings or any
   other newly focused window, leaves the complete transcript on the clipboard,
-  shows **Copied — ⌘V if unchanged** on a 0.3.9 candidate (published 0.3.8
+  shows **Copied — ⌘V if unchanged** on 0.3.9 or later (published 0.3.8
   says **Copied — press ⌘V to paste**), and returns to the missing-permission
   setup state. Regrant the permission and confirm a fresh dictation can paste
   automatically; the interrupted dictation must never paste later.
@@ -1455,7 +1455,7 @@ item after the development-wrapper launch check.
   during focused-window query` means window-server focus changed during the
   bounded lookup. Other categories must be retained verbatim for triage.
   When the target was unavailable at recording start, confirm the HUD says
-  **Unverified — ⌘V if unchanged** on a 0.3.9 candidate, the menu keeps **Can’t
+  **Unverified — ⌘V if unchanged** on 0.3.9 or later, the menu keeps **Can’t
   verify window — ⌘V if clipboard unchanged**, and VoiceOver explains that the
   window could not be verified and the transcript was copied for manual paste
   only while the clipboard is unchanged. Published 0.3.8 says **Can’t verify

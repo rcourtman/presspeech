@@ -6,7 +6,7 @@
   "network_calls": [
     {
       "name": "macos_first_launch_model_download",
-      "when": "macOS 0.3.8 starts its first model download on launch. In upcoming macOS 0.3.9 (not yet published), a clean install without a complete model cache must choose Download Model in Setup; choosing Set Up Later defers the transfer. A complete preinstalled cache can load offline without granting future download permission; an incomplete cache needs the choice. Existing installs keep automatic startup. An integrity failure may redownload automatically only when download permission is already recorded; otherwise a clean install must reset the cache and choose Download Model first",
+      "when": "macOS 0.3.8 starts its first model download on launch. In macOS 0.3.9 and later, a clean install without a complete model cache must choose Download Model in Setup; choosing Set Up Later defers the transfer. A complete preinstalled cache can load offline without granting future download permission; an incomplete cache needs the choice. Existing installs keep automatic startup. An integrity failure may redownload automatically only when download permission is already recorded; otherwise a clean install must reset the cache and choose Download Model first",
       "destination": [
         "huggingface.co and its subdomains",
         "Hugging Face model-storage and CDN hosts under hf.co",
@@ -39,7 +39,7 @@
           ]
         }
       ],
-      "data_sent": "Standard HTTPS request metadata; no dictation audio. macOS 0.3.8 can attach an inherited HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN as an Authorization header. Upcoming 0.3.9 removes those credentials from its own process before FluidAudio can read them, so its public model download carries no account credential; this does not alter the user's shell or token store. Both versions use the pinned FluidAudio client, which honors inherited lowercase https_proxy and http_proxy settings. A tunnelling proxy sees connection metadata but not request headers; a TLS-inspecting HTTPS proxy trusted by macOS could read any token sent by published 0.3.8. Upcoming 0.3.9 still honors proxy settings but removes inherited account-token authentication"
+      "data_sent": "Standard HTTPS request metadata; no dictation audio. macOS 0.3.8 can attach an inherited HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN as an Authorization header. From 0.3.9, Presspeech removes those credentials from its own process before FluidAudio can read them, so its public model download carries no account credential; this does not alter the user's shell or token store. Both versions use the pinned FluidAudio client, which honors inherited lowercase https_proxy and http_proxy settings. A tunnelling proxy sees connection metadata but not request headers; a TLS-inspecting HTTPS proxy trusted by macOS could read any token sent by published 0.3.8. From 0.3.9, Presspeech still honors proxy settings but removes inherited account-token authentication"
     },
     {
       "name": "windows_first_launch_model_download",

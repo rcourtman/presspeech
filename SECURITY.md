@@ -48,7 +48,7 @@ macOS could read any 0.3.8 token it receives. If a 0.3.8 model download ran
 with a token available and an untrusted TLS-inspecting proxy could read the
 request, treat that token as disclosed to the proxy: revoke it and create a
 replacement at [Hugging Face Access Tokens](https://huggingface.co/settings/token).
-Upcoming macOS 0.3.9 removes inherited account-token authentication before
+From macOS 0.3.9, Presspeech removes inherited account-token authentication before
 model loading, but still honors proxy settings. A working local model cache
 does not need a planned re-download; see the
 [macOS after-use guidance](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).
@@ -204,8 +204,8 @@ What that means for trust:
   injected value before relaunching.
 - FluidAudio also reads `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, and
   `HUGGINGFACEHUB_API_TOKEN` and would attach an inherited credential to
-  public model requests. Presspeech has no authenticated model path. The
-  macOS 0.3.9 candidate removes those variables from its own process before
+  public model requests. Presspeech has no authenticated model path. From
+  macOS 0.3.9, Presspeech removes those variables from its own process before
   Foundation or FluidAudio can capture the launch environment; this does not
   change the user's shell, token store, or other processes. It logs variable
   names only, never credential values, and fails closed if a variable cannot
