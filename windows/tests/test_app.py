@@ -2256,6 +2256,8 @@ class TextRegressionTests(unittest.TestCase):
         self.assertEqual(app._paste_route("mstsc.exe"), "rdp")
         self.assertEqual(app._paste_route("msrdc.exe"), "rdp")
         self.assertEqual(app._paste_route("notepad.exe"), "local")
+        self.assertIsNone(app._paste_route(""))
+        self.assertIsNone(app._paste_route(None))
 
     def test_recording_remembers_foreground_paste_target(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -5299,6 +5301,38 @@ class ForegroundPasteTargetTests(unittest.TestCase):
             user32, 100, 77, read_caption=True)
         kernel32.CloseHandle.assert_called_once_with(88)
 
+    def test_unreadable_process_image_does_not_invent_a_local_route(self):
+        from ctypes import wintypes
+
+        user32 = mock.Mock()
+        kernel32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 100
+
+        def window_thread(_hwnd, pointer):
+            ctypes.cast(pointer, ctypes.POINTER(wintypes.DWORD)).contents.value = 41
+            return 77
+
+        user32.GetWindowThreadProcessId.side_effect = window_thread
+        kernel32.OpenProcess.return_value = 88
+        kernel32.QueryFullProcessImageNameW.return_value = 0
+
+        def library(name, **_kwargs):
+            return {"user32": user32, "kernel32": kernel32}[name]
+
+        with mock.patch.object(app.ctypes, "WinDLL", side_effect=library,
+                               create=True), \
+                mock.patch.object(app.os, "getpid", return_value=123), \
+                mock.patch.object(app, "_stable_focus_and_caption",
+                                  return_value=(101, b"private-fingerprint")), \
+                mock.patch.object(app, "_process_integrity_level",
+                                  return_value=0x2000):
+            target = app._foreground_paste_target()
+
+        self.assertEqual(target, app.PasteTarget(
+            "", 100, 41, 0x2000, 101, b"private-fingerprint"))
+        self.assertIsNone(app._paste_route(target.process_name))
+        kernel32.CloseHandle.assert_called_once_with(88)
+
 
 class DeliveryRecoveryTests(unittest.TestCase):
     """Delivery control-flow tests; never touch the clipboard or inject input."""
@@ -5376,6 +5410,23 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.instance.open_delivery_recovery.assert_called_once_with()
         self.copy.assert_not_called()
         self.controller.assert_not_called()
+
+    def test_unreadable_target_process_retains_before_clipboard_write(self):
+        # The HWND, PID, focused child and integrity can all be valid while
+        # QueryFullProcessImageNameW fails. Never assume a local Ctrl+V route.
+        self.target = app.PasteTarget("", 1234, 41, 0x2000, 101)
+        self.foreground.return_value = self.target
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.foreground.assert_called_once_with()
+        self.blocked.assert_called_once_with(self.target)
+        self.assert_retained_without_content_logs()
+        self.assertIn("paste method could not be determined",
+                      str(self.instance.notify.mock_calls))
+        self.instance.open_delivery_recovery.assert_called_once_with()
 
     def test_clipboard_failure_retains_text_and_never_constructs_keyboard(self):
         self.copy.side_effect = RuntimeError("private clipboard detail")

@@ -575,8 +575,11 @@ def _paste_target_blocks_simulated_input(paste_target, source_integrity=None):
 
 
 def _paste_route(process_name):
-    """Choose a paste method for the application receiving the transcript."""
-    name = (process_name or "").lower()
+    """Choose a paste method, or None when the app image is unavailable."""
+    # A window/PID match cannot distinguish local, RDP, or Moonlight input.
+    if not isinstance(process_name, str) or not process_name:
+        return None
+    name = process_name.lower()
     if name in MOONLIGHT_PROCESSES:
         return "moonlight"
     if name in RDP_PROCESSES:
@@ -3001,6 +3004,9 @@ class PresspeechApp:
                 "clipboard item may have changed. "),
             "clipboard-changed": "The clipboard changed; no paste shortcut was sent. ",
             "target-unavailable": "The original input window could not be identified. ",
+            "route-unavailable": (
+                "The original app's paste method could not be determined; "
+                "no paste shortcut was sent. "),
             "focus-changed": (
                 "The original window or focused control could not be "
                 "verified, or the window title changed; no paste shortcut "
@@ -3146,6 +3152,12 @@ class PresspeechApp:
         if _paste_target_blocks_simulated_input(paste_target):
             self._remember_undelivered_dictation(text, "input-integrity-boundary")
             return False
+        route = _paste_route(paste_target.process_name)
+        if route is None:
+            # The image query can fail despite readable HWND, PID and integrity.
+            # Do not replace the clipboard or guess the local paste route.
+            self._remember_undelivered_dictation(text, "route-unavailable")
+            return False
         # A newline is executable input in many shells. The default space
         # suffix is no guarantee: the recognizer, dictionary, or a selected
         # newline suffix can all put a line break in the final transcript.
@@ -3171,8 +3183,6 @@ class PresspeechApp:
         if not clipboard_delivery.is_current(receipt):
             self._remember_undelivered_dictation(text, "clipboard-changed")
             return False
-        process_name = paste_target.process_name
-        route = _paste_route(process_name)
         time.sleep(RDP_PASTE_DELAY_SEC if route == "rdp" else PASTE_DELAY_SEC)
         if not clipboard_delivery.is_current(receipt):
             self._remember_undelivered_dictation(text, "clipboard-changed")

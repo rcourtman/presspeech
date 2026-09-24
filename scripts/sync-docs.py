@@ -1926,12 +1926,17 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         text,
         r"<p>(?:Click each warning row in the menu|Use the Grant buttons in Setup Checklist|"
         r"Use the context-specific <strong>Continue</strong>, <strong>Open Settings</strong>, "
-        r"or <strong>Try Again</strong> actions in Setup Checklist)\..*?</p>",
-        "<p>Use the context-specific <strong>Continue</strong>, "
-        "<strong>Open Settings</strong>, or <strong>Try Again</strong> actions in "
-        "Setup Checklist. The main menu also shows clickable permission rows "
-        "while anything is missing, so setup can continue even after the "
-        "checklist window is closed.</p>",
+        r"or <strong>Try Again</strong> actions in Setup Checklist|"
+        r"In the 0\.3\.8 download, follow the permission controls shown in Setup Checklist)\..*?</p>",
+        "<p>In the 0.3.8 download, follow the permission controls shown in Setup Checklist. "
+        "If a row remains Missing, choose <strong>Try Again</strong>; an Accessibility "
+        "row that appears granted does not separately verify keyboard-event posting. "
+        "Upcoming 0.3.9 (not in "
+        "0.3.8) labels the first microphone prompt <strong>Continue</strong> and an "
+        "earlier denial <strong>Open Settings</strong>, and checks both focused-window "
+        "access and keyboard-event posting before reporting Accessibility granted. "
+        "The main menu also shows clickable permission rows while anything is missing, "
+        "so setup can continue even after the checklist window is closed.</p>",
         path=path,
     )
     if "<strong>Grant the three permissions</strong>" in text:
@@ -3850,6 +3855,59 @@ def check_model_recovery_privacy_order(
                     f"{action!r} in {start_marker!r}; missing or late "
                     + ", ".join(repr(phrase) for phrase in missing_or_late)
                 )
+    return errors
+
+
+def check_macos_permission_recovery_scope(
+    install_path: Path = DOCS / "install.html",
+    html_path: Path = DOCS / "troubleshooting.html",
+    markdown_path: Path = DOCS / "troubleshooting.md",
+) -> list[str]:
+    """Do not attribute 0.3.9's two-part permission check to 0.3.8."""
+    sections = (
+        (install_path, '<section id="permissions">', '</section>',
+         ("accessibility row that appears granted does not separately verify keyboard-event posting",),
+         ("first microphone prompt continue", "checks both focused-window access and keyboard-event posting")),
+        (html_path, 'id="macos-permissions"', '</article>',
+         ("accessibility row that appears granted does not separately verify permission to post the paste shortcut",),
+         ("row checks both focused-window access and keyboard-event posting", "copy diagnostics reports those checks separately")),
+        (html_path, 'id="macos-paste"', '</article>',
+         ("setup does not separately check keyboard-event posting", "appears granted does not prove the paste shortcut was accepted"),
+         ("keeps the row missing if either focused-window access or keyboard-event posting is unavailable",)),
+        (markdown_path, '### Permission Is Missing Or Will Not Appear', '\n### ',
+         ("accessibility row that appears granted does not separately verify permission to post the paste shortcut",),
+         ("row checks both focused-window access and keyboard-event posting", "copy diagnostics reports those checks separately")),
+        (markdown_path, '### Try Dictation Works But Text Is Not Inserted', '\n### ',
+         ("setup does not separately check keyboard-event posting", "appears granted does not prove the paste shortcut was accepted"),
+         ("keeps the row missing if either focused-window access or keyboard-event posting is unavailable",)),
+    )
+    errors: list[str] = []
+    for path, start_marker, end_marker, current_required, future_required in sections:
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing macOS permission recovery guidance")
+            continue
+        raw = read_text(path)
+        start = raw.find(start_marker)
+        end = raw.find(end_marker, start + len(start_marker)) if start >= 0 else -1
+        if start < 0 or end < 0:
+            errors.append(f"{display}: missing macOS permission section {start_marker!r}")
+            continue
+        visible = " ".join(html.unescape(re.sub(r"<[^>]+>|[*_`]", "", raw[start:end])).split()).casefold()
+        current = visible.find("in the 0.3.8 download")
+        future = visible.find("upcoming 0.3.9 (not in 0.3.8)")
+        if current < 0 or future <= current:
+            errors.append(f"{display}: {start_marker!r} must distinguish 0.3.8 from upcoming 0.3.9")
+            continue
+        current_copy = visible[current:future]
+        future_copy = visible[future:]
+        missing_current = [phrase for phrase in current_required if phrase not in current_copy]
+        missing_future = [phrase for phrase in future_required if phrase not in future_copy]
+        if missing_current or missing_future:
+            errors.append(
+                f"{display}: {start_marker!r} mis-scopes macOS permission behavior; "
+                f"missing 0.3.8 {missing_current!r}, upcoming 0.3.9 {missing_future!r}"
+            )
     return errors
 
 
@@ -6714,6 +6772,47 @@ def run_self_test() -> None:
         if not check_model_recovery_privacy_order(recovery_html, recovery_markdown):
             raise SyncError("self-test: unconditional Windows model retry was accepted")
 
+        permission_install = Path(tmp) / "install-permissions.html"
+        permission_html = Path(tmp) / "permission-troubleshooting.html"
+        permission_markdown = Path(tmp) / "permission-troubleshooting.md"
+        safe_permission_install = read_text(DOCS / "install.html")
+        for path, contents in (
+            (permission_install, safe_permission_install),
+            (permission_html, safe_recovery_html),
+            (permission_markdown, safe_recovery_markdown),
+        ):
+            path.write_text(contents, encoding="utf-8")
+        def permission_scope_errors() -> list[str]:
+            return check_macos_permission_recovery_scope(
+                permission_install, permission_html, permission_markdown
+            )
+        if permission_scope_errors():
+            raise SyncError("self-test: version-scoped Mac permission guidance was rejected")
+        for path, contents, phrase in (
+            (permission_install, safe_permission_install,
+             "row that appears granted does not separately verify keyboard-event posting"),
+            (permission_html, safe_recovery_html,
+             "row that appears granted does not separately"),
+            (permission_html, safe_recovery_html,
+             "Setup does not separately check keyboard-event posting"),
+            (permission_markdown, safe_recovery_markdown,
+             "row that appears granted does not separately"),
+            (permission_markdown, safe_recovery_markdown,
+             "Setup does not separately check keyboard-event posting"),
+        ):
+            if phrase not in contents:
+                raise SyncError(f"self-test: missing Mac permission mutation target {phrase!r}")
+            path.write_text(contents.replace(phrase, phrase.replace("does not", "does"), 1), encoding="utf-8")
+            if not permission_scope_errors():
+                raise SyncError(f"self-test: unscoped Mac permission claim was accepted: {phrase!r}")
+            path.write_text(contents, encoding="utf-8")
+        permission_html.write_text(
+            safe_recovery_html.replace("Upcoming 0.3.9 (not in 0.3.8):", "In 0.3.8:", 1),
+            encoding="utf-8",
+        )
+        if not permission_scope_errors():
+            raise SyncError("self-test: future Mac permission control presented as released was accepted")
+
         windows_agent_prompt = Path(tmp) / "agents.md"
         agent_warning = (
             "Before installing or launching published Windows 0.1.12, disclose "
@@ -7340,6 +7439,7 @@ def main() -> int:
             errors.extend(check_getting_started_preflight_order())
             errors.extend(check_getting_started_entry_links())
             errors.extend(check_model_recovery_privacy_order())
+            errors.extend(check_macos_permission_recovery_scope())
             errors.extend(check_getting_started_scratchpad_privacy_order())
             errors.extend(check_scratchpad_privacy_claims())
             errors.extend(check_windows_agent_install_privacy_order())
@@ -7413,6 +7513,7 @@ def main() -> int:
         errors.extend(check_getting_started_preflight_order())
         errors.extend(check_getting_started_entry_links())
         errors.extend(check_model_recovery_privacy_order())
+        errors.extend(check_macos_permission_recovery_scope())
         errors.extend(check_getting_started_scratchpad_privacy_order())
         errors.extend(check_scratchpad_privacy_claims())
         errors.extend(check_windows_agent_install_privacy_order())

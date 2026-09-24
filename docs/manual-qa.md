@@ -1797,6 +1797,13 @@ clipboard.
   preflight may still leave transcript text on the current clipboard; inspect
   the field before deciding to Copy or Discard. Record only pass/fail, not the
   raw log or clipboard content.
+- In a controlled candidate build, make `QueryFullProcessImageNameW` fail for
+  the original window while its HWND, PID, focused control, and integrity level
+  remain readable. Repeat for an ordinary editor, RDP client, and Moonlight
+  client. Presspeech must keep the prior clipboard item, send no paste shortcut,
+  and retain the complete dictation for Delivery Recovery rather than assuming
+  the ordinary local route. Do not count a process-name lookup failure as a
+  successful remote insertion.
 - Force `GetGUIThreadInfo` to fail at both capture and delivery for the same
   top-level window, then repeat with failure only after the clipboard write.
   Neither case may send the paste shortcut. The pre-write case must preserve

@@ -270,6 +270,9 @@ focused, or elevated, or cannot verify either app's input integrity level,
 it also leaves the previous clipboard item unchanged and waits for an explicit
 recovery choice. A change after that check may still
 leave the dictated text on the current clipboard.
+If Windows identifies the window but does not provide its executable name,
+Presspeech likewise keeps the previous clipboard item: it cannot safely choose
+between local Ctrl+V, RDP, and Moonlight delivery without knowing the app.
 If the original focused window or Win32 control cannot be verified just after
 the paste shortcut is submitted, Presspeech also opens Delivery Recovery even
 when Windows accepted the shortcut. The text may already be in the original

@@ -45,11 +45,15 @@ Access**, and Presspeech uses that current name in Setup Checklist. Open
 **Support -> Setup Checklist...** and choose the affected row. If the grant
 still does not appear, quit and reopen the copy in Applications, return to Setup
 Checklist, and choose **Try Again**. Presspeech resets only the TCC service or
-services represented by that row and asks macOS again. The Accessibility /
-Device Control and Data Access row checks both focused-window access and
-permission to send the paste shortcut; **Copy Diagnostics** reports those two
-checks separately when the visible System Settings toggle and actual keyboard
-delivery disagree.
+services represented by that row and asks macOS again.
+
+**In the 0.3.8 download:** An Accessibility row that appears granted does not separately
+verify permission to post the paste shortcut. Do not treat that row as proof
+that text reached the target; inspect the field and follow the paste recovery
+steps below if delivery fails. **Upcoming 0.3.9 (not in 0.3.8):** The row checks
+both focused-window access and keyboard-event posting, and **Copy Diagnostics**
+reports those checks separately. Check [GitHub Releases](https://github.com/rcourtman/presspeech/releases)
+before relying on that change.
 
 ### Speech Model Fails To Load
 
@@ -86,10 +90,13 @@ reset a working cache.
 
 Confirm Accessibility (Device Control and Data Access on macOS 27 and later) is
 granted in Setup Checklist, click the destination text
-field, then dictate without changing apps before transcription finishes. The
-row remains Missing if either focused-window access or keyboard-event posting
-is unavailable, even when System Settings already shows Presspeech enabled; use
-**Try Again** in that case. If the HUD or menu says
+field, then dictate without changing apps before transcription finishes. In the
+0.3.8 download, Setup does not separately check keyboard-event posting, so an
+Accessibility row that appears granted does not prove the paste shortcut was accepted.
+If the row itself says Missing, use **Try Again**. Upcoming 0.3.9 (not in 0.3.8)
+keeps the row Missing if either focused-window access or keyboard-event posting
+is unavailable, even when System Settings shows Presspeech enabled; its
+diagnostics identify both checks. If the HUD or menu says
 **Copied — press Command-V to paste** in published 0.3.8, Presspeech copied the
 finished transcript when dictation completed. In builds with a separate
 starting-window warning, **Can’t verify window — use Command-V** means it could
@@ -303,6 +310,8 @@ shortcut error does not prove that nothing was pasted.
 If the original target is already missing, unfocused, or elevated before
 delivery, or Windows cannot verify either app's input integrity level,
 Presspeech retains the dictation without replacing the prior clipboard item.
+It does the same when Windows cannot provide the target app's executable name:
+without that name it cannot choose safely between local and remote paste routes.
 A later change can still leave the dictated text on the current clipboard.
 
 The **Delivery Recovery** window opens without showing or copying the dictated
