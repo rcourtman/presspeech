@@ -3248,20 +3248,23 @@ def check_model_recovery_privacy_order(
             (
                 ('id="start-here"', "</section>", "Reopen Presspeech's controls", (
                     "Check before model recovery", "reopening a published build with a missing model",
+                    "If you choose to wait with a missing or damaged model, do not reopen",
                     "Model requests do not include dictation audio or transcripts",
                 )),
-                ('id="macos-model"', "</article>", "Check the connection and retry first", (
+                ('id="macos-model"', "</article>", "check the connection before retrying", (
                     "Before reopening, retrying, or resetting macOS 0.3.8",
                     "another download may include a Hugging Face token inherited by Presspeech",
                     "do not start another download", "macOS 0.3.9 is published and installed",
                     "privacy.html#macos-0-3-8-after-use",
+                    "If you choose to make another model request after reading the warning above",
                 )),
-                ('id="windows-model"', "</article>", "Keep Setup open and wait", (
+                ('id="windows-model"', "</article>", "Retry Speech Model", (
                     "Before reopening, retrying, or selecting an uncached model in Windows 0.1.12",
                     "usage telemetry", "already-configured or saved token",
                     "custom routing can change its destination", "TLS-inspecting HTTPS proxy",
                     "do not start another download", "Windows 0.1.13 is published and installed",
                     "windows.html#model-download-privacy",
+                    "If you choose to make another model request after reading the warning above",
                 )),
             ),
         ),
@@ -3270,20 +3273,23 @@ def check_model_recovery_privacy_order(
             (
                 ("## Start Here", "\n## ", "Reopen Presspeech's controls", (
                     "Check before model recovery", "Reopening a published build with a missing model",
+                    "If you choose to wait with a missing or damaged model, do not reopen",
                     "Model requests do not include dictation audio or transcripts",
                 )),
-                ("### Speech Model Fails To Load", "\n### ", "Check the connection and retry first", (
+                ("### Speech Model Fails To Load", "\n### ", "check the connection before retrying", (
                     "Before reopening, retrying, or resetting macOS 0.3.8",
                     "Another download may include a Hugging Face token inherited by Presspeech",
                     "do not start another download", "macOS 0.3.9 is published and installed",
                     "privacy.html#macos-0-3-8-after-use",
+                    "If you choose to make another model request after reading the warning above",
                 )),
-                ("### Speech Model Is Preparing Or Failed", "\n### ", "Keep Setup open and wait", (
+                ("### Speech Model Is Preparing Or Failed", "\n### ", "Retry Speech Model", (
                     "Before reopening, retrying, or selecting an uncached model in Windows 0.1.12",
                     "usage telemetry", "already-configured or saved token",
                     "custom routing can change its destination", "TLS-inspecting HTTPS proxy",
                     "do not start another download", "Windows 0.1.13 is published and installed",
                     "windows.html#model-download-privacy",
+                    "If you choose to make another model request after reading the warning above",
                 )),
             ),
         ),
@@ -5512,9 +5518,11 @@ def run_self_test() -> None:
             raise SyncError("self-test: safe model-recovery decisions were rejected")
         for path, safe, phrase in (
             (recovery_html, safe_recovery_html, "Check before model recovery"),
+            (recovery_html, safe_recovery_html, "If you choose to wait with a missing or damaged model"),
             (recovery_html, safe_recovery_html, "another download may include a Hugging Face token"),
             (recovery_html, safe_recovery_html, "custom routing can change its destination"),
             (recovery_markdown, safe_recovery_markdown, "Check before model recovery"),
+            (recovery_markdown, safe_recovery_markdown, "If you choose to wait with a missing or damaged model"),
             (recovery_markdown, safe_recovery_markdown, "Another download may include a Hugging Face token"),
             (recovery_markdown, safe_recovery_markdown, "custom routing can change its destination"),
         ):
@@ -5528,14 +5536,38 @@ def run_self_test() -> None:
                 "when you can choose the timing,",
                 1,
             ).replace(
-                "Check the connection and retry first.",
-                "Check the connection and retry first. do not start another download;",
+                "check the connection before retrying.",
+                "check the connection before retrying. do not start another download;",
                 1,
             ),
             encoding="utf-8",
         )
         if not check_model_recovery_privacy_order(recovery_html, recovery_markdown):
             raise SyncError("self-test: model-recovery action before its warning was accepted")
+        unconditional_mac_retry = safe_recovery_html.replace(
+            "If you choose to make another model request after reading the warning above, "
+            "check the connection before retrying.",
+            "Check the connection before retrying. If you choose to make another model "
+            "request after reading the warning above, continue.",
+            1,
+        )
+        if unconditional_mac_retry == safe_recovery_html:
+            raise SyncError("self-test: missing Mac retry mutation target")
+        recovery_html.write_text(unconditional_mac_retry, encoding="utf-8")
+        if not check_model_recovery_privacy_order(recovery_html, recovery_markdown):
+            raise SyncError("self-test: unconditional Mac model retry was accepted")
+        unconditional_windows_retry = safe_recovery_html.replace(
+            "If you choose to make another model request after reading the warning above, "
+            "use <strong>Retry Speech Model</strong>",
+            "Use <strong>Retry Speech Model</strong> first. If you choose to make another "
+            "model request after reading the warning above, continue",
+            1,
+        )
+        if unconditional_windows_retry == safe_recovery_html:
+            raise SyncError("self-test: missing Windows retry mutation target")
+        recovery_html.write_text(unconditional_windows_retry, encoding="utf-8")
+        if not check_model_recovery_privacy_order(recovery_html, recovery_markdown):
+            raise SyncError("self-test: unconditional Windows model retry was accepted")
 
         windows_agent_prompt = Path(tmp) / "agents.md"
         agent_warning = (

@@ -65,9 +65,12 @@ collaborator where noted:
   versions or conditions must not be pooled into a general success rate.
 - In a signed-out browser, confirm the repository About description and topics
   expose both the released macOS app and Windows prerelease instead of
-  presenting a Mac-only project. Confirm the Pages home page, Get started,
-  macOS, Windows, Help, and Privacy routes are reachable from the primary
-  navigation at desktop width, 360 CSS pixels, and 200% zoom.
+  presenting a Mac-only project. Check its privacy claims against the published
+  builds too: do not use a blanket "no telemetry" description while a published
+  build's model-download dependencies may emit usage telemetry. Confirm the
+  Pages home page, Get started, macOS, Windows, Help, and Privacy routes are
+  reachable from the primary navigation at desktop width, 360 CSS pixels,
+  and 200% zoom.
 - On Get started at desktop width, 360 CSS pixels, and 200% zoom, use each
   platform shortcut in the first-launch warning. It must reach that platform's
   visible decision and full-warning link without skipping to install or setup;
@@ -630,6 +633,13 @@ transcript once, while switching to a second window of that same app before
 delivery inserts nothing and leaves the complete transcript available for
 manual paste. A matching process identifier alone does not authorize paste;
 any insertion after the window switch is a failure.
+For a candidate with the focused-control window fallback, include an Electron
+target whose app-level `AXFocusedWindow` is unavailable but whose focused
+control exposes `AXWindow`, if one is available. Check steady focus, a different
+field in the same window with a distinct AX identity, and a second window. The
+fallback must paste only with the original control and window still focused;
+missing or changed identity must stay copy-only. Record only attribute
+availability and aggregate outcomes, never AX values, window titles, or text.
 
 For the separate browser row, use a disposable, non-submitting field in a
 current browser. Keep its field and tab selected for ten steady-focus attempts
@@ -1024,6 +1034,15 @@ item after the development-wrapper launch check.
   a full transcript over possible partial text. If the test target does not
   produce uncertain delivery, mark this case Not run rather than treating a
   copied/manual-paste notice as proof.
+- With a harmless multi-sentence transcript in recent history, hover **Copy
+  Last Transcript**, a **Recent Transcripts** entry, and **Add Correction from
+  Last Transcript…**. Their help tags must describe the actions without
+  revealing transcript text; only the intentionally opened submenu may show
+  its bounded preview.
+  Repeat with VoiceOver configured to speak help tags; no full transcript
+  should be announced merely by reaching a menu action. Confirm that copying
+  an entry still places the complete transcript on the clipboard. Do not put
+  the test phrase in the qualification record.
 - Dictate silence long enough to pass the short-clip cutoff and confirm the HUD
   and menu report **No speech detected — try again** rather than playing the
   successful-dictation cue.

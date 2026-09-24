@@ -9,11 +9,15 @@ the same recovery steps available as plain Markdown.
 **Check before model recovery:** Reopening a published build with a missing
 model, retrying a failed load, or resetting the cache may make another model
 request. Read the macOS 0.3.8 or Windows 0.1.12 privacy decision below before
-taking that step. Model requests do not include dictation audio or transcripts.
+taking that step. If you choose to wait with a missing or damaged model, do not
+reopen Presspeech, retry, reset the cache, or select an uncached model. Model
+requests do not include dictation audio or transcripts.
 
-1. Reopen Presspeech's controls. Open `Presspeech.app` again on macOS or launch
-   Presspeech again from the Windows Start Menu. The running process restores
-   Setup or Settings instead of starting a second dictation process.
+1. Reopen Presspeech's controls only after making the model-download decision
+   above. Open `Presspeech.app` again on macOS or launch Presspeech from the
+   Windows Start Menu. If you chose to wait with a missing model, leave the app
+   closed. An already-running process restores Setup or Settings instead of
+   starting a second dictation process.
 2. Check the model, microphone, permission, and hotkey status in **Setup
    Checklist** on macOS or **Setup** on Windows.
 3. Use **Try Dictation**. If its private scratchpad works, continue with the
@@ -57,10 +61,12 @@ and installed. Leave a working model cache in place. Read the
 [guidance for existing 0.3.8 users](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use)
 before resetting anything.
 
-Check the connection and retry first. If Presspeech reports an incomplete or
-corrupt cache, use **Support -> Reset Speech Model Cache...**. Presspeech deletes
-only the local model cache, then downloads and verifies a fresh copy; settings
-and dictionary rules remain intact.
+If you choose to make another model request after reading the warning above,
+check the connection before retrying. If Presspeech reports an incomplete or
+corrupt cache and you still choose to download again, use **Support -> Reset
+Speech Model Cache...**. Presspeech deletes the local model cache, then downloads
+and verifies a fresh copy; settings and dictionary rules remain intact. Do not
+reset a working cache.
 
 ### Hotkey Stops Working
 
@@ -160,11 +166,13 @@ is unclear, do not launch while it is in use. Read the
 [full Windows privacy decision](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
 before retrying.
 
-Keep Setup open and wait for the selected model to report ready. A hotkey press
-while it is preparing is intentionally ignored. If Setup reports a failure,
-choose **Retry Speech Model**. Check the connection and available disk space; on
-an NVIDIA system, also update the display driver or select a local Whisper model
-in Settings.
+If a download is already in progress and you have decided to continue, keep
+Setup open and wait for the selected model to report ready. A hotkey press while
+it is preparing is intentionally ignored. If Setup reports a failure, check the
+connection and available disk space first; on an NVIDIA system, also check the
+display driver. If you choose to make another model request after reading the
+warning above, use **Retry Speech Model** or select another model in Settings.
+An uncached alternative can also download files.
 
 ### Microphone Is Silent Or Cannot Open
 

@@ -7,7 +7,7 @@ free tool exists" should travel in postures that aren't marketing:
 a note where engineers look up notes, and answers where people are
 already asking.
 
-**Hold as of 23 September 2026: none of the launch drafts below is ready to
+**Hold as of 24 September 2026: the Show HN launch draft below is not ready to
 post.** The [published releases](https://github.com/rcourtman/presspeech/releases)
 are macOS 0.3.8 and Windows 0.1.12, not the proposed 0.3.9 / 0.1.13 fixes.
 Before launching macOS 0.3.8, users need its [inherited-token
@@ -54,7 +54,7 @@ Links:
 - Homebrew: `brew install --cask rcourtman/presspeech/presspeech`
 
 GitHub's repository profile is a manual distribution surface and must match the
-two-platform README. **Observed 23 September 2026:** the public
+two-platform README. **Observed 24 September 2026:** the public
 [repository profile](https://github.com/rcourtman/presspeech)
 still describes only Apple Silicon Macs and says "no cloud or telemetry". That
 does not describe the Windows prerelease or its version-specific model-download
@@ -165,51 +165,29 @@ https://github.com/rcourtman/presspeech/releases/latest/download/Presspeech.zip
 Or install with Homebrew:
 `brew install --cask rcourtman/presspeech/presspeech`
 
-## Reddit / r/macapps (unapproved draft; recheck before any posting)
+## Reddit / r/macapps (no standalone launch draft)
 
-> **[Free & open source] Presspeech – on-device push-to-talk dictation for Apple Silicon**
+**Route check, 24 September 2026:** the moderators' [September App Pile
+megathread](https://www.reddit.com/r/macapps/comments/1w4brkd/megathread_the_app_pile_september_2026/)
+explicitly includes dictation apps among promotions to keep in
+that megathread, and requires a concise problem, named-competitor comparison,
+and price with a link. Their [Trust or Transparency
+guidance](https://www.reddit.com/r/macapps/comments/1ryaeex/comment/obd1kbk/)
+describes exceptions for established developers or a qualifying public
+identity and policy site, as well as local-karma and promotion-frequency
+conditions. Presspeech's [public repository
+profile](https://github.com/rcourtman/presspeech) shows 33 stars at this
+check, below the guidance's 100-star project signal; account history, flair,
+and any other eligibility have not been verified. Do not treat an open-source
+license or notarization as automatic main-feed eligibility.
 
-I’ve released Presspeech, a small native Mac menu-bar app for one
-workflow: hold a key, speak, release, and the text normally pastes after
-Presspeech confirms that the same window is still focused. If that destination
-cannot be verified, the text stays on the clipboard for manual paste instead.
-
-- speech recognition runs on-device with Parakeet TDT v3 on the Apple
-  Neural Engine
-- about 100 ms for model transcription on the documented M4 benchmark clips;
-  clipboard and paste work are not included
-- no account, subscription, cloud transcription, or saved audio; model-download
-  network behavior is version-specific
-- 8.4 MB notarised app; the local speech model is about 500–600 MB on
-  first launch
-- voice shortcuts for exact reusable text, plus optional deterministic
-  “new paragraph”, “bullet point”, punctuation, quote, and parenthesis
-  commands
-- free, MIT licensed, Apple Silicon + macOS 14+
-
-Presspeech uses one consistent product, repository, bundle, and Homebrew
-identity. Saved app settings migrate forward automatically when required;
-macOS privacy grants remain controlled by System Settings.
-
-Before launching macOS 0.3.8, be aware that its model download may include a
-Hugging Face token inherited by Presspeech. The public model needs no token;
-if a token may be present in the launch environment or you are unsure, wait
-for 0.3.9 to be published. See the [current privacy
-guidance](https://rcourtman.github.io/presspeech/privacy.html#network-calls).
-
-Demo and download:
-https://rcourtman.github.io/presspeech/
-
-Source:
-https://github.com/rcourtman/presspeech
-
-The privacy-safe eight-check [target-app
-protocol](https://rcourtman.github.io/presspeech/app-compatibility.html) can
-help evaluate a disposable native, browser, or Electron/Chromium field without
-sharing dictated text. The [support
-guide](https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md) explains
-whether public reports are currently accepted; a locally downloaded worksheet
-draft is not submitted or monitored.
+Retire the standalone post copy rather than adapting it for a different route
+while the release, reporting, and native-qualification holds above remain.
+The distribution stance here is still one qualified Show HN post, followed by
+answer-driven replies only. If that stance is ever reconsidered, recheck the
+current subreddit rules and the posting account's actual eligibility before
+drafting anything; do not use comments in another developer's post to evade
+promotion limits. No Reddit submission is approved by this kit.
 
 ### Show HN posting notes
 
@@ -411,6 +389,10 @@ For directories and "what is this" replies:
 - One account, your own (pseudonymous is fine). Always disclose
   "I maintain it" / "I built this".
 - Answer questions that were actually asked; don't seed them.
+- For r/macapps specifically, recheck its current moderator rules before any
+  reply that promotes Presspeech: the September 2026 guidance requires local
+  community karma, disclosure, and respect for its 30-day promotion limit;
+  do not assume an answer-driven reply is exempt.
 - The compare section answers "why not Superwhisper / Wispr Flow /
   VoiceInk / Handy / FluidVoice / MacParakeet / Apple Dictation / MacWhisper" and separates
   the Windows built-ins from local and cloud apps — link the relevant table or

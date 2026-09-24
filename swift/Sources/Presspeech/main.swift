@@ -5768,6 +5768,21 @@ enum DictationPasteTargetCaptureFailure: Error, Equatable {
     case focusedWindowValueInvalid
     case frontmostApplicationChanged
 
+    var allowsFocusedElementWindowFallback: Bool {
+        switch self {
+        case .focusedWindowQueryFailed(let code):
+            // AXError.noValue means this attribute had no value. Other AX
+            // failures may be permission or messaging problems.
+            return code == AXError.noValue.rawValue
+        case .focusedWindowValueUnavailable:
+            // A successful query with no value also leaves no app-level
+            // focused window to compare against.
+            return true
+        default:
+            return false
+        }
+    }
+
     var logDescription: String {
         switch self {
         case .frontmostApplicationUnavailable:
@@ -5828,7 +5843,8 @@ func dictationCompletionNotice(processedText: String,
 func captureDictationPasteTarget(
     frontmostProcessIdentifier: () -> pid_t?,
     focusedWindowForProcess: (pid_t) -> Result<AXUIElement, DictationPasteTargetCaptureFailure>,
-    focusedElementForProcess: (pid_t) -> AXUIElement? = { _ in nil }
+    focusedElementForProcess: (pid_t) -> AXUIElement? = { _ in nil },
+    focusedWindowForElement: (AXUIElement) -> AXUIElement? = { _ in nil }
 ) -> DictationPasteTargetCaptureResult {
     guard let processIdentifier = frontmostProcessIdentifier() else {
         return .unavailable(.frontmostApplicationUnavailable)
@@ -5837,16 +5853,28 @@ func captureDictationPasteTarget(
         return .unavailable(.invalidFrontmostProcessIdentifier)
     }
     let focusedWindow: AXUIElement
+    let focusedElement: AXUIElement?
     switch focusedWindowForProcess(processIdentifier) {
     case .success(let window):
         focusedWindow = window
+        focusedElement = focusedElementForProcess(processIdentifier)
     case .failure(let failure):
-        return .unavailable(failure)
+        // Some applications omit the recommended app-level AXFocusedWindow
+        // attribute while still exposing a focused control with a required
+        // AXWindow relationship. This is an exact-window fallback, never a
+        // process-only delivery route. Keep the control identity too, so a
+        // later same-window focus change also blocks automatic paste.
+        guard failure.allowsFocusedElementWindowFallback,
+              let element = focusedElementForProcess(processIdentifier),
+              let window = focusedWindowForElement(element) else {
+            return .unavailable(failure)
+        }
+        focusedWindow = window
+        focusedElement = element
     }
-    // Not every target (notably some Electron/Chromium views) publishes this
-    // optional attribute. Preserve the existing exact-window route when it is
-    // absent at recording start; if present, require the same control later.
-    let focusedElement = focusedElementForProcess(processIdentifier)
+    // Not every target (notably some Electron/Chromium views) publishes a
+    // focused control. The normal exact-window route remains available when
+    // it is absent; the fallback above requires one.
     guard frontmostProcessIdentifier() == processIdentifier else {
         return .unavailable(.frontmostApplicationChanged)
     }
@@ -5902,6 +5930,20 @@ func currentDictationPasteTarget(reportFailure: Bool = false,
                 return nil
             }
             return elementValue as! AXUIElement
+        },
+        focusedWindowForElement: { element in
+            _ = AXUIElementSetMessagingTimeout(element, PASTE_TARGET_AX_TIMEOUT_SECONDS)
+            var windowValue: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(
+                element,
+                kAXWindowAttribute as CFString,
+                &windowValue
+            ) == .success,
+                  let windowValue,
+                  CFGetTypeID(windowValue) == AXUIElementGetTypeID() else {
+                return nil
+            }
+            return windowValue as! AXUIElement
         }
     )
     // captureDictationPasteTarget rechecks activation after the potentially
@@ -7797,6 +7839,17 @@ func manualUpdateCheckFailureText(_ failure: UpdateCheckFailure) -> String {
     }
 }
 
+/// The update check has one fixed GitHub API endpoint. A redirect is not an
+/// update response and must not send the periodic request to another origin.
+private final class UpdateCheckRedirectBlocker: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
 enum UpdateCheck {
     private static let githubReleaseURLPathPrefix = "/rcourtman/presspeech/releases/tag/"
     static let maxReleaseResponseBytes = 512 * 1024
@@ -7819,7 +7872,8 @@ enum UpdateCheck {
         defer { session.finishTasksAndInvalidate() }
 
         do {
-            let (data, response) = try await session.data(for: req)
+            let (data, response) = try await session.data(
+                for: req, delegate: UpdateCheckRedirectBlocker())
             return parseLatest(data: data, response: response)
         } catch {
             return .failure(.network)
@@ -7828,6 +7882,9 @@ enum UpdateCheck {
 
     static func parseLatest(data: Data, response: URLResponse) -> Result<GitHubRelease, UpdateCheckFailure> {
         guard let http = response as? HTTPURLResponse else {
+            return .failure(.unexpectedResponse)
+        }
+        guard http.url?.absoluteString == GITHUB_LATEST_RELEASE_URL.absoluteString else {
             return .failure(.unexpectedResponse)
         }
         guard (200..<300).contains(http.statusCode) else {
@@ -7877,6 +7934,7 @@ enum UpdateCheck {
         guard let components = URLComponents(string: trimmed),
               components.scheme == "https",
               components.host == "github.com",
+              components.port == nil,
               components.user == nil,
               components.password == nil,
               components.query == nil,
@@ -11388,7 +11446,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                     keyEquivalent: "")
             inline.target = self
             inline.representedObject = newest
-            inline.toolTip = newest
+            // The menu action is available during recording. A transcript in
+            // its help tag can be exposed by pointer hover or spoken by
+            // VoiceOver into the live microphone without opening History.
+            inline.toolTip = "Copy the latest transcript to the clipboard."
             menu.addItem(inline)
 
             menu.addItem(buildRecentTranscriptsItem())
@@ -11432,7 +11493,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                   keyEquivalent: "")
             item.target = self
             item.representedObject = entry
-            item.toolTip = entry
+            item.toolTip = "Copy this transcript to the clipboard."
             sub.addItem(item)
         }
 
@@ -13205,9 +13266,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                      keyEquivalent: "")
         addFromLast.target = self
         addFromLast.isEnabled = history.first != nil
-        if let newest = history.first {
-            addFromLast.toolTip = previewLine(for: newest)
-        }
+        addFromLast.toolTip = "Create a dictionary correction from the latest transcript."
         sub.addItem(addFromLast)
 
         sub.addItem(.separator())
@@ -16747,6 +16806,58 @@ private enum PresspeechSelfTest {
                 processIdentifier: 700, focusedWindow: firstWindow,
                 focusedElement: otherField)), equals: true,
                        "an unavailable starting field must preserve the established window-only route")
+            var queriedElementWindowOnNormalPath = false
+            let normalPath = captureDictationPasteTarget(
+                frontmostProcessIdentifier: { 700 },
+                focusedWindowForProcess: { _ in .success(firstWindow) },
+                focusedElementForProcess: { _ in firstField },
+                focusedWindowForElement: { _ in
+                    queriedElementWindowOnNormalPath = true
+                    return otherWindow
+                })
+            guard case .captured = normalPath else {
+                throw SelfTestFailure.failed("a published focused window should retain the normal capture route")
+            }
+            try expect(queriedElementWindowOnNormalPath, equals: false,
+                       "normal capture should not add a bounded AXWindow round-trip")
+            for missingWindow in [
+                DictationPasteTargetCaptureFailure.focusedWindowQueryFailed(-25212),
+                .focusedWindowValueUnavailable
+            ] {
+                let recovered = captureDictationPasteTarget(
+                    frontmostProcessIdentifier: { 700 },
+                    focusedWindowForProcess: { _ in .failure(missingWindow) },
+                    focusedElementForProcess: { _ in firstField },
+                    focusedWindowForElement: { element in
+                        CFEqual(element, firstField) ? firstWindow : nil
+                    }
+                )
+                guard case .captured(let recoveredTarget) = recovered else {
+                    throw SelfTestFailure.failed("a focused control's AXWindow should recover exact-window identity")
+                }
+                try expect(dictationPasteTargetMatches(recoveredTarget, DictationPasteTarget(
+                    processIdentifier: 700, focusedWindow: firstWindow,
+                    focusedElement: firstField)), equals: true,
+                           "recovered window and control identities should authorize the same destination")
+                try expect(dictationPasteTargetMatches(recoveredTarget, DictationPasteTarget(
+                    processIdentifier: 700, focusedWindow: firstWindow,
+                    focusedElement: otherField)), equals: false,
+                           "a recovered window must not erase focused-control protection")
+                try expect(dictationPasteTargetMatches(recoveredTarget, DictationPasteTarget(
+                    processIdentifier: 700, focusedWindow: otherWindow,
+                    focusedElement: firstField)), equals: false,
+                           "a recovered control must not erase exact-window protection")
+                let noFocusedControl = captureDictationPasteTarget(
+                    frontmostProcessIdentifier: { 700 },
+                    focusedWindowForProcess: { _ in .failure(missingWindow) },
+                    focusedElementForProcess: { _ in nil },
+                    focusedWindowForElement: { _ in firstWindow })
+                guard case .unavailable(let missingControlReason) = noFocusedControl else {
+                    throw SelfTestFailure.failed("a missing window and control must stay copy-only")
+                }
+                try expect(missingControlReason, equals: missingWindow,
+                           "missing control must retain the original window failure")
+            }
             var queriedFieldAfterFailedWindow = false
             let unavailable = captureDictationPasteTarget(
                 frontmostProcessIdentifier: { 700 },
@@ -16754,17 +16865,48 @@ private enum PresspeechSelfTest {
                 focusedElementForProcess: { _ in
                     queriedFieldAfterFailedWindow = true
                     return firstField
-                })
+                },
+                focusedWindowForElement: { _ in nil })
             guard case .unavailable(let unavailableFailure) = unavailable else {
-                throw SelfTestFailure.failed("process identity alone must never authorize automatic paste")
+                throw SelfTestFailure.failed("a control without AXWindow must not authorize automatic paste")
             }
             try expect(unavailableFailure, equals: .focusedWindowQueryFailed(-25212),
                        "AX failure detail must survive for privacy-safe qualification logs")
             try expect(unavailableFailure.logDescription,
                        equals: "focused-window query failed (AX error -25212)",
                        "AX failure logs should identify the error without target metadata")
-            try expect(queriedFieldAfterFailedWindow, equals: false,
-                       "a failed required-window query must not probe the optional focused control")
+            try expect(queriedFieldAfterFailedWindow, equals: true,
+                       "a missing app-level window may probe the control for its containing window")
+            var queriedFieldAfterPermissionFailure = false
+            let permissionFailure = captureDictationPasteTarget(
+                frontmostProcessIdentifier: { 700 },
+                focusedWindowForProcess: { _ in .failure(.focusedWindowQueryFailed(-25211)) },
+                focusedElementForProcess: { _ in
+                    queriedFieldAfterPermissionFailure = true
+                    return firstField
+                },
+                focusedWindowForElement: { _ in firstWindow })
+            guard case .unavailable(let permissionReason) = permissionFailure else {
+                throw SelfTestFailure.failed("unrelated AX failures must remain copy-only")
+            }
+            try expect(permissionReason, equals: .focusedWindowQueryFailed(-25211),
+                       "an unrelated AX failure should retain its original reason")
+            try expect(queriedFieldAfterPermissionFailure, equals: false,
+                       "an unrelated AX failure must not attempt the missing-window fallback")
+            var fallbackProcessReads = 0
+            let switchedDuringFallback = captureDictationPasteTarget(
+                frontmostProcessIdentifier: {
+                    fallbackProcessReads += 1
+                    return fallbackProcessReads == 1 ? 700 : 701
+                },
+                focusedWindowForProcess: { _ in .failure(.focusedWindowValueUnavailable) },
+                focusedElementForProcess: { _ in firstField },
+                focusedWindowForElement: { _ in firstWindow })
+            guard case .unavailable(let fallbackSwitchReason) = switchedDuringFallback else {
+                throw SelfTestFailure.failed("app changes during fallback must fail closed")
+            }
+            try expect(fallbackSwitchReason, equals: .frontmostApplicationChanged,
+                       "fallback must recheck the frontmost process after AX replies")
             var processReads = 0
             let switchedDuringLookup = captureDictationPasteTarget(
                 frontmostProcessIdentifier: {
@@ -21278,6 +21420,34 @@ private enum PresspeechSelfTest {
             equals: .failure(.httpStatus(404)),
             "update parsing should reject non-2xx HTTP responses with the status code"
         )
+        let redirected = HTTPURLResponse(url: URL(string: "https://example.test/releases/latest")!,
+                                         statusCode: 200,
+                                         httpVersion: nil,
+                                         headerFields: nil)!
+        try expect(
+            UpdateCheck.parseLatest(data: releaseData, response: redirected),
+            equals: .failure(.unexpectedResponse),
+            "update parsing must not trust a successful off-origin redirect response"
+        )
+        let otherGitHubAPIPath = HTTPURLResponse(
+            url: URL(string: "https://api.github.com/repos/rcourtman/presspeech/releases/1")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil)!
+        try expect(
+            UpdateCheck.parseLatest(data: releaseData, response: otherGitHubAPIPath),
+            equals: .failure(.unexpectedResponse),
+            "update parsing must require the exact fixed API endpoint"
+        )
+        let refusedRedirect = HTTPURLResponse(url: GITHUB_LATEST_RELEASE_URL,
+                                               statusCode: 302,
+                                               httpVersion: nil,
+                                               headerFields: ["Location": "https://example.test/"])!
+        try expect(
+            UpdateCheck.parseLatest(data: releaseData, response: refusedRedirect),
+            equals: .failure(.httpStatus(302)),
+            "a refused API redirect must not become a release response"
+        )
         let rateLimited = HTTPURLResponse(url: GITHUB_LATEST_RELEASE_URL,
                                           statusCode: 403,
                                           httpVersion: nil,
@@ -21368,6 +21538,13 @@ private enum PresspeechSelfTest {
                                            body: "",
                                            htmlURL: GITHUB_RELEASES_PAGE.absoluteString)),
             "update parsing should fall back when release URL tag does not match the payload tag"
+        )
+        try expect(
+            UpdateCheck.sanitizedReleaseURL(
+                "https://github.com:444/rcourtman/presspeech/releases/tag/v9.8.7",
+                expectedTag: "v9.8.7"),
+            equals: GITHUB_RELEASES_PAGE.absoluteString,
+            "update links must not open a nonstandard port on the release host"
         )
         try expect(
             UpdateCheck.parseLatest(
