@@ -194,6 +194,10 @@ async function main() {
       worksheet.formatReportDraft(summary.value),
       /Optional remote clipboard handoff observation \(separate from eight counts; if safely run\):/,
     );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
+      /Safe, known clipboard-change interruptions that prevented classification \(count completed outcomes\):/,
+    );
     assert.doesNotMatch(worksheet.formatReportDraft(summary.value), /https?:\/\//);
     assert.match(
       worksheet.formatReportDraft(summary.value),

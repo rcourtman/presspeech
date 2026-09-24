@@ -203,11 +203,15 @@ continue for another reason, mark unrun slots **Not completed**; a completed
 failure is never an unrun check. An early stop is not a passing five-attempt
 baseline.
 
-If you know another copy changed the clipboard during delivery, record that
-attempt as an interruption under **Relevant conditions** and repeat with a fresh
-harmless phrase if it remains safe to continue. Exclude known interruptions
-from the five scheduled check slots. Do not use this exclusion for unexplained
-failures; report those as **Incorrect or unsafe** above.
+If you know another copy changed the clipboard during delivery, and it
+prevented you from classifying an attempt without an incorrect or unsafe result,
+record it as an interruption under **Relevant conditions** and repeat with a
+fresh harmless phrase if it remains safe to continue. Exclude only those safe,
+known, unclassifiable interruptions from the five scheduled check slots; count
+completed pasted-once and recovered-safely outcomes. A stale, partial,
+duplicate, misdirected, or unrecoverable result is **Incorrect or unsafe** even
+when the clipboard change explains it: count that completed attempt and stop.
+Never exclude an unexplained failure.
 
 A copied/manual-paste result is a safe recovery, not an automatic-paste pass.
 Keep its count separate so reports do not hide app classes where insertion is
@@ -306,8 +310,11 @@ Overall result: [classification from the definitions below]
 ```
 
 The first four values must total five and the final four must total three.
-Record known clipboard-change interruptions separately under relevant
-conditions; do not turn them into another category or include their text.
+Record only safe, known clipboard-change interruptions that prevented
+classification separately under relevant conditions; do not include their
+text. Count every classifiable completed outcome, including a failure explained
+by another copy.
+
 If an incorrect or unsafe steady-focus result stops testing early, count it
 under **Incorrect or unsafe** and every unrun slot under **Not completed**.
 If unexpected insertion or failed recovery stops the focus-safety check early,

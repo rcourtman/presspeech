@@ -16,6 +16,10 @@ Windows UI, UIA integration, or Tk version.
 - Leave model downloads and microphone checks until deliberately needed. A
   microphone check opens the selected input; a Try Dictation recording captures
   audio in memory. Use only a harmless test phrase in the private scratchpad.
+- Exercise first-run download consent in a separate clean profile with no
+  cached default model. Do not select a download just to run an accessibility
+  scan. A cached model skips this decision, so record that path separately
+  rather than treating it as a consent-path pass.
 
 ## Checklist
 
@@ -26,7 +30,9 @@ Windows UI, UIA integration, or Tk version.
    Inspect**, check that controls expose useful names, roles, and states: for
    example, Setup's microphone and hotkey selectors, Settings' labelled
    selectors and dictionary editor, the named scratchpad editor, and Recovery's
-   buttons/status. Recovery UI must not expose the retained transcript text.
+   buttons/status. When first-run model consent is visible, inspect each
+   download choice and its accessible description as well as the model status.
+   Recovery UI must not expose the retained transcript text.
 
 2. **Keyboard and Narrator.** Without using the pointer, traverse each window
    with Tab and Shift+Tab; use arrow keys within radio groups and selectors.
@@ -35,6 +41,27 @@ Windows UI, UIA integration, or Tk version.
    that command becomes disabled. Have Narrator read and invoke controls; names,
    roles, values, and checked/disabled states should agree with the visible UI.
    A status update must not steal focus.
+   On a fresh profile with a missing default model, confirm Setup initially
+   focuses the required download choice; Tab reaches the other visible model
+   choices before the microphone selector. For the CUDA default, check the
+   Parakeet download, smaller English-only CPU option, and Settings option.
+   For the CPU default, check the English-only download and Settings option;
+   the redundant CPU fallback must not appear. For each download choice,
+   Narrator must convey its model, approximate size, and request/privacy
+   disclosure; the Settings choice must remain clearly distinct. Verify
+   the visible Alt+D and Alt+M access-key cues (and Alt+U on the CUDA path),
+   and invoke Alt+M to check its keyboard route to Settings. Do not invoke a
+   download command unless a separate first-run test has deliberately approved
+   that network request; inspect its cue and exposed UIA action without
+   activating it, then use
+   **Set Up Later**. Hidden or disabled choices must not be invokable while
+   Setup is checking the local cache or after the decision is dismissed.
+   Reopen Setup and confirm the decision remains available. If consent appears
+   after Setup opens, it may move focus to the download choice only when the
+   user has not begun navigating; otherwise it must leave focus in place.
+   Mark an unavailable hardware path **Not run**, not Pass. The fuller
+   [Windows first-run acceptance steps](../docs/manual-qa.md#windows-first-run)
+   cover download/network behavior separately from this accessibility check.
    In Try Dictation, leave a harmless dictation waiting for recovery and close
    Delivery Recovery with **Leave Waiting**. Confirm **Review Delivery…** is
    enabled, reachable by Tab and Left Alt+R, and reopens Recovery without
@@ -50,6 +77,9 @@ Windows UI, UIA integration, or Tk version.
    status control and record its UIA events. Trigger a safe status transition,
    such as Setup's global-hotkey startup or a permitted microphone check, and
    confirm the changed status is exposed and Narrator announces it. For a
+   fresh uncached model, also observe the transition to **Needs your choice**:
+   the model-status change must be announced without repeatedly speaking
+   progress, and the consent controls must be exposed in the UIA tree. For a
    microphone check, confirm **Connecting microphone…** precedes **Listening —
    speak a few words…**, and Listening is not announced before the first input
    buffer arrives. If a model download is already part of the test, verify
@@ -80,7 +110,8 @@ Windows UI, UIA integration, or Tk version.
    **Text size** 225%. Change the setting while each window is open as well as
    before opening it. Check that all actions and explanatory text remain
    reachable by scrolling, focused controls stay visible, and text remains
-   readable without clipping or obscuring a choice. Confirm Delivery Recovery
+   readable without clipping or obscuring a choice, including Setup with its
+   first-run consent choices expanded. Confirm Delivery Recovery
    still does not expose retained transcript text. Enable a Contrast theme and
    check each window plus the indicator; the indicator must remain legible and
    on-screen while its state is visible. At 225% Text size, trigger the longest
@@ -118,6 +149,7 @@ Accessibility Insights version:
 Changed UI surfaces:
 
 FastPass — Setup / Settings / Try Dictation / Delivery Recovery / Update:
+First-run consent — CUDA / CPU path, initial focus, Tab/Alt keys, Narrator disclosure:
 UIA names, roles, values, and states:
 Keyboard traversal, focus, and scrolling:
 Narrator control and live-status announcements:

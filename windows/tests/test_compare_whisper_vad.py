@@ -292,6 +292,49 @@ class CompareWhisperVadTests(unittest.TestCase):
         self.assertEqual(result["candidate"]["vad_missing"], 1)
         self.assertEqual(result["regressions"]["vad_missing"], [1])
 
+    def test_vad_retention_changes_are_visible_without_claiming_word_loss(self):
+        base, candidate = reports()
+        candidate["samples"][0]["speech_detection"]["all_seconds"] = [0.5, 0.5]
+        candidate["samples"][1]["speech_detection"].update({
+            "rejected_trials": 0, "all_seconds": [0.4, 0.4],
+        })
+
+        result = compare.compare_reports(base, candidate)
+
+        self.assertEqual(result["regressions"], {})
+        self.assertEqual(result["vad_retention"]["speech"], {
+            "lower": [1], "higher": [], "unchanged": 0, "unmeasured": [],
+        })
+        self.assertEqual(result["vad_retention"]["silence"], {
+            "lower": [], "higher": [2], "unchanged": 0, "unmeasured": [],
+        })
+        with tempfile.TemporaryDirectory() as root:
+            paths = [os.path.join(root, name) for name in ("base.json", "new.json")]
+            for path, report in zip(paths, (base, candidate)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", ["compare", *paths]), \
+                    redirect_stdout(output):
+                compare.main()
+            message = output.getvalue()
+            self.assertIn("reviewed speech: 1 lower", message)
+            self.assertIn("reviewed silence: 0 lower, 1 higher", message)
+            self.assertIn("VAD-retained duration is not acoustic speech recall", message)
+            for private in ("private speech", "private-path", root):
+                self.assertNotIn(private, message)
+
+    def test_partial_vad_measurements_do_not_count_as_duration_change(self):
+        base, candidate = reports()
+        candidate["samples"][0]["speech_detection"].update({
+            "measured_trials": 1, "missing_trials": 1,
+            "all_seconds": [0.5],
+        })
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["vad_retention"]["speech"], {
+            "lower": [], "higher": [], "unchanged": 0, "unmeasured": [1],
+        })
+
     def test_clip_regression_is_visible_even_when_pooled_wer_improves(self):
         base, candidate = reports()
         second_base = copy.deepcopy(base["samples"][0])

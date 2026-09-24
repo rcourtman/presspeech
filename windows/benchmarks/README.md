@@ -234,10 +234,17 @@ precision, recorded environment, run count, per-clip review scope, or any VAD
 setting other than the minimum silence duration. It compares all-trial WER,
 error-free speech-trial counts, longest deletion, first/final-word failures,
 VAD rejection and missing-duration counts, reviewed-silence false positives,
-and inference median. An error-free-trial count can fall while total WER
-stays unchanged or the worst trial improves; trial positions in separate
-benchmark runs are not paired observations, so this does not prove a policy
-effect. For reviewed, comparably labelled Whisper-turbo automatic-language
+and inference median. It also shows anonymous positions where median
+VAD-retained duration fell or rose on reviewed speech and silence controls;
+clips with missing VAD measurements are listed as unmeasured rather than
+compared. This is a directional diagnostic, **not** an accuracy regression or
+speech-recall score: a shorter speech clip may have lost only silence, and a
+longer retained silence clip may still decode blank. Listen to the affected
+private recordings before interpreting either change. An error-free-trial
+count can fall while total WER stays unchanged or the worst trial improves;
+trial positions in separate benchmark runs are not paired observations, so
+this does not prove a policy effect. For reviewed, comparably labelled
+Whisper-turbo automatic-language
 clips, it checks language-ID counts against detected-code counts and reports
 matches, mismatches, missing codes, and VAD-rejected trials. A new mismatch or
 missing code is visible even when WER does not change; a wrong language code

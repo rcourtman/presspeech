@@ -334,6 +334,39 @@ def _worsened(base, candidate):
     return {}
 
 
+def _vad_retention_diagnostics(baseline, candidate):
+    """Compare per-clip median VAD duration, not unpaired trial positions.
+
+    A shorter retained duration on speech is not proof of a lost word, and a
+    longer duration on silence is not proof of hallucination. Still, either
+    direction warrants inspecting the private audio when assessing a policy.
+    Partial VAD coverage cannot support a duration comparison.
+    """
+    result = {
+        kind: {"lower": [], "higher": [], "unchanged": 0,
+               "unmeasured": []}
+        for kind in ("speech", "silence")
+    }
+    for position, (base, changed) in enumerate(zip(baseline, candidate), 1):
+        kind = _sample_kind(base)
+        if kind not in result:
+            continue
+        before = base["speech_detection"]
+        after = changed["speech_detection"]
+        if before["missing_trials"] or after["missing_trials"]:
+            result[kind]["unmeasured"].append(position)
+            continue
+        before_median = statistics.median(before["all_seconds"])
+        after_median = statistics.median(after["all_seconds"])
+        if after_median < before_median:
+            result[kind]["lower"].append(position)
+        elif after_median > before_median:
+            result[kind]["higher"].append(position)
+        else:
+            result[kind]["unchanged"] += 1
+    return result
+
+
 def compare_reports(baseline, candidate):
     """Reject non-paired runs and return content-free comparison diagnostics."""
     _validate_report(baseline)
@@ -408,6 +441,8 @@ def compare_reports(baseline, candidate):
         "candidate": candidate_score,
         "regressions": regressions,
         "strata": strata,
+        "vad_retention": _vad_retention_diagnostics(
+            baseline["samples"], candidate["samples"]),
     }
 
 
@@ -459,14 +494,24 @@ def main():
     elif baseline["model"] == "turbo" and baseline["requested_language"] == "auto":
         print("Automatic language identification not evaluated: no reviewed "
               "speech clips with comparable language labels")
+    for kind, counts in result["vad_retention"].items():
+        print("VAD-retained duration on reviewed %s: %d lower, %d higher, "
+              "%d unchanged, %d unmeasured (median per clip)" % (
+                  kind, len(counts["lower"]), len(counts["higher"]),
+                  counts["unchanged"], len(counts["unmeasured"])))
+        for direction in ("lower", "higher", "unmeasured"):
+            if counts[direction]:
+                print("  %s positions: %s" % (
+                    direction, ",".join(map(str, counts[direction]))))
     for key, indexes in sorted(result["regressions"].items()):
         print("%s worsened: %d clips (positions %s)" % (
             key, len(indexes), ",".join(map(str, indexes))))
     for key, item in result["strata"].items():
         print("%s strata with any measured quality or language-ID regression: %d/%d" % (
             key, item["regressed"], item["count"]))
-    print("Not a pass/fail result; review individual private reports, audio, "
-          "thermal load, and native dictation behavior before a policy change.")
+    print("VAD-retained duration is not acoustic speech recall or a quality "
+          "verdict. Not a pass/fail result; review individual private reports, "
+          "audio, thermal load, and native dictation before a policy change.")
 
 
 if __name__ == "__main__":

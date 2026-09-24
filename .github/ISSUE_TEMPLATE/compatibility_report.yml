@@ -177,9 +177,12 @@ body:
         handoff observation separately from the eight counts, including
         remote client/version, local and guest OS versions, clipboard-sharing
         state, attempts run, anomalies or recovery notices, and whether a
-        final scratch comparison was possible. Separately count known
-        clipboard-change interruptions excluded from completed attempts; do
-        not exclude unexplained failures. Omit private document, account,
+        final scratch comparison was possible. Separately count only safe,
+        known clipboard-change interruptions that prevented classification
+        and were excluded from scheduled checks. Count every classifiable
+        completed outcome, including stale, misdirected, or unrecoverable
+        results explained by another copy; never exclude an
+        unexplained failure. Omit private document, account,
         server, and window names.
       placeholder: e.g. Dvorak input source; hold mode; plain-text editor field; append-space suffix; no clipboard manager
   - type: textarea

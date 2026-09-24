@@ -132,7 +132,7 @@
       "Clipboard preservation during steady-focus check:",
       "Relevant conditions (keyboard layout/input source if relevant):",
       "Optional remote clipboard handoff observation (separate from eight counts; if safely run):",
-      "Known clipboard-change interruptions excluded:",
+      "Safe, known clipboard-change interruptions that prevented classification (count completed outcomes):",
       "",
       summaryText,
     ].join("\n");

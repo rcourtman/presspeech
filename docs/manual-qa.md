@@ -232,8 +232,10 @@ the three counts must sum to the required attempt count. A successful
 `SendInput` call or unchanged clipboard sequence is not evidence that the
 target consumed the text. Inspect the original field before retrying or using
 recovery because it may already contain all or part of the transcript. If a
-known external copy interrupted an attempt, record the interruption and rerun
-with a fresh phrase; never exclude an unexplained failure. Retain only
+known external copy prevented classification without an incorrect or unsafe
+result, record the interruption and rerun with a fresh phrase. Count completed
+safe outcomes; count and stop on stale, misdirected, or unrecoverable delivery
+even when that copy explains it; never exclude an unexplained failure. Retain only
 aggregate counts, app versions, and generic field types, not the phrases,
 clipboard contents, or screenshots.
 
@@ -817,9 +819,12 @@ misdirected, silent-missing, or unrecoverable text fails the row; posting a
 paste event or showing a success notice is not proof that the target consumed
 the text. Inspect the original field before retrying or using recovery because
 it may already contain all or part of the transcript. Record a known external
-copy interruption and rerun it with a fresh phrase, but never exclude an
-unexplained failure. Retain only aggregate counts, app versions, and generic
-field types—not phrases, clipboard contents, or screenshots.
+copy interruption that prevented classification without an incorrect or unsafe
+result and rerun it with a fresh phrase. Count completed safe outcomes; count
+and stop on stale, misdirected, or unrecoverable delivery even when that copy
+explains it; never exclude an unexplained failure. Retain only aggregate counts,
+app versions, and generic field types—not phrases, clipboard contents, or
+screenshots.
 
 For the synthetic-credential row, use a disposable macOS profile or VM with no
 Hugging Face login/cache. Launch the installed candidate executable directly
