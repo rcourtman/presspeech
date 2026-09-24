@@ -1285,6 +1285,7 @@ struct ModelDownloadEnvironmentPreparation: Equatable, Sendable {
     let hostileRegistryVariables: [String]
     let removedCredentialVariables: [String]
     let failedCredentialVariables: [String]
+    let invalidProxyVariables: [String]
 }
 
 func detectedHostileRegistryEnvVars(in env: [String: String]) -> [String] {
@@ -1301,6 +1302,18 @@ func detectedHuggingFaceTokenEnvVars(in env: [String: String]) -> [String] {
 
 func detectedHuggingFaceTokenEnvVars(inVariableNames names: Set<String>) -> [String] {
     HUGGING_FACE_TOKEN_ENV_VARS.filter { names.contains($0) }.sorted()
+}
+
+/// Match the pinned FluidAudio ModelRegistry proxy parser before it can run.
+/// Its invalid-URL warning includes the entire inherited value (potentially a
+/// proxy password), and a rejected proxy is otherwise silently ignored. Return
+/// names only; never pass a proxy value to Presspeech logs or alerts.
+func detectedInvalidFluidAudioProxyEnvVars(in env: [String: String]) -> [String] {
+    ["https_proxy", "http_proxy"].filter { name in
+        guard let value = env[name] else { return false }
+        guard let url = URL(string: value) else { return true }
+        return url.host == nil || url.port == nil
+    }.sorted()
 }
 
 /// Read only model-download environment variable names. Never copy credential
@@ -1330,18 +1343,20 @@ func prepareModelDownloadEnvironment(
     return ModelDownloadEnvironmentPreparation(
         hostileRegistryVariables: hostile,
         removedCredentialVariables: removed,
-        failedCredentialVariables: failed
+        failedCredentialVariables: failed,
+        invalidProxyVariables: []
     )
 }
 
 func verifyModelDownloadEnvironmentPreparation(
     _ preparation: ModelDownloadEnvironmentPreparation,
-    variableNamesVisibleToFluidAudio visibleVariableNames: Set<String>
+    environmentVisibleToFluidAudio visibleEnvironment: [String: String]
 ) -> ModelDownloadEnvironmentPreparation {
     // FluidAudio reads ProcessInfo.environment, not getenv directly. Preserve
     // every registry redirect visible in that view, and treat a credential
     // that remains there as a removal failure even if unsetenv succeeded (for
     // example, if Foundation cached an earlier view).
+    let visibleVariableNames = Set(visibleEnvironment.keys)
     let visibleHostileRegistryVariables = Set(
         detectedHostileRegistryEnvVars(inVariableNames: visibleVariableNames)
     )
@@ -1356,7 +1371,8 @@ func verifyModelDownloadEnvironmentPreparation(
         removedCredentialVariables: preparation.removedCredentialVariables.filter {
             !visibleCredentials.contains($0)
         },
-        failedCredentialVariables: failed.sorted()
+        failedCredentialVariables: failed.sorted(),
+        invalidProxyVariables: detectedInvalidFluidAudioProxyEnvVars(in: visibleEnvironment)
     )
 }
 
@@ -1368,14 +1384,14 @@ func prepareProcessModelDownloadEnvironment() -> ModelDownloadEnvironmentPrepara
     ) { name in
         name.withCString { unsetenv($0) == 0 }
     }
-    // Force Foundation's environment view only after removal, then retain just
-    // its names. FluidAudio will consume this same view when it builds a
-    // request. If Foundation somehow captured an earlier credential-bearing
-    // view, verification below fails closed before a model loader is created.
-    let foundationEnvironmentVariableNames = Set(ProcessInfo.processInfo.environment.keys)
+    // Force Foundation's environment view only after credential removal.
+    // FluidAudio will consume this same view when it builds a request. Check
+    // proxy syntax without logging its value, which may contain a password.
+    // An earlier credential-bearing view fails closed before model loading.
+    let foundationEnvironment = ProcessInfo.processInfo.environment
     return verifyModelDownloadEnvironmentPreparation(
         preparation,
-        variableNamesVisibleToFluidAudio: foundationEnvironmentVariableNames
+        environmentVisibleToFluidAudio: foundationEnvironment
     )
 }
 
@@ -1405,18 +1421,34 @@ func enforcePreparedModelDownloadEnvironmentAndExit(
     }
 
     let detected = preparation.hostileRegistryVariables
-    guard !detected.isEmpty else { return }
-    let names = detected.joined(separator: ", ")
-    log("refusing to start: registry override env var(s) set: \(names)")
+    if !detected.isEmpty {
+        let names = detected.joined(separator: ", ")
+        log("refusing to start: registry override env var(s) set: \(names)")
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Presspeech refused to start"
+        alert.informativeText = """
+            These environment variable(s) are set in Presspeech's process: \(names).
+
+            FluidAudio uses them to override the speech-model download URL. Presspeech does not support this and treats it as a sign that the launch environment has been tampered with.
+
+            Check ~/Library/LaunchAgents/, your shell rc files, and any parent process. Once the variables are gone, launch Presspeech again.
+            """
+        alert.addButton(withTitle: "Quit")
+        alert.runModal()
+        exit(EXIT_FAILURE)
+    }
+
+    guard !preparation.invalidProxyVariables.isEmpty else { return }
+    let names = preparation.invalidProxyVariables.joined(separator: ", ")
+    log("refusing to start: invalid model-download proxy env var(s): \(names)")
     let alert = NSAlert()
     alert.alertStyle = .critical
     alert.messageText = "Presspeech refused to start"
     alert.informativeText = """
-        These environment variable(s) are set in Presspeech's process: \(names).
+        Presspeech could not use these inherited model-download proxy setting(s): \(names).
 
-        FluidAudio uses them to override the speech-model download URL. Presspeech does not support this and treats it as a sign that the launch environment has been tampered with.
-
-        Check ~/Library/LaunchAgents/, your shell rc files, and any parent process. Once the variables are gone, launch Presspeech again.
+        FluidAudio would ignore an invalid proxy URL and might connect directly. Its error log could also include the full setting, including a password. Correct or remove the setting from the app's launch environment, then launch Presspeech again. No model download was started.
         """
     alert.addButton(withTitle: "Quit")
     alert.runModal()
@@ -5433,24 +5465,33 @@ enum FillerWordRemover {
         // Clean up artifacts left behind by removal:
         //   1. Comma runs left by consecutive fillers: "x, , , y" →
         //      "x, y". Quantified so a run of ANY length collapses in
-        //      one pass — a non-overlapping ",\s*," pattern consumed
+        //      one pass — a non-overlapping comma-pair pattern consumed
         //      pairs and left ",," behind for two-plus fillers.
         //   2. Whitespace before punctuation: "x ." → "x."
         //   3. Orphan comma glued onto terminal punctuation by pass 2:
         //      "x,." → "x." ("That's all, um." must not end ",.")
-        //   4. Multiple consecutive spaces → single space
-        //   5. Leading punctuation / whitespace, including "?" and "!"
+        //   4. Multiple consecutive horizontal spaces → single space
+        //   5. Horizontal whitespace around line breaks, without changing
+        //      the breaks themselves
+        //   6. Leading punctuation / whitespace, including "?" and "!"
         //      so a removed sentence-initial filler takes its terminal
         //      punctuation with it ("Um? What?" → "What?")
-        //   6. Orphan punctuation after an existing sentence terminator:
+        //   7. Orphan punctuation after an existing sentence terminator:
         //      "x. , y" → "x. y" when removing "Um," after the period.
-        //   7. Trailing whitespace
-        result = result.replacingOccurrences(of: #"\s*,(?:\s*,)+"#, with: ",", options: .regularExpression)
-        result = result.replacingOccurrences(of: #"([.!?])\s+[,.;:!?]+\s*"#, with: "$1 ", options: .regularExpression)
-        result = result.replacingOccurrences(of: #"\s+([.,!?;:])"#, with: "$1", options: .regularExpression)
+        //   8. Trailing whitespace
+        // ICU's \s includes newlines. These cleanups run over the whole
+        // dictation, including line/paragraph breaks created by spoken
+        // formatting commands; only horizontal whitespace may be folded.
+        result = result.replacingOccurrences(of: #"[\p{Zs}\t]*,(?:[\p{Zs}\t]*,)+"#, with: ",", options: .regularExpression)
+        // Keep the exact line endings when a filler after sentence punctuation
+        // leaves orphan punctuation at the start of a line or paragraph.
+        result = result.replacingOccurrences(of: #"([.!?])((?:[\p{Zs}\t]*(?:\r\n|\r|\n))+)[\p{Zs}\t]*[,.;:!?]+[\p{Zs}\t]*"#, with: "$1$2", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"([.!?])[\p{Zs}\t]+[,.;:!?]+[\p{Zs}\t]*"#, with: "$1 ", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[\p{Zs}\t]+([.,!?;:])"#, with: "$1", options: .regularExpression)
         result = result.replacingOccurrences(of: #",+([.!?;:])"#, with: "$1", options: .regularExpression)
-        result = result.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        result = result.replacingOccurrences(of: #"^[\s,.;:!?]+"#, with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[\p{Zs}\t]+"#, with: " ", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[ \t]*(\r\n|\r|\n)[ \t]*"#, with: "$1", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"^[\p{Zs}\t,.;:!?]+"#, with: "", options: .regularExpression)
         result = result.trimmingCharacters(in: .whitespacesAndNewlines)
         result = restoringCapitalization(in: result,
                                          targets: capitalizationRepairTargets)
@@ -21059,6 +21100,21 @@ private enum PresspeechSelfTest {
         let leadingBang = FillerWordRemover.apply(to: "Ah! Careful.")
         try expect(leadingBang.text, equals: "Careful.", "leading filler exclamation should take its punctuation with it")
         try expect(leadingBang.removedCount, equals: 1, "leading filler exclamation removal count")
+
+        let multiline = FillerWordRemover.apply(to: "First. Um, line.\nSecond line.\n\nThird line.")
+        try expect(multiline.text, equals: "First. Line.\nSecond line.\n\nThird line.",
+                   "filler cleanup must retain unrelated line and paragraph breaks")
+        try expect(multiline.removedCount, equals: 1, "multiline filler removal count")
+
+        let afterBreak = FillerWordRemover.apply(to: "First.\nUm second.\r\nThird.")
+        try expect(afterBreak.text, equals: "First.\nSecond.\r\nThird.",
+                   "filler removal at a line start must retain LF and CRLF boundaries")
+        try expect(afterBreak.removedCount, equals: 1, "line-start filler removal count")
+
+        let afterParagraph = FillerWordRemover.apply(to: "First.\n\nUm, second.")
+        try expect(afterParagraph.text, equals: "First.\n\nSecond.",
+                   "orphan punctuation after a paragraph break must be removed without flattening it")
+        try expect(afterParagraph.removedCount, equals: 1, "paragraph-start filler removal count")
     }
 
     private static func testAudioInputDeviceFiltering() throws {
@@ -22178,6 +22234,22 @@ private enum PresspeechSelfTest {
             equals: ["MODEL_REGISTRY_URL", "REGISTRY_URL"],
             "an empty-string value still represents a tampered launch env"
         )
+        try expect(
+            detectedInvalidFluidAudioProxyEnvVars(in: [
+                "https_proxy": "http://proxy.example:8080",
+                "http_proxy": "http://user:synthetic-password@proxy.example:3128",
+            ]),
+            equals: [],
+            "valid inherited proxies must remain available for model downloads"
+        )
+        try expect(
+            detectedInvalidFluidAudioProxyEnvVars(in: [
+                "https_proxy": "http://user:synthetic-password@proxy.example:notaport",
+                "http_proxy": "",
+            ]),
+            equals: ["http_proxy", "https_proxy"],
+            "an invalid proxy must be rejected by name before FluidAudio logs its full URL"
+        )
 
         var attempted: [String] = []
         let preparation = prepareModelDownloadEnvironment(
@@ -22202,21 +22274,27 @@ private enum PresspeechSelfTest {
             equals: ModelDownloadEnvironmentPreparation(
                 hostileRegistryVariables: ["REGISTRY_URL"],
                 removedCredentialVariables: ["HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"],
-                failedCredentialVariables: ["HUGGINGFACEHUB_API_TOKEN"]
+                failedCredentialVariables: ["HUGGINGFACEHUB_API_TOKEN"],
+                invalidProxyVariables: []
             ),
             "model download preparation must preserve redirects and fail closed on credential removal"
         )
         try expect(
             verifyModelDownloadEnvironmentPreparation(
                 preparation,
-                variableNamesVisibleToFluidAudio: ["HF_TOKEN", "MODEL_REGISTRY_URL"]
+                environmentVisibleToFluidAudio: [
+                    "HF_TOKEN": "synthetic-token",
+                    "MODEL_REGISTRY_URL": "https://presspeech.invalid/",
+                    "https_proxy": "http://user:synthetic-password@proxy.example:notaport",
+                ]
             ),
             equals: ModelDownloadEnvironmentPreparation(
                 hostileRegistryVariables: ["MODEL_REGISTRY_URL", "REGISTRY_URL"],
                 removedCredentialVariables: ["HUGGING_FACE_HUB_TOKEN"],
-                failedCredentialVariables: ["HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN"]
+                failedCredentialVariables: ["HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN"],
+                invalidProxyVariables: ["https_proxy"]
             ),
-            "Foundation-visible redirects and credentials must both fail closed"
+            "Foundation-visible redirects, credentials and malformed proxies must fail closed"
         )
 
         // Exercise getenv/unsetenv and Foundation's environment snapshot in a
@@ -22235,6 +22313,8 @@ private enum PresspeechSelfTest {
             "HUGGINGFACEHUB_API_TOKEN": "presspeech-synthetic-token-marker",
             "REGISTRY_URL": "https://presspeech.invalid/",
             "MODEL_REGISTRY_URL": "https://presspeech.invalid/",
+            "https_proxy": "http://user:synthetic-password@proxy.example:notaport",
+            "http_proxy": "http://proxy.example:8080",
         ]
         child.standardOutput = FileHandle.nullDevice
         child.standardError = FileHandle.nullDevice
@@ -22263,6 +22343,11 @@ private enum PresspeechSelfTest {
             preparation.hostileRegistryVariables,
             equals: ["MODEL_REGISTRY_URL", "REGISTRY_URL"],
             "registry override names must remain detected while credentials are removed"
+        )
+        try expect(
+            preparation.invalidProxyVariables,
+            equals: ["https_proxy"],
+            "an invalid proxy must be detected without retaining its sensitive value"
         )
         try expect(
             detectedHuggingFaceTokenEnvVars(inVariableNames: modelDownloadEnvironmentVariableNames()),
@@ -22735,6 +22820,24 @@ private enum PresspeechSelfTest {
                 removedFillerWordCount: 0
             ),
             "spoken formatting should deterministically turn documented phrases into structure and punctuation"
+        )
+
+        let formattedWithFillerRemoval = processedDictationText(
+            rawTranscript: "First new paragraph um second new line third",
+            corrections: [],
+            spokenFormattingCommands: true,
+            dictationLanguage: .english,
+            removeFillerWords: true
+        )
+        try expect(
+            formattedWithFillerRemoval,
+            equals: DictationTextProcessingResult(
+                text: "First\n\nsecond\nthird",
+                appliedCorrectionCount: 0,
+                appliedFormattingCommandCount: 2,
+                removedFillerWordCount: 1
+            ),
+            "filler removal must not undo spoken line and paragraph formatting"
         )
 
         let frenchFormatted = processedDictationText(

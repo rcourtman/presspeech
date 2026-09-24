@@ -656,6 +656,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Verify signature, notarisation, staple, version, archive size, and SHA-256 | |
 | First launch through model, microphone, Accessibility / Device Control and Data Access, Input Monitoring, and keyboard-event-posting readiness | |
 | Clean first model download with synthetic values in all inherited Hugging Face token variables | |
+| In builds with proxy preflight, malformed inherited macOS proxy URL refuses before model loading without logging its synthetic credential marker | |
 | Physical Command-V into each chosen native, browser, and Electron target works before Presspeech delivery is scored | |
 | Ten consecutive dictations into TextEdit with the previous-clipboard option off | |
 | Ten consecutive dictations into a current browser text field, plus three two-window focus-change recoveries, with the previous-clipboard option off | |
@@ -722,6 +723,16 @@ only—not marker values. Do not copy raw logs or capture/share request headers.
 This packaged-app check complements the focused
 `swift run Presspeech --self-test hostile-env` check, which exercises actual
 process environment removal and Foundation visibility with synthetic values.
+
+For the proxy-preflight row, use a separate disposable launch environment with
+`https_proxy=http://user:presspeech-synthetic-proxy-marker@proxy.invalid:notaport`
+and no real credentials. Launch the installed candidate with a missing model.
+It must refuse before creating the model loader or making a download request;
+the alert and app/library logs may name `https_proxy` but must not contain the
+marker or full URL. Also test a syntactically valid proxy value in a controlled
+network setup if available: Presspeech must not reject its syntax, though a
+working proxy and TLS trust still require separate verification. Do not share
+raw logs or proxy settings as qualification evidence.
 
 For issue #33, pass only if a steady-focus Electron target receives the complete
 transcript once, while switching to a second window of that same app before
@@ -1293,6 +1304,12 @@ item after the development-wrapper launch check.
 - Enable **Settings → Text → Spoken formatting commands** with Language Hint
   set to English. Dictate “first line new line second line question mark” and
   confirm the exact output has a newline and ends in `?`.
+- Keep spoken formatting enabled and also enable **Remove filler words**.
+  In a disposable field, dictate a phrase with “new paragraph” and “new
+  line” plus an audible “um”. When the privacy-safe log reports a nonzero
+  filler-removal count for that take, confirm the filler is gone but the
+  paragraph and line breaks remain. If recognition omits the filler on every
+  attempt, mark this check **Blocked**, not **Pass**.
 - Set Language Hint to French. Dictate “bonjour virgule nouvelle ligne monde
   point d’interrogation” and confirm the exact output is `bonjour,`, a newline,
   then `monde?`. Confirm the same French command words remain literal when the

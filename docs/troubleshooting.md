@@ -237,7 +237,9 @@ is not restored after recording.
 
 Choose **Open Startup Settings**, find Presspeech under **Settings -> Apps ->
 Startup**, and review the system setting. Return to Setup or Settings and retry
-**Finish Setup** or **Save**.
+**Finish Setup** or **Save**. **Finish Setup** stays open if registration fails.
+In upcoming Windows 0.1.13, **Set Up Later** instead shows a warning and closes
+without completing setup; the guided setup returns on the next launch.
 
 ## Report A Problem Safely
 

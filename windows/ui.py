@@ -1737,14 +1737,23 @@ class SetupWindow:
                 self.app._cached_input_topology = None
             settings["input_device"] = selected
             settings["autostart"] = bool(self.autostart.get())
-            settings["setup_complete"] = True
+            # Keep first-run recovery available if the separate Windows
+            # startup registration fails. The requested choices are saved
+            # now, but completion is committed only after that side effect.
             cfg.save(settings)
         if self.app.apply_autostart():
+            with self.app.lock:
+                settings = self.app.settings
+                if not settings.get("setup_complete", False):
+                    completed = dict(settings, setup_complete=True)
+                    cfg.save(completed)
+                    settings["setup_complete"] = True
             self._close()
         else:
             _set_accessible_text(
                 self.autostart_status,
-                "Setup is complete, but Start with Windows was not updated.")
+                "Start with Windows was not updated. Setup remains open; "
+                "review Startup Settings, then retry Finish Setup.")
 
     def _defer(self):
         """Keep first-run choices without claiming setup is complete."""
@@ -1769,12 +1778,20 @@ class SetupWindow:
         if self.app.apply_autostart():
             self._close()
         else:
-            _set_accessible_text(
-                self.autostart_status,
-                "Setup is still open, but Start with Windows was not updated. "
-                "Open Startup Settings or turn it off, then choose Set Up "
-                "Later again.",
-            )
+            # Deferral is not a claim that setup or startup succeeded. A
+            # permanently inaccessible Run key must not trap the user behind
+            # Escape and the window-close action, both of which call _defer.
+            try:
+                messagebox.showwarning(
+                    "Start with Windows not updated",
+                    "Your choices were saved, but Start with Windows was not "
+                    "updated. Setup remains incomplete and will open again "
+                    "on the next launch. Review Startup Settings before "
+                    "trying again.",
+                    parent=self.root,
+                )
+            finally:
+                self._close()
 
     def _close(self):
         try:

@@ -1481,13 +1481,25 @@ class SetupWindowTests(unittest.TestCase):
         window.autostart.get.return_value = False
         window.app.apply_autostart.return_value = True
         window._close = mock.Mock()
+        events = []
 
-        with mock.patch.object(ui.cfg, "save") as save:
+        def save(settings):
+            events.append(("save", settings["setup_complete"]))
+
+        def apply_autostart():
+            events.append(("apply", window.app.settings["setup_complete"]))
+            return True
+
+        window.app.apply_autostart.side_effect = apply_autostart
+
+        with mock.patch.object(ui.cfg, "save", side_effect=save):
             window._finish()
 
         self.assertTrue(window.app.settings["setup_complete"])
         self.assertFalse(window.app.settings["autostart"])
-        save.assert_called_once_with(window.app.settings)
+        self.assertEqual(events, [
+            ("save", False), ("apply", False), ("save", True),
+        ])
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
 
@@ -1502,17 +1514,70 @@ class SetupWindowTests(unittest.TestCase):
         window.autostart.get.return_value = True
         window.app.apply_autostart.return_value = False
         window._close = mock.Mock()
+        saved = []
 
-        with mock.patch.object(ui.cfg, "save") as save, \
+        with mock.patch.object(
+                ui.cfg, "save",
+                side_effect=lambda settings: saved.append(dict(settings))) as save, \
                 mock.patch.object(ui, "_set_accessible_text") as set_text:
             window._finish()
 
-        self.assertTrue(window.app.settings["setup_complete"])
+        self.assertFalse(window.app.settings["setup_complete"])
+        self.assertEqual(saved[0]["setup_complete"], False)
+        self.assertEqual(saved[0]["autostart"], True)
         save.assert_called_once_with(window.app.settings)
         set_text.assert_called_once_with(
             window.autostart_status,
-            "Setup is complete, but Start with Windows was not updated.",
+            "Start with Windows was not updated. Setup remains open; "
+            "review Startup Settings, then retry Finish Setup.",
         )
+        window._close.assert_not_called()
+
+    def test_setup_can_finish_after_startup_registration_retry(self):
+        window = self.make_window("ready")
+        window.app.settings = {
+            "input_device": "auto",
+            "autostart": True,
+            "setup_complete": False,
+        }
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = True
+        window.app.apply_autostart.side_effect = [False, True]
+        window._close = mock.Mock()
+        saved = []
+
+        with mock.patch.object(
+                ui.cfg, "save",
+                side_effect=lambda settings: saved.append(dict(settings))), \
+                mock.patch.object(ui, "_set_accessible_text"):
+            window._finish()
+            self.assertFalse(window.app.settings["setup_complete"])
+            window._finish()
+
+        self.assertEqual(
+            [settings["setup_complete"] for settings in saved],
+            [False, False, True],
+        )
+        self.assertTrue(window.app.settings["setup_complete"])
+        window._close.assert_called_once_with()
+
+    def test_failed_completion_save_keeps_setup_incomplete(self):
+        window = self.make_window("ready")
+        window.app.settings = {
+            "input_device": "auto",
+            "autostart": False,
+            "setup_complete": False,
+        }
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = False
+        window.app.apply_autostart.return_value = True
+        window._close = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save", side_effect=[None, OSError]):
+            with self.assertRaises(OSError):
+                window._finish()
+
+        self.assertFalse(window.app.settings["setup_complete"])
         window._close.assert_not_called()
 
     def test_setup_hotkey_change_applies_and_persists_before_finish(self):
@@ -1692,7 +1757,7 @@ class SetupWindowTests(unittest.TestCase):
         window.app.apply_autostart.assert_called_once_with()
         window._close.assert_called_once_with()
 
-    def test_deferred_setup_exposes_autostart_failure_without_claiming_success(self):
+    def test_deferred_setup_warns_then_closes_after_autostart_failure(self):
         window = self.make_window("loading")
         window.app.settings = {
             "input_device": "auto",
@@ -1705,20 +1770,43 @@ class SetupWindowTests(unittest.TestCase):
         window._close = mock.Mock()
 
         with mock.patch.object(ui.cfg, "save") as save, \
-                mock.patch.object(ui, "_set_accessible_text") as set_text:
+                mock.patch.object(ui.messagebox, "showwarning") as warning:
             window._defer()
 
         self.assertFalse(window.app.settings["setup_complete"])
         self.assertTrue(window.app.settings["autostart"])
         save.assert_called_once_with(window.app.settings)
         window.app.apply_autostart.assert_called_once_with()
-        set_text.assert_called_once_with(
-            window.autostart_status,
-            "Setup is still open, but Start with Windows was not updated. "
-            "Open Startup Settings or turn it off, then choose Set Up Later "
-            "again.",
+        warning.assert_called_once_with(
+            "Start with Windows not updated",
+            "Your choices were saved, but Start with Windows was not "
+            "updated. Setup remains incomplete and will open again "
+            "on the next launch. Review Startup Settings before "
+            "trying again.",
+            parent=window.root,
         )
-        window._close.assert_not_called()
+        window._close.assert_called_once_with()
+
+    def test_deferred_setup_closes_even_if_warning_cannot_be_shown(self):
+        window = self.make_window("loading")
+        window.app.settings = {
+            "input_device": "auto",
+            "autostart": False,
+            "setup_complete": False,
+        }
+        window.autostart = mock.Mock()
+        window.autostart.get.return_value = False
+        window.app.apply_autostart.return_value = False
+        window._close = mock.Mock()
+
+        with mock.patch.object(ui.cfg, "save"), \
+                mock.patch.object(
+                    ui.messagebox, "showwarning", side_effect=RuntimeError):
+            with self.assertRaises(RuntimeError):
+                window._defer()
+
+        self.assertFalse(window.app.settings["setup_complete"])
+        window._close.assert_called_once_with()
 
     def test_setup_instructions_respect_existing_toggle_mode(self):
         window = self.make_window("ready")

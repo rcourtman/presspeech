@@ -14,6 +14,7 @@
       ],
       "purpose": "FluidAudio downloads the Parakeet TDT v3 CoreML model weights",
       "approximate_size": "500-600 MB",
+      "proxy_preflight_by_release": "In macOS 0.3.8, the pinned FluidAudio client may log a malformed inherited https_proxy or http_proxy URL verbatim, including embedded credentials, and then ignore it. The macOS 0.3.9 implementation refuses to start before model loading when either value lacks a parsable host and port; it reports variable names only. Valid inherited proxy settings remain active, including the TLS-inspection trust boundary",
       "first_run_controls_by_release": [
         {
           "version": "0.3.8",

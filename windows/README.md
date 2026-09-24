@@ -516,10 +516,13 @@ A microphone selection saved during an active recording applies to the next
 dictation. The recording already in progress stays on the input it opened, so
 changing Settings cannot alter its timing or cut off its final words.
 
-If **Start with Windows** cannot be registered, Setup stays open and Settings
-reports that the startup state was not updated instead of claiming success.
-Use **Open Startup Settings** to review Presspeech under Windows
-**Settings → Apps → Startup**, then retry **Finish Setup** or **Save**.
+If **Start with Windows** cannot be registered, **Finish Setup** keeps Setup
+open and Settings reports that the startup state was not updated instead of
+claiming success. Use **Open Startup Settings** to review Presspeech under
+Windows **Settings → Apps → Startup**, then retry **Finish Setup** or **Save**.
+In the upcoming 0.1.13 build, a failed first-run registration also leaves
+Setup incomplete, so it reopens on the next launch. **Set Up Later** can close
+Setup after an explicit warning if the startup setting cannot be fixed now.
 
 ## Notes
 

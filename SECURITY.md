@@ -54,6 +54,15 @@ does not need a planned re-download; see the
 [macOS after-use guidance](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use).
 Do not include token values in logs or support requests.
 
+The pinned macOS FluidAudio client logs an invalid inherited `https_proxy` or
+`http_proxy` URL verbatim and then ignores it, which could expose proxy
+credentials in a library log or allow an unintended direct model request.
+The 0.3.9 implementation checks these two proxy settings before creating a model
+loader and refuses to start if either lacks a parsable host and port. Its log
+and alert identify only the variable name, not its value. Correct or remove a
+malformed setting before relaunching. Valid proxy settings remain in effect;
+this check is not a guarantee against a misconfigured or TLS-inspecting proxy.
+
 Finished text does enter the
 shared system clipboard for paste and recovery. macOS 0.3.8 can make
 those entries available through Universal Clipboard; builds containing the
