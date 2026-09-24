@@ -6193,9 +6193,7 @@ func currentDictationPasteTarget(reportFailure: Bool = false,
         bundleIdentifierForProcess: { processIdentifier in
             // Read only the captured process, not a title or window text;
             // captureDictationPasteTarget checks frontmost PID again afterwards.
-            NSRunningApplication.runningApplication(
-                withProcessIdentifier: processIdentifier
-            )?.bundleIdentifier
+            NSRunningApplication(processIdentifier: processIdentifier)?.bundleIdentifier
         }
     )
     // captureDictationPasteTarget rechecks activation after the potentially
