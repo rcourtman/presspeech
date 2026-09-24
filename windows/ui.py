@@ -171,6 +171,12 @@ RECOVERY_COPY_CLIPBOARD_WARNING = (
     "breaks can run commands."
 )
 
+SCRATCHPAD_RETENTION_WARNING = (
+    "Text already shown here is not saved. Closing Try Dictation discards it. "
+    "Select and copy it to a private editor first; Copy or Cut replaces the "
+    "current clipboard item."
+)
+
 
 def _window_host():
     global _WINDOW_HOST
@@ -3012,7 +3018,10 @@ class ScratchpadWindow(_RegisteredDialog):
         frame.rowconfigure(1, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        scratchpad_label = ttk.Label(frame, text="Private dictation scratchpad")
+        scratchpad_label = ttk.Label(
+            frame, text="Private dictation scratchpad — closing discards "
+            "text already shown. Copy/Cut replaces the clipboard.",
+            justify="left", wraplength=max(1, width - 48))
         scratchpad_label.grid(row=0, column=0, sticky="w", pady=(0, 4))
         self.text = tk.Text(frame, wrap="word", font="TkDefaultFont")
         self.text.grid(row=1, column=0, sticky="nsew")
@@ -3040,12 +3049,15 @@ class ScratchpadWindow(_RegisteredDialog):
 
         def resize_status(event):
             if event.widget is root:
+                scratchpad_label.configure(
+                    wraplength=max(1, event.width - 48))
                 self.status.configure(wraplength=max(1, event.width - 48))
 
         root.bind("<Configure>", resize_status, add="+")
         root.update_idletasks()
         _label_control(scratchpad_label, self.text)
         _name_control(self.text, "Private dictation scratchpad")
+        _describe_control(self.text, SCRATCHPAD_RETENTION_WARNING)
         _describe_control(
             self.review_button,
             "Open Delivery Recovery for a waiting dictation without copying it.")

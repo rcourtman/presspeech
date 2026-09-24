@@ -1842,12 +1842,9 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
         "<title>Install Presspeech on macOS - Direct Download or Homebrew</title>",
         path=path,
     )
-    text = replace_regex(
-        text,
-        r'<meta name="description" content="[^"]+">',
-        '<meta name="description" content="Install Presspeech from the notarised zip or Homebrew Cask, launch the app, use Setup Checklist to finish the local model, permissions, and hotkey readiness, then start push-to-talk dictation.">',
-        path=path,
-    )
+    # The install preview carries a release-specific first-launch warning.
+    # Keep it hand-reviewed instead of rewriting it with an unconditional
+    # instruction to launch a build whose missing-model request is not deferrable.
     text = replace_regex(
         text,
         r"<p>(?:The canonical install path is|Use the direct notarised download for the shortest path).*?</p>",

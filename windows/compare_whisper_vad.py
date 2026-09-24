@@ -372,6 +372,27 @@ def _vad_retention_diagnostics(baseline, candidate, *, app_eligible_only=False):
     return result
 
 
+def _latency_diagnostics(baseline, candidate, *, app_eligible_only=False):
+    """Expose the largest per-clip p50 increase without pairing trial positions.
+
+    The two reports are separate runs, so individual trial timings are not
+    paired observations. A pooled median can also hide one slow dictation.
+    This is a magnitude to investigate, not a noise-adjusted speed verdict.
+    """
+    largest = None
+    for position, (base, changed) in enumerate(zip(baseline, candidate), 1):
+        if app_eligible_only and not base["passes_app_minimum_audio_duration"]:
+            continue
+        before = statistics.median(base["inference_seconds"]["all"])
+        after = statistics.median(changed["inference_seconds"]["all"])
+        increase = after - before
+        if increase > 0 and (largest is None
+                             or increase > largest["increase_seconds"]):
+            largest = {"position": position, "increase_seconds": increase,
+                       "baseline_seconds": before, "candidate_seconds": after}
+    return {"largest_clip_median_slowdown": largest}
+
+
 def _regressed_strata(samples, regressions, *, app_eligible_only=False):
     """Count labelled strata without treating latency alone as a quality loss."""
     measured_regression_positions = {
@@ -474,6 +495,8 @@ def compare_reports(baseline, candidate):
         "candidate": candidate_score,
         "regressions": regressions,
         "strata": _regressed_strata(baseline["samples"], regressions),
+        "latency": _latency_diagnostics(
+            baseline["samples"], candidate["samples"]),
         "app_eligible": {
             "baseline": _score(eligible_baseline),
             "candidate": _score(eligible_candidate),
@@ -482,6 +505,9 @@ def compare_reports(baseline, candidate):
                 baseline["samples"], eligible_regressions,
                 app_eligible_only=True),
             "vad_retention": _vad_retention_diagnostics(
+                baseline["samples"], candidate["samples"],
+                app_eligible_only=True),
+            "latency": _latency_diagnostics(
                 baseline["samples"], candidate["samples"],
                 app_eligible_only=True),
         },
@@ -533,6 +559,17 @@ def _print_vad_retention(diagnostics, *, prefix=""):
                     direction, ",".join(map(str, counts[direction]))))
 
 
+def _print_latency(diagnostics, *, prefix=""):
+    largest = diagnostics["largest_clip_median_slowdown"]
+    if largest is None:
+        print("%sLargest clip p50 inference slowdown: none measured" % prefix)
+    else:
+        print("%sLargest clip p50 inference slowdown: +%.6fs at position %d "
+              "(%.6fs -> %.6fs)" % (
+                  prefix, largest["increase_seconds"], largest["position"],
+                  largest["baseline_seconds"], largest["candidate_seconds"]))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("baseline", help="private baseline benchmark JSON")
@@ -571,6 +608,7 @@ def main():
               "speech clips with comparable language labels")
     _print_vad_retention(result["vad_retention"])
     _print_regressions(result["regressions"], result["strata"])
+    _print_latency(result["latency"])
     if result["baseline"]["below_app_gate_clips"]:
         eligible = result["app_eligible"]
         before = eligible["baseline"]
@@ -595,8 +633,10 @@ def main():
                              prefix="App-eligible ")
         _print_regressions(eligible["regressions"], eligible["strata"],
                            prefix="App-eligible ")
+        _print_latency(eligible["latency"], prefix="App-eligible ")
     print("VAD-retained duration is not acoustic speech recall or a quality "
-          "verdict. Not a pass/fail result; review individual private reports, "
+          "verdict. A clip p50 difference is not a controlled trial pairing or "
+          "a significance test. Not a pass/fail result; review individual private reports, "
           "audio, thermal load, and native dictation before a policy change.")
 
 

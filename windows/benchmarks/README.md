@@ -234,7 +234,13 @@ precision, recorded environment, run count, per-clip review scope, or any VAD
 setting other than the minimum silence duration. It compares all-trial WER,
 error-free speech-trial counts, longest deletion, first/final-word failures,
 VAD rejection and missing-duration counts, reviewed-silence false positives,
-and inference median. It also shows anonymous positions where median
+and inference median. It reports the largest positive per-clip inference p50
+change, including its anonymous position and before/after times, so an outlier
+cannot disappear behind a stable pooled median. This is an unpaired,
+noise-sensitive diagnostic rather than proof of a VAD speed effect. Interpret
+it alongside text accuracy: [faster-whisper notes](https://github.com/SYSTRAN/faster-whisper#comparing-performance-against-other-implementations)
+that decoding speed also depends on the number of words produced. The helper
+also shows anonymous positions where median
 VAD-retained duration fell or rose on reviewed speech and silence controls;
 clips with missing VAD measurements are listed as unmeasured rather than
 compared. This is a directional diagnostic, **not** an accuracy regression or
@@ -257,8 +263,9 @@ transcripts, or group labels. Sub-250 ms clips remain in the all-clips model
 scores and are counted separately as below the app's transcription gate. When
 any such clip is present, the helper also prints an app-duration-gate-eligible
 subset: reviewed speech/silence counts, all-trial quality and inference
-summaries, VAD-retention changes, anonymous clip regressions, and regressed
-labelled-stratum counts. Positions remain those of the original report. If no
+summaries, the largest eligible clip-level p50 slowdown, VAD-retention changes,
+anonymous clip regressions, and regressed labelled-stratum counts. Positions
+remain those of the original report. If no
 eligible reviewed speech or silence control remains, the helper says that this
 subset lacks the coverage needed for a quality comparison; it does not turn
 missing WER or latency into zero. Eligibility is taken from the benchmark's

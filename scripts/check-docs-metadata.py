@@ -36,6 +36,7 @@ class DocumentParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.canonicals: list[str] = []
         self.robots: list[str] = []
+        self.previews: dict[str, list[str]] = {"description": [], "og:description": []}
         self.structured_data: list[str] = []
         self._json_ld: list[str] | None = None
 
@@ -47,6 +48,13 @@ class DocumentParser(HTMLParser):
                 self.canonicals.append(href)
         if tag == "meta" and (attributes.get("name") or "").lower() == "robots":
             self.robots.append((attributes.get("content") or "").lower())
+        if tag == "meta":
+            name = (attributes.get("name") or "").lower()
+            prop = (attributes.get("property") or "").lower()
+            if name == "description":
+                self.previews["description"].append(attributes.get("content") or "")
+            if prop == "og:description":
+                self.previews["og:description"].append(attributes.get("content") or "")
         if tag == "script" and attributes.get("type") == "application/ld+json":
             self._json_ld = []
 
@@ -118,6 +126,26 @@ def has_delivery_boundary(description: object) -> bool:
             "same window", "clipboard", "manual paste",
         )
     )
+
+
+def preview_decision_errors(
+    page: str, parser: DocumentParser, required: tuple[str, ...]
+) -> list[str]:
+    """Keep short search/social snippets from bypassing first-launch decisions."""
+    errors: list[str] = []
+    for field in ("description", "og:description"):
+        values = parser.previews[field]
+        if len(values) != 1:
+            errors.append(f"{page}: expected one {field} preview, found {len(values)}")
+            continue
+        normalized = " ".join(values[0].lower().split())
+        missing = [phrase for phrase in required if phrase not in normalized]
+        if missing:
+            errors.append(
+                f"{page}: {field} preview omits first-launch decision: "
+                + ", ".join(missing)
+            )
+    return errors
 
 
 def robots_directives(parser: DocumentParser) -> set[str]:
@@ -310,6 +338,20 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
 
     index_path = docs / "index.html"
     windows_path = docs / "windows.html"
+    preview_requirements = {
+        "index.html": ("model", "launch", "privacy decision", "before opening"),
+        "install.html": (
+            f"macos {versions[MAC_APP_ID]}", "before opening", "model",
+            "launch", "privacy decision", "inherited", "token",
+        ),
+        "windows.html": (
+            f"windows {versions[WINDOWS_APP_ID]}", "before opening", "model",
+            "launch", "privacy decision", "telemetry", "token",
+        ),
+    }
+    for page, required in preview_requirements.items():
+        parser = documents.get(docs / page, (DocumentParser(), []))[0]
+        errors.extend(preview_decision_errors(page, parser, required))
     index_apps = app_nodes(documents.get(index_path, (DocumentParser(), []))[1])
     windows_apps = app_nodes(documents.get(windows_path, (DocumentParser(), []))[1])
     index_pages = webpage_nodes(documents.get(index_path, (DocumentParser(), []))[1])
@@ -505,6 +547,23 @@ def run_self_test() -> None:
         "holds the text for manual paste."
     ):
         raise RuntimeError("self-test: missing same-window limit was accepted")
+
+    preview_parser = DocumentParser()
+    preview_parser.feed(
+        '<meta name="description" content="Before opening macOS 0.3.8, read the '
+        'model-download privacy decision: a missing model downloads on launch '
+        'and may send an inherited token.">'
+        '<meta property="og:description" content="Open and start dictating.">'
+    )
+    if not any(
+        "og:description preview omits first-launch decision" in error
+        for error in preview_decision_errors(
+            "install.html", preview_parser,
+            ("macos 0.3.8", "before opening", "model", "launch",
+             "privacy decision", "inherited", "token"),
+        )
+    ):
+        raise RuntimeError("self-test: unsafe social install preview was accepted")
 
     with tempfile.TemporaryDirectory() as tmp:
         broken = Path(tmp) / "broken.html"

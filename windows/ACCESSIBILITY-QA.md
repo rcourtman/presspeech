@@ -67,6 +67,9 @@ Windows UI, UIA integration, or Tk version.
    enabled, reachable by Tab and Left Alt+R, and reopens Recovery without
    copying. After resolving the item, confirm Review disables, focus does not
    remain on the disabled button, and Dictate becomes available again.
+   With harmless text already shown in Try Dictation, confirm its visible
+   close warning and the editor's Narrator description both explain that
+   closing discards the shown text and Copy/Cut replaces the clipboard item.
    In Delivery Recovery, confirm the warning that Copy replaces the current
    clipboard item—including non-text content—is visible and that Narrator
    announces the same consequence when **Copy for Manual Paste** is focused.

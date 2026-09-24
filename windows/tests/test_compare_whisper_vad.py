@@ -413,6 +413,69 @@ class CompareWhisperVadTests(unittest.TestCase):
             for private in ("private speech", "private-path", root):
                 self.assertNotIn(private, message)
 
+    def test_largest_clip_latency_slowdown_is_not_hidden_by_pooled_median(self):
+        base, candidate = reports()
+        candidate["samples"][0]["inference_seconds"]["all"] = [0.5, 0.6]
+        # The larger number of unchanged controls keeps the pooled median
+        # small despite a 300 ms regression on one reviewed dictation.
+        for report in (base, candidate):
+            for index in range(3):
+                control = copy.deepcopy(report["samples"][1])
+                control["id"] = "private-control-%d" % index
+                control["audio"] = "private-control-%d.wav" % index
+                report["samples"].append(control)
+            report["sample_count"] = len(report["samples"])
+
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["regressions"]["inference_median_seconds"], [1])
+        largest = result["latency"]["largest_clip_median_slowdown"]
+        self.assertEqual(largest["position"], 1)
+        self.assertAlmostEqual(largest["increase_seconds"], 0.3)
+        self.assertAlmostEqual(largest["baseline_seconds"], 0.25)
+        self.assertAlmostEqual(largest["candidate_seconds"], 0.55)
+        self.assertEqual(result["baseline"]["inference_median_seconds"],
+                         result["candidate"]["inference_median_seconds"])
+        self.assertNotIn("private", repr(result))
+
+    def test_latency_diagnostic_keeps_below_gate_clips_out_of_app_subset(self):
+        base, candidate = reports()
+        for report in (base, candidate):
+            report["samples"][0]["passes_app_minimum_audio_duration"] = False
+        candidate["samples"][0]["inference_seconds"]["all"] = [1.2, 1.3]
+        candidate["samples"][1]["inference_seconds"]["all"] = [0.15, 0.15]
+
+        result = compare.compare_reports(base, candidate)
+        self.assertEqual(result["latency"]["largest_clip_median_slowdown"]["position"], 1)
+        eligible_largest = result["app_eligible"]["latency"][
+            "largest_clip_median_slowdown"]
+        self.assertEqual(eligible_largest["position"], 2)
+        self.assertAlmostEqual(eligible_largest["increase_seconds"], 0.05)
+        self.assertAlmostEqual(eligible_largest["baseline_seconds"], 0.1)
+        self.assertAlmostEqual(eligible_largest["candidate_seconds"], 0.15)
+        with tempfile.TemporaryDirectory() as root:
+            paths = [os.path.join(root, name) for name in ("base.json", "new.json")]
+            for path, report in zip(paths, (base, candidate)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", ["compare", *paths]), \
+                    redirect_stdout(output):
+                compare.main()
+            message = output.getvalue()
+            self.assertIn(
+                "Largest clip p50 inference slowdown: +1.000000s at position 1",
+                message)
+            self.assertIn("App-eligible Largest clip p50 inference slowdown: "
+                          "+0.050000s at position 2", message)
+            for private in ("private speech", "private-path", root):
+                self.assertNotIn(private, message)
+
+    def test_no_clip_latency_slowdown_is_explicit(self):
+        base, candidate = reports()
+        candidate["samples"][0]["inference_seconds"]["all"] = [0.1, 0.2]
+        result = compare.compare_reports(base, candidate)
+        self.assertIsNone(result["latency"]["largest_clip_median_slowdown"])
+
     def test_partial_vad_measurements_do_not_count_as_duration_change(self):
         base, candidate = reports()
         candidate["samples"][0]["speech_detection"].update({

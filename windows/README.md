@@ -372,6 +372,9 @@ upcoming 0.1.13 change also provide a **Try Dictation…** button in Settings.
 In the scratchpad, use **Dictate** to start and stop, then check the result
 there. Use only harmless words: the scratchpad can still use the system
 clipboard (see the [clipboard privacy boundary](https://rcourtman.github.io/presspeech/privacy.html#operating-system-clipboard-services)).
+Text already shown in Try Dictation is not saved: closing the window discards
+it. Select and copy any words you need to keep into a private editor before
+closing; Copy or Cut replaces the current clipboard item.
 In upcoming 0.1.13 builds, Copy and Cut of selected scratchpad text use the
 same history/cloud-excluded clipboard path as dictation delivery. Cut removes
 the selection only after Presspeech confirms the copy.

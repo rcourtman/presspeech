@@ -709,6 +709,12 @@ keyboard access testing in addition to assistive-technology testing.
   Transcribing-to-ready transition; no transcript should disappear or be
   duplicated. A close during active capture must still cancel without
   creating a recovery copy.
+- After harmless text has appeared in Try Dictation, check that its visible
+  warning and the editor's Narrator description explain that closing discards
+  text already shown and that Copy/Cut replaces the clipboard item. Close and
+  reopen the scratchpad: the shown text must not persist or be copied
+  automatically. This is separate from a still-transcribing result retained
+  by Delivery Recovery.
 - In hold mode, release directly on the final consonant of several short
   phrases; in toggle mode, press the hotkey at the same boundary. Confirm the
   final word is retained. Repeat with quiet room tone and steady background

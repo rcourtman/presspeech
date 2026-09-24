@@ -604,6 +604,16 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertIn('font="TkDefaultFont"', source)
         self.assertIn('root.bind("<Configure>", resize_status', source)
         self.assertIn('self._protect_scratchpad_copy_and_cut()', source)
+        self.assertIn("closing discards", source)
+        self.assertIn("Copy/Cut replaces the clipboard", source)
+        self.assertIn(
+            '_describe_control(self.text, SCRATCHPAD_RETENTION_WARNING)',
+            source,
+        )
+        self.assertIn("text already shown",
+                      ui.SCRATCHPAD_RETENTION_WARNING.lower())
+        self.assertIn("replaces the current clipboard item",
+                      ui.SCRATCHPAD_RETENTION_WARNING)
 
     def test_scratchpad_recovery_is_an_explicit_keyboard_command(self):
         source = inspect.getsource(ui.ScratchpadWindow._build)
