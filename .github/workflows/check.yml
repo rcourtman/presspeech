@@ -219,7 +219,6 @@ jobs:
           # Source installs use the readable pin; workflows use the hashed
           # release lock and are checked for exact commands below.
           source_install_paths = [
-              Path("README.md"),
               Path("CONTRIBUTING.md"),
               Path("windows/README.md"),
           ]

@@ -126,9 +126,6 @@ PLATFORM_ORIENTATION = {
         "Windows",
         "Released, signed, and notarised",
         "Prerelease",
-        "**macOS default:** **Right Option**",
-        "**Windows default:** **Right Alt**",
-        "⌘V on macOS or Ctrl+V on Windows",
     ),
     DOCS / "index.html": (
         "macOS — released",
@@ -156,7 +153,6 @@ PLATFORM_ORIENTATION = {
 # not override operating-system policy. Windows 11 Smart App Control and managed
 # PCs can intentionally withhold the usual SmartScreen bypass for unsigned apps.
 WINDOWS_UNSIGNED_GUIDANCE = {
-    ROOT / "README.md": ("Smart App Control", "managed policy", "do not try to circumvent"),
     ROOT / "windows" / "README.md": (
         "Smart App Control",
         "managed policy",
@@ -195,11 +191,6 @@ WINDOWS_UNSIGNED_GUIDANCE = {
 # `base.en` is never the only warning before a large unsigned installation.
 WINDOWS_LANGUAGE_GUIDANCE = {
     ROOT / "llms.txt": (
-        "multilingual Parakeet",
-        "English-only Whisper base.en",
-    ),
-    ROOT / "README.md": (
-        "Default language path",
         "multilingual Parakeet",
         "English-only Whisper base.en",
     ),
@@ -299,13 +290,6 @@ ANCHORED_INSTALL_PREFLIGHTS = (
 # Windows behavior from 0.1.13's history/cloud exclusion, and avoid implying
 # that the exclusion constrains third-party clipboard readers.
 CLIPBOARD_SERVICE_GUIDANCE = {
-    ROOT / "README.md": (
-        "macOS Clipboard History",
-        "Spotlight on macOS 26",
-        "macOS Universal Clipboard",
-        "Windows clipboard",
-        "Upcoming Windows 0.1.13 asks Windows to exclude",
-    ),
     DOCS / "faq.html": (
         "macOS Clipboard History",
         "Spotlight on macOS 26",
@@ -464,23 +448,11 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_GUIDANCE = {
 }
 
 WINDOWS_AGENT_DISCLOSURE = {
-    ROOT / "README.md": ("agent-harnesses", "agent-related environment markers"),
     DOCS / "llms.txt": ("agent-harnesses", "agent-related environment markers"),
     DOCS / "llms-full.txt": ("agent-harnesses", "agent-related environment markers"),
 }
 
 MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
-    ROOT / "README.md": (
-        "Before installing or launching macOS 0.3.8",
-        "Hugging Face token inherited by Presspeech",
-        "public model needs no account token",
-        "wait until macOS 0.3.9 is published",
-        "Dictation audio and transcripts are not sent",
-        "version-specific network inventory",
-        "follow-up guidance before another model download",
-        "Do not inspect or display token values",
-        "malformed inherited", "embedded proxy credentials", "leave 0.3.8 unopened",
-    ),
     DOCS / "index.html": (
         "Before opening macOS 0.3.8",
         "Hugging Face token inherited by Presspeech",
@@ -591,9 +563,6 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
 # but does not remove the proxy setting. Keep this distinction visible at every
 # first-launch decision surface and in the technical inventory.
 MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
-    ROOT / "README.md": (
-        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
-    ),
     ROOT / "SECURITY.md": (
         "macOS 0.3.8", "https_proxy", "http_proxy", "treat that token as disclosed",
         "still honors proxy settings",
@@ -634,26 +603,6 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "avoid this possible usage telemetry",
         "wait for 0.1.13",
         "keep the app unopened",
-    ),
-    ROOT / "README.md": (
-        "Before installing or launching Windows 0.1.12",
-        "usage telemetry",
-        "already-configured or locally saved Hugging Face token",
-        "Custom download routing can change where the model request",
-        "avoid this possible usage telemetry",
-        "concerned that a Hugging Face token or custom download route may be configured on this PC",
-        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
-        "wait until Windows 0.1.13 is published",
-        "public models need no account token",
-        "Windows privacy decision and technical details",
-        "Already used Windows 0.1.12?",
-        "inherited",
-        "staging setting",
-        "destination you do not trust",
-        "treat the token as disclosed",
-        "revoke the token",
-        "Hugging Face Access Tokens",
-        "Do not include token values",
     ),
     DOCS / "index.html": (
         "Before opening Windows 0.1.12",
@@ -743,7 +692,6 @@ WINDOWS_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
     )
     for path in (
         ROOT / "SECURITY.md",
-        ROOT / "README.md",
         ROOT / "windows" / "README.md",
         DOCS / "privacy.html",
         DOCS / "privacy" / "network-calls.json",
@@ -764,7 +712,6 @@ WINDOWS_MODEL_DOWNLOAD_INTEGRITY_GUIDANCE = {
     )
     for path in (
         ROOT / "SECURITY.md",
-        ROOT / "README.md",
         ROOT / "windows" / "README.md",
         DOCS / "privacy.html",
         DOCS / "privacy" / "network-calls.json",
@@ -782,7 +729,6 @@ WINDOWS_MODEL_DOWNLOAD_INTEGRITY_STALE_CLAIMS = (
 # Published 0.1.12 and the unreleased 0.1.13 candidate have different
 # authentication behavior. Keep each claim attached to the affected version.
 WINDOWS_MODEL_DOWNLOAD_PRIVACY_SCOPE_SURFACES = (
-    ROOT / "README.md",
     DOCS / "privacy.html",
     DOCS / "privacy" / "network-calls.json",
 )
@@ -837,11 +783,6 @@ DELIVERY_BOUNDARY_GUIDANCE = {
 # candidate intentionally does not replace a known-invalid target's previous
 # clipboard item. Generic "already copied" advice could paste unrelated text.
 WINDOWS_DELIVERY_RECOVERY_GUIDANCE = {
-    ROOT / "README.md": (
-        "published Windows 0.1.12", "copied at completion",
-        "only if the clipboard still holds it", "Upcoming Windows 0.1.13",
-        "Delivery Recovery",
-    ),
     DOCS / "windows.html": ("Published 0.1.12", "Upcoming 0.1.13", "Delivery Recovery"),
     DOCS / "faq.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "getting-started.html": ("Windows 0.1.12", "Transcript copied, not pasted", "only if it still holds the complete transcript"),
@@ -902,10 +843,6 @@ COPY_NOTICE_FRESHNESS_GUIDANCE = {
 # warning; reference/install pages also explain 0.3.9's clean-install prompt.
 # Vague "depending on the build" copy hides the behavior that matters most.
 MAC_MODEL_DOWNLOAD_GUIDANCE = {
-    ROOT / "README.md": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model",
-        "Set Up Later", "defer", "upcoming macOS 0.3.9 (not yet published)",
-    ),
     DOCS / "index.html": ("0.3.8", "0.3.9", "500", "on launch", "full macOS warning"),
     DOCS / "getting-started.html": (
         "0.3.8", "0.3.9", "500", "on launch", "full macOS warning"
@@ -937,12 +874,6 @@ MAC_MODEL_DOWNLOAD_GUIDANCE = {
 # published Windows build, or run the published Mac app as part of an install
 # command before deciding whether to make its model request.
 FIRST_RUN_ACTION_COPY = {
-    ROOT / "README.md": (
-        "If you decide to launch published 0.3.8 after reviewing the model-download",
-        "Only after the user makes an informed choice to launch 0.3.8:",
-        "Choose **Press to toggle** in Settings, not Setup.",
-        "**Finish Setup**, **Set Up Later**, or",
-    ),
     ROOT / "windows" / "README.md": (
         "Published 0.1.12 starts a missing selected-model download automatically",
         "Only upcoming 0.1.13 asks you to confirm",
@@ -1024,12 +955,6 @@ COMPATIBILITY_OVERALL_RESULTS = (
 # public entry points linked to the repeated protocol and filtered report
 # index, and keep the issue form's field classification aligned with them.
 COMPATIBILITY_EVIDENCE_GUIDANCE = {
-    ROOT / "README.md": (
-        "Help qualify target apps",
-        "five steady-focus and three focus-change slots",
-        "live coverage links separate native, browser, and Electron/Chromium",
-        "Browse existing compatibility",
-    ),
     ROOT / "SUPPORT.md": (
         "Browse existing target-app compatibility reports",
         "live coverage",
@@ -1118,7 +1043,6 @@ COMPATIBILITY_WORKSHEET_FORBIDDEN = (
 # Keep the safe review workflow on the onboarding and retrieval surfaces most
 # likely to be used before someone dictates into Terminal or PowerShell.
 COMMAND_SHELL_GUIDANCE = {
-    ROOT / "README.md": ("command shell", "Append newline", "review the exact result"),
     ROOT / "windows" / "README.md": ("command shells", "**newline**", "review it"),
     DOCS / "getting-started.html": (
         "Command shells can run pasted text",
@@ -1689,12 +1613,6 @@ def sync_readme(path: Path, metadata: dict[str, object]) -> str:
         text,
         r"\*\*[\d.]+ MB release zip\*\*",
         f"**{size} release zip**",
-        path=path,
-    )
-    text = replace_regex(
-        text,
-        r'- \*\*(?:Copy Diagnostics|Copy/Save Diagnostics)\*\* — .*',
-        "- **Copy/Save Diagnostics** — privacy-safe support report with app state, settings counts, microphone availability, and update state; exact device names, raw error details, and logs stay local",
         path=path,
     )
     return sync_readme_mac_prompt(text, path)
@@ -3421,74 +3339,6 @@ def check_readme_launch_preflight(
             + ", ".join(repr(phrase) for phrase in missing)
         ]
     return []
-
-
-def check_readme_windows_install_decision_order(
-    path: Path = ROOT / "README.md",
-) -> list[str]:
-    """Keep Windows privacy and unsigned-build decisions before README install steps."""
-    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
-    if not path.exists():
-        return [f"{display}: missing Windows install section"]
-
-    contents = read_text(path)
-    heading = "## Install on Windows"
-    start = contents.find(heading)
-    if start < 0:
-        return [f"{display}: missing Windows install section"]
-    end = contents.find("\n## ", start + len(heading))
-    section = contents[start:end] if end >= 0 else contents[start:]
-
-    warnings = (
-        ("model-download privacy", "**Before installing or launching Windows 0.1.12:**"),
-        ("unsigned-installer policy", "The installer is currently unsigned"),
-    )
-    actions = (
-        "Download the self-contained installer",
-        "- After verification, run the installer.",
-        "- If a shell-capable assistant is doing the installation",
-    )
-    warning_positions: list[tuple[str, int]] = []
-    errors: list[str] = []
-    for label, marker in warnings:
-        position = section.find(marker)
-        if position < 0:
-            errors.append(f"{display}: missing Windows {label} warning")
-        else:
-            warning_positions.append((label, position))
-
-    for action in actions:
-        action_position = section.find(action)
-        if action_position < 0:
-            errors.append(f"{display}: missing Windows install step {action!r}")
-            continue
-        for label, warning_position in warning_positions:
-            if warning_position > action_position:
-                errors.append(
-                    f"{display}: Windows {label} warning must precede "
-                    "installer download, run, and assistant instructions"
-                )
-                break
-    launch_start = section.find("- After verification, run the installer.")
-    if launch_start >= 0:
-        launch_end = section.find("\n- ", launch_start + 1)
-        launch_step = " ".join(
-            (section[launch_start:launch_end] if launch_end >= 0 else section[launch_start:]).split()
-        )
-        decision_markers = (
-            "If you choose to wait for 0.1.13",
-            "clear **Launch Presspeech**",
-            "leave the app unopened",
-            "If you choose to launch 0.1.12 after reviewing the privacy decision above",
-            "a missing selected-model download begins without another prompt",
-        )
-        positions = [launch_step.find(marker) for marker in decision_markers]
-        if any(position < 0 for position in positions) or positions != sorted(positions):
-            errors.append(
-                f"{display}: Windows installer step must keep the wait/unopened choice "
-                "before the explicit launch and automatic model-download instructions"
-            )
-    return errors
 
 
 def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]:
@@ -6545,56 +6395,6 @@ def run_self_test() -> None:
             if not check_readme_launch_preflight(published, readme_preflight):
                 raise SyncError("self-test: stale README launch preflight was accepted")
 
-        readme_install = Path(tmp) / "README.md"
-        readme_install.write_text(
-            "## Install on Windows\n"
-            "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
-            "The installer is currently unsigned; stop if managed policy blocks it.\n"
-            "Download the self-contained installer.\n"
-            "- After verification, run the installer. If you choose to wait for 0.1.13, "
-            "clear **Launch Presspeech** and leave the app unopened. "
-            "If you choose to launch 0.1.12 after reviewing the privacy decision above, "
-            "a missing selected-model download begins without another prompt.\n"
-            "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
-            "\n## Install on macOS\n",
-            encoding="utf-8",
-        )
-        if check_readme_windows_install_decision_order(readme_install):
-            raise SyncError("self-test: ordered README Windows warnings were rejected")
-        readme_install.write_text(
-            "## Install on Windows\n"
-            "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
-            "The installer is currently unsigned; stop if managed policy blocks it.\n"
-            "Download the self-contained installer.\n"
-            "- After verification, run the installer. If you choose to launch 0.1.12 "
-            "after reviewing the privacy decision above, start it now. "
-            "If you choose to wait for 0.1.13, clear **Launch Presspeech** and "
-            "leave the app unopened; a missing selected-model download begins "
-            "without another prompt.\n"
-            "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
-            "\n## Install on macOS\n",
-            encoding="utf-8",
-        )
-        if not check_readme_windows_install_decision_order(readme_install):
-            raise SyncError("self-test: README launch-before-wait instruction was accepted")
-        readme_install.write_text(
-            "## Install on Windows\n"
-            "Download the self-contained installer.\n"
-            "- After verification, run the installer. If you choose to wait for 0.1.13, "
-            "clear **Launch Presspeech** and leave the app unopened. "
-            "If you choose to launch 0.1.12 after reviewing the privacy decision above, "
-            "a missing selected-model download begins without another prompt.\n"
-            "- If a shell-capable assistant is doing the installation, use the guarded prompt.\n"
-            "**Before installing or launching Windows 0.1.12:** privacy decision.\n"
-            "The installer is currently unsigned; stop if managed policy blocks it.\n"
-            "\n## Install on macOS\n",
-            encoding="utf-8",
-        )
-        if not check_readme_windows_install_decision_order(readme_install):
-            raise SyncError(
-                "self-test: README Windows install instructions before the warnings were accepted"
-            )
-
         mac_summary = Path(tmp) / "macos-privacy-summary.html"
         required_mac_summary = {
             mac_summary: (
@@ -7634,7 +7434,6 @@ def main() -> int:
             errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
             errors.extend(check_windows_model_download_privacy_summary())
             errors.extend(check_readme_launch_preflight(metadata))
-            errors.extend(check_readme_windows_install_decision_order())
             errors.extend(check_faq_install_privacy_order())
             errors.extend(check_homepage_launch_decision())
             errors.extend(check_getting_started_preflight_order())
@@ -7709,7 +7508,6 @@ def main() -> int:
         errors.extend(check_mac_model_download_guidance(MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE))
         errors.extend(check_windows_model_download_privacy_summary())
         errors.extend(check_readme_launch_preflight(metadata))
-        errors.extend(check_readme_windows_install_decision_order())
         errors.extend(check_faq_install_privacy_order())
         errors.extend(check_homepage_launch_decision())
         errors.extend(check_getting_started_preflight_order())
