@@ -36,11 +36,13 @@ collaborator where noted:
 - After Pages deploys the intended main commit, run
   `python3 scripts/check-live-pages.py` from that exact commit. It compares the
   public home, first-dictation, install, privacy, help, compatibility, and FAQ
-  HTML with the checked-in files byte for byte. A passing source check or
-  successful workflow run alone does not show which copy visitors receive.
-  If this check differs or cannot fetch a page, mark public guidance
-  **Blocked**, inspect the live first-launch and support warnings directly,
-  and verify again after Pages catches up. Do not run it against an unreleased
+  HTML, plus the served release metadata, network inventory, assistant-install
+  prompt, LLM guidance, and compatibility worksheet script, with the checked-in
+  files byte for byte. A passing source check or successful workflow run alone
+  does not show which copy visitors receive. If this check differs or cannot
+  fetch a file, mark public guidance **Blocked**, inspect the live first-launch
+  and support warnings directly, and verify again after Pages catches up. Do
+  not run it against an unreleased
   candidate worktree and mistake expected source-ahead-of-site drift for a
   deployment failure.
 - Review each candidate's release notes before publication, then inspect the
@@ -1226,6 +1228,16 @@ item after the development-wrapper launch check.
 - Repeat the focus-change check immediately after pressing the hotkey, before
   the waveform appears, so a cold or rebuilding audio engine cannot retarget
   the transcript during startup.
+- For a candidate with the final post-event focus guard, use a controlled
+  disposable target or fault injection to change focus only after Command-V
+  key-down, and separately during the final Direct Unicode chunk when that
+  fallback is exercised. Confirm **Delivery uncertain**, no success cue or
+  second insertion attempt, and inspect both the original and newly focused
+  fields before manual recovery. A transcript still on the unchanged clipboard
+  may be used for recovery; a newer copy must not be replaced. Record the
+  observed timing and result, not dictated words or window titles. An ordinary
+  switch before delivery tests the earlier guard, not this narrow interval;
+  mark the late-focus case **Not run** if its timing cannot be established.
 - In each focus-change case on a 0.3.9 candidate, confirm the HUD says
   **Copied — ⌘V if unchanged**, the menu says **Transcript copied — ⌘V if
   clipboard unchanged** after the HUD closes, and copying the last transcript

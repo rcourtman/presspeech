@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the public onboarding pages with the intended checked-in docs.
+"""Compare public onboarding files with the intended checked-in docs.
 
 Run this read-only check from the exact main commit intended for Pages, after
 its deployment. Candidate source can legitimately be ahead of the public site.
@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 SITE = "https://rcourtman.github.io/presspeech/"
-CRITICAL_PAGES = (
+CRITICAL_FILES = (
     "index.html",
     "getting-started.html",
     "install.html",
@@ -31,16 +31,25 @@ CRITICAL_PAGES = (
     "troubleshooting.html",
     "app-compatibility.html",
     "faq.html",
+    # These are also direct first-launch entry points. A fresh Pages HTML
+    # deployment does not prove its versioned data, agent instructions, or
+    # worksheet script were deployed with it.
+    "site-metadata.json",
+    "privacy/network-calls.json",
+    "install/agents.md",
+    "llms.txt",
+    "llms-full.txt",
+    "compatibility-worksheet.js",
 )
 MAX_BYTES = 1024 * 1024
 
 
-def public_url(page: str) -> str:
-    return SITE + ("" if page == "index.html" else page)
+def public_url(path: str) -> str:
+    return SITE + ("" if path == "index.html" else path)
 
 
-def fetch_public(page: str) -> bytes:
-    url = public_url(page)
+def fetch_public(path: str) -> bytes:
+    url = public_url(path)
     request = Request(url, headers={"User-Agent": "Presspeech-Pages-check/1.0",
                                     "Cache-Control": "no-cache"})
     with urlopen(request, timeout=15) as response:
@@ -48,7 +57,7 @@ def fetch_public(page: str) -> bytes:
             raise ValueError(f"unexpected response or redirect for {url}")
         body = response.read(MAX_BYTES + 1)
     if len(body) > MAX_BYTES:
-        raise ValueError(f"public page exceeds {MAX_BYTES} bytes: {url}")
+        raise ValueError(f"public file exceeds {MAX_BYTES} bytes: {url}")
     return body
 
 
@@ -56,19 +65,19 @@ def short_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:12]
 
 
-def compare_pages(docs: Path, fetch=fetch_public) -> list[str]:
+def compare_files(docs: Path, fetch=fetch_public) -> list[str]:
     errors = []
-    for page in CRITICAL_PAGES:
+    for path in CRITICAL_FILES:
         try:
-            local = (docs / page).read_bytes()
-            remote = fetch(page)
+            local = (docs / path).read_bytes()
+            remote = fetch(path)
             if local != remote:
                 errors.append(
-                    f"{page}: live Pages differs from checked-in docs "
+                    f"{path}: live Pages differs from checked-in docs "
                     f"(local sha256 {short_hash(local)}, live sha256 {short_hash(remote)})"
                 )
         except (OSError, ValueError, HTTPError, URLError) as exc:
-            errors.append(f"{page}: could not verify live Pages: {exc}")
+            errors.append(f"{path}: could not verify live Pages: {exc}")
     return errors
 
 
@@ -85,6 +94,8 @@ def self_test() -> None:
 
     assert public_url("index.html") == SITE
     assert public_url("getting-started.html") == SITE + "getting-started.html"
+    assert public_url("privacy/network-calls.json") == SITE + "privacy/network-calls.json"
+    assert public_url("install/agents.md") == SITE + "install/agents.md"
     with patch(__name__ + ".urlopen", return_value=FakeResponse(SITE, b"current")):
         assert fetch_public("index.html") == b"current"
     with patch(__name__ + ".urlopen", return_value=FakeResponse(SITE + "old", b"current")):
@@ -104,23 +115,32 @@ def self_test() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         docs = Path(tmp)
-        for page in CRITICAL_PAGES:
-            (docs / page).write_bytes(page.encode())
-        assert not compare_pages(docs, lambda page: page.encode())
+        for path in CRITICAL_FILES:
+            local = docs / path
+            local.parent.mkdir(parents=True, exist_ok=True)
+            local.write_bytes(path.encode())
+        assert not compare_files(docs, lambda path: path.encode())
 
-        def stale(page: str) -> bytes:
-            return b"old guide" if page == "getting-started.html" else page.encode()
+        for stale_path in (
+            "getting-started.html", "site-metadata.json",
+            "privacy/network-calls.json", "install/agents.md",
+            "llms.txt", "llms-full.txt", "compatibility-worksheet.js",
+        ):
+            def stale(path: str) -> bytes:
+                return b"old content" if path == stale_path else path.encode()
 
-        errors = compare_pages(docs, stale)
-        assert len(errors) == 1 and errors[0].startswith("getting-started.html: live Pages differs")
+            errors = compare_files(docs, stale)
+            assert len(errors) == 1 and errors[0].startswith(
+                f"{stale_path}: live Pages differs"
+            )
 
-        def unavailable(page: str) -> bytes:
-            if page == "windows.html":
+        def unavailable(path: str) -> bytes:
+            if path == "install/agents.md":
                 raise URLError("offline")
-            return page.encode()
+            return path.encode()
 
-        errors = compare_pages(docs, unavailable)
-        assert len(errors) == 1 and errors[0].startswith("windows.html: could not verify")
+        errors = compare_files(docs, unavailable)
+        assert len(errors) == 1 and errors[0].startswith("install/agents.md: could not verify")
     print("live Pages comparison self-test passed")
 
 
@@ -131,13 +151,13 @@ def main() -> int:
     if args.self_test:
         self_test()
         return 0
-    errors = compare_pages(DOCS)
+    errors = compare_files(DOCS)
     if errors:
         print("Live Pages does not match the intended onboarding source:", file=sys.stderr)
         for error in errors:
             print(f"  {error}", file=sys.stderr)
         return 1
-    print(f"Live Pages matches {len(CRITICAL_PAGES)} checked-in onboarding pages.")
+    print(f"Live Pages matches {len(CRITICAL_FILES)} checked-in onboarding files.")
     return 0
 
 

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
+from decimal import Decimal
 import importlib.util
 import io
 from pathlib import Path
@@ -117,6 +119,35 @@ class ReportComparisonTests(unittest.TestCase):
         self.assertIn("+1 words", table)
         self.assertIn("+5.0 ms", table)
         self.assertIn("1/3", table)
+        self.assertIn("1 worse; 0 better", table)
+        self.assertIn("1 newly failed; 0 recovered", table)
+        self.assertIn("Review numbered positions with quality regressions: 001.", table)
+        self.assertIn("Review numbered non-speech positions with new emissions: 002.", table)
+        self.assertNotIn(SECRET, table)
+
+    def test_compensating_clip_changes_are_visible_when_corpus_errors_tie(self):
+        baseline = comparator.parse_report(report(controls=False))
+        candidate = comparator.parse_report(report(candidate=True, controls=False))
+        baseline = replace(
+            baseline, clips=2, corpus_errors=5, reference_words=70,
+            corpus_wer=Decimal("7.14"), clip_metrics=(
+                baseline.clip_metrics[0],
+                replace(baseline.clip_metrics[0], worst_errors=3),
+            ),
+        )
+        candidate = replace(
+            candidate, clips=2, corpus_errors=5, reference_words=70,
+            corpus_wer=Decimal("7.14"), clip_metrics=(
+                candidate.clip_metrics[0],
+                replace(candidate.clip_metrics[0], worst_errors=2,
+                        final_failure=False, worst_deletion_run=4),
+            ),
+        )
+        comparator.validate_pair(baseline, candidate)
+        table = comparator.comparison_table(baseline, candidate, 1)
+        self.assertIn("+0 errors", table)
+        self.assertIn("1 worse; 1 better", table)
+        self.assertIn("Review numbered positions with quality regressions: 001.", table)
         self.assertNotIn(SECRET, table)
 
     def test_rejects_unmatched_provenance_and_input_coverage(self):

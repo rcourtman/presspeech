@@ -6467,14 +6467,20 @@ func clipboardOnlyOutcomeAfterOwnedWrite(
     clipboardStillOwned() ? .copiedWithoutPasting : .clipboardChanged
 }
 
-/// Event posting is not a paste acknowledgement. If another process takes
-/// clipboard ownership while the shortcut is posted, the target might have
-/// consumed either value. Report uncertainty instead of silent success, and
-/// never try a second insertion that could duplicate an already-consumed paste.
+/// Event posting is not a paste acknowledgement. Focus can move after the
+/// paste key-down, and another process can take clipboard ownership during
+/// the final AX query. Either change makes delivery uncertain; never try a
+/// second insertion that could duplicate an already-consumed paste.
+@MainActor
 func clipboardPasteOutcomeAfterPostedShortcut(
+    targetStillFocused: () -> Bool,
     clipboardStillOwned: () -> Bool
 ) -> TextInsertionOutcome {
-    clipboardStillOwned() ? .inserted : .deliveryUncertain
+    let focused = targetStillFocused()
+    // AX may wait on the target app. Check ownership *after* that wait so a
+    // newer clipboard copy cannot be mistaken for a successful paste.
+    guard clipboardStillOwned() else { return .deliveryUncertain }
+    return focused ? .inserted : .deliveryUncertain
 }
 
 private enum ClipboardPasteStart: Equatable {
@@ -7227,15 +7233,25 @@ private enum ClipboardPasteInserter {
             return postOutcome == .deliveryUncertain ? .deliveryUncertain : .failed
         }
 
-        // Posting Command+V is not a consumption acknowledgement. A different
-        // owner may also have copied while these events were being delivered;
-        // in that case we cannot know which value the target consumed. Do not
-        // stage a restore offer for a clipboard generation we no longer own.
-        let completionOutcome = clipboardPasteOutcomeAfterPostedShortcut {
-            receipt.stillOwns(pb)
-        }
+        // Posting Command+V is not a consumption acknowledgement. Focus or
+        // clipboard ownership may change during these events or the final AX
+        // query; neither case proves which field consumed which clipboard item.
+        let completionOutcome = clipboardPasteOutcomeAfterPostedShortcut(
+            targetStillFocused: {
+                dictationPasteTargetStillFocused(expectedTarget)
+            },
+            clipboardStillOwned: { receipt.stillOwns(pb) }
+        )
         guard completionOutcome == .inserted else {
-            log("clipboard changed while posting paste shortcut; delivery uncertain")
+            // A focus move does not revoke our clipboard ownership. Keep an
+            // eligible prior-clipboard snapshot available for explicit
+            // restoration, but never restore it automatically or overwrite a
+            // newer copy. stageManualPreservation checks the same generation.
+            if receipt.stillOwns(pb) {
+                stageManualPreservation(context, on: pb,
+                                        expectedChangeCount: writeChangeCount)
+            }
+            log("paste shortcut posted; final focus or clipboard check uncertain")
             return completionOutcome
         }
         // Keep the transcript until the user deliberately restores or copies.
@@ -7384,6 +7400,14 @@ private func directUnicodeInsertionOutcome(
             return recovery
         }
         postedAnyChunk = true
+    }
+    // The final key-up can be posted just as focus moves. A check only before
+    // each chunk would call that delivery successful even though the final
+    // characters may have reached another field. Recovery still uses the
+    // source clipboard generation so a newer copy is never overwritten.
+    if postedAnyChunk && !targetStillFocused() {
+        let recovery = copyWithoutPasting()
+        return recovery == .clipboardChanged ? .clipboardChanged : .deliveryUncertain
     }
     return .inserted
 }
@@ -19349,6 +19373,27 @@ private enum PresspeechSelfTest {
             equals: true,
             "an interrupted Direct Unicode fallback should preserve the transcript on the clipboard"
         )
+        let finalUnicodeFocusProbe = MainActor.assumeIsolated {
+            var focused = true
+            var copied = false
+            let outcome = directUnicodeInsertionOutcome(
+                chunks: [[1, 2]],
+                targetStillFocused: { focused },
+                postChunk: { _ in
+                    focused = false
+                    return true
+                },
+                copyWithoutPasting: {
+                    copied = true
+                    return .copiedWithoutPasting
+                }
+            )
+            return (outcome: outcome, copied: copied)
+        }
+        try expect(finalUnicodeFocusProbe.outcome, equals: .deliveryUncertain,
+                   "focus loss during the final Unicode chunk must not claim insertion")
+        try expect(finalUnicodeFocusProbe.copied, equals: true,
+                   "late Unicode focus loss must offer a complete recovery copy")
         let failedPartialRecoveryProbe = MainActor.assumeIsolated {
             var focusChecks = [true, false]
             return directUnicodeInsertionOutcome(
@@ -19751,9 +19796,10 @@ private enum PresspeechSelfTest {
             let receipt = ClipboardPasteInserter.writeWithReceipt(
                 "temporary post-V fixture", to: pasteboard
             )
-            let stillOwned = clipboardPasteOutcomeAfterPostedShortcut {
-                receipt?.stillOwns(pasteboard) == true
-            }
+            let stillOwned = clipboardPasteOutcomeAfterPostedShortcut(
+                targetStillFocused: { true },
+                clipboardStillOwned: { receipt?.stillOwns(pasteboard) == true }
+            )
             var posted: [KeyboardEventStep] = []
             let eventOutcome = postFocusBoundClipboardPasteSteps(
                 clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
@@ -19771,9 +19817,10 @@ private enum PresspeechSelfTest {
                     return true
                 }
             )
-            let afterCopy = clipboardPasteOutcomeAfterPostedShortcut {
-                receipt?.stillOwns(pasteboard) == true
-            }
+            let afterCopy = clipboardPasteOutcomeAfterPostedShortcut(
+                targetStillFocused: { true },
+                clipboardStillOwned: { receipt?.stillOwns(pasteboard) == true }
+            )
             return (stillOwned: stillOwned, eventOutcome: eventOutcome,
                     afterCopy: afterCopy, posted: posted,
                     remaining: pasteboard.string(forType: .string))
@@ -19790,6 +19837,57 @@ private enum PresspeechSelfTest {
                    "ambiguous posted paste must not retry with Unicode typing")
         try expect(ownershipAfterPostingProbe.remaining, equals: "new external post-V fixture",
                    "post-V ownership loss must leave the newer clipboard item intact")
+        let focusAfterPostingProbe = MainActor.assumeIsolated {
+            var focused = true
+            var posted: [KeyboardEventStep] = []
+            let eventOutcome = postFocusBoundClipboardPasteSteps(
+                clipboardPasteKeyboardEventSteps(commandKey: 0x37, pasteKey: 0x09),
+                pasteKey: 0x09,
+                targetStillFocused: { focused },
+                clipboardStillOwned: { true },
+                postStep: { step in
+                    posted.append(step)
+                    if step.virtualKey == 0x37, !step.keyDown {
+                        focused = false
+                    }
+                    return true
+                }
+            )
+            let completion = clipboardPasteOutcomeAfterPostedShortcut(
+                targetStillFocused: { focused },
+                clipboardStillOwned: { true }
+            )
+            return (eventOutcome: eventOutcome, completion: completion,
+                    posted: posted)
+        }
+        try expect(focusAfterPostingProbe.eventOutcome, equals: .posted,
+                   "late-focus fixture must post the full shortcut before focus changes")
+        try expect(focusAfterPostingProbe.posted.count, equals: 4,
+                   "late-focus fixture must not drop a shortcut event")
+        try expect(focusAfterPostingProbe.completion, equals: .deliveryUncertain,
+                   "focus loss after paste key-down cannot be reported as insertion")
+        try expect(focusAfterPostingProbe.completion.allowsFallback, equals: false,
+                   "late focus loss must not start a duplicate Unicode fallback")
+        let copyDuringFinalFocusProbe = MainActor.assumeIsolated {
+            let pb = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.final-focus-copy.\(UUID().uuidString)"
+            ))
+            defer { pb.releaseGlobally() }
+            let receipt = ClipboardPasteInserter.writeWithReceipt("owned fixture", to: pb)
+            let completion = clipboardPasteOutcomeAfterPostedShortcut(
+                targetStillFocused: {
+                    pb.clearContents()
+                    _ = pb.setString("newer fixture", forType: .string)
+                    return true
+                },
+                clipboardStillOwned: { receipt?.stillOwns(pb) == true }
+            )
+            return (completion: completion, remaining: pb.string(forType: .string))
+        }
+        try expect(copyDuringFinalFocusProbe.completion, equals: .deliveryUncertain,
+                   "a clipboard copy during the final AX query must defeat the old receipt")
+        try expect(copyDuringFinalFocusProbe.remaining, equals: "newer fixture",
+                   "the final focus guard must not overwrite a newer clipboard item")
         let failedOwnershipCleanupProbe = MainActor.assumeIsolated {
             let steps = clipboardPasteKeyboardEventSteps(commandKey: 0x37,
                                                          pasteKey: 0x09)

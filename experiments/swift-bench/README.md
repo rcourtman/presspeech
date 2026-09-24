@@ -138,8 +138,9 @@ count, language hint, corpus kind, or non-default SDK environment; it also
 requires a distinct candidate dependency pin. It checks numbered clip sections,
 per-trial output receipts, scored speech and non-speech rows, and summary
 arithmetic before comparing a report. It prints aggregate WER, worst
-clip WER, final-word failures, consecutive-deletion run, latency, and any
-non-speech-emission changes without printing text or paths. Compare the
+clip WER, final-word failures, consecutive-deletion run, latency, and paired
+per-clip regression counts and generic positions without printing text or
+paths. Compare the
 `v3-sdk-default` reports separately against candidate-revision `v3` to isolate
 the SDK's chunking-policy change. This is **not** a pass/fail gate: inspect
 per-clip regressions and the absolute release checks too. Report files do not

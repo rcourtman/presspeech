@@ -82,6 +82,7 @@ class Report:
     average_p50_ms: Decimal
     worst_deletion_run: int
     controls: tuple[int, int, int] | None
+    clip_metrics: tuple[ClipMetrics, ...]
 
 
 @dataclass(frozen=True)
@@ -294,6 +295,7 @@ def parse_report(source: str) -> Report:
         average_p50_ms=Decimal(row.group(5)),
         worst_deletion_run=max(clip.worst_deletion_run for clip in speech),
         controls=controls,
+        clip_metrics=tuple(clip_metrics),
     )
 
 
@@ -318,6 +320,9 @@ def validate_pair(baseline: Report, candidate: Report) -> None:
     if baseline.controls is not None and candidate.controls is not None:
         if baseline.controls[0] != candidate.controls[0] or baseline.controls[2] != candidate.controls[2]:
             raise ComparisonError("reports differ in non-speech control coverage")
+    for left, right in zip(baseline.clip_metrics, candidate.clip_metrics):
+        if left.reference_words != right.reference_words:
+            raise ComparisonError("reports differ in numbered clip reference coverage")
 
 
 def signed_delta(left: Decimal | int, right: Decimal | int, places: int = 0) -> str:
@@ -326,6 +331,45 @@ def signed_delta(left: Decimal | int, right: Decimal | int, places: int = 0) -> 
 
 
 def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
+    speech_pairs = [
+        (position, left, right)
+        for position, (left, right) in enumerate(
+            zip(baseline.clip_metrics, candidate.clip_metrics), 1
+        ) if left.reference_words > 0
+    ]
+    control_pairs = [
+        (position, left, right)
+        for position, (left, right) in enumerate(
+            zip(baseline.clip_metrics, candidate.clip_metrics), 1
+        ) if left.reference_words == 0
+    ]
+    worse_errors = sum(right.worst_errors > left.worst_errors
+                       for _, left, right in speech_pairs)
+    better_errors = sum(right.worst_errors < left.worst_errors
+                        for _, left, right in speech_pairs)
+    new_final_failures = sum(not left.final_failure and right.final_failure
+                             for _, left, right in speech_pairs)
+    recovered_final_words = sum(left.final_failure and not right.final_failure
+                                for _, left, right in speech_pairs)
+    worse_deletion_runs = sum(right.worst_deletion_run > left.worst_deletion_run
+                              for _, left, right in speech_pairs)
+    slower = sum(right.p50_ms > left.p50_ms for _, left, right in speech_pairs)
+    faster = sum(right.p50_ms < left.p50_ms for _, left, right in speech_pairs)
+    new_control_emissions = sum(right.emitting_trials > left.emitting_trials
+                                for _, left, right in control_pairs)
+    resolved_control_emissions = sum(right.emitting_trials < left.emitting_trials
+                                     for _, left, right in control_pairs)
+    quality_positions = [
+        position for position, left, right in speech_pairs
+        if (right.worst_errors > left.worst_errors
+            or (right.final_failure and not left.final_failure)
+            or right.worst_deletion_run > left.worst_deletion_run)
+    ]
+    control_positions = [
+        position for position, left, right in control_pairs
+        if right.emitting_trials > left.emitting_trials
+    ]
+
     rows = [
         f"Pair {index}: {baseline.kind} corpus; {baseline.clips} clips; "
         f"{baseline.trials} trials/clip; hint {baseline.language}; "
@@ -345,6 +389,14 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
         f"{signed_delta(baseline.worst_deletion_run, candidate.worst_deletion_run)} words |",
         f"| Mean speech p50 | {baseline.average_p50_ms} ms | {candidate.average_p50_ms} ms | "
         f"{signed_delta(baseline.average_p50_ms, candidate.average_p50_ms, 1)} ms |",
+        f"| Paired speech clips: worst-trial errors | — | — | "
+        f"{worse_errors} worse; {better_errors} better |",
+        f"| Paired speech clips: final word | — | — | "
+        f"{new_final_failures} newly failed; {recovered_final_words} recovered |",
+        f"| Paired speech clips: deletion run | — | — | "
+        f"{worse_deletion_runs} worse |",
+        f"| Paired speech clips: p50 latency | — | — | "
+        f"{slower} slower; {faster} faster |",
     ]
     if baseline.controls is not None and candidate.controls is not None:
         rows.append(
@@ -352,8 +404,25 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
             f"{candidate.controls[1]}/{candidate.controls[2]} | "
             f"{signed_delta(baseline.controls[1], candidate.controls[1])} trials |"
         )
+        rows.append(
+            f"| Paired non-speech controls | — | — | "
+            f"{new_control_emissions} newly worse; {resolved_control_emissions} improved |"
+        )
     else:
         rows.append("| Non-speech controls | not reported | not reported | — |")
+
+    def positions(indices: list[int]) -> str:
+        return ", ".join(f"{position:03d}" for position in indices) if indices else "none"
+
+    rows.append(
+        "Review numbered positions with quality regressions: "
+        + positions(quality_positions) + "."
+    )
+    if control_pairs:
+        rows.append(
+            "Review numbered non-speech positions with new emissions: "
+            + positions(control_positions) + "."
+        )
     return "\n".join(rows)
 
 
