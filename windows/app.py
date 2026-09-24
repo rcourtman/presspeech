@@ -3006,8 +3006,9 @@ class PresspeechApp:
         self._log("dictation retained in memory; delivery status: %s" % reason)
         prefix = {
             "clipboard-unavailable": (
-                "The clipboard write could not be verified; the previous "
-                "clipboard item may have changed. "),
+                "The clipboard write could not be verified. The previous "
+                "clipboard item may have been replaced, and the current "
+                "item may contain this dictation; no paste shortcut was sent. "),
             "clipboard-changed": "The clipboard changed; no paste shortcut was sent. ",
             "target-unavailable": "The original input window could not be identified. ",
             "route-unavailable": (
@@ -3056,6 +3057,10 @@ class PresspeechApp:
                 "reached the original field or a different field. "),
         }[reason]
         review_instruction = (
+            "To inspect the current clipboard, paste only into a private, "
+            "non-executing editor, not the intended field. Review it before "
+            "choosing Copy or Discard. "
+            if reason == "clipboard-unavailable" else
             "Delivery Recovery does not show the words. Choose Copy for Manual "
             "Paste into a private editor to inspect them, or Discard and "
             "dictate again. "

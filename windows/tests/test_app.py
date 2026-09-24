@@ -5467,6 +5467,12 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.controller.assert_not_called()
         self.assert_retained_without_content_logs()
         self.assertNotIn("private clipboard detail", str(self.instance._log.mock_calls))
+        notice = str(self.instance.notify.mock_calls)
+        self.assertIn("current item may contain this dictation", notice)
+        self.assertIn("no paste shortcut was sent", notice)
+        self.assertIn("private, non-executing editor", notice)
+        self.assertIn("not the intended field", notice)
+        self.assertNotIn("private transcript", notice)
 
     def test_two_failed_focus_queries_preserve_prior_clipboard(self):
         # An unavailable GUI-thread query at capture and delivery must not

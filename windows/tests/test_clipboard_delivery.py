@@ -254,6 +254,12 @@ class ClipboardTransactionTests(unittest.TestCase):
         api.EmptyClipboard.assert_called_once()
         self.assertEqual(api.SetClipboardData.call_count, 3)
         api.GlobalFree.assert_not_called()
+        # The first CloseClipboard already published the item. A failed
+        # receipt is not evidence that the previous clipboard still exists.
+        text_memory = self.state['formats'][13]
+        self.assertEqual(bytes(self.state['buffers'][text_memory]),
+                         "synthetic transcript\0".encode('utf-16-le'))
+        self.assertIn(0xC002, self.state['formats'])
 
     def test_reacquisition_gets_its_own_bounded_retry_window(self):
         api = self.backend()
