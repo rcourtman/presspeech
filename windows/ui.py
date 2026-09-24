@@ -2018,9 +2018,8 @@ class UpdateWindow(_RegisteredDialog):
         root.update_idletasks()
         _mark_live_region(self.status)
         self.scrollable_body.fit_to_screen()
-        # Automatic update checks can open this window while the user is
-        # typing elsewhere. An incidental Enter must not approve a network
-        # download before the release notes have been deliberately reviewed.
+        # Even after a deliberate review action, an incidental Enter must not
+        # approve a download before the release notes have been reviewed.
         root.after_idle(self.later_button.focus_set)
         root.after(100, self._poll)
 

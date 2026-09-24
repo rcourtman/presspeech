@@ -1428,6 +1428,8 @@ Only after the user makes an informed choice to launch 0.3.8:
 
 After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch; its Setup cannot defer that request. Existing installs with a valid cached model load without another download. Do not tell the user to choose Download Model or Set Up Later in 0.3.8. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.
 
+A successful Try Dictation scratchpad test proves only the in-app path, not automatic paste into another app. Do not use a production field, live chat, form that can submit, or command shell as a first target. If the user asks to try another app, follow https://rcourtman.github.io/presspeech/getting-started.html#first-app with harmless words in a blank, disposable field. Count an automatic-paste pass only when the complete text appears once with no recovery notice. For macOS 0.3.8, a copied notice is manual recovery, not a paste pass: inspect the intended field first, then verify the clipboard still holds the complete transcript before manual paste; a later copy may have replaced it. Do not retry blindly. Use https://rcourtman.github.io/presspeech/app-compatibility.html before relying on repeated delivery to a specific app.
+
 Only if the user asks about a future build: a clean install of 0.3.9 is planned to choose Download Model in Setup or Set Up Later to defer. That behavior is not in published 0.3.8; check GitHub Releases before describing it as available."""
 
 README_MAC_PROMPT_START = (
@@ -1521,6 +1523,8 @@ Once the checksum succeeds and any requested attestation check also succeeds—o
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
 After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). In published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically during Setup and when its selection changes; its retry button is Check Again, not Check Microphone. Before choosing Finish Setup, Set Up Later, or closing Setup, explain that a new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off. Published 0.1.12 offers Press to toggle in Settings, not Setup. If the user chooses Set Up Later, leave setup incomplete; in 0.1.12 this does not defer an already-started model download. Otherwise, finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Focus on setup and the first test; do not ask the user to star, review, or otherwise endorse the project.
+
+A successful Try Dictation scratchpad test proves only the in-app path, not automatic paste into another app. Do not use a production field, live chat, form that can submit, or command shell as a first target. If the user asks to try another app, follow https://rcourtman.github.io/presspeech/getting-started.html#first-app with harmless words in a blank, disposable field. Count an automatic-paste pass only when the complete text appears once with no recovery notice. For Windows 0.1.12, a copied notice is manual recovery, not a paste pass: inspect the intended field first, then verify the clipboard still holds the complete transcript before manual paste; a later copy may have replaced it. Do not retry blindly. Use https://rcourtman.github.io/presspeech/app-compatibility.html before relying on repeated delivery to a specific app.
 
 Only if the user asks about a future build: planned 0.1.13 asks before downloading either missing first-run default model and offers Set Up Later to defer; the Parakeet path also offers the smaller CPU model. It leaves the microphone closed until the user chooses Check Microphone and defaults Start with Windows off. Upcoming 0.1.13 offers Press to toggle in Setup. None of those controls is in the published 0.1.12 download. Verify GitHub Releases before describing them as available."""
 
@@ -4875,9 +4879,59 @@ def check_macos_agent_install_order(
     return errors
 
 
+def check_assistant_first_test_handoff(
+    mac_prompt: str = MAC_INSTALL_PROMPT,
+    windows_prompt: str = WINDOWS_INSTALL_PROMPT,
+) -> list[str]:
+    """Keep an in-app smoke test distinct from verified target-app delivery."""
+    shared = (
+        "A successful Try Dictation scratchpad test proves only the in-app path",
+        "Do not use a production field, live chat, form that can submit, or command shell",
+        "If the user asks to try another app",
+        "getting-started.html#first-app",
+        "blank, disposable field",
+        "complete text appears once with no recovery notice",
+        "a copied notice is manual recovery, not a paste pass",
+        "inspect the intended field first",
+        "verify the clipboard still holds the complete transcript before manual paste",
+        "Do not retry blindly",
+        "app-compatibility.html",
+    )
+    checks = (
+        (
+            "macOS",
+            mac_prompt,
+            "Focus on setup and the first in-app test",
+            "For macOS 0.3.8",
+        ),
+        (
+            "Windows",
+            windows_prompt,
+            "Use Try Dictation for the first in-app test",
+            "For Windows 0.1.12",
+        ),
+    )
+    errors: list[str] = []
+    for platform, prompt, setup_marker, published_marker in checks:
+        start = prompt.find(setup_marker)
+        end = prompt.find("Only if the user asks about a future build")
+        if start < 0 or end <= start:
+            errors.append(f"{platform} assistant prompt: missing first-test boundary")
+            continue
+        handoff = prompt[start:end]
+        missing = [marker for marker in (*shared, published_marker) if marker not in handoff]
+        if missing:
+            errors.append(
+                f"{platform} assistant prompt: first-test handoff is incomplete; missing "
+                + ", ".join(repr(marker) for marker in missing)
+            )
+    return errors
+
+
 def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     errors: list[str] = []
     errors.extend(check_macos_agent_install_order())
+    errors.extend(check_assistant_first_test_handoff())
     try:
         readme_prompt = readme_mac_prompt(read_text(ROOT / "README.md"), ROOT / "README.md")
     except SyncError as exc:
@@ -5129,6 +5183,20 @@ def run_self_test() -> None:
     missing_check = MAC_INSTALL_PROMPT.replace("  sw_vers -productVersion", "")
     if not check_macos_agent_install_order(prompt=missing_check):
         raise SyncError("self-test: missing macOS compatibility check was accepted")
+    if check_assistant_first_test_handoff():
+        raise SyncError("self-test: safe assistant first-test handoff was rejected")
+    missing_handoff = WINDOWS_INSTALL_PROMPT.replace(
+        "verify the clipboard still holds the complete transcript before manual paste",
+        "paste the transcript manually",
+    )
+    if not check_assistant_first_test_handoff(windows_prompt=missing_handoff):
+        raise SyncError("self-test: missing Windows clipboard freshness check was accepted")
+    wrong_handoff = MAC_INSTALL_PROMPT.replace(
+        "a copied notice is manual recovery, not a paste pass",
+        "a copied notice is a paste pass",
+    )
+    if not check_assistant_first_test_handoff(mac_prompt=wrong_handoff):
+        raise SyncError("self-test: copied notice treated as a paste pass was accepted")
     metadata: dict[str, object] = {
         "last_updated": "2026-01-02",
         "version": "8.7.6",

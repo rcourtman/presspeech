@@ -527,7 +527,8 @@ The **Presspeech** icon in the Windows notification area (bottom-right) includes
 **Check for Updates…**, **Copy Diagnostics**, **Report a Problem…**, **Suggest an
 Improvement…**, **Repair Global Hotkey**, and **Exit**. Upcoming 0.1.13 / builds
 containing **Test App Compatibility…** also open the privacy-safe repeated
-target-app guide. **Report a Problem…** and **Suggest an Improvement…** both
+target-app guide and add **Review Available Update…** (enabled after a newer
+release is found). **Report a Problem…** and **Suggest an Improvement…** both
 open the repository's [SUPPORT.md](../SUPPORT.md) guide, not an issue form;
 neither submits a report or attaches diagnostics. Follow the guide's current
 GitHub availability notice before using any separately linked issue form.
@@ -616,9 +617,14 @@ again; unsaved edits remain in place while it waits.
 - Optional GitHub update checks at startup when the recorded check is at least
   24 hours old. Published 0.1.12 records only successful checks, so a failed
   check can repeat after each restart; upcoming 0.1.13 records automatic
-  attempts before connecting and offers unrestricted manual retries. Downloads
-  and installation require approval, mutable releases are ignored, and the
-  installer is verified by size and SHA-256 after download and again
+  attempts before connecting and offers unrestricted manual retries. When an
+  automatic check finds a release, it notifies without opening a window over
+  the field where you may be dictating. Choose **Review Available Update…**
+  from the notification-area menu to read its notes and decide what to do;
+  **Check for Updates…** still opens the review window after a manual check.
+  The pending review action remains available if the notification is missed.
+  Downloads and installation require approval, mutable releases are ignored,
+  and the installer is verified by size and SHA-256 after download and again
   immediately before launch. Upcoming 0.1.13 postpones installer launch while
   a dictation is starting, recording, canceling, transcribing, or waiting in
   Delivery Recovery. The verified installer stays in the update window for an

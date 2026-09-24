@@ -29,6 +29,7 @@ def reports():
         "accuracy": {"reference_words": 3},
         "trial_accuracy": {
             "trials": 2, "all_word_errors": [0, 0],
+            "all_case_sensitive_cer": [0.0, 0.0],
             "all_max_reference_deletion_runs": [0, 0],
             "worst_word_errors": 0, "worst_max_reference_deletion_run": 0,
         },
@@ -96,6 +97,64 @@ def auto_language_reports():
 
 
 class CompareWhisperVadTests(unittest.TestCase):
+    def test_case_or_punctuation_regression_is_visible_when_wer_is_unchanged(self):
+        base, candidate = reports()
+        candidate["samples"][0]["trial_accuracy"][
+            "all_case_sensitive_cer"] = [0.1, 0.0]
+
+        result = compare.compare_reports(base, candidate)
+
+        self.assertEqual(result["baseline"]["trial_wer"],
+                         result["candidate"]["trial_wer"])
+        self.assertEqual(result["candidate"]["mean_case_sensitive_cer"], 0.05)
+        self.assertEqual(result["candidate"]["case_sensitive_error_free_trials"], 1)
+        self.assertEqual(result["regressions"]["case_sensitive_cer"], [1])
+        self.assertEqual(result["regressions"][
+            "case_sensitive_error_free_trials"], [1])
+        self.assertEqual(result["strata"]["task_group"], {
+            "count": 1, "regressed": 1,
+        })
+        self.assertNotIn("private", repr(result))
+        with tempfile.TemporaryDirectory() as root:
+            paths = [os.path.join(root, name) for name in ("base.json", "new.json")]
+            for path, report in zip(paths, (base, candidate)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", ["compare", *paths]), \
+                    redirect_stdout(output):
+                compare.main()
+            message = output.getvalue()
+            self.assertIn("mean_case_sensitive_cer: 0.00% -> 5.00%", message)
+            self.assertIn("case_sensitive_cer worsened: 1 clips", message)
+            for private in ("private speech", "private-path", root):
+                self.assertNotIn(private, message)
+
+    def test_case_sensitive_clean_trial_loss_survives_unchanged_mean(self):
+        base, candidate = reports()
+        base["samples"][0]["trial_accuracy"][
+            "all_case_sensitive_cer"] = [0.0, 0.2]
+        candidate["samples"][0]["trial_accuracy"][
+            "all_case_sensitive_cer"] = [0.1, 0.1]
+
+        result = compare.compare_reports(base, candidate)
+
+        self.assertEqual(result["baseline"]["mean_case_sensitive_cer"],
+                         result["candidate"]["mean_case_sensitive_cer"])
+        self.assertNotIn("case_sensitive_cer", result["regressions"])
+        self.assertEqual(result["regressions"][
+            "case_sensitive_error_free_trials"], [1])
+
+    def test_missing_or_invalid_case_sensitive_trials_are_not_a_clean_result(self):
+        for values in (None, [], [0.0], [0.0, float("nan")],
+                       [0.0, float("inf")], [0.0, -0.1], [0.0, True]):
+            base, candidate = reports()
+            candidate["samples"][0]["trial_accuracy"][
+                "all_case_sensitive_cer"] = values
+            with self.subTest(values=values), self.assertRaisesRegex(
+                    ValueError, "case-sensitive CER"):
+                compare.compare_reports(base, candidate)
+
     def test_paired_comparison_exposes_regressions_without_private_content(self):
         base, candidate = reports()
         changed = candidate["samples"][0]
@@ -265,11 +324,17 @@ class CompareWhisperVadTests(unittest.TestCase):
         base, candidate = reports()
         for report in (base, candidate):
             report["samples"][0]["passes_app_minimum_audio_duration"] = False
+        candidate["samples"][0]["trial_accuracy"][
+            "all_case_sensitive_cer"] = [0.1, 0.0]
         result = compare.compare_reports(base, candidate)
         self.assertEqual(result["baseline"]["below_app_gate_clips"], 1)
+        self.assertEqual(result["regressions"]["case_sensitive_cer"], [1])
+        self.assertNotIn("case_sensitive_cer", result["app_eligible"]["regressions"])
         self.assertEqual(result["app_eligible"]["baseline"]["reviewed_speech_clips"], 0)
         self.assertIsNone(result["app_eligible"]["baseline"]["trial_wer"])
         self.assertIsNone(result["app_eligible"]["baseline"]["trial_word_errors"])
+        self.assertIsNone(result["app_eligible"]["baseline"][
+            "mean_case_sensitive_cer"])
 
     def test_below_gate_changes_do_not_masquerade_as_app_eligible_quality(self):
         base, candidate = reports()

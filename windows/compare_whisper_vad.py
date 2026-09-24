@@ -92,6 +92,13 @@ def _validate_sample(sample):
             raise ValueError("missing reviewed speech trial errors")
         for error in errors:
             _count(error, "word error count")
+        case_cers = trial.get("all_case_sensitive_cer")
+        if (not isinstance(case_cers, list) or len(case_cers) != runs
+                or any(isinstance(value, bool)
+                       or not isinstance(value, (int, float))
+                       or not math.isfinite(value) or value < 0
+                       for value in case_cers)):
+            raise ValueError("missing or invalid reviewed case-sensitive CER trials")
         if trial.get("worst_word_errors") != max(errors):
             raise ValueError("inconsistent worst word errors")
         deletion_runs = trial.get("all_max_reference_deletion_runs")
@@ -251,6 +258,8 @@ def _score(samples):
                 for item in speech)
     errors = sum(sum(item["trial_accuracy"]["all_word_errors"])
                  for item in speech)
+    case_cers = [value for item in speech
+                 for value in item["trial_accuracy"]["all_case_sensitive_cer"]]
     latency = [value for item in samples
                for value in item["inference_seconds"]["all"]]
     return {
@@ -262,6 +271,12 @@ def _score(samples):
         "trial_word_errors": errors if speech else None,
         "trial_reference_words": words if speech else None,
         "trial_wer": errors / words if words else None,
+        # A macro average gives each reviewed clip/trial equal weight. This
+        # complements WER; it is not a corpus character-error rate.
+        "mean_case_sensitive_cer": (
+            statistics.mean(case_cers) if case_cers else None),
+        "case_sensitive_error_free_trials": (
+            sum(value == 0 for value in case_cers) if speech else None),
         # Count clean decodes without pretending trial positions in separate
         # benchmark invocations are controlled pairs.
         "error_free_trials": (sum(
@@ -300,6 +315,16 @@ def _worsened(base, candidate):
         worsened = {
             "word_errors": sum(candidate["trial_accuracy"]["all_word_errors"])
             > sum(base["trial_accuracy"]["all_word_errors"]),
+            "case_sensitive_cer": math.fsum(
+                candidate["trial_accuracy"]["all_case_sensitive_cer"]
+            ) > math.fsum(base["trial_accuracy"]["all_case_sensitive_cer"]),
+            "case_sensitive_error_free_trials": sum(
+                value == 0 for value in candidate["trial_accuracy"][
+                    "all_case_sensitive_cer"]
+            ) < sum(
+                value == 0 for value in base["trial_accuracy"][
+                    "all_case_sensitive_cer"]
+            ),
             "error_free_trials": sum(
                 error == 0 for error in candidate["trial_accuracy"]["all_word_errors"]
             ) < sum(
@@ -518,6 +543,7 @@ def compare_reports(baseline, candidate):
 
 _PRINTED_SCORE_FIELDS = (
     "trial_word_errors", "trial_reference_words", "trial_wer",
+    "mean_case_sensitive_cer", "case_sensitive_error_free_trials",
     "error_free_trials",
     "worst_deletion_run", "first_word_failures", "final_word_failures",
     "vad_rejections", "vad_missing", "silence_false_positives",
@@ -532,6 +558,8 @@ def _print_scores(before, after, *, prefix=""):
         if key == "inference_median_seconds" and old is not None:
             old, new = "%.3fs" % old, "%.3fs" % new
         elif key == "trial_wer" and old is not None:
+            old, new = "%.2f%%" % (old * 100), "%.2f%%" % (new * 100)
+        elif key == "mean_case_sensitive_cer" and old is not None:
             old, new = "%.2f%%" % (old * 100), "%.2f%%" % (new * 100)
         print("%s%s: %s -> %s" % (
             prefix, key, "not evaluated" if old is None else old,

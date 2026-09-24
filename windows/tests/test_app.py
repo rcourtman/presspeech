@@ -481,6 +481,7 @@ class UpdateCheckFailureTests(unittest.TestCase):
     def make_app(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance._update_lock = threading.Lock()
+        instance._window_open_lock = threading.Lock()
         instance.settings = {"last_update_check_epoch": 0}
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
@@ -562,6 +563,86 @@ class UpdateCheckFailureTests(unittest.TestCase):
         self.assertEqual(instance.settings["last_update_check_epoch"], 100_000)
         instance.notify.assert_called_once_with(
             "Presspeech", "Version %s is up to date." % app.cfg.VERSION)
+
+    def test_automatic_discovery_does_not_open_a_focus_changing_window(self):
+        instance = self.make_app()
+        instance.icon = mock.Mock()
+        update = {"version": "9.8.7", "body": "Synthetic notes"}
+        with mock.patch.object(app.time, "time", return_value=100_000), \
+                mock.patch.object(app.cfg, "save"), \
+                mock.patch.object(app.updates, "fetch_update", return_value=update), \
+                mock.patch.object(app.ui, "UpdateWindow") as window:
+            instance._update_check_worker()
+
+        self.assertIs(instance.pending_update, update)
+        window.assert_not_called()
+        instance.icon.update_menu.assert_called_once_with()
+        instance.notify.assert_called_once_with(
+            "Presspeech update available",
+            "Version 9.8.7 is available. Choose Review Available Update "
+            "in the Presspeech notification-area menu to read the notes "
+            "and decide whether to download it.")
+
+    def test_discovered_update_opens_only_after_explicit_review(self):
+        instance = self.make_app()
+        update = {"version": "9.8.7"}
+        instance.pending_update = update
+        window = mock.Mock()
+
+        def register(owner, selected):
+            owner.update_window = window
+
+        with mock.patch.object(app.ui, "UpdateWindow", side_effect=register) as create, \
+                mock.patch.object(app.ui, "present_window") as present:
+            self.assertTrue(instance.review_available_update())
+            self.assertTrue(instance.review_available_update())
+
+        create.assert_called_once_with(instance, update)
+        present.assert_called_once_with(window)
+
+    def test_manual_discovery_opens_review_window(self):
+        instance = self.make_app()
+        update = {"version": "9.8.7"}
+        with mock.patch.object(app.time, "time", return_value=100_000), \
+                mock.patch.object(app.cfg, "save"), \
+                mock.patch.object(app.updates, "fetch_update", return_value=update), \
+                mock.patch.object(app.ui, "UpdateWindow") as window:
+            instance._update_check_worker(manual=True)
+
+        self.assertIs(instance.pending_update, update)
+        window.assert_called_once_with(instance, update)
+        instance.notify.assert_not_called()
+
+    def test_successful_no_update_check_clears_stale_review_action(self):
+        instance = self.make_app()
+        instance.icon = mock.Mock()
+        instance.pending_update = {"version": "9.8.7"}
+        with mock.patch.object(app.cfg, "save"), \
+                mock.patch.object(app.updates, "fetch_update", return_value=None), \
+                mock.patch.object(app.ui, "UpdateWindow") as window:
+            instance._update_check_worker(manual=True)
+
+        self.assertIsNone(instance.pending_update)
+        instance.icon.update_menu.assert_called_once_with()
+        self.assertFalse(instance.review_available_update())
+        window.assert_not_called()
+
+    def test_failed_review_keeps_update_and_redacts_window_error(self):
+        instance = self.make_app()
+        update = {"version": "9.8.7"}
+        instance.pending_update = update
+        with mock.patch.object(
+                app.ui, "UpdateWindow",
+                side_effect=OSError("synthetic-private-window-path")):
+            self.assertFalse(instance.review_available_update())
+
+        self.assertIs(instance.pending_update, update)
+        self.assertNotIn("synthetic-private", str(instance._log.call_args_list))
+        self.assertNotIn("synthetic-private", str(instance.notify.call_args_list))
+        instance.notify.assert_called_once_with(
+            "Update window unavailable",
+            "Could not open the update window. Try Review Available Update "
+            "again, or use Check for Updates.")
 
 
 class InputSelectionTests(unittest.TestCase):

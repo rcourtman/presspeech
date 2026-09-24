@@ -846,6 +846,9 @@ class PresspeechApp:
                     self.discard_undelivered_dictation,
                     enabled=lambda _item: self.has_undelivered_dictation()),
                 MenuItem("Check for Updates\u2026", self.check_for_updates),
+                MenuItem(
+                    "Review Available Update\u2026", self.review_available_update,
+                    enabled=lambda _item: self.pending_update is not None),
                 MenuItem("Copy Diagnostics", self.copy_diagnostics),
                 MenuItem(
                     "Test App Compatibility\u2026", self.test_app_compatibility),
@@ -3395,6 +3398,38 @@ class PresspeechApp:
         threading.Thread(
             target=self._update_check_worker, args=(True, True), daemon=True).start()
 
+    def review_available_update(self, icon=None, item=None):
+        """Open a discovered update only after an explicit user action."""
+        try:
+            with self._window_open_lock:
+                update = self.pending_update
+                if update is None:
+                    return False
+                if self.update_window is None:
+                    ui.UpdateWindow(self, update)
+                else:
+                    ui.present_window(self.update_window)
+        except Exception as exc:
+            self._log("update window unavailable: %s" % type(exc).__name__)
+            self.notify(
+                "Update window unavailable",
+                "Could not open the update window. Try Review Available Update "
+                "again, or use Check for Updates.")
+            return False
+        return True
+
+    def _refresh_update_review_menu(self):
+        """Make the externally changed tray action state visible promptly."""
+        icon = getattr(self, "icon", None)
+        if icon is None:
+            return
+        try:
+            icon.update_menu()
+        except Exception:
+            # A tray refresh is advisory. Manual Check for Updates still opens
+            # the release-notes window if this platform refuses the refresh.
+            self._log("update review menu could not refresh")
+
     def _update_check_worker(self, manual=False, lock_held=False):
         if not lock_held and not self._update_lock.acquire(blocking=False):
             return
@@ -3412,12 +3447,24 @@ class PresspeechApp:
                 self.settings["last_update_check_epoch"] = int(time.time())
                 cfg.save(self.settings)
             if update is None:
+                self.pending_update = None
+                self._refresh_update_review_menu()
                 if manual:
                     self.notify("Presspeech", "Version %s is up to date." % cfg.VERSION)
                 return
             self.pending_update = update
-            if self.update_window is None:
-                ui.UpdateWindow(self, update)
+            self._refresh_update_review_menu()
+            if manual:
+                self.review_available_update()
+            else:
+                # A background Toplevel can take focus from the field where a
+                # dictation started. Keep discovery non-modal and leave the
+                # release-notes/download window behind a deliberate tray action.
+                self.notify(
+                    "Presspeech update available",
+                    "Version %s is available. Choose Review Available Update "
+                    "in the Presspeech notification-area menu to read the notes "
+                    "and decide whether to download it." % update["version"])
         except Exception as exc:
             self._log("update check failed: %s" % type(exc).__name__)
             if manual:

@@ -233,8 +233,18 @@ corpus/order digests, model snapshot, requested language,
 precision, recorded environment, run count, per-clip review scope, or any VAD
 setting other than the minimum silence duration. It compares all-trial WER,
 error-free speech-trial counts, longest deletion, first/final-word failures,
-VAD rejection and missing-duration counts, reviewed-silence false positives,
-and inference median. It reports the largest positive per-clip inference p50
+and trial-level case-sensitive CER (which retains capitalization and
+punctuation after canonical apostrophe/whitespace normalization). It prints
+the unweighted mean of reviewed clip/trial CER values, not a corpus CER, and
+flags anonymous clips whose summed trial CER increased or whose count of
+zero-CER trials fell. This exposes capitalization or punctuation changes that
+WER misses, but offsetting character errors can still cancel; inspect the
+private trial text to identify the actual difference. Missing or invalid CER
+trials are rejected rather than treated as clean output. These diagnostics use
+fields already in version 25 reports and do not change recognition or
+benchmark inference. The helper also compares VAD rejection and
+missing-duration counts, reviewed-silence false positives, and inference
+median. It reports the largest positive per-clip inference p50
 change, including its anonymous position and before/after times, so an outlier
 cannot disappear behind a stable pooled median. This is an unpaired,
 noise-sensitive diagnostic rather than proof of a VAD speed effect. Interpret

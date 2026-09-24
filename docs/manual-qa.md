@@ -1987,10 +1987,14 @@ clipboard.
   transcribing. If the update window is closed instead, its temporary verified
   installer must be removed. Record this as native update/recovery behavior,
   not as proof that an accepted paste reached the original field.
-- When an automatic update check opens the update window, confirm **Later**
-  has initial focus and **Download Update** is not the default. Press Enter
-  before navigating to Download; no download should start. Then deliberately
-  choose Download, using a disposable candidate or controlled test release.
+- When an automatic update check finds a release, confirm it does not open
+  the update window or take focus from the current editor, including during
+  a harmless dictation. Its notice must point to **Review Available Update…**
+  in the notification-area menu; that action must stay enabled if the notice
+  is missed. Choose it deliberately and confirm **Later** has initial focus
+  and **Download Update** is not the default. Press Enter before navigating
+  to Download; no download should start. Then deliberately choose Download,
+  using a disposable candidate or controlled test release.
   After verification, the installer confirmation must default to **No**:
   pressing Enter must leave Presspeech running and must not launch the
   installer. Repeat with an explicit Yes to qualify the approved path.
