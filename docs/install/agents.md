@@ -91,6 +91,8 @@ If GitHub CLI is already installed and the user is already signed in, offer an o
   }
 This checks the immutable release and the installer's signed GitHub release attestation. It is stronger provenance evidence than the checksum served beside the installer, but it does not code-sign the installer or prove the program is safe. If the user agrees to the check and either command fails, stop; do not run the installer. If the user declines or gh is unavailable, say clearly that provenance was not verified; do not claim otherwise. Let the user decide whether the repository source and matching checksum are enough, and never launch without explicit confirmation.
 
+Before opening the installer, warn that its final "Launch Presspeech" checkbox starts checked. If the user wants to wait, they must clear it before choosing Finish; otherwise Finish launches the app and can start the model request. Consent to install is not consent to launch.
+
 Once the checksum succeeds and any requested attestation check also succeeds—or the user explicitly chooses checksum-only trust—show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
   Start-Process -FilePath $installer
 

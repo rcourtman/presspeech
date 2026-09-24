@@ -34,6 +34,7 @@ import keyboard_delivery
 import session_events
 from paste_target import (
     PasteTarget, focused_child_handle as _focused_child_handle,
+    window_caption_fingerprint as _window_caption_fingerprint,
     matches as _paste_target_matches, same_window as _paste_target_same_window,
     input_integrity_blocks_delivery as _input_integrity_blocks_delivery,
 )
@@ -417,7 +418,7 @@ def _resample_to_16k(audio, from_rate):
 
 
 def _foreground_paste_target():
-    """Return the foreground window, process and Win32 focus where available."""
+    """Return the foreground window, process and available focus signals."""
     try:
         import ctypes
         from ctypes import wintypes
@@ -447,11 +448,18 @@ def _foreground_paste_target():
             return PasteTarget("", int(hwnd))
         focus_handle = _focused_child_handle(
             user32, int(hwnd), int(thread_identifier))
+        # GetWindowTextW sends a window message for in-process captions. The
+        # private scratchpad needs no tab guard, so avoid querying our own UI
+        # from a worker that might be waiting on the Tk thread.
+        caption_fingerprint = (
+            _window_caption_fingerprint(user32, int(hwnd))
+            if process_id.value != os.getpid() else None)
         handle = kernel32.OpenProcess(0x1000, False, process_id.value)
         if not handle:
             return PasteTarget(
                 "", int(hwnd), int(process_id.value),
-                _process_integrity_level(process_id.value), focus_handle)
+                _process_integrity_level(process_id.value), focus_handle,
+                caption_fingerprint)
         try:
             size = wintypes.DWORD(32768)
             path = ctypes.create_unicode_buffer(size.value)
@@ -459,11 +467,13 @@ def _foreground_paste_target():
                     handle, 0, path, ctypes.byref(size)):
                 return PasteTarget(
                     "", int(hwnd), int(process_id.value),
-                    _process_integrity_level(process_id.value), focus_handle)
+                    _process_integrity_level(process_id.value), focus_handle,
+                    caption_fingerprint)
             return PasteTarget(
                 os.path.basename(path.value).lower(), int(hwnd),
                 int(process_id.value),
-                _process_integrity_level(process_id.value), focus_handle)
+                _process_integrity_level(process_id.value), focus_handle,
+                caption_fingerprint)
         finally:
             kernel32.CloseHandle(handle)
     except Exception:
@@ -2893,7 +2903,8 @@ class PresspeechApp:
             "target-unavailable": "The original input window could not be identified. ",
             "focus-changed": (
                 "The original window or focused control could not be "
-                "verified; no paste shortcut was sent. "),
+                "verified, or the window title changed; no paste shortcut "
+                "was sent. "),
             "input-integrity-boundary": (
                 "The original app's input privilege boundary blocks automatic "
                 "paste or could not be verified; no paste shortcut was sent. "),
@@ -2913,9 +2924,9 @@ class PresspeechApp:
                 "The paste shortcut may have run fully or partly; delivery "
                 "could not be verified. "),
             "shortcut-focus-uncertain": (
-                "The original focused field could not be verified after the "
-                "paste shortcut was sent. Text may have reached the original "
-                "field or a different field. "),
+                "The original focused field or window title could not be "
+                "verified after the paste shortcut was sent. Text may have "
+                "reached the original field or a different field. "),
         }[reason]
         review_instruction = (
             "Check the intended field and any field that may have gained "

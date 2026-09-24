@@ -193,6 +193,7 @@ For each configuration, also record this release-gate matrix:
 | Ten short-phrase onset checks across hold/toggle; first word or syllable retained | |
 | A physical hold across the OS key-repeat interval remains one capture until release | |
 | Five consecutive dictations into a current Chromium browser text field | |
+| Same-window Chromium tab switch with different titles uses Delivery Recovery before paste | |
 | Five consecutive dictations into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
 | Held-modifier shortcut guard and manual recovery | |
@@ -229,6 +230,21 @@ known external copy interrupted an attempt, record the interruption and rerun
 with a fresh phrase; never exclude an unexplained failure. Retain only
 aggregate counts, app versions, and generic field types, not the phrases,
 clipboard contents, or screenshots.
+
+For a candidate with the window-caption guard, use two disposable Chromium
+tabs in the same window with different harmless titles and blank,
+non-submitting text fields. Start dictation in the first, switch to the second
+while still recording, then stop and confirm neither field receives an automatic
+paste, the existing clipboard item is unchanged when the switch is detected
+before the clipboard write, and Delivery Recovery retains the phrase for an
+explicit decision. Repeat the switch after a harmless clipboard write if the
+timing can be controlled, and verify no paste shortcut reaches the second tab;
+the dictated text may already be on the current clipboard in that case. Also
+test steady focus in the original tab: a caption change unrelated to a tab
+switch may conservatively require recovery, but must not silently discard the
+dictation. Same-title tabs and two fields within one tab remain an unresolved
+identity limit, not a pass from the different-title test. Record only the
+browser version and aggregate outcomes, not titles or dictated words.
 
 For the remote-delivery row, use disposable local and remote machines and a
 blank, non-submitting plain-text editor on the remote host—not a shell,
@@ -747,6 +763,7 @@ Record this release-gate matrix against the exact installed candidate:
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
 | Menu-bar visibility preference, Dock fallback/restore, and dictation recovery with VoiceOver and keyboard-only navigation | |
+| Two-display recording and clipboard-recovery HUD follows keyboard focus rather than the parked pointer | |
 | Copy Last Transcript and Recent Transcripts recover the original dictation suffix, including after the suffix setting changes | |
 
 Before scoring each target-app delivery row, copy a harmless marker by ordinary
@@ -922,6 +939,20 @@ actions are not presented as actionable. With VoiceOver, verify the recovery not
 and action names explain what will happen without relying on color or the
 Command-key glyph. Do not record transcript contents; restore the test clipboard
 only through an explicit user-confirmed action.
+
+For the two-display HUD row, park the pointer on display A and use the
+keyboard to focus a disposable, non-submitting field on display B. With the
+waveform enabled, start and stop a harmless dictation using the hotkey. Confirm
+the recording HUD, and **Transcribing** if it lasts long enough to appear, stay
+on display B without moving keyboard focus or the pointer. Repeat with two windows
+on display B: begin in the first,
+switch focus to the second before transcription completes, and confirm the
+clipboard-only recovery notice appears on B, no text is inserted into either
+window, and the complete transcript can be pasted deliberately. Keep the
+pointer on A throughout. Record only display/focus placement and aggregate
+delivery outcomes, not text or window titles. A one-display run cannot pass
+this row; native AppKit behavior is not established by the screen-choice
+self-test.
 
 For the two ten-trial clipboard rows, use distinct harmless markers and record
 only aggregate pass/fail counts. Observe that the intended field consumed each

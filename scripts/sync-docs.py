@@ -1490,6 +1490,8 @@ If GitHub CLI is already installed and the user is already signed in, offer an o
   }
 This checks the immutable release and the installer's signed GitHub release attestation. It is stronger provenance evidence than the checksum served beside the installer, but it does not code-sign the installer or prove the program is safe. If the user agrees to the check and either command fails, stop; do not run the installer. If the user declines or gh is unavailable, say clearly that provenance was not verified; do not claim otherwise. Let the user decide whether the repository source and matching checksum are enough, and never launch without explicit confirmation.
 
+Before opening the installer, warn that its final "Launch Presspeech" checkbox starts checked. If the user wants to wait, they must clear it before choosing Finish; otherwise Finish launches the app and can start the model request. Consent to install is not consent to launch.
+
 Once the checksum succeeds and any requested attestation check also succeeds—or the user explicitly chooses checksum-only trust—show the user the installer path and verified hash. Ask for explicit confirmation before launching it with:
   Start-Process -FilePath $installer
 
@@ -2028,7 +2030,8 @@ LLMS_SHORT_ANSWER = (
     "any token sent through it; do not launch through one whose trust is unclear. "
     "Downloading the app alone does not start a model request, but opening it with a "
     "missing model does. If installing Windows 0.1.12 while waiting, leave the final "
-    "Launch Presspeech option unchecked. Review the macOS "
+    "Launch Presspeech option unchecked. It starts checked by default; clear it "
+    "before choosing Finish. Review the macOS "
     "https://rcourtman.github.io/presspeech/install.html#model-download-privacy "
     "or Windows https://rcourtman.github.io/presspeech/windows.html#model-download-privacy "
     "warning before choosing to launch. Dictation audio and transcripts are not sent "
@@ -4574,6 +4577,8 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     required_windows_launch_choice = (
         "Downloading the installer and checksum from GitHub does not make a model request",
         'uncheck the installer\'s final "Launch Presspeech" option',
+        'final "Launch Presspeech" checkbox starts checked',
+        "Consent to install is not consent to launch",
         'make sure the installer\'s final "Launch Presspeech" option was unchecked',
     )
     missing_windows_launch_choice = [
@@ -4652,6 +4657,49 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     return errors
 
 
+def check_windows_install_launch_checkbox(
+    installer: str | None = None,
+    surfaces: dict[str, str] | None = None,
+) -> list[str]:
+    """Keep the install-only warning aligned with Inno's final-screen default."""
+    if installer is None:
+        installer = read_text(ROOT / "windows" / "installer.iss")
+    if surfaces is None:
+        surfaces = {
+            str(path.relative_to(ROOT)): read_text(path)
+            for path in (
+                ROOT / "README.md",
+                DOCS / "index.html",
+                DOCS / "getting-started.html",
+                DOCS / "windows.html",
+                DOCS / "privacy.html",
+                DOCS / "llms.txt",
+                DOCS / "install" / "agents.md",
+            )
+        }
+    run_section = installer.split("[Run]", 1)
+    if len(run_section) != 2:
+        return ["windows/installer.iss: missing [Run] section for launch guidance"]
+    launch_entries = [
+        line.strip() for line in run_section[1].split("\n[", 1)[0].splitlines()
+        if 'Description: "Launch Presspeech"' in line and not line.lstrip().startswith(";")
+    ]
+    if len(launch_entries) != 1:
+        return ["windows/installer.iss: expected one final Launch Presspeech entry"]
+    flags_match = re.search(r"\bFlags:\s*([^;]+)$", launch_entries[0])
+    flags = set(flags_match.group(1).split()) if flags_match else set()
+    if "postinstall" not in flags:
+        return ["windows/installer.iss: Launch Presspeech must be a final-screen choice"]
+    expected = "starts unchecked" if "unchecked" in flags else "starts checked"
+    errors = []
+    for name, content in surfaces.items():
+        if expected not in content:
+            errors.append(
+                f"{name}: state that the final Launch Presspeech option {expected}"
+            )
+    return errors
+
+
 def diff_text(path: Path, current: str, expected: str) -> str:
     return "".join(
         difflib.unified_diff(
@@ -4664,6 +4712,29 @@ def diff_text(path: Path, current: str, expected: str) -> str:
 
 
 def run_self_test() -> None:
+    launch_entry = (
+        '[Run]\nFilename: "{app}\\Presspeech.exe"; '
+        'Description: "Launch Presspeech"; Flags: postinstall\n'
+    )
+    if check_windows_install_launch_checkbox(
+        launch_entry, {"guide": "Launch Presspeech starts checked by default"}
+    ):
+        raise SyncError("self-test: checked Windows launch default was rejected")
+    if not check_windows_install_launch_checkbox(
+        launch_entry.rstrip() + " unchecked\n",
+        {"guide": "Launch Presspeech starts checked"},
+    ):
+        raise SyncError("self-test: changed Windows launch default did not fail guidance")
+    if check_windows_install_launch_checkbox(
+        launch_entry.rstrip() + " unchecked\n",
+        {"guide": "Launch Presspeech starts unchecked by default"},
+    ):
+        raise SyncError("self-test: unchecked Windows launch default was rejected")
+    if not check_windows_install_launch_checkbox(
+        launch_entry, {"guide": "Uncheck Launch Presspeech to wait"}
+    ):
+        raise SyncError("self-test: missing checkbox-default warning was accepted")
+
     readme_fixture = (
         "before\n" + README_MAC_PROMPT_START + "stale prompt"
         + README_MAC_PROMPT_END + "\nafter\n"
@@ -6958,6 +7029,7 @@ def main() -> int:
         errors.extend(check_compare_freshness())
         errors.extend(check_cross_platform_compare_privacy())
         errors.extend(check_install_prompt_sync(metadata))
+        errors.extend(check_windows_install_launch_checkbox())
         if errors:
             for error in errors:
                 print(error, file=sys.stderr)

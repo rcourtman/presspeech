@@ -88,7 +88,8 @@ is unclear, don't launch while it is in use.
 The Hugging Face request starts when Presspeech launches to fetch a missing
 model; downloading the installer and checksum from GitHub does not make that
 request. If you install 0.1.12 but choose to wait, leave **Launch Presspeech**
-unchecked at the end of setup.
+unchecked at the end of setup. This final-screen option starts checked by
+default; clear it before choosing **Finish**.
 If you prefer to avoid this possible usage telemetry, are concerned that a
 Hugging Face token or custom download route may be configured on this PC, or
 are unsure, wait until Windows 0.1.13 is published. The public models need no
@@ -132,7 +133,8 @@ Download the self-contained installer—Python is not required:
   guarded PowerShell commands together while the next prerelease is prepared.
 - After verification, run the installer. If you choose to wait for 0.1.13,
   clear **Launch Presspeech** on the final installer screen and leave the app
-  unopened. If you choose to launch 0.1.12 after reviewing the privacy
+  unopened. It starts checked by default; confirm it is clear before choosing
+  **Finish**. If you choose to launch 0.1.12 after reviewing the privacy
   decision above, use that installer option or open it from the Start Menu;
   a missing selected-model download begins without another prompt. Wait for
   **Preparing speech model…** to disappear before the first dictation.

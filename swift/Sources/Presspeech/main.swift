@@ -123,6 +123,15 @@ func recordingHUDFrame(size: NSSize, visibleFrame: NSRect?) -> NSRect? {
                   height: size.height)
 }
 
+/// Keyboard dictation can happen on a different display from the parked
+/// pointer. Keep recording and recovery feedback beside the focused work;
+/// retain the pointer/first-display routes when macOS has no focused screen.
+private func preferredRecordingHUDScreen<Screen>(keyboardFocusedScreen: Screen?,
+                                                 pointerScreen: Screen?,
+                                                 fallbackScreen: Screen?) -> Screen? {
+    keyboardFocusedScreen ?? pointerScreen ?? fallbackScreen
+}
+
 func setupChecklistWindowContentSize(ideal: NSSize = NSSize(width: 560, height: 620),
                                      visibleFrame: NSRect?) -> NSSize {
     guard let visibleFrame,
@@ -10324,11 +10333,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func screenForRecordingHUD() -> NSScreen? {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return nil }
         let mouse = NSEvent.mouseLocation
-        if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) {
-            return screen
-        }
-        return NSScreen.main ?? NSScreen.screens.first
+        let pointerScreen = screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+        return preferredRecordingHUDScreen(keyboardFocusedScreen: NSScreen.main,
+                                           pointerScreen: pointerScreen,
+                                           fallbackScreen: screens.first)
     }
 
     private func scheduleDelayedBusyHUD() {
@@ -22945,6 +22956,34 @@ private enum PresspeechSelfTest {
             recordingHUDFrame(size: RECORDING_HUD_EXPANDED_SIZE, visibleFrame: nil),
             equals: NSRect?.none,
             "recording HUD should stay hidden while macOS reports no screens"
+        )
+        try expect(
+            preferredRecordingHUDScreen(keyboardFocusedScreen: "focused",
+                                        pointerScreen: "pointer",
+                                        fallbackScreen: "first"),
+            equals: Optional("focused"),
+            "recording and recovery HUD should follow keyboard focus before the pointer"
+        )
+        try expect(
+            preferredRecordingHUDScreen(keyboardFocusedScreen: Optional<String>.none,
+                                        pointerScreen: "pointer",
+                                        fallbackScreen: "first"),
+            equals: Optional("pointer"),
+            "HUD should use the pointer when macOS has no focused screen"
+        )
+        try expect(
+            preferredRecordingHUDScreen(keyboardFocusedScreen: Optional<String>.none,
+                                        pointerScreen: Optional<String>.none,
+                                        fallbackScreen: "first"),
+            equals: Optional("first"),
+            "HUD should fall back to an available display during focus transitions"
+        )
+        try expect(
+            preferredRecordingHUDScreen(keyboardFocusedScreen: Optional<String>.none,
+                                        pointerScreen: Optional<String>.none,
+                                        fallbackScreen: Optional<String>.none),
+            equals: Optional<String>.none,
+            "HUD should remain hidden when macOS reports no displays"
         )
         try expect(
             setupChecklistWindowContentSize(

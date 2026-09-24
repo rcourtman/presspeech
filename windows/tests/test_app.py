@@ -1,6 +1,7 @@
 import threading
 import tempfile
 import unittest
+import ctypes
 from pathlib import Path
 from unittest import mock
 
@@ -4955,7 +4956,44 @@ class StartupTests(unittest.TestCase):
         self.assertEqual(instance._model_load_target, "small.en")
         instance._schedule_model_idle_unload.assert_not_called()
 
+class ForegroundPasteTargetTests(unittest.TestCase):
+    def test_external_caption_fingerprint_is_carried_to_delivery_target(self):
+        from ctypes import wintypes
 
+        user32 = mock.Mock()
+        kernel32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 100
+
+        def window_thread(_hwnd, pointer):
+            ctypes.cast(pointer, ctypes.POINTER(wintypes.DWORD)).contents.value = 41
+            return 77
+
+        def process_image(_handle, _flags, buffer, _size):
+            buffer.value = "chrome.exe"
+            return 1
+
+        user32.GetWindowThreadProcessId.side_effect = window_thread
+        kernel32.OpenProcess.return_value = 88
+        kernel32.QueryFullProcessImageNameW.side_effect = process_image
+
+        def library(name, **_kwargs):
+            return {"user32": user32, "kernel32": kernel32}[name]
+
+        with mock.patch.object(app.ctypes, "WinDLL", side_effect=library,
+                               create=True), \
+                mock.patch.object(app.os, "getpid", return_value=123), \
+                mock.patch.object(app, "_focused_child_handle",
+                                  return_value=101), \
+                mock.patch.object(app, "_window_caption_fingerprint",
+                                  return_value=b"private-fingerprint") as caption, \
+                mock.patch.object(app, "_process_integrity_level",
+                                  return_value=0x2000):
+            target = app._foreground_paste_target()
+
+        self.assertEqual(target, app.PasteTarget(
+            "chrome.exe", 100, 41, 0x2000, 101, b"private-fingerprint"))
+        caption.assert_called_once_with(user32, 100)
+        kernel32.CloseHandle.assert_called_once_with(88)
 
 
 class DeliveryRecoveryTests(unittest.TestCase):
@@ -5027,6 +5065,31 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assert_retained_without_content_logs()
         self.assertIn("focused control could not be verified",
                       str(self.instance.notify.mock_calls))
+
+    def test_changed_window_caption_preserves_prior_clipboard(self):
+        # Browsers can keep one foreground HWND and Win32 focus child while
+        # another tab takes focus. A changed caption must stop preflight.
+        self.target = self.target._replace(caption_fingerprint=b"original")
+        self.foreground.return_value = self.target._replace(
+            caption_fingerprint=b"other-tab")
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
+        self.assertIn("window title changed", str(self.instance.notify.mock_calls))
+
+    def test_caption_change_after_copy_never_sends_shortcut(self):
+        self.target = self.target._replace(caption_fingerprint=b"original")
+        other_tab = self.target._replace(caption_fingerprint=b"other-tab")
+        self.foreground.side_effect = [self.target, other_tab]
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_called_once()
+        self.controller.assert_not_called()
+        self.assert_retained_without_content_logs()
 
     def test_focus_query_failure_after_copy_never_sends_shortcut(self):
         # The transcript may already be on the current clipboard, but a
@@ -5250,6 +5313,30 @@ class DeliveryRecoveryTests(unittest.TestCase):
         self.assertIn("paste outcome uncertain; original target could not be verified",
                       str(self.instance._log.mock_calls))
         self.assertNotIn("paste skipped", str(self.instance._log.mock_calls))
+
+    def test_caption_change_during_accepted_shortcut_is_reported_uncertain(self):
+        self.target = self.target._replace(caption_fingerprint=b"original")
+        other_tab = self.target._replace(caption_fingerprint=b"other-tab")
+        self.foreground.return_value = self.target
+        api = mock.Mock()
+        api.MapVirtualKeyW.return_value = 0x1D
+        api.GetAsyncKeyState.return_value = 0
+
+        def accept_then_change_caption(count, _inputs, _size):
+            self.foreground.return_value = other_tab
+            return count
+
+        api.SendInput.side_effect = accept_then_change_caption
+        self.controller.return_value = self.checked_controller(api=api)
+
+        self.assertFalse(self.paste())
+
+        api.SendInput.assert_called_once()
+        self.assert_retained_without_content_logs()
+        self.assertIn("window title could not be verified",
+                      str(self.instance.notify.mock_calls))
+        self.assertNotIn("no paste shortcut was sent",
+                         str(self.instance.notify.mock_calls))
 
     def test_failed_focus_query_after_shortcut_is_not_reported_as_success(self):
         api = mock.Mock()

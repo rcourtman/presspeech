@@ -255,9 +255,14 @@ If the original focused window or Win32 control cannot be verified just after
 the paste shortcut is submitted, Presspeech also opens Delivery Recovery even
 when Windows accepted the shortcut. The text may already be in the original
 or another field: check the original and any newly focused field before
-copying again. This check cannot identify a different browser tab or
-custom-rendered field sharing one HWND,
-and it cannot undo a paste or prove that a target consumed it.
+copying again. The upcoming build also compares a private fingerprint of a
+nonempty foreground-window title at each delivery check. If switching tabs
+changes that title, Presspeech uses Delivery Recovery rather than knowingly
+pasting into the changed tab; a title change within the original tab may also
+cause recovery. The title itself is not kept or logged. Tabs with identical or
+empty titles, and custom-rendered fields sharing one HWND and title, may still
+be indistinguishable. These checks cannot undo a paste or prove that a target
+consumed it.
 
 If a clipboard write fails after replacement begins, Windows cannot restore
 the previous item. Presspeech clears its partial item while it still owns the
@@ -425,7 +430,11 @@ Where Windows exposes a separate focused child control, Presspeech also checks
 that control before sending Ctrl+V; moving between two native edit controls in
 one window then uses Delivery Recovery instead of automatic paste. Custom-drawn
 browser and Electron fields can share one Win32 control handle, so this is not
-a guarantee of field identity within those apps. Keep the intended field
+a guarantee of field identity within those apps. Upcoming 0.1.13 additionally
+compares a private fingerprint of the top-level window title, catching a tab
+switch when it changes the title but not when two tabs have the same title.
+An original tab whose title changes for another reason may also require
+manual recovery. Keep the intended field
 focused until delivery finishes, and review where the text landed.
 If a control is identifiable only at the later delivery check, Presspeech
 cannot confirm it was focused when recording began and uses Delivery Recovery.

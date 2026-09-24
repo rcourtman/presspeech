@@ -93,6 +93,66 @@ class FocusedChildTests(unittest.TestCase):
         self.assertIsNone(paste_target.focused_child_handle(user32, 0, 77))
 
 
+class WindowCaptionTests(unittest.TestCase):
+    def backend(self, title, *, foreground=100):
+        user32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = foreground
+        user32.GetWindowTextLengthW.return_value = len(title)
+
+        def get_text(window, buffer, capacity):
+            self.assertEqual(window, 100)
+            self.assertGreater(capacity, len(title))
+            buffer.value = title
+            return len(title)
+
+        user32.GetWindowTextW.side_effect = get_text
+        return user32
+
+    def test_only_private_fingerprint_of_complete_caption_is_retained(self):
+        title = "Private document - Browser"
+        user32 = self.backend(title)
+        fingerprint = paste_target.window_caption_fingerprint(user32, 100)
+        self.assertIsInstance(fingerprint, bytes)
+        self.assertNotIn(title.encode(), fingerprint)
+        self.assertEqual(
+            fingerprint, paste_target.window_caption_fingerprint(user32, 100))
+        self.assertEqual(user32.GetWindowTextW.argtypes, (
+            ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int))
+        self.assertIs(user32.GetWindowTextW.restype, ctypes.c_int)
+
+    def test_changed_caption_has_different_fingerprint(self):
+        first = paste_target.window_caption_fingerprint(
+            self.backend("First page - Browser"), 100)
+        second = paste_target.window_caption_fingerprint(
+            self.backend("Second page - Browser"), 100)
+        self.assertNotEqual(first, second)
+
+    def test_empty_unavailable_or_truncated_caption_is_not_adopted(self):
+        self.assertIsNone(paste_target.window_caption_fingerprint(
+            self.backend(""), 100))
+        self.assertIsNone(paste_target.window_caption_fingerprint(
+            self.backend("Page", foreground=200), 100))
+        user32 = self.backend("Page")
+        user32.GetForegroundWindow.side_effect = [100, 200]
+        self.assertIsNone(paste_target.window_caption_fingerprint(user32, 100))
+        user32 = self.backend("Page")
+        user32.GetWindowTextLengthW.return_value = 2
+
+        def truncated(_hwnd, buffer, capacity):
+            buffer.value = "Pag"
+            return capacity - 1
+
+        user32.GetWindowTextW.side_effect = truncated
+        self.assertIsNone(paste_target.window_caption_fingerprint(user32, 100))
+        user32 = self.backend("Page")
+        user32.GetWindowTextLengthW.return_value = (
+            paste_target._MAX_CAPTION_CHARS + 1)
+        self.assertIsNone(paste_target.window_caption_fingerprint(user32, 100))
+        user32 = self.backend("Page")
+        user32.GetWindowTextW.side_effect = OSError("private window title")
+        self.assertIsNone(paste_target.window_caption_fingerprint(user32, 100))
+
+
 class PasteTargetMatchTests(unittest.TestCase):
     def target(self, focus=101, *, process=41, window=100, name="notepad.exe"):
         return paste_target.PasteTarget(name, window, process, 0, focus)
@@ -135,6 +195,17 @@ class PasteTargetMatchTests(unittest.TestCase):
         expected = self.target(0)
         self.assertFalse(paste_target.matches(expected, self.target(101)))
         self.assertFalse(paste_target.matches(self.target(101), self.target(0)))
+
+    def test_caption_change_in_same_win32_control_fails_closed(self):
+        first = self.target()._replace(caption_fingerprint=b"first")
+        changed = self.target()._replace(caption_fingerprint=b"second")
+        unavailable = self.target()._replace(caption_fingerprint=None)
+        self.assertTrue(paste_target.matches(first, first))
+        self.assertFalse(paste_target.matches(first, changed))
+        self.assertFalse(paste_target.matches(first, unavailable))
+        self.assertFalse(paste_target.matches(unavailable, first))
+        # Uncaptioned apps retain the existing HWND/Win32-focus policy.
+        self.assertTrue(paste_target.matches(unavailable, unavailable))
 
     def test_executable_fallback_and_unidentified_owner(self):
         expected = self.target(process=0)
