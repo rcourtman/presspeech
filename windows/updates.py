@@ -39,6 +39,10 @@ ALLOWED_DOWNLOAD_HOSTS = {
     "release-assets.githubusercontent.com",
 }
 UPDATE_DIRECTORY_PREFIX = "Presspeech-update-"
+# GitHub release assets must be smaller than 2 GiB. Reject a larger claimed
+# size at selection and again at transfer/launch so a hostile response cannot
+# stream an effectively unlimited amount into the user's temp drive.
+MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
 
 
 class UpdateError(RuntimeError):
@@ -141,7 +145,8 @@ def select_update(releases, current_version):
             continue
         installer_digest = str(installer.get("digest", ""))
         checksum_digest = str(checksum.get("digest", ""))
-        if (installer_size <= 0 or checksum_size <= 0 or checksum_size > 8192 or
+        if (installer_size <= 0 or installer_size >= MAX_INSTALLER_BYTES or
+                checksum_size <= 0 or checksum_size > 8192 or
                 not re.fullmatch(
                     r"sha256:[0-9a-fA-F]{64}", installer_digest) or
                 not re.fullmatch(
@@ -345,12 +350,10 @@ def _read_checksum(update, opener, timeout):
 def _installer_metadata(update, installer_path):
     expected_name = str(update.get("installer_name", ""))
     expected_digest = str(update.get("installer_digest", "")).lower()
-    try:
-        expected_size = int(update.get("installer_size", 0) or 0)
-    except (TypeError, ValueError) as exc:
-        raise UpdateError("installer metadata was invalid") from exc
+    expected_size = update.get("installer_size")
     if (not expected_name or os.path.basename(installer_path) != expected_name or
-            expected_size <= 0 or
+            type(expected_size) is not int or
+            not 0 < expected_size < MAX_INSTALLER_BYTES or
             not re.fullmatch(r"[0-9a-f]{64}", expected_digest)):
         raise UpdateError("installer metadata was invalid")
     return expected_size, expected_digest
@@ -608,16 +611,22 @@ def download_update(update, destination=None, progress=None,
         raise UpdateError("installer download was cancelled")
     url = _checked_download_url(update["installer_url"])
     _checked_download_url(update["checksum_url"])
+    installer_name = update.get("installer_name")
+    if (not isinstance(installer_name, str) or
+            INSTALLER_NAME_RE.fullmatch(installer_name) is None):
+        raise UpdateError("installer metadata was invalid")
     destination = destination or tempfile.gettempdir()
+    final_path = os.path.join(destination, installer_name)
+    # Selection already checks the release metadata, but the transfer is the
+    # resource boundary: it must never interpret a missing/zero size as an
+    # unlimited stream or accept a sidecar without the installer API digest.
+    expected_size, api_digest = _installer_metadata(update, final_path)
     os.makedirs(destination, exist_ok=True)
-    final_path = os.path.join(destination, update["installer_name"])
     checksum = _read_checksum(update, opener, timeout)
     if cancelled is not None and cancelled():
         raise UpdateError("installer download was cancelled")
-    api_digest = update.get("installer_digest", "").lower()
-    if api_digest and api_digest != checksum:
+    if api_digest != checksum:
         raise UpdateError("GitHub asset digest and checksum file disagree")
-    expected_size = int(update.get("installer_size", 0) or 0)
     digest = hashlib.sha256()
     downloaded = 0
     partial_path = None
@@ -648,23 +657,21 @@ def download_update(update, destination=None, progress=None,
                     # metadata. Read one sentinel byte beyond it so a broken or
                     # hostile response cannot fill the temp drive before the size
                     # mismatch is rejected.
-                    read_size = 1024 * 1024
-                    if expected_size:
-                        read_size = min(read_size, expected_size - downloaded + 1)
+                    read_size = min(1024 * 1024, expected_size - downloaded + 1)
                     block = response.read(read_size)
                     if not block:
                         break
                     if cancelled is not None and cancelled():
                         raise UpdateError("installer download was cancelled")
                     downloaded += len(block)
-                    if expected_size and downloaded > expected_size:
+                    if downloaded > expected_size:
                         raise UpdateError(
                             "installer download exceeded the release size")
                     output.write(block)
                     digest.update(block)
                     if progress is not None:
                         progress(downloaded, expected_size)
-        if expected_size and downloaded != expected_size:
+        if downloaded != expected_size:
             raise UpdateError("installer download size did not match the release")
         if digest.hexdigest().lower() != checksum:
             raise UpdateError("installer SHA-256 verification failed")

@@ -807,6 +807,46 @@ qualifying multilingual chunking; still retain independent human dictation.
 Run `python3 ./compose-public-window-shift-fixtures.py --self-test` for a
 no-model check of composition, tamper detection, and safe replacement.
 
+### Interior-silence sensitivity diagnostic
+
+The ordinary long-form composer concatenates complete utterances without
+inserting a multi-second pause. An [upstream FluidAudio interior-window
+report](https://github.com/FluidInference/FluidAudio/issues/803) describes
+speech disappearing when a window ends inside a long silent run. That report
+does **not** establish the defect in Presspeech's pinned SDK or show that a
+particular fix improves this app. Probe the risk without changing production
+chunking:
+
+```sh
+python3 ./compose-public-silence-gap-fixtures.py \
+  --input-dir public-audio/librispeech-dev-clean-long-form \
+  --output-dir public-audio/librispeech-dev-clean-silence-gap
+./run-real-dictation-regression.sh \
+  --input-dir public-audio/librispeech-dev-clean-silence-gap \
+  --out-dir public-results/silence-gap \
+  --backend v3 --language en --public-corpus --trials 3
+```
+
+For each validated long-form composite, the composer chooses an **existing
+source-utterance boundary** near a nominal 15-second window end and writes a
+clean/gapped pair with byte-identical speech samples and reference. Its
+default 5-second digital-silence gap puts at least one second of the gap on
+each side of that nominal edge and leaves at least ten seconds of source
+audio after it. If a composite has no eligible boundary, composition fails
+rather than inserting silence in the middle of a word. Validation checks
+the pair's reference, exact speech bytes, zero gap, placement, and inventory.
+Use `--show-transcripts --show-paths` only with this public corpus when
+inspecting individual errors and consecutive-deletion runs. A changed decode
+is a signal for investigation, **not** proof that an actual FluidAudio window
+ended at the nominal marker; gap insertion can alter preprocessing and model
+context independently. The longer gapped variant is not a like-for-like
+latency comparison. These repeated-speech fixtures are report-only and cannot
+satisfy a release quality threshold or `--require-candidate-pass`.
+
+Run `python3 ./compose-public-silence-gap-fixtures.py --self-test` for a
+model-free composition and tamper-detection check. A native Mac run on the
+pinned SDK is still needed before drawing any recognition conclusion.
+
 ### Multilingual long-form seam probe
 
 The English LibriSpeech release corpus exercises long-form chunking but not

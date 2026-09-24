@@ -192,6 +192,10 @@ async function main() {
     );
     assert.match(
       worksheet.formatReportDraft(summary.value),
+      /Optional macOS same-window browser-tab observation \(separate from eight counts; 0\.3\.9 or later; safe recovery, unsafe insertion or failed recovery, or not run\):/,
+    );
+    assert.match(
+      worksheet.formatReportDraft(summary.value),
       /Optional remote clipboard handoff observation \(separate from eight counts; if safely run\):/,
     );
     assert.match(

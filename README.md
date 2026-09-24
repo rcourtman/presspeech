@@ -35,7 +35,14 @@ No account, subscription, or cloud transcription.
 > unopened and read the [macOS launch decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy)
 > or [Windows launch decision](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
 > before choosing to launch. If you install Windows but wait, clear the
-> installer's final **Launch Presspeech** option.
+> installer's final **Launch Presspeech** option. If an older copy is already
+> installed and set to open at sign-in, turn off its macOS login item or Windows
+> startup entry in system settings without opening Presspeech; on Mac, also
+> prevent the old app from reopening after sign-out or restart. Check
+> [GitHub Releases](https://github.com/rcourtman/presspeech/releases) in a browser
+> for the new build instead of opening the old app to check for updates. The
+> [wait-path guide](https://rcourtman.github.io/presspeech/getting-started.html#model-download-preflight)
+> gives the system-setting steps.
 
 **Start here:** [official website](https://rcourtman.github.io/presspeech/) ·
 [first dictation guide](https://rcourtman.github.io/presspeech/getting-started.html) ·

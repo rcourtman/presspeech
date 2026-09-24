@@ -44,6 +44,7 @@ BENCHMARK_INPUT_SHA256="unreported"
 BENCHMARK_ORDER_SHA256="unreported"
 BENCHMARK_HARNESS_SHA256="unreported"
 WINDOW_SHIFT_CORPUS=0
+SILENCE_GAP_CORPUS=0
 
 usage() {
     cat <<'USAGE'
@@ -564,6 +565,9 @@ write_report_header() {
         if [[ "$WINDOW_SHIFT_CORPUS" -eq 1 ]]; then
             echo "- Evidence scope: repeated-speech window-position diagnostic; not an independent release or candidate gate"
         fi
+        if [[ "$SILENCE_GAP_CORPUS" -eq 1 ]]; then
+            echo "- Evidence scope: repeated-speech interior-silence diagnostic; not an independent release or candidate gate"
+        fi
         echo
         report_note
     } >"$report"
@@ -671,6 +675,10 @@ run_self_test() {
     write_report_header "$report" "20260101T000000Z" 1
     assert_contains "$report" "repeated-speech window-position diagnostic"
     WINDOW_SHIFT_CORPUS=0
+    SILENCE_GAP_CORPUS=1
+    write_report_header "$report" "20260101T000000Z" 1
+    assert_contains "$report" "repeated-speech interior-silence diagnostic"
+    SILENCE_GAP_CORPUS=0
 
     BACKEND="unified"
     write_report_header "$report" "20260101T000000Z" 1
@@ -901,6 +909,23 @@ run_self_test() {
     fi
     assert_contains "$shift_log" "missing regular window-position manifest"
 
+    local gap_dir="$tmpdir/silence-gap"
+    mkdir -p "$gap_dir"
+    printf 'Presspeech generated public interior-silence speech fixtures\n' \
+        >"$gap_dir/.presspeech-public-silence-gap-fixtures"
+    local gap_log="$tmpdir/silence-gap.log"
+    if bash "$SCRIPT_PATH" --input-dir "$gap_dir" \
+        --max-corpus-wer 10 >"$gap_log" 2>&1; then
+        echo "self-test expected repeated gap speech to reject an independent-corpus gate" >&2
+        exit 1
+    fi
+    assert_contains "$gap_log" "silence-gap fixtures are report-only"
+    if bash "$SCRIPT_PATH" --input-dir "$gap_dir" >"$gap_log" 2>&1; then
+        echo "self-test expected malformed silence-gap corpus to fail preflight" >&2
+        exit 1
+    fi
+    assert_contains "$gap_log" "missing regular silence-gap manifest"
+
     if bash "$SCRIPT_PATH" --trials >"$missing_value_log" 2>&1; then
         echo "self-test expected --trials without a value to fail" >&2
         exit 1
@@ -1089,6 +1114,18 @@ if [[ -e "$INPUT_DIR/.presspeech-public-window-shift-fixtures" || \
     python3 ./compose-public-window-shift-fixtures.py \
         --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
     WINDOW_SHIFT_CORPUS=1
+fi
+
+if [[ -e "$INPUT_DIR/.presspeech-public-silence-gap-fixtures" || \
+      -L "$INPUT_DIR/.presspeech-public-silence-gap-fixtures" ]]; then
+    if [[ -n "$MAX_REFERENCE_DELETION_RUN" || -n "$MAX_CORPUS_WER" ||
+          -n "$MAX_NON_SPEECH_EMISSIONS" ]]; then
+        echo "silence-gap fixtures are report-only; do not apply independent-corpus quality gates" >&2
+        exit 2
+    fi
+    python3 ./compose-public-silence-gap-fixtures.py \
+        --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
+    SILENCE_GAP_CORPUS=1
 fi
 
 if ! [[ "$TRIALS" =~ ^[0-9]+$ ]]; then

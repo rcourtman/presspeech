@@ -206,6 +206,16 @@
         </div>
       </section>
 
+      <section id="macos-tab-observation">
+        <div class="wrap">
+          <span class="section-eyebrow">Optional macOS observation</span>
+          <h2>Check a tab switch separately</h2>
+          <p>The eight checks use separate windows; they cannot establish safety when a browser switches tabs inside one window. The macOS 0.3.8 implementation checks only the window, so this is already a known limitation of that build. Do not repeat it to claim a new 0.3.8 safety result. If you have a macOS 0.3.9 or later build with focused-control checks, this optional observation can help identify a browser/version that still needs native qualification.</p>
+          <p>Run it only after an eight-check baseline with no unsafe result. Use two blank, non-submitting fields in two tabs of the <strong>same</strong> browser window, and harmless disposable text. First verify ordinary physical Command-V in <em>both</em> fields and clear them; skip this observation if either shortcut fails. In toggle mode, start one dictation in the first tab, switch to the second before stopping, and keep it focused until Presspeech finishes. If switching safely while recording is not possible, skip the observation. Inspect <strong>both</strong> fields before copying, pasting, or retrying. Do not switch back before delivery or test in a real form, chat, or command window.</p>
+          <div class="note warn"><p><strong>Classify this one attempt separately:</strong> safe recovery means neither field received automatic text, a recovery notice appeared, and the complete transcript was available for deliberate manual paste by the version-appropriate route above. Insertion into the second tab, missing recovery, or an unverified clipboard item is unsafe; stop. Record only <strong>safe recovery</strong>, <strong>unsafe insertion or failed recovery</strong>, or <strong>not run</strong>, with public browser and Presspeech versions and a generic field type under <strong>Relevant conditions</strong>. Never share tab titles, URLs, field contents, transcripts, or clipboard data. Do not add this attempt to the eight worksheet counts or Overall result. A safe community observation is not a general tab guarantee or a substitute for the three native release-gate trials; an unsafe result matters even when the eight-check block passed.</p></div>
+        </div>
+      </section>
+
       <section id="worksheet">
         <div class="wrap">
           <span class="section-eyebrow">Local worksheet</span>

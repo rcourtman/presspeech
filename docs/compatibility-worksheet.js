@@ -131,6 +131,7 @@
       "Hardware (optional; generic model only):",
       "Clipboard preservation during steady-focus check:",
       "Relevant conditions (keyboard layout/input source if relevant):",
+      "Optional macOS same-window browser-tab observation (separate from eight counts; 0.3.9 or later; safe recovery, unsafe insertion or failed recovery, or not run):",
       "Optional remote clipboard handoff observation (separate from eight counts; if safely run):",
       "Safe, known clipboard-change interruptions that prevented classification (count completed outcomes):",
       "",

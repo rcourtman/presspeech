@@ -258,6 +258,37 @@ expose or execute sensitive content, use the private reporting route in
 through a public route when one is available; if intake is restricted, retain
 the aggregate locally and retry later.
 
+## Optional macOS same-window tab observation
+
+The eight checks above use separate windows. They do **not** show what happens
+when a browser changes tabs inside one window. macOS 0.3.8 checks only the
+window, so a tab change is already a known limitation of that published build;
+do not repeat it to claim a new 0.3.8 safety result. If you have a macOS 0.3.9
+or later build with focused-control checks, this separate, optional observation
+can help identify which browser/version still needs native qualification.
+
+Run it only if the eight-check baseline had no unsafe result and you have two
+blank, non-submitting fields in two tabs of the **same** browser window. Use
+harmless, disposable text. First check ordinary physical Command-V in *both*
+fields, clearing them afterward; if either shortcut fails, skip this
+observation. In toggle mode, start one dictation in the first tab, switch to
+the second tab before stopping, and keep that tab focused until Presspeech
+finishes. If you cannot switch tabs safely while recording, skip it. Inspect
+**both** fields before copying, pasting, or retrying. A safe result inserts in
+neither field, shows a recovery notice, and leaves the complete transcript
+available for deliberate manual paste by the version-appropriate route above.
+Insertion into the second tab, missing recovery, or an unverified clipboard
+item is unsafe; stop after that single attempt. Do not switch back before
+delivery or test in a real form, chat, or command window.
+
+Record only **safe recovery**, **unsafe insertion or failed recovery**, or
+**not run**, plus the public browser and Presspeech versions and generic field
+type. Put this under **Relevant conditions**, outside the eight worksheet
+counts and Overall result. Never include tab titles, URLs, field contents,
+transcripts, or clipboard data. One safe observation is not a general tab
+guarantee or a substitute for the three native release-gate trials; an unsafe
+one remains important even if the eight-check block passed.
+
 ## Record categories without recording words
 
 The [public protocol page](https://rcourtman.github.io/presspeech/app-compatibility.html#worksheet)

@@ -71,11 +71,11 @@ Supported input extensions: wav, aiff, aif, caf, m4a, mp3, flac.
 Each audio file must have a same-stem .txt reference sidecar.
 Generated context-variation triplets deliberately repeat source audio and can
 be analysed separately, but cannot satisfy the independent-corpus candidate
-screen. Generated window-position variants likewise repeat the same speech
-and cannot satisfy that screen. A thresholded candidate corpus also needs at
-least five independently recorded, hand-audited non-speech controls. Mark each
-with a zero-byte .txt sidecar; include realistic room/device noise rather than
-only digital silence.
+screen. Generated window-position and interior-silence variants likewise
+repeat the same speech and cannot satisfy that screen. A thresholded candidate
+corpus also needs at least five independently recorded, hand-audited non-speech
+controls. Mark each with a zero-byte .txt sidecar; include realistic room/device
+noise rather than only digital silence.
 USAGE
 }
 
@@ -951,6 +951,21 @@ run_self_test() {
     assert_contains "$shift_gate_log" \
         "window-position fixtures cannot satisfy the independent-corpus candidate screen"
 
+    local gap_gate_dir="$tmpdir/gap-gate"
+    mkdir -p "$gap_gate_dir"
+    printf 'Presspeech generated public interior-silence speech fixtures\n' \
+        >"$gap_gate_dir/.presspeech-public-silence-gap-fixtures"
+    local gap_gate_log="$tmpdir/gap-gate.log"
+    if bash "$SCRIPT_PATH" \
+        --input-dir "$gap_gate_dir" \
+        --candidate-backend v3-no-mel \
+        --require-candidate-pass >"$gap_gate_log" 2>&1; then
+        echo "self-test expected repeated silence-gap fixtures to be rejected by the candidate gate" >&2
+        exit 1
+    fi
+    assert_contains "$gap_gate_log" \
+        "silence-gap fixtures cannot satisfy the independent-corpus candidate screen"
+
     rm -rf "$tmpdir"
     trap - EXIT INT TERM
     python3 ./test-context-inputs.py
@@ -1098,6 +1113,19 @@ MSG
     exit 2
 fi
 
+if [[ "$REQUIRE_CANDIDATE_PASS" -eq 1 && \
+      ( -e "$INPUT_DIR/.presspeech-public-silence-gap-fixtures" || \
+        -L "$INPUT_DIR/.presspeech-public-silence-gap-fixtures" ) ]]; then
+    cat >&2 <<'MSG'
+silence-gap fixtures cannot satisfy the independent-corpus candidate screen
+
+The same source speech is repeated with and without an interior silent gap.
+Use run-real-dictation-regression.sh for a report-only gap-sensitivity probe,
+and use a separate independent corpus for a candidate gate.
+MSG
+    exit 2
+fi
+
 CONTEXT_CORPUS=0
 CONTEXT_MANIFEST_SHA256=""
 if [[ -e "$INPUT_DIR/.presspeech-public-context-fixtures" || \
@@ -1110,6 +1138,12 @@ fi
 if [[ -e "$INPUT_DIR/.presspeech-public-window-shift-fixtures" || \
       -L "$INPUT_DIR/.presspeech-public-window-shift-fixtures" ]]; then
     python3 ./compose-public-window-shift-fixtures.py \
+        --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
+fi
+
+if [[ -e "$INPUT_DIR/.presspeech-public-silence-gap-fixtures" || \
+      -L "$INPUT_DIR/.presspeech-public-silence-gap-fixtures" ]]; then
+    python3 ./compose-public-silence-gap-fixtures.py \
         --output-dir "$INPUT_DIR" --validate-output-dir >/dev/null
 fi
 

@@ -214,6 +214,11 @@ class UpdateSelectionTests(unittest.TestCase):
         candidate["assets"][0]["digest"] = None
         self.assertIsNone(updates.select_update([candidate], "0.1.0"))
 
+    def test_ignores_installer_larger_than_github_release_asset_limit(self):
+        candidate = release("0.1.1")
+        candidate["assets"][0]["size"] = updates.MAX_INSTALLER_BYTES
+        self.assertIsNone(updates.select_update([candidate], "0.1.0"))
+
     def test_ignores_non_prerelease_or_inexact_asset_sets(self):
         stable = release("0.1.1")
         stable["prerelease"] = False
@@ -494,6 +499,35 @@ class DownloadTests(unittest.TestCase):
                     name != os.path.basename(legacy_partial))
             ]
             self.assertEqual(leftovers, [])
+
+    def test_download_rejects_unbounded_or_unsafe_installer_metadata_before_io(self):
+        update, _digest = self.make_update(b"safe installer")
+        invalid = (
+            ("installer_size", 0),
+            ("installer_size", -1),
+            ("installer_size", None),
+            ("installer_size", True),
+            ("installer_size", 12.5),
+            ("installer_size", "14"),
+            ("installer_size", updates.MAX_INSTALLER_BYTES),
+            ("installer_digest", ""),
+            ("installer_digest", None),
+            ("installer_name", "../other.exe"),
+            ("installer_name", "other.exe"),
+        )
+        with tempfile.TemporaryDirectory() as root:
+            for field, value in invalid:
+                with self.subTest(field=field, value=value):
+                    malformed = dict(update, **{field: value})
+                    destination = os.path.join(root, "new-download")
+                    opener = mock.Mock(side_effect=AssertionError(
+                        "invalid installer metadata reached the network"))
+                    with self.assertRaisesRegex(
+                            updates.UpdateError, "installer metadata was invalid"):
+                        updates.download_update(
+                            malformed, destination, opener=opener)
+                    opener.assert_not_called()
+                    self.assertFalse(os.path.exists(destination))
 
     def test_mismatched_checksum_is_rejected(self):
         payload = b"tampered"

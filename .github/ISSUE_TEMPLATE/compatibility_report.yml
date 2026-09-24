@@ -173,7 +173,11 @@ body:
         technology, or a minimal repro. Include the active keyboard
         layout/input source only when it differs from your usual layout or
         helps explain the result; use its public name and never include typed
-        text. For a remote target, report any optional continuous-focus
+        text. On macOS 0.3.9 or later, report any optional same-window
+        browser-tab observation separately from the eight counts as safe
+        recovery, unsafe insertion or failed recovery, or not run; omit tab
+        titles, URLs, and text. A safe observation is not release qualification.
+        For a remote target, report any optional continuous-focus
         handoff observation separately from the eight counts, including
         remote client/version, local and guest OS versions, clipboard-sharing
         state, attempts run, anomalies or recovery notices, and whether a

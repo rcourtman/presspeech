@@ -22,6 +22,15 @@ collaborator where noted:
   pointers (including `releases/latest` for macOS) still resolve to the
   preceding published release. A source candidate may be ahead, but Pages must
   not expose its pinned URL, checksum, version, or structured data yet.
+- Trace the published build's **wait without launching** path from the home,
+  first-dictation, and platform install pages. For a fresh Windows install,
+  confirm the final Launch Presspeech checkbox is explained. For an existing
+  install, confirm the guide covers quitting a running copy, disabling the
+  operating-system login/startup entry (and macOS window reopening), checking
+  GitHub Releases in a browser rather than opening the old app for an update
+  check, and reading the new build's instructions before launch. An older app
+  with a missing model can make a request just by opening; a startup change
+  cannot undo a request that already happened.
 - After publication, run
   `python3 scripts/check-public-releases.py --require-published --check-release-notes`
   with read-only GitHub API access. Confirm the deployed platform guide names
@@ -210,7 +219,7 @@ For each configuration, also record this release-gate matrix:
 | Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
 | Try Dictation Copy/Cut uses protected clipboard and failed Cut leaves text intact | |
 | Microphone disconnect/reconnect rescan and in-flight selection change | |
-| Microsoft Remote Desktop and Moonlight insertion routes: repeated distinct text, original-field check, and focus-change recovery | |
+| Microsoft Remote Desktop and Moonlight insertion routes: client-only preflight, repeated distinct text, original-field check, and focus-change recovery | |
 | Sleep/resume, then microphone, hotkey, and dictation recovery | |
 | In-place candidate install over the preceding public Windows release | |
 | In-app update, cancelled/failed update recovery, uninstall, and reinstall | |
@@ -267,7 +276,18 @@ record **Blocked** for that configuration rather than treating local insertion
 or Presspeech's local recovery copy as a remote pass; do not change managed
 policy to make the test pass. Before Moonlight dictation, verify its own
 client-side clipboard-typing shortcut with a harmless local marker; remote
-clipboard synchronization is not its prerequisite. For each usable route,
+clipboard synchronization is not its prerequisite. Record the client and host
+keyboard layouts. Repeat that client-only check with a distinct harmless
+marker containing punctuation and a non-ASCII character, and compare the
+remote editor's text with the local clipboard item exactly. If Moonlight drops
+or changes characters, mark the Moonlight route **Fail** and record the
+client-route failure separately; do not attribute it to speech recognition or
+count it as a Presspeech delivery pass. Do not use personal text to probe the
+route. A
+[Moonlight issue](https://github.com/moonlight-stream/moonlight-qt/issues/1553)
+reports this character-level failure for its clipboard-typing shortcut on a
+Linux client, but does not establish that it occurs in Presspeech's tested
+Windows configuration. For each usable route,
 make five consecutive dictations with distinct harmless phrases, including a
 longer phrase and non-ASCII text where the selected model supports it. Clear
 the remote editor between attempts, inspect it before any retry, and compare
