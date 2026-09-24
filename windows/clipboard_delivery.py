@@ -148,8 +148,7 @@ def write_text(text, *, api=None, sleep=time.sleep, monotonic=time.monotonic):
         private_memory = allocate(_PRIVATE_CLIPBOARD_MARKER)
         text_memory = allocate(payload)
         token_memory = allocate(nonce)
-        deadline = monotonic() + 0.5
-        acquire(deadline)
+        acquire(monotonic() + 0.5)
         if not api.EmptyClipboard():
             raise ClipboardError("clipboard could not be emptied")
         try:
@@ -174,7 +173,9 @@ def write_text(text, *, api=None, sleep=time.sleep, monotonic=time.monotonic):
                 pass
             raise
         close()  # Windows finalizes text formats and advances the serial here.
-        acquire(deadline)
+        # Validation needs its own bounded wait. A slow initial acquisition
+        # must not exhaust the chance to verify a write we already published.
+        acquire(monotonic() + 0.5)
         if (api.GetClipboardOwner() != window or
                 not matches(private_format, _PRIVATE_CLIPBOARD_MARKER) or
                 not matches(token_format, nonce) or not matches(13, payload)):

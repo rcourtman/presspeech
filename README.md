@@ -24,7 +24,7 @@ or Discard, without replacing the clipboard for an already-known invalid target.
 No account, subscription, or cloud transcription.
 
 **Start here:** [official website](https://rcourtman.github.io/presspeech/) ·
-[first private dictation](https://rcourtman.github.io/presspeech/getting-started.html) ·
+[first dictation guide](https://rcourtman.github.io/presspeech/getting-started.html) ·
 [macOS install](https://rcourtman.github.io/presspeech/install.html) ·
 [Windows install](https://rcourtman.github.io/presspeech/windows.html)
 
@@ -40,8 +40,9 @@ Choose the build that matches your computer:
 
 **New to Presspeech?** Follow the
 [four-checkpoint first-dictation guide](https://rcourtman.github.io/presspeech/getting-started.html)
-from install, through Ready and the private scratchpad, to one simple target
-app.
+from install, through Ready and an in-app scratchpad test, to one simple target
+app. Use harmless practice words: the scratchpad can still use the system
+clipboard.
 
 > **Published downloads and source can differ.** The `main` branch can contain
 > an unreleased candidate. The install links below resolve only to published
@@ -266,7 +267,8 @@ Only after the user makes an informed choice to launch 0.3.8:
 
 After launch, use Presspeech's Setup Checklist from the menu bar to finish
 the model, permissions, and hotkey readiness. Focus on setup and the first
-private test; do not ask the user to star, review, or otherwise endorse the
+in-app test with harmless words: the scratchpad can still use the system
+clipboard. Do not ask the user to star, review, or otherwise endorse the
 project.
 ```
 
@@ -323,7 +325,7 @@ On macOS, spoken formatting can also add line breaks. Dictate command text into
 **Try Dictation** or a plain-text editor, review the exact result, then paste
 and run it deliberately.
 
-Both builds provide a private **Try Dictation** scratchpad, hold and toggle
+Both builds provide an in-app **Try Dictation** scratchpad, hold and toggle
 trigger modes, configurable hotkeys, deterministic dictionary replacements,
 filler removal, paste suffix choices, startup controls, update checks, and
 privacy-safe diagnostics. Their menus and settings are intentionally native to
@@ -338,8 +340,9 @@ each platform rather than identical.
 - **Settings → Behavior → Show Presspeech in Menu Bar** — hide the status item
   to free space; this enables Dock access when needed, and the Dock menu can
   restore the item
-- **Support → Try Dictation…** — a private scratchpad for verifying the
-  hotkey and first transcription without switching apps
+- **Support → Try Dictation…** — an in-app scratchpad for verifying the
+  hotkey and first transcription without switching apps; use harmless words
+  because delivery can still use the system clipboard
 - **Support → Test App Compatibility… (macOS 0.3.8 and later)** —
   open the privacy-safe repeated test for automatic paste and focus-change
   recovery in one exact target app
@@ -423,11 +426,11 @@ each platform rather than identical.
 
 - **Dictate / Cancel Dictation (Esc)** — start, stop, or cancel from the
   notification-area menu without using the global hotkey
-- **Try Dictation… / Setup… / Settings…** — test privately, revisit first-run
-  readiness, or configure the hotkey, microphone, local model, text handling,
+- **Try Dictation… / Setup… / Settings…** — test in-app with harmless words,
+  revisit first-run readiness, or configure the hotkey, microphone, local model, text handling,
   audio feedback, and Start with Windows. In upcoming 0.1.13, **Try
   Dictation…** is also available beside the hotkey selector in Settings, where
-  it opens the private scratchpad without starting a recording
+  it opens the in-app scratchpad without starting a recording
 - **Repair Global Hotkey** — replace the keyboard listener if menu-based
   Dictate still works but the configured key does not
 - **Copy Diagnostics / Report a Problem… / Suggest an Improvement…** — copy a

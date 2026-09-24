@@ -890,7 +890,7 @@ func parseRecentTranscriptLimit(storedValue value: Any?) -> RecentTranscriptLimi
     return nil
 }
 
-func limitedRecentTranscripts(_ transcripts: [String], limit: RecentTranscriptLimit) -> [String] {
+func limitedRecentTranscripts<Entry>(_ transcripts: [Entry], limit: RecentTranscriptLimit) -> [Entry] {
     let count = limit.count
     guard count > 0 else { return [] }
     guard transcripts.count > count else { return transcripts }
@@ -5696,6 +5696,35 @@ func pastedText(from correctedTranscript: String, suffix: PasteSuffix) -> String
     }
 }
 
+/// Retain both the processed words and the exact text offered for delivery.
+/// Copy Last Transcript is a recovery action, so it must use the suffix chosen
+/// for that dictation even if the user changes the setting before copying.
+/// Dictionary prefill and menu previews still use the unsuffixed words.
+struct RecentTranscript: Equatable {
+    let processedText: String
+    let suffix: PasteSuffix
+
+    var deliveredText: String {
+        pastedText(from: processedText, suffix: suffix)
+    }
+
+    var copyHelp: String {
+        switch suffix {
+        case .appendSpace:
+            return "Copy this transcript with the trailing space selected when it was dictated."
+        case .none:
+            return "Copy this transcript without an appended suffix."
+        case .appendNewline:
+            return "Copy this transcript with its trailing newline. Pasting into a command window may submit it."
+        }
+    }
+
+    init(processedText: String, suffix: PasteSuffix) {
+        self.processedText = processedText
+        self.suffix = suffix
+    }
+}
+
 func speechModelStartupStatusTitle(_ progress: DownloadProgress) -> String {
     switch progress.phase {
     case .listing:
@@ -8929,7 +8958,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var systemAudioMuteWatchdog: Process?
 
     /// Last N transcripts, newest first. Shown in the History submenu.
-    private var history: [String] = []
+    private var history: [RecentTranscript] = []
 
     /// In-session click counter per permission. Click #2 onwards
     /// resets the matching TCC entry before re-requesting — belt
@@ -10465,21 +10494,21 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             earlier: permissionInterruptionObserved,
                             missingPermissions: missing
                         )
-                        let deliveredText = pastedText(from: cleaned,
-                                                       suffix: settings.pasteSuffix)
+                        let completed = RecentTranscript(processedText: cleaned,
+                                                         suffix: settings.pasteSuffix)
                         let insertionOutcome: TextInsertionOutcome
                         if shouldAttemptAutomaticDictationDelivery(
                             permissionInterruptionObserved: permissionInterruptionObserved,
                             missingPermissions: missing
                         ), let expectedTarget = recordingPasteTarget {
                             insertionOutcome = TextInserter.insert(
-                                deliveredText,
+                                completed.deliveredText,
                                 preserveClipboard: settings.preserveClipboardForManualRestore,
                                 expectedTarget: expectedTarget
                             )
                         } else {
                             insertionOutcome = TextInserter.copyWithoutPasting(
-                                deliveredText,
+                                completed.deliveredText,
                                 preserveClipboard: settings.preserveClipboardForManualRestore
                             )
                         }
@@ -10512,7 +10541,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                 && !permissionInterruptionObserved
                                 && missing.isEmpty
                         )
-                        addToHistory(cleaned)
+                        addToHistory(completed)
                     }
                 }
             } catch {
@@ -10823,8 +10852,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     // MARK: - History
 
-    private func addToHistory(_ text: String) {
-        let next = limitedRecentTranscripts([text] + history,
+    private func addToHistory(_ transcript: RecentTranscript) {
+        let next = limitedRecentTranscripts([transcript] + history,
                                             limit: settings.recentTranscriptLimit)
         guard next != history else { return }
         history = next
@@ -11341,7 +11370,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                       action: #selector(historyClicked(_:)),
                                       keyEquivalent: "")
             copyLast.target = self
-            copyLast.representedObject = newest
+            copyLast.representedObject = newest.deliveredText
+            copyLast.toolTip = newest.copyHelp
             menu.addItem(copyLast)
         }
 
@@ -11445,11 +11475,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                     action: #selector(historyClicked(_:)),
                                     keyEquivalent: "")
             inline.target = self
-            inline.representedObject = newest
+            inline.representedObject = newest.deliveredText
             // The menu action is available during recording. A transcript in
             // its help tag can be exposed by pointer hover or spoken by
             // VoiceOver into the live microphone without opening History.
-            inline.toolTip = "Copy the latest transcript to the clipboard."
+            inline.toolTip = newest.copyHelp
             menu.addItem(inline)
 
             menu.addItem(buildRecentTranscriptsItem())
@@ -11488,12 +11518,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         sub.autoenablesItems = false
 
         for entry in history {
-            let item = NSMenuItem(title: previewLine(for: entry),
+            let item = NSMenuItem(title: previewLine(for: entry.processedText),
                                   action: #selector(historyClicked(_:)),
                                   keyEquivalent: "")
             item.target = self
-            item.representedObject = entry
-            item.toolTip = "Copy this transcript to the clipboard."
+            item.representedObject = entry.deliveredText
+            item.toolTip = entry.copyHelp
             sub.addItem(item)
         }
 
@@ -13741,7 +13771,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     @objc private func addCorrectionFromLastTranscriptClicked(_ sender: NSMenuItem) {
         guard let newest = history.first else { return }
-        let prefill = correctionSourcePrefill(from: newest)
+        let prefill = correctionSourcePrefill(from: newest.processedText)
         guard !prefill.isEmpty else { return }
         guard let correction = showCorrectionEditor(existing: nil, mode: .correction, prefillSource: prefill) else { return }
         saveCorrection(correction)
@@ -19843,6 +19873,26 @@ private enum PresspeechSelfTest {
 
     private static func testRecentTranscriptLimit() throws {
         let transcripts = ["newest", "second", "third", "fourth", "fifth", "sixth"]
+        let spaced = RecentTranscript(processedText: "hello", suffix: .appendSpace)
+        let newlined = RecentTranscript(processedText: "next", suffix: .appendNewline)
+        let unchanged = RecentTranscript(processedText: "plain", suffix: .none)
+
+        try expect(spaced.deliveredText, equals: "hello ",
+                   "Copy Last Transcript must retain the default delivery suffix")
+        try expect(newlined.deliveredText, equals: "next\n",
+                   "menu recovery must retain a newline suffix selected for that dictation")
+        try expect(newlined.copyHelp.contains("may submit it"), equals: true,
+                   "a recovery copy with a hidden newline must warn about command-window submission")
+        try expect(unchanged.deliveredText, equals: "plain",
+                   "menu recovery must not add a suffix when none was selected")
+        try expect(spaced.processedText, equals: "hello",
+                   "history previews and dictionary prefill must not acquire delivery suffixes")
+        try expect(correctionSourcePrefill(from: newlined.processedText), equals: "next",
+                   "creating a correction from history must use the processed words")
+        try expect(limitedRecentTranscripts([newlined, spaced], limit: .last5)
+                       .map(\.deliveredText),
+                   equals: ["next\n", "hello "],
+                   "each retained entry must keep its own suffix after the setting changes")
 
         try expect(
             recentTranscriptLimitSettingTitle(.off),

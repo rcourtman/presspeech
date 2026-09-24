@@ -11,6 +11,7 @@ try:
 except ModuleNotFoundError:
     # Keep these model-free state tests portable to minimal Python workers.
     tkinter = types.ModuleType("tkinter")
+    tkinter.TclError = RuntimeError
     tkinter.messagebox = mock.Mock()
     tkinter.ttk = mock.Mock()
     sys.modules["tkinter"] = tkinter
@@ -301,6 +302,7 @@ class AccessibleWindowTests(unittest.TestCase):
         self.assertIn("_bounded_window_size(", source)
         self.assertIn('font="TkDefaultFont"', source)
         self.assertIn('root.bind("<Configure>", resize_status', source)
+        self.assertIn('self._protect_scratchpad_copy_and_cut()', source)
 
     def test_scratchpad_recovery_is_an_explicit_keyboard_command(self):
         source = inspect.getsource(ui.ScratchpadWindow._build)
@@ -1957,6 +1959,98 @@ class ScratchpadWindowTests(unittest.TestCase):
         window.status = mock.Mock()
         window.text = mock.Mock()
         return window
+
+    def selected_window(self):
+        window = self.make_window()
+        window.text.index.side_effect = {
+            "sel.first": "1.0", "sel.last": "1.15",
+        }.get
+        window.text.get.return_value = "private words 🐈"
+        return window
+
+    def test_copy_and_cut_virtual_events_stop_tk_class_clipboard_bindings(self):
+        window = self.make_window()
+        window._copy_or_cut_selection = mock.Mock(return_value="break")
+
+        window._protect_scratchpad_copy_and_cut()
+
+        bindings = {call.args[0]: call.args[1]
+                    for call in window.text.bind.call_args_list}
+        self.assertEqual(set(bindings), {"<<Copy>>", "<<Cut>>"})
+        self.assertEqual(bindings["<<Copy>>"](object()), "break")
+        self.assertEqual(bindings["<<Cut>>"](object()), "break")
+        self.assertEqual(window._copy_or_cut_selection.call_args_list,
+                         [mock.call(cut=False), mock.call(cut=True)])
+
+    def test_unexpected_copy_callback_failure_still_blocks_tk_class_binding(self):
+        window = self.make_window()
+        window._copy_or_cut_selection = mock.Mock(
+            side_effect=RuntimeError("private callback detail"))
+        window._protect_scratchpad_copy_and_cut()
+        bindings = {call.args[0]: call.args[1]
+                    for call in window.text.bind.call_args_list}
+
+        self.assertEqual(bindings["<<Copy>>"](object()), "break")
+        self.assertEqual(bindings["<<Cut>>"](object()), "break")
+
+    def test_copy_uses_privacy_writer_and_confirms_current_receipt(self):
+        window = self.selected_window()
+        receipt = object()
+        with mock.patch.object(ui.clipboard_delivery, "write_text",
+                               return_value=receipt) as write, \
+                mock.patch.object(ui.clipboard_delivery, "is_current",
+                                  return_value=True) as current:
+            self.assertEqual(window._copy_or_cut_selection(), "break")
+
+        write.assert_called_once_with("private words 🐈")
+        current.assert_called_once_with(receipt)
+        window.text.delete.assert_not_called()
+        window.app.notify.assert_not_called()
+
+    def test_cut_deletes_only_after_confirmed_protected_copy(self):
+        window = self.selected_window()
+        with mock.patch.object(ui.clipboard_delivery, "write_text",
+                               return_value=object()), \
+                mock.patch.object(ui.clipboard_delivery, "is_current",
+                                  return_value=True):
+            self.assertEqual(window._copy_or_cut_selection(cut=True), "break")
+
+        window.text.delete.assert_called_once_with("1.0", "1.15")
+
+    def test_missing_selection_neither_changes_clipboard_nor_runs_default_copy(self):
+        window = self.make_window()
+        window.text.index.side_effect = ui.tk.TclError("no selection")
+        with mock.patch.object(ui.clipboard_delivery, "write_text") as write:
+            self.assertEqual(window._copy_or_cut_selection(cut=True), "break")
+        write.assert_not_called()
+        window.text.delete.assert_not_called()
+
+    def test_unconfirmed_or_failed_copy_never_cuts_or_leaks_text_in_notice(self):
+        for failure in ("write", "receipt"):
+            with self.subTest(failure=failure):
+                window = self.selected_window()
+                with mock.patch.object(ui.clipboard_delivery, "write_text") as write, \
+                        mock.patch.object(ui.clipboard_delivery, "is_current",
+                                          return_value=False):
+                    if failure == "write":
+                        write.side_effect = OSError("private backend detail")
+                    self.assertEqual(
+                        window._copy_or_cut_selection(cut=True), "break")
+                window.text.delete.assert_not_called()
+                window.app.notify.assert_called_once()
+                self.assertNotIn("private words", str(window.app.notify.call_args))
+                self.assertNotIn("private backend detail", str(window.app.notify.call_args))
+
+    def test_cut_does_not_delete_a_selection_changed_during_clipboard_write(self):
+        window = self.selected_window()
+        positions = ["1.0", "1.15", "1.1", "1.15"]
+        window.text.index.side_effect = positions
+        with mock.patch.object(ui.clipboard_delivery, "write_text",
+                               return_value=object()), \
+                mock.patch.object(ui.clipboard_delivery, "is_current",
+                                  return_value=True):
+            self.assertEqual(window._copy_or_cut_selection(cut=True), "break")
+        window.text.delete.assert_not_called()
 
     def test_waiting_dictation_enables_review_without_reenabling_dictate(self):
         window = self.make_window(waiting=True)

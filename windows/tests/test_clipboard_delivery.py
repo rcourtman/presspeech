@@ -249,11 +249,34 @@ class ClipboardTransactionTests(unittest.TestCase):
         api = self.backend(); api.OpenClipboard.side_effect = [True, False]
         with self.assertRaises(delivery.ClipboardError):
             delivery.write_text("synthetic transcript", api=api,
-                                monotonic=mock.Mock(side_effect=[10.0, 10.51]), sleep=mock.Mock())
+                                monotonic=mock.Mock(side_effect=[10.0, 10.5, 11.01]), sleep=mock.Mock())
         api.GetClipboardSequenceNumber.assert_not_called()
         api.EmptyClipboard.assert_called_once()
         self.assertEqual(api.SetClipboardData.call_count, 3)
         api.GlobalFree.assert_not_called()
+
+    def test_reacquisition_gets_its_own_bounded_retry_window(self):
+        api = self.backend()
+        now = [10.0]
+        attempts = iter((False, True, False, True))
+        def open_clipboard(_window):
+            opened = next(attempts)
+            if opened and api.OpenClipboard.call_count == 2:
+                # The first acquisition/write consumed the original deadline.
+                now[0] = 10.51
+            return opened
+        api.OpenClipboard.side_effect = open_clipboard
+        sleep = mock.Mock()
+
+        receipt = delivery.write_text(
+            "synthetic transcript", api=api,
+            monotonic=lambda: now[0],
+            sleep=sleep)
+
+        self.assertEqual(receipt, delivery.WriteReceipt(107))
+        self.assertEqual(api.OpenClipboard.call_count, 4)
+        self.assertEqual(sleep.call_args_list, [mock.call(0.01), mock.call(0.01)])
+        api.EmptyClipboard.assert_called_once()
 
     def test_zero_sequence_and_close_failure_do_not_report_success(self):
         for fault in ("GetClipboardSequenceNumber", "CloseClipboard"):

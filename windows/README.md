@@ -307,11 +307,15 @@ If using the configured key is inconvenient, select **Dictate** from the
 Presspeech notification-area menu to start recording, then select it again to
 stop. This menu action toggles recording in either dictation style.
 
-For a private, click-driven test that does not type into another app, open
+For an in-app, click-driven test that does not type into another app, open
 **Try Dictation…** from the notification-area menu. Builds containing the
 upcoming 0.1.13 change also provide a **Try Dictation…** button in Settings.
-In the scratchpad, use **Dictate** to start and stop; the transcript stays in
-that private window.
+In the scratchpad, use **Dictate** to start and stop, then check the result
+there. Use only harmless words: the scratchpad can still use the system
+clipboard (see the [clipboard privacy boundary](https://rcourtman.github.io/presspeech/privacy.html#operating-system-clipboard-services)).
+In upcoming 0.1.13 builds, Copy and Cut of selected scratchpad text use the
+same history/cloud-excluded clipboard path as dictation delivery. Cut removes
+the selection only after Presspeech confirms the copy.
 In builds containing the upcoming 0.1.13 recovery change, closing Try
 Dictation while a finished recording is still transcribing keeps its completed
 text in Delivery Recovery instead of silently losing it or pasting into another
@@ -509,8 +513,9 @@ Use **Open Startup Settings** to review Presspeech under Windows
 - **Copy Diagnostics** includes configuration counts, runtime state, and
   microphone availability, never transcripts, audio, dictionary contents,
   exact microphone names, raw error details, or raw log lines.
-- Upcoming 0.1.13 marks transcript, recovery, and user-requested diagnostics
-  copies for exclusion from Windows Clipboard History and Cloud Clipboard;
+- Upcoming 0.1.13 marks transcript, recovery, Try Dictation scratchpad Copy/Cut,
+  and user-requested diagnostics copies for exclusion from Windows Clipboard
+  History and Cloud Clipboard;
   they remain available for local Ctrl+V. Published 0.1.12 does not apply this
   exclusion, and other local clipboard readers remain a separate boundary.
 - `python app.py --selftest` verifies the engine pipeline.

@@ -56,6 +56,12 @@ and benchmark version before interpreting probe latency across reports; version
 12 always ran the tailed member second. Manifest order can change which
 condition goes first for a particular clip even when the input digest matches;
 retain manifest order for comparisons or inspect each clip's `trial_order`.
+Version 14 adds signed, per-pair **tailed minus clean** inference time and
+order-stratified medians at the sample and corpus levels. A positive delta is
+slower with the tail; a negative delta is faster. These are diagnostics, not
+release-to-paste timings, and small or imbalanced order strata cannot establish
+an inference-speed effect. Compare identical input digests, run counts,
+hardware, model settings, and manifest order before interpreting them.
 
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
@@ -120,12 +126,16 @@ zero-valued 16 kHz samples appended, alternating which goes first across all
 reviewed pairs. Reviewed silence, unreviewed audio,
 and unscoreable references receive only the ordinary transcription. The JSON
 keeps ordered transcript pairs, paired word-error counts, blank regressions,
-and separate tailed inference times. Each sample's `trial_order` is indexed
-like `pairs` and both inference-time arrays; aggregate order counts are also
-reported. The `order_breakdown` in each sample and the aggregate report
-separately count nonempty-to-empty and worsened-word-error trials for each
-first variant. The console reports pooled and order-stratified counts. Review
-`nonempty_to_empty_trial_count` and worsened word errors by order,
+separate tailed inference times, and signed paired inference-time deltas.
+Each sample's `trial_order` is indexed like `pairs`, both inference-time arrays,
+and `paired_inference_delta_seconds.all`; aggregate order counts and paired
+delta distributions are also reported. The `order_breakdown` in each sample
+and the aggregate report separately count nonempty-to-empty and
+worsened-word-error trials for each first variant.
+`paired_inference_delta_seconds.by_order` retains separate
+first-variant timing distributions; an empty stratum has `null` medians. The
+console reports pooled and order-stratified counts and paired latency medians.
+Review `nonempty_to_empty_trial_count` and worsened word errors by order,
 and first/final-word failures by task group, not just pooled WER. A tailed
 output that differs from an already-wrong baseline is not automatically a
 regression. Counterbalancing reduces systematic second-run warming bias but

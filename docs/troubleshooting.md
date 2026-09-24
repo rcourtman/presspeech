@@ -20,8 +20,9 @@ requests do not include dictation audio or transcripts.
    starting a second dictation process.
 2. Check the model, microphone, permission, and hotkey status in **Setup
    Checklist** on macOS or **Setup** on Windows.
-3. Use **Try Dictation**. If its private scratchpad works, continue with the
-   paste and focus checks below.
+3. Use **Try Dictation** with harmless words. Its in-app scratchpad can still
+   use the system clipboard. If that test works, continue with the paste and
+   focus checks below.
 
 ## macOS
 

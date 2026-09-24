@@ -1289,7 +1289,7 @@ Otherwise offer the direct notarised zip using the current version-pinned downlo
 Only after the user makes an informed choice to launch 0.3.8:
   open /Applications/Presspeech.app
 
-After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch. In 0.3.9, a clean install must choose Download Model in Setup; choose Set Up Later to defer. Existing installs and cached models continue loading automatically. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project."""
 
 WINDOWS_INSTALL_PROMPT = r"""Install Presspeech from https://github.com/rcourtman/presspeech on this Windows PC.
 
@@ -1351,7 +1351,7 @@ Once the checksum succeeds and any requested attestation check also succeeds—o
 
 Do not automate a security-warning choice. If Microsoft Defender SmartScreen offers More info → Run anyway, the user must decide whether to proceed after checking the source and hash. If Windows 11 Smart App Control or managed policy blocks the unsigned installer without an override, stop; do not try to circumvent that policy.
 
-After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button. Before choosing Finish Setup, Set Up Later, or closing Setup, explain that a new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off; upcoming 0.1.13 defaults it off. Published 0.1.12 offers Press to toggle in Settings, not Setup; upcoming 0.1.13 offers it in Setup. If the user chooses Set Up Later, leave setup incomplete; in 0.1.12 this does not defer an already-started model download. Otherwise, finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first private test. Focus on setup and the first private test; do not ask the user to star, review, or otherwise endorse the project."""
+After the user completes the installer, launch Presspeech from the Start Menu only if they chose not to wait and explicitly confirmed launching 0.1.12. If they chose to wait, leave the app unopened and make sure the installer's final "Launch Presspeech" option was unchecked. Explain that first launch may download a local model (about 141 MiB on a fresh CPU-only PC or about 2.5 GB with usable NVIDIA CUDA; an incomplete cache may need less). With 0.1.13, Setup asks before downloading either missing first-run default model and offers Set Up Later; the Parakeet path also offers the smaller CPU model. With published 0.1.12, the model download starts automatically on first launch, so make sure the user understands the size before launching. Published 0.1.12 also checks the microphone automatically; upcoming 0.1.13 leaves it closed until the user chooses Check Microphone. Let them decide whether to run that test in versions that offer the button. Before choosing Finish Setup, Set Up Later, or closing Setup, explain that a new 0.1.12 profile selects Start with Windows by default and ask whether to turn it off; upcoming 0.1.13 defaults it off. Published 0.1.12 offers Press to toggle in Settings, not Setup; upcoming 0.1.13 offers it in Setup. If the user chooses Set Up Later, leave setup incomplete; in 0.1.12 this does not defer an already-started model download. Otherwise, finish Setup before testing the configured hotkey. Right Alt is the default; choose F8 or another available key if Right Alt acts as AltGr. Use Try Dictation for the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Focus on setup and the first test; do not ask the user to star, review, or otherwise endorse the project."""
 
 
 def agents_markdown(_metadata: dict[str, object]) -> str:
@@ -3234,6 +3234,34 @@ def check_getting_started_scratchpad_privacy_order(
             + ", ".join(repr(phrase) for phrase in missing)
         ]
     return []
+
+
+SCRATCHPAD_PRIVACY_OVERCLAIM = re.compile(
+    r"\b(?:private\s+(?:scratchpad|test|first\s+dictation)"
+    r"|first\s+private\s+dictation|test\s+privately"
+    r"|private,\s*click-driven\s+test"
+    r"|transcript\s+stays\s+in\s+that\s+private\s+window)\b",
+    re.I,
+)
+
+
+def check_scratchpad_privacy_claims(paths: list[Path] | None = None) -> list[str]:
+    """Do not imply the in-app test bypasses the shared system clipboard."""
+    if paths is None:
+        paths = [ROOT / "README.md", ROOT / "windows" / "README.md"] + [
+            path for path in DOCS.rglob("*")
+            if path.is_file() and path.suffix in {".html", ".md", ".txt"}
+        ]
+    errors: list[str] = []
+    for path in paths:
+        content = html.unescape(re.sub(r"<[^>]+>", " ", read_text(path)))
+        if SCRATCHPAD_PRIVACY_OVERCLAIM.search(content):
+            display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+            errors.append(
+                f"{display}: in-app scratchpad is not clipboard-private; "
+                "use 'in-app test' and harmless practice words"
+            )
+    return errors
 
 
 def check_model_recovery_privacy_order(
@@ -5508,6 +5536,22 @@ def run_self_test() -> None:
         if not check_getting_started_scratchpad_privacy_order(scratchpad_guidance):
             raise SyncError("self-test: incomplete scratchpad warning was accepted")
 
+        scratchpad_claim = Path(tmp) / "scratchpad-claim.txt"
+        scratchpad_claim.write_text(
+            "Use an in-app scratchpad with harmless words; it can use the clipboard.",
+            encoding="utf-8",
+        )
+        if check_scratchpad_privacy_claims([scratchpad_claim]):
+            raise SyncError("self-test: accurate scratchpad copy was rejected")
+        for overclaim in (
+            "private scratchpad", "private test", "first private dictation",
+            "private first dictation", "test privately",
+            "private, click-driven test", "transcript stays in that private window",
+        ):
+            scratchpad_claim.write_text(overclaim, encoding="utf-8")
+            if not check_scratchpad_privacy_claims([scratchpad_claim]):
+                raise SyncError(f"self-test: {overclaim!r} scratchpad claim was accepted")
+
         recovery_html = Path(tmp) / "troubleshooting.html"
         recovery_markdown = Path(tmp) / "troubleshooting.md"
         safe_recovery_html = read_text(DOCS / "troubleshooting.html")
@@ -6067,6 +6111,7 @@ def main() -> int:
             errors.extend(check_getting_started_entry_links())
             errors.extend(check_model_recovery_privacy_order())
             errors.extend(check_getting_started_scratchpad_privacy_order())
+            errors.extend(check_scratchpad_privacy_claims())
             errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_agent_brief_preflight_order())
             errors.extend(check_delivery_boundary_guidance())
@@ -6129,6 +6174,7 @@ def main() -> int:
         errors.extend(check_getting_started_entry_links())
         errors.extend(check_model_recovery_privacy_order())
         errors.extend(check_getting_started_scratchpad_privacy_order())
+        errors.extend(check_scratchpad_privacy_claims())
         errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_agent_brief_preflight_order())
         errors.extend(check_delivery_boundary_guidance())

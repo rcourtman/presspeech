@@ -18,6 +18,7 @@ except ImportError:
     winreg = None
 
 import config as cfg
+import clipboard_delivery
 import live_region
 import updates
 
@@ -2646,6 +2647,7 @@ class ScratchpadWindow:
         scratchpad_label.grid(row=0, column=0, sticky="w", pady=(0, 4))
         self.text = tk.Text(frame, wrap="word", font="TkDefaultFont")
         self.text.grid(row=1, column=0, sticky="nsew")
+        self._protect_scratchpad_copy_and_cut()
         transcript_scrollbar = ttk.Scrollbar(
             frame, orient="vertical", command=self.text.yview,
             takefocus=False)
@@ -2687,6 +2689,56 @@ class ScratchpadWindow:
         user32.GetParent.restype = ctypes.c_void_p
         client_handle = root.winfo_id()
         self.window_handle = int(user32.GetParent(client_handle) or client_handle)
+
+    def _protect_scratchpad_copy_and_cut(self):
+        # Widget bindings run before Tk's Text class bindings. Return "break"
+        # even on failure so the default Copy/Cut cannot publish an unmarked
+        # dictation through Tk's own clipboard path.
+        self.text.bind("<<Copy>>", lambda _event: self._protected_copy_event())
+        self.text.bind("<<Cut>>", lambda _event: self._protected_copy_event(cut=True))
+
+    def _protected_copy_event(self, *, cut=False):
+        try:
+            self._copy_or_cut_selection(cut=cut)
+        except Exception:
+            # Even an unexpected Tk or notification failure must not let the
+            # unprotected Text class binding run after this widget binding.
+            pass
+        return "break"
+
+    def _copy_or_cut_selection(self, *, cut=False):
+        try:
+            start = self.text.index("sel.first")
+            end = self.text.index("sel.last")
+            selected = self.text.get(start, end)
+        except tk.TclError:
+            return "break"  # No selection; leave the existing clipboard alone.
+        if not selected:
+            return "break"
+
+        try:
+            receipt = clipboard_delivery.write_text(selected)
+            copied = clipboard_delivery.is_current(receipt)
+        except Exception:
+            copied = False
+        if not copied:
+            self.app.notify(
+                "Clipboard copy unavailable",
+                "Try Dictation could not confirm the copy. Check the clipboard "
+                "before trying again; Presspeech did not remove scratchpad text.")
+            return "break"
+
+        if cut:
+            try:
+                # The native clipboard transaction may wait for another app.
+                # Do not delete text if the selection changed while it ran.
+                if (self.text.index("sel.first") == start and
+                        self.text.index("sel.last") == end and
+                        self.text.get(start, end) == selected):
+                    self.text.delete(start, end)
+            except tk.TclError:
+                pass
+        return "break"
 
     def toggle(self):
         if self.app.recording:

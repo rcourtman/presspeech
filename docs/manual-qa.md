@@ -149,6 +149,7 @@ For each configuration, also record this release-gate matrix:
 | Locked/replaced clipboard recovery with notifications disabled and tray icon in overflow | |
 | Explicit recovery Copy, Discard, Leave Waiting, and Exit behavior | |
 | Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
+| Try Dictation Copy/Cut uses protected clipboard and failed Cut leaves text intact | |
 | Microphone disconnect/reconnect rescan and in-flight selection change | |
 | Microsoft Remote Desktop and Moonlight insertion routes | |
 | Sleep/resume, then microphone, hotkey, and dictation recovery | |
@@ -386,7 +387,7 @@ keyboard access testing in addition to assistive-technology testing.
   or UI Automation names alone. After setup is complete, also launch Presspeech
   from the Start Menu, use Voice Access to activate Settings' **Try Dictation…**
   button, then operate the scratchpad's **Dictate** / **Stop Dictation** button
-  by its accessible name. Confirm it opens the private scratchpad without
+  by its accessible name. Confirm it opens the in-app scratchpad without
   starting a recording, and record any Voice Access limitation. Use Microsoft's
   [Voice Access overview](https://support.microsoft.com/en-us/accessibility/windows/voice-access/use-voice-access-to-control-your-pc-author-text-with-your-voice)
   and [screen-item interaction guidance](https://support.microsoft.com/en-us/accessibility/windows/voice-access/use-voice-to-interact-with-items-on-the-screen)
@@ -612,6 +613,7 @@ Record this release-gate matrix against the exact installed candidate:
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
 | Menu-bar visibility preference, Dock fallback/restore, and dictation recovery with VoiceOver and keyboard-only navigation | |
+| Copy Last Transcript and Recent Transcripts recover the original dictation suffix, including after the suffix setting changes | |
 
 For each ten-attempt TextEdit, browser, and Electron delivery row, use distinct
 harmless phrases in blank, non-submitting fields and seed a harmless previous
@@ -739,9 +741,16 @@ keyboard: first the status-item menu, then the Dock menu with **Show in Dock**
 enabled. Traverse the available actions in both directions with the keyboard.
 Confirm **Copy Last Transcript** is reachable in the action order after the
 dictation control, is enabled when retained history is available, and copies
-the latest transcript when activated. Confirm any microphone recovery action
-is likewise reachable when shown, and that disabled or absent recovery actions
-are not presented as actionable. With VoiceOver, verify the recovery notice
+the latest transcript when activated. In a disposable plain-text field, check
+that **Copy Last Transcript** from both the status and Dock menus, and an entry
+in **Recent Transcripts**, copy the exact text originally offered for delivery,
+including a configured final space or newline. Change the suffix setting
+between dictation and Copy; an older entry must keep its own suffix, not adopt
+the new setting. Use only non-executing fields for the newline case. Menu
+previews and **Add Correction from Last Transcript** must still use the
+processed words without the delivery suffix. Confirm any microphone recovery
+action is likewise reachable when shown, and that disabled or absent recovery
+actions are not presented as actionable. With VoiceOver, verify the recovery notice
 and action names explain what will happen without relying on color or the
 Command-key glyph. Do not record transcript contents; restore the test clipboard
 only through an explicit user-confirmed action.
@@ -1313,6 +1322,13 @@ clipboard.
 - Hold the clipboard from a separate process during delivery. Confirm retained
   text is recoverable, recording is paused, the Delivery Recovery window opens
   above ordinary apps, and no transcript appears in the window, logs or files.
+- On a disposable Windows test setup, briefly contend for the clipboard near
+  the end of Presspeech's first acquisition window, then again while it
+  reopens the clipboard to verify its write. If Presspeech's item remains
+  current and the second hold ends within its separate bounded retry window,
+  confirm one paste and no recovery prompt. If another process replaces the
+  item instead, confirm no paste shortcut, no second Presspeech write, and
+  explicit recovery. The model-free timing test cannot qualify this Win32 path.
 - Disable Presspeech notifications and move its notification-area icon into
   overflow. Trigger recovery and confirm the window still exposes Copy,
   Discard and Leave Waiting. Navigate and invoke each action using only Tab,
@@ -1369,6 +1385,13 @@ clipboard.
   qualify Windows' ExcludeClipboardContentFromMonitorProcessing behavior; the
   opt-in native probe only confirms the marker is present, while doubled tests
   qualify write ordering and fail-closed control flow.
+- In Try Dictation, select a distinct harmless phrase and use Ctrl+C, then
+  Ctrl+X on another selection. Confirm each copy remains available to ordinary
+  Ctrl+V, Cut removes only the selected text, and neither item appears in
+  Win+V after the current clipboard is replaced. Repeat with the clipboard
+  held by another process: Copy/Cut must not fall through to Tk's unprotected
+  default clipboard path, and a failed Cut must leave the selection in the
+  scratchpad. Record only pass/fail; never save the test clipboard contents.
 - Choose Discard and Exit separately. Both forget private recovery; Discard must
   leave a newer external clipboard untouched. No late worker may retain after Exit.
 - Force `SendInput` to return zero for modifier-down, V-down, V-up and
