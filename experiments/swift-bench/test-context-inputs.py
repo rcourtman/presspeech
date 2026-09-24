@@ -222,7 +222,7 @@ print('latency: p50=1.0 ms')
 trials=int(args[args.index('--trials')+1])
 for trial in range(1, trials + 1):
     print(f'output: trial={trial}/{trials} empty=false characters={len(reference)}')
-print(f'transcript: [WER 0.0%] [final-word retained=true] [word-errors=0 reference-words={len(reference.split())}] <redacted>')
+print(f'transcript: [WER 0.0%] [final-word retained=true] [first-word retained=true] [word-errors=0 reference-words={len(reference.split())}] <redacted>')
 ''')
         mock_bench.chmod(0o755)
         commands = {

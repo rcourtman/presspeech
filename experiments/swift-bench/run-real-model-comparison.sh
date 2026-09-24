@@ -188,7 +188,7 @@ extract_worst_wer_metrics() {
     # Match the benchmark-owned tags at the start of each result line. An
     # unredacted dictated transcript can itself contain strings resembling
     # metric tags and must not be able to spoof the report parser.
-    sed -nE 's/^[[:space:]]*(transcript:|[^[:space:]]+)[[:space:]]+\[WER ([0-9.]+)%\][[:space:]]+\[final-word retained=(true|false)([^]]*)\][[:space:]]+\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\2\t\5\t\6/p' "$log_file" \
+    sed -nE 's/^[[:space:]]*(transcript:|[^[:space:]]+)[[:space:]]+\[WER ([0-9.]+)%\][[:space:]]+\[final-word retained=(true|false)([^]]*)\][[:space:]]+\[first-word retained=(true|false)[^]]*\][[:space:]]+\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\2\t\6\t\7/p' "$log_file" \
         | awk -F '\t' '
         {
             numerator = $2
@@ -218,7 +218,7 @@ extract_worst_wer_metrics() {
 
 extract_best_wer_metrics() {
     local log_file="$1"
-    sed -nE 's/^[[:space:]]*(transcript:|[^[:space:]]+)[[:space:]]+\[WER ([0-9.]+)%\][[:space:]]+\[final-word retained=(true|false)([^]]*)\][[:space:]]+\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\2\t\5\t\6/p' "$log_file" \
+    sed -nE 's/^[[:space:]]*(transcript:|[^[:space:]]+)[[:space:]]+\[WER ([0-9.]+)%\][[:space:]]+\[final-word retained=(true|false)([^]]*)\][[:space:]]+\[first-word retained=(true|false)[^]]*\][[:space:]]+\[word-errors=([0-9]+) reference-words=([0-9]+)\].*/\2\t\6\t\7/p' "$log_file" \
         | awk -F '\t' '
         {
             numerator = $2
@@ -616,11 +616,14 @@ run_self_test() {
         echo 'latency:  p50=  123.4 ms  min=  120.0 ms  max=  130.0 ms'
         echo 'output: trial=1/2 empty=true characters=0'
         echo 'output: trial=2/2 empty=false characters=12'
-        echo 'transcript: [WER 16.7%] [final-word retained=false expected="sure" actual-last="not"] [word-errors=1 reference-words=6] "literal [WER 99.0%] [word-errors=99 reference-words=1]"'
+        echo 'transcript: [WER 16.7%] [final-word retained=false expected="sure" actual-last="not"] [first-word retained=true expected="be" actual-first="be"] [word-errors=1 reference-words=6] "literal [WER 99.0%] [word-errors=99 reference-words=1]"'
     } >"$log"
     assert_eq "$(extract_final_word_retained "$log")" "false" "final-word parser"
     assert_eq "$(extract_best_final_word_retained "$log")" "false" "best final-word parser"
     assert_eq "$(extract_worst_wer_metrics "$log")" $'16.7\t1\t6' "WER parser"
+    sed 's/ \[first-word retained=[^]]*\]//g' "$log" >"$tmpdir/missing-first-word.log"
+    assert_eq "$(extract_worst_wer_metrics "$tmpdir/missing-first-word.log")" \
+        $'unknown\tunknown\tunknown' "missing first-word evidence must not score"
     assert_eq "$(extract_p50_ms "$log")" "123.4" "latency parser"
     assert_eq "$(extract_max_ms "$log")" "130.0" "maximum latency parser"
     assert_eq "$(extract_max_ms /dev/null)" "" "missing maximum latency parser"
@@ -658,8 +661,8 @@ run_self_test() {
 
     local rounded_wer_log="$tmpdir/rounded-wer.log"
     {
-        echo 'transcript: [WER 0.1%] [final-word retained=true] [word-errors=1 reference-words=2000] <redacted 20 chars>'
-        echo 'transcript: [WER 0.1%] [final-word retained=false] [word-errors=2 reference-words=2000] <redacted 22 chars>'
+        echo 'transcript: [WER 0.1%] [final-word retained=true] [first-word retained=true] [word-errors=1 reference-words=2000] <redacted 20 chars>'
+        echo 'transcript: [WER 0.1%] [final-word retained=false] [first-word retained=false] [word-errors=2 reference-words=2000] <redacted 22 chars>'
     } >"$rounded_wer_log"
     assert_eq "$(extract_worst_wer_metrics "$rounded_wer_log")" $'0.1\t2\t2000' "rounded WER exact worst-trial selection"
     assert_eq "$(extract_best_wer_metrics "$rounded_wer_log")" $'0.1\t1\t2000' "rounded WER exact best-trial selection"
@@ -669,7 +672,7 @@ run_self_test() {
         "best final-word trial selection"
 
     local tag_spoof_log="$tmpdir/tag-spoof.log"
-    echo 'transcript: [WER 0.0%] [final-word retained=true] [word-errors=0 reference-words=5] "literal [final-word retained=false]"' \
+    echo 'transcript: [WER 0.0%] [final-word retained=true] [first-word retained=true] [word-errors=0 reference-words=5] "literal [final-word retained=false]"' \
         >"$tag_spoof_log"
     assert_eq "$(extract_final_word_retained "$tag_spoof_log")" "true" \
         "transcript text cannot spoof final-word metric"

@@ -13,7 +13,9 @@ credentials; checksum sidecars still download over public HTTPS.
 With ``--check-release-notes``, also compare the latest public macOS and
 Windows release descriptions with their tracked notes and check that the two
 published builds with known model-download risks carry their disclosure on
-their own release pages. ``--notes-only`` runs just that read-only audit,
+their own release pages. The macOS 0.3.8 compatibility-report invitation also
+needs a support-route handoff while new issue creation is restricted.
+``--notes-only`` runs just that read-only audit,
 without asset downloads or candidate metadata checks.
 This remains useful while source metadata is preparing a newer release:
 visitors can still reach the preceding release pages. It is not a Pages gate:
@@ -75,6 +77,19 @@ KNOWN_DISCLOSURE_MARKERS = {
         "windows.html#model-download-privacy",
     ),
 }
+
+# macOS 0.3.8 directly invites compatibility reports. Its archived page is a
+# standalone entry point even when current site guidance explains that GitHub
+# may restrict new issues and the worksheet only saves a local draft. Keep this
+# check separate from the model-download warning so the failure is actionable.
+KNOWN_REPORTING_MARKERS = {
+    "v0.3.8": (
+        "support.md",
+        ("issue creation is restricted", "restricts new issues"),
+        ("not submitted or monitored", "local, unmonitored draft"),
+    ),
+}
+REPORT_INVITATION_MARKERS = ("help verify", "passing reports", "share only aggregate outcomes")
 
 
 class ReleaseCheckError(RuntimeError):
@@ -349,6 +364,41 @@ def known_release_disclosure_errors(releases: object) -> list[str]:
         if missing:
             errors.append(
                 f"{tag} public release notes lack model-download disclosure markers: "
+                + ", ".join(missing)
+            )
+    return errors
+
+
+def known_release_reporting_errors(releases: object) -> list[str]:
+    """Check the archived compatibility invitation's public reporting handoff.
+
+    This is a marker check, not proof that a GitHub form or comment route works.
+    Review the rendered page and verify intake with a non-collaborator account.
+    """
+    if not isinstance(releases, list):
+        return ["public release list is missing; cannot audit compatibility reporting guidance"]
+    errors: list[str] = []
+    for tag, markers in KNOWN_REPORTING_MARKERS.items():
+        matching = [release for release in releases if isinstance(release, dict)
+                    and release.get("tag_name") == tag and release.get("draft") is False]
+        if len(matching) != 1:
+            errors.append(f"{tag} public release entry is missing or duplicated; cannot audit its reporting guidance")
+            continue
+        body = matching[0].get("body")
+        if not isinstance(body, str) or not body.strip():
+            errors.append(f"{tag} has no public release notes; cannot verify its reporting guidance")
+            continue
+        normalized = re.sub(r"\s+", " ", body).casefold()
+        if not any(marker in normalized for marker in REPORT_INVITATION_MARKERS):
+            continue
+        missing = []
+        for marker in markers:
+            alternatives = (marker,) if isinstance(marker, str) else marker
+            if not any(phrase in normalized for phrase in alternatives):
+                missing.append(" / ".join(alternatives))
+        if missing:
+            errors.append(
+                f"{tag} public release notes lack compatibility-reporting guidance markers: "
                 + ", ".join(missing)
             )
     return errors
@@ -721,6 +771,32 @@ def run_self_test() -> None:
     if not any("v0.3.8" in error for error in known_release_disclosure_errors(disclosed[1:])):
         raise ReleaseCheckError("self-test missed an unauditable archived macOS release")
 
+    reporting = json.loads(json.dumps(disclosed))
+    reporting[0]["body"] += (
+        "\nHelp verify compatibility with aggregate outcomes. "
+        "Check https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md "
+        "before sharing. If issue creation is restricted, keep the local draft; "
+        "it is not submitted or monitored."
+    )
+    if known_release_reporting_errors(reporting):
+        raise ReleaseCheckError("self-test rejected the compatibility reporting handoff")
+    draft_wording = json.loads(json.dumps(reporting))
+    draft_wording[0]["body"] = (
+        "Help verify compatibility. GitHub currently restricts new issues. "
+        "The worksheet saves only a local, unmonitored draft. Check "
+        "https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md."
+    )
+    if known_release_reporting_errors(draft_wording):
+        raise ReleaseCheckError("self-test rejected equivalent public reporting guidance")
+    if known_release_reporting_errors(disclosed):
+        raise ReleaseCheckError("self-test required a reporting handoff without an invitation")
+    without_handoff = json.loads(json.dumps(reporting))
+    without_handoff[0]["body"] = "Help verify compatibility with aggregate outcomes."
+    if not any("v0.3.8" in error for error in known_release_reporting_errors(without_handoff)):
+        raise ReleaseCheckError("self-test missed the absent public reporting handoff")
+    if not any("v0.3.8" in error for error in known_release_reporting_errors(reporting[1:])):
+        raise ReleaseCheckError("self-test missed an unauditable archived reporting handoff")
+
     draft = json.loads(json.dumps(windows))
     draft["tag_name"] = "windows-v9.9.9"
     draft["draft"] = True
@@ -857,7 +933,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true", help="run without network access")
     parser.add_argument("--require-published", action="store_true", help="block deployment while configured downloads are not public yet")
-    parser.add_argument("--check-release-notes", action="store_true", help="audit public release-note parity and known model-download disclosures")
+    parser.add_argument("--check-release-notes", action="store_true", help="audit public release-note parity, known model-download disclosures, and the 0.3.8 reporting handoff")
     parser.add_argument("--notes-only", action="store_true", help="audit only public release notes and known disclosures; skip package and candidate-metadata checks")
     parser.add_argument("--github-api-via-gh", action="store_true", help="read API JSON through repo-scoped gh api without exporting credentials; checksum downloads remain public HTTPS")
     args = parser.parse_args()
@@ -875,11 +951,12 @@ def main() -> int:
         if args.notes_only:
             errors = release_note_parity_errors(mac_release, releases)
             errors.extend(known_release_disclosure_errors(releases))
+            errors.extend(known_release_reporting_errors(releases))
             for error in errors:
                 print(f"check-public-releases: {error}", file=sys.stderr)
             if errors:
                 return 1
-            print("latest public macOS and Windows release notes match tracked files; known model-download disclosures are present")
+            print("latest public macOS and Windows release notes match tracked files; known disclosure and reporting markers are present")
             return 0
         metadata = load_metadata()
         errors, status = public_release_errors(
@@ -894,6 +971,7 @@ def main() -> int:
         if args.check_release_notes:
             errors.extend(release_note_parity_errors(mac_release, releases))
             errors.extend(known_release_disclosure_errors(releases))
+            errors.extend(known_release_reporting_errors(releases))
         for line in status:
             print(line)
         if errors:

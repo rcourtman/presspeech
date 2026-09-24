@@ -186,9 +186,12 @@ Published Windows 0.1.12 checks the selected input automatically during Setup
 and when its selection changes; choose **Check Again** to repeat that check.
 Upcoming 0.1.13 and builds
 containing this change keep the selected device closed until you choose
-**Check Microphone**. Speak during its local level check; if the input is
+**Check Microphone** in Setup or Settings. In 0.1.13, Settings checks the
+input shown in its picker before Save, but only Save changes the dictation
+input. Its Microphone Privacy and Sound Input links help with later recovery.
+Speak during the local level check; if the input is
 silent, unmute it and choose **Check Again** in 0.1.12 or **Check Microphone**
-in 0.1.13. If the input cannot open, use Setup's links to Windows Microphone
+in 0.1.13. If the input cannot open, use Setup's or Settings' links to Windows Microphone
 Privacy and Sound Input settings. Turn on **Microphone access**, **Let apps
 access your microphone**, and **Let desktop apps access your microphone**,
 then confirm the input under

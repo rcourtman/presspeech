@@ -21,9 +21,10 @@ controls are present in these downloads.
 
 Run `python3 scripts/check-public-releases.py --notes-only` before and after
 any authorized correction. It audits public/tracked-note parity and flags
-missing disclosure markers on both archived release pages without modifying
-GitHub. A passing marker check is only a presence check; review the rendered
-warning, version-specific decision, and links manually. The audit is expected
+missing disclosure markers on both archived release pages and the absent
+reporting handoff on macOS 0.3.8, without modifying GitHub. A passing marker
+check is only a presence check; review the rendered warnings, current support
+route, version-specific decisions, and links manually. The audit is expected
 to fail while the current public entries remain uncorrected.
 
 ## macOS 0.3.8 — proposed lead notice

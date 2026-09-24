@@ -186,6 +186,7 @@ validate_benchmark_output() {
             if (reference_kind == "speech" &&
                 (line !~ /\[WER [0-9]+([.][0-9]+)?%\]/ ||
                  line !~ /\[final-word retained=(true|false)([[:space:]]|\])/ ||
+                 line !~ /\[first-word retained=(true|false)([[:space:]]|\])/ ||
                  line !~ /\[word-errors=[0-9]+ reference-words=[0-9]+\]/ ||
                  line !~ /\[max-reference-deletion-run=[0-9]+\]/)) {
                 incomplete_results += 1
@@ -708,10 +709,10 @@ run_self_test() {
     {
         echo '    latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms'
         echo '    transcripts (2 distinct):'
-        echo '      • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] [word-errors=0 reference-words=25] [max-reference-deletion-run=0] <redacted 3 chars>'
-        echo '      • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] [word-errors=1 reference-words=25] [max-reference-deletion-run=1] "literal [WER 99.0%]"'
+        echo '      • [WER 0.0%] [final-word retained=true expected="one" actual-last="one"] [first-word retained=true expected="one" actual-first="one"] [word-errors=0 reference-words=25] [max-reference-deletion-run=0] <redacted 3 chars>'
+        echo '      • [WER 4.0%] [final-word retained=false expected="one" actual-last="none"] [first-word retained=false expected="one" actual-first="none"] [word-errors=1 reference-words=25] [max-reference-deletion-run=1] "literal [WER 99.0%]"'
         echo '    latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms'
-        echo '    transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] [word-errors=1 reference-words=10] [max-reference-deletion-run=4] <redacted 3 chars>'
+        echo '    transcript: [WER 10.0%] [final-word retained=false expected="two" actual-last="one"] [first-word retained=true expected="one" actual-first="one"] [word-errors=1 reference-words=10] [max-reference-deletion-run=4] <redacted 3 chars>'
     } >"$summary_source"
     BACKEND="v3"
     # shellcheck disable=SC2016 # Markdown backticks are intentional literals.
@@ -725,6 +726,12 @@ run_self_test() {
     assert_contains "$summary_source" \
         "Conservative corpus WER (worst observed transcript per clip): 5.71% (2 errors / 35 reference words)"
     validate_benchmark_output "$summary_source" 2 speech
+    local missing_first_word="$tmpdir/missing-first-word.md"
+    sed 's/ \[first-word retained=[^]]*\]//g' "$summary_source" >"$missing_first_word"
+    if validate_benchmark_output "$missing_first_word" 2 speech >/dev/null 2>&1; then
+        echo "self-test expected missing first-word evidence to fail" >&2
+        exit 1
+    fi
     assert_eq "$(worst_reference_deletion_run "$summary_source")" "4" "worst consecutive deletion parser"
     MAX_REFERENCE_DELETION_RUN="4"
     append_quality_gate "$summary_source" "$(worst_reference_deletion_run "$summary_source")"

@@ -36,6 +36,7 @@ CORPUS_ROW = re.compile(
 SPEECH_SCORE = re.compile(
     r"^[ \t]*(?:transcript:|•) \[WER ([0-9]+(?:\.[0-9]+)?)%\] "
     r"\[final-word retained=(true|false)[^\n]*?\]"
+    r" \[first-word retained=(true|false)[^\n]*?\]"
     r"(?: \[critical-terms [^\]\n]*\])? "
     r"\[word-errors=([0-9]+) reference-words=([1-9][0-9]*)\] "
     r"\[max-reference-deletion-run=([0-9]+)\](?: |$)",
@@ -91,6 +92,7 @@ class ClipMetrics:
     worst_errors: int
     worst_wer: Decimal
     final_failure: bool
+    first_failure: bool
     worst_deletion_run: int
     p50_ms: Decimal
     emitting_trials: int
@@ -138,25 +140,26 @@ def parse_clip(body: str, trials: int) -> ClipMetrics:
     speech = [SPEECH_SCORE.match(line) for line in score_lines]
     if all(match is not None for match in speech):
         matches = [match for match in speech if match is not None]
-        words = {int(match.group(4)) for match in matches}
+        words = {int(match.group(5)) for match in matches}
         if len(words) != 1:
             raise ComparisonError("clip has inconsistent reference-word counts")
         reference_words = words.pop()
         for match in matches:
             displayed = Decimal(match.group(1))
-            exact = Decimal(100 * int(match.group(3))) / Decimal(reference_words)
+            exact = Decimal(100 * int(match.group(4))) / Decimal(reference_words)
             if abs(displayed - exact) > Decimal("0.051"):
                 raise ComparisonError("clip WER conflicts with exact word counts")
         return ClipMetrics(
             reference_words=reference_words,
-            worst_errors=max(int(match.group(3)) for match in matches),
+            worst_errors=max(int(match.group(4)) for match in matches),
             worst_wer=max(Decimal(match.group(1)) for match in matches),
             final_failure=any(match.group(2) == "false" for match in matches),
-            worst_deletion_run=max(int(match.group(5)) for match in matches),
+            first_failure=any(match.group(3) == "false" for match in matches),
+            worst_deletion_run=max(int(match.group(6)) for match in matches),
             p50_ms=p50, emitting_trials=emitting,
         )
     if all(CONTROL_SCORE.match(line) is not None for line in score_lines):
-        return ClipMetrics(0, 0, Decimal(0), False, 0, p50, emitting)
+        return ClipMetrics(0, 0, Decimal(0), False, False, 0, p50, emitting)
     raise ComparisonError("clip has incomplete or mixed score metrics")
 
 
@@ -351,6 +354,12 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
                              for _, left, right in speech_pairs)
     recovered_final_words = sum(left.final_failure and not right.final_failure
                                 for _, left, right in speech_pairs)
+    new_first_failures = sum(not left.first_failure and right.first_failure
+                             for _, left, right in speech_pairs)
+    recovered_first_words = sum(left.first_failure and not right.first_failure
+                                for _, left, right in speech_pairs)
+    baseline_first_failures = sum(clip.first_failure for _, clip, _ in speech_pairs)
+    candidate_first_failures = sum(clip.first_failure for _, _, clip in speech_pairs)
     worse_deletion_runs = sum(right.worst_deletion_run > left.worst_deletion_run
                               for _, left, right in speech_pairs)
     slower = sum(right.p50_ms > left.p50_ms for _, left, right in speech_pairs)
@@ -363,6 +372,7 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
         position for position, left, right in speech_pairs
         if (right.worst_errors > left.worst_errors
             or (right.final_failure and not left.final_failure)
+            or (right.first_failure and not left.first_failure)
             or right.worst_deletion_run > left.worst_deletion_run)
     ]
     control_positions = [
@@ -385,6 +395,8 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
         f"{signed_delta(baseline.worst_wer, candidate.worst_wer, 1)} pp |",
         f"| Final-word failures | {baseline.final_failures} | {candidate.final_failures} | "
         f"{signed_delta(baseline.final_failures, candidate.final_failures)} |",
+        f"| First-word failures | {baseline_first_failures} | {candidate_first_failures} | "
+        f"{signed_delta(baseline_first_failures, candidate_first_failures)} |",
         f"| Worst deletion run | {baseline.worst_deletion_run} | {candidate.worst_deletion_run} | "
         f"{signed_delta(baseline.worst_deletion_run, candidate.worst_deletion_run)} words |",
         f"| Mean speech p50 | {baseline.average_p50_ms} ms | {candidate.average_p50_ms} ms | "
@@ -393,6 +405,8 @@ def comparison_table(baseline: Report, candidate: Report, index: int) -> str:
         f"{worse_errors} worse; {better_errors} better |",
         f"| Paired speech clips: final word | — | — | "
         f"{new_final_failures} newly failed; {recovered_final_words} recovered |",
+        f"| Paired speech clips: first word | — | — | "
+        f"{new_first_failures} newly failed; {recovered_first_words} recovered |",
         f"| Paired speech clips: deletion run | — | — | "
         f"{worse_deletion_runs} worse |",
         f"| Paired speech clips: p50 latency | — | — | "

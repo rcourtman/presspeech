@@ -203,7 +203,14 @@ open again on the next launch. Microphone, hotkey, dictation style, and Start
 with Windows choices are kept when setup is deferred, and a newly selected
 microphone is used immediately by **Try Dictation**. A microphone can still be
 connected later and does not block **Finish Setup** once the speech model is
-ready. During an active or starting dictation, Setup holds its microphone
+ready. Upcoming 0.1.13 also offers **Check Microphone** in Settings for later
+recovery. It tests the input currently shown in that picker only after you
+choose the command, refreshes the picker after a reconnect, and reports
+connecting, listening, silent, or unavailable status without exposing driver
+details. Testing an unsaved choice does not change the dictation input; choose
+**Save** to use it. Settings also links directly to Windows Microphone Privacy
+and Sound Input settings. Published 0.1.12 does not have this Settings check.
+During an active or starting dictation, Setup holds its microphone
 selection and **Check Microphone** action until dictation finishes or is
 canceled; a check already in progress also postpones a new recording. This
 prevents the setup probe and recording from opening microphone streams at the

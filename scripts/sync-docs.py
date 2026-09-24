@@ -3438,7 +3438,7 @@ def check_faq_install_privacy_order(path: Path = DOCS / "faq.html") -> list[str]
 
 
 def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str]:
-    """Keep the first-launch choice ahead of actions and visible in the first-run card."""
+    """Put the launch choice before actions, then show delivery detail before the card."""
     display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
     if not path.exists():
         return [f"{display}: missing homepage launch decision"]
@@ -3466,12 +3466,20 @@ def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str
         "Windows 0.1.12 — telemetry or token",
         "wait until Windows 0.1.13 is published",
         'href="windows.html#model-download-privacy"',
+        'href="privacy.html#network-calls"',
     )
     missing = [phrase for phrase in required if phrase not in panel]
     if missing:
         return [
             f"{display}: incomplete homepage first-launch decision — missing "
             + ", ".join(repr(phrase) for phrase in missing)
+        ]
+    delivery = contents.find('<div class="note hero-delivery" id="delivery-boundary">')
+    visual = contents.find('<div class="hero-visual">', actions)
+    if delivery < 0 or visual < 0 or not actions < delivery < visual:
+        return [
+            f"{display}: delivery and clipboard detail must follow the launch "
+            "decision and platform actions in the homepage hero"
         ]
     card_start = contents.find('<aside class="start-card"', end)
     card_end = contents.find("</aside>", card_start) if card_start >= 0 else -1
@@ -4937,11 +4945,27 @@ def run_self_test() -> None:
         if not check_homepage_launch_decision(homepage):
             raise SyncError("self-test: homepage action before launch decision was accepted")
         homepage.write_text(
+            safe_homepage.replace(
+                '<div class="actions">',
+                '<div class="note hero-delivery" id="delivery-boundary"></div><div class="actions">',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: homepage delivery detail before actions was accepted")
+        homepage.write_text(
             safe_homepage.replace('href="windows.html#model-download-privacy"', 'href="windows.html"', 1),
             encoding="utf-8",
         )
         if not check_homepage_launch_decision(homepage):
             raise SyncError("self-test: missing Windows privacy link was accepted")
+        homepage.write_text(
+            safe_homepage.replace('href="privacy.html#network-calls"', 'href="privacy.html"', 1),
+            encoding="utf-8",
+        )
+        if not check_homepage_launch_decision(homepage):
+            raise SyncError("self-test: missing first-screen network inventory was accepted")
         homepage.write_text(
             safe_homepage.replace('href="#launch-decision-title"', 'href="install.html"', 1),
             encoding="utf-8",

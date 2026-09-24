@@ -518,6 +518,43 @@ def _settings_save_block_reason(app):
     return ""
 
 
+def _run_microphone_check(app, selected, events):
+    """Probe on a worker and return only privacy-safe results to Tk."""
+    def listening():
+        events.put((selected, "listening", None))
+
+    try:
+        result = app.check_input_device(selected, on_listening=listening)
+    except Exception:
+        # Native driver errors can contain a private device or user name.
+        result = "check_error"
+    options = None
+    if result != "busy":
+        try:
+            # A reconnect can change PortAudio's device table during the
+            # check. Discover again off the UI thread.
+            options = app.input_device_options()
+        except Exception:
+            pass
+    events.put((selected, result, options))
+
+
+def _microphone_result_text(result):
+    if result == "level":
+        return "Ready — input level detected"
+    if result == "silent":
+        return (
+            "Connected, but no input level detected — unmute and "
+            "choose Check Microphone again")
+    if result == "check_error":
+        return "Microphone check failed — choose Check Microphone to retry"
+    if result == "busy":
+        return (
+            "Microphone check postponed — finish or cancel dictation, "
+            "then choose Check Microphone")
+    return "Needs attention — microphone could not be opened"
+
+
 def _add_access_key(root, widget, key):
     """Give a command its conventional Windows Alt mnemonic."""
     key = key.casefold()
@@ -1664,26 +1701,7 @@ class SetupWindow(_RegisteredDialog):
         ).start()
 
     def _check_microphone_worker(self, selected):
-        def listening():
-            self.microphone_events.put((selected, "listening", None))
-
-        try:
-            result = self.app.check_input_device(
-                selected, on_listening=listening)
-        except Exception:
-            # The app normally converts audio-backend failures to "unavailable".
-            # Keep the asynchronous UI state recoverable if an unexpected
-            # exception escapes that boundary; never surface driver details.
-            result = "check_error"
-        # Query again after the check: it may have refreshed PortAudio after a
-        # reconnect. Do this on the worker so a slow driver never blocks Tk.
-        options = None
-        if result != "busy":
-            try:
-                options = self.app.input_device_options()
-            except Exception:
-                pass
-        self.microphone_events.put((selected, result, options))
+        _run_microphone_check(self.app, selected, self.microphone_events)
 
     def _refresh_microphone_options(self, options, selected):
         """Replace picker choices while retaining the user's stable selector."""
@@ -1736,24 +1754,12 @@ class SetupWindow(_RegisteredDialog):
             # device until they choose Check Microphone for it.
             _set_accessible_text(self.microphone_status, "Not checked")
             return
-        if result == "level":
-            text = "Ready — input level detected"
-        elif result == "silent":
-            text = (
-                "Connected, but no input level detected — unmute and "
-                "choose Check Microphone again")
-        elif result == "check_error":
-            text = "Microphone check failed — choose Check Microphone to retry"
-        elif result == "busy":
+        if result == "busy":
             self._microphone_busy_feedback = True
-            text = (
-                "Microphone check postponed — finish or cancel dictation, "
-                "then choose Check Microphone")
-        else:
-            text = "Needs attention — microphone could not be opened"
         if result != "busy":
             self._microphone_busy_feedback = False
-        _set_accessible_text(self.microphone_status, text)
+        _set_accessible_text(
+            self.microphone_status, _microphone_result_text(result))
 
     def _retry_model(self):
         self.app.retry_model()
@@ -2157,6 +2163,10 @@ class SettingsWindow(_RegisteredDialog):
     def __init__(self, app):
         self.app = app
         self.root = None
+        self.microphone_events = queue.Queue()
+        self.microphone_checking = False
+        self._microphone_busy_feedback = False
+        self._last_microphone_capture_busy = False
         self._queue_build()
 
     def _build(self):
@@ -2236,6 +2246,49 @@ class SettingsWindow(_RegisteredDialog):
         )
         self.var_device.set(selected_label)
         self.var_device.grid(row=row, column=1, columnspan=2, sticky="w", padx=10, pady=2)
+        self.var_device.bind("<<ComboboxSelected>>", self._microphone_changed)
+        row += 1
+
+        microphone_check_label = ttk.Label(f, text="Microphone check")
+        microphone_check_label.grid(row=row, column=0, sticky="w", pady=2)
+        microphone_check = ttk.Frame(f)
+        microphone_check.grid(row=row, column=1, columnspan=2, sticky="ew", padx=10, pady=2)
+        self.microphone_status = ttk.Label(
+            microphone_check, text="Not checked", justify="left", wraplength=420)
+        self.microphone_status.pack(side="left")
+        self.check_microphone_button = ttk.Button(
+            microphone_check, text="Check Microphone", command=self._check_microphone)
+        self.check_microphone_button.pack(side="right", padx=(10, 0))
+        row += 1
+
+        ttk.Label(
+            f,
+            text=("Check Microphone opens the selected input only when you choose "
+                  "it; a Windows microphone-use indicator or permission prompt "
+                  "may appear on some Insider Experimental builds. Identify "
+                  "the requesting app before allowing access. Speak while "
+                  "the check runs. Samples measure "
+                  "input level in memory and are discarded, not saved, sent, "
+                  "or transcribed. Checking an unsaved selection does not "
+                  "change the dictation microphone; choose Save to use it. "
+                  "If access is blocked, review Microphone access, Let apps "
+                  "access your microphone, and Let desktop apps access your "
+                  "microphone. If these settings are managed by your "
+                  "organization, contact your administrator."),
+            justify="left", wraplength=620,
+        ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
+        row += 1
+
+        microphone_actions = ttk.Frame(f)
+        microphone_actions.grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
+        privacy_button = ttk.Button(
+            microphone_actions, text="Open Microphone Privacy Settings",
+            command=self.app.open_microphone_privacy_settings)
+        privacy_button.pack(side="left")
+        sound_button = ttk.Button(
+            microphone_actions, text="Open Sound Input Settings",
+            command=self.app.open_default_input_settings)
+        sound_button.pack(side="left", padx=(8, 0))
         row += 1
 
         ttk.Label(
@@ -2392,6 +2445,9 @@ class SettingsWindow(_RegisteredDialog):
         _add_access_key(root, add_button, "a")
         _add_access_key(root, remove_button, "r")
         _add_access_key(root, self.try_button, "t")
+        _add_access_key(root, self.check_microphone_button, "c")
+        _add_access_key(root, privacy_button, "p")
+        _add_access_key(root, sound_button, "i")
         _add_access_key(root, self.repair_hotkey_button, "h")
         _add_access_key(root, startup_button, "o")
         _add_access_key(root, self.retry_model_button, "m")
@@ -2414,6 +2470,7 @@ class SettingsWindow(_RegisteredDialog):
         _name_control(self.var_suffix, PASTE_SUFFIX_ACCESSIBLE_NAME)
         _name_control(self.listbox, "Dictionary rules")
         _mark_live_region(self.model_status)
+        _mark_live_region(self.microphone_status)
         _mark_live_region(self.hotkey_status)
         _mark_live_region(self.status)
         self._poll_model()
@@ -2424,6 +2481,7 @@ class SettingsWindow(_RegisteredDialog):
         """Keep selected-model readiness visible while Settings stays open."""
         if self.root is None:
             return
+        self._poll_microphone_events()
         selected = self.app.settings.get("model", cfg.DEFAULTS["model"])
         status = getattr(self.app, "model_status", "pending")
         detail = getattr(self.app, "model_status_detail", "")
@@ -2464,8 +2522,98 @@ class SettingsWindow(_RegisteredDialog):
         _set_control_state(
             self.root, self.retry_model_button,
             "normal" if status == "error" else "disabled", self.var_model)
+        microphone_busy = bool(_settings_save_block_reason(self.app))
+        was_microphone_busy = getattr(
+            self, "_last_microphone_capture_busy", False)
+        self._last_microphone_capture_busy = microphone_busy
+        if (was_microphone_busy and not microphone_busy and
+                getattr(self, "_microphone_busy_feedback", False)):
+            self._microphone_busy_feedback = False
+            _set_accessible_text(
+                self.microphone_status,
+                "You can now choose Check Microphone to test the selected input.")
+        _set_control_state(
+            self.root, self.check_microphone_button,
+            "disabled" if microphone_busy or self.microphone_checking else "normal",
+            self.var_device)
         self._refresh_save_state()
         self.root.after(300, self._poll_model)
+
+    def _microphone_changed(self, _event=None):
+        # A result for the previous picker choice must not imply the new input
+        # is ready; unlike Setup, this selection is not saved until Save.
+        _set_accessible_text(self.microphone_status, "Not checked")
+
+    def _check_microphone(self):
+        if self.root is None or self.microphone_checking:
+            return
+        with self.app.lock:
+            if _settings_save_block_reason(self.app):
+                self._microphone_busy_feedback = True
+                _set_accessible_text(
+                    self.microphone_status,
+                    "Finish or cancel the current dictation before checking the microphone.")
+                return
+        selected = self.device_values.get(
+            self.var_device.get(), cfg.DEFAULTS["input_device"])
+        self._microphone_busy_feedback = False
+        self.microphone_checking = True
+        _set_control_state(
+            self.root, self.check_microphone_button, "disabled", self.var_device)
+        _set_accessible_text(
+            self.microphone_status,
+            "Connecting microphone… Wait for Listening before speaking.")
+        threading.Thread(
+            target=self._check_microphone_worker, args=(selected,),
+            name="presspeech-microphone-check", daemon=True,
+        ).start()
+
+    def _check_microphone_worker(self, selected):
+        _run_microphone_check(self.app, selected, self.microphone_events)
+
+    def _poll_microphone_events(self):
+        events = getattr(self, "microphone_events", None)
+        if events is None:
+            return
+        latest = None
+        try:
+            while True:
+                latest = events.get_nowait()
+        except queue.Empty:
+            pass
+        if latest is None:
+            return
+        selected, result, options = latest
+        current = self.device_values.get(
+            self.var_device.get(), cfg.DEFAULTS["input_device"])
+        if result == "listening":
+            if self.microphone_checking and selected == current:
+                _set_accessible_text(
+                    self.microphone_status, "Listening — speak a few words…")
+            return
+        self.microphone_checking = False
+        _set_control_state(
+            self.root, self.check_microphone_button,
+            "disabled" if _settings_save_block_reason(self.app) else "normal",
+            self.var_device)
+        if options:
+            values = {label: value for label, value in options}
+            selected_label = next(
+                (label for label, value in options if value == current), None)
+            if selected_label is not None:
+                self.device_values = values
+                self.var_device.config(values=list(values))
+                self.var_device.set(selected_label)
+        if selected != current:
+            # The changed picker choice needs its own explicit check.
+            _set_accessible_text(self.microphone_status, "Not checked")
+            return
+        self._microphone_busy_feedback = result == "busy"
+        text = _microphone_result_text(result)
+        if (result == "level" and selected != self.app.settings.get(
+                "input_device", cfg.DEFAULTS["input_device"])):
+            text += ". Choose Save to use this input for dictation."
+        _set_accessible_text(self.microphone_status, text)
 
     def _refresh_save_state(self):
         """Keep Save truthful while an in-flight dictation owns app settings."""

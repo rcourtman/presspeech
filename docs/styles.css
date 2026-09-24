@@ -296,6 +296,18 @@ p[data-release-status] {
   font-weight: 640;
 }
 
+.hero-delivery {
+  margin-top: 20px;
+}
+
+.hero .hero-delivery p {
+  max-width: none;
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -708,6 +720,12 @@ section p:last-child,
 
 .launch-decision li + li {
   margin-top: 10px;
+}
+
+.hero .launch-decision .launch-inventory {
+  margin-top: 12px;
+  color: var(--text);
+  font-size: 0.95rem;
 }
 
 #model-download-preflight ul {

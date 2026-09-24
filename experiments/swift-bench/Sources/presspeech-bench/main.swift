@@ -2170,6 +2170,30 @@ func runBenchSelfTests() throws {
         finalWordRetention(reference: "", hypothesis: "go") == nil,
         "terminal-run retention should use WER token normalization and handle empty text"
     )
+    let repeatedBeginningReference = "go go turn left"
+    let retainedBeginning = "go go turn right"
+    let lostBeginning = "go turn left"
+    try expect(
+        wordErrorScore(reference: repeatedBeginningReference,
+                       hypothesis: retainedBeginning).errors ==
+        wordErrorScore(reference: repeatedBeginningReference,
+                       hypothesis: lostBeginning).errors,
+        "a corrected later word can conceal a lost repeated first word in total WER"
+    )
+    try expect(
+        firstWordRetention(reference: repeatedBeginningReference,
+                           hypothesis: retainedBeginning)?.retained == true &&
+        firstWordRetention(reference: repeatedBeginningReference,
+                           hypothesis: lostBeginning)?.retained == false,
+        "first-word retention must require the complete consecutive initial run"
+    )
+    try expect(
+        firstWordRetention(reference: "Go, go!", hypothesis: "go go.")?.retained == true &&
+        firstWordRetention(reference: "Go, go!", hypothesis: "go")?.retained == false &&
+        firstWordRetention(reference: "go", hypothesis: "")?.retained == false &&
+        firstWordRetention(reference: "", hypothesis: "go") == nil,
+        "initial-run retention should use WER token normalization and handle empty text"
+    )
     let preflightMetrics = referenceMetrics(
         reference: "Szypański met Nowy Sącz. Szypański returned.",
         criticalTerms: ["Szypański", "Nowy Sącz", "Absent"]
@@ -2231,6 +2255,17 @@ func finalWordRetention(reference: String, hypothesis: String) -> (retained: Boo
     let required = referenceWords.reversed().prefix { $0 == expected }.count
     let observed = hypothesisWords.reversed().prefix { $0 == expected }.count
     return (observed >= required, expected, hypothesisWords.last)
+}
+
+func firstWordRetention(reference: String, hypothesis: String) -> (retained: Bool, expected: String, actualFirst: String?)? {
+    let referenceWords = werTokens(reference)
+    guard let expected = referenceWords.first else { return nil }
+    let hypothesisWords = werTokens(hypothesis)
+    // A first-token match alone mislabels "go" as retaining the beginning
+    // of "go go". This is a text boundary diagnostic, not acoustic alignment.
+    let required = referenceWords.prefix { $0 == expected }.count
+    let observed = hypothesisWords.prefix { $0 == expected }.count
+    return (observed >= required, expected, hypothesisWords.first)
 }
 
 // MARK: - Memory
@@ -2344,6 +2379,16 @@ func summarize(_ name: String,
         let actualLast = retention.actualLast ?? "<none>"
         return " [final-word retained=\(retention.retained) expected=\"\(retention.expected)\" actual-last=\"\(actualLast)\"]"
     }
+    func firstWordTag(_ text: String) -> String {
+        guard let reference,
+              let retention = firstWordRetention(reference: reference, hypothesis: text)
+        else { return "" }
+        if redactTranscripts {
+            return " [first-word retained=\(retention.retained)]"
+        }
+        let actualFirst = retention.actualFirst ?? "<none>"
+        return " [first-word retained=\(retention.retained) expected=\"\(retention.expected)\" actual-first=\"\(actualFirst)\"]"
+    }
     func criticalTermTag(_ text: String) -> String {
         guard let reference, !criticalTerms.isEmpty else { return "" }
         let score = criticalTermScore(
@@ -2356,13 +2401,13 @@ func summarize(_ name: String,
     if texts.count == 1, let only = texts.first {
         let display = redactTranscripts ? redactedTextLabel(only) : "\"\(only)\""
         let wordErrors = wordErrorTags(only)
-        print("    transcript:\(wordErrors.wer)\(finalWordTag(only))\(criticalTermTag(only))\(wordErrors.counts) \(display)")
+        print("    transcript:\(wordErrors.wer)\(finalWordTag(only))\(firstWordTag(only))\(criticalTermTag(only))\(wordErrors.counts) \(display)")
     } else {
         print("    transcripts (\(texts.count) distinct):")
         for t in texts.sorted() {
             let display = redactTranscripts ? redactedTextLabel(t) : "\"\(t)\""
             let wordErrors = wordErrorTags(t)
-            print("      •\(wordErrors.wer)\(finalWordTag(t))\(criticalTermTag(t))\(wordErrors.counts) \(display)")
+            print("      •\(wordErrors.wer)\(finalWordTag(t))\(firstWordTag(t))\(criticalTermTag(t))\(wordErrors.counts) \(display)")
         }
     }
 }

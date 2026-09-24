@@ -32,7 +32,10 @@ collaborator where noted:
   release page, not only a source edit. For a read-only notes audit without
   asset downloads or candidate metadata checks, run
   `python3 scripts/check-public-releases.py --notes-only` separately; it does
-  not block Pages deployment.
+  not block Pages deployment. The notes audit also flags the known missing
+  model-download disclosures on 0.3.8 and 0.1.12 and the missing reporting
+  handoff beside 0.3.8's compatibility invitation. These are marker checks,
+  not proof that a public reporting route accepts submissions.
 - After Pages deploys the intended main commit, run
   `python3 scripts/check-live-pages.py` from that exact commit. It compares the
   public home, first-dictation, install, privacy, help, compatibility, and FAQ

@@ -48,6 +48,7 @@ def report(*, candidate=False, digest=INPUT_DIGEST, order=ORDER_DIGEST,
     speech_line = (
         f"    transcript: [WER {rounded_wer}%] "
         f"[final-word retained={'false' if candidate else 'true'}] "
+        f"[first-word retained={'false' if candidate else 'true'}] "
         f"[word-errors={errors} reference-words=35] "
         f"[max-reference-deletion-run={deletion}] <redacted 12 chars>\n"
     ) if scored else "    transcript: <redacted 12 chars>\n"
@@ -121,9 +122,33 @@ class ReportComparisonTests(unittest.TestCase):
         self.assertIn("1/3", table)
         self.assertIn("1 worse; 0 better", table)
         self.assertIn("1 newly failed; 0 recovered", table)
+        self.assertIn("First-word failures | 0 | 1 | +1", table)
         self.assertIn("Review numbered positions with quality regressions: 001.", table)
         self.assertIn("Review numbered non-speech positions with new emissions: 002.", table)
         self.assertNotIn(SECRET, table)
+
+    def test_first_word_loss_is_visible_when_other_quality_metrics_tie(self):
+        baseline = comparator.parse_report(report(controls=False))
+        candidate = comparator.parse_report(report(candidate=True, controls=False))
+        candidate = replace(
+            candidate,
+            corpus_errors=baseline.corpus_errors,
+            corpus_wer=baseline.corpus_wer,
+            worst_wer=baseline.worst_wer,
+            final_failures=baseline.final_failures,
+            clip_metrics=(replace(
+                candidate.clip_metrics[0],
+                worst_errors=baseline.clip_metrics[0].worst_errors,
+                worst_wer=baseline.clip_metrics[0].worst_wer,
+                final_failure=False,
+                worst_deletion_run=baseline.clip_metrics[0].worst_deletion_run,
+            ),),
+        )
+        comparator.validate_pair(baseline, candidate)
+        table = comparator.comparison_table(baseline, candidate, 1)
+        self.assertIn("Conservative corpus WER | 5.71% (2/35) | 5.71% (2/35)", table)
+        self.assertIn("Paired speech clips: first word | — | — | 1 newly failed", table)
+        self.assertIn("Review numbered positions with quality regressions: 001.", table)
 
     def test_compensating_clip_changes_are_visible_when_corpus_errors_tie(self):
         baseline = comparator.parse_report(report(controls=False))
@@ -140,7 +165,8 @@ class ReportComparisonTests(unittest.TestCase):
             corpus_wer=Decimal("7.14"), clip_metrics=(
                 candidate.clip_metrics[0],
                 replace(candidate.clip_metrics[0], worst_errors=2,
-                        final_failure=False, worst_deletion_run=4),
+                        final_failure=False, first_failure=False,
+                        worst_deletion_run=4),
             ),
         )
         comparator.validate_pair(baseline, candidate)
@@ -182,6 +208,8 @@ class ReportComparisonTests(unittest.TestCase):
             comparator.parse_report(report(state="configured"))
         with self.assertRaisesRegex(comparator.ComparisonError, "incomplete or mixed score"):
             comparator.parse_report(report(scored=False))
+        with self.assertRaisesRegex(comparator.ComparisonError, "incomplete or mixed score"):
+            comparator.parse_report(report().replace("[first-word retained=true] ", ""))
         with self.assertRaisesRegex(comparator.ComparisonError, "comparison provenance"):
             comparator.parse_report(report().replace(
                 f"- Benchmark order SHA-256: {ORDER_DIGEST}\n", ""))
@@ -227,6 +255,10 @@ class ReportComparisonTests(unittest.TestCase):
             '[final-word retained=false]',
             '[final-word retained=false expected="alpha" actual-last="beta"]',
         )
+        source = source.replace(
+            '[first-word retained=false]',
+            '[first-word retained=false expected="alpha" actual-first="beta"]',
+        )
         source = source.replace("<redacted 12 chars>", f'"{SECRET}"')
         parsed = comparator.parse_report(source)
         self.assertEqual(parsed.worst_deletion_run, 5)
@@ -235,14 +267,14 @@ class ReportComparisonTests(unittest.TestCase):
     def test_reconciles_variable_speech_and_multiple_speech_clips(self):
         source = report(controls=False)
         source = source.replace(
-            "    transcript: [WER 5.7%] [final-word retained=true] "
+            "    transcript: [WER 5.7%] [final-word retained=true] [first-word retained=true] "
             "[word-errors=2 reference-words=35] "
             "[max-reference-deletion-run=4] <redacted 12 chars>\n",
             "    transcripts (2 distinct):\n"
-            "      • [WER 2.9%] [final-word retained=true] "
+            "      • [WER 2.9%] [final-word retained=true] [first-word retained=true] "
             "[word-errors=1 reference-words=35] "
             "[max-reference-deletion-run=1] <redacted 12 chars>\n"
-            "      • [WER 5.7%] [final-word retained=true] "
+            "      • [WER 5.7%] [final-word retained=true] [first-word retained=true] "
             "[word-errors=2 reference-words=35] "
             "[max-reference-deletion-run=4] <redacted 12 chars>\n",
         )
@@ -255,7 +287,7 @@ class ReportComparisonTests(unittest.TestCase):
             "    output: trial=1/3 empty=false characters=9\n"
             "    output: trial=2/3 empty=false characters=9\n"
             "    output: trial=3/3 empty=false characters=9\n"
-            "    transcript: [WER 10.0%] [final-word retained=true] "
+            "    transcript: [WER 10.0%] [final-word retained=true] [first-word retained=true] "
             "[word-errors=1 reference-words=10] "
             "[max-reference-deletion-run=3] <redacted 9 chars>\n"
             "```\n\n## Summary",

@@ -138,9 +138,13 @@ count, language hint, corpus kind, or non-default SDK environment; it also
 requires a distinct candidate dependency pin. It checks numbered clip sections,
 per-trial output receipts, scored speech and non-speech rows, and summary
 arithmetic before comparing a report. It prints aggregate WER, worst
-clip WER, final-word failures, consecutive-deletion run, latency, and paired
+clip WER, first-/final-word failures, consecutive-deletion run, latency, and paired
 per-clip regression counts and generic positions without printing text or
-paths. Compare the
+paths. The first-word diagnostic requires new baseline and candidate reports;
+older reports without its tag are rejected rather than silently treated as
+retained. It checks the full consecutive initial run of a repeated first word,
+but remains a text comparison, not acoustic alignment or an automatic release
+threshold. Compare the
 `v3-sdk-default` reports separately against candidate-revision `v3` to isolate
 the SDK's chunking-policy change. This is **not** a pass/fail gate: inspect
 per-clip regressions and the absolute release checks too. Report files do not
@@ -781,7 +785,7 @@ the offset and digests in `manifest.tsv`, and verifies byte-identical speech
 and references across each group. The regression runner validates the
 generated corpus again before freezing inputs; its report contains the exact
 benchmark-input digest. Compare each source's rows side by side: exact word
-errors/WER, consecutive deletions, final-word retention, and p50 latency.
+errors/WER, consecutive deletions, first-/final-word retention, and p50 latency.
 Do not rely only on the all-variants average or treat repeated speech as
 independent evidence. A changed transcript is worth inspecting with
 `--show-transcripts`; it is **not** proof of a particular window/merge cause,

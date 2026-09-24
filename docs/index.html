@@ -131,9 +131,7 @@
       <div class="wrap hero">
         <div class="hero-copy">
           <h1>Private push-to-talk dictation for Mac and Windows.</h1>
-          <p>Hold a key, speak, and release—or choose <strong>Press to toggle</strong>. Presspeech transcribes locally, with no account or cloud transcription. A missing speech model downloads when a current build opens; review the launch decision below. See the <a href="privacy.html#network-calls">version-specific privacy inventory</a> for network details.</p>
-          <p><strong>Keep the starting field and tab selected until delivery finishes.</strong> The published builds verify the original window, not a field or browser tab in the same window. If Presspeech cannot safely verify the destination, it avoids automatic paste.</p>
-          <p><strong>Check before recovering.</strong> On macOS 0.3.8 and published Windows 0.1.12, a copied notice means the transcript was copied at completion, but a later copy can replace it. Other delivery-error notices do not guarantee that the clipboard holds the transcript or that the field received nothing. Check the intended field first; paste manually only if the clipboard still holds the complete transcript. See the <a href="getting-started.html">first-dictation guide</a> for recovery steps.</p>
+          <p>Hold a key, speak, and release—or choose <strong>Press to toggle</strong>. Presspeech transcribes locally, with no account or cloud transcription. Before opening a current build, review the model-download decision below.</p>
           <p class="quiet"><strong>macOS 0.3.8:</strong> released, signed, and notarised for Apple Silicon on macOS 14+. <strong>Windows 0.1.12:</strong> an unsigned prerelease for x64 PCs; Windows 11 is recommended.</p>
           <div class="note warn launch-decision" role="region" aria-labelledby="launch-decision-title">
             <h2 id="launch-decision-title">Before opening a current build</h2>
@@ -142,12 +140,16 @@
               <li><strong>macOS 0.3.8 — inherited token:</strong> A missing-model request may include a Hugging Face token. If one may be inherited, or you are unsure, wait until macOS 0.3.9 is published. Do not launch through a TLS-inspecting proxy whose trust is unclear. <a href="install.html#model-download-privacy">Read the full macOS launch decision.</a></li>
               <li><strong>Windows 0.1.12 — telemetry or token:</strong> A missing-model request may send Hugging Face usage telemetry or an available token; custom routing can change its destination. First-run Setup also briefly opens the selected microphone for an automatic local readiness check. If you want to avoid possible telemetry, a token or custom route may be configured, or you are unsure, wait until Windows 0.1.13 is published. Do not launch through a TLS-inspecting proxy whose trust is unclear. <a href="windows.html#model-download-privacy">Read the full Windows launch decision.</a></li>
             </ul>
+            <p class="launch-inventory"><a href="privacy.html#network-calls">Review the version-specific network-call inventory</a> before choosing to launch.</p>
           </div>
           <div class="actions">
             <a class="button" href="#macos">Check the macOS release</a>
             <a class="button secondary" href="#windows">Check the Windows prerelease</a>
           </div>
           <p class="next-step"><strong>Already installed?</strong> <a href="getting-started.html">Follow the four-checkpoint first-dictation guide</a>.</p>
+          <div class="note hero-delivery" id="delivery-boundary">
+            <p><strong>Before dictating into another app:</strong> Keep the starting field and tab selected until delivery finishes. The published builds verify the original window, not a field or browser tab in the same window. If Presspeech cannot safely verify the destination, it avoids automatic paste. <strong>Check before recovering:</strong> On macOS 0.3.8 and published Windows 0.1.12, a copied notice means the transcript was copied at completion, but a later copy can replace it. Other delivery-error notices do not guarantee that the clipboard holds the transcript or that the field received nothing. Check the intended field first; paste manually only if the clipboard still holds the complete transcript. See the <a href="getting-started.html">first-dictation guide</a> for recovery steps.</p>
+          </div>
           <div class="stat-row" aria-label="macOS release and benchmark summary">
             <div class="stat"><strong>~100 ms</strong><span>model transcription on benchmark clips</span></div>
             <div class="stat"><strong>8.4 MB</strong><span>signed release zip</span></div>

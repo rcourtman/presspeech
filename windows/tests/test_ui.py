@@ -2995,10 +2995,179 @@ class PasteSuffixGuidanceTests(unittest.TestCase):
         )
 
 
+class SettingsMicrophoneTests(unittest.TestCase):
+    def make_window(self):
+        window = ui.SettingsWindow.__new__(ui.SettingsWindow)
+        window.app = mock.Mock()
+        window.app.lock = threading.Lock()
+        window.app.settings = {"input_device": "auto"}
+        window.root = mock.Mock()
+        window.var_device = mock.Mock()
+        window.var_device.get.return_value = "USB microphone"
+        window.device_values = {"USB microphone": "MME::USB microphone"}
+        window.microphone_events = queue.Queue()
+        window.microphone_checking = False
+        window._microphone_busy_feedback = False
+        window.microphone_status = mock.Mock()
+        window.check_microphone_button = mock.Mock()
+        return window
+
+    def test_settings_exposes_explicit_private_check_and_recovery(self):
+        body = inspect.getsource(ui.SettingsWindow._build)
+        self.assertIn('text="Check Microphone"', body)
+        self.assertIn("opens the selected input only when you choose ", body)
+        self.assertIn("not saved, sent, ", body)
+        self.assertIn("Checking an unsaved selection does not ", body)
+        self.assertIn("command=self.app.open_microphone_privacy_settings", body)
+        self.assertIn("command=self.app.open_default_input_settings", body)
+        self.assertIn("_mark_live_region(self.microphone_status)", body)
+        self.assertIn('_add_access_key(root, self.check_microphone_button, "c")', body)
+        self.assertNotIn("root.after(0, self._check_microphone)", body)
+
+    def test_check_uses_unsaved_picker_choice_only_after_explicit_action(self):
+        window = self.make_window()
+        window.root.focus_get.return_value = window.check_microphone_button
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text, \
+                mock.patch.object(ui.threading, "Thread") as thread:
+            window._check_microphone()
+
+        self.assertTrue(window.microphone_checking)
+        self.assertEqual(window.app.settings["input_device"], "auto")
+        window.app.check_input_device.assert_not_called()
+        window.var_device.focus_set.assert_called_once_with()
+        window.check_microphone_button.config.assert_called_once_with(
+            state="disabled")
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Connecting microphone… Wait for Listening before speaking.")
+        thread.assert_called_once_with(
+            target=window._check_microphone_worker,
+            args=("MME::USB microphone",),
+            name="presspeech-microphone-check", daemon=True)
+        thread.return_value.start.assert_called_once_with()
+
+    def test_active_dictation_blocks_check_without_opening_input(self):
+        window = self.make_window()
+        window.app.recording = True
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text, \
+                mock.patch.object(ui.threading, "Thread") as thread:
+            window._check_microphone()
+
+        self.assertFalse(window.microphone_checking)
+        self.assertTrue(window._microphone_busy_feedback)
+        thread.assert_not_called()
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Finish or cancel the current dictation before checking the microphone.")
+
+    def test_listening_then_result_refreshes_reconnected_picker(self):
+        window = self.make_window()
+        window.microphone_checking = True
+        window.microphone_events.put(("MME::USB microphone", "listening", None))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        set_text.assert_called_once_with(
+            window.microphone_status, "Listening — speak a few words…")
+        self.assertTrue(window.microphone_checking)
+        window.check_microphone_button.config.assert_not_called()
+
+        available = "USB microphone — MME (device 2)"
+        window.microphone_events.put((
+            "MME::USB microphone", "level",
+            [("Automatic (recommended)", "auto"),
+             (available, "MME::USB microphone")]))
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        self.assertFalse(window.microphone_checking)
+        self.assertEqual(window.device_values[available], "MME::USB microphone")
+        window.var_device.config.assert_called_once_with(
+            values=["Automatic (recommended)", available])
+        window.var_device.set.assert_called_once_with(available)
+        self.assertEqual(window.app.settings["input_device"], "auto")
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Ready — input level detected. Choose Save to use this input "
+            "for dictation.")
+
+    def test_changed_choice_does_not_inherit_old_check_result(self):
+        window = self.make_window()
+        window.microphone_checking = True
+        window.device_values["Headset"] = "MME::Headset"
+        window.var_device.get.return_value = "Headset"
+        window.microphone_events.put((
+            "MME::USB microphone", "level",
+            [("Headset", "MME::Headset")]))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        self.assertFalse(window.microphone_checking)
+        window.app.check_input_device.assert_not_called()
+        set_text.assert_called_once_with(window.microphone_status, "Not checked")
+
+    def test_saved_choice_does_not_prompt_for_another_save(self):
+        window = self.make_window()
+        window.microphone_checking = True
+        window.app.settings["input_device"] = "MME::USB microphone"
+        window.microphone_events.put(("MME::USB microphone", "level", None))
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        set_text.assert_called_once_with(
+            window.microphone_status, "Ready — input level detected")
+
+    def test_picker_change_resets_status_without_opening_microphone(self):
+        window = self.make_window()
+
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._microphone_changed()
+
+        window.app.check_input_device.assert_not_called()
+        set_text.assert_called_once_with(window.microphone_status, "Not checked")
+
+    def test_busy_check_does_not_rescan_or_claim_readiness(self):
+        window = self.make_window()
+        window.microphone_checking = True
+        window.app.check_input_device.return_value = "busy"
+
+        window._check_microphone_worker("MME::USB microphone")
+        with mock.patch.object(ui, "_set_accessible_text") as set_text:
+            window._poll_microphone_events()
+
+        window.app.input_device_options.assert_not_called()
+        self.assertFalse(window.microphone_checking)
+        set_text.assert_called_once_with(
+            window.microphone_status,
+            "Microphone check postponed — finish or cancel dictation, "
+            "then choose Check Microphone")
+
+    def test_unexpected_driver_error_never_reaches_status_queue(self):
+        window = self.make_window()
+        window.app.check_input_device.side_effect = OSError(
+            "private account and device name")
+
+        window._check_microphone_worker("MME::USB microphone")
+
+        selected, result, options = window.microphone_events.get_nowait()
+        self.assertEqual((selected, result),
+                         ("MME::USB microphone", "check_error"))
+        self.assertNotIn("private account", str((selected, result, options)))
+
+
 class DictionarySettingsTests(unittest.TestCase):
     def make_window(self, rules=None):
         window = ui.SettingsWindow.__new__(ui.SettingsWindow)
         window.root = mock.Mock()
+        window.microphone_events = queue.Queue()
+        window.microphone_checking = False
+        window.check_microphone_button = mock.Mock()
+        window.var_device = mock.Mock()
         window.dictionary_rules = [list(rule) for rule in (rules or [])]
         window.var_spoken = mock.Mock()
         window.var_replace = mock.Mock()
@@ -3242,6 +3411,18 @@ class DictionarySettingsTests(unittest.TestCase):
             set_text.call_args_list,
         )
         window.retry_model_button.config.assert_called_with(state="disabled")
+
+        window.app.recording = True
+        window.root.focus_get.return_value = window.check_microphone_button
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+        window.var_device.focus_set.assert_called_once_with()
+        window.check_microphone_button.config.assert_called_with(state="disabled")
+
+        window.app.recording = False
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._poll_model()
+        window.check_microphone_button.config.assert_called_with(state="normal")
 
     def test_save_is_blocked_atomically_during_recording(self):
         window = self.make_window([["original", "rule"]])

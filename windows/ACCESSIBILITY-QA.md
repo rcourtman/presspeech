@@ -67,6 +67,13 @@ Windows UI, UIA integration, or Tk version.
    blocked racing action without claiming that another input was checked.
    A microphone check in progress must also keep Try Dictation unavailable
    until the check ends.
+   In Settings, choose a harmless test input without saving it, then use
+   **Check Microphone**. Confirm it opens only on that explicit command,
+   announces Connecting, Listening (only after an audio buffer), and the
+   result, and refreshes the picker after a reconnect without saving the
+   choice. Save only if you intend to change the dictation input. Confirm
+   microphone Privacy and Sound Input links are keyboard reachable; an active
+   dictation must postpone the check without opening another input.
 
 4. **Text size and contrast.** Test Setup, Settings, Try Dictation, Delivery
    Recovery, and the update window individually at Windows Accessibility
