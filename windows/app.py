@@ -33,8 +33,7 @@ import clipboard_delivery
 import keyboard_delivery
 import session_events
 from paste_target import (
-    PasteTarget, focused_child_handle as _focused_child_handle,
-    window_caption_fingerprint as _window_caption_fingerprint,
+    PasteTarget, stable_focus_and_caption as _stable_focus_and_caption,
     matches as _paste_target_matches, same_window as _paste_target_same_window,
     input_integrity_blocks_delivery as _input_integrity_blocks_delivery,
 )
@@ -446,14 +445,14 @@ def _foreground_paste_target():
             hwnd, ctypes.byref(process_id))
         if not thread_identifier:
             return PasteTarget("", int(hwnd))
-        focus_handle = _focused_child_handle(
-            user32, int(hwnd), int(thread_identifier))
         # GetWindowTextW sends a window message for in-process captions. The
         # private scratchpad needs no tab guard, so avoid querying our own UI
-        # from a worker that might be waiting on the Tk thread.
-        caption_fingerprint = (
-            _window_caption_fingerprint(user32, int(hwnd))
-            if process_id.value != os.getpid() else None)
+        # from a worker that might be waiting on the Tk thread. For external
+        # windows, bracket focus with title reads rather than mixing a control
+        # from one browser tab with the title of another.
+        focus_handle, caption_fingerprint = _stable_focus_and_caption(
+            user32, int(hwnd), int(thread_identifier),
+            read_caption=process_id.value != os.getpid())
         handle = kernel32.OpenProcess(0x1000, False, process_id.value)
         if not handle:
             return PasteTarget(

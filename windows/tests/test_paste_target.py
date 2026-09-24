@@ -153,6 +153,62 @@ class WindowCaptionTests(unittest.TestCase):
         self.assertIsNone(paste_target.window_caption_fingerprint(user32, 100))
 
 
+class StableFocusAndCaptionTests(unittest.TestCase):
+    def test_same_caption_brackets_focus_query(self):
+        user32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 100
+        events = []
+
+        def caption(_user32, _window):
+            events.append("caption")
+            return b"original"
+
+        def focus(_user32, _window, _thread):
+            events.append("focus")
+            return 101
+
+        self.assertEqual(paste_target.stable_focus_and_caption(
+            user32, 100, 77, focus_reader=focus, caption_reader=caption),
+            (101, b"original"))
+        self.assertEqual(events, ["caption", "focus", "caption"])
+
+    def test_title_change_or_disappearance_invalidates_entire_snapshot(self):
+        for after in (b"other tab", None):
+            with self.subTest(after=after):
+                user32 = mock.Mock()
+                user32.GetForegroundWindow.return_value = 100
+                caption = mock.Mock(side_effect=[b"original", after])
+                self.assertEqual(paste_target.stable_focus_and_caption(
+                    user32, 100, 77,
+                    focus_reader=mock.Mock(return_value=101),
+                    caption_reader=caption), (None, None))
+
+    def test_untitled_window_keeps_existing_focus_fallback(self):
+        user32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 100
+        self.assertEqual(paste_target.stable_focus_and_caption(
+            user32, 100, 77,
+            focus_reader=mock.Mock(return_value=101),
+            caption_reader=mock.Mock(return_value=None)), (101, None))
+
+    def test_foreground_change_invalidates_snapshot_even_without_title(self):
+        user32 = mock.Mock()
+        user32.GetForegroundWindow.return_value = 200
+        self.assertEqual(paste_target.stable_focus_and_caption(
+            user32, 100, 77,
+            focus_reader=mock.Mock(return_value=101),
+            caption_reader=mock.Mock(return_value=None)), (None, None))
+
+    def test_own_window_does_not_read_caption(self):
+        focus = mock.Mock(return_value=101)
+        caption = mock.Mock()
+        user32 = mock.Mock()
+        self.assertEqual(paste_target.stable_focus_and_caption(
+            user32, 100, 77, read_caption=False,
+            focus_reader=focus, caption_reader=caption), (101, None))
+        caption.assert_not_called()
+
+
 class PasteTargetMatchTests(unittest.TestCase):
     def target(self, focus=101, *, process=41, window=100, name="notepad.exe"):
         return paste_target.PasteTarget(name, window, process, 0, focus)

@@ -144,6 +144,34 @@ def window_caption_fingerprint(user32, window_handle):
         return None
 
 
+def stable_focus_and_caption(user32, window_handle, thread_identifier, *,
+                             read_caption=True, focus_reader=focused_child_handle,
+                             caption_reader=window_caption_fingerprint):
+    """Do not combine a focused control with a changing window caption.
+
+    Browser tabs can share a Win32 focus HWND. Bracket the focus query with
+    caption observations so a title change during this snapshot cannot make
+    an old control and a new tab's title look like one coherent destination.
+    This is a point-in-time guard, not proof of a DOM field's identity.
+    Reading our own Tk caption from a worker is deliberately skipped.
+    """
+    if not read_caption:
+        return focus_reader(user32, window_handle, thread_identifier), None
+    before = caption_reader(user32, window_handle)
+    focus = focus_reader(user32, window_handle, thread_identifier)
+    after = caption_reader(user32, window_handle)
+    try:
+        foreground_still_matches = (
+            int(user32.GetForegroundWindow() or 0) == window_handle)
+    except Exception:
+        foreground_still_matches = False
+    if not foreground_still_matches or before != after:
+        # A failed focus observation cannot authorize automatic paste, even
+        # if a later incoherent snapshot happens to fail in the same way.
+        return None, None
+    return focus, after
+
+
 def same_window(expected, current):
     """Match the top-level window and its owner, regardless of child focus."""
     if (not expected.window_handle or

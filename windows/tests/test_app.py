@@ -4982,17 +4982,16 @@ class ForegroundPasteTargetTests(unittest.TestCase):
         with mock.patch.object(app.ctypes, "WinDLL", side_effect=library,
                                create=True), \
                 mock.patch.object(app.os, "getpid", return_value=123), \
-                mock.patch.object(app, "_focused_child_handle",
-                                  return_value=101), \
-                mock.patch.object(app, "_window_caption_fingerprint",
-                                  return_value=b"private-fingerprint") as caption, \
+                mock.patch.object(app, "_stable_focus_and_caption",
+                                  return_value=(101, b"private-fingerprint")) as observation, \
                 mock.patch.object(app, "_process_integrity_level",
                                   return_value=0x2000):
             target = app._foreground_paste_target()
 
         self.assertEqual(target, app.PasteTarget(
             "chrome.exe", 100, 41, 0x2000, 101, b"private-fingerprint"))
-        caption.assert_called_once_with(user32, 100)
+        observation.assert_called_once_with(
+            user32, 100, 77, read_caption=True)
         kernel32.CloseHandle.assert_called_once_with(88)
 
 

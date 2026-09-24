@@ -238,6 +238,14 @@ distinct phrases and focus-change recovery in a disposable Screen Sharing
 field with shared clipboard enabled. Presspeech's current-device-only transcript writes
 are not a demonstrated control for Screen Sharing's separate transfer path;
 keep that boundary explicit until native testing establishes behavior.
+An individual [Handy Screen Sharing report](https://github.com/cjpais/Handy/issues/2036)
+describes its paste keystroke arriving before the remote clipboard synchronised,
+with a window-activation-dependent transfer on that user's setup. This is not
+evidence of a Presspeech defect or a general remote-desktop failure rate. It
+does show that switching to a local scratch field after every attempt could
+mask a stale transfer. The macOS release checklist therefore includes a
+continuous-focus remote sequence in addition to per-attempt scratch checks;
+it does not add a speculative paste-delay setting.
 
 A wider check finds the same handoff class in other products: an individual
 macOS [OmniVoice Studio report](https://github.com/debpalash/VoiceStudio/issues/287)
@@ -263,6 +271,14 @@ naming the corresponding physical-hold invariant in native qualification: one
 held key must remain one capture until release. This tests Presspeech's own
 behavior without assuming another product's implementation or claiming a
 Presspeech defect.
+An individual [Handy Windows report](https://github.com/cjpais/Handy/issues/2051)
+also describes extra shortcut modifiers remaining held when paste was sent,
+altering the target's perceived chord. Presspeech's Windows qualification
+already checks held modifiers and explicit recovery. The macOS checklist now
+tests a modifier-bearing hotkey with a physical modifier still down at delivery:
+the intended text must arrive once or recover visibly, without an unrelated
+shortcut. This is a cross-platform hazard to test, not a demonstrated
+Presspeech macOS failure.
 
 A recent [Handy Windows issue](https://github.com/cjpais/Handy/issues/1879)
 describes one user's loss of opening words or syllables at recording start

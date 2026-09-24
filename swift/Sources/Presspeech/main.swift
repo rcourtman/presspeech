@@ -7288,24 +7288,59 @@ private enum ClipboardPasteInserter {
 /// Without this responder override, Command-C would bypass Presspeech's
 /// transcript writer and re-enable Universal Clipboard for the same words.
 @MainActor
+private func protectedScratchpadCutCanDelete(
+    receipt: ClipboardPasteInserter.WriteReceipt,
+    on pasteboard: NSPasteboard,
+    copiedRange: NSRange,
+    currentRange: NSRange,
+    copiedText: String,
+    currentText: String
+) -> Bool {
+    // A clipboard write is not a durable recovery copy. Keep the source text
+    // if another app copied after our write, or if the selection changed while
+    // AppKit and the pasteboard server handled the Cut command.
+    receipt.stillOwns(pasteboard)
+        && copiedRange == currentRange
+        && copiedText == currentText
+}
+
+@MainActor
 private final class LocalOnlyTranscriptTextView: NSTextView {
-    private func copySelectionToProtectedPasteboard() -> Bool {
-        let range = selectedRange()
-        guard range.location != NSNotFound, range.length > 0 else { return false }
-        let selected = (string as NSString).substring(with: range)
-        return ClipboardPasteInserter.writeTranscript(selected, to: .general)
+    private func text(in range: NSRange) -> String? {
+        let contents = string as NSString
+        guard range.location != NSNotFound,
+              range.location <= contents.length,
+              range.length <= contents.length - range.location else { return nil }
+        return contents.substring(with: range)
+    }
+
+    private func copySelectionToProtectedPasteboard(_ selected: String) -> ClipboardPasteInserter.WriteReceipt? {
+        let receipt = ClipboardPasteInserter.writeTranscriptWithReceipt(selected, to: .general)
+        return receipt?.stillOwns(.general) == true ? receipt : nil
     }
 
     override func copy(_ sender: Any?) {
-        guard selectedRange().length > 0 else { return }
-        if !copySelectionToProtectedPasteboard() { NSSound.beep() }
+        let range = selectedRange()
+        guard range.length > 0, let selected = text(in: range) else { return }
+        if copySelectionToProtectedPasteboard(selected) == nil { NSSound.beep() }
     }
 
     override func cut(_ sender: Any?) {
         let range = selectedRange()
-        guard isEditable, range.location != NSNotFound, range.length > 0 else { return }
+        guard isEditable, range.length > 0,
+              let selected = text(in: range) else { return }
         guard shouldChangeText(in: range, replacementString: "") else { return }
-        guard copySelectionToProtectedPasteboard() else {
+        guard selectedRange() == range, text(in: range) == selected,
+              let receipt = copySelectionToProtectedPasteboard(selected),
+              let currentText = text(in: range),
+              protectedScratchpadCutCanDelete(
+                  receipt: receipt,
+                  on: .general,
+                  copiedRange: range,
+                  currentRange: selectedRange(),
+                  copiedText: selected,
+                  currentText: currentText
+              ) else {
             NSSound.beep()
             return
         }
@@ -20163,6 +20198,51 @@ private enum PresspeechSelfTest {
                    "a manual offer must reject a newer external owner using the acquired count")
         try expect(acquiredGenerationProbe.remaining, equals: "new external receipt fixture",
                    "a later copy must survive the write-return/changeCount-read interleaving")
+
+        let protectedCutProbe = MainActor.assumeIsolated {
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name(
+                "com.local.presspeech.self-test.protected-cut.\(UUID().uuidString)"
+            ))
+            defer { pasteboard.releaseGlobally() }
+            let receipt = ClipboardPasteInserter.writeTranscriptWithReceipt(
+                "selected text", to: pasteboard
+            )
+            let range = NSRange(location: 0, length: 13)
+            @MainActor
+            func mayDelete(_ currentRange: NSRange, _ currentText: String) -> Bool {
+                guard let receipt else { return false }
+                return protectedScratchpadCutCanDelete(
+                    receipt: receipt,
+                    on: pasteboard,
+                    copiedRange: range,
+                    currentRange: currentRange,
+                    copiedText: "selected text",
+                    currentText: currentText
+                )
+            }
+            let intact = mayDelete(range, "selected text")
+            let movedSelection = mayDelete(NSRange(location: 1, length: 13), "selected text")
+            let replacedSelection = mayDelete(range, "different text")
+            pasteboard.clearContents()
+            let externalCopy = pasteboard.setString("new external copy", forType: .string)
+            let supersededCopy = mayDelete(range, "selected text")
+            return (receiptWritten: receipt != nil,
+                    intact: intact,
+                    movedSelection: movedSelection,
+                    replacedSelection: replacedSelection,
+                    externalCopy: externalCopy,
+                    supersededCopy: supersededCopy)
+        }
+        try expect(protectedCutProbe.receiptWritten && protectedCutProbe.intact, equals: true,
+                   "scratchpad Cut may delete only after a confirmed protected copy")
+        try expect(protectedCutProbe.movedSelection, equals: false,
+                   "scratchpad Cut must retain text when the selection moves")
+        try expect(protectedCutProbe.replacedSelection, equals: false,
+                   "scratchpad Cut must retain text when the selected words change")
+        try expect(protectedCutProbe.externalCopy, equals: true,
+                   "the protected Cut fixture should install a newer external copy")
+        try expect(protectedCutProbe.supersededCopy, equals: false,
+                   "scratchpad Cut must retain text when another copy supersedes its receipt")
 
         let incompleteSnapshotProbe = MainActor.assumeIsolated {
             let pasteboardName = NSPasteboard.Name("com.local.presspeech.self-test.\(UUID().uuidString)")

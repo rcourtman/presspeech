@@ -763,6 +763,8 @@ Record this release-gate matrix against the exact installed candidate:
 | Same-window focus change between two controls with distinct AX identities: clipboard-only recovery | |
 | Permission loss while recording: captured speech completes to clipboard-only recovery | |
 | Screen Sharing shared-clipboard path: consecutive remote pastes stay fresh; a focus change recovers safely | |
+| Screen Sharing shared-clipboard path without leaving the remote window between dictations: no stale or missing transfer | |
+| Modifier still physically held at macOS paste time: no altered shortcut or misdirected insertion | |
 | Sleep/resume, microphone route change, and first dictation afterward | |
 | In-place upgrade with preferences, hotkey, and TCC grants retained | |
 | Setup and Try Dictation with VoiceOver, keyboard-only navigation, and Voice Control menu start/stop before the hotkey is tested | |
@@ -881,6 +883,30 @@ Screen Sharing and remote macOS versions, and the shared-clipboard setting;
 do not retain phrases, hostnames, remote clipboard contents, or screenshots.
 This qualifies only the tested configuration, not all remote desktop apps or
 clipboard-sharing modes.
+
+Also run at least three distinct harmless dictations while keeping the Screen
+Sharing window active throughout: clear the remote field using only that
+window's controls, and do not switch to a local scratch field between attempts.
+Inspect the remote field after each delivery. A remote clipboard bridge may
+transfer only when the sharing window is activated, so switching away and back
+for every scratch comparison can hide stale remote clipboard content. After
+the series, compare the last result with a local scratch paste. A previous
+phrase, absent text, or uncertain result fails this continuous-focus row even
+if switching windows later refreshes the remote clipboard. If the setup cannot
+keep the sharing window active for this check, mark the row **Blocked**, not
+**Pass**. Do not retain the displayed phrases or remote clipboard contents.
+
+For the held-modifier row, use a blank, non-submitting native text field and a
+modifier-bearing hotkey in hold and toggle modes. Keep an extra physical
+modifier pressed after the trigger's release or toggle-stop press, through
+delivery, then release it. Observe whether the intended field receives the
+complete text once or Presspeech gives explicit copy-only recovery. No other
+shortcut, target, or field may receive the text, and Presspeech must not
+release a user's physically held key. Check Control, Option, and Shift
+separately where the test target makes the resulting chords harmless. A
+normal paste after all modifiers are released does not qualify this row;
+neither source-level event flags nor a successfully posted Command-V prove
+what the native target actually received. Record aggregate outcomes only.
 
 For the keyboard-layout rows, compare an English/US input source with two
 distinct cases: ordinary Dvorak (or another layout that moves V under Command)
