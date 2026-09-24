@@ -180,6 +180,12 @@ def summarise_tail_silence_probe(samples):
               if sample.get("tail_silence_probe") is not None]
     return {
         "sample_count": len(probes),
+        "baseline_first_trial_count": sum(
+            order == "baseline-first"
+            for probe in probes for order in probe["trial_order"]),
+        "tailed_first_trial_count": sum(
+            order == "tailed-first"
+            for probe in probes for order in probe["trial_order"]),
         **{
             key: sum(probe[key] for probe in probes)
             for key in (
@@ -591,6 +597,18 @@ def _sync_cuda():
         torch.cuda.synchronize()
 
 
+def _timed_transcription(transcriber, audio, language_hint):
+    """Measure completed inference and snapshot the matching backend stages."""
+    _sync_cuda()
+    started = time.perf_counter()
+    transcript = transcriber.transcribe(audio, language=language_hint)
+    _sync_cuda()
+    elapsed = time.perf_counter() - started
+    backend_timing = getattr(transcriber, "last_timing", {})
+    return (transcript, elapsed,
+            dict(backend_timing) if isinstance(backend_timing, dict) else {})
+
+
 def _percentile(values, percentile):
     ordered = sorted(values)
     index = max(0, math.ceil(percentile * len(ordered)) - 1)
@@ -746,6 +764,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
 
     sample_results = []
     input_rows = []
+    tail_pair_index = 0
     for sample, (audio_path, checked_seconds, checked_rate, checked_digest) in zip(
             samples, checked_audio):
         task_group = sample.get("task_group")
@@ -777,23 +796,31 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
             if probe_this_sample else None)
         tail_timings = []
         tail_transcripts = []
+        trial_order = []
         for _run in range(runs):
-            _sync_cuda()
-            started = time.perf_counter()
-            transcript = transcriber.transcribe(audio, language=language_hint)
-            _sync_cuda()
-            timings.append(time.perf_counter() - started)
-            transcripts.append(transcript)
-            backend_timing = getattr(transcriber, "last_timing", {})
-            backend_timings.append(
-                dict(backend_timing) if isinstance(backend_timing, dict) else {})
+            # Alternate across *all* reviewed probe pairs, not just within a
+            # clip. This keeps corpus order counts within one even when runs
+            # is odd. Otherwise the tailed condition is always measured second.
+            tailed_first = probe_this_sample and tail_pair_index % 2 == 1
             if probe_this_sample:
-                _sync_cuda()
-                started = time.perf_counter()
-                tail_transcripts.append(
-                    transcriber.transcribe(tail_audio, language=language_hint))
-                _sync_cuda()
-                tail_timings.append(time.perf_counter() - started)
+                trial_order.append(
+                    "tailed-first" if tailed_first else "baseline-first")
+                tail_pair_index += 1
+            if tailed_first:
+                tail_text, tail_seconds, _ = _timed_transcription(
+                    transcriber, tail_audio, language_hint)
+                tail_transcripts.append(tail_text)
+                tail_timings.append(tail_seconds)
+            transcript, seconds, backend_timing = _timed_transcription(
+                transcriber, audio, language_hint)
+            timings.append(seconds)
+            transcripts.append(transcript)
+            backend_timings.append(backend_timing)
+            if probe_this_sample and not tailed_first:
+                tail_text, tail_seconds, _ = _timed_transcription(
+                    transcriber, tail_audio, language_hint)
+                tail_transcripts.append(tail_text)
+                tail_timings.append(tail_seconds)
         consensus = collections.Counter(transcripts).most_common(1)[0][0]
         median_seconds = statistics.median(timings)
         result = {
@@ -830,6 +857,8 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         if probe_this_sample:
             result["tail_silence_probe"] = {
                 "appended_silence_ms": parakeet_tail_silence_ms,
+                # Indexed like pairs and both timing arrays below.
+                "trial_order": trial_order,
                 **paired_tail_silence_metrics(
                     reference, transcripts, tail_transcripts),
                 "tailed_inference_seconds": {
@@ -908,7 +937,7 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
     except Exception:
         pass
     return {
-        "benchmark_version": 12,
+        "benchmark_version": 13,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "benchmark_inputs_sha256": benchmark_inputs_sha256(input_rows),
         "model": model_name,
@@ -1019,7 +1048,8 @@ def _print_summary(result):
     if tail_probe is not None:
         print("Parakeet +%d ms silence (benchmark-only): nonempty-to-empty "
               "%d/%d paired trials; word errors %d -> %d; worsened %d, "
-              "improved %d trials across %d reviewed clips" % (
+              "improved %d trials across %d reviewed clips; order "
+              "baseline-first %d, tailed-first %d" % (
                   result["parakeet_tail_silence_ms"],
                   tail_probe["nonempty_to_empty_trial_count"],
                   tail_probe["trial_count"],
@@ -1028,6 +1058,8 @@ def _print_summary(result):
                   tail_probe["worsened_word_error_trial_count"],
                   tail_probe["improved_word_error_trial_count"],
                   tail_probe["sample_count"],
+                  tail_probe["baseline_first_trial_count"],
+                  tail_probe["tailed_first_trial_count"],
               ))
     if result["aggregate_wer"] is not None:
         print("Reviewed corpus WER: %.2f%% consensus | %.2f%% all trials | "

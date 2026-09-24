@@ -385,13 +385,16 @@ class MetricTests(unittest.TestCase):
         probe = benchmark.paired_tail_silence_metrics(
             "spoken words", ["spoken words"], [""])
         summary = benchmark.summarise_tail_silence_probe([
-            {"tail_silence_probe": probe},
+            {"tail_silence_probe": {
+                **probe, "trial_order": ["baseline-first"]}},
             {"silence": {"evaluated": True}},
             {"tail_silence_probe": None},
         ])
         self.assertEqual(summary["sample_count"], 1)
         self.assertEqual(summary["nonempty_to_empty_trial_count"], 1)
         self.assertEqual(summary["trial_count"], 1)
+        self.assertEqual(summary["baseline_first_trial_count"], 1)
+        self.assertEqual(summary["tailed_first_trial_count"], 0)
 
     def test_tail_probe_requires_one_unchanged_feature_bucket(self):
         rate = benchmark.engine.PARAKEET_SAMPLE_RATE
@@ -481,7 +484,7 @@ class MetricTests(unittest.TestCase):
         transcriber = mock.Mock()
         transcriber.model.dtype = "float16"
         transcriber.transcribe.side_effect = [
-            "hello world", "", "hello world", "hello world", "", ""]
+            "hello world", "", "hello there", "hello world", "", ""]
         audio = np.ones(16000, dtype=np.float32)
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "manifest.json")
@@ -502,9 +505,9 @@ class MetricTests(unittest.TestCase):
 
         self.assertEqual(len(calls), 6)
         self.assertIs(calls[0].args[0], audio)
-        self.assertIs(calls[2].args[0], audio)
+        self.assertIs(calls[3].args[0], audio)
         self.assertEqual(len(calls[1].args[0]), 22400)
-        self.assertEqual(len(calls[3].args[0]), 22400)
+        self.assertEqual(len(calls[2].args[0]), 22400)
         np.testing.assert_array_equal(calls[1].args[0][:16000], audio)
         np.testing.assert_array_equal(
             calls[1].args[0][16000:], np.zeros(6400, dtype=np.float32))
@@ -516,16 +519,80 @@ class MetricTests(unittest.TestCase):
         self.assertIsNone(plain_result["tail_silence_probe"])
         self.assertEqual(result["tail_silence_probe"]["sample_count"], 1)
         self.assertEqual(result["tail_silence_probe"]["trial_count"], 2)
+        self.assertEqual(result["benchmark_version"], 13)
+        self.assertEqual(
+            result["samples"][0]["tail_silence_probe"]["trial_order"],
+            ["baseline-first", "tailed-first"])
+        self.assertEqual(result["tail_silence_probe"]["baseline_first_trial_count"], 1)
+        self.assertEqual(result["tail_silence_probe"]["tailed_first_trial_count"], 1)
         self.assertEqual(
             result["tail_silence_probe"]["nonempty_to_empty_trial_count"], 1)
-        self.assertEqual(result["tail_silence_probe"]["tailed_word_error_count"], 2)
+        self.assertEqual(result["tail_silence_probe"]["tailed_word_error_count"], 3)
+        self.assertEqual(
+            result["samples"][0]["tail_silence_probe"]["pairs"][1]["baseline_transcript"],
+            "hello world")
+        self.assertEqual(
+            result["samples"][0]["tail_silence_probe"]["pairs"][1]["tailed_transcript"],
+            "hello there")
         self.assertNotIn("tail_silence_probe", result["samples"][1])
         output = io.StringIO()
         with redirect_stdout(output):
             benchmark._print_summary(result)
         self.assertIn("Parakeet +400 ms silence (benchmark-only)",
                       output.getvalue())
+        self.assertIn("order baseline-first 1, tailed-first 1",
+                      output.getvalue())
         json.dumps(result, allow_nan=False)
+
+    def test_tail_probe_balances_odd_runs_across_clips_and_keeps_baseline_stages(self):
+        manifest = {"model": "parakeet-tdt-0.6b-v3", "runs": 3, "samples": [
+            {"id": "first", "audio": "first.wav", "reference": "hello world",
+             "reference_reviewed": True},
+            {"id": "second", "audio": "second.wav", "reference": "hello world",
+             "reference_reviewed": True},
+        ]}
+        transcriber = mock.Mock()
+        transcriber.model.dtype = "float16"
+
+        def transcribe(input_audio, language=None):
+            transcriber.last_timing = {
+                "backend": "parakeet",
+                "prepare": len(input_audio) / 16000,
+                "chunk_count": 1,
+                "max_chunk_seconds": len(input_audio) / 16000,
+            }
+            return "hello world"
+
+        transcriber.transcribe.side_effect = transcribe
+        audio = np.ones(16000, dtype=np.float32)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle)
+            with mock.patch.object(
+                    benchmark.engine, "Transcriber", return_value=transcriber), \
+                    mock.patch.object(
+                        benchmark, "load_audio",
+                        return_value=(audio, 1.0, 16000, "0" * 64)):
+                result = benchmark.run_benchmark(
+                    path, parakeet_tail_silence_ms=400)
+
+        orders = [sample["tail_silence_probe"]["trial_order"]
+                  for sample in result["samples"]]
+        self.assertEqual(orders, [
+            ["baseline-first", "tailed-first", "baseline-first"],
+            ["tailed-first", "baseline-first", "tailed-first"],
+        ])
+        self.assertEqual(result["tail_silence_probe"]["baseline_first_trial_count"], 3)
+        self.assertEqual(result["tail_silence_probe"]["tailed_first_trial_count"], 3)
+        for sample in result["samples"]:
+            self.assertEqual(sample["backend_stages"]["prepare"]["median"], 1.0)
+            self.assertEqual(sample["parakeet_windowing"]["max_chunk_seconds"], 1.0)
+        calls = list(transcriber.transcribe.call_args_list)
+        self.assertEqual([len(call.args[0]) for call in calls], [
+            16000, 22400, 22400, 16000, 16000, 22400,
+            22400, 16000, 16000, 22400, 22400, 16000,
+        ])
 
     def test_invalid_run_counts_are_rejected_before_model_loading(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1120,7 +1187,7 @@ class MetricTests(unittest.TestCase):
             output.getvalue(),
         )
         self.assertIn("not measured delivery", output.getvalue())
-        self.assertEqual(result["benchmark_version"], 12)
+        self.assertEqual(result["benchmark_version"], 13)
         self.assertEqual(result["reviewed_speech_vad_sample_count"], 0)
         self.assertIsNone(
             result["reviewed_speech_vad_retained_audio_ratio"]["median"])

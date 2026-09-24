@@ -785,7 +785,10 @@ DELIVERY_BOUNDARY_GUIDANCE = {
     DOCS / "windows.html": ("cannot verify that destination", "clipboard"),
     DOCS / "faq.html": ("cannot verify that destination", "clipboard"),
     DOCS / "llms.txt": ("cannot verify the same destination", "clipboard"),
-    DOCS / "llms-full.txt": ("verify the original destination", "clipboard"),
+    DOCS / "llms-full.txt": (
+        "verify the original destination", "clipboard",
+        "does not verify that the same field or browser tab",
+    ),
     ROOT / "marketing" / "SHARING.md": ("cannot be verified", "clipboard"),
 }
 
@@ -1034,6 +1037,13 @@ COMMAND_SHELL_GUIDANCE = {
 # URLs that can only resolve to a published artifact: GitHub's stable latest
 # alias for macOS and the gated, version-pinned Pages guide for Windows.
 REPOSITORY_INSTALL_GUIDANCE = {
+    ROOT / "llms.txt": (
+        "Before installing or launching macOS 0.3.8",
+        "wait until 0.3.9 is published",
+        "unsigned Windows 0.1.12 prerelease",
+        "Verify the installer SHA-256",
+        "do not bypass Smart App Control or managed policy",
+    ),
     ROOT / "README.md": (
         "The `main` branch can contain",
         "an unreleased candidate",
@@ -1527,8 +1537,18 @@ def sync_windows_readme(path: Path, metadata: dict[str, object]) -> str:
     return text
 
 
+def remove_structured_download_urls(text: str) -> str:
+    """Keep discovery metadata on the install guides, not bare release assets.
+
+    Older snapshots advertised a direct unsigned Windows installer and called
+    the macOS release landing page a binary downloadUrl. Neither route carries
+    the current first-launch decision and Windows checksum instructions.
+    """
+    return re.sub(r'(?m)^[ \t]*"downloadUrl": "[^"]+",?\n', "", text)
+
+
 def sync_index(path: Path, metadata: dict[str, object]) -> str:
-    text = read_text(path)
+    text = remove_structured_download_urls(read_text(path))
     version = str(metadata["version"])
     windows_version = str(metadata["windows_version"])
     size = str(metadata["release_zip_size"])
@@ -1579,14 +1599,6 @@ def sync_index(path: Path, metadata: dict[str, object]) -> str:
         r'"releaseNotes": "[^"]+"',
         '"releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/'
         f'windows-v{windows_version}"',
-        path=path,
-    )
-    text = replace_after_marker(
-        text,
-        windows_marker,
-        r'"downloadUrl": "[^"]+"',
-        '"downloadUrl": "https://github.com/rcourtman/presspeech/releases/download/'
-        f'windows-v{windows_version}/Presspeech-Setup-{windows_version}-x64.exe"',
         path=path,
     )
     unified_same_as = '          "https://huggingface.co/nvidia/parakeet-' 'unified-en-0.6b",\n'
@@ -1764,7 +1776,7 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
 
 
 def sync_windows_html(path: Path, metadata: dict[str, object]) -> str:
-    text = read_text(path)
+    text = remove_structured_download_urls(read_text(path))
     version = str(metadata["windows_version"])
     last_updated = str(metadata["last_updated"])
     updated_display = display_date(last_updated)
@@ -3339,6 +3351,47 @@ def check_windows_agent_install_privacy_order(
     return []
 
 
+def check_agent_brief_preflight_order(
+    root_brief: Path = ROOT / "llms.txt",
+    full_brief: Path = DOCS / "llms-full.txt",
+) -> list[str]:
+    """Keep first-launch decisions ahead of agent-facing install routes."""
+    checks = (
+        (
+            root_brief,
+            (
+                ("Before installing or launching macOS 0.3.8",
+                 "brew install --cask"),
+                ("If you are installing the unsigned Windows 0.1.12 prerelease",
+                 "Current Windows language and hardware requirements"),
+            ),
+        ),
+        (
+            full_brief,
+            (
+                ("Before installing or launching macOS 0.3.8",
+                 "brew install --cask"),
+                ("Before installing or launching published Windows 0.1.12",
+                 "The current Windows installer, requirements"),
+            ),
+        ),
+    )
+    errors: list[str] = []
+    for path, pairs in checks:
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing agent-facing install brief")
+            continue
+        contents = read_text(path)
+        for warning, action in pairs:
+            warning_at, action_at = contents.find(warning), contents.find(action)
+            if warning_at < 0 or action_at < 0 or warning_at > action_at:
+                errors.append(
+                    f"{display}: {warning!r} must precede {action!r}"
+                )
+    return errors
+
+
 def check_macos_model_download_privacy_summary(
     surfaces: dict[Path, tuple[str, ...]] = MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY,
     install_page: Path = DOCS / "install.html",
@@ -3617,10 +3670,13 @@ def check_compatibility_worksheet_contract(
             "docs/compatibility-worksheet.js: copied worksheet summary must include "
             "the canonical overall result"
         )
-    if "reportActions.hidden = !result.complete" not in script:
+    if (
+        "reportActions.hidden = !result.reportable" not in script
+        or "reportable: remaining === 0 && !sequenceViolation" not in script
+    ):
         errors.append(
             "docs/compatibility-worksheet.js: report actions must remain hidden "
-            "until all outcomes are complete"
+            "until all outcomes are complete and comparable"
         )
     if "save.disabled = !result.complete" not in script:
         errors.append(
@@ -3629,10 +3685,11 @@ def check_compatibility_worksheet_contract(
         )
     if (
         'save.addEventListener("click", saveSummary)' not in script
-        or "new Blob([`${formatReportDraft(summary.value)}\\n`]" not in script
-        or 'link.download = "presspeech-compatibility-report-draft.txt"' not in script
+        or "new Blob([`${formatReportDraft(summary.value, latestResult.reportable)}\\n`]" not in script
+        or '"presspeech-compatibility-report-draft.txt"' not in script
+        or '"presspeech-compatibility-noncomparable-draft.txt"' not in script
         or "URL.createObjectURL(file)" not in script
-        or "function formatReportDraft(summaryText)" not in script
+        or "function formatReportDraft(summaryText, reportable" not in script
         or '"Platform (macOS or Windows):"' not in script
         or '"Target app and public version:"' not in script
         or '"Generic field type:"' not in script
@@ -4471,6 +4528,7 @@ def run_self_test() -> None:
             '"dateModified": "2025-12-29"\n'
             '"@id": "https://rcourtman.github.io/presspeech/#software"\n'
             '"softwareVersion": "1.2.3"\n'
+            '"downloadUrl": "https://github.com/rcourtman/presspeech/releases/latest"\n'
             '"installUrl": "https://example.com/old-mac"\n'
             '"storageRequirements": "1 MB old cache"\n'
             '"@id": "https://rcourtman.github.io/presspeech/windows.html#software"\n'
@@ -4488,7 +4546,7 @@ def run_self_test() -> None:
         for expected in (
             '"softwareVersion": "8.7.6"',
             '"softwareVersion": "9.8.7"',
-            "windows-v9.8.7/Presspeech-Setup-9.8.7-x64.exe",
+            '"releaseNotes": "https://github.com/rcourtman/presspeech/releases/tag/windows-v9.8.7"',
             "<strong>7.6 MB</strong>",
             "<strong>macOS 8.7.6:</strong>",
             "<strong>Windows 9.8.7:</strong>",
@@ -4497,6 +4555,8 @@ def run_self_test() -> None:
         ):
             if expected not in synced_index:
                 raise SyncError(f"self-test: homepage metadata did not sync {expected!r}")
+        if '"downloadUrl"' in synced_index:
+            raise SyncError("self-test: release sync retained an unguarded structured download")
 
         getting_started = Path(tmp) / "getting-started.html"
         getting_started.write_text(
@@ -5505,6 +5565,34 @@ def run_self_test() -> None:
                    for error in agent_order_errors):
             raise SyncError("self-test: Windows assistant install before privacy warning was accepted")
 
+        short_brief = Path(tmp) / "short-brief.txt"
+        full_brief = Path(tmp) / "full-brief.txt"
+        short_contents = read_text(ROOT / "llms.txt")
+        full_contents = read_text(DOCS / "llms-full.txt")
+        short_brief.write_text(short_contents, encoding="utf-8")
+        full_brief.write_text(full_contents, encoding="utf-8")
+        if check_agent_brief_preflight_order(short_brief, full_brief):
+            raise SyncError("self-test: ordered agent briefs were rejected")
+        short_brief.write_text(
+            short_contents.replace(
+                "Before installing or launching macOS 0.3.8",
+                "After installation, macOS 0.3.8",
+                1,
+            ), encoding="utf-8",
+        )
+        if not check_agent_brief_preflight_order(short_brief, full_brief):
+            raise SyncError("self-test: missing short-brief preflight was accepted")
+        short_brief.write_text(short_contents, encoding="utf-8")
+        full_brief.write_text(
+            full_contents.replace(
+                "Before installing or launching published Windows 0.1.12",
+                "After installing published Windows 0.1.12",
+                1,
+            ), encoding="utf-8",
+        )
+        if not check_agent_brief_preflight_order(short_brief, full_brief):
+            raise SyncError("self-test: missing full-brief Windows preflight was accepted")
+
         delivery_guidance = Path(tmp) / "getting-started.html"
         required_delivery_guidance = {
             delivery_guidance: ("cannot verify the destination", "clipboard recovery"),
@@ -5623,14 +5711,16 @@ def run_self_test() -> None:
         )
         worksheet_valid_script = (
             'document.getElementById("compatibility-worksheet");\n'
-            'reportActions.hidden = !result.complete;\n'
+            'reportActions.hidden = !result.reportable;\n'
+            'reportable: remaining === 0 && !sequenceViolation;\n'
             'save.disabled = !result.complete;\n'
             'save.addEventListener("click", saveSummary);\n'
-            'function formatReportDraft(summaryText) { return ['
+            'function formatReportDraft(summaryText, reportable = true) { return ['
             '"Platform (macOS or Windows):", "Target app and public version:", '
             '"Generic field type:", summaryText].join("\\n"); }\n'
-            'const file = new Blob([`${formatReportDraft(summary.value)}\\n`]);\n'
+            'const file = new Blob([`${formatReportDraft(summary.value, latestResult.reportable)}\\n`]);\n'
             'link.download = "presspeech-compatibility-report-draft.txt";\n'
+            'link.download = "presspeech-compatibility-noncomparable-draft.txt";\n'
             'URL.createObjectURL(file);\n'
             '`Overall result: ${result.overall}`\n'
             + "\n".join(COMPATIBILITY_OVERALL_RESULTS)
@@ -5708,7 +5798,7 @@ def run_self_test() -> None:
         worksheet_page.write_text(valid_worksheet_page, encoding="utf-8")
         worksheet_script.write_text(
             valid_worksheet_script.replace(
-                "reportActions.hidden = !result.complete;\n", "", 1
+                "reportActions.hidden = !result.reportable;\n", "", 1
             ),
             encoding="utf-8",
         )
@@ -5946,6 +6036,7 @@ def main() -> int:
             errors.extend(check_model_recovery_privacy_order())
             errors.extend(check_getting_started_scratchpad_privacy_order())
             errors.extend(check_windows_agent_install_privacy_order())
+            errors.extend(check_agent_brief_preflight_order())
             errors.extend(check_delivery_boundary_guidance())
             errors.extend(check_windows_delivery_recovery_guidance())
             errors.extend(check_compatibility_evidence_guidance())
@@ -6007,6 +6098,7 @@ def main() -> int:
         errors.extend(check_model_recovery_privacy_order())
         errors.extend(check_getting_started_scratchpad_privacy_order())
         errors.extend(check_windows_agent_install_privacy_order())
+        errors.extend(check_agent_brief_preflight_order())
         errors.extend(check_delivery_boundary_guidance())
         errors.extend(check_windows_delivery_recovery_guidance())
         errors.extend(check_compatibility_evidence_guidance())

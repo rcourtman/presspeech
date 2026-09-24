@@ -1,5 +1,7 @@
 import threading
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import app
@@ -25,6 +27,28 @@ HOST_APIS = [
     {"name": "Windows WASAPI"},
     {"name": "Windows WDM-KS"},
 ]
+
+
+class BenchmarkCapturePrivacyTests(unittest.TestCase):
+    def test_capture_keeps_session_and_file_path_out_of_diagnostic_log(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {
+            "capture_benchmark_remaining": 1,
+            "capture_benchmark_session": "private-session-label",
+            "capture_benchmark_index": 1,
+            "capture_next_benchmark": False,
+        }
+        instance._log = mock.Mock()
+        instance.notify = mock.Mock()
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(app, "__file__", str(Path(directory) / "app.py")), \
+                mock.patch.object(app.cfg, "save"):
+            output = instance._capture_benchmark_if_armed(
+                app.np.array([0.0, 0.1], dtype=app.np.float32))
+            self.assertTrue(Path(output).is_file())
+            self.assertIn("private-session-label", Path(output).name)
+        instance._log.assert_called_once_with("benchmark audio saved")
+        self.assertNotIn("private-session-label", str(instance._log.call_args_list))
 
 
 class SingleInstanceActivationTests(unittest.TestCase):

@@ -122,10 +122,16 @@ async function main() {
     assert.equal(save.disabled, true);
     assert.equal(reportActions.hidden, true);
 
-    ["pasted", "pasted", "recovered", "unsafe", "recovered"].forEach(
+    doc.outcomes.set("steady-1", "unsafe");
+    form.listeners.change();
+    assert.match(status.textContent, /Stop testing after this result/);
+    assert.equal(save.disabled, true);
+    doc.outcomes.clear();
+
+    ["pasted", "pasted", "recovered", "pasted", "recovered"].forEach(
       (value, index) => doc.outcomes.set(`steady-${index + 1}`, value),
     );
-    ["copied", "inserted", "failed"].forEach((value, index) =>
+    ["copied", "failed", "copied"].forEach((value, index) =>
       doc.outcomes.set(`focus-${index + 1}`, value),
     );
     form.listeners.change();
@@ -133,13 +139,12 @@ async function main() {
     assert.equal(copy.disabled, false);
     assert.equal(save.disabled, false);
     assert.equal(reportActions.hidden, false);
-    assert.match(summary.value, /Pasted once: 2/);
+    assert.match(summary.value, /Pasted once: 3/);
     assert.match(summary.value, /Recovered safely: 2/);
-    assert.match(summary.value, /Incorrect or unsafe: 1/);
-    assert.match(summary.value, /Incorrect or unsafe: 1\nNot completed: 0/);
+    assert.match(summary.value, /Incorrect or unsafe: 0\nNot completed: 0/);
     assert.equal(doc.getElementById("steady-notrun-count").textContent, "0");
-    assert.match(summary.value, /Copied for manual paste without inserting anywhere: 1/);
-    assert.match(summary.value, /Inserted into any field: 1/);
+    assert.match(summary.value, /Copied for manual paste without inserting anywhere: 2/);
+    assert.match(summary.value, /Inserted into any field: 0/);
     assert.match(summary.value, /No insertion, but recovery failed: 1/);
     assert.match(summary.value, /Not completed: 0/);
     assert.equal(doc.getElementById("focus-failed-count").textContent, "1");
@@ -235,11 +240,73 @@ async function main() {
     assert.match(blobs[2].parts[0], /Overall result: An incorrect or unsafe result occurred/);
     assert.doesNotMatch(blobs[2].parts[0], /amber rabbit|blue otter|dictated text/i);
 
+    ["pasted", "unsafe", "pasted", "notrun", "notrun"].forEach(
+      (value, index) => doc.outcomes.set(`steady-${index + 1}`, value),
+    );
+    ["notrun", "notrun", "notrun"].forEach((value, index) =>
+      doc.outcomes.set(`focus-${index + 1}`, value),
+    );
+    form.listeners.change();
+    assert.equal(copy.disabled, false, "observed counts remain locally copyable");
+    assert.equal(save.disabled, false, "observed counts remain locally downloadable");
+    assert.equal(reportActions.hidden, true, "a sequence past a safety stop is not report-ready");
+    assert.equal(save.textContent, "Download noncomparable draft");
+    assert.match(status.textContent, /relabel completed attempts as unrun/);
+    assert.match(summary.value, /Protocol status: Noncomparable/);
+    await copy.listeners.click();
+    assert.match(status.textContent, /noncomparable count block|Noncomparable counts copied/);
+    assert.match(status.textContent, /do not submit/i);
+    await save.listeners.click();
+    assert.equal(blobs.length, 4);
+    assert.equal(doc.downloadLink.download, "presspeech-compatibility-noncomparable-draft.txt");
+    assert.match(blobs[3].parts[0], /NONCOMPARABLE: completed checks followed a stop or Not completed slot/);
+    assert.match(blobs[3].parts[0], /Pasted once: 2[\s\S]*Incorrect or unsafe: 1/);
+    assert.match(status.textContent, /Do not submit it as a compatibility baseline/);
+
+    ["pasted", "pasted", "pasted", "pasted", "pasted"].forEach(
+      (value, index) => doc.outcomes.set(`steady-${index + 1}`, value),
+    );
+    ["copied", "inserted", "copied"].forEach((value, index) =>
+      doc.outcomes.set(`focus-${index + 1}`, value),
+    );
+    form.listeners.change();
+    assert.equal(reportActions.hidden, true, "a focus-safety insertion requires stopping");
+    assert.match(summary.value, /Protocol status: Noncomparable/);
+    assert.equal(
+      worksheet.summarise(Array(5).fill("pasted"), ["copied", "inserted", "notrun"]).reportable,
+      true,
+      "a correctly recorded focus-safety stop remains reportable",
+    );
+    assert.equal(
+      worksheet.summarise(["pasted", "unsafe", "notrun", "notrun", "notrun"],
+        Array(3).fill("notrun")).reportable,
+      true,
+      "a correctly recorded steady-focus stop remains reportable",
+    );
+    assert.equal(
+      worksheet.summarise(["pasted", "unsafe", "pasted", "notrun", "notrun"],
+        Array(3).fill("notrun")).reportable,
+      false,
+      "continuing after an unsafe result is noncomparable",
+    );
+    assert.equal(
+      worksheet.summarise(["pasted", "notrun", "pasted", "notrun", "notrun"],
+        Array(3).fill("notrun")).reportable,
+      false,
+      "a completed check after an unrun slot is noncomparable",
+    );
+    assert.equal(
+      worksheet.summarise(Array(5).fill("pasted"), ["copied", "notrun", "copied"]).reportable,
+      false,
+      "a focus-check gap cannot be called a comparable baseline",
+    );
+
     globalThis.Blob = undefined;
     await save.listeners.click();
     assert.equal(summary.focused, true);
     assert.equal(summary.selected, true);
     assert.match(status.textContent, /download was unavailable/i);
+    assert.match(status.textContent, /noncomparable block/);
 
     assert.equal(
       worksheet.summarise(Array(5).fill(null), Array(3).fill(null)).remaining,

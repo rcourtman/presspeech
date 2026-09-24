@@ -24,13 +24,16 @@ privately and retry when issue creation is restored. Do not post transcripts,
 clipboard contents, or other private data elsewhere as a workaround.
 
 Presspeech binds each recording to the window where it began. It should paste
-only when it can still verify that destination. A focus change normally leaves
-the transcript available for manual paste. On macOS, if Presspeech detects another copy replacing
-the clipboard during delivery, it stops and preserves that newer copy;
+only when it can still verify that destination. A focus change should avoid
+insertion and leave a route to deliberate manual recovery, but the clipboard
+state is version-specific. macOS and published Windows 0.1.12 normally leave
+the transcript on the clipboard; upcoming Windows 0.1.13 can keep it only in
+memory until **Delivery Recovery -> Copy for Manual Paste** is chosen. On
+macOS, if Presspeech detects another copy replacing the clipboard during
+delivery, it stops and preserves that newer copy;
 0.3.8 shows **Couldn't paste**, while builds with revised wording say
 **Delivery uncertain**. A failed input event does not prove that no text reached
-the destination, so inspect the target before retrying or using **Copy Last
-Transcript**.
+the destination, so inspect the target before retrying or using recovery.
 
 On macOS, this is a window-level identity check, not a field- or tab-level
 check. Moving to another field or browser tab within that same window while
@@ -98,14 +101,16 @@ bug reports are not counted as completed protocol evidence.
    isolated, disposable, and non-executing; otherwise skip that target.
 3. On macOS 0.3.8 or later, leave **Settings -> Behavior -> Keep Previous
    Clipboard for Manual Restore** off. The automatic timer in legacy 0.3.7 is
-   not a comparable baseline. Windows leaves the transcript on the current
-   clipboard. Upcoming
-   Windows 0.1.13 asks Windows to exclude it from Clipboard History and Cloud
-   Clipboard; published 0.1.12 does not.
+   not a comparable baseline. Published Windows 0.1.12 leaves the finished
+   transcript on the current clipboard. Upcoming Windows 0.1.13 can leave the
+   previous item unchanged when the target is already known to be invalid; a
+   recovery notice does not mean the transcript was copied. Its actual
+   dictation clipboard writes ask Windows to exclude them from Clipboard
+   History and Cloud Clipboard; published 0.1.12 does not.
 4. Use only harmless phrases created for the test. On Windows 0.1.12, disable
-   clipboard history and cross-device clipboard sync. On every platform,
-   macOS 0.3.8 can expose transcript entries to Universal Clipboard;
-   disable Handoff if that test text must stay on the Mac. Builds containing
+   clipboard history and cross-device clipboard sync. On macOS, 0.3.8 can
+   expose transcript entries to Universal Clipboard; disable Handoff if that
+   test text must stay on the Mac. Builds containing
    local-only transcript clipboard writes prevent Universal Clipboard transfer
    while preserving local Command-V. Apple's
    [Screen Sharing](https://support.apple.com/guide/mac-help/mh14066/mac) has a separate
@@ -145,24 +150,31 @@ For each attempt:
 2. Dictate the harmless phrase once.
 3. Note what appeared in the target and whether Presspeech showed a recovery
    notice.
-4. If delivery succeeded or Presspeech showed its copied/manual-paste notice,
-   paste into the separate local scratch field before copying anything else.
-   With restoration off and no intervening clipboard change, this should be
-   the finished transcript. After a delivery warning on macOS, do not assume
-   the clipboard contains the transcript or that the destination received
-   nothing: inspect the target before retrying. If text is missing, use
-   **Copy Last Transcript** if offered, removing any partial text before
-   pasting the full transcript. If Recent Transcripts is off, there is no
-   in-app copy-recovery entry; correct or remove partial text before dictating
-   again. Record the failed delivery; deliberate recovery afterward does not
-   turn it into a successful attempt.
+4. Inspect the target field first. After automatic paste without a recovery
+   notice, paste the current clipboard into the separate local scratch field
+   before copying anything else and compare the complete text, including its
+   suffix. After a macOS copied notice or published Windows 0.1.12's
+   **Transcript copied, not pasted**, check the clipboard copy in the scratch
+   field before manual paste. After upcoming Windows 0.1.13's **Delivery
+   Recovery** notice, do **not** treat the current clipboard as the transcript:
+   choose **Copy for Manual Paste** explicitly, then paste that copy into the
+   scratch field. The previous clipboard item may still be current. On macOS,
+   **Couldn't paste** or **Delivery uncertain** also does not prove the
+   clipboard contains the transcript or that the target received nothing:
+   inspect the target, then use **Copy Last Transcript** if offered. Remove
+   any partial target text before pasting a full recovery copy. On macOS, if
+   Recent Transcripts is off, there may be no in-app copy-recovery entry.
+   Record a failed delivery when the complete copy is unavailable; deliberate
+   recovery afterward never turns an attempt into a successful automatic
+   paste.
 5. Record one outcome:
    - **Pasted once:** the target received one copy and no recovery notice
      appeared. Its text matches the scratch copy, including the configured
      space or newline suffix.
    - **Recovered safely:** the target received nothing, Presspeech showed its
-     copied/manual-paste notice, and the scratch paste recovered the complete
-     transcript.
+     version-appropriate recovery notice, and the scratch paste recovered the
+     complete transcript, either directly from a copied notice or after an
+     explicit Windows 0.1.13 Delivery Recovery Copy.
    - **Incorrect or unsafe:** text was stale, partial, duplicated, unavailable,
      or delivered to another field, or paste failed without a recovery notice.
 6. Clear both disposable fields before the next attempt.
@@ -195,8 +207,10 @@ move it before the stop press.
 With no intervening clipboard change, the safe result is:
 
 - no text is inserted into either field;
-- Presspeech shows the copied/manual-paste notice; and
-- the complete transcript is available for deliberate manual paste.
+- Presspeech shows the version-appropriate recovery notice; and
+- the complete transcript is available for deliberate manual paste. On
+  upcoming Windows 0.1.13, choose **Delivery Recovery -> Copy for Manual
+  Paste** before treating the clipboard as the transcript.
 
 Plan three attempts, recording known clipboard-change interruptions
 separately as above. For an Electron/Chromium app, use two separate windows of
@@ -207,7 +221,9 @@ text.
 
 Classify each slot as **copied for manual paste without inserting anywhere**,
 **inserted into a field**, **no insertion, but recovery failed**, or **not
-completed**. Recovery failed means a completed attempt inserted nowhere but
+completed**. The first category includes an explicit, verified Copy from
+Windows 0.1.13 Delivery Recovery; it does not imply that Presspeech copied
+automatically. Recovery failed means a completed attempt inserted nowhere but
 the notice or complete transcript was unavailable; it is an incorrect result,
 not an unrun check. The four counts should total three.
 
@@ -237,10 +253,16 @@ not submitted or monitored, points to the support guide for current reporting
 routes, and advises keeping the file private if no suitable route is available.
 The browser or operating system controls the downloaded file. It can preserve
 a classified result and a reminder of useful context while no public reporting
-route is available. Once all eight check slots are classified, the worksheet reveals
-the existing-report search and a link to the GitHub issue list, where the
-current issue-creation status is visible. Selections are not submitted; if
-intake is restricted, keep the draft locally and retry later.
+route is available. Once all eight check slots are classified *consistently
+with the stop-early instructions*, the worksheet reveals the existing-report
+search and a link to the GitHub issue list, where the current issue-creation
+status is visible. If completed outcomes follow a required stop or a **Not
+completed** slot, it instead marks the counts **Noncomparable** and offers a
+labelled local draft; do not relabel completed checks as unrun or submit that
+draft as an eight-check compatibility baseline. Keep the actual observations
+and follow [`SUPPORT.md`](../SUPPORT.md) for a suitable reporting route.
+Selections are not submitted; if intake is restricted, keep the draft locally
+and retry later.
 
 Without the worksheet, tally the same eight categories manually:
 
@@ -292,8 +314,9 @@ it in a real field and use the appropriate reporting route when available.
   [recovery guide](troubleshooting.md#previous-clipboard-content-is-pasted)
   and report a bug.
 - A normally running Windows app cannot send the paste shortcut into a target
-  running as administrator. A copied/manual-paste notice is the expected
-  boundary. Do not elevate Presspeech as a workaround.
+  running as administrator. Published Windows 0.1.12 shows a copied/manual-paste
+  notice; upcoming 0.1.13 offers Delivery Recovery without replacing the
+  previous clipboard item. Do not elevate Presspeech as a workaround.
 - Remote-desktop, virtual-machine, terminal-based editor, browser-editor, and
   assistive-technology paths are useful reports only when the field is isolated,
   disposable, and cannot submit or execute a paste. An ordinary command-shell

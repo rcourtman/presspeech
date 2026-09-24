@@ -13,7 +13,8 @@ domains/userInfo and upstream errors can contain private paths or input. Only
 the reviewed privacySafeErrorLogDetail(error) category wrapper is allowed.
 Python exception bindings are treated the same way regardless of the name
 chosen after `except ... as`; exception class names remain safe categories.
-Counts and other bounded metadata are allowed.
+Counts and other bounded metadata are allowed. Paths and benchmark-session
+labels are private too: a sanitized filename can still identify its user.
 
 The whole argument expression of each `log(...)` call is scanned —
 string-literal prose is stripped first so only code (interpolations,
@@ -115,6 +116,7 @@ PYTHON_PRIVATE_IDENTIFIERS = {
     "error",
     "exception",
     "exc",
+    "filename",
     "history",
     "input_device",
     "input_device_name",
@@ -133,6 +135,8 @@ PYTHON_PRIVATE_IDENTIFIERS = {
     "replacement",
     "replacement_field",
     "samples",
+    "safe_session",
+    "session",
     "source",
     "source_field",
     "spoken",
@@ -147,6 +151,15 @@ PYTHON_PRIVATE_IDENTIFIERS = {
 # Reading these properties exposes only bounded metadata, not the private value.
 PYTHON_SAFE_METADATA_ATTRIBUTES = {"count", "is_empty", "ndim", "shape", "size"}
 PYTHON_EXCEPTION_IDENTIFIERS = {"exc", "exception", "error", "err"}
+
+
+def python_private_name(name: str) -> bool:
+    """Recognize private values, including new local path variable names."""
+    return (
+        name in PYTHON_PRIVATE_IDENTIFIERS
+        or name == "path"
+        or name.endswith(("_path", "_dir", "_directory", "_filename", "_session"))
+    )
 
 
 class Finding(Exception):
@@ -300,7 +313,6 @@ def python_private_identifiers(
     node: ast.AST, exception_names: frozenset[str] = frozenset()
 ) -> list[str]:
     identifiers: set[str] = set()
-    private_identifiers = PYTHON_PRIVATE_IDENTIFIERS | exception_names
     exception_identifiers = PYTHON_EXCEPTION_IDENTIFIERS | exception_names
 
     def visit(current: ast.AST) -> None:
@@ -330,16 +342,20 @@ def python_private_identifiers(
             return
 
         if (isinstance(current, ast.Name)
-                and current.id in private_identifiers):
+                and (current.id in exception_names or
+                     python_private_name(current.id))):
             identifiers.add(current.id)
         elif (isinstance(current, ast.Attribute)
-              and current.attr in PYTHON_PRIVATE_IDENTIFIERS):
+              and python_private_name(current.attr)
+              and not (current.attr == "path" and
+                       isinstance(current.value, ast.Name) and
+                       current.value.id == "os")):
             identifiers.add(current.attr)
         elif isinstance(current, ast.Subscript):
             index = current.slice
             if (isinstance(index, ast.Constant)
                     and isinstance(index.value, str)
-                    and index.value in PYTHON_PRIVATE_IDENTIFIERS):
+                    and python_private_name(index.value)):
                 identifiers.add(index.value)
 
         for child in ast.iter_child_nodes(current):
@@ -453,6 +469,7 @@ self._log("audio samples: %d" % audio.size)
 PresspeechApp._log("dictionary rules: %d" % len(self.settings["dictionary"]))
 self._log("backend: %s" % backend)
 self._log("operation failed: %s" % type(exc).__name__)
+self._log("static filename: %s" % os.path.basename("public-fixture.txt"))
 """
     python_dirty = """
 self._log(text)
@@ -472,6 +489,12 @@ self._log(f"failed: {error}")
 self._log("failed: %s" % err)
 self._log("failed: %s" % exception)
 self._log("paste target: %s" % paste_target.process_name)
+self._log("saved benchmark: %s" % output_path)
+self._log("basename: %s" % os.path.basename(output_path))
+self._log("session: %s" % safe_session)
+self._log("session setting: %s" % self.settings["capture_benchmark_session"])
+self._log("directory: %s" % capture_dir)
+self._log("file: %s" % filename)
 """
     python_exception_alias_clean = """
 try:
@@ -545,14 +568,15 @@ self._log(traceback.format_exception_only(ValueError("private path")))
         if findings:
             raise SystemExit(f"self-test rejected clean Python log calls: {findings}")
         findings = scan_paths([python_dirty_path])
-        if len(findings) != 17:
+        if len(findings) != 23:
             raise SystemExit(
-                f"self-test expected 17 dirty Python findings, got {len(findings)}: {findings}"
+                f"self-test expected 23 dirty Python findings, got {len(findings)}: {findings}"
             )
         for identifier in (
             "audio", "corrected", "dictionary", "text", "transcript",
             "name", "selector", "input_device_uid",
-            "process_name",
+            "process_name", "output_path", "safe_session", "capture_benchmark_session",
+            "capture_dir", "filename",
             "exc", "error", "err", "exception",
         ):
             if not any(identifier in finding for finding in findings):

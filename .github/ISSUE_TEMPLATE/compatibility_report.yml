@@ -127,7 +127,12 @@ body:
         transcript. After an incorrect or unsafe steady-focus result, stop,
         mark every unrun steady-focus and focus-change slot Not completed, and
         explain why under Relevant conditions. Do not repeat a safety failure
-        just to fill the worksheet. In an older six-count draft,
+        just to fill the worksheet. If a focus-change attempt inserts into any
+        field, stop and mark every later unrun focus-change slot Not completed.
+        If completed checks followed either required stop or a Not completed
+        slot, preserve the actual observations but do not submit them as a
+        comparable eight-check report; follow the support guide for another
+        suitable route. In an older six-count draft,
         a nonzero Other or not completed count is ambiguous; do not relabel it
         as a comparable new count. Retest safely if possible.
       placeholder: |

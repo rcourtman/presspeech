@@ -21,7 +21,22 @@ https://rcourtman.github.io/presspeech/app-compatibility.html
 Source:
 https://github.com/rcourtman/presspeech
 
-Presspeech is free MIT-licensed local push-to-talk dictation with separate macOS and Windows implementations. The released Apple Silicon menu-bar app runs Parakeet TDT v3 through FluidAudio, CoreML, and the Apple Neural Engine. Install it with:
+Presspeech is free MIT-licensed local push-to-talk dictation with separate macOS and Windows implementations. The released Apple Silicon menu-bar app runs Parakeet TDT v3 through FluidAudio, CoreML, and the Apple Neural Engine.
+
+Before installing or launching macOS 0.3.8, read the
+[macOS model-download privacy decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy).
+A missing model downloads on launch and may include an inherited Hugging Face
+token. If one may be present, or you are unsure, leave the app unopened and
+wait until 0.3.9 is published. Do not inspect or display token values.
+
+If you are installing the unsigned Windows 0.1.12 prerelease, read the
+[Windows privacy decision and verification steps](https://rcourtman.github.io/presspeech/windows.html#model-download-privacy)
+before downloading or launching it. Its first model download may send usage
+telemetry or an available Hugging Face token. If those risks are unclear, wait
+until 0.1.13 is published. Verify the installer SHA-256 before deciding to run
+it; do not bypass Smart App Control or managed policy.
+
+After that decision, the macOS Homebrew command is:
 
 ```sh
 brew install --cask rcourtman/presspeech/presspeech

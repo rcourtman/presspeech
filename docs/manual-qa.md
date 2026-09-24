@@ -478,7 +478,12 @@ keyboard access testing in addition to assistive-technology testing.
   saving. Confirm **Save** is disabled and Ctrl+S does not apply any change
   during recording, transcription, or delivery. Confirm the status announces
   each wait state, then announces that saving is available when delivery ends;
-  the pending edits must remain available and save normally afterward.
+  the pending edits must remain available and save normally afterward. Repeat
+  with keyboard focus on **Save** immediately before recording: focus must move
+  to the adjacent dictionary list before **Save** is disabled, and Tab must
+  continue normally. With focus on another control, the same status transition
+  must not steal focus. Check both transitions with Narrator, then cancel the
+  harmless recording without retaining dictated text.
 - Begin recording in both hold and toggle modes, press **Escape**, and confirm
   capture stops, muted playback is restored, and no transcription is pasted or
   copied. Repeat with **Cancel Dictation (Esc)** in the notification-area menu.

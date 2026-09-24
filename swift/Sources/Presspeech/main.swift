@@ -15584,6 +15584,7 @@ private final class NativeInteractionFixture {
     private let listener = HotkeyListener()
     private var windows: [NSWindow] = []
     private var editors: [NSTextView] = []
+    private var secondEditorInFirstWindow: NSTextView?
     private var expectedWindow: NSWindow?
     private var expectedClipboardCount = 0
     private var changedClipboard = false
@@ -15868,9 +15869,21 @@ private final class NativeInteractionFixture {
                                   styleMask: [.titled], backing: .buffered, defer: false)
             window.title = "Presspeech native acceptance \(index + 1)"
             window.isReleasedWhenClosed = false
-            let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 220))
+            let editor = NSTextView(frame: NSRect(x: 0, y: 0,
+                                                  width: index == 0 ? 250 : 500, height: 220))
             editor.isRichText = false
-            window.contentView = editor
+            if index == 0 {
+                let content = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 220))
+                let secondEditor = NSTextView(frame: NSRect(x: 250, y: 0,
+                                                            width: 250, height: 220))
+                secondEditor.isRichText = false
+                content.addSubview(editor)
+                content.addSubview(secondEditor)
+                window.contentView = content
+                secondEditorInFirstWindow = secondEditor
+            } else {
+                window.contentView = editor
+            }
             windows.append(window)
             editors.append(editor)
         }
@@ -16040,6 +16053,37 @@ private final class NativeInteractionFixture {
         try drain()
         try require(editors[1].string.isEmpty && sequence == count + 1, "wrong window receives no paste events")
         print("PASS native same-process different-window copy-only")
+
+        try selectWindow(0)
+        guard let secondEditor = secondEditorInFirstWindow else {
+            throw SelfTestFailure.failed("own second field unavailable")
+        }
+        editors[0].string = ""
+        secondEditor.string = ""
+        guard let firstFieldTarget = currentDictationPasteTarget(),
+              firstFieldTarget.focusedElement != nil else {
+            throw SelfTestFailure.failed("own first field AX identity unavailable")
+        }
+        try require(windows[0].makeFirstResponder(secondEditor), "second field takes focus")
+        try wait("second field AX identity") {
+            guard let current = currentDictationPasteTarget(),
+                  current.focusedElement != nil,
+                  current.processIdentifier == firstFieldTarget.processIdentifier,
+                  CFEqual(current.focusedWindow, firstFieldTarget.focusedWindow) else {
+                return false
+            }
+            return !dictationPasteTargetMatches(firstFieldTarget, current)
+        }
+        let sameWindowCount = sequence
+        try require(ClipboardPasteInserter.insert("native-fixture-other-field",
+                    expectedTarget: firstFieldTarget) == .copiedWithoutPasting,
+                    "changed control in original window must use copy-only recovery")
+        try drain()
+        try require(editors[0].string.isEmpty && secondEditor.string.isEmpty
+                        && sequence == sameWindowCount + 1
+                        && pasteboard.string(forType: .string) == "native-fixture-other-field",
+                    "same-window focus move must not post paste events or lose recovery text")
+        print("PASS native same-window different-control copy-only")
         try check()
     }
 

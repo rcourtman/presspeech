@@ -35,6 +35,14 @@
     const steadyCounts = countsFor(steady, STEADY_OUTCOMES);
     const focusCounts = countsFor(focus, FOCUS_OUTCOMES);
     const remaining = [...steady, ...focus].filter((value) => value === null).length;
+    const completed = (value) => value !== null && value !== "notrun";
+    const steadyStopIndex = steady.findIndex((value) => value === "unsafe" || value === "notrun");
+    const focusStopIndex = focus.findIndex((value) => value === "inserted" || value === "notrun");
+    const stopCondition = steady.includes("unsafe") || focus.includes("inserted");
+    const sequenceViolation =
+      (steadyStopIndex >= 0 &&
+        (steady.slice(steadyStopIndex + 1).some(completed) || focus.some(completed))) ||
+      (focusStopIndex >= 0 && focus.slice(focusStopIndex + 1).some(completed));
     let overall = "";
     if (remaining === 0) {
       if (steadyCounts.unsafe > 0 || focusCounts.inserted > 0 || focusCounts.failed > 0) {
@@ -50,7 +58,10 @@
 
     return {
       complete: remaining === 0,
+      reportable: remaining === 0 && !sequenceViolation,
       remaining,
+      stopCondition,
+      sequenceViolation,
       steady: steadyCounts,
       focus: focusCounts,
       overall,
@@ -59,7 +70,7 @@
 
   function formatSummary(result) {
     if (!result.complete) return "";
-    return [
+    const lines = [
       "Five steady-focus results",
       `Pasted once: ${result.steady.pasted}`,
       `Recovered safely: ${result.steady.recovered}`,
@@ -73,13 +84,26 @@
       `Not completed: ${result.focus.notrun}`,
       "",
       `Overall result: ${result.overall}`,
-    ].join("\n");
+    ];
+    if (result.sequenceViolation) {
+      lines.push(
+        "",
+        "Protocol status: Noncomparable — a completed outcome follows a stop or Not completed slot. " +
+          "Do not submit these counts as an eight-check compatibility baseline.",
+      );
+    }
+    return lines.join("\n");
   }
 
-  function formatReportDraft(summaryText) {
+  function formatReportDraft(summaryText, reportable = true) {
     if (!summaryText) return "";
     return [
       "Presspeech target-app compatibility report draft",
+      ...(reportable ? [] : [
+        "NONCOMPARABLE: completed checks followed a stop or Not completed slot. Preserve actual " +
+          "observations; do not relabel completed checks as unrun or submit this as a " +
+          "compatibility baseline. Check SUPPORT.md for an appropriate reporting route.",
+      ]),
       "Fill in public or generic context only. Do not add dictated or recognized text, audio, " +
         "clipboard contents, document/account/window names, private paths, credentials, or device serial numbers.",
       "",
@@ -117,6 +141,7 @@
     const copy = doc.getElementById("copy-worksheet-summary");
     const save = doc.getElementById("save-worksheet-summary");
     const reportActions = doc.getElementById("worksheet-report-actions");
+    let latestResult;
     const countOutputs = {
       "steady-pasted-count": ["steady", "pasted"],
       "steady-recovered-count": ["steady", "recovered"],
@@ -137,23 +162,40 @@
 
     function render() {
       const result = summarise(selected("steady", 5), selected("focus", 3));
+      latestResult = result;
       for (const [id, [group, outcome]] of Object.entries(countOutputs)) {
         doc.getElementById(id).textContent = String(result[group][outcome]);
       }
       summary.value = formatSummary(result);
       copy.disabled = !result.complete;
       save.disabled = !result.complete;
-      reportActions.hidden = !result.complete;
-      status.textContent = result.complete
-        ? `All eight check slots classified. Overall: ${result.overall}.`
-        : `${result.remaining} ${result.remaining === 1 ? "outcome remains" : "outcomes remain"}.`;
+      save.textContent = result.complete && !result.reportable
+        ? "Download noncomparable draft"
+        : "Download report draft";
+      reportActions.hidden = !result.reportable;
+      if (result.sequenceViolation) {
+        status.textContent =
+          "A completed check follows a stop or Not completed slot. Do not repeat unsafe checks or " +
+          "relabel completed attempts as unrun. These counts are noncomparable; " +
+          "download a local draft and check SUPPORT.md for a suitable reporting route.";
+      } else if (result.complete) {
+        status.textContent = `All eight check slots classified. Overall: ${result.overall}.`;
+      } else if (result.stopCondition) {
+        status.textContent =
+          "Stop testing after this result. Mark every later unrun slot Not completed; " +
+          `${result.remaining} ${result.remaining === 1 ? "outcome remains" : "outcomes remain"}.`;
+      } else {
+        status.textContent =
+          `${result.remaining} ${result.remaining === 1 ? "outcome remains" : "outcomes remain"}.`;
+      }
     }
 
     async function copySummary() {
       if (!summary.value) return;
+      const reportable = latestResult.reportable;
       let copied = false;
       try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(summary.value);
           copied = true;
         }
@@ -170,8 +212,12 @@
         }
       }
       status.textContent = copied
-        ? "Aggregate counts and overall result copied. Review them before adding them to GitHub."
-        : "Automatic copy was unavailable. The count and overall-result block is selected for manual copy.";
+        ? (reportable
+          ? "Aggregate counts and overall result copied. Review them before adding them to GitHub."
+          : "Noncomparable counts copied. Do not submit them as an eight-check compatibility baseline.")
+        : (reportable
+          ? "Automatic copy was unavailable. The count and overall-result block is selected for manual copy."
+          : "Automatic copy was unavailable. The noncomparable count block is selected for manual copy; do not submit it as a compatibility baseline.");
     }
 
     function saveSummary() {
@@ -179,27 +225,33 @@
       let link;
       let downloadUrl;
       try {
-        const file = new Blob([`${formatReportDraft(summary.value)}\n`], {
+        const file = new Blob([`${formatReportDraft(summary.value, latestResult.reportable)}\n`], {
           type: "text/plain;charset=utf-8",
         });
         downloadUrl = URL.createObjectURL(file);
         link = doc.createElement("a");
         link.href = downloadUrl;
-        link.download = "presspeech-compatibility-report-draft.txt";
+        link.download = latestResult.reportable
+          ? "presspeech-compatibility-report-draft.txt"
+          : "presspeech-compatibility-noncomparable-draft.txt";
         link.hidden = true;
         doc.body.appendChild(link);
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-        status.textContent =
-          "Report draft download requested with aggregate counts and blank context fields. " +
-          "It contains no phrases or transcript.";
+        status.textContent = latestResult.reportable
+          ? "Report draft download requested with aggregate counts and blank context fields. " +
+            "It contains no phrases or transcript."
+          : "Noncomparable draft download requested with observed counts and blank context fields. " +
+            "Do not submit it as a compatibility baseline; it contains no phrases or transcript.";
       } catch (_error) {
         if (link && link.parentNode) link.remove();
         if (downloadUrl) URL.revokeObjectURL(downloadUrl);
         summary.focus();
         summary.select();
-        status.textContent = "File download was unavailable. The aggregate-only block is selected for manual copying.";
+        status.textContent = latestResult.reportable
+          ? "File download was unavailable. The aggregate-only block is selected for manual copying."
+          : "File download was unavailable. The noncomparable block is selected for manual copying; do not submit it as a compatibility baseline.";
       }
     }
 

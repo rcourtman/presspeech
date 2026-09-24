@@ -2302,7 +2302,12 @@ class SettingsWindow:
         reason = _settings_save_block_reason(self.app)
         previous = getattr(self, "_save_block_reason", "")
         self._save_block_reason = reason
-        self.save_button.config(state="disabled" if reason else "normal")
+        # A recording may start while Save has keyboard focus. Leave focus on
+        # the adjacent dictionary list before disabling Save, so Tab remains
+        # usable and a background poll never steals focus from another control.
+        _set_control_state(
+            self.root, self.save_button,
+            "disabled" if reason else "normal", self.listbox)
         if reason and reason != previous:
             _set_accessible_text(self.status, reason)
         elif not reason and previous:
@@ -2342,7 +2347,10 @@ class SettingsWindow:
             reason = _settings_save_block_reason(self.app)
             if reason:
                 self._save_block_reason = reason
-                self.save_button.config(state="disabled")
+                # Ctrl+S can race the poll above; apply the same focus rule at
+                # the definitive save boundary.
+                _set_control_state(
+                    self.root, self.save_button, "disabled", self.listbox)
                 _set_accessible_text(self.status, reason)
                 return False
 

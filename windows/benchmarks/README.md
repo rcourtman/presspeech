@@ -50,6 +50,12 @@ Version 12 adds an optional Parakeet short-speech tail-silence probe. Its
 of `benchmark_inputs_sha256`; matching digests with different probe settings
 do not describe the same inference workload. Without the option, ordinary
 benchmark inference and scoring are unchanged.
+Version 13 counterbalances the probe's clean/tailed execution order across
+all reviewed pairs and records each pair's order. Compare both the input digest
+and benchmark version before interpreting probe latency across reports; version
+12 always ran the tailed member second. Manifest order can change which
+condition goes first for a particular clip even when the input digest matches;
+retain manifest order for comparisons or inspect each clip's `trial_order`.
 
 Audio, reviewed references, manifests, and JSON results stay ignored because
 they can contain private dictation.
@@ -109,16 +115,20 @@ Run a paired probe on the same loaded Parakeet model:
 ```
 
 The option accepts 1–400 ms and affects only this benchmark. For each scored
-speech clip, each trial transcribes the original and then the same samples
-with zero-valued 16 kHz samples appended. Reviewed silence, unreviewed audio,
+speech clip, each trial transcribes the original and the same samples with
+zero-valued 16 kHz samples appended, alternating which goes first across all
+reviewed pairs. Reviewed silence, unreviewed audio,
 and unscoreable references receive only the ordinary transcription. The JSON
 keeps ordered transcript pairs, paired word-error counts, blank regressions,
-and separate tailed inference times; the console reports aggregate and
-per-clip counts. Review `nonempty_to_empty_trial_count`, worsened word errors,
+and separate tailed inference times. Each sample's `trial_order` is indexed
+like `pairs` and both inference-time arrays; aggregate order counts are also
+reported. The console reports aggregate and per-clip counts. Review
+`nonempty_to_empty_trial_count`, worsened word errors,
 and first/final-word failures by task group, not just pooled WER. A tailed
 output that differs from an already-wrong baseline is not automatically a
-regression. Fixed baseline-then-tailed order can affect latency through cache
-warming, so these times are diagnostics, not a release-to-paste comparison.
+regression. Counterbalancing reduces systematic second-run warming bias but
+cannot remove thermal drift, model state, or other order effects, so these
+times remain diagnostics, not a release-to-paste comparison.
 Synthetic zeros also do not represent microphone room tone or prove the live
 post-roll behavior. Any product trim/retry policy still needs paired native
 Windows dictation, silence controls, and a latency check before adoption.

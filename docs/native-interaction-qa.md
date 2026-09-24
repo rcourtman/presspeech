@@ -2,9 +2,9 @@
 
 The debug executable includes a bounded acceptance fixture for real Quartz event
 taps, the hotkey recorder decision, hold/toggle callbacks, and clipboard paste
-into two fixture-owned AppKit text views. It runs the production implementations;
-its recording callbacks only increment counters. It never constructs
-`PresspeechApp`, `Settings`, an audio engine, or a speech model.
+into fixture-owned AppKit text views in two windows. It runs the production
+implementations; its recording callbacks only increment counters. It never
+constructs `PresspeechApp`, `Settings`, an audio engine, or a speech model.
 
 ## Non-interactive verification
 
@@ -72,6 +72,10 @@ The fixture checks:
 - A newer fixture copy survives an explicit request using an older restore token.
 - Focusing the second owned window makes a target captured from the first window
   fall back to copy-only without posting paste events.
+- Focusing a second text view in the first owned window makes a target captured
+  from its first view fall back to copy-only, provided both controls expose
+  distinct Accessibility identities. Neither text view receives paste events;
+  the complete fixed marker remains on the clipboard for manual recovery.
 
 ## Isolation and abort behavior
 
@@ -135,11 +139,11 @@ in the full recorder dialog, keyboard-layout label refresh, a second physical
 keyboard layout, right-modifier hardware behavior, or microphone/model behavior.
 Those remain separate manual checks. Explicit user confirmation is not a Quartz
 clipboard-consumption acknowledgement.
-The fixture's focus-change check uses two separate windows. The pure hotkey
-self-test exercises same-window focused-control identity decisions with opaque
-tokens, but neither check proves that a particular external app publishes a
-stable control identity or that browser tabs use different identities. Use the
-disposable-field check in the manual QA checklist for that native behavior.
+The fixture's focus-change checks use two separate windows and two controls in
+one owned AppKit window. They do not prove that a particular external app
+publishes a stable control identity or that browser tabs use different
+identities. Use the disposable-field check in the manual QA checklist for that
+external-app behavior.
 The fixture exercises the recorder's real decision function through a native
 local monitor, not its modal confirmation UI, persistence, or the full app's
 Command-comma Settings-menu precedence; the existing pure hotkey suite covers

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
@@ -392,7 +393,6 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
             "description",
             "operatingSystem",
             "applicationCategory",
-            "downloadUrl",
             "installUrl",
         ):
             if not isinstance(app.get(field), str) or not app[field]:
@@ -402,17 +402,20 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
                 f"{display}: {app_id} description must state the verified original-destination "
                 "and manual clipboard-paste boundary"
             )
-        for field in ("downloadUrl", "installUrl"):
-            value = app.get(field)
-            if isinstance(value, str) and urlsplit(value).scheme != "https":
-                errors.append(f"{display}: {app_id} has non-HTTPS {field} {value!r}")
+        if "downloadUrl" in app:
+            errors.append(
+                f"{display}: {app_id} must route discovery through installUrl, "
+                "not advertise a downloadUrl that bypasses the release preflight"
+            )
+        install_url = app.get("installUrl")
+        if isinstance(install_url, str) and urlsplit(install_url).scheme != "https":
+            errors.append(f"{display}: {app_id} has non-HTTPS installUrl {install_url!r}")
         offer = app.get("offers")
         if not isinstance(offer, dict) or offer.get("price") != "0" or offer.get("priceCurrency") != "USD":
             errors.append(f"{display}: {app_id} must carry the free USD offer")
 
         if app_id == MAC_APP_ID:
             expected_urls = {
-                "downloadUrl": "https://github.com/rcourtman/presspeech/releases/latest",
                 "installUrl": f"{SITE_ROOT}install.html",
             }
         else:
@@ -420,10 +423,6 @@ def metadata_errors(docs: Path = DOCS, today: date | None = None) -> list[str]:
                 "releaseNotes": (
                     "https://github.com/rcourtman/presspeech/releases/tag/"
                     f"windows-v{expected_version}"
-                ),
-                "downloadUrl": (
-                    "https://github.com/rcourtman/presspeech/releases/download/"
-                    f"windows-v{expected_version}/Presspeech-Setup-{expected_version}-x64.exe"
                 ),
                 "installUrl": f"{SITE_ROOT}windows.html",
             }
@@ -506,6 +505,24 @@ def run_self_test() -> None:
         _, _, errors = document_metadata(broken)
         if not errors:
             raise RuntimeError("self-test: malformed JSON-LD was accepted")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        docs = Path(tmp) / "docs"
+        shutil.copytree(DOCS, docs)
+        windows_page = docs / "windows.html"
+        windows_page.write_text(
+            windows_page.read_text(encoding="utf-8").replace(
+                '"installUrl": "https://rcourtman.github.io/presspeech/windows.html",',
+                '"downloadUrl": "https://example.com/unsigned.exe",\n'
+                '            "installUrl": "https://rcourtman.github.io/presspeech/windows.html",',
+                1,
+            ), encoding="utf-8",
+        )
+        if not any(
+            "must route discovery through installUrl" in error
+            for error in metadata_errors(docs, today=date.fromisoformat("2026-09-24"))
+        ):
+            raise RuntimeError("self-test: direct structured download was accepted")
 
 
 def main() -> int:

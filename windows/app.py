@@ -2015,7 +2015,9 @@ class PresspeechApp:
                 self.settings["capture_benchmark_remaining"] = remaining - 1
                 self.settings["capture_benchmark_index"] = index + 1
             cfg.save(self.settings)
-            self._log("saved one-shot benchmark audio: %s" % output_path)
+            # The optional session name and user profile directory are part of
+            # this path. Keep them out of the persistent diagnostic log.
+            self._log("benchmark audio saved")
             left = max(0, remaining - 1) if remaining > 0 else 0
             self.notify("Benchmark clip saved", "%s (%d remaining)" %
                         (os.path.basename(output_path), left))

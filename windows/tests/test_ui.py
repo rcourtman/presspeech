@@ -2341,6 +2341,7 @@ class PasteSuffixGuidanceTests(unittest.TestCase):
 class DictionarySettingsTests(unittest.TestCase):
     def make_window(self, rules=None):
         window = ui.SettingsWindow.__new__(ui.SettingsWindow)
+        window.root = mock.Mock()
         window.dictionary_rules = [list(rule) for rule in (rules or [])]
         window.var_spoken = mock.Mock()
         window.var_replace = mock.Mock()
@@ -2594,6 +2595,10 @@ class DictionarySettingsTests(unittest.TestCase):
         window.app.transcribing = False
         window.app._canceling_recording = False
         window.app.settings = {"model": "base.en", "dictionary": []}
+        window.root.focus_get.return_value = window.save_button
+        order = []
+        window.listbox.focus_set.side_effect = lambda: order.append("focus")
+        window.save_button.config.side_effect = lambda **_kwargs: order.append("disable")
 
         with mock.patch.object(ui.cfg, "save") as save, \
                 mock.patch.object(ui, "_set_accessible_text") as set_text:
@@ -2604,11 +2609,31 @@ class DictionarySettingsTests(unittest.TestCase):
             window.app.settings, {"model": "base.en", "dictionary": []})
         save.assert_not_called()
         window.app.apply_autostart.assert_not_called()
+        self.assertEqual(order, ["focus", "disable"])
         window.save_button.config.assert_called_once_with(state="disabled")
         set_text.assert_called_once_with(
             window.status,
             "Finish or cancel the current dictation before saving settings.",
         )
+
+    def test_save_poll_moves_focus_only_when_disabling_focused_save(self):
+        window = self.make_window()
+        window.app = types.SimpleNamespace(recording=True)
+        window.root.focus_get.return_value = window.save_button
+        order = []
+        window.listbox.focus_set.side_effect = lambda: order.append("focus")
+        window.save_button.config.side_effect = lambda **_kwargs: order.append("disable")
+
+        with mock.patch.object(ui, "_set_accessible_text"):
+            window._refresh_save_state()
+            self.assertEqual(order, ["focus", "disable"])
+            window.root.focus_get.return_value = window.listbox
+            window._refresh_save_state()
+            window.app.recording = False
+            window._refresh_save_state()
+
+        window.listbox.focus_set.assert_called_once_with()
+        window.save_button.config.assert_called_with(state="normal")
 
     def test_every_dictation_transition_has_specific_save_guidance(self):
         app = types.SimpleNamespace(
