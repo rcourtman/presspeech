@@ -16,6 +16,7 @@ import struct
 import sys
 import threading
 import time
+import unicodedata
 import winsound
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
@@ -106,6 +107,7 @@ NO_SPEECH_FEEDBACK_SEC = 2.5
 NOT_READY_FEEDBACK_SEC = 2.5
 NO_SPEECH_OUTCOME = "no_speech"
 NO_TEXT_OUTCOME = "no_text"
+NO_CONTENT_OUTCOME = "no_content"
 
 VK_ESCAPE = 0x1B
 WM_KEYDOWN = 0x0100
@@ -279,7 +281,7 @@ def _remove_fillers(text):
     return _restore_filler_capitalization(result, capitalization_targets)
 
 
-def _apply_dictionary_rules(text, rules):
+def _apply_dictionary_rules(text, rules, *, return_effects=False):
     """Apply longest non-overlapping rules once against the original text."""
     active = [
         (index, spoken, replacement)
@@ -303,6 +305,9 @@ def _apply_dictionary_rules(text, rules):
     # inserted literally and can never trigger a later dictionary rule.
     for start, end, replacement in sorted(matches, reverse=True):
         text = text[:start] + replacement + text[end:]
+    if return_effects:
+        return (text, any(not replacement for _, _, replacement in matches),
+                any(bool(replacement) for _, _, replacement in matches))
     return text
 
 
@@ -2683,7 +2688,8 @@ class PresspeechApp:
         # indicator's generation guard prevents a delayed result hide from
         # erasing that newer recording state.
         with self.lock:
-            if outcome in (NO_SPEECH_OUTCOME, NO_TEXT_OUTCOME):
+            if outcome in (NO_SPEECH_OUTCOME, NO_TEXT_OUTCOME,
+                           NO_CONTENT_OUTCOME):
                 self._set_temporary_indicator(
                     outcome, NO_SPEECH_FEEDBACK_SEC)
             else:
@@ -2693,6 +2699,8 @@ class PresspeechApp:
             self._notify_no_speech()
         elif outcome == NO_TEXT_OUTCOME:
             self._notify_no_text()
+        elif outcome == NO_CONTENT_OUTCOME:
+            self._notify_no_content()
 
     def _transcribe_worker_inner(
             self, audio, paste_target=PasteTarget("", 0),
@@ -2768,7 +2776,7 @@ class PresspeechApp:
                 return
         timing = getattr(self.transcriber, "last_timing", {})
         timing_summary = _model_timing_summary(timing)
-        if not text:
+        if not text or not text.strip():
             self._log("transcription returned empty (model %.3fs)" % model_seconds)
             if timing_summary is not None:
                 self._log(timing_summary)
@@ -2780,6 +2788,14 @@ class PresspeechApp:
                 return NO_SPEECH_OUTCOME
             return NO_TEXT_OUTCOME
         text = self._apply_text(text)
+        if not text:
+            # Filler removal or a deliberate empty dictionary replacement can
+            # erase a recognized phrase. Never paste just the configured suffix
+            # over a selection or replace it with an empty clipboard item.
+            self._log("transcription removed by text settings; no delivery attempted")
+            if timing_summary is not None:
+                self._log(timing_summary)
+            return NO_CONTENT_OUTCOME
         # Dictation is private: retain performance data without persisting the
         # user's words in the diagnostic log. Whisper's detected-speech duration
         # distinguishes a VAD rejection from an empty decoder result.
@@ -2822,11 +2838,21 @@ class PresspeechApp:
         self._remember_undelivered_dictation(text, "scratchpad-unavailable")
 
     def _apply_text(self, text):
-        text = _apply_dictionary_rules(text, self.settings["dictionary"])
+        text, removed_by_rule, inserted_by_rule = _apply_dictionary_rules(
+            text, self.settings["dictionary"], return_effects=True)
         if self.settings["remove_fillers"]:
             text = _remove_fillers(text)
         if self.settings.get("british"):
             text = to_british(text)
+        if (not text or
+                (removed_by_rule and not inserted_by_rule and
+                 all(char.isspace() or unicodedata.category(char).startswith("P")
+                     for char in text))):
+            # An empty replacement can leave the recognizer's trailing period
+            # behind. A punctuation-only remnant is not worth replacing the
+            # user's selected text with; an explicit punctuation replacement
+            # remains deliverable because inserted_by_rule is true.
+            return ""
         text += cfg.SUFFIXES.get(self.settings["suffix"], " ")
         return text
 
@@ -3459,6 +3485,13 @@ class PresspeechApp:
             "No text recognized",
             "The local recognizer returned no text. Try again. If this keeps "
             "happening, check the microphone in Setup or try another model.")
+
+    def _notify_no_content(self):
+        self.notify(
+            "Nothing to insert",
+            "Text settings removed the recognized words. Presspeech did not "
+            "change the clipboard or attempt a paste. Review filler removal "
+            "and dictionary rules in Settings if this was unexpected.")
 
     def _show_no_speech_feedback(self):
         self._set_temporary_indicator("no_speech", NO_SPEECH_FEEDBACK_SEC)

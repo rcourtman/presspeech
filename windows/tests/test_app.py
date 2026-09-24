@@ -2149,6 +2149,30 @@ class TextRegressionTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(app._remove_fillers(text), text)
 
+    def test_text_settings_cannot_turn_removed_words_into_a_suffix_only_paste(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        for suffix in ("space", "newline", "none"):
+            with self.subTest(suffix=suffix):
+                instance.settings = {
+                    "dictionary": [], "remove_fillers": True,
+                    "british": False, "suffix": suffix,
+                }
+                self.assertEqual(instance._apply_text("Um."), "")
+                instance.settings["dictionary"] = [["remove me", ""]]
+                instance.settings["remove_fillers"] = False
+                self.assertEqual(instance._apply_text("remove me"), "")
+                self.assertEqual(instance._apply_text("Remove me."), "")
+
+        # A deliberate whitespace replacement is content, unlike a suffix
+        # appended after all recognized words were removed.
+        instance.settings = {
+            "dictionary": [["insert a space", " "]],
+            "remove_fillers": False, "british": False, "suffix": "none",
+        }
+        self.assertEqual(instance._apply_text("insert a space"), " ")
+        instance.settings["dictionary"] = [["insert a question mark", "?"]]
+        self.assertEqual(instance._apply_text("insert a question mark"), "?")
+
     def test_input_device_default_is_automatic(self):
         self.assertEqual(config.DEFAULTS["input_device"], "auto")
 
@@ -3144,6 +3168,25 @@ class TextRegressionTests(unittest.TestCase):
             "No text recognized",
             "The local recognizer returned no text. Try again. If this keeps "
             "happening, check the microphone in Setup or try another model.")
+        self.assertFalse(instance.transcribing)
+
+    def test_removed_text_feedback_does_not_claim_recognizer_or_mic_failure(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"visual_indicator": True}
+        instance.indicator = mock.Mock()
+        instance.notify = mock.Mock()
+        instance.lock = threading.Lock()
+        instance.transcribing = True
+
+        instance._finish_transcribing(app.NO_CONTENT_OUTCOME)
+
+        instance.indicator.show_temporary.assert_called_once_with(
+            "no_content", app.NO_SPEECH_FEEDBACK_SEC)
+        instance.notify.assert_called_once_with(
+            "Nothing to insert",
+            "Text settings removed the recognized words. Presspeech did not "
+            "change the clipboard or attempt a paste. Review filler removal "
+            "and dictionary rules in Settings if this was unexpected.")
         self.assertFalse(instance.transcribing)
 
     def test_frozen_autostart_runs_only_the_packaged_executable(self):
@@ -4400,6 +4443,52 @@ class ModelIdleTests(unittest.TestCase):
                     app.NO_TEXT_OUTCOME)
                 instance.transcriber.transcribe.assert_called_once_with(
                     mock.sentinel.audio)
+
+    def test_whitespace_only_decode_does_not_replace_selected_text(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "base.en"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.return_value = " \t\n "
+        instance.transcriber.last_timing = {"backend": "whisper"}
+        instance._apply_text = mock.Mock()
+        instance._deliver_text = mock.Mock()
+        instance._log = mock.Mock()
+
+        self.assertEqual(
+            instance._transcribe_worker_inner(mock.sentinel.audio),
+            app.NO_TEXT_OUTCOME)
+
+        instance._apply_text.assert_not_called()
+        instance._deliver_text.assert_not_called()
+
+    def test_removed_words_never_reach_clipboard_or_paste_delivery(self):
+        for recognized, dictionary, remove_fillers in (
+                ("Um.", [], True),
+                ("remove me", [["remove me", ""]], False),
+                ("Remove me.", [["remove me", ""]], False)):
+            with self.subTest(recognized=recognized):
+                instance = app.PresspeechApp.__new__(app.PresspeechApp)
+                instance.settings = {
+                    "model": "base.en", "dictionary": dictionary,
+                    "remove_fillers": remove_fillers, "british": False,
+                    "suffix": "space",
+                }
+                instance.transcriber = mock.Mock()
+                instance.transcriber.loaded.return_value = True
+                instance.transcriber.transcribe.return_value = recognized
+                instance.transcriber.last_timing = {}
+                instance._deliver_text = mock.Mock()
+                instance._log = mock.Mock()
+
+                outcome = instance._transcribe_worker_inner(
+                    mock.sentinel.audio)
+
+                self.assertEqual(outcome, app.NO_CONTENT_OUTCOME)
+                instance._deliver_text.assert_not_called()
+                self.assertNotIn(recognized, str(instance._log.call_args_list))
+                instance._log.assert_called_once_with(
+                    "transcription removed by text settings; no delivery attempted")
 
     def test_multilingual_model_is_not_forced_to_english(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)

@@ -37,14 +37,37 @@ def report(*, candidate=False, digest=INPUT_DIGEST, hint="auto", trials=3,
     failures = 1 if candidate else 0
     latency = "65.0" if candidate else "60.0"
     clip_count = 2 if controls else 1
+    speech_outputs = "".join(
+        f"    output: trial={index}/{trials} empty=false characters=12\n"
+        for index in range(1, trials + 1)
+    )
     speech_line = (
-        f"    transcript: [WER {rounded_wer}%] [final-word retained=true] "
+        f"    transcript: [WER {rounded_wer}%] "
+        f"[final-word retained={'false' if candidate else 'true'}] "
         f"[word-errors={errors} reference-words=35] "
         f"[max-reference-deletion-run={deletion}] <redacted 12 chars>\n"
     ) if scored else "    transcript: <redacted 12 chars>\n"
+    control_outputs = "".join(
+        f"    output: trial={index}/{trials} "
+        f"empty={'false' if candidate and index == 1 else 'true'} "
+        f"characters={9 if candidate and index == 1 else 0}\n"
+        for index in range(1, trials + 1)
+    )
+    control_transcripts = (
+        "    transcripts (2 distinct):\n"
+        "      • [WER 0.0%] [word-errors=0 reference-words=0] "
+        "[max-reference-deletion-run=0] <redacted 0 chars>\n"
+        "      • [WER 100.0%] [word-errors=1 reference-words=0] "
+        "[max-reference-deletion-run=0] <redacted 9 chars>\n"
+    ) if candidate else (
+        "    transcript: [WER 0.0%] [word-errors=0 reference-words=0] "
+        "[max-reference-deletion-run=0] <redacted 0 chars>\n"
+    )
     control_section = (
-        "\n## Clip 002\n\n```text\n"
-        "    output: trial=1/3 empty=true characters=0\n"
+        "\n## Clip 002\n\n- Reference: <redacted path> (WER enabled)\n"
+        "\n```text\n"
+        "    latency:  p50=  50.0 ms  min=  49.0 ms  max=  51.0 ms\n"
+        f"{control_outputs}{control_transcripts}"
         "```\n"
     ) if controls else ""
     control_summary = (
@@ -63,8 +86,10 @@ def report(*, candidate=False, digest=INPUT_DIGEST, hint="auto", trials=3,
         f"- Trials per clip: {trials}\n"
         f"- Parakeet TDT v3 language/script hint: {hint}\n"
         f"- Clips: {clip_count}\n"
-        "\n## Clip 001\n\n```text\n"
-        f"{speech_line}```\n"
+        "\n## Clip 001\n\n- Reference: <redacted path> (WER enabled)\n"
+        "\n```text\n"
+        f"    latency:  p50=  {latency} ms  min=  49.0 ms  max=  71.0 ms\n"
+        f"{speech_outputs}{speech_line}```\n"
         f"{control_section}"
         "\n## Summary\n\n"
         "| Backend | Clip rows | Mean worst-speech-clip WER % | Worst speech WER % | "
@@ -120,14 +145,98 @@ class ReportComparisonTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(comparator.ComparisonError, "SDK environment"):
             comparator.parse_report(report(state="configured"))
-        with self.assertRaisesRegex(comparator.ComparisonError, "deletion observations"):
+        with self.assertRaisesRegex(comparator.ComparisonError, "incomplete or mixed score"):
             comparator.parse_report(report(scored=False))
-        with self.assertRaisesRegex(comparator.ComparisonError, "corpus WER conflicts"):
+        with self.assertRaisesRegex(comparator.ComparisonError, "clip WER conflicts"):
             comparator.parse_report(report(errors=4))
         with self.assertRaisesRegex(comparator.ComparisonError, "non-speech control receipt"):
             comparator.parse_report(report().replace(
                 "deliverable text in 0/3 measured trials",
                 "deliverable text in 0/2 measured trials"))
+
+    def test_rejects_truncated_clips_and_summary_rewrites(self):
+        source = report()
+        mutations = (
+            (source.replace("| 5.7 | 5.7 | 0 | 60.0 |",
+                            "| 5.7 | 99.9 | 0 | 60.0 |"), "summary conflicts"),
+            (source.replace("\n## Clip 002", "\n## Removed 002"), "clip numbering"),
+            (source[:source.index("\n## Clip 002")] +
+             source[source.index("\n## Summary"):], "clip sections"),
+            (source.replace("    output: trial=2/3 empty=false characters=12\n", ""),
+             "trial receipts"),
+            (source.replace("    output: trial=2/3 empty=false characters=12",
+                            "    output: trial=1/3 empty=false characters=12"),
+             "trial receipts"),
+            (source.replace("deliverable text in 0/3 measured trials",
+                            "deliverable text in 1/3 measured trials"),
+             "control receipt"),
+            (source.replace("[word-errors=2 reference-words=35]",
+                            "[word-errors=1 reference-words=35]"),
+             "clip WER conflicts"),
+        )
+        for mutated, reason in mutations:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(comparator.ComparisonError, reason):
+                    comparator.parse_report(mutated)
+
+    def test_accepts_unredacted_numbered_clip_and_variable_hypotheses(self):
+        source = report(candidate=True)
+        source = source.replace("## Clip 001", "## 001-speech-example")
+        source = source.replace("## Clip 002", "## 002-control-example")
+        source = source.replace(
+            '[final-word retained=false]',
+            '[final-word retained=false expected="alpha" actual-last="beta"]',
+        )
+        source = source.replace("<redacted 12 chars>", f'"{SECRET}"')
+        parsed = comparator.parse_report(source)
+        self.assertEqual(parsed.worst_deletion_run, 5)
+        self.assertEqual(parsed.controls, (1, 1, 3))
+
+    def test_reconciles_variable_speech_and_multiple_speech_clips(self):
+        source = report(controls=False)
+        source = source.replace(
+            "    transcript: [WER 5.7%] [final-word retained=true] "
+            "[word-errors=2 reference-words=35] "
+            "[max-reference-deletion-run=4] <redacted 12 chars>\n",
+            "    transcripts (2 distinct):\n"
+            "      • [WER 2.9%] [final-word retained=true] "
+            "[word-errors=1 reference-words=35] "
+            "[max-reference-deletion-run=1] <redacted 12 chars>\n"
+            "      • [WER 5.7%] [final-word retained=true] "
+            "[word-errors=2 reference-words=35] "
+            "[max-reference-deletion-run=4] <redacted 12 chars>\n",
+        )
+        source = source.replace("- Clips: 1", "- Clips: 2")
+        source = source.replace(
+            "\n## Summary",
+            "\n## Clip 002\n\n- Reference: <redacted path> (WER enabled)\n"
+            "\n```text\n"
+            "    latency:  p50=  70.0 ms  min=  69.0 ms  max=  71.0 ms\n"
+            "    output: trial=1/3 empty=false characters=9\n"
+            "    output: trial=2/3 empty=false characters=9\n"
+            "    output: trial=3/3 empty=false characters=9\n"
+            "    transcript: [WER 10.0%] [final-word retained=true] "
+            "[word-errors=1 reference-words=10] "
+            "[max-reference-deletion-run=3] <redacted 9 chars>\n"
+            "```\n\n## Summary",
+        )
+        source = source.replace(
+            "| `v3` | 1 | 5.7 | 5.7 | 0 | 60.0 |",
+            "| `v3` | 2 | 7.85 | 10.0 | 0 | 65.0 |",
+        ).replace(
+            "5.71% (2 errors / 35 reference words)",
+            "6.67% (3 errors / 45 reference words)",
+        )
+        parsed = comparator.parse_report(source)
+        self.assertEqual(parsed.reference_words, 45)
+        self.assertEqual(parsed.corpus_errors, 3)
+        self.assertEqual(parsed.worst_wer, 10)
+        self.assertEqual(parsed.worst_deletion_run, 4)
+
+        with self.assertRaisesRegex(comparator.ComparisonError, "corpus WER conflicts"):
+            comparator.parse_report(source.replace(
+                "6.67% (3 errors / 45 reference words)",
+                "4.44% (2 errors / 45 reference words)"))
 
     def test_cli_emits_only_aggregate_evidence_and_refuses_mixed_sdk_pairs(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -159,6 +268,20 @@ class ReportComparisonTests(unittest.TestCase):
             self.assertEqual(out.getvalue(), "")
             self.assertIn("do not share one production/candidate revision pair", err.getvalue())
             self.assertNotIn(SECRET, err.getvalue())
+
+            files[0].write_text(report().replace(
+                "| 5.7 | 5.7 | 0 | 60.0 |",
+                "| 5.7 | 99.9 | 0 | 60.0 |",
+            ).replace("<redacted 12 chars>", f'"{SECRET}"'), encoding="utf-8")
+            out = io.StringIO()
+            err = io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = comparator.main(["--pair", str(files[0]), str(files[1])])
+            self.assertEqual(code, 1)
+            self.assertEqual(out.getvalue(), "")
+            self.assertIn("summary conflicts", err.getvalue())
+            self.assertNotIn(SECRET, err.getvalue())
+            self.assertNotIn(str(root), err.getvalue())
 
 
 if __name__ == "__main__":

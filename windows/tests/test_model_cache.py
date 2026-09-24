@@ -427,6 +427,33 @@ class CacheFirstTests(unittest.TestCase):
         self.assertEqual(self.flags(), [True, True])
         self.assertNotIn(False, self.flags())
 
+    def test_hash_handle_must_still_name_the_file_at_the_snapshot_path(self):
+        weights = self.snapshot / 'model.safetensors'
+        replacement = Path(self.temp.name) / 'replacement'
+        replacement.write_bytes(b'X' * len(b'synthetic weights'))
+
+        class SwitchedPath:
+            # Simulate a snapshot symlink that switches to the replacement
+            # after open() but before the path's first stat(). Each API sees
+            # internally stable metadata, so only a cross-API file-ID check
+            # catches the formerly accepted mismatch.
+            def open(self, *args, **kwargs):
+                return weights.open(*args, **kwargs)
+
+            def stat(self):
+                return replacement.stat()
+
+            def resolve(self, *, strict):
+                return replacement.resolve(strict=strict)
+
+        with self.assertRaisesRegex(model_cache.ModelCacheIntegrityError,
+                                    'changed while being verified'):
+            model_cache._calculate_sha256(SwitchedPath(), 'model.safetensors')
+
+    def test_missing_file_ids_cannot_authorize_a_hash_path_binding(self):
+        unknown = types.SimpleNamespace(st_dev=1, st_ino=0)
+        self.assertFalse(model_cache._same_file_identity(unknown, unknown))
+
     def test_downloaded_snapshot_must_match_the_manifest_before_return(self):
         self.download.side_effect = [self.missing('no cache'), str(self.snapshot)]
         (self.snapshot / 'model.safetensors').write_bytes(b'X' * len(b'synthetic weights'))

@@ -96,6 +96,18 @@ def _file_stat_identity(metadata):
                  if hasattr(metadata, name))
 
 
+def _same_file_identity(handle_stat, path_stat):
+    """Require a usable file ID linking the hashed handle to the cache path.
+
+    Other metadata can differ between Windows fstat(handle) and stat(path).
+    Python 3.12 exposes the Windows file index as st_ino where available; an
+    unavailable/zero ID cannot prove that a reparse point still names the
+    file whose bytes were hashed.
+    """
+    return (bool(handle_stat.st_ino) and bool(path_stat.st_ino) and
+            os.path.samestat(handle_stat, path_stat))
+
+
 def _calculate_sha256(path, name):
     """Hash a regular file and reject changes during the verification read."""
     digest = hashlib.sha256()
@@ -116,10 +128,15 @@ def _calculate_sha256(path, name):
         raise ModelCacheIntegrityError(
             "pinned model file could not be verified: " + name) from exc
 
-    # Windows can report different metadata for fstat(handle) and stat(path)
-    # on the same unchanged file. Compare each API with itself instead.
+    # Windows can report different timestamps for fstat(handle) and stat(path)
+    # on the same unchanged file. Compare each API with itself for mutations,
+    # but also bind the two observations by file ID. Without that cross-check,
+    # a changed snapshot symlink could make us hash one file and then authorize
+    # a different file at the path the model loader is about to use.
     if (_file_stat_identity(before) != _file_stat_identity(after) or
-            _file_stat_identity(before_path) != _file_stat_identity(current)):
+            _file_stat_identity(before_path) != _file_stat_identity(current) or
+            not _same_file_identity(before, before_path) or
+            not _same_file_identity(after, current)):
         raise ModelCacheIntegrityError(
             "pinned model file changed while being verified: " + name)
     return digest.hexdigest(), _file_fingerprint(path, current)

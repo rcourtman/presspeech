@@ -1550,6 +1550,15 @@ Neither qualifies Clipboard History, Cloud Clipboard, real input delivery, or
 the packaged recovery UI. Do not run these steps against a user's active
 clipboard.
 
+- In a disposable editor with selected harmless text, configure a dictionary
+  rule that replaces a reliably recognized test phrase with the empty string.
+  Test the Space, Newline and None suffix choices separately. When that phrase
+  is recognized, **Nothing to insert** must appear, the selected text and
+  previous clipboard item must remain unchanged, and no Ctrl+V may be sent.
+  Repeat with filler removal enabled and a filler-only recognized phrase when
+  the recognizer produces one. Record an unrecognized phrase as **Not run** for
+  this check, not a pass. A deliberate single-space dictionary replacement
+  must remain deliverable; do not treat all whitespace as removed content.
 - Hold the clipboard from a separate process during delivery. Confirm retained
   text is recoverable, recording is paused, the Delivery Recovery window opens
   above ordinary apps, and no transcript appears in the window, logs or files.

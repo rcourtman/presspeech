@@ -135,7 +135,9 @@ python3 ./compare-sdk-asr-reports.py \
 
 The helper refuses mismatched fixture-set SHA-256, app pin, trial count, clip
 count, language hint, corpus kind, or non-default SDK environment; it also
-requires a distinct candidate dependency pin. It prints aggregate WER, worst
+requires a distinct candidate dependency pin. It checks numbered clip sections,
+per-trial output receipts, scored speech and non-speech rows, and summary
+arithmetic before comparing a report. It prints aggregate WER, worst
 clip WER, final-word failures, consecutive-deletion run, latency, and any
 non-speech-emission changes without printing text or paths. Compare the
 `v3-sdk-default` reports separately against candidate-revision `v3` to isolate

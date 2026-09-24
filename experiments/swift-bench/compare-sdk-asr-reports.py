@@ -30,15 +30,26 @@ CORPUS_ROW = re.compile(
     r"([1-9][0-9]*) reference words\)$",
     re.MULTILINE,
 )
-# The benchmark prints these tags before any unredacted hypothesis. Do not
-# search arbitrary transcript text for a metric-like substring.
-DELETION_TAG = re.compile(
-    r"^\s*(?:transcript:|•)\s*\[WER [0-9]+(?:\.[0-9]+)?%\] "
-    r"\[final-word retained=(?:true|false)[^\]\n]*\]"
+# The benchmark prints these tags before any unredacted hypothesis. Match
+# only its result lines, never metric-like substrings in a transcript.
+SPEECH_SCORE = re.compile(
+    r"^[ \t]*(?:transcript:|•) \[WER ([0-9]+(?:\.[0-9]+)?)%\] "
+    r"\[final-word retained=(true|false)[^\n]*?\]"
     r"(?: \[critical-terms [^\]\n]*\])? "
-    r"\[word-errors=[0-9]+ reference-words=[1-9][0-9]*\] "
-    r"\[max-reference-deletion-run=([0-9]+)\]",
-    re.MULTILINE,
+    r"\[word-errors=([0-9]+) reference-words=([1-9][0-9]*)\] "
+    r"\[max-reference-deletion-run=([0-9]+)\](?: |$)",
+)
+CONTROL_SCORE = re.compile(
+    r"^[ \t]*(?:transcript:|•) \[WER [0-9]+(?:\.[0-9]+)?%\] "
+    r"\[word-errors=[0-9]+ reference-words=0\] "
+    r"\[max-reference-deletion-run=0\](?: |$)",
+)
+OUTPUT_ROW = re.compile(
+    r"^    output: trial=([0-9]+)/([0-9]+) "
+    r"empty=(true|false) characters=([0-9]+)$",
+)
+LATENCY_ROW = re.compile(
+    r"^    latency:[ \t]+p50=[ \t]*([0-9]+(?:\.[0-9]+)?) ms(?: |$)",
 )
 CONTROL_ROW = re.compile(
     r"^Non-speech controls \(zero-byte references\): ([0-9]+); "
@@ -69,6 +80,81 @@ class Report:
     average_p50_ms: Decimal
     worst_deletion_run: int
     controls: tuple[int, int, int] | None
+
+
+@dataclass(frozen=True)
+class ClipMetrics:
+    reference_words: int
+    worst_errors: int
+    worst_wer: Decimal
+    final_failure: bool
+    worst_deletion_run: int
+    p50_ms: Decimal
+    emitting_trials: int
+
+
+def parse_clip(body: str, trials: int) -> ClipMetrics:
+    """Reconcile benchmark-owned receipts without reading hypothesis text."""
+    lines = body.splitlines()
+    if not any(line.startswith("- Reference: ") and
+               line.endswith(" (WER enabled)") for line in lines):
+        raise ComparisonError("clip lacks a scored reference")
+
+    output_lines = [line for line in lines if line.startswith("    output:")]
+    outputs = [OUTPUT_ROW.fullmatch(line) for line in output_lines]
+    if len(outputs) != trials or any(match is None for match in outputs):
+        raise ComparisonError("clip has incomplete trial receipts")
+    emitting = 0
+    for number, match in enumerate(outputs, 1):
+        assert match is not None
+        trial, total, empty, characters = match.groups()
+        if int(trial) != number or int(total) != trials or (
+                (empty == "true") != (int(characters) == 0)):
+            raise ComparisonError("clip has inconsistent trial receipts")
+        emitting += empty == "false"
+
+    latencies = [LATENCY_ROW.match(line) for line in lines
+                 if line.startswith("    latency:")]
+    if len(latencies) != 1 or latencies[0] is None:
+        raise ComparisonError("clip has incomplete latency metrics")
+    p50 = Decimal(latencies[0].group(1))
+
+    stable = [line for line in lines if line.startswith("    transcript:")]
+    variable = [line for line in lines if line.startswith("    transcripts (")]
+    bullets = [line for line in lines if line.startswith("      • ")]
+    if len(stable) == 1 and not variable and not bullets:
+        score_lines = stable
+    elif not stable and len(variable) == 1 and bullets:
+        distinct = re.fullmatch(r"    transcripts \(([0-9]+) distinct\):", variable[0])
+        if distinct is None or int(distinct.group(1)) != len(bullets) or len(bullets) > trials:
+            raise ComparisonError("clip has incomplete transcript metrics")
+        score_lines = bullets
+    else:
+        raise ComparisonError("clip has incomplete transcript metrics")
+
+    speech = [SPEECH_SCORE.match(line) for line in score_lines]
+    if all(match is not None for match in speech):
+        matches = [match for match in speech if match is not None]
+        words = {int(match.group(4)) for match in matches}
+        if len(words) != 1:
+            raise ComparisonError("clip has inconsistent reference-word counts")
+        reference_words = words.pop()
+        for match in matches:
+            displayed = Decimal(match.group(1))
+            exact = Decimal(100 * int(match.group(3))) / Decimal(reference_words)
+            if abs(displayed - exact) > Decimal("0.051"):
+                raise ComparisonError("clip WER conflicts with exact word counts")
+        return ClipMetrics(
+            reference_words=reference_words,
+            worst_errors=max(int(match.group(3)) for match in matches),
+            worst_wer=max(Decimal(match.group(1)) for match in matches),
+            final_failure=any(match.group(2) == "false" for match in matches),
+            worst_deletion_run=max(int(match.group(5)) for match in matches),
+            p50_ms=p50, emitting_trials=emitting,
+        )
+    if all(CONTROL_SCORE.match(line) is not None for line in score_lines):
+        return ClipMetrics(0, 0, Decimal(0), False, 0, p50, emitting)
+    raise ComparisonError("clip has incomplete or mixed score metrics")
 
 
 def one(pattern: re.Pattern[str], source: str, label: str) -> re.Match[str]:
@@ -132,16 +218,34 @@ def parse_report(source: str) -> Report:
     ).group(1)
     if environment != "default":
         raise ComparisonError("SDK environment was not the default")
-    summary = one(
+    summary_match = one(
         re.compile(r"^## Summary\n(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL),
         source, "summary section",
-    ).group(1)
+    )
+    summary = summary_match.group(1)
     row = one(SUMMARY_ROW, summary, "v3 summary row")
     corpus = one(CORPUS_ROW, summary, "conservative corpus WER")
     if int(row.group(1)) != clips:
         raise ComparisonError("summary clip count differs from report header")
-    if int(row.group(4)) > clips:
-        raise ComparisonError("summary final-word failures exceed clip count")
+
+    # A summary can still look plausible when a Markdown report was truncated
+    # or hand-edited. Bind it to every numbered clip and each trial receipt.
+    before_summary = source[:summary_match.start()]
+    headings = list(re.finditer(r"^## ([^\n]+)$", before_summary, re.MULTILINE))
+    if len(headings) != clips:
+        raise ComparisonError("report clip sections differ from header")
+    clip_metrics = []
+    for index, heading in enumerate(headings, 1):
+        label = re.fullmatch(r"(?:Clip )?([0-9]{3,})(?:-[^\n]*)?", heading.group(1))
+        if label is None or int(label.group(1)) != index:
+            raise ComparisonError("report clip numbering is incomplete")
+        end = headings[index].start() if index < clips else len(before_summary)
+        clip_metrics.append(parse_clip(before_summary[heading.end():end], trials))
+    speech = [clip for clip in clip_metrics if clip.reference_words > 0]
+    controls_found = [clip for clip in clip_metrics if clip.reference_words == 0]
+    if not speech:
+        raise ComparisonError("report has no scored speech observations")
+
     corpus_wer = Decimal(corpus.group(1))
     errors = int(corpus.group(2))
     words = int(corpus.group(3))
@@ -149,21 +253,29 @@ def parse_report(source: str) -> Report:
     # inconsistent rows instead of turning a hand-edited value into evidence.
     if abs(corpus_wer - Decimal(100 * errors) / Decimal(words)) > Decimal("0.011"):
         raise ComparisonError("corpus WER conflicts with exact word counts")
-    deletion_runs = [int(match.group(1)) for match in DELETION_TAG.finditer(
-        source.split("\n## Summary\n", 1)[0]
-    )]
-    if not deletion_runs:
-        raise ComparisonError("report has no scored speech deletion observations")
+    if (errors != sum(clip.worst_errors for clip in speech) or
+            words != sum(clip.reference_words for clip in speech)):
+        raise ComparisonError("corpus WER conflicts with clip scores")
+    mean_wer = sum((clip.worst_wer for clip in speech), Decimal(0)) / len(speech)
+    mean_p50 = sum((clip.p50_ms for clip in speech), Decimal(0)) / len(speech)
+    if (abs(Decimal(row.group(2)) - mean_wer) > Decimal("0.011") or
+            Decimal(row.group(3)) != max(clip.worst_wer for clip in speech) or
+            int(row.group(4)) != sum(clip.final_failure for clip in speech) or
+            abs(Decimal(row.group(5)) - mean_p50) > Decimal("0.051")):
+        raise ComparisonError("summary conflicts with clip scores or latency")
 
     control_matches = list(CONTROL_ROW.finditer(summary))
     if len(control_matches) > 1:
         raise ComparisonError("report has duplicate non-speech control receipts")
     controls = None
-    if control_matches:
+    if bool(control_matches) != bool(controls_found):
+        raise ComparisonError("non-speech control receipt does not match clips")
+    if controls_found:
         control = control_matches[0]
         controls = tuple(int(control.group(index)) for index in (1, 2, 3))
         count, emitted, measured = controls
-        if count < 1 or measured != count * trials or emitted > measured:
+        if (count != len(controls_found) or measured != count * trials or
+                emitted != sum(clip.emitting_trials for clip in controls_found)):
             raise ComparisonError("non-speech control receipt is inconsistent")
 
     return Report(
@@ -173,7 +285,8 @@ def parse_report(source: str) -> Report:
         reference_words=words, worst_wer=Decimal(row.group(3)),
         final_failures=int(row.group(4)),
         average_p50_ms=Decimal(row.group(5)),
-        worst_deletion_run=max(deletion_runs), controls=controls,
+        worst_deletion_run=max(clip.worst_deletion_run for clip in speech),
+        controls=controls,
     )
 
 

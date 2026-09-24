@@ -825,6 +825,7 @@ class DictationIndicator:
         "transcribing": ("Transcribing\u2026", "#ffb340"),
         "no_speech": ("No speech detected \u2014 try again", "#ffb340"),
         "no_text": ("No text recognized \u2014 try again", "#ffb340"),
+        "no_content": ("Nothing to insert \u2014 check text settings", "#ffb340"),
         "not_ready": ("Microphone was not ready \u2014 try again", "#ffb340"),
     }
 

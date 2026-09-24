@@ -373,6 +373,10 @@ the indicator briefly says **No speech detected — try again** and a Windows
 notification points back to Setup's microphone check. If a recognizer instead
 returns blank text without a VAD rejection, the indicator says **No text
 recognized — try again**; that does not claim the microphone captured silence.
+In upcoming 0.1.13, if filler removal or an empty dictionary replacement
+leaves nothing to insert, **Nothing to insert** explains the result instead;
+Presspeech does not change the clipboard or paste only the configured suffix
+over a field.
 A quick retry cannot be hidden by the previous message's timeout.
 
 After release, silence-aware post-roll stops as early as 80 ms while retaining
