@@ -481,23 +481,23 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Do not inspect or display token values",
     ),
     DOCS / "index.html": (
-        "Before installing or launching macOS 0.3.8",
+        "Before opening macOS 0.3.8",
         "Hugging Face token inherited by Presspeech",
-        "public model needs no account token",
-        "wait until macOS 0.3.9 is published",
-        "Dictation audio and transcripts are not sent",
-        "version-specific network inventory",
+        "public model needs no token",
+        "wait until 0.3.9 is published",
+        "dictation audio and transcripts are not sent",
+        "full macOS warning",
         "Already used macOS 0.3.8?",
         "macos-0-3-8-after-use",
     ),
     DOCS / "getting-started.html": (
-        "Check before first launch",
+        "Downloading is not launching",
         "macOS 0.3.8 — wait if a token may be inherited",
-        "a model request may include a Hugging Face token inherited by Presspeech",
+        "A model request can include the inherited token",
         "public models need no account token",
-        "wait until macOS 0.3.9 is published",
-        "Dictation audio and transcripts are not included in model requests",
-        "version-specific privacy inventory",
+        "Wait for published 0.3.9",
+        "model requests do not include dictation audio or transcripts",
+        "version-specific network inventory",
         "install.html#model-download-privacy",
         "Already used macOS 0.3.8?",
         "macos-0-3-8-after-use",
@@ -588,10 +588,10 @@ MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
         "still honors proxy settings",
     ),
     DOCS / "index.html": (
-        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+        "lowercase", "https_proxy", "TLS-inspecting", "trusted by macOS", "proxy's trust is unclear"
     ),
     DOCS / "getting-started.html": (
-        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "proxy's trust is unclear"
+        "lowercase", "https_proxy", "TLS-inspecting", "trusted by macOS", "trust is unclear"
     ),
     DOCS / "faq.html": (
         "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "tunnelling proxy"
@@ -645,16 +645,16 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Do not include token values",
     ),
     DOCS / "index.html": (
-        "Before installing or launching Windows 0.1.12",
+        "Before opening Windows 0.1.12",
         "usage telemetry",
-        "already-configured or locally saved Hugging Face token",
-        "Custom download routing can change where the model request",
-        "avoid this possible usage telemetry",
-        "concerned that a Hugging Face token or custom download route may be configured on this PC",
-        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
-        "wait until Windows 0.1.13 is published",
-        "public models need no account token",
-        "Windows privacy decision and technical details",
+        "already-configured or locally saved token",
+        "Custom routing can change the request destination",
+        "want to avoid possible telemetry",
+        "a token or custom route may be configured",
+        "TLS-inspecting HTTPS proxy trusted by the client can read a token",
+        "wait until 0.1.13 is published",
+        "public models need no token",
+        "full Windows warning",
         "Already used Windows 0.1.12?",
         "inherited",
         "staging setting",
@@ -667,12 +667,11 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
     DOCS / "getting-started.html": (
         "Windows 0.1.12 — wait if privacy risks are unclear",
         "usage telemetry",
-        "already-configured or locally saved Hugging Face token",
-        "Custom download routing can change where the model request",
-        "avoid this possible usage telemetry",
-        "concerned that a Hugging Face token or custom download route may be configured on this PC",
-        "TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token",
-        "wait until Windows 0.1.13 is published",
+        "an available token or custom download route may be configured",
+        "A custom route can change where the request and token go",
+        "want to avoid possible Hugging Face usage telemetry",
+        "TLS-inspecting proxy trusted by the client can read the token",
+        "Wait for published 0.1.13",
         "public models need no account token",
         "windows.html#model-download-privacy",
         "Already used Windows 0.1.12?",
@@ -780,7 +779,7 @@ DELIVERY_BOUNDARY_GUIDANCE = {
         "manual paste",
     ),
     DOCS / "index.html": ("cannot safely verify the destination", "manual paste"),
-    DOCS / "getting-started.html": ("If Presspeech did not paste", "clipboard", "Delivery Recovery"),
+    DOCS / "getting-started.html": ("If Presspeech did not paste", "Windows 0.1.12", "clipboard for manual paste"),
     DOCS / "install.html": ("cannot verify that destination", "clipboard"),
     DOCS / "windows.html": ("cannot verify that destination", "clipboard"),
     DOCS / "faq.html": ("cannot verify that destination", "clipboard"),
@@ -799,7 +798,7 @@ WINDOWS_DELIVERY_RECOVERY_GUIDANCE = {
     ROOT / "README.md": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "windows.html": ("Published 0.1.12", "Upcoming 0.1.13", "Delivery Recovery"),
     DOCS / "faq.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
-    DOCS / "getting-started.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "getting-started.html": ("Windows 0.1.12", "Transcript copied, not pasted", "clipboard for manual paste"),
     DOCS / "privacy.html": ("Published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "llms.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
     DOCS / "llms-full.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
@@ -819,15 +818,15 @@ WINDOWS_DELIVERY_UNSCOPED_CLAIMS = (
     "if delivery succeeded or presspeech showed its copied/manual-paste notice, paste",
 )
 
-# Keep the large macOS model transfer's consent behavior explicit by release:
-# the linked 0.3.8 app starts on launch, while 0.3.9 gates a clean install on
-# the user's choice. Vague "depending on the build" copy hides the behavior
-# that matters most to someone deciding whether to start a 500+ MB download.
+# Keep the large macOS model transfer's consent behavior explicit by release.
+# Discovery pages describe the linked 0.3.8 first run and point to the full
+# warning; reference/install pages also explain 0.3.9's clean-install prompt.
+# Vague "depending on the build" copy hides the behavior that matters most.
 MAC_MODEL_DOWNLOAD_GUIDANCE = {
     ROOT / "README.md": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
-    DOCS / "index.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
+    DOCS / "index.html": ("0.3.8", "0.3.9", "500", "on launch", "full macOS warning"),
     DOCS / "getting-started.html": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
+        "0.3.8", "0.3.9", "500", "on launch", "full macOS warning"
     ),
     DOCS / "install.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
     DOCS / "faq.html": ("0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"),
@@ -862,8 +861,8 @@ FIRST_RUN_ACTION_COPY = {
         "**Finish Setup**, **Set Up Later**, or closing Setup",
     ),
     DOCS / "getting-started.html": (
-        "Only upcoming 0.1.13 can defer that first download from Setup.",
-        "published 0.1.12 selects <strong>Start Presspeech with Windows</strong> by default",
+        "In 0.1.12, <strong>Set Up Later</strong> does not stop a missing-model download",
+        "0.1.12 selects <strong>Start Presspeech with Windows</strong> by default",
         "Its Setup has no dictation-style selector",
         "<strong>Set Up Later</strong>, or closing Setup if you do not want the app at sign-in",
     ),
@@ -909,6 +908,16 @@ FIRST_RUN_ACTION_FORBIDDEN = {
         re.compile(r"On first run it checks whether the default model is cached and asks before downloading missing files"),
         re.compile(r"(?m)^brew install --cask rcourtman/presspeech/presspeech\nopen /Applications/Presspeech\.app$"),
     ),
+}
+
+# The landing and first-dictation pages deliberately teach only the current
+# published controls. Unlike their version headings, their hand-written steps
+# are not rewritten by sync_index/sync_getting_started. Require a human review
+# when release metadata advances so the old steps cannot be published beneath
+# a new version heading.
+ONBOARDING_RELEASE_COPY_REVIEWED = {
+    "version": "0.3.8",
+    "windows_version": "0.1.12",
 }
 
 COMPATIBILITY_OVERALL_RESULTS = (
@@ -2942,6 +2951,21 @@ def check_first_run_action_copy(
     return errors
 
 
+def check_onboarding_release_scope(
+    metadata: dict[str, object],
+    reviewed: dict[str, str] = ONBOARDING_RELEASE_COPY_REVIEWED,
+) -> list[str]:
+    errors: list[str] = []
+    for key, version in reviewed.items():
+        if metadata.get(key) != version:
+            errors.append(
+                "docs/index.html and docs/getting-started.html: first-run steps "
+                f"reviewed for {key} {version}, not {metadata.get(key)!r}; "
+                "review both pages and update ONBOARDING_RELEASE_COPY_REVIEWED"
+            )
+    return errors
+
+
 def check_windows_model_download_privacy_summary(
     surfaces: dict[Path, tuple[str, ...]] = WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY,
 ) -> list[str]:
@@ -3116,25 +3140,28 @@ def check_getting_started_preflight_order(
         else contents[preflight_start:preflight_end]
     )
     required = (
-        "Check before first launch",
-        "in macOS 0.3.8 and Windows 0.1.12, a missing model starts downloading when you open Presspeech—not when you download the installer",
-        "The upcoming 0.3.9 and 0.1.13 builds ask before a clean-install download, but are not yet published",
-        "Dictation audio and transcripts are not included in model requests",
-        "macOS 0.3.8",
-        "a model request may include a Hugging Face token inherited by Presspeech",
-        "If one may be available—or you are unsure—keep the app closed and wait until macOS 0.3.9 is published",
-        "Windows 0.1.12",
-        "a request may send Hugging Face usage telemetry or include an already-configured or locally saved Hugging Face token",
-        "Custom download routing can change where the model request—and a token it carries—goes",
-        "A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives",
-        "If its trust is unclear, do not launch while it is in use",
-        "If you prefer to avoid this possible usage telemetry",
-        "are concerned that a Hugging Face token or custom download route may be configured on this PC, or are unsure",
-        "wait until Windows 0.1.13 is published",
-        "upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings",
+        "Downloading is not launching",
+        "macOS 0.3.8 and Windows 0.1.12 start a missing-model request when Presspeech opens, not when you download the ZIP or installer",
+        "You can download a build and leave it unopened",
+        "Unsure about a token, telemetry, or proxy? Keep it closed",
+        "Wait for published 0.3.9",
+        "a Hugging Face token may be inherited by Presspeech",
+        "Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear",
+        "A model request can include the inherited token",
+        "lowercase <code>https_proxy</code>",
+        "TLS-inspecting proxy trusted by macOS can read that token",
+        "Wait for published 0.1.13",
+        "want to avoid possible Hugging Face usage telemetry",
+        "an available token or custom download route may be configured",
+        "A custom route can change where the request and token go",
+        "TLS-inspecting proxy trusted by the client can read the token",
+        "If such a proxy's trust is unclear, do not launch while it is in use",
+        "upcoming build disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings",
         "leave <strong>Launch Presspeech</strong> unchecked",
         "public models need no account token",
+        "model requests do not include dictation audio or transcripts",
         "Do not inspect or share token values",
+        "not published yet",
         'href="https://github.com/rcourtman/presspeech/releases"',
         'href="install.html#model-download-privacy"',
         'href="windows.html#model-download-privacy"',
@@ -5417,33 +5444,32 @@ def run_self_test() -> None:
         safe_getting_started = (
             '<div id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">'
             '<h2 id="launch-decision-heading">Decide before opening a current build</h2>'
-            '<p><strong>Check before first launch:</strong> in macOS 0.3.8 and Windows 0.1.12, '
-            'a missing model starts downloading when you open Presspeech—not when you download the installer. '
-            'The upcoming 0.3.9 and 0.1.13 builds ask before a clean-install download, but are not yet published. '
-            'Dictation audio and transcripts are not included in model requests.</p>'
-            '<p><a href="#macos-launch-decision">macOS decision</a> '
+            '<p><strong>Downloading is not launching:</strong> macOS 0.3.8 and Windows 0.1.12 '
+            'start a missing-model request when Presspeech opens, not when you download the ZIP or installer. '
+            'You can download a build and leave it unopened. '
+            '<strong>Unsure about a token, telemetry, or proxy? Keep it closed.</strong> '
+            '<a href="#macos-launch-decision">macOS decision</a> '
             '<a href="#windows-launch-decision">Windows decision</a></p>'
-            '<ul><li id="macos-launch-decision"><h3>macOS 0.3.8 — wait if a token may be inherited</h3> a model request may include a Hugging Face token inherited '
-            'by Presspeech. If one may be available—or you are unsure—keep the app closed and wait until '
-            'macOS 0.3.9 is published. '
+            '<ul><li id="macos-launch-decision"><h3>macOS 0.3.8 — wait if a token may be inherited</h3> '
+            '<strong>Wait for published 0.3.9</strong> if a Hugging Face token may be inherited by Presspeech. '
+            'Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear. '
+            'A model request can include the inherited token; the bundled client honors '
+            'lowercase <code>https_proxy</code>, and a TLS-inspecting proxy trusted by macOS can read that token. '
             '<a href="install.html#model-download-privacy">full macOS warning</a></li>'
-            '<li id="windows-launch-decision"><h3>Windows 0.1.12 — wait if privacy risks are unclear</h3> a request may send Hugging Face usage telemetry or include '
-            'an already-configured or locally saved Hugging Face token. Custom download routing can change '
-            'where the model request—and a token it carries—goes. A TLS-inspecting HTTPS proxy trusted by '
-            'the client can read any 0.1.12 token it receives. If its trust is unclear, do not launch while '
-            'it is in use. If you prefer to avoid this possible usage telemetry, are concerned that a Hugging '
-            'Face token or custom download route may be configured on this PC, or are unsure, wait until '
-            'Windows 0.1.13 is published. If installing '
-            'now, leave <strong>Launch Presspeech</strong> unchecked. The upcoming 0.1.13 removes '
-            'account-token authentication but still honors proxy and CA settings. '
+            '<li id="windows-launch-decision"><h3>Windows 0.1.12 — wait if privacy risks are unclear</h3> '
+            '<strong>Wait for published 0.1.13</strong> if you want to avoid possible Hugging Face usage telemetry, '
+            'an available token or custom download route may be configured. A custom route can change where '
+            'the request and token go; a TLS-inspecting proxy trusted by the client can read the token. '
+            "If such a proxy's trust is unclear, do not launch while it is in use. "
+            'If you install but wait, leave <strong>Launch Presspeech</strong> unchecked. '
+            'The upcoming build disables bundled-library telemetry and account-token authentication '
+            'but still honors proxy and CA settings. '
             '<a href="windows.html#model-download-privacy">full Windows warning</a></li></ul>'
-            '<p>If you choose to wait, check the '
-            '<a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases page</a> to confirm '
-            'a later version is published before following its install steps; the source branch can be ahead '
-            'of released downloads.</p>'
-            '<p>The public models need no account token. Do not inspect or share token values. See the '
-            '<a href="privacy.html#network-calls">version-specific privacy inventory</a> for technical '
-            'details.</p></div>'
+            '<p>The public models need no account token, and model requests do not include dictation audio '
+            'or transcripts. Do not inspect or share token values. The later builds are '
+            '<strong>not published yet</strong>; check '
+            '<a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a>. '
+            'See the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p></div>'
             '<div class="actions"><a href="install.html">Install</a>'
             '<a href="#quick-path">Already installed?</a></div>'
             '<section id="quick-path"><a href="#model-download-preflight">Check warning</a></section>'
@@ -5465,9 +5491,9 @@ def run_self_test() -> None:
         if not check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: onboarding platform shortcut bypassed its warning")
         for warning in (
-            "keep the app closed and wait until macOS 0.3.9 is published",
-            "wait until Windows 0.1.13 is published",
-            "If its trust is unclear, do not launch while it is in use",
+            "Wait for published 0.3.9",
+            "Wait for published 0.1.13",
+            "If such a proxy's trust is unclear, do not launch while it is in use",
         ):
             getting_started.write_text(
                 safe_getting_started.replace(warning, ""),
@@ -6012,6 +6038,10 @@ def run_self_test() -> None:
         action_copy.write_text("Published 0.1.12 starts without asking\n", encoding="utf-8")
         if check_first_run_action_copy(required_action_copy, forbidden_action_copy):
             raise SyncError("self-test: versioned first-run action was rejected")
+        if check_onboarding_release_scope({"version": "0.3.8", "windows_version": "0.1.12"}):
+            raise SyncError("self-test: reviewed onboarding release scope was rejected")
+        if len(check_onboarding_release_scope({"version": "0.3.9", "windows_version": "0.1.13"})) != 2:
+            raise SyncError("self-test: onboarding steps were not gated on a new release")
         action_copy.write_text("Upcoming 0.1.13 asks before downloading\n", encoding="utf-8")
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
             raise SyncError("self-test: missing published first-run action was accepted")
@@ -6085,6 +6115,7 @@ def main() -> int:
             errors.extend(check_mac_release_phase_copy(metadata))
             errors.extend(check_mac_model_download_guidance())
             errors.extend(check_first_run_action_copy())
+            errors.extend(check_onboarding_release_scope(metadata))
             errors.extend(check_windows_release_phase_copy(metadata))
             errors.extend(check_windows_release_references(metadata))
             errors.extend(check_icon_stats(metadata))
@@ -6148,6 +6179,7 @@ def main() -> int:
         errors.extend(check_mac_release_phase_copy(metadata))
         errors.extend(check_mac_model_download_guidance())
         errors.extend(check_first_run_action_copy())
+        errors.extend(check_onboarding_release_scope(metadata))
         errors.extend(check_windows_release_phase_copy(metadata))
         errors.extend(check_windows_release_references(metadata))
         errors.extend(check_icon_stats(metadata))

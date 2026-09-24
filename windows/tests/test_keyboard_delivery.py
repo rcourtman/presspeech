@@ -92,6 +92,36 @@ class CheckedKeyboardDeliveryTests(unittest.TestCase):
 
                 api.SendInput.assert_not_called()
 
+    def test_preflight_detects_held_key_without_injecting_input(self):
+        for key in delivery._MODIFIER_KEYS:
+            with self.subTest(key=key):
+                api = self.backend()
+                api.GetAsyncKeyState.side_effect = (
+                    lambda checked, held=key: -32768 if checked == held else 0)
+
+                self.assertTrue(delivery.paste_keys_held(api=api))
+                api.SendInput.assert_not_called()
+
+    def test_preflight_ignores_unreliable_recent_press_bit(self):
+        api = self.backend()
+        api.GetAsyncKeyState.return_value = 1
+
+        self.assertFalse(delivery.paste_keys_held(api=api))
+        self.assertEqual(api.GetAsyncKeyState.call_count,
+                         len(delivery._MODIFIER_KEYS))
+        api.SendInput.assert_not_called()
+
+    def test_preflight_query_failure_is_content_free(self):
+        api = self.backend()
+        api.GetAsyncKeyState.side_effect = OSError("private keyboard detail")
+
+        with self.assertRaises(delivery.ModifierStateError) as raised:
+            delivery.paste_keys_held(api=api)
+
+        self.assertNotIn("private", str(raised.exception))
+        self.assertIsNone(raised.exception.__cause__)
+        api.SendInput.assert_not_called()
+
     def test_recent_press_bit_alone_does_not_block_shortcut(self):
         api = self.backend()
         api.GetAsyncKeyState.return_value = 1

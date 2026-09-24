@@ -86,7 +86,11 @@ collaborator where noted:
   visible decision and full-warning link without skipping to install or setup;
   the two decisions must sit side by side when space permits and stack without
   horizontal overflow on mobile. Confirm the warning and both platform decisions
-  are available through heading navigation in a screen reader.
+  are available through heading navigation in a screen reader. Follow the four
+  checkpoints against the currently published build on each platform: setup,
+  microphone, hotkey, scratchpad, and paste-recovery instructions must not ask
+  the user to use a control that exists only in an upcoming release. The wait
+  decision may name that release, but must not imply it is already downloadable.
 - With keyboard focus on a primary-navigation link, narrow the viewport below
   720 CSS pixels. The links should collapse and focus should move to the visible
   Menu button. Open the menu and focus a link; Escape should collapse it and
@@ -1359,7 +1363,9 @@ clipboard.
   turn while transcription finishes. Confirm Presspeech sends no paste shortcut,
   does not release the physically held key, explains the retained dictation,
   and offers manual Copy or Discard. A key already held before delivery should
-  leave the prior clipboard item unchanged. Release it before manually pasting.
+  leave the prior clipboard item unchanged, including when the hook did not
+  observe the initial key-down but the physical-state preflight sees it.
+  Release it before manually pasting.
   Repeat a normal paste with no other modifier held. This point-in-time check
   reduces wrong-shortcut risk but cannot make keyboard state and SendInput
   atomic; inspect the target for any unexpected command or partial insertion.

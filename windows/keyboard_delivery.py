@@ -111,6 +111,24 @@ class _WindowsAPI:
         )
 
 
+def paste_keys_held(*, api=None):
+    """Snapshot keys that could alter a paste chord, without injecting input.
+
+    Use before replacing the clipboard as well as immediately before SendInput.
+    A zero result can also mean Win32 denied the query, so this remains a
+    point-in-time guard rather than proof that every key is up.
+    """
+    try:
+        api = _WindowsAPI() if api is None else api
+        return any(
+            int(api.GetAsyncKeyState(key)) & 0x8000
+            for key in _MODIFIER_KEYS
+        )
+    except Exception:
+        raise ModifierStateError(
+            "Windows could not check held modifier keys") from None
+
+
 class Controller:
     """Send virtual-key events and require Win32 to accept every event."""
 
@@ -140,19 +158,7 @@ class Controller:
         )
 
     def _modifiers_down(self):
-        """Check the current high bit, not the unreliable recent-press bit.
-
-        Win32 also returns zero on some access failures, indistinguishable
-        from an up key. The caller's focus and integrity checks remain needed.
-        """
-        try:
-            return any(
-                int(self._api.GetAsyncKeyState(key)) & 0x8000
-                for key in _MODIFIER_KEYS
-            )
-        except Exception:
-            raise ModifierStateError(
-                "Windows could not check held modifier keys") from None
+        return paste_keys_held(api=self._api)
 
     def _send(self, events, *, check_modifiers=False):
         events = tuple(events)

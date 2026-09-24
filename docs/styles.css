@@ -726,11 +726,6 @@ section p:last-child,
   margin-bottom: 6px;
 }
 
-#model-download-preflight .decision-summary {
-  margin-top: 12px;
-  color: var(--text);
-}
-
 #model-download-preflight li p {
   max-width: none;
   margin: 8px 0 0;

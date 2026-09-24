@@ -230,8 +230,10 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    model-download privacy guidance](../docs/privacy.html#network-calls). Do
    not present the 0.3.9 / 0.1.13 source controls as shipped while 0.3.8 /
    0.1.12 are the downloads. Resolve or carry the exact published-version
-   warnings before inviting a new user to install or launch; this draft is
-   held while the current issues remain.
+   warnings on the rendered release pages as well as install guides before
+   inviting a new user to install or launch. Editing source notes is not a
+   correction to already-published GitHub release text; this draft is held
+   while the current issues remain.
 4. Complete the [public release and support
    qualification](../docs/manual-qa.md#public-release-and-support-qualification).
    Confirm `main` is deployed to GitHub Pages and the README shows the direct

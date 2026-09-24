@@ -2279,6 +2279,8 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(
                     app, "_foreground_paste_target",
                     side_effect=[target, replacement]), \
+                mock.patch.object(app.keyboard_delivery, "paste_keys_held",
+                                  return_value=False), \
                 mock.patch.object(
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("private transcript", target)
@@ -2302,6 +2304,8 @@ class TextRegressionTests(unittest.TestCase):
                 mock.patch.object(app.time, "sleep"), \
                 mock.patch.object(
                     app, "_foreground_paste_target", return_value=target), \
+                mock.patch.object(app.keyboard_delivery, "paste_keys_held",
+                                  return_value=False), \
                 mock.patch.object(
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("transcript", target)
@@ -2346,6 +2350,8 @@ class TextRegressionTests(unittest.TestCase):
                     app, "_foreground_paste_target", return_value=target), \
                 mock.patch.object(
                     app, "_process_integrity_level", return_value=0x2000), \
+                mock.patch.object(app.keyboard_delivery, "paste_keys_held",
+                                  return_value=False), \
                 mock.patch.object(
                     app.keyboard_delivery, "Controller") as controller:
             instance._paste("transcript", target)
@@ -4304,6 +4310,8 @@ class DeliveryRecoveryTests(unittest.TestCase):
             app, "_foreground_paste_target", return_value=self.target)
         self.blocked = patch(
             app, "_paste_target_blocks_simulated_input", return_value=False)
+        self.physical_keys_held = patch(
+            app.keyboard_delivery, "paste_keys_held", return_value=False)
 
     def paste(self):
         return self.instance._paste("private transcript", self.target)
@@ -4340,6 +4348,31 @@ class DeliveryRecoveryTests(unittest.TestCase):
                 self.copy.assert_not_called()
                 self.controller.assert_not_called()
                 self.assert_retained_without_content_logs()
+
+    def test_preexisting_physical_paste_key_preserves_previous_clipboard(self):
+        # The low-level hook may miss a key that was already down before it
+        # began listening; the Win32 preflight must still run before Copy.
+        self.physical_keys_held.return_value = True
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.assertIn("no paste shortcut was sent",
+                      str(self.instance.notify.mock_calls))
+        self.assert_retained_without_content_logs()
+
+    def test_unavailable_physical_state_preserves_previous_clipboard(self):
+        self.physical_keys_held.side_effect = (
+            app.keyboard_delivery.ModifierStateError("synthetic private detail"))
+
+        self.assertFalse(self.paste())
+
+        self.copy.assert_not_called()
+        self.controller.assert_not_called()
+        self.assertNotIn("synthetic private detail",
+                         str(self.instance.notify.mock_calls))
+        self.assert_retained_without_content_logs()
 
     def test_hook_key_pressed_after_clipboard_write_prevents_shortcut(self):
         with mock.patch.object(

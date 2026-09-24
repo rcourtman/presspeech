@@ -275,12 +275,16 @@ another local process or third-party clipboard manager from reading the current
 item. Clipboard sequence checks reduce replacement races; they do not make
 Ctrl+V atomic or acknowledge that the target application consumed the text.
 Another copy after the final check remains possible.
-Before sending a paste shortcut, the upcoming build checks whether Ctrl, Shift,
-Alt, or Windows is already held. If it sees one, it sends no shortcut and keeps
-the dictation for explicit recovery rather than risk invoking a different
-command in the target. This is a point-in-time check, not a guarantee against a
-key pressed immediately afterward; review the target field before copying or
-pasting a retained dictation.
+Before replacing the clipboard, the upcoming build checks the physical state
+of Ctrl, Shift, Alt, Windows, and V as well as its keyboard-hook state. A key
+already held at this preflight leaves the previous clipboard item unchanged and
+keeps the dictation for explicit recovery. It checks again immediately before
+the paste shortcut; a key pressed between checks can still leave the dictated
+text on the current clipboard. These point-in-time checks cannot prevent a key
+pressed immediately afterward or prove that the target consumed the paste.
+Windows can also return zero from a key-state query when access fails, which
+cannot be distinguished from an up key at this API boundary.
+Review the target field before copying or pasting a retained dictation.
 
 ## Install from source
 

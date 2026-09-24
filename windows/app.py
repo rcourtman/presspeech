@@ -2758,6 +2758,16 @@ class PresspeechApp:
         if _paste_target_blocks_simulated_input(paste_target):
             self._remember_undelivered_dictation(text, "input-integrity-boundary")
             return False
+        # The hook may not have observed a key already held before delivery.
+        # Check the physical state before replacing the user's clipboard;
+        # Controller.shortcut checks again immediately before SendInput.
+        try:
+            if keyboard_delivery.paste_keys_held():
+                self._remember_undelivered_dictation(text, "modifier-held")
+                return False
+        except keyboard_delivery.ModifierStateError:
+            self._remember_undelivered_dictation(text, "modifier-state-unavailable")
+            return False
         try:
             receipt = clipboard_delivery.write_text(text)
         except Exception:
