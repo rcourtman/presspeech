@@ -529,7 +529,37 @@ def load_audio(path):
     return audio, original_seconds, sample_rate, asr_audio_sha256(audio)
 
 
-def _preflight_audio(manifest_dir, samples):
+def _tail_probe_applies(sample, appended_silence_ms):
+    """Only score a reviewed speech reference in the paired tail experiment."""
+    return (appended_silence_ms is not None
+            and sample.get("reference_reviewed", False)
+            and not sample.get("expected_silence", False)
+            and bool(_normalise_words(sample.get("reference", ""))))
+
+
+def _validate_tail_probe_bucket(sample_count, appended_silence_ms):
+    """Keep the paired inputs on one identical Parakeet feature shape.
+
+    Comparing across a bucket or the 60-second windowing boundary would mix
+    the effect of appended silence with a different inference path.
+    """
+    tail_count = appended_silence_ms * engine.PARAKEET_SAMPLE_RATE // 1000
+    tailed_count = sample_count + tail_count
+    maximum = engine.PARAKEET_MAX_WINDOW_SECONDS * engine.PARAKEET_SAMPLE_RATE
+    if tailed_count > maximum:
+        raise ValueError(
+            "tail-silence probe needs both variants in one Parakeet window")
+    clean_bucket = engine._parakeet_bucket_seconds(
+        sample_count / engine.PARAKEET_SAMPLE_RATE)
+    tailed_bucket = engine._parakeet_bucket_seconds(
+        tailed_count / engine.PARAKEET_SAMPLE_RATE)
+    if clean_bucket != tailed_bucket:
+        raise ValueError(
+            "tail-silence probe needs both variants in the same Parakeet "
+            "feature bucket; shorten the clip or reduce appended silence")
+
+
+def _preflight_audio(manifest_dir, samples, *, parakeet_tail_silence_ms=None):
     """Decode every fixture before costly model setup without retaining audio.
 
     The second read for inference must match the exact signal checked here;
@@ -541,7 +571,9 @@ def _preflight_audio(manifest_dir, samples):
         path = sample["audio"]
         if not os.path.isabs(path):
             path = os.path.join(manifest_dir, path)
-        _, seconds, source_rate, digest = load_audio(path)
+        audio, seconds, source_rate, digest = load_audio(path)
+        if _tail_probe_applies(sample, parakeet_tail_silence_ms):
+            _validate_tail_probe_bucket(len(audio), parakeet_tail_silence_ms)
         checked.append((path, seconds, source_rate, digest))
     return checked
 
@@ -687,7 +719,9 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         raise ValueError("unsupported benchmark precision")
     if precision != "auto" and not engine.is_parakeet(model_name):
         raise ValueError("precision experiments currently support Parakeet only")
-    checked_audio = _preflight_audio(manifest_dir, samples)
+    checked_audio = _preflight_audio(
+        manifest_dir, samples,
+        parakeet_tail_silence_ms=parakeet_tail_silence_ms)
 
     # Stage barriers are benchmark-only: they make CUDA timings factual while
     # keeping synchronization overhead out of interactive dictation.
@@ -735,12 +769,8 @@ def run_benchmark(manifest_path, model_name=None, runs=None, precision="auto",
         transcripts = []
         backend_timings = []
         reference = sample.get("reference", "")
-        probe_this_sample = (
-            parakeet_tail_silence_ms is not None
-            and sample.get("reference_reviewed", False)
-            and not sample.get("expected_silence", False)
-            and bool(_normalise_words(reference))
-        )
+        probe_this_sample = _tail_probe_applies(
+            sample, parakeet_tail_silence_ms)
         tail_audio = (np.concatenate((audio, np.zeros(
             parakeet_tail_silence_ms * engine.PARAKEET_SAMPLE_RATE // 1000,
             dtype=np.float32)))

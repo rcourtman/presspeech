@@ -339,7 +339,7 @@ CLIPBOARD_SERVICE_GUIDANCE = {
         "Spotlight on macOS 26",
         "macOS Universal Clipboard",
         "Published Windows 0.1.12",
-        "upcoming 0.1.13 marks every dictation item",
+        "marks every dictation clipboard item",
         "third-party clipboard managers",
     ),
     DOCS / "llms-full.txt": (
@@ -665,7 +665,7 @@ WINDOWS_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Do not include token values",
     ),
     DOCS / "getting-started.html": (
-        "Windows 0.1.12 — wait if you want to avoid possible telemetry",
+        "Windows 0.1.12 — wait if privacy risks are unclear",
         "usage telemetry",
         "already-configured or locally saved Hugging Face token",
         "Custom download routing can change where the model request",
@@ -780,7 +780,7 @@ DELIVERY_BOUNDARY_GUIDANCE = {
         "manual paste",
     ),
     DOCS / "index.html": ("cannot safely verify the destination", "manual paste"),
-    DOCS / "getting-started.html": ("cannot verify the same destination", "clipboard"),
+    DOCS / "getting-started.html": ("If Presspeech did not paste", "clipboard", "Delivery Recovery"),
     DOCS / "install.html": ("cannot verify that destination", "clipboard"),
     DOCS / "windows.html": ("cannot verify that destination", "clipboard"),
     DOCS / "faq.html": ("cannot verify that destination", "clipboard"),
@@ -788,6 +788,33 @@ DELIVERY_BOUNDARY_GUIDANCE = {
     DOCS / "llms-full.txt": ("verify the original destination", "clipboard"),
     ROOT / "marketing" / "SHARING.md": ("cannot be verified", "clipboard"),
 }
+
+# The published Windows build copies after a failed target check; the next
+# candidate intentionally does not replace a known-invalid target's previous
+# clipboard item. Generic "already copied" advice could paste unrelated text.
+WINDOWS_DELIVERY_RECOVERY_GUIDANCE = {
+    ROOT / "README.md": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "windows.html": ("Published 0.1.12", "Upcoming 0.1.13", "Delivery Recovery"),
+    DOCS / "faq.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "getting-started.html": ("published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "privacy.html": ("Published Windows 0.1.12", "Upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "llms.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "llms-full.txt": ("published Windows 0.1.12", "upcoming Windows 0.1.13", "Delivery Recovery"),
+    DOCS / "app-compatibility.html": (
+        "published Windows 0.1.12", "upcoming Windows 0.1.13",
+        "Delivery Recovery", "do <em>not</em> treat the current clipboard as the transcript",
+    ),
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "compatibility_report.yml": (
+        "Windows 0.1.13", "Delivery Recovery", "notice alone does not mean",
+    ),
+}
+WINDOWS_DELIVERY_UNSCOPED_CLAIMS = (
+    "windows leaves the transcript on the clipboard",
+    "if it cannot verify that destination, it keeps the result on the clipboard",
+    "if presspeech cannot verify the same destination, it copies the transcript",
+    "otherwise it leaves the transcript on the clipboard for manual paste",
+    "if delivery succeeded or presspeech showed its copied/manual-paste notice, paste",
+)
 
 # Keep the large macOS model transfer's consent behavior explicit by release:
 # the linked 0.3.8 app starts on launch, while 0.3.9 gates a clean install on
@@ -3078,6 +3105,14 @@ def check_getting_started_preflight_order(
         'href="https://github.com/rcourtman/presspeech/releases"',
         'href="install.html#model-download-privacy"',
         'href="windows.html#model-download-privacy"',
+        'href="#macos-launch-decision"',
+        'href="#windows-launch-decision"',
+        '<li id="macos-launch-decision">',
+        '<li id="windows-launch-decision">',
+        'role="region" aria-labelledby="launch-decision-heading"',
+        '<h2 id="launch-decision-heading">',
+        '<h3>macOS 0.3.8 — wait if a token may be inherited</h3>',
+        '<h3>Windows 0.1.12 — wait if privacy risks are unclear</h3>',
     )
     missing = [phrase for phrase in required if phrase not in preflight]
     if missing:
@@ -3085,6 +3120,15 @@ def check_getting_started_preflight_order(
             f"{display}: incomplete model-download preflight — missing "
             + ", ".join(repr(phrase) for phrase in missing)
         ]
+
+    for platform in ("macos", "windows"):
+        link = preflight.find(f'href="#{platform}-launch-decision"')
+        decision = preflight.find(f'<li id="{platform}-launch-decision">')
+        if link > decision:
+            return [
+                f"{display}: {platform} launch-decision shortcut must precede "
+                "its warning"
+            ]
 
     actions = contents.find('<div class="actions">')
     if actions < 0 or preflight_end < 0 or preflight_end > actions:
@@ -3344,6 +3388,32 @@ def check_delivery_boundary_guidance(
                 f"{display}: incomplete focus-safe delivery guidance — "
                 f"missing {', '.join(repr(phrase) for phrase in missing)}"
             )
+    return errors
+
+
+def check_windows_delivery_recovery_guidance(
+    surfaces: dict[Path, tuple[str, ...]] = WINDOWS_DELIVERY_RECOVERY_GUIDANCE,
+) -> list[str]:
+    """Keep clipboard recovery instructions scoped to their Windows release."""
+    errors: list[str] = []
+    for path, required in surfaces.items():
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        if not path.exists():
+            errors.append(f"{display}: missing Windows delivery recovery guidance")
+            continue
+        contents = " ".join(read_text(path).split()).casefold()
+        missing = [phrase for phrase in required if phrase.casefold() not in contents]
+        if missing:
+            errors.append(
+                f"{display}: incomplete release-scoped Windows delivery recovery — "
+                f"missing {', '.join(repr(phrase) for phrase in missing)}"
+            )
+        for claim in WINDOWS_DELIVERY_UNSCOPED_CLAIMS:
+            if claim in contents:
+                errors.append(
+                    f"{display}: unscoped clipboard-copy advice can paste the previous item"
+                )
+                break
     return errors
 
 
@@ -5213,16 +5283,19 @@ def run_self_test() -> None:
 
         getting_started = Path(tmp) / "getting-started.html"
         safe_getting_started = (
-            '<div id="model-download-preflight">'
+            '<div id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">'
+            '<h2 id="launch-decision-heading">Decide before opening a current build</h2>'
             '<p><strong>Check before first launch:</strong> in macOS 0.3.8 and Windows 0.1.12, '
             'a missing model starts downloading when you open Presspeech—not when you download the installer. '
             'The upcoming 0.3.9 and 0.1.13 builds ask before a clean-install download, but are not yet published. '
             'Dictation audio and transcripts are not included in model requests.</p>'
-            '<ul><li><strong>macOS 0.3.8:</strong> a model request may include a Hugging Face token inherited '
+            '<p><a href="#macos-launch-decision">macOS decision</a> '
+            '<a href="#windows-launch-decision">Windows decision</a></p>'
+            '<ul><li id="macos-launch-decision"><h3>macOS 0.3.8 — wait if a token may be inherited</h3> a model request may include a Hugging Face token inherited '
             'by Presspeech. If one may be available—or you are unsure—keep the app closed and wait until '
             'macOS 0.3.9 is published. '
             '<a href="install.html#model-download-privacy">full macOS warning</a></li>'
-            '<li><strong>Windows 0.1.12:</strong> a request may send Hugging Face usage telemetry or include '
+            '<li id="windows-launch-decision"><h3>Windows 0.1.12 — wait if privacy risks are unclear</h3> a request may send Hugging Face usage telemetry or include '
             'an already-configured or locally saved Hugging Face token. Custom download routing can change '
             'where the model request—and a token it carries—goes. A TLS-inspecting HTTPS proxy trusted by '
             'the client can read any 0.1.12 token it receives. If its trust is unclear, do not launch while '
@@ -5253,6 +5326,12 @@ def run_self_test() -> None:
         )
         if not check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: missing token-handling guidance was accepted")
+        getting_started.write_text(
+            safe_getting_started.replace('href="#windows-launch-decision"', 'href="#quick-path"'),
+            encoding="utf-8",
+        )
+        if not check_getting_started_preflight_order(getting_started):
+            raise SyncError("self-test: onboarding platform shortcut bypassed its warning")
         for warning in (
             "keep the app closed and wait until macOS 0.3.9 is published",
             "wait until Windows 0.1.13 is published",
@@ -5266,8 +5345,8 @@ def run_self_test() -> None:
                 raise SyncError(f"self-test: missing first-launch warning was accepted: {warning}")
         getting_started.write_text(
             safe_getting_started.replace(
-                '<div id="model-download-preflight">',
-                '<a href="#finish-setup">Skip to setup</a><div id="model-download-preflight">',
+                '<div id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">',
+                '<a href="#finish-setup">Skip to setup</a><div id="model-download-preflight" role="region" aria-labelledby="launch-decision-heading">',
             ),
             encoding="utf-8",
         )
@@ -5403,6 +5482,32 @@ def run_self_test() -> None:
         )
         if check_delivery_boundary_guidance(required_delivery_guidance):
             raise SyncError("self-test: complete delivery boundary was rejected")
+
+        recovery_page = Path(tmp) / "recovery.html"
+        scoped_recovery = {
+            recovery_page: (
+                "Published Windows 0.1.12",
+                "Upcoming Windows 0.1.13",
+                "Delivery Recovery",
+            ),
+        }
+        recovery_page.write_text(
+            "Published Windows 0.1.12 copies for manual paste. "
+            "Upcoming Windows 0.1.13 uses Delivery Recovery Copy or Discard.\n",
+            encoding="utf-8",
+        )
+        if check_windows_delivery_recovery_guidance(scoped_recovery):
+            raise SyncError("self-test: release-scoped Windows recovery was rejected")
+        recovery_page.write_text(
+            "If it cannot verify that destination, it keeps the result on the clipboard. "
+            + recovery_page.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        if not any(
+            "unscoped clipboard-copy advice" in error
+            for error in check_windows_delivery_recovery_guidance(scoped_recovery)
+        ):
+            raise SyncError("self-test: unsafe Windows clipboard advice was accepted")
 
         compatibility_guidance = Path(tmp) / "compatibility.md"
         required_compatibility_guidance = {
@@ -5804,6 +5909,7 @@ def main() -> int:
             errors.extend(check_getting_started_scratchpad_privacy_order())
             errors.extend(check_windows_agent_install_privacy_order())
             errors.extend(check_delivery_boundary_guidance())
+            errors.extend(check_windows_delivery_recovery_guidance())
             errors.extend(check_compatibility_evidence_guidance())
             errors.extend(check_compatibility_worksheet_contract())
             errors.extend(check_command_shell_guidance())
@@ -5864,6 +5970,7 @@ def main() -> int:
         errors.extend(check_getting_started_scratchpad_privacy_order())
         errors.extend(check_windows_agent_install_privacy_order())
         errors.extend(check_delivery_boundary_guidance())
+        errors.extend(check_windows_delivery_recovery_guidance())
         errors.extend(check_compatibility_evidence_guidance())
         errors.extend(check_compatibility_worksheet_contract())
         errors.extend(check_command_shell_guidance())

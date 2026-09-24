@@ -17,7 +17,10 @@
 **Private push-to-talk dictation for Mac and Windows.** Hold is the default;
 choose **Press to toggle** to start and stop with separate presses. Presspeech
 transcribes locally before pasting at the cursor. If it cannot safely identify
-the same destination, the transcript stays on the clipboard for manual paste.
+the original destination, it avoids automatic paste. macOS and published
+Windows 0.1.12 leave the transcript on the clipboard to paste manually;
+upcoming Windows 0.1.13 instead waits for an explicit Delivery Recovery Copy
+or Discard, without replacing the clipboard for an already-known invalid target.
 No account, subscription, or cloud transcription.
 
 **Start here:** [official website](https://rcourtman.github.io/presspeech/) ·

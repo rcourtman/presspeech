@@ -5722,14 +5722,22 @@ enum TextInsertionStrategy: String {
     }
 }
 
-/// The exact application window that owned the cursor when a recording began.
+/// The application window that owned the cursor when a recording began, plus
+/// the focused control when the destination exposes one through Accessibility.
 /// Accessibility permission is already a runtime requirement for synthetic
-/// paste events, so using the focused AX window does not broaden Presspeech's
-/// permission footprint. Keeping the opaque element (rather than a title or
-/// document URL) also avoids retaining private window metadata.
+/// paste events, so these identity-only AX queries do not broaden Presspeech's
+/// permission footprint. Never retain a field value, title, or document URL.
 struct DictationPasteTarget {
     let processIdentifier: pid_t
     let focusedWindow: AXUIElement
+    let focusedElement: AXUIElement?
+
+    init(processIdentifier: pid_t, focusedWindow: AXUIElement,
+         focusedElement: AXUIElement? = nil) {
+        self.processIdentifier = processIdentifier
+        self.focusedWindow = focusedWindow
+        self.focusedElement = focusedElement
+    }
 }
 
 enum DictationPasteTargetCaptureFailure: Error, Equatable {
@@ -5799,7 +5807,8 @@ func dictationCompletionNotice(processedText: String,
 @MainActor
 func captureDictationPasteTarget(
     frontmostProcessIdentifier: () -> pid_t?,
-    focusedWindowForProcess: (pid_t) -> Result<AXUIElement, DictationPasteTargetCaptureFailure>
+    focusedWindowForProcess: (pid_t) -> Result<AXUIElement, DictationPasteTargetCaptureFailure>,
+    focusedElementForProcess: (pid_t) -> AXUIElement? = { _ in nil }
 ) -> DictationPasteTargetCaptureResult {
     guard let processIdentifier = frontmostProcessIdentifier() else {
         return .unavailable(.frontmostApplicationUnavailable)
@@ -5814,15 +5823,21 @@ func captureDictationPasteTarget(
     case .failure(let failure):
         return .unavailable(failure)
     }
+    // Not every target (notably some Electron/Chromium views) publishes this
+    // optional attribute. Preserve the existing exact-window route when it is
+    // absent at recording start; if present, require the same control later.
+    let focusedElement = focusedElementForProcess(processIdentifier)
     guard frontmostProcessIdentifier() == processIdentifier else {
         return .unavailable(.frontmostApplicationChanged)
     }
     return .captured(DictationPasteTarget(processIdentifier: processIdentifier,
-                                          focusedWindow: focusedWindow))
+                                          focusedWindow: focusedWindow,
+                                          focusedElement: focusedElement))
 }
 
 @MainActor
-func currentDictationPasteTarget(reportFailure: Bool = false) -> DictationPasteTarget? {
+func currentDictationPasteTarget(reportFailure: Bool = false,
+                                includeFocusedElement: Bool = true) -> DictationPasteTarget? {
     let result = captureDictationPasteTarget(
         // Activation is tracked by the window server; it does not depend on
         // the app publishing the system-wide AX focused-application attribute.
@@ -5848,6 +5863,25 @@ func currentDictationPasteTarget(reportFailure: Bool = false) -> DictationPasteT
                 return .failure(.focusedWindowValueInvalid)
             }
             return .success(windowValue as! AXUIElement)
+        },
+        focusedElementForProcess: { processIdentifier in
+            // If the original app did not expose a focused control, the
+            // delivery decision is window-only. Avoid another bounded AX
+            // round-trip on every recheck in that compatibility path.
+            guard includeFocusedElement else { return nil }
+            let application = AXUIElementCreateApplication(processIdentifier)
+            _ = AXUIElementSetMessagingTimeout(application, PASTE_TARGET_AX_TIMEOUT_SECONDS)
+            var elementValue: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(
+                application,
+                kAXFocusedUIElementAttribute as CFString,
+                &elementValue
+            ) == .success,
+                  let elementValue,
+                  CFGetTypeID(elementValue) == AXUIElementGetTypeID() else {
+                return nil
+            }
+            return elementValue as! AXUIElement
         }
     )
     // captureDictationPasteTarget rechecks activation after the potentially
@@ -5867,11 +5901,24 @@ func currentDictationPasteTarget(reportFailure: Bool = false) -> DictationPasteT
 @MainActor
 func dictationPasteTargetMatches(_ expected: DictationPasteTarget,
                                  _ current: DictationPasteTarget?) -> Bool {
-    // This guards the window, not the focused field or browser tab within it.
-    // Keep that limitation explicit in user guidance and native QA.
+    // The window check is always required. A field identity captured at start
+    // must also survive; losing it later is not evidence that focus stayed put.
+    // No starting field identity means window-only protection, and a tab may
+    // reuse the same AX control. Keep those limits explicit in user guidance.
     guard let current,
-          expected.processIdentifier == current.processIdentifier else { return false }
-    return CFEqual(expected.focusedWindow, current.focusedWindow)
+          expected.processIdentifier == current.processIdentifier,
+          CFEqual(expected.focusedWindow, current.focusedWindow) else { return false }
+    guard let expectedElement = expected.focusedElement else { return true }
+    guard let currentElement = current.focusedElement else { return false }
+    return CFEqual(expectedElement, currentElement)
+}
+
+@MainActor
+private func dictationPasteTargetStillFocused(_ expected: DictationPasteTarget) -> Bool {
+    let current = currentDictationPasteTarget(
+        includeFocusedElement: expected.focusedElement != nil
+    )
+    return dictationPasteTargetMatches(expected, current)
 }
 
 func dictationDeliveryRoute(capturedTargetAvailable: Bool,
@@ -6816,8 +6863,7 @@ private enum ClipboardPasteInserter {
     static func insert(_ text: String,
                        preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
-        guard dictationPasteTargetMatches(expectedTarget,
-                                          currentDictationPasteTarget()) else {
+        guard dictationPasteTargetStillFocused(expectedTarget) else {
             return TextInserter.copyWithoutPasting(
                 text,
                 preserveClipboard: preserveClipboard
@@ -6844,8 +6890,7 @@ private enum ClipboardPasteInserter {
         // the last possible point before posting Command+V. A focus change
         // degrades to a protected, local manual paste instead of losing the
         // words.
-        let targetStillFocused = dictationPasteTargetMatches(expectedTarget,
-                                                             currentDictationPasteTarget())
+        let targetStillFocused = dictationPasteTargetStillFocused(expectedTarget)
         guard receipt.stillOwns(pb) else {
             // The target lookup can block. Do not post Command+V for a newer
             // clipboard owner or schedule an old snapshot against its count.
@@ -6893,8 +6938,7 @@ private enum ClipboardPasteInserter {
             steps,
             pasteKey: pasteKey,
             targetStillFocused: {
-                dictationPasteTargetMatches(expectedTarget,
-                                             currentDictationPasteTarget())
+                dictationPasteTargetStillFocused(expectedTarget)
             },
             clipboardStillOwned: { receipt.stillOwns(pb) }
         )
@@ -7056,8 +7100,7 @@ private enum DirectUnicodeInserter {
         return directUnicodeInsertionOutcome(
             chunks: chunks,
             targetStillFocused: {
-                dictationPasteTargetMatches(expectedTarget,
-                                             currentDictationPasteTarget())
+                dictationPasteTargetStillFocused(expectedTarget)
             },
             postChunk: { post($0, source: source) },
             copyWithoutPasting: {
@@ -16593,11 +16636,14 @@ private enum PresspeechSelfTest {
             // permissions, desktop focus changes or synthetic keys are needed.
             let firstWindow = AXUIElementCreateApplication(710)
             let otherWindow = AXUIElementCreateApplication(711)
+            let firstField = AXUIElementCreateApplication(712)
+            let otherField = AXUIElementCreateApplication(713)
             let captureResult = captureDictationPasteTarget(
                 frontmostProcessIdentifier: { 700 },
                 focusedWindowForProcess: { pid in
                     pid == 700 ? .success(firstWindow) : .failure(.focusedWindowValueUnavailable)
-                }
+                },
+                focusedElementForProcess: { pid in pid == 700 ? firstField : nil }
             )
             guard case .captured(let capture) = captureResult else {
                 throw SelfTestFailure.failed("paste target capture should succeed with an exact window")
@@ -16605,7 +16651,18 @@ private enum PresspeechSelfTest {
             try expect(capture.processIdentifier, equals: pid_t(700),
                        "frontmost process capture must not require system-wide AX focus")
             try expect(dictationPasteTargetMatches(capture, capture), equals: true,
-                       "the same process and exact window should permit delivery")
+                       "the same process, window, and field should permit delivery")
+            try expect(dictationPasteTargetMatches(capture, DictationPasteTarget(
+                processIdentifier: 700, focusedWindow: firstWindow,
+                focusedElement: firstField)), equals: true,
+                       "the captured focused control should permit delivery")
+            try expect(dictationPasteTargetMatches(capture, DictationPasteTarget(
+                processIdentifier: 700, focusedWindow: firstWindow,
+                focusedElement: otherField)), equals: false,
+                       "switching fields in the same window must prevent delivery when field identity exists")
+            try expect(dictationPasteTargetMatches(capture, DictationPasteTarget(
+                processIdentifier: 700, focusedWindow: firstWindow)), equals: false,
+                       "losing a previously captured focused control must prevent delivery")
             try expect(dictationPasteTargetMatches(capture, DictationPasteTarget(
                 processIdentifier: 700, focusedWindow: otherWindow)), equals: false,
                        "switching windows within the same app must prevent delivery")
@@ -16614,9 +16671,25 @@ private enum PresspeechSelfTest {
                        "an app switch must prevent delivery even with a reused identity token")
             try expect(dictationPasteTargetMatches(capture, nil), equals: false,
                        "losing exact-window evidence must prevent delivery")
+            let windowOnlyCapture = captureDictationPasteTarget(
+                frontmostProcessIdentifier: { 700 },
+                focusedWindowForProcess: { _ in .success(firstWindow) }
+            )
+            guard case .captured(let windowOnly) = windowOnlyCapture else {
+                throw SelfTestFailure.failed("targets without a published field should retain window identity")
+            }
+            try expect(dictationPasteTargetMatches(windowOnly, DictationPasteTarget(
+                processIdentifier: 700, focusedWindow: firstWindow,
+                focusedElement: otherField)), equals: true,
+                       "an unavailable starting field must preserve the established window-only route")
+            var queriedFieldAfterFailedWindow = false
             let unavailable = captureDictationPasteTarget(
                 frontmostProcessIdentifier: { 700 },
-                focusedWindowForProcess: { _ in .failure(.focusedWindowQueryFailed(-25212)) })
+                focusedWindowForProcess: { _ in .failure(.focusedWindowQueryFailed(-25212)) },
+                focusedElementForProcess: { _ in
+                    queriedFieldAfterFailedWindow = true
+                    return firstField
+                })
             guard case .unavailable(let unavailableFailure) = unavailable else {
                 throw SelfTestFailure.failed("process identity alone must never authorize automatic paste")
             }
@@ -16625,6 +16698,8 @@ private enum PresspeechSelfTest {
             try expect(unavailableFailure.logDescription,
                        equals: "focused-window query failed (AX error -25212)",
                        "AX failure logs should identify the error without target metadata")
+            try expect(queriedFieldAfterFailedWindow, equals: false,
+                       "a failed required-window query must not probe the optional focused control")
             var processReads = 0
             let switchedDuringLookup = captureDictationPasteTarget(
                 frontmostProcessIdentifier: {

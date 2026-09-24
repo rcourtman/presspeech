@@ -96,9 +96,13 @@ than evidence that Presspeech has the same defect.
 
 Build a small, private manifest of short speech clips cropped at the spoken
 endpoint, with listened-to references and `reference_reviewed: true`; include
-short commands and quiet speech. At 400 ms, keep original clips below 14.6 s
-so both variants use Presspeech's same 15 s Parakeet feature bucket. Run a
-paired probe on the same loaded Parakeet model:
+short commands and quiet speech. At 400 ms, keep original clips at or below
+14.6 s so both variants use Presspeech's same 15 s Parakeet feature bucket.
+The runner checks the **resampled 16 kHz sample count** before model loading
+and rejects reviewed speech whose clean and tailed variants would use different
+15/30/60 s buckets or cross the 60 s long-form windowing boundary. Silence
+controls and unreviewed clips are not paired and do not need this restriction.
+Run a paired probe on the same loaded Parakeet model:
 
 ```bat
 .venv\Scripts\python benchmark.py --manifest benchmarks\short-speech.json --model parakeet-tdt-0.6b-v3 --runs 5 --parakeet-tail-silence-ms 400 --output benchmarks\tail-400ms.json

@@ -135,6 +135,11 @@ in the full recorder dialog, keyboard-layout label refresh, a second physical
 keyboard layout, right-modifier hardware behavior, or microphone/model behavior.
 Those remain separate manual checks. Explicit user confirmation is not a Quartz
 clipboard-consumption acknowledgement.
+The fixture's focus-change check uses two separate windows. The pure hotkey
+self-test exercises same-window focused-control identity decisions with opaque
+tokens, but neither check proves that a particular external app publishes a
+stable control identity or that browser tabs use different identities. Use the
+disposable-field check in the manual QA checklist for that native behavior.
 The fixture exercises the recorder's real decision function through a native
 local monitor, not its modal confirmation UI, persistence, or the full app's
 Command-comma Settings-menu precedence; the existing pure hotkey suite covers

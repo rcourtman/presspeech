@@ -55,7 +55,7 @@
           <div class="grid two">
             <article class="card">
               <h3>What is Presspeech?</h3>
-              <p>Free MIT-licensed push-to-talk dictation with separate macOS and Windows apps. Hold a hotkey, speak, and release. Presspeech normally pastes into the window where the recording began; if it cannot verify that destination, it keeps the transcript on the clipboard for manual paste.</p>
+              <p>Free MIT-licensed push-to-talk dictation with separate macOS and Windows apps. Hold a hotkey, speak, and release. Presspeech normally pastes into the window where the recording began; if it cannot verify that destination, it avoids automatic paste. macOS and published Windows 0.1.12 use the clipboard for manual paste; upcoming Windows 0.1.13 waits for an explicit Delivery Recovery Copy or Discard when delivery is uncertain.</p>
             </article>
             <article class="card">
               <h3>Do upgrades preserve settings and permissions?</h3>
@@ -121,8 +121,8 @@
               <p>Treat Terminal, PowerShell, Command Prompt, and remote consoles as execution surfaces. The default paste suffix is a space; selecting <strong>Append newline</strong> on macOS or <strong>newline</strong> on Windows can submit a transcript before you inspect it. On macOS, spoken formatting can also insert line breaks. Use Try Dictation or a plain-text editor, review the exact command, then paste and run it deliberately. Terminal paste warnings vary by operating system, terminal, and settings; they are not a Presspeech safety boundary.</p>
             </article>
             <article class="card">
-              <h3>Why was the transcript copied instead of pasted?</h3>
-              <p>Presspeech fails closed when it cannot verify the same destination it captured at the start. If macOS says <strong>Copied — press ⌘V to paste</strong> (or <strong>Can’t verify window — use ⌘V</strong> in builds that distinguish a missing starting window), or Windows says <strong>Transcript copied, not pasted</strong>, return to the intended field and paste manually instead of dictating again. Causes include a focus change, unavailable focused-window information, and—on Windows—a target running as administrator. The <a href="troubleshooting.html#macos-paste">Mac</a> and <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps explain the platform details; the <a href="app-compatibility.html">target-app check</a> records repeatable results without publishing your text.</p>
+              <h3>Why was the transcript not pasted?</h3>
+              <p>Presspeech avoids automatic paste when it cannot verify the same destination it captured at the start. If macOS says <strong>Copied — press ⌘V to paste</strong> (or <strong>Can’t verify window — use ⌘V</strong> in builds that distinguish a missing starting window), or published Windows 0.1.12 says <strong>Transcript copied, not pasted</strong>, return to the intended field and paste the clipboard copy manually instead of dictating again. Upcoming Windows 0.1.13 may leave the previous clipboard item unchanged: check the intended field, then use <strong>Delivery Recovery → Copy for Manual Paste</strong> or Discard; do not blindly paste the previous clipboard item. Causes include a focus change, unavailable focused-window information, and—on Windows—a target running as administrator. The <a href="troubleshooting.html#macos-paste">Mac</a> and <a href="troubleshooting.html#windows-paste">Windows</a> recovery steps explain the platform details; the <a href="app-compatibility.html">target-app check</a> records repeatable results without publishing your text.</p>
             </article>
             <article class="card">
               <h3>Can a clipboard service retain transcripts?</h3>

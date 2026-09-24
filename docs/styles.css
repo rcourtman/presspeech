@@ -703,9 +703,16 @@ section p:last-child,
 
 #model-download-preflight ul {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   padding: 0;
   list-style: none;
+}
+
+#model-download-preflight > h2 {
+  margin-bottom: 12px;
+  font-size: 1.25rem;
+  line-height: 1.25;
 }
 
 #model-download-preflight li {
@@ -715,9 +722,8 @@ section p:last-child,
   background: var(--panel);
 }
 
-#model-download-preflight li > strong:first-child {
-  display: block;
-  margin-bottom: 4px;
+#model-download-preflight li > h3 {
+  margin-bottom: 6px;
 }
 
 #model-download-preflight .decision-summary {
@@ -1168,6 +1174,10 @@ td strong {
   .facts,
   .checkpoints,
   .worksheet-attempts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #model-download-preflight ul {
     grid-template-columns: minmax(0, 1fr);
   }
 

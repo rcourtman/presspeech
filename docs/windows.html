@@ -9,7 +9,7 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#0d7f5f">
     <meta property="og:title" content="Presspeech for Windows - Private Local Dictation">
-    <meta property="og:description" content="Choose hold-to-talk or press-to-toggle for local dictation. Presspeech transcribes locally, then pastes into the original window or keeps a clipboard copy for manual paste.">
+    <meta property="og:description" content="Choose hold-to-talk or press-to-toggle for local dictation. Presspeech transcribes locally, then pastes into the original window or offers version-specific recovery for manual paste.">
     <meta property="og:url" content="https://rcourtman.github.io/presspeech/windows.html">
     <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">
     <meta property="og:image:type" content="image/png">
@@ -37,7 +37,7 @@
             "@type": "SoftwareApplication",
             "@id": "https://rcourtman.github.io/presspeech/windows.html#software",
             "name": "Presspeech for Windows",
-            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech pastes only when it can verify the original destination; otherwise it leaves the transcript on the clipboard for manual paste. Speech-model downloads use the network; there is no account or cloud transcription, and bundled-library network behavior is documented by version.",
+            "description": "Free MIT-licensed local push-to-talk dictation in everyday Windows text fields. Speech recognition runs on the PC. Presspeech pastes only when it can verify the original destination; otherwise it offers recovery for manual paste from the clipboard. Speech-model downloads use the network; there is no account or cloud transcription, and bundled-library network behavior is documented by version.",
             "operatingSystem": "Windows 11 x64 recommended; Windows 10 x64 only while the specific edition remains supported or is enrolled in applicable Extended Security Updates",
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "Speech recognition, dictation, transcription",
@@ -85,7 +85,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Windows prerelease</span>
         <h1>Private dictation on your Windows PC</h1>
-        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it keeps the result on the clipboard for manual paste. There is no account or cloud transcription.</p>
+        <p>Hold Right Alt, speak, and release. Presspeech transcribes on your PC and normally pastes into the window where you started; if it cannot verify that destination, it avoids automatic paste. Published 0.1.12 copies the result to the clipboard for manual paste. Upcoming 0.1.13 instead opens Delivery Recovery for an explicit Copy or Discard when delivery is uncertain; a known-invalid target leaves the previous clipboard item alone. There is no account or cloud transcription.</p>
         <div class="note warn" id="model-download-privacy">
           <p class="decision-lead"><strong>Privacy decision for published Windows 0.1.12:</strong> model downloads may send Hugging Face usage telemetry or an available token. If you prefer to avoid this possible usage telemetry, are concerned that a Hugging Face token or custom download route may be configured on this PC, or are unsure, wait for Windows 0.1.13 before installing or launching 0.1.12. If a TLS-inspecting HTTPS proxy is in use and its trust is unclear, don't launch while it is in use.</p>
           <p><strong>Why:</strong> during model downloads, its Hugging Face libraries may send default usage telemetry and include a token already available to this Windows account. Custom download routing can change where the model request—and a token it carries—goes. A TLS-inspecting HTTPS proxy trusted by the client can read any 0.1.12 token it receives. Upcoming 0.1.13 removes account-token authentication but still honors proxy and CA settings. The public models need no account token.</p>

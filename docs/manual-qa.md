@@ -68,6 +68,12 @@ collaborator where noted:
   presenting a Mac-only project. Confirm the Pages home page, Get started,
   macOS, Windows, Help, and Privacy routes are reachable from the primary
   navigation at desktop width, 360 CSS pixels, and 200% zoom.
+- On Get started at desktop width, 360 CSS pixels, and 200% zoom, use each
+  platform shortcut in the first-launch warning. It must reach that platform's
+  visible decision and full-warning link without skipping to install or setup;
+  the two decisions must sit side by side when space permits and stack without
+  horizontal overflow on mobile. Confirm the warning and both platform decisions
+  are available through heading navigation in a screen reader.
 - With keyboard focus on a primary-navigation link, narrow the viewport below
   720 CSS pixels. The links should collapse and focus should move to the visible
   Menu button. Open the menu and focus a link; Escape should collapse it and
@@ -126,6 +132,7 @@ For each configuration, also record this release-gate matrix:
 | Five consecutive dictations into a current Electron application text field | |
 | Focus-change clipboard recovery and elevated-target recovery | |
 | Held-modifier shortcut guard and manual recovery | |
+| Automatic paste and manual recovery on US and a layout that moves V (for example US Dvorak) | |
 | Locked/replaced clipboard recovery with notifications disabled and tray icon in overflow | |
 | Explicit recovery Copy, Discard, Leave Waiting, and Exit behavior | |
 | Clipboard History exclusion (and Cloud Clipboard exclusion when a disposable paired device is available) | |
@@ -572,6 +579,7 @@ Record this release-gate matrix against the exact installed candidate:
 | Custom hotkey in hold and toggle modes on two keyboard layouts | |
 | Hotkey conflict rejection, persistence, Full Keyboard Access, and VoiceOver checks for issue #34 | |
 | Focus-change recovery between native-app windows and between applications | |
+| Same-window focus change between two controls with distinct AX identities: clipboard-only recovery | |
 | Permission loss while recording: captured speech completes to clipboard-only recovery | |
 | Screen Sharing shared-clipboard path: consecutive remote pastes stay fresh; a focus change recovers safely | |
 | Sleep/resume, microphone route change, and first dictation afterward | |
@@ -607,14 +615,18 @@ window. Record the browser version and generic field type, not page or tab
 names. This does not qualify a desktop Electron app or same-window tab moves.
 
 Separately observe a same-window focus move using two harmless, non-submitting
-fields in one native or browser window. Start in the first field, move to the
-second before transcription finishes, and record whether text reaches either
-field and whether a recovery notice appears. If available, repeat across two
-tabs of one browser window. This is a diagnostic observation, not a substitute
-for the required two-window focus gate: the current macOS target identity is
-the focused window, not the field or tab inside it. Do not mark exact-field or
-same-window tab safety as qualified from a passing two-window result. Record
-only aggregate outcomes and generic field types, never text or tab names.
+fields in one native or browser window. Confirm with Accessibility Inspector,
+without reading or retaining field contents, whether the two fields expose
+distinct focused AX controls. Start in the first field, move to the second
+before transcription finishes, and record whether text reaches either field
+and whether a recovery notice appears. If the first field exposed a focused
+control and the second has a distinct identity, require no automatic insertion
+and a complete clipboard-only recovery. If the app exposes no focused control
+at recording start or reuses one identity, record the window-only limitation
+instead of claiming field safety. If available, repeat across two tabs of one
+browser window; tabs can reuse a control. This diagnostic is not a substitute
+for the required two-window focus gate. Record only aggregate outcomes and
+generic field types, never text or tab names.
 
 For the Screen Sharing row, use a disposable remote Mac with a blank,
 non-executing text field, not a shell, message composer, or real document.
@@ -1298,11 +1310,20 @@ clipboard.
   reached Windows. Every case must retain recovery and run applicable release
   attempts; review the field before retrying. A fully accepted shortcut is not
   evidence of target consumption.
-- Repeat ordinary local, elevated-window, RDP and Moonlight dictation checks;
-  repeat local delivery with a non-US active keyboard layout, and use non-ASCII
-  text and emoji to qualify the Unicode clipboard path. Verify the non-delayed
-  clipboard data survives its private owner window being destroyed, and that
-  the exclusion marker does not regress either remote delivery route.
+- Repeat ordinary local, elevated-window, RDP and Moonlight dictation checks.
+  For the keyboard-layout row, compare US with a layout that moves V to a
+  different physical key (for example US Dvorak). In a blank local editor,
+  verify that Presspeech inserts once while focus stays steady under each
+  layout; then force a safe focus-change recovery, use Delivery Recovery's
+  explicit Copy action, and verify that Control plus the key producing V in
+  the active layout (not the US V position) pastes the retained transcript
+  once under each layout. Check the original field before copying, and count
+  automatic failure as a failure even if recovery works. A generic non-US
+  layout that leaves V in place does not complete this check. Use non-ASCII
+  text and emoji separately to qualify the Unicode clipboard path. Verify the
+  non-delayed clipboard data
+  survives its private owner window being destroyed, and that the exclusion
+  marker does not regress either remote delivery route.
 - In a native test window containing two edit controls with distinct Win32
   focus HWNDs (verify both handles with a Windows inspection tool), start
   dictation in the first and move keyboard focus to the second before delivery.

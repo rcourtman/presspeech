@@ -393,6 +393,58 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(summary["nonempty_to_empty_trial_count"], 1)
         self.assertEqual(summary["trial_count"], 1)
 
+    def test_tail_probe_requires_one_unchanged_feature_bucket(self):
+        rate = benchmark.engine.PARAKEET_SAMPLE_RATE
+        # Exact boundaries are valid; one additional effective sample would
+        # make the tailed member use a different shape or long-form path.
+        for bucket in benchmark.engine.PARAKEET_BUCKET_SECONDS:
+            with self.subTest(bucket=bucket):
+                clean_count = bucket * rate - 400 * rate // 1000
+                self.assertIsNone(
+                    benchmark._validate_tail_probe_bucket(clean_count, 400))
+                error = ("Parakeet window" if bucket == 60
+                         else "same Parakeet feature bucket")
+                with self.assertRaisesRegex(ValueError, error):
+                    benchmark._validate_tail_probe_bucket(clean_count + 1, 400)
+
+    def test_tail_probe_rejects_cross_bucket_audio_before_model_loading(self):
+        sample = {"id": "speech", "audio": "speech.wav",
+                  "reference": "spoken words", "reference_reviewed": True}
+        # The source duration sits on the nominal boundary, but the effective
+        # ASR array has one extra sample. Validate the samples, not metadata.
+        rate = benchmark.engine.PARAKEET_SAMPLE_RATE
+        audio = np.zeros(15 * rate - 400 * rate // 1000 + 1,
+                         dtype=np.float32)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "manifest.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"model": "parakeet-tdt-0.6b-v3",
+                           "samples": [sample]}, handle)
+            with mock.patch.object(
+                    benchmark, "load_audio",
+                    return_value=(audio, 14.6, 48000, "0" * 64)), \
+                    mock.patch.object(
+                        benchmark.engine, "Transcriber") as constructor:
+                with self.assertRaisesRegex(ValueError, "feature bucket"):
+                    benchmark.run_benchmark(
+                        path, parakeet_tail_silence_ms=400)
+                constructor.assert_not_called()
+
+    def test_tail_probe_bucket_check_skips_unscored_controls(self):
+        audio = np.zeros(16 * 16000, dtype=np.float32)
+        samples = [
+            {"id": "unreviewed", "audio": "unreviewed.wav",
+             "reference": "spoken words"},
+            {"id": "silence", "audio": "silence.wav",
+             "expected_silence": True, "reference_reviewed": True},
+        ]
+        with mock.patch.object(
+                benchmark, "load_audio",
+                return_value=(audio, 16.0, 16000, "0" * 64)):
+            checked = benchmark._preflight_audio(
+                ".", samples, parakeet_tail_silence_ms=400)
+        self.assertEqual(len(checked), 2)
+
     def test_tail_probe_rejects_invalid_settings_before_model_loading(self):
         sample = {"id": "speech", "audio": "ignored.wav",
                   "reference": "spoken words", "reference_reviewed": True}

@@ -121,7 +121,10 @@ body:
         counts and the fixed classification only; do not quote any transcript
         or clipboard content. A completed focus-change attempt with no insertion
         but missing notice or incomplete recovery is a failed recovery, not an
-        unrun attempt. After an incorrect or unsafe steady-focus result, stop,
+        unrun attempt. On Windows 0.1.13, count a safe focus-change Copy only
+        after explicitly using Delivery Recovery and confirming the scratch
+        paste; its notice alone does not mean the clipboard contains the
+        transcript. After an incorrect or unsafe steady-focus result, stop,
         mark every unrun steady-focus and focus-change slot Not completed, and
         explain why under Relevant conditions. Do not repeat a safety failure
         just to fill the worksheet. In an older six-count draft,
