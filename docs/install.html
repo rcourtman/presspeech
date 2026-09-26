@@ -46,7 +46,7 @@
         <span class="section-eyebrow">Install</span>
         <h1>Install Presspeech on macOS</h1>
         <p>Use the direct notarised download for the shortest path, or Homebrew if you want command-line install and updates. The app then guides model loading, macOS privacy grants, and hotkey readiness from Setup Checklist.</p>
-        <p class="quiet" data-release-status>Current published macOS release: 0.3.8. Install metadata updated <time datetime="2026-09-24">24 September 2026</time>.</p>
+        <p class="quiet" data-release-status>Current published macOS release: 0.3.9. Install metadata updated <time datetime="2026-09-26">26 September 2026</time>.</p>
         <div class="note warn" id="model-download-privacy">
           <p class="decision-lead"><strong>Before installing or launching macOS 0.3.8:</strong> decide whether to open it. If a token may be present in the environment that launches Presspeech—or you are unsure—leave 0.3.8 unopened and wait until macOS 0.3.9 is published. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. If you rely on an inherited proxy whose URL may be malformed, leave 0.3.8 unopened.</p>
           <p><strong>Why:</strong> its model-download requests may include a Hugging Face token inherited by Presspeech. The public model needs no account token. FluidAudio also honors an inherited lowercase <code>https_proxy</code> setting. A TLS-inspecting HTTPS proxy trusted by macOS can read any 0.3.8 token it receives; a tunnelling proxy cannot read the HTTPS request. From 0.3.9, Presspeech removes account-token authentication but still honors proxy settings.</p>
@@ -57,7 +57,7 @@
         </div>
         <div class="note"><p><strong>Using Windows?</strong> The <a href="windows.html">Windows install guide</a> has the current prerelease installer, system and model sizes, SHA-256 verification steps, and first-run instructions.</p></div>
         <div class="actions">
-          <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/v0.3.8/Presspeech.zip">Download macOS 0.3.8 (.zip)</a>
+          <a class="button" href="https://github.com/rcourtman/presspeech/releases/download/v0.3.9/Presspeech.zip">Download macOS 0.3.9 (.zip)</a>
           <a class="button secondary" href="getting-started.html">First dictation guide</a>
           <a class="button secondary" href="#assistant-install">Install with an assistant</a>
           <a class="button secondary" href="https://github.com/rcourtman/presspeech/releases/latest">View latest release</a>
@@ -95,19 +95,19 @@
           <ol class="steps">
             <li>
               <strong>Download the app</strong>
-              <p><a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.8/Presspeech.zip">Download Presspeech 0.3.8 (.zip)</a> from the current GitHub release.</p>
+              <p><a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.9/Presspeech.zip">Download Presspeech 0.3.9 (.zip)</a> from the current GitHub release.</p>
             </li>
             <li>
               <strong>Optionally verify the archive</strong>
               <p>In Downloads, verify the current archive against its published SHA-256:</p>
               <pre><code>cd ~/Downloads
-echo '7edc7987d2bf6a47db10381f5b39bb740ae331c2a2a5b9780b1e57898baf291f  Presspeech.zip' | shasum -a 256 -c -</code></pre>
+echo '4b20dc57f0eff34457fda67d928b00e2af142c2e1c3035da9ea1a98f70640442  Presspeech.zip' | shasum -a 256 -c -</code></pre>
               <p>Continue only if it reports <code>Presspeech.zip: OK</code>. A checksum detects a damaged or different download; by itself, it does not establish who built or published the file.</p>
               <details>
                 <summary>Verify the release attestation (optional)</summary>
                 <p>For an additional check, install <a href="https://cli.github.com/">GitHub CLI</a> and verify both the immutable release and the exact archive you downloaded. Replace the tag below if you downloaded a different version:</p>
-                <pre><code>gh release verify v0.3.8 --repo rcourtman/presspeech &amp;&amp;
-gh release verify-asset v0.3.8 ~/Downloads/Presspeech.zip --repo rcourtman/presspeech &amp;&amp;
+                <pre><code>gh release verify v0.3.9 --repo rcourtman/presspeech &amp;&amp;
+gh release verify-asset v0.3.9 ~/Downloads/Presspeech.zip --repo rcourtman/presspeech &amp;&amp;
 echo 'Release and archive attestations verified'</code></pre>
                 <p>The success line appears only if both commands succeed. If either fails, stop: do not treat the archive as attested or launch it until you resolve the failure. This checks the release’s GitHub attestation and that the archive matches its attested asset; it does not prove the software is vulnerability-free or benign.</p>
               </details>
@@ -213,7 +213,7 @@ echo 'Release and archive attestations verified'</code></pre>
             </li>
             <li>
               <strong>Choose an install path</strong>
-              <p>Download <a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.8/Presspeech.zip">Presspeech.zip</a> from the version-pinned release above, or run <code>brew install --cask rcourtman/presspeech/presspeech</code>.</p>
+              <p>Download <a href="https://github.com/rcourtman/presspeech/releases/download/v0.3.9/Presspeech.zip">Presspeech.zip</a> from the version-pinned release above, or run <code>brew install --cask rcourtman/presspeech/presspeech</code>.</p>
             </li>
             <li>
               <strong>Decide whether to launch 0.3.8</strong>

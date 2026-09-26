@@ -33,7 +33,7 @@ subscription, no cloud transcription.
   <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence quickly lands at the cursor." width="900">
 </p>
 
-> **~90–150 ms warm ASR inference** · **8.4 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
+> **~90–150 ms warm ASR inference** · **8.5 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
 
 - **Fast and small.** A native Swift menu-bar app running NVIDIA's multilingual
   [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) on the
