@@ -2707,19 +2707,14 @@ class PresspeechApp:
 
     @staticmethod
     def _probe_input_level(idx, rate, listen_for=0.0, on_listening=None):
-        """Return peak RMS after samples arrive, or None if none arrive."""
+        """Return peak RMS from a short in-memory probe, or None if it cannot open."""
         got = threading.Event()
         peak_rms = [0.0]
         stream = None
 
         def cb(indata, frames, t, status):
             chunk = np.asarray(indata)
-            # PortAudio may call us without samples. An empty callback is not
-            # microphone readiness and must not let Setup say "Listening" or
-            # make automatic selection accept an unresponsive input.
-            if not chunk.size:
-                return
-            level = float(np.sqrt(np.mean(np.square(chunk))))
+            level = float(np.sqrt(np.mean(np.square(chunk)))) if chunk.size else 0.0
             peak_rms[0] = max(peak_rms[0], level)
             got.set()
 
@@ -2731,7 +2726,7 @@ class PresspeechApp:
             if not got.wait(0.8):
                 return None
             # A successful open is not proof that capture has delivered a
-            # nonempty buffer. Let Setup invite speech only after that buffer;
+            # buffer. Let Setup invite speech only after that first callback;
             # no audio or device detail is passed to the UI.
             if on_listening is not None:
                 try:

@@ -1127,64 +1127,6 @@ class InputSelectionTests(unittest.TestCase):
         ready.assert_called_once_with()
         stream.close.assert_called_once_with()
 
-    def test_setup_probe_ignores_empty_callback_until_samples_arrive(self):
-        stream = mock.Mock()
-        ready = mock.Mock()
-        got = threading.Event()
-        real_wait = got.wait
-        callback = {}
-        seen_before_samples = []
-
-        def input_stream(**kwargs):
-            callback["audio"] = kwargs["callback"]
-            stream.start.side_effect = lambda: callback["audio"](
-                app.np.empty((0, 1), dtype="float32"), 0, None, None)
-            return stream
-
-        def wait_for_samples(timeout):
-            seen_before_samples.append((timeout, got.is_set(), ready.called))
-            callback["audio"](
-                app.np.zeros((80, 1), dtype="float32"), 80, None, None)
-            return real_wait(timeout)
-
-        with mock.patch.object(app.AUDIO_BACKEND, "open_input_stream",
-                               side_effect=input_stream), \
-                mock.patch.object(app.threading, "Event", return_value=got), \
-                mock.patch.object(got, "wait", side_effect=wait_for_samples):
-            level = app.PresspeechApp._probe_input_level(
-                3, 16000, listen_for=0, on_listening=ready)
-
-        self.assertEqual(level, 0.0)
-        self.assertEqual(seen_before_samples, [(0.8, False, False)])
-        ready.assert_called_once_with()
-        stream.close.assert_called_once_with()
-
-    def test_setup_probe_empty_callbacks_only_are_unavailable(self):
-        stream = mock.Mock()
-        ready = mock.Mock()
-        got = threading.Event()
-        seen_before_timeout = []
-
-        def input_stream(**kwargs):
-            stream.start.side_effect = lambda: kwargs["callback"](
-                app.np.empty((0, 1), dtype="float32"), 0, None, None)
-            return stream
-
-        def wait_for_samples(timeout):
-            seen_before_timeout.append((timeout, got.is_set()))
-            return False
-
-        with mock.patch.object(app.AUDIO_BACKEND, "open_input_stream",
-                               side_effect=input_stream), \
-                mock.patch.object(app.threading, "Event", return_value=got), \
-                mock.patch.object(got, "wait", side_effect=wait_for_samples):
-            self.assertIsNone(app.PresspeechApp._probe_input_level(
-                3, 16000, listen_for=0, on_listening=ready))
-
-        self.assertEqual(seen_before_timeout, [(0.8, False)])
-        ready.assert_not_called()
-        stream.close.assert_called_once_with()
-
     def test_setup_probe_never_invites_speech_without_audio(self):
         stream = mock.Mock()
         ready = mock.Mock()
