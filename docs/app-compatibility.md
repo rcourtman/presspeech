@@ -3,15 +3,19 @@
 The public, navigable version of this protocol is at
 <https://rcourtman.github.io/presspeech/app-compatibility.html>.
 
-**Published-build privacy check (24 September 2026):** The current downloads are
-macOS 0.3.8 and Windows 0.1.12. Both start a missing-model download on launch.
-The macOS request may include an inherited Hugging Face token; the Windows
-request may send Hugging Face usage telemetry or a locally available token,
-with additional routing and proxy risks. Read the [macOS model-download
-warning](../README.md#install-on-macos) or [Windows model-download
-warning](../README.md#install-on-windows) before launching or triggering a
-model download. If you are unsure about those version-specific risks, wait for
-0.3.9 or 0.1.13 to be published rather than launching solely for this check.
+**Published-build privacy check (26 September 2026):** Current downloads are
+macOS 0.3.9 and Windows 0.1.12. A clean macOS 0.3.9 install asks before a
+missing-model download, but an existing install may download on launch. It
+removes inherited Hugging Face account tokens; valid proxy settings still
+apply. Older macOS 0.3.8 may include an inherited token or log a malformed
+proxy URL, including embedded credentials; upgrade before another model request.
+Windows 0.1.12 starts a missing-model download on launch and may send
+Hugging Face usage telemetry or a locally available token, with additional
+routing and proxy risks. Read the [macOS model-download
+warning](install.html#model-download-privacy) or [Windows model-download
+warning](windows.html#model-download-privacy) before launching or triggering
+a model download. If the Windows risks are unclear, wait for 0.1.13 rather
+than launching solely for this check.
 If your model is already ready, do not reset its cache or switch models for
 this protocol.
 
