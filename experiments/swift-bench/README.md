@@ -806,13 +806,38 @@ the offset and digests in `manifest.tsv`, and verifies byte-identical speech
 and references across each group. The regression runner validates the
 generated corpus again before freezing inputs; its report contains the exact
 benchmark-input digest. Compare each source's rows side by side: exact word
-errors/WER, consecutive deletions, first-/final-word retention, and p50 latency.
+errors/WER, consecutive deletions, and first-/final-word retention. Inspect
+p50 latency only as a workload diagnostic, not a like-for-like speed result.
+After the run, summarize the paired quality signals without reading or
+printing transcripts:
+
+```sh
+python3 ./analyze-window-shift-report.py \
+  --fixture-dir public-audio/librispeech-dev-clean-window-shift \
+  --report public-results/window-shift/20260926T120000Z-v3.md
+```
+
+Replace the example report timestamp with the one printed by the runner.
+
+The analyzer accepts only a public, production-pin `v3` window-position
+report. It validates the generated fixture inventory, matches the report's
+frozen input **and execution-order** receipts to the current audio/reference
+bytes, and compares every shifted clip against its unshifted source. It flags
+increased worst-trial word errors, newly failed first/final-word retention,
+or a longer consecutive deletion run even if aggregate WER stays flat. Output
+uses numbered positions and offsets, not paths or transcript text. A failed
+receipt means the results cannot be paired with the supplied fixtures; do not
+manually force a match. Run
+`python3 ./test-analyze-window-shift-report.py` for model-free checks.
+
 Do not rely only on the all-variants average or treat repeated speech as
 independent evidence. A changed transcript is worth inspecting with
 `--show-transcripts`; it is **not** proof of a particular window/merge cause,
 because added silence may also affect preprocessing. The longer shifted clips
 also have more samples to process, so their p50s are not like-for-like speed
-comparisons. The helper does not run as part of the release gate, does not set
+comparisons; the analyzer deliberately does not compare latency. Equal word
+errors and boundary flags cannot prove the words are unchanged. The helper
+does not run as part of the release gate, does not set
 a pass threshold, and the model comparison runner refuses to use this corpus
 for `--require-candidate-pass`.
 Repeat on the German FLEURS long-form corpus with `--language de` when
