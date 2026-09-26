@@ -61,8 +61,8 @@ before relying on that change.
 damaged model:** Another download may include a Hugging Face token inherited by
 Presspeech. The public model needs no account token. If one may be present in
 the environment that launches Presspeech—or you are unsure—do not start another
-download; when you can choose the timing, wait until macOS 0.3.9 is published
-and installed. Leave a working model cache in place. Read the
+download; when you can choose the timing, install macOS 0.3.9 before another
+download. Leave a working model cache in place. Read the
 [guidance for existing 0.3.8 users](https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use)
 before resetting anything.
 

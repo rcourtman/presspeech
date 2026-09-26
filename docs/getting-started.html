@@ -54,7 +54,7 @@
           <ul role="list">
             <li id="macos-launch-decision">
               <h3>macOS 0.3.8 — wait if a token may be inherited</h3>
-              <p><strong>Wait for published 0.3.9</strong> if a Hugging Face token may be inherited by Presspeech, or you are unsure. Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear.</p>
+              <p><strong>Choose macOS 0.3.9 after reviewing its launch decision</strong> if a Hugging Face token may be inherited by Presspeech, or you are unsure. Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear.</p>
               <p><strong>Download on launch:</strong> a missing model is about 500–600 MB. A model request can include the inherited token; the bundled client honors lowercase <code>https_proxy</code>, and a TLS-inspecting proxy trusted by macOS can read that token.</p>
               <p><strong>Proxy URL risk:</strong> 0.3.8 can log a malformed inherited <code>https_proxy</code> or <code>http_proxy</code> URL verbatim, including credentials in that URL, then ignore the proxy. If you depend on one and are unsure its URL is valid, leave 0.3.8 unopened. From 0.3.9, Presspeech refuses malformed proxy settings before model loading; it still honors valid proxies.</p>
               <p>Read the <a href="install.html#model-download-privacy">full macOS warning</a> before deciding to launch.</p>
@@ -68,7 +68,7 @@
               <p>Read the <a href="windows.html#model-download-privacy">full Windows warning</a> before deciding to launch. The upcoming build disables bundled-library telemetry and account-token authentication but still honors proxy and CA settings.</p>
             </li>
           </ul>
-          <p>The public models need no account token, and model requests do not include dictation audio or transcripts. Do not inspect or share token values. The later builds are <strong>not published yet</strong>; check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a> before following a newer guide. Source can be ahead of downloads. If you choose to launch now, read your platform's full warning and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
+          <p>The public models need no account token, and model requests do not include dictation audio or transcripts. Do not inspect or share token values. Windows 0.1.13 is <strong>not published yet</strong>; check <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a> before following a newer guide. Source can be ahead of downloads. If you choose to launch now, read your platform's full warning and the <a href="privacy.html#network-calls">version-specific network inventory</a>.</p>
         </div>
         <div class="actions">
           <a class="button" href="install.html">Install on macOS</a>

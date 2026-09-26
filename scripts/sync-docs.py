@@ -270,7 +270,7 @@ ANCHORED_INSTALL_PREFLIGHTS = (
             "missing-model download starts on launch",
             "Hugging Face token inherited by Presspeech",
             "leave the downloaded app unopened",
-            "wait until macOS 0.3.9 is published",
+            "choose macOS 0.3.9 after reviewing its launch decision",
             "full release-specific warning",
         ),
     },
@@ -467,7 +467,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Before opening macOS 0.3.8",
         "Hugging Face token inherited by Presspeech",
         "public model needs no token",
-        "wait until 0.3.9 is published",
+        "choose macOS 0.3.9 after reviewing its launch decision",
         "dictation audio and transcripts are not sent",
         "full macOS warning",
         "Already used macOS 0.3.8?",
@@ -479,7 +479,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "macOS 0.3.8 — wait if a token may be inherited",
         "A model request can include the inherited token",
         "public models need no account token",
-        "Wait for published 0.3.9",
+        "Choose macOS 0.3.9 after reviewing its launch decision",
         "model requests do not include dictation audio or transcripts",
         "version-specific network inventory",
         "install.html#model-download-privacy",
@@ -491,7 +491,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Before installing or launching macOS 0.3.8",
         "Hugging Face token inherited by Presspeech",
         "public model needs no account token",
-        "wait until macOS 0.3.9 is published",
+        "choose macOS 0.3.9 after reviewing its launch decision",
         "Dictation audio and transcripts are not sent",
         'id="faq-macos-install-privacy"',
         "install.html#model-download-privacy",
@@ -504,7 +504,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "its Setup cannot defer it",
         "Hugging Face token inherited by Presspeech",
         "public model needs no account token",
-        "wait until macOS 0.3.9 is published",
+        "choose macOS 0.3.9 after reviewing its launch decision",
         "Dictation audio and transcripts are not sent",
         "version-specific network inventory",
         "Already used macOS 0.3.8?",
@@ -515,7 +515,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "macOS 0.3.8",
         "Hugging Face token inherited by Presspeech",
         "public model needs no account token",
-        "wait until macOS 0.3.9 is published",
+        "otherwise wait rather than launch 0.3.8",
         "Do not inspect or display token values",
         "informed choice",
         "malformed inherited lowercase", "embedded proxy credentials",
@@ -528,7 +528,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "install.html#model-download-privacy",
         "macOS 0.3.8 may attach an inherited Hugging Face token",
         "public model needs no account token",
-        "wait until macOS 0.3.9 is published",
+        "choose macOS 0.3.9 after reviewing its launch decision",
         "dictation audio and transcripts are not sent",
         "leave a working model cache in place",
         "macos-0-3-8-after-use",
@@ -542,7 +542,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "macOS 0.3.8 can attach an inherited `HF_TOKEN`",
         "public model needs no account token",
         "If a token may be inherited by Presspeech",
-        "wait until macOS 0.3.9 is published",
+        "choose macOS 0.3.9 after reviewing its launch decision",
         "removes those credentials from its own process",
         "Dictation audio and transcripts are not sent in these requests",
         "If macOS 0.3.8 is already in use",
@@ -554,7 +554,7 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Before installing or launching macOS 0.3.8",
         "Hugging Face token inherited by Presspeech",
         "public model needs no token",
-        "wait until macOS 0.3.9 is published",
+        "choose macOS 0.3.9 after reviewing its launch decision",
         "Dictation audio and transcripts are not sent",
         "HF_TOKEN",
         "HUGGING_FACE_HUB_TOKEN",
@@ -898,9 +898,9 @@ FIRST_RUN_ACTION_COPY = {
         "<strong>Set Up Later</strong>, or closing Setup if you do not want the app at sign-in",
     ),
     DOCS / "install.html": (
-        "If you decide to launch published 0.3.8 after reviewing the",
-        "<strong>Decide whether to launch 0.3.8</strong>",
-        "If you chose to wait after reading the <a href=\"#model-download-privacy\">privacy warning</a>, leave the app unopened",
+        "If you decide to launch the installed version after reviewing",
+        "<strong>Check the installed version and decide whether to launch</strong>",
+        "If you chose to wait after reading the <a href=\"#model-download-privacy\">privacy warning</a>, leave it unopened",
     ),
     DOCS / "windows.html": (
         "Published 0.1.12 starts the selected download on first launch; it has no pre-download deferral. Only upcoming 0.1.13",
@@ -917,7 +917,7 @@ FIRST_RUN_ACTION_COPY = {
         "<strong>Set Up Later</strong>, or closing Setup if you do not want Presspeech at sign-in",
     ),
     DOCS / "llms-full.txt": (
-        "Only after the user decides to launch published 0.3.8 despite the model-download warning above:",
+        "Only after the user decides to launch that version:",
         "Published Windows 0.1.12 starts a missing selected-model download on first launch without asking first",
         "Upcoming 0.1.13 checks the default-model cache locally and asks before downloading missing first-run files",
     ),
@@ -1098,7 +1098,7 @@ README_BADGE_PREFLIGHT = (
 REPOSITORY_INSTALL_GUIDANCE = {
     ROOT / "llms.txt": (
         "Before installing or launching macOS 0.3.8",
-        "wait until 0.3.9 is published",
+        "choose 0.3.9 after reviewing its launch decision",
         "unsigned Windows 0.1.12 prerelease",
         "Verify the installer SHA-256",
         "do not bypass Smart App Control or managed policy",
@@ -1341,7 +1341,9 @@ class SyncError(RuntimeError):
 
 MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/presspeech on this Mac.
 
-Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer to wait until macOS 0.3.9 is published. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. From 0.3.9, Presspeech removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before choosing an install or launch path, verify the published macOS version on https://github.com/rcourtman/presspeech/releases and the deployed https://rcourtman.github.io/presspeech/install.html#direct-download guide. Use the version-pinned download only when both identify the same available release; if they disagree or the release asset is unavailable, stop and wait. The source branch, release notes, and local site metadata can be ahead of the downloadable build. Do not infer publication from those files alone.
+
+Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer macOS 0.3.9 if the release and deployed guide agree; otherwise wait rather than launch 0.3.8. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. From 0.3.9, Presspeech removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Before downloading or installing, run these read-only compatibility checks:
   uname -m
@@ -1357,14 +1359,18 @@ If Homebrew is available and the user chooses it, install with:
 
 Otherwise offer the direct notarised zip using the current version-pinned download and verification steps at https://rcourtman.github.io/presspeech/install.html#direct-download. Do not install Homebrew just for Presspeech. After verification, unzip and move Presspeech.app to Applications, but do not follow the guide's launch instruction yet. Do not run the Homebrew command when Homebrew is unavailable.
 
-Only after the user makes an informed choice to launch 0.3.8:
+Before launching, read the installed app's version without opening it:
+  plutil -extract CFBundleShortVersionString raw -o - /Applications/Presspeech.app/Contents/Info.plist
+If it does not match the published version and launch decision you reviewed, stop; do not launch a different installed build. The installation method alone does not establish which version is present at that path.
+
+Only after the user makes an informed choice to launch the verified published version:
   open /Applications/Presspeech.app
 
-After launch, explain that macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch; its Setup cannot defer that request. Existing installs with a valid cached model load without another download. Do not tell the user to choose Download Model or Set Up Later in 0.3.8. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.
+After launch, give instructions for the version actually installed. macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch; its Setup cannot defer that request. If 0.3.9 is published and installed, a clean install waits for Download Model or Set Up Later, but an existing installation with a missing model may still start a download on launch. A valid cached model loads without another download. Do not tell the user to choose Download Model or Set Up Later in 0.3.8. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.
 
 A successful Try Dictation scratchpad test proves only the in-app path, not automatic paste into another app. Do not use a production field, live chat, form that can submit, or command shell as a first target. If the user asks to try another app, follow https://rcourtman.github.io/presspeech/getting-started.html#first-app with harmless words in a blank, disposable field. Count an automatic-paste pass only when the complete text appears once with no recovery notice. For macOS 0.3.8, a copied notice is manual recovery, not a paste pass: inspect the intended field first, then verify the clipboard still holds the complete transcript before manual paste; a later copy may have replaced it. Do not retry blindly. Use https://rcourtman.github.io/presspeech/app-compatibility.html before relying on repeated delivery to a specific app.
 
-Only if the user asks about a future build: a clean install of 0.3.9 is planned to choose Download Model in Setup or Set Up Later to defer. That behavior is not in published 0.3.8; check GitHub Releases before describing it as available."""
+Only if the user asks about a future build: check GitHub Releases and the deployed install guide before describing its controls as available. Source changes alone do not make a new download available."""
 
 README_MAC_PROMPT_START = (
     "### Assistant Install Prompt\n\n"
@@ -1796,7 +1802,7 @@ def sync_install_html(path: Path, metadata: dict[str, object]) -> str:
     text = replace_regex(
         text,
         r"<p>(?:The Presspeech icon appears in the menu bar|Homebrew is the easiest path if you already use it or want command-line updates)\..*?</p>",
-        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. The macOS 0.3.8 release starts its first ~500–600 MB model download on launch; Setup cannot defer it. Existing installs with a valid cached model load without another download. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
+        "<p>Homebrew is the easiest path if you already use it or want command-line updates. On first launch, macOS shows its standard downloaded-app confirmation; choose <strong>Open</strong> after checking that it says Apple found no malicious software. The Presspeech icon then appears in the menu bar. macOS 0.3.8 starts a missing ~500–600 MB model download on launch; Setup cannot defer it. A clean 0.3.9 install asks before downloading, but an existing installation with a missing model may still download on launch. If setup is not complete, Presspeech opens Setup Checklist; you can reopen it from the menu at any time.</p>",
         path=path,
     )
     text = replace_regex(
@@ -1979,11 +1985,11 @@ LLMS_SHORT_ANSWER = (
     "No account or cloud transcription is required. Before opening a published build "
     "with a missing model, read its launch decision: macOS 0.3.8 may include an "
     "inherited Hugging Face token in the model request. If a token may be present or "
-    "you are unsure, wait for macOS 0.3.9. Windows 0.1.12 may send Hugging Face "
+    "you are unsure, choose macOS 0.3.9 after reviewing its launch decision. Windows 0.1.12 may send Hugging Face "
     "usage telemetry and an available token; custom routing can change the request "
     "destination. If you want to avoid possible telemetry, cannot rule out a token "
-    "or custom route, or are unsure, wait for Windows 0.1.13. Neither newer build "
-    "is published yet. A TLS-inspecting HTTPS proxy trusted by the client can read "
+    "or custom route, or are unsure, wait for Windows 0.1.13. macOS 0.3.9 is "
+    "available; Windows 0.1.13 is not yet published. A TLS-inspecting HTTPS proxy trusted by the client can read "
     "any token sent through it; do not launch through one whose trust is unclear. "
     "On macOS 0.3.8, a malformed inherited proxy URL can be logged with embedded "
     "credentials and ignored, allowing a model request without the expected proxy; "
@@ -2033,7 +2039,7 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "- Before installing or launching macOS 0.3.8, model-download requests may include "
         "a Hugging Face token inherited by Presspeech. The public model needs no account "
         "token; if one may be present in the environment that launches Presspeech—or you "
-        "are unsure—wait until macOS 0.3.9 is published. The pinned FluidAudio client "
+        "are unsure—choose macOS 0.3.9 after reviewing its launch decision. The pinned FluidAudio client "
         "honors inherited lowercase `https_proxy`; an untrusted TLS-inspecting proxy could "
         "read a 0.3.8 token, while a tunnelling proxy cannot. If the proxy's trust is unclear, "
         "do not launch 0.3.8 while it is in use. A malformed inherited lowercase "
@@ -2061,12 +2067,12 @@ def sync_llms(path: Path, metadata: dict[str, object]) -> str:
         "- Privacy: no cloud transcription or Presspeech-authored analytics, and no transcript persistence; "
         "macOS 0.3.8 may attach an inherited Hugging Face token to model-download requests, "
         "although the public model needs no account token. If a token may be present in the environment "
-        "that launches Presspeech—or you are unsure—wait until macOS 0.3.9 is published; dictation audio "
+        "that launches Presspeech—or you are unsure—choose macOS 0.3.9 after reviewing its launch decision; dictation audio "
         "and transcripts are not sent in those requests. If macOS 0.3.8 already downloaded a model "
         "with a token available and an untrusted TLS-inspecting proxy could read the request, "
         "treat the token as disclosed to that proxy and revoke it at Hugging Face Access Tokens. "
         "Leave a working "
-        "model cache in place and wait for 0.3.9 before a planned re-download; see "
+        "model cache in place and use 0.3.9 before another planned download; see "
         "https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use. "
         "During Windows 0.1.12 model downloads, bundled libraries may send default usage telemetry to "
         "Hugging Face. If you prefer to avoid this possible usage telemetry, are concerned that a token "
@@ -2156,7 +2162,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         "Before installing or launching macOS 0.3.8, its model-download requests may "
         "include a Hugging Face token inherited by Presspeech. The public model needs "
         "no account token. If one may be present in the environment that launches "
-        "Presspeech—or you are unsure—wait until macOS 0.3.9 is published. "
+        "Presspeech—or you are unsure—choose macOS 0.3.9 after reviewing its launch decision. "
         "The pinned FluidAudio client also honors inherited lowercase `https_proxy`; "
         "an untrusted TLS-inspecting proxy could read a 0.3.8 token, while a tunnelling "
         "proxy cannot. If the proxy's trust is unclear, do not launch 0.3.8 while it is "
@@ -2271,7 +2277,7 @@ def sync_llms_full(path: Path, metadata: dict[str, object]) -> str:
         )
     download_sentence = (
         "The macOS 0.3.8 release starts its first speech-model download (about 500-600 MB) "
-        "on launch. In upcoming macOS 0.3.9 (not yet published), a clean install "
+        "on launch. In macOS 0.3.9, a clean install "
         "must choose Download Model in Setup; "
         "choosing Set Up Later defers it. Existing installations and cached models load automatically. "
         "The model is stored under `~/Library/Application Support/FluidAudio/`.\n"
@@ -2820,7 +2826,7 @@ def check_macos_upgrade_preflight(
         "macOS 0.3.8", "cached model loads without a download",
         "missing or fails integrity checks", "model request at launch",
         "inherited Hugging Face token", "or you are unsure",
-        "leave the upgraded app unopened", "wait until macOS 0.3.9 is published",
+        "leave the upgraded app unopened", "choose macOS 0.3.9 after reviewing its launch decision",
         "TLS-inspecting proxy",
     )
     errors = [
@@ -3333,7 +3339,10 @@ def check_readme_launch_preflight(
         return [f"{display}: missing README heading or start links"]
     intro = " ".join(re.sub(r"(?m)^> ?", "", contents[heading:start_links]).split())
     required = (
-        "**Before opening the published builds",
+        "**Before opening a published build",
+        "GitHub Releases",
+        "deployed install guide",
+        "source branch can contain",
         f"macOS {metadata['version']}",
         f"Windows {metadata['windows_version']}",
         "missing speech-model download starts on launch",
@@ -3446,7 +3455,7 @@ def check_homepage_launch_decision(path: Path = DOCS / "index.html") -> list[str
         "neither macOS 0.3.8 nor Windows 0.1.12 lets Setup defer that request",
         "On Windows, clear the installer’s final <strong>Launch Presspeech</strong> option if you choose to wait",
         "macOS 0.3.8 — inherited token",
-        "wait until macOS 0.3.9 is published",
+        "choose macOS 0.3.9 after reviewing its launch decision",
         'href="install.html#model-download-privacy"',
         "Windows 0.1.12 — telemetry or token",
         "wait until Windows 0.1.13 is published",
@@ -3503,7 +3512,7 @@ def check_getting_started_preflight_order(
         "Unsure about a token, telemetry, or proxy? Keep it closed",
         '<p><strong>Safe stopping point:</strong>',
         "If you install Windows but wait, clear the installer’s final <strong>Launch Presspeech</strong> option",
-        "Wait for published 0.3.9",
+        "Choose macOS 0.3.9 after reviewing its launch decision",
         "a Hugging Face token may be inherited by Presspeech",
         "Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear",
         "A model request can include the inherited token",
@@ -3688,7 +3697,7 @@ def check_model_recovery_privacy_order(
                 ('id="macos-model"', "</article>", "check the connection before retrying", (
                     "Before reopening, retrying, or resetting macOS 0.3.8",
                     "another download may include a Hugging Face token inherited by Presspeech",
-                    "do not start another download", "macOS 0.3.9 is published and installed",
+                    "do not start another download", "install macOS 0.3.9 before another download",
                     "privacy.html#macos-0-3-8-after-use",
                     "If you choose to make another model request after reading the warning above",
                 )),
@@ -3713,7 +3722,7 @@ def check_model_recovery_privacy_order(
                 ("### Speech Model Fails To Load", "\n### ", "check the connection before retrying", (
                     "Before reopening, retrying, or resetting macOS 0.3.8",
                     "Another download may include a Hugging Face token inherited by Presspeech",
-                    "do not start another download", "macOS 0.3.9 is published and installed",
+                    "do not start another download", "install macOS 0.3.9 before another download",
                     "privacy.html#macos-0-3-8-after-use",
                     "If you choose to make another model request after reading the warning above",
                 )),
@@ -4724,10 +4733,14 @@ def check_macos_agent_install_order(
     except SyncError as exc:
         return [str(exc)]
     markers = (
+        "verify the published macOS version",
+        "if they disagree or the release asset is unavailable, stop and wait",
         "Before installing or launching macOS 0.3.8", "uname -m",
         "sw_vers -productVersion", "Stop if", "command -v brew",
         "brew install --cask", "current version-pinned download",
-        "Only after the user makes an informed choice to launch 0.3.8",
+        "plutil -extract CFBundleShortVersionString raw",
+        "If it does not match the published version",
+        "Only after the user makes an informed choice to launch the verified published version",
         "open /Applications/Presspeech.app",
     )
     sequences = (
@@ -4805,7 +4818,7 @@ def check_install_prompt_sync(metadata: dict[str, object]) -> list[str]:
     required_mac_launch_choice = (
         "installing the app without opening it does not make the model request",
         "If the user chooses to wait, skip the `open` command below",
-        "Only after the user makes an informed choice to launch 0.3.8",
+        "Only after the user makes an informed choice to launch the verified published version",
     )
     missing_mac_launch_choice = [
         phrase for phrase in required_mac_launch_choice
@@ -5043,6 +5056,16 @@ def run_self_test() -> None:
     )
     if not check_macos_agent_install_order(prompt=early_install):
         raise SyncError("self-test: install before compatibility stop was accepted")
+    missing_release_check = MAC_INSTALL_PROMPT.replace(
+        "verify the published macOS version", "assume the source version", 1
+    )
+    if not check_macos_agent_install_order(prompt=missing_release_check):
+        raise SyncError("self-test: missing published-version check was accepted")
+    missing_installed_check = MAC_INSTALL_PROMPT.replace(
+        "plutil -extract CFBundleShortVersionString raw", "assume installed version", 1
+    )
+    if not check_macos_agent_install_order(prompt=missing_installed_check):
+        raise SyncError("self-test: missing installed-version check was accepted")
     missing_check = MAC_INSTALL_PROMPT.replace("  sw_vers -productVersion", "")
     if not check_macos_agent_install_order(prompt=missing_check):
         raise SyncError("self-test: missing macOS compatibility check was accepted")
@@ -5479,7 +5502,7 @@ def run_self_test() -> None:
             or "random per-process session ID" not in synced_llms
             or "Before installing or launching macOS 0.3.8" not in synced_llms
             or "macOS 0.3.8 may attach an inherited Hugging Face token" not in synced_llms
-            or "wait until macOS 0.3.9 is published" not in synced_llms
+            or "choose macOS 0.3.9 after reviewing its launch decision" not in synced_llms
             or "Leave a working model cache in place" not in synced_llms
             or "https_proxy" not in synced_llms
             or "TLS-inspecting" not in synced_llms
@@ -5500,7 +5523,7 @@ def run_self_test() -> None:
             phrase in short_answer
             for phrase in (
                 "macOS 0.3.8 may include an inherited Hugging Face token",
-                "wait for macOS 0.3.9",
+                "choose macOS 0.3.9 after reviewing its launch decision",
                 "Windows 0.1.12 may send Hugging Face usage telemetry",
                 "wait for Windows 0.1.13",
                 "Delivery Recovery Copy or Discard",
@@ -5819,7 +5842,7 @@ def run_self_test() -> None:
                 or "malformed inherited lowercase" not in synced_llms_full
                 or "without the expected proxy" not in synced_llms_full
                 or "The macOS 0.3.8 release starts its first speech-model download" not in synced_llms_full
-                or "In upcoming macOS 0.3.9 (not yet published), a clean install must choose Download Model" not in synced_llms_full
+                or "In macOS 0.3.9, a clean install must choose Download Model" not in synced_llms_full
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
                 > synced_llms_full.find("brew install --cask")
                 or synced_llms_full.find("Before installing or launching macOS 0.3.8")
@@ -6387,7 +6410,7 @@ def run_self_test() -> None:
         readme_preflight.write_text(safe_readme, encoding="utf-8")
         if check_readme_launch_preflight(published, readme_preflight):
             raise SyncError("self-test: README launch preflight was rejected")
-        intro_start = safe_readme.index("\n> **Before opening the published builds")
+        intro_start = safe_readme.index("\n> **Before opening a published build")
         intro_end = safe_readme.index("\n**Start here:**", intro_start)
         intro = safe_readme[intro_start:intro_end]
         readme_preflight.write_text(
@@ -6399,6 +6422,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: README warning after start links was accepted")
         for stale in (
             intro.replace("macOS 0.3.8", "macOS 9.9.9"),
+            intro.replace("deployed install guide", "source checkout"),
             intro.replace("windows.html#model-download-privacy", "windows.html"),
         ):
             readme_preflight.write_text(
@@ -6415,7 +6439,7 @@ def run_self_test() -> None:
                 "Before installing or launching macOS 0.3.8",
                 "Hugging Face token inherited by Presspeech",
                 "public model needs no account token",
-                "wait until macOS 0.3.9 is published",
+                "choose macOS 0.3.9 after reviewing its launch decision",
                 "Dictation audio and transcripts are not sent",
                 "version-specific network inventory",
             )
@@ -6431,7 +6455,7 @@ def run_self_test() -> None:
             '<div id="model-download-privacy"><p>Before installing or launching '
             "macOS 0.3.8, its model-download requests may include a Hugging Face "
             "token inherited by Presspeech. The public model needs no account "
-            "token. If one may be present, wait until macOS 0.3.9 is published. "
+            "token. If one may be present, choose macOS 0.3.9 after reviewing its launch decision. "
             "Dictation audio and transcripts are not sent. See the version-specific "
             "network inventory. Malformed proxy URLs are a separate risk: "
             "https_proxy or http_proxy can be logged verbatim, including embedded "
@@ -6544,7 +6568,7 @@ def run_self_test() -> None:
             '<a href="#macos-launch-decision">macOS decision</a> '
             '<a href="#windows-launch-decision">Windows decision</a></p>'
             '<ul><li id="macos-launch-decision"><h3>macOS 0.3.8 — wait if a token may be inherited</h3> '
-            '<strong>Wait for published 0.3.9</strong> if a Hugging Face token may be inherited by Presspeech. '
+            '<strong>Choose macOS 0.3.9 after reviewing its launch decision</strong> if a Hugging Face token may be inherited by Presspeech. '
             'Do not launch 0.3.8 while using a TLS-inspecting proxy whose trust is unclear. '
             '<strong>Download on launch:</strong> 500–600 MB. '
             'A model request can include the inherited token; the bundled client honors '
@@ -6605,7 +6629,7 @@ def run_self_test() -> None:
         if not check_getting_started_preflight_order(getting_started):
             raise SyncError("self-test: onboarding platform shortcut bypassed its warning")
         for warning in (
-            "Wait for published 0.3.9",
+            "Choose macOS 0.3.9 after reviewing its launch decision",
             "Wait for published 0.1.13",
             "If such a proxy's trust is unclear, do not launch while it is in use",
         ):
@@ -7279,7 +7303,7 @@ def run_self_test() -> None:
         required_model_download_guidance = {
             model_download_guidance: (
                 "0.3.8", "0.3.9", "500", "clean install", "Download Model", "defer",
-                "upcoming macOS 0.3.9 (not yet published)",
+                "macOS 0.3.9",
             )
         }
         model_download_guidance.write_text(

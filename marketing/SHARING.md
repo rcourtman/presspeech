@@ -7,14 +7,16 @@ free tool exists" should travel in postures that aren't marketing:
 a note where engineers look up notes, and answers where people are
 already asking.
 
-**Hold as of 24 September 2026: the Show HN launch draft below is not ready to
-post.** The [published releases](https://github.com/rcourtman/presspeech/releases)
-are macOS 0.3.8 and Windows 0.1.12, not the proposed 0.3.9 / 0.1.13 fixes.
+**Hold as of 26 September 2026: the Show HN launch draft below is not ready to
+post.** The [release list](https://github.com/rcourtman/presspeech/releases)
+now includes macOS 0.3.9, whose release entry gives a first-launch decision;
+Windows 0.1.12 remains the published prerelease. The draft below still contains
+pre-0.3.9 wait guidance and release-size copy, so it must not be posted as-is.
 Before launching macOS 0.3.8, users need its [inherited-token, proxy, and
-malformed-proxy warning](../README.md#install-on-macos); before launching
+malformed-proxy warning](../docs/install.html#model-download-privacy); before launching
 Windows 0.1.12,
 they need its [telemetry, token, routing, and proxy
-warning](../README.md#install-on-windows). Do not collapse these into a
+warning](../docs/windows.html#model-download-privacy). Do not collapse these into a
 generic "100% local" claim. Also, [new GitHub issues are currently
 restricted](https://github.com/rcourtman/presspeech/issues), so a new
 compatibility report cannot be promised as an available feedback route.
@@ -241,8 +243,8 @@ Do this once, then stop and measure instead of tweaking copy in a loop:
    turning it into a universal paste claim.
 3. Recheck the published macOS and Windows tags and their [version-specific
    model-download privacy guidance](../docs/privacy.html#network-calls). Do
-   not present the 0.3.9 / 0.1.13 source controls as shipped while 0.3.8 /
-   0.1.12 are the downloads. Resolve or carry the exact published-version
+   not present Windows 0.1.13 source controls as shipped while 0.1.12 is the
+   prerelease download. Resolve or carry the exact published-version
    warnings on the rendered release pages as well as install guides before
    inviting a new user to install or launch. Editing source notes is not a
    correction to already-published GitHub release text; this draft is held

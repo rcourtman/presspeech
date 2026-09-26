@@ -33,7 +33,7 @@ Before installing or launching macOS 0.3.8, read the
 [macOS model-download privacy decision](https://rcourtman.github.io/presspeech/install.html#model-download-privacy).
 A missing model downloads on launch and may include an inherited Hugging Face
 token. If one may be present, or you are unsure, leave the app unopened and
-wait until 0.3.9 is published. Downloading or installing without opening the
+choose 0.3.9 after reviewing its launch decision. Downloading or installing without opening the
 app does not start that request. Do not inspect or display token values.
 The pinned 0.3.8 client may log a malformed inherited lowercase
 `https_proxy` or `http_proxy` URL verbatim, including embedded proxy

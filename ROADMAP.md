@@ -1,6 +1,6 @@
 # Presspeech product roadmap
 
-Last reviewed: 24 September 2026
+Last reviewed: 26 September 2026
 
 Presspeech is the small, private dictation tool: hold or toggle a key, speak,
 and put locally transcribed text into the app you were using. The roadmap
@@ -32,23 +32,25 @@ request status remains authoritative for individual changes.
 
 ## Now: qualify shipped text delivery
 
-macOS 0.3.8 shipped on 22 September 2026 with automated, optimized-build, and
-packaged-app checks complete. The current priority is to qualify its behavior
-in the physical and target-app conditions those checks cannot simulate, not to
-add another layer of settings. Open validation issues remain open until their
-named evidence gates in the
+macOS 0.3.9 is now published, following 0.3.8 on 22 September 2026. The
+current priority is to qualify released text delivery in physical and
+target-app conditions that automated and packaged-app checks cannot simulate,
+not to add another layer of settings. As checked 26 September, issues #33 and
+#36 are closed, but their named rows in the
 [macOS release qualification](docs/manual-qa.md#macos-release-qualification)
-are met; publication alone is not evidence that every target or input path
-passed.
+still have no recorded results. Issue closure and publication are not evidence
+that every target or input path passed; keep those native gates visible until
+their results are recorded.
 
 - Qualify paste-target capture in representative native, browser, and
   Electron/Chromium apps. macOS 0.3.8 gets frontmost-process identity
   from the window server but still requires the exact Accessibility-focused
-  window before automatic paste. [Issue
-  #33](https://github.com/rcourtman/presspeech/issues/33) stays open until a
-  steady-focus Electron target can paste automatically while a switch between
-  two windows of that same process still recovers to the clipboard. Process
-  identity alone is not an acceptable substitute for the exact-window check.
+  window before automatic paste. For closed [issue
+  #33](https://github.com/rcourtman/presspeech/issues/33), retain the native
+  evidence gate: a steady-focus Electron target must paste automatically while
+  a switch between two windows of that same process still recovers to the
+  clipboard. Process identity alone is not an acceptable substitute for the
+  exact-window check.
   Separately, qualify a switch between two browser tabs in one window: when a
   target exposes no distinct focused-control identity, window equality cannot
   prove that the original tab is still selected. A two-window pass must not be
@@ -57,10 +59,10 @@ passed.
 - Qualify the macOS 0.3.8 manual clipboard-recovery replacement against both
   fast native and slow Electron targets. It retires automatic timer restoration
   rather than choosing another delay: no timeout proves that another app has
-  consumed a paste. Close [issue
-  #36](https://github.com/rcourtman/presspeech/issues/36) only after the
-  repeated native checks show that old clipboard content cannot race the new
-  transcript.
+  consumed a paste. For closed [issue
+  #36](https://github.com/rcourtman/presspeech/issues/36), keep the qualification
+  row open until repeated native checks show that old clipboard content cannot
+  race the new transcript.
 - Exercise the macOS 0.3.8 configurable hotkey across keyboard layouts,
   hold and toggle modes, conflict cases, and keyboard/VoiceOver navigation.
   That is the remaining evidence gate for [issue
@@ -101,7 +103,7 @@ Treat missing public reports as missing evidence—not evidence of
 low demand or reliable delivery—and keep direct native qualification in force
 until a usable reporting route returns.
 
-### Product intelligence and community evidence (23–24 September 2026)
+### Product intelligence and community evidence (23–26 September 2026)
 
 A small scan of public project pages shows that offline recognition,
 shortcut-driven dictation, and cross-app insertion recur as category claims:
@@ -137,14 +139,15 @@ frames local/no-account dictation as a separate product, explicitly notes the
 initial model download, and separates optional provider-based cleanup; [dybur](https://dybur.com/)
 markets local Mac/Windows dictation as requiring little setup but still lists
 about 700 MB for its model. These are promotional claims, not comparative
-tests or user-demand data. The current [Presspeech release list](https://github.com/rcourtman/presspeech/releases)
-still names macOS 0.3.8 and Windows 0.1.12 as published, so the inherited-token,
-routing, and telemetry controls described for 0.3.9/0.1.13 must not be presented
-as shipped. Keep the exact-version wait guidance beside download choices and
-refresh it only when the corrected model-download paths are actually published.
-The checked-in install guides carry that guidance, but the standalone
-published release entries still omit their first-launch privacy decisions. An
-authorized release maintainer needs to correct those live entries. The bounded
+tests or user-demand data. As checked 26 September, the
+[Presspeech release list](https://github.com/rcourtman/presspeech/releases)
+includes macOS 0.3.9 and Windows 0.1.12. The 0.3.9 release notes describe its
+inherited-token and malformed-proxy controls; the Windows 0.1.13 telemetry,
+token, and routing controls are not yet published. Keep exact-version
+first-launch guidance beside download choices. The standalone macOS 0.3.8 and
+Windows 0.1.12 release entries still omit their first-launch privacy decisions;
+the 0.3.9 entry includes one. An authorized release maintainer needs to correct
+the two older live entries. The bounded
 [release-entry draft](marketing/RELEASE_ENTRY_CORRECTIONS.md) is ready for
 review; editing source notes alone cannot do it. This is a publication gate,
 not a reason to add features or broader reassurance copy.
@@ -211,7 +214,7 @@ own guidance, not an independent comparison; it reinforces the delivery race
 as a category risk, not a claim about Presspeech behavior or relative quality.
 This small, self-selected sample reinforces that destination focus, safe
 delivery, and recovery are consequential risks in this workflow, consistent
-with Presspeech's open issues #33 and #36. It also identifies a concrete
+with the reports in Presspeech issues #33 and #36. It also identifies a concrete
 recovery trade-off: making the transcript available without displacing unrelated
 clipboard content. Presspeech already offers configurable, bounded macOS
 transcript history in memory, cleared on quit; upcoming Windows delivery

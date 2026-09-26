@@ -1,10 +1,12 @@
 # Published release-entry corrections (internal draft)
 
-Checked 24 September 2026. **Not published or approved for posting.** The
+Checked 26 September 2026. **Not published or approved for posting.** The
 [macOS 0.3.8 release](https://github.com/rcourtman/presspeech/releases/tag/v0.3.8)
 and [Windows 0.1.12 release](https://github.com/rcourtman/presspeech/releases/tag/windows-v0.1.12)
 are standalone download pages. Neither currently gives the model-download
 privacy decision present in the [version-specific inventory](../docs/privacy/network-calls.json).
+macOS 0.3.9 is now [published](https://github.com/rcourtman/presspeech/releases/tag/v0.3.9)
+with its own first-launch notice; this draft targets only the older entries.
 The macOS page also omits the malformed-proxy warning: the [pinned FluidAudio
 client](https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Sources/FluidAudio/ModelRegistry.swift)
 logs the invalid URL string and ignores that proxy setting. Its notes invite
@@ -49,7 +51,8 @@ public entries remain uncorrected.
 > also use an inherited HTTPS proxy; a TLS-inspecting proxy trusted by macOS
 > could read a token, whereas a tunnelling proxy cannot read the HTTPS request.
 > If a token may be present in the app's launch environment, or you are unsure,
-> leave the app unopened and wait until macOS 0.3.9 is published. If the trust
+> leave the app unopened and use version 0.3.9 after reviewing its
+> first-launch decision. If the trust
 > of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use.
 > The bundled 0.3.8 client can also log a malformed inherited lowercase
 > `https_proxy` or `http_proxy` URL verbatim, including embedded proxy
