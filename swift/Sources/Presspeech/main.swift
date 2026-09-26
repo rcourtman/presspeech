@@ -6128,7 +6128,13 @@ func dictationCompletionNotice(processedText: String,
     case .copiedWithoutPasting:
         if terminalReviewRequired { return .terminalReview }
         return pasteTargetUnavailableAtStart ? .pasteTargetUnavailable : .copiedToClipboard
-    case .failed, .deliveryUncertain, .clipboardChanged:
+    case .failed, .clipboardChanged:
+        // A known terminal line break never enters automatic insertion. If
+        // its recovery copy fails or loses ownership, retain both the copy
+        // uncertainty and the warning against executing a manual paste.
+        if terminalReviewRequired { return .clipboardCopyUnconfirmedAfterTerminalReview }
+        return keepsRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
+    case .deliveryUncertain:
         return keepsRecentTranscripts ? .insertionFailed : .insertionFailedWithoutHistory
     case .inserted:
         return nil
@@ -6315,6 +6321,32 @@ private func shouldAttemptAutomaticDictationDelivery(
     missingPermissions: [Permission]
 ) -> Bool {
     !permissionInterruptionObserved && missingPermissions.isEmpty
+}
+
+private struct DictationDeliveryPolicy {
+    let attemptAutomaticInsertion: Bool
+    let terminalReviewRequired: Bool
+}
+
+/// Permission loss prevents automatic insertion, not the warning that a
+/// copied line break can execute if manually pasted into the original shell.
+/// Keep those decisions independent, including when a grant returns before
+/// transcription completes.
+private func dictationDeliveryPolicy(
+    permissionInterruptionObserved: Bool,
+    missingPermissions: [Permission],
+    deliveredText: String,
+    capturedTargetBundleIdentifier: String?
+) -> DictationDeliveryPolicy {
+    DictationDeliveryPolicy(
+        attemptAutomaticInsertion: shouldAttemptAutomaticDictationDelivery(
+            permissionInterruptionObserved: permissionInterruptionObserved,
+            missingPermissions: missingPermissions
+        ),
+        terminalReviewRequired: requiresCommandTerminalReview(
+            deliveredText, bundleIdentifier: capturedTargetBundleIdentifier
+        )
+    )
 }
 
 /// A grant can return while audio drains or recognition runs. Once a missing
@@ -11104,17 +11136,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                         )
                         let completed = RecentTranscript(processedText: cleaned,
                                                          suffix: settings.pasteSuffix)
-                        let automaticDeliveryPermitted = shouldAttemptAutomaticDictationDelivery(
+                        let deliveryPolicy = dictationDeliveryPolicy(
                             permissionInterruptionObserved: permissionInterruptionObserved,
-                            missingPermissions: missing
+                            missingPermissions: missing,
+                            deliveredText: completed.deliveredText,
+                            capturedTargetBundleIdentifier: recordingPasteTarget?.bundleIdentifier
                         )
-                        let terminalReviewRequired = automaticDeliveryPermitted
-                            && requiresCommandTerminalReview(
-                                completed.deliveredText,
-                                bundleIdentifier: recordingPasteTarget?.bundleIdentifier
-                            )
                         let insertionOutcome: TextInsertionOutcome
-                        if automaticDeliveryPermitted,
+                        if deliveryPolicy.attemptAutomaticInsertion,
                            let expectedTarget = recordingPasteTarget {
                             insertionOutcome = TextInserter.insert(
                                 completed.deliveredText,
@@ -11155,7 +11184,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             pasteTargetUnavailableAtStart: recordingPasteTarget == nil
                                 && !permissionInterruptionObserved
                                 && missing.isEmpty,
-                            terminalReviewRequired: terminalReviewRequired
+                            terminalReviewRequired: deliveryPolicy.terminalReviewRequired
                         )
                         addToHistory(completed)
                     }
@@ -19018,6 +19047,48 @@ private enum PresspeechSelfTest {
             equals: false,
             "a transient permission interruption should not retarget automatic delivery"
         )
+        let terminalAfterInterruption = dictationDeliveryPolicy(
+            permissionInterruptionObserved: true,
+            missingPermissions: [],
+            deliveredText: "harmless fixture\n",
+            capturedTargetBundleIdentifier: "com.apple.Terminal"
+        )
+        try expect(terminalAfterInterruption.attemptAutomaticInsertion, equals: false,
+                   "a restored permission must not re-enable this dictation's automatic insertion")
+        try expect(terminalAfterInterruption.terminalReviewRequired, equals: true,
+                   "a restored permission must not erase manual shell-paste caution")
+        try expect(dictationCompletionNotice(
+            processedText: "harmless fixture",
+            insertionOutcome: .copiedWithoutPasting,
+            keepsRecentTranscripts: false,
+            terminalReviewRequired: terminalAfterInterruption.terminalReviewRequired
+        ), equals: .terminalReview,
+                   "permission-interrupted terminal recovery must say review before manual paste")
+        let terminalWithMissingGrant = dictationDeliveryPolicy(
+            permissionInterruptionObserved: false,
+            missingPermissions: [.accessibility],
+            deliveredText: "harmless fixture\n",
+            capturedTargetBundleIdentifier: "com.apple.Terminal"
+        )
+        try expect(terminalWithMissingGrant.attemptAutomaticInsertion, equals: false,
+                   "a missing delivery grant must keep the terminal path copy-only")
+        try expect(terminalWithMissingGrant.terminalReviewRequired, equals: true,
+                   "copy-only recovery must still warn before a manual terminal paste")
+        try expect(dictationCompletionNotice(
+            processedText: "harmless fixture",
+            insertionOutcome: .failed,
+            keepsRecentTranscripts: false,
+            terminalReviewRequired: terminalWithMissingGrant.terminalReviewRequired
+        ), equals: .clipboardCopyUnconfirmedAfterTerminalReview,
+                   "a missing-grant copy failure must retain both shell and clipboard warnings")
+        let editorWithMissingGrant = dictationDeliveryPolicy(
+            permissionInterruptionObserved: false,
+            missingPermissions: [.accessibility],
+            deliveredText: "harmless fixture\n",
+            capturedTargetBundleIdentifier: "com.example.Editor"
+        )
+        try expect(editorWithMissingGrant.terminalReviewRequired, equals: false,
+                   "ordinary editor recovery must not be labelled a terminal paste")
         try expect(
             hasObservedPermissionInterruption(earlier: false,
                                               missingPermissions: [.accessibility]),
@@ -23945,8 +24016,20 @@ private enum PresspeechSelfTest {
                                               insertionOutcome: .failed,
                                               keepsRecentTranscripts: false,
                                               terminalReviewRequired: true),
-                   equals: .insertionFailedWithoutHistory,
-                   "a failed terminal recovery copy must never claim the text is on the clipboard")
+                   equals: .clipboardCopyUnconfirmedAfterTerminalReview,
+                   "a failed terminal recovery copy must retain review guidance without claiming a copy")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .clipboardChanged,
+                                              keepsRecentTranscripts: true,
+                                              terminalReviewRequired: true),
+                   equals: .clipboardCopyUnconfirmedAfterTerminalReview,
+                   "a newer clipboard owner must not erase terminal review guidance")
+        try expect(dictationCompletionNotice(processedText: "hello",
+                                              insertionOutcome: .deliveryUncertain,
+                                              keepsRecentTranscripts: true,
+                                              terminalReviewRequired: true),
+                   equals: .insertionFailed,
+                   "a hypothetically posted input must retain destination uncertainty")
         try expect(dictationCompletionNotice(processedText: "hello",
                                               insertionOutcome: .copiedWithoutPasting,
                                               keepsRecentTranscripts: false,

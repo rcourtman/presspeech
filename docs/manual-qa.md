@@ -906,6 +906,17 @@ unknown terminal bundles, IDE-embedded shells, or remote consoles; terminal
 paste warnings and manual Command-V are not a Presspeech execution barrier.
 Keep only outcomes and app versions, never commands or transcripts.
 
+In a disposable profile where a delivery grant can be interrupted safely,
+repeat the recognized-terminal line-break case during permission loss and after
+the grant returns before transcription finishes. Both clipboard-only outcomes
+must retain the **review before manual terminal paste** warning. If the
+recovery copy fails or loses ownership before Presspeech classifies it, the
+notice must also say **Copy unconfirmed**, not offer an unconditional Command-V.
+Do not paste into the shell to verify this warning or revoke a grant in a
+user's working dictation session. Record **Blocked** if the
+interruption cannot be staged safely; a model-free policy test is not a native
+pass.
+
 For the synthetic-credential row, use a disposable macOS profile or VM with no
 Hugging Face login/cache. Launch the installed candidate executable directly
 with nonfunctional marker values in `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, and
