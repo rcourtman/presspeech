@@ -2668,6 +2668,8 @@ final class Logger: @unchecked Sendable {
         #if DEBUG
         // Native acceptance must not append fixture diagnostics to the user's log.
         if NativeInteractionPolicy.authorized(Array(CommandLine.arguments.dropFirst())) { return }
+        // Measurement runs beside the daily-use app and must not add to its log.
+        if PressLatencyMeasurement.requested(Array(CommandLine.arguments.dropFirst())) { return }
         #endif
         q.async { [url] in
             do {
@@ -4654,7 +4656,8 @@ final class HotkeyListener {
     /// or first press in toggle mode). onRelease fires when it should
     /// stop (release in hold mode, or second press in toggle mode).
     /// onCancel fires for Escape while a recording is active.
-    var onPress: (() -> Void)?
+    /// The receipt is nil only when no press event started it.
+    var onPress: ((HotkeyPressReceipt?) -> Void)?
     var onRelease: (() -> Void)?
     var onCancel: (() -> Void)?
     var onTapInterrupted: (() -> Void)?
@@ -4693,7 +4696,9 @@ final class HotkeyListener {
             eventsOfInterest: mask,
             callback: { _, type, event, userInfo in
                 guard let userInfo else { return Unmanaged.passUnretained(event) }
+                let receivedAt = monotonicNanoseconds()
                 let listener = Unmanaged<HotkeyListener>.fromOpaque(userInfo).takeUnretainedValue()
+                let eventTimestamp = event.timestamp
                 let snapshot = HotkeyEventSnapshot(
                     typeRawValue: type.rawValue,
                     keycode: CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)),
@@ -4704,7 +4709,9 @@ final class HotkeyListener {
                     #if DEBUG
                     if let filter = listener.nativeTestEventFilter, !filter(event) { return false }
                     #endif
-                    return listener.handleTapCallback(snapshot)
+                    return listener.handleTapCallback(snapshot,
+                                                      receivedAt: receivedAt,
+                                                      eventTimestamp: eventTimestamp)
                 }
                 return shouldSuppress ? nil : Unmanaged.passUnretained(event)
             },
@@ -4753,7 +4760,9 @@ final class HotkeyListener {
         log("HotkeyListener: trigger mode → \(mode.rawValue)")
     }
 
-    private func handleTapCallback(_ event: HotkeyEventSnapshot) -> Bool {
+    private func handleTapCallback(_ event: HotkeyEventSnapshot,
+                                   receivedAt: UInt64,
+                                   eventTimestamp: UInt64) -> Bool {
         if event.typeRawValue == CGEventType.tapDisabledByTimeout.rawValue
             || event.typeRawValue == CGEventType.tapDisabledByUserInput.rawValue {
             var actions: [HotkeyTransitionAction] = []
@@ -4834,25 +4843,41 @@ final class HotkeyListener {
             didLogFirstUnmatchedModifier = true
             log("HotkeyListener: received \(modifierName), but watching \(hotkey.name)")
         }
-        dispatchHotkeyActions(result.actions)
+        let receipt = result.actions.contains(.press)
+            ? HotkeyPressReceipt(receivedAt: receivedAt,
+                                 eventAgeNanoseconds: hotkeyEventAgeNanoseconds(
+                                     eventTimestamp: eventTimestamp,
+                                     receivedAt: receivedAt,
+                                     timebaseNumer: Self.timebase.numer,
+                                     timebaseDenom: Self.timebase.denom))
+            : nil
+        dispatchHotkeyActions(result.actions, pressReceipt: receipt)
         return result.suppress
     }
 
-    private func dispatchHotkeyActions(_ actions: [HotkeyTransitionAction]) {
+    private static let timebase: mach_timebase_info_data_t = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return info
+    }()
+
+    private func dispatchHotkeyActions(_ actions: [HotkeyTransitionAction],
+                                       pressReceipt: HotkeyPressReceipt? = nil) {
         guard !actions.isEmpty else { return }
         let generation = actionGeneration
 
         Task { @MainActor [weak self] in
             guard let self, self.actionGeneration == generation else { return }
-            self.performHotkeyActions(actions)
+            self.performHotkeyActions(actions, pressReceipt: pressReceipt)
             if actions.contains(.tapInterrupted) { self.tapInterruptionPending = false }
         }
     }
 
-    private func performHotkeyActions(_ actions: [HotkeyTransitionAction]) {
+    private func performHotkeyActions(_ actions: [HotkeyTransitionAction],
+                                      pressReceipt: HotkeyPressReceipt?) {
         for action in actions {
             switch action {
-            case .press: onPress?()
+            case .press: onPress?(pressReceipt)
             case .release: onRelease?()
             case .cancel: onCancel?()
             case .tapInterrupted: onTapInterrupted?()
@@ -4873,6 +4898,123 @@ final class HotkeyListener {
     func recordingDidStartOutsideHotkey() {
         transitionState.recordingDidStartOutsideHotkey(triggerMode: triggerMode)
     }
+}
+
+// MARK: - Press latency timing
+//
+// One compact log line per press says where the time between the hotkey
+// and live recording went. Marks are monotonic nanoseconds (immune to
+// wall-clock changes), cost one clock read each, and the line carries
+// durations only: no key, window, application or audio content.
+
+/// Monotonic clock for latency marks, shared by the main and audio threads.
+func monotonicNanoseconds() -> UInt64 {
+    DispatchTime.now().uptimeNanoseconds
+}
+
+/// When the event tap delivered a hotkey press, plus how long the event
+/// waited before the tap callback ran (a busy main run loop shows up here).
+struct HotkeyPressReceipt: Equatable, Sendable {
+    let receivedAt: UInt64
+    let eventAgeNanoseconds: UInt64?
+}
+
+/// Age of a HID event at `receivedAt`. CGEvent timestamps are documented as
+/// nanoseconds since startup but have been reported in mach ticks; accept
+/// whichever reading is plausible and drop anything else (synthetic events
+/// carry 0) rather than log a wrong number.
+func hotkeyEventAgeNanoseconds(eventTimestamp: UInt64,
+                               receivedAt: UInt64,
+                               timebaseNumer: UInt32,
+                               timebaseDenom: UInt32) -> UInt64? {
+    let plausibleAge: UInt64 = 10_000_000_000
+    guard eventTimestamp > 0 else { return nil }
+    if eventTimestamp <= receivedAt, receivedAt - eventTimestamp <= plausibleAge {
+        return receivedAt - eventTimestamp
+    }
+    guard timebaseDenom > 0 else { return nil }
+    let (product, overflow) = eventTimestamp.multipliedReportingOverflow(by: UInt64(timebaseNumer))
+    guard !overflow else { return nil }
+    let converted = product / UInt64(timebaseDenom)
+    if converted <= receivedAt, receivedAt - converted <= plausibleAge {
+        return receivedAt - converted
+    }
+    return nil
+}
+
+/// Marks along `handlePress()`, in the order they happen on the main thread.
+/// The first buffer is delivered on the audio thread and picked up later.
+struct PressTiming: Equatable, Sendable {
+    var receivedAt: UInt64
+    /// Event tap → callback; nil for menu and Voice Control starts.
+    var eventAgeNanoseconds: UInt64? = nil
+    var handlerStartedAt: UInt64? = nil
+    var permissionsCheckedAt: UInt64? = nil
+    var pasteTargetCapturedAt: UInt64? = nil
+    var engineStartedAt: UInt64? = nil
+    var engineWasCold = false
+    /// Part of a cold engine step spent starting the input device.
+    var engineDeviceStartNanoseconds: UInt64? = nil
+    /// Recording state set, menu-bar icon and HUD requested.
+    var stateUpdatedAt: UInt64? = nil
+    /// nil when feedback sounds are off.
+    var soundTriggeredAt: UInt64? = nil
+    /// After the output-mute request, log line and menu rebuild, when the press handler returns and AppKit can
+    /// draw the recording icon.
+    var menuRebuiltAt: UInt64? = nil
+    var firstBufferAt: UInt64? = nil
+}
+
+private func pressTimingMilliseconds(from start: UInt64?, to end: UInt64?) -> String? {
+    guard let start, let end else { return nil }
+    let nanoseconds = end >= start ? end - start : 0
+    return "\((nanoseconds + 500_000) / 1_000_000) ms"
+}
+
+func formattedPressTiming(_ timing: PressTiming) -> String {
+    var steps: [String] = []
+    if let age = timing.eventAgeNanoseconds {
+        steps.append("tap \((age + 500_000) / 1_000_000) ms")
+    }
+    var previous: UInt64? = timing.receivedAt
+    func step(_ name: String, _ mark: UInt64?, suffix: String = "") {
+        guard let mark else { return }
+        if let duration = pressTimingMilliseconds(from: previous, to: mark) {
+            steps.append("\(name) \(duration)\(suffix)")
+        }
+        previous = mark
+    }
+    step("queue", timing.handlerStartedAt)
+    step("permissions", timing.permissionsCheckedAt)
+    step("target", timing.pasteTargetCapturedAt)
+    let engineDetail: String
+    if !timing.engineWasCold {
+        engineDetail = " (warm)"
+    } else if let device = timing.engineDeviceStartNanoseconds {
+        engineDetail = " (cold, device \((device + 500_000) / 1_000_000) ms)"
+    } else {
+        engineDetail = " (cold)"
+    }
+    step("engine", timing.engineStartedAt, suffix: engineDetail)
+    step("state", timing.stateUpdatedAt)
+    if timing.soundTriggeredAt == nil, timing.stateUpdatedAt != nil {
+        steps.append("sound off")
+    }
+    step("sound", timing.soundTriggeredAt)
+    step("menu", timing.menuRebuiltAt)
+    if timing.engineStartedAt != nil {
+        steps.append(pressTimingMilliseconds(from: timing.engineStartedAt, to: timing.firstBufferAt)
+            .map { "first buffer \($0)" } ?? "first buffer none")
+    }
+    var line = "press timing: " + steps.joined(separator: ", ")
+    let milestones = [
+        pressTimingMilliseconds(from: timing.receivedAt, to: timing.menuRebuiltAt).map { "icon at \($0)" },
+        pressTimingMilliseconds(from: timing.receivedAt, to: timing.firstBufferAt).map { "audio at \($0)" },
+    ].compactMap { $0 }
+    if !milestones.isEmpty {
+        line += "; " + milestones.joined(separator: ", ")
+    }
+    return line
 }
 
 // MARK: - Audio capture
@@ -5111,6 +5253,9 @@ final class AudioCapture: @unchecked Sendable {
     private var latestCallbackStartedAt: TimeInterval = 0
     private var peakRMS = 0.0
     private var recordingGeneration: UInt64 = 0
+    /// Monotonic time of the current recording's first tap callback; 0 until then.
+    private var firstRecordingBufferAt: UInt64 = 0
+    private var lastEngineDeviceStartNanoseconds: UInt64?
     private var engineStarted = false
     private var configurationObserver: NSObjectProtocol?
 
@@ -5124,6 +5269,20 @@ final class AudioCapture: @unchecked Sendable {
     var isEngineStarted: Bool {
         lock.lock(); defer { lock.unlock() }
         return engineStarted
+    }
+
+    /// Time the latest cold start spent in `engine.start()` (the input device
+    /// starting), as opposed to building the graph before it.
+    var lastColdStartDeviceNanoseconds: UInt64? {
+        lock.lock(); defer { lock.unlock() }
+        return lastEngineDeviceStartNanoseconds
+    }
+
+    /// When the latest recording's first audio buffer was delivered. Kept
+    /// after endRecording() so a short press can still report it.
+    var firstRecordingBufferDeliveredAt: UInt64? {
+        lock.lock(); defer { lock.unlock() }
+        return firstRecordingBufferAt != 0 ? firstRecordingBufferAt : nil
     }
 
     func startEngine(inputDevicePreference: String = "",
@@ -5173,6 +5332,7 @@ final class AudioCapture: @unchecked Sendable {
         converter = newConverter
         if recordingImmediately {
             recordingGeneration &+= 1
+            firstRecordingBufferAt = 0
             samples.removeAll(keepingCapacity: true)
             latestLevel = 0
             latestLevelSequence &+= 1
@@ -5193,6 +5353,7 @@ final class AudioCapture: @unchecked Sendable {
             self?.handleTap(buffer: buffer, target: targetFormat)
         }
 
+        let deviceStartBegan = monotonicNanoseconds()
         do {
             try engine.start()
         } catch {
@@ -5201,8 +5362,10 @@ final class AudioCapture: @unchecked Sendable {
             resetEngineInstance()
             throw error
         }
+        let deviceStartNanoseconds = monotonicNanoseconds() - deviceStartBegan
         lock.lock()
         engineStarted = true
+        lastEngineDeviceStartNanoseconds = deviceStartNanoseconds
         lock.unlock()
         installConfigurationObserver()
         log("AudioCapture: engine started")
@@ -5236,6 +5399,7 @@ final class AudioCapture: @unchecked Sendable {
         latestCallbackStartedAt = 0
         peakRMS = 0
         recordingGeneration &+= 1
+        firstRecordingBufferAt = 0
         samples.removeAll(keepingCapacity: true)
         engineStarted = false
         // Clear the converter trio under the same lock the render
@@ -5266,6 +5430,7 @@ final class AudioCapture: @unchecked Sendable {
     func beginRecording() {
         lock.lock(); defer { lock.unlock() }
         recordingGeneration &+= 1
+        firstRecordingBufferAt = 0
         samples.removeAll(keepingCapacity: true)
         latestLevel = 0
         latestLevelSequence &+= 1
@@ -5331,6 +5496,7 @@ final class AudioCapture: @unchecked Sendable {
 
     private func handleTap(buffer: AVAudioPCMBuffer, target: AVAudioFormat) {
         let callbackStartedAt = ProcessInfo.processInfo.systemUptime
+        let callbackNanoseconds = monotonicNanoseconds()
         // Snapshot the running flag AND the converter trio in one
         // lock acquisition; bail fast if we're not recording so we
         // don't pay conversion cost for nothing. Working off the
@@ -5340,6 +5506,9 @@ final class AudioCapture: @unchecked Sendable {
         // converter alive for the rest of this call.
         lock.lock()
         let running = _isRunning
+        if running && firstRecordingBufferAt == 0 {
+            firstRecordingBufferAt = callbackNanoseconds
+        }
         let generation = recordingGeneration
         let converter = self.converter
         let monoMixFormat = converterInputFormat
@@ -9983,6 +10152,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var correctionsManagerVisibleIndices: [Int] = []
     private var hotkeyTestSucceeded = false
     private var recordingLevelTimer: Timer?
+    /// The current press's latency marks, logged once its first audio
+    /// buffer arrives or the recording ends without one.
+    private var pendingPressTiming: PressTiming?
     private var recordingVisualLevel: Float = 0
     private var recordingHUDPhase: CGFloat = 0
     private var recordingHUDAccessibilityOptions = RecordingHUDAccessibilityOptions.current()
@@ -10076,7 +10248,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             break
         }
 
-        hotkey.onPress = { [weak self] in self?.handleHotkeyPress() }
+        hotkey.onPress = { [weak self] receipt in self?.handleHotkeyPress(receipt: receipt) }
         hotkey.onRelease = { [weak self] in self?.handleRelease() }
         hotkey.onCancel = { [weak self] in self?.cancelActiveRecording(reason: "escape") }
         hotkey.onTapInterrupted = { [weak self] in self?.handleHotkeyTapInterruption() }
@@ -11028,6 +11200,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func stopRecordingLevelMeter(resetImage: Bool = true) {
+        logPressTimingIfReady(recordingEnded: true)
         recordingLevelTimer?.invalidate()
         recordingLevelTimer = nil
         recordingVisualLevel = 0
@@ -11045,6 +11218,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             stopRecordingLevelMeter()
             return
         }
+        logPressTimingIfReady(recordingEnded: false)
         let snapshot = audio.latestRecordingLevelSnapshot()
         if snapshot.sequence == lastRecordingLevelSequence {
             staleRecordingLevelTicks += 1
@@ -11367,15 +11541,19 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     /// Only the global event listener enters here. Menu and Voice Control
     /// dictation actions call `handlePress()` directly, so they cannot falsely
     /// mark the configured keyboard shortcut as tested.
-    private func handleHotkeyPress() {
+    private func handleHotkeyPress(receipt: HotkeyPressReceipt?) {
         if !hotkeyTestSucceeded {
             hotkeyTestSucceeded = true
             updateSetupChecklist()
         }
-        handlePress()
+        handlePress(receipt: receipt)
     }
 
-    private func handlePress() {
+    private func handlePress(receipt: HotkeyPressReceipt? = nil) {
+        let handlerStartedAt = monotonicNanoseconds()
+        var timing = PressTiming(receivedAt: receipt?.receivedAt ?? handlerStartedAt,
+                                 eventAgeNanoseconds: receipt?.eventAgeNanoseconds)
+        if receipt != nil { timing.handlerStartedAt = handlerStartedAt }
         if let blocker = recordingStartBlocker() {
             log("press ignored: \(blocker.rawValue)")
             return
@@ -11389,6 +11567,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             enterPermissionBlockedState(missing: missing, reason: "hotkey press")
             return
         }
+        timing.permissionsCheckedAt = monotonicNanoseconds()
         recordingPermissionInterruptionObserved = false
         // Snapshot the destination before audio startup, which can block while
         // rebuilding the engine. A focus change during that work must make the
@@ -11397,13 +11576,19 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // matters for #33: a target that never exposed exact window identity
         // is different from a window that changed during the bounded lookup.
         let pasteTarget = currentDictationPasteTarget(reportFailure: true)
+        timing.pasteTargetCapturedAt = monotonicNanoseconds()
         cancelAudioIdleStop()
         do {
             didTouchAudioEngine = true
-            if !audio.isEngineStarted {
+            timing.engineWasCold = !audio.isEngineStarted
+            if timing.engineWasCold {
                 suppressAudioConfigurationChangesFromAppEngineUpdate()
             }
             try audio.startRecording(inputDevicePreference: settings.inputDevice)
+            timing.engineStartedAt = monotonicNanoseconds()
+            if timing.engineWasCold {
+                timing.engineDeviceStartNanoseconds = audio.lastColdStartDeviceNanoseconds
+            }
         } catch {
             recordingPasteTarget = nil
             stopAudioEngineImmediately()
@@ -11414,14 +11599,29 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isRecording = true
         clearDictationNotice()
         startRecordingLevelMeter()
+        timing.stateUpdatedAt = monotonicNanoseconds()
         if settings.playFeedbackSounds {
             Sounds.playStart()
+            timing.soundTriggeredAt = monotonicNanoseconds()
         }
         muteIfNeededForRecording()
         log("press: recording")
 
         scheduleMaxDurationAutoRelease()
         rebuildMenu()
+        timing.menuRebuiltAt = monotonicNanoseconds()
+        pendingPressTiming = timing
+        logPressTimingIfReady(recordingEnded: false)
+    }
+
+    /// The first buffer lands on the audio thread; the level meter polls for
+    /// it, so the press path itself never waits or hops threads to log.
+    private func logPressTimingIfReady(recordingEnded: Bool) {
+        guard var timing = pendingPressTiming else { return }
+        timing.firstBufferAt = audio.firstRecordingBufferDeliveredAt
+        guard timing.firstBufferAt != nil || recordingEnded else { return }
+        pendingPressTiming = nil
+        log(formattedPressTiming(timing))
     }
 
     private func handleRelease() {
@@ -17254,7 +17454,7 @@ private final class NativeInteractionFixture {
         try installTail()
         listener.nativeTestEventFilter = { [weak self] in self?.isOwned($0) ?? false }
         listener.setHotkey(binding)
-        listener.onPress = { [weak self] in self?.presses += 1; self?.active = self?.blocked == false }
+        listener.onPress = { [weak self] _ in self?.presses += 1; self?.active = self?.blocked == false }
         listener.onRelease = { [weak self] in self?.releases += 1; self?.active = false }
         listener.onCancel = { [weak self] in
             self?.cancellations += 1
@@ -17491,6 +17691,280 @@ private final class NativeInteractionFixture {
     }
 }
 
+/// Headless press-path latency measurement for debug builds:
+/// `--measure-press-latency N [--model v3|ultra] [--gap SECONDS] [--hold MS]
+/// [--input default|explicit]`. `explicit` binds the current default input by
+/// UID, as a saved microphone choice would, instead of the system default.
+/// Runs the real paste-target capture and AudioCapture start on the system
+/// default input, cold then warm, N times. No status item, hotkey tap, sound,
+/// mute or keystroke is involved; the paste-target lookup only reads the
+/// frontmost window. Results go to stdout as durations only; nothing is
+/// appended to the user's log and no audio is kept.
+private enum PressLatencyMeasurement {
+    static let flag = "--measure-press-latency"
+
+    static func requested(_ arguments: [String]) -> Bool {
+        arguments.first == flag
+    }
+
+    private struct Options {
+        var iterations = 20
+        var profile: SpeechModelProfile?
+        var gapSeconds = 2.0
+        var holdMilliseconds = 600.0
+        var explicitInput = false
+    }
+
+    private struct Press {
+        var cold: Bool
+        var inputBusyElsewhere: Bool
+        var targetCaptured: Bool
+        var target: Double
+        var engine: Double
+        var device: Double?
+        var firstBuffer: Double?
+        var audioAt: Double?
+        var leadingDigitalSilence: Double
+    }
+
+    /// Async results handed back to the spinning main thread.
+    private final class Completion<T>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var result: Result<T, Error>?
+        func finish(_ value: Result<T, Error>) { lock.lock(); result = value; lock.unlock() }
+        var value: Result<T, Error>? { lock.lock(); defer { lock.unlock() }; return result }
+    }
+
+    @MainActor
+    static func run(arguments: [String]) -> Int32 {
+        guard let options = parse(Array(arguments.dropFirst())) else {
+            print("usage: \(flag) N [--model v3|ultra] [--gap SECONDS] [--hold MS] [--input default|explicit]")
+            return EXIT_FAILURE
+        }
+        let worker = TranscriptionWorker()
+        if let profile = options.profile {
+            let started = monotonicNanoseconds()
+            do {
+                try wait { try await worker.load(profile: profile, allowDownload: false) }
+            } catch {
+                print("FAIL model load: \(privacySafeErrorLogDetail(error))")
+                return EXIT_FAILURE
+            }
+            print("model \(profile.rawValue) loaded in \(milliseconds(started, monotonicNanoseconds())) ms")
+        } else {
+            print("model none")
+        }
+
+        var inputPreference = ""
+        if options.explicitInput {
+            guard let device = defaultInputDevice(),
+                  let uid = audioObjectStringProperty(device, selector: kAudioDevicePropertyDeviceUID) else {
+                print("FAIL no default input device")
+                return EXIT_FAILURE
+            }
+            inputPreference = uid
+        }
+        print("input \(options.explicitInput ? "explicit default device" : "system default")")
+        let audio = AudioCapture()
+        var presses: [Press] = []
+        // Iteration 0 pays one-off framework loading in this process; it is
+        // printed but kept out of the summary.
+        for iteration in 0...options.iterations {
+            audio.stopEngine()
+            pump(seconds: options.gapSeconds)
+            do {
+                let cold = try press(audio, inputPreference: inputPreference,
+                                     holdMilliseconds: options.holdMilliseconds)
+                // A second press while the input is still open, as within the
+                // app's idle window.
+                pump(seconds: 0.3)
+                let warm = try press(audio, inputPreference: inputPreference,
+                                     holdMilliseconds: options.holdMilliseconds)
+                if options.profile != nil {
+                    let silence = [Float](repeating: 0, count: Int(SAMPLE_RATE))
+                    _ = try wait { try await worker.transcribe(samples: silence) }
+                }
+                for result in [cold, warm] {
+                    print("press \(iteration) \(describe(result))")
+                    if iteration > 0 { presses.append(result) }
+                }
+            } catch {
+                print("FAIL press \(iteration): \(privacySafeErrorLogDetail(error))")
+                audio.stopEngine()
+                return EXIT_FAILURE
+            }
+        }
+        audio.stopEngine()
+        summarize(presses)
+        return EXIT_SUCCESS
+    }
+
+    private static func parse(_ arguments: [String]) -> Options? {
+        var options = Options()
+        guard let count = arguments.first.flatMap(Int.init), count > 0 else { return nil }
+        options.iterations = count
+        var index = 1
+        while index < arguments.count {
+            guard index + 1 < arguments.count else { return nil }
+            let value = arguments[index + 1]
+            switch arguments[index] {
+            case "--model":
+                switch value {
+                case "v3": options.profile = .multilingualV3
+                case "ultra": options.profile = .parakeetUltra
+                case "none": options.profile = nil
+                default: return nil
+                }
+            case "--gap":
+                guard let seconds = Double(value), seconds >= 0 else { return nil }
+                options.gapSeconds = seconds
+            case "--hold":
+                guard let ms = Double(value), ms >= 50 else { return nil }
+                options.holdMilliseconds = ms
+            case "--input":
+                guard ["default", "explicit"].contains(value) else { return nil }
+                options.explicitInput = value == "explicit"
+            default:
+                return nil
+            }
+            index += 2
+        }
+        return options
+    }
+
+    /// The press path from `handlePress()`: paste target, then audio start,
+    /// then the first delivered buffer.
+    @MainActor
+    private static func press(_ audio: AudioCapture, inputPreference: String,
+                              holdMilliseconds: Double) throws -> Press {
+        let cold = !audio.isEngineStarted
+        let busy = cold && defaultInputIsRunningSomewhere()
+        let started = monotonicNanoseconds()
+        let target = currentDictationPasteTarget(reportFailure: false)
+        let targetCaptured = monotonicNanoseconds()
+        try audio.startRecording(inputDevicePreference: inputPreference)
+        let engineStarted = monotonicNanoseconds()
+        let deadline = started + UInt64(max(holdMilliseconds, 3_000) * 1_000_000)
+        var firstBuffer = audio.firstRecordingBufferDeliveredAt
+        while firstBuffer == nil, monotonicNanoseconds() < deadline {
+            usleep(500)
+            firstBuffer = audio.firstRecordingBufferDeliveredAt
+        }
+        let holdUntil = started + UInt64(holdMilliseconds * 1_000_000)
+        while monotonicNanoseconds() < holdUntil { usleep(1_000) }
+        let samples = audio.endRecording()
+        let leadingSilence = samples.prefix { $0 == 0 }.count
+        return Press(
+            cold: cold,
+            inputBusyElsewhere: busy,
+            targetCaptured: target != nil,
+            target: milliseconds(started, targetCaptured),
+            engine: milliseconds(targetCaptured, engineStarted),
+            device: cold ? audio.lastColdStartDeviceNanoseconds.map { Double($0) / 1_000_000 } : nil,
+            firstBuffer: firstBuffer.map { milliseconds(engineStarted, $0) },
+            audioAt: firstBuffer.map { milliseconds(started, $0) },
+            leadingDigitalSilence: Double(leadingSilence) / SAMPLE_RATE * 1_000
+        )
+    }
+
+    private static func describe(_ press: Press) -> String {
+        func ms(_ value: Double?) -> String { value.map { String(format: "%.1f", $0) } ?? "none" }
+        return [
+            press.cold ? "cold" : "warm",
+            "target \(ms(press.target)) ms (\(press.targetCaptured ? "captured" : "unavailable"))",
+            "engine \(ms(press.engine)) ms" + (press.device.map { " (device \(ms($0)) ms)" } ?? ""),
+            "first buffer \(ms(press.firstBuffer)) ms",
+            "audio at \(ms(press.audioAt)) ms",
+            "leading zeros \(ms(press.leadingDigitalSilence)) ms",
+            press.inputBusyElsewhere ? "input already running elsewhere" : nil,
+        ].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    private static func summarize(_ presses: [Press]) {
+        print("step | start | n | median ms | p90 ms | max ms")
+        for cold in [true, false] {
+            // A cold start that found the device already running (another
+            // app recording) is not a cold device start; report it apart.
+            let group = presses.filter { $0.cold == cold && !$0.inputBusyElsewhere }
+            let label = cold ? "cold" : "warm"
+            let rows: [(String, [Double])] = [
+                ("target", group.map(\.target)),
+                ("engine", group.map(\.engine)),
+                ("device start", group.compactMap(\.device)),
+                ("first buffer", group.compactMap(\.firstBuffer)),
+                ("audio at", group.compactMap(\.audioAt)),
+                ("leading zeros", group.map(\.leadingDigitalSilence)),
+            ]
+            for (name, values) in rows where !values.isEmpty {
+                let sorted = values.sorted()
+                let p90 = sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.9).rounded(.up)) - 1)]
+                print(String(format: "%@ | %@ | %d | %.1f | %.1f | %.1f",
+                             name, label, sorted.count, median(sorted), p90, sorted.last ?? 0))
+            }
+            if cold {
+                let busy = presses.filter(\.inputBusyElsewhere).count
+                if busy > 0 { print("note: \(busy) cold presses found the input already running elsewhere and are excluded") }
+            }
+        }
+    }
+
+    private static func median(_ sorted: [Double]) -> Double {
+        guard !sorted.isEmpty else { return 0 }
+        let mid = sorted.count / 2
+        return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+    }
+
+    private static func milliseconds(_ start: UInt64, _ end: UInt64) -> Double {
+        Double(end >= start ? end - start : 0) / 1_000_000
+    }
+
+    /// Another client (the installed app mid-dictation, a call) keeps the
+    /// device running, which would make a "cold" start look warm.
+    private static func defaultInputDevice() -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var device = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                         &address, 0, nil, &size, &device) == noErr,
+              device != 0 else { return nil }
+        return device
+    }
+
+    private static func defaultInputIsRunningSomewhere() -> Bool {
+        guard let device = defaultInputDevice() else { return false }
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var running = UInt32(0)
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &running) == noErr else { return false }
+        return running != 0
+    }
+
+    @MainActor
+    private static func pump(seconds: Double) {
+        let until = Date(timeIntervalSinceNow: seconds)
+        while Date() < until {
+            RunLoop.main.run(until: min(until, Date(timeIntervalSinceNow: 0.05)))
+        }
+    }
+
+    @MainActor
+    private static func wait<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
+        let completion = Completion<T>()
+        Task.detached {
+            do { completion.finish(.success(try await operation())) }
+            catch { completion.finish(.failure(error)) }
+        }
+        while true {
+            if let result = completion.value { return try result.get() }
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+        }
+    }
+}
+
 private enum PresspeechSelfTest {
     private final class UnavailablePasteboardDataProvider: NSObject, NSPasteboardItemDataProvider {
         func pasteboard(_ pasteboard: NSPasteboard?,
@@ -17532,6 +18006,8 @@ private enum PresspeechSelfTest {
             return runSuite("fillers", testFillerWordRemoval)
         case "audio-level":
             return runSuite("audio-level", testAudioLevelMetering)
+        case "press-timing":
+            return runSuite("press-timing", testPressTiming)
         case "hud-accessibility":
             return runSuite("hud-accessibility", testRecordingHUDAccessibility)
         case "audio-conversion":
@@ -17600,6 +18076,7 @@ private enum PresspeechSelfTest {
         try testTranscriptCorrections()
         try testFillerWordRemoval()
         try testAudioLevelMetering()
+        try testPressTiming()
         try testRecordingHUDAccessibility()
         try testAudioConversion()
         try testAudioInputDeviceFiltering()
@@ -17618,6 +18095,91 @@ private enum PresspeechSelfTest {
         try testIdentityMigration()
         try testLaunchAtLogin()
         try testControlSurfaceVisibility()
+    }
+
+    private static func testPressTiming() throws {
+        let received: UInt64 = 1_000_000_000
+        let engine = received + 652_600_000
+        let hotkeyPress = PressTiming(
+            receivedAt: received,
+            eventAgeNanoseconds: 2_400_000,
+            handlerStartedAt: received + 400_000,
+            permissionsCheckedAt: received + 600_000,
+            pasteTargetCapturedAt: received + 12_600_000,
+            engineStartedAt: engine,
+            engineWasCold: true,
+            engineDeviceStartNanoseconds: 455_400_000,
+            stateUpdatedAt: engine + 1_000_000,
+            soundTriggeredAt: engine + 4_000_000,
+            menuRebuiltAt: engine + 8_000_000,
+            firstBufferAt: engine + 85_000_000
+        )
+        try expect(
+            formattedPressTiming(hotkeyPress),
+            equals: "press timing: tap 2 ms, queue 0 ms, permissions 0 ms, target 12 ms, engine 640 ms (cold, device 455 ms), state 1 ms, sound 3 ms, menu 4 ms, first buffer 85 ms; icon at 661 ms, audio at 738 ms",
+            "a hotkey press should log each step as a delta and the two user-visible milestones from the event"
+        )
+        var coldWithoutSplit = hotkeyPress
+        coldWithoutSplit.engineDeviceStartNanoseconds = nil
+        try expect(
+            formattedPressTiming(coldWithoutSplit).contains("engine 640 ms (cold), state"),
+            equals: true,
+            "a cold start without a device split should still say cold"
+        )
+
+        let menuStart = PressTiming(
+            receivedAt: received,
+            permissionsCheckedAt: received + 1_000_000,
+            pasteTargetCapturedAt: received + 3_000_000,
+            engineStartedAt: received + 8_000_000,
+            stateUpdatedAt: received + 9_000_000,
+            menuRebuiltAt: received + 11_000_000
+        )
+        try expect(
+            formattedPressTiming(menuStart),
+            equals: "press timing: permissions 1 ms, target 2 ms, engine 5 ms (warm), state 1 ms, sound off, menu 2 ms, first buffer none; icon at 11 ms",
+            "a menu start has no tap or queue step, and a recording without audio says so"
+        )
+
+        var clockSkew = menuStart
+        clockSkew.firstBufferAt = received + 7_000_000
+        try expect(
+            formattedPressTiming(clockSkew).hasSuffix("first buffer 0 ms; icon at 11 ms, audio at 7 ms"),
+            equals: true,
+            "a buffer delivered before the engine call returned should clamp to 0 ms, not wrap"
+        )
+
+        let now: UInt64 = 102_604_501_875_000  // a whole number of 125/3 ns ticks
+        try expect(
+            hotkeyEventAgeNanoseconds(eventTimestamp: now - 3_000_000, receivedAt: now,
+                                      timebaseNumer: 125, timebaseDenom: 3),
+            equals: 3_000_000,
+            "a nanosecond event timestamp should give the event's age directly"
+        )
+        try expect(
+            hotkeyEventAgeNanoseconds(eventTimestamp: (now - 3_000_000) / 125 * 3, receivedAt: now,
+                                      timebaseNumer: 125, timebaseDenom: 3),
+            equals: 3_000_000,
+            "a mach-tick event timestamp should be converted with the timebase"
+        )
+        try expect(
+            hotkeyEventAgeNanoseconds(eventTimestamp: 0, receivedAt: now,
+                                      timebaseNumer: 125, timebaseDenom: 3) == nil,
+            equals: true,
+            "a synthetic event without a timestamp should not report an age"
+        )
+        try expect(
+            hotkeyEventAgeNanoseconds(eventTimestamp: now + 1_000_000, receivedAt: now,
+                                      timebaseNumer: 1, timebaseDenom: 1) == nil,
+            equals: true,
+            "a timestamp after receipt should not report an age"
+        )
+        try expect(
+            hotkeyEventAgeNanoseconds(eventTimestamp: UInt64.max / 2, receivedAt: now,
+                                      timebaseNumer: 125, timebaseDenom: 3) == nil,
+            equals: true,
+            "an implausible timestamp should not overflow or report an age"
+        )
     }
 
     private static func testSilentCaptureHint() throws {
@@ -25726,12 +26288,18 @@ private enum PresspeechSelfTest {
     }
 }
 
+if PressLatencyMeasurement.requested(Array(CommandLine.arguments.dropFirst())) {
+    exit(MainActor.assumeIsolated {
+        PressLatencyMeasurement.run(arguments: Array(CommandLine.arguments.dropFirst()))
+    })
+}
 if let status = PresspeechSelfTest.run(arguments: Array(CommandLine.arguments.dropFirst())) {
     exit(status)
 }
 #else
 // A mistyped acceptance command must never launch the production application.
-if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contains("--allow-native-input") {
+if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contains("--allow-native-input")
+    || CommandLine.arguments.contains("--measure-press-latency") {
     FileHandle.standardError.write(Data("Self-tests require a debug build.\n".utf8))
     exit(EXIT_FAILURE)
 }
