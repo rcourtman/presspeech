@@ -5958,19 +5958,27 @@ func speechModelStartupStatusTitle(_ progress: DownloadProgress) -> String {
         return "Checking speech model files…"
     case .downloading(let completedFiles, let totalFiles):
         guard totalFiles > 0 else { return "Loading cached speech model…" }
-        let downloadFraction = min(max(progress.fractionCompleted / 0.5, 0), 1)
-        let percent = min(100, max(0, Int((downloadFraction * 20).rounded()) * 5))
+        let percent = Int((speechModelDownloadFraction(progress) * 100).rounded())
         return "Downloading speech model… \(percent)% (\(completedFiles)/\(totalFiles))"
     case .compiling:
         return "Preparing speech model…"
     }
 }
 
+/// Download progress normalized to the download half of FluidAudio's
+/// fraction and quantized to 5% steps. FluidAudio reports progress for every
+/// received chunk, and each visible change rebuilds the status menu on the
+/// main thread, so only steps the title and bar can actually show count.
+func speechModelDownloadFraction(_ progress: DownloadProgress) -> Double {
+    let downloadFraction = min(max(progress.fractionCompleted / 0.5, 0), 1)
+    return (downloadFraction * 20).rounded() / 20
+}
+
 func speechModelStartupProgressValue(_ progress: DownloadProgress) -> Double? {
     switch progress.phase {
     case .downloading(_, let totalFiles):
         guard totalFiles > 0 else { return nil }
-        return min(max(progress.fractionCompleted / 0.5, 0), 1)
+        return speechModelDownloadFraction(progress)
     case .listing, .compiling:
         return nil
     }
@@ -9705,6 +9713,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var manualUpdateCheckTask: Task<Void, Never>?
     private var startupStatusTitle = "Loading speech model…"
     private var speechModelStartupProgressFraction: Double?
+    /// `SMAppService.mainApp.status` is a synchronous XPC round trip. Menu
+    /// rebuilds reuse this value; `menuWillOpen` and the toggle refresh it.
+    private var cachedLaunchAtLoginStatus: SMAppService.Status?
     private var startupFailure: StartupFailure?
     private var didTouchAudioEngine = false
     private var permissionReadinessTimer: Timer?
@@ -12131,7 +12142,13 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
               let item = menuItem(with: Self.launchAtLoginMenuItemIdentifier, in: menu) else {
             return
         }
-        configureLaunchAtLoginMenuItem(item, status: SMAppService.mainApp.status)
+        configureLaunchAtLoginMenuItem(item, status: refreshLaunchAtLoginStatus())
+    }
+
+    private func refreshLaunchAtLoginStatus() -> SMAppService.Status {
+        let status = SMAppService.mainApp.status
+        cachedLaunchAtLoginStatus = status
+        return status
     }
 
     private func menuItem(with identifier: NSUserInterfaceItemIdentifier,
@@ -13748,7 +13765,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                        keyEquivalent: "")
         launchAtLogin.target = self
         launchAtLogin.identifier = Self.launchAtLoginMenuItemIdentifier
-        configureLaunchAtLoginMenuItem(launchAtLogin, status: SMAppService.mainApp.status)
+        configureLaunchAtLoginMenuItem(launchAtLogin,
+                                       status: cachedLaunchAtLoginStatus ?? refreshLaunchAtLoginStatus())
         sub.addItem(launchAtLogin)
 
         let dock = NSMenuItem(title: "Show Presspeech in Dock",
@@ -15731,6 +15749,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         } catch {
             showLaunchAtLoginError(error)
         }
+        _ = refreshLaunchAtLoginStatus()
         rebuildMenu()
     }
 
@@ -22940,6 +22959,32 @@ private enum PresspeechSelfTest {
                                                   phase: .downloading(completedFiles: 2, totalFiles: 4))),
             equals: 0.5,
             "download phase should expose normalized model progress"
+        )
+        try expect(
+            speechModelStartupProgressValue(.init(fractionCompleted: 0.1234,
+                                                  phase: .downloading(completedFiles: 1, totalFiles: 4))),
+            equals: 0.25,
+            "download progress should be quantized to the 5% steps the title shows"
+        )
+        var visibleDownloadSteps = Set<String>()
+        var progressFractions = Set<Double>()
+        for chunk in 0...10_000 {
+            let progress = DownloadProgress(fractionCompleted: Double(chunk) / 10_000 * 0.5,
+                                            phase: .downloading(completedFiles: 0, totalFiles: 4))
+            visibleDownloadSteps.insert(speechModelStartupStatusTitle(progress))
+            if let fraction = speechModelStartupProgressValue(progress) {
+                progressFractions.insert(fraction)
+            }
+        }
+        try expect(
+            visibleDownloadSteps.count,
+            equals: 21,
+            "per-chunk download callbacks should collapse to 21 visible title steps"
+        )
+        try expect(
+            progressFractions.count,
+            equals: 21,
+            "per-chunk download callbacks should only change the bar when the title changes"
         )
         try expect(
             speechModelStartupProgressValue(.init(fractionCompleted: 0.5,
