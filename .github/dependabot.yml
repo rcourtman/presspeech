@@ -17,6 +17,12 @@ updates:
     # Most runtime requirements are lower bounds, so avoid PRs that merely
     # raise a floor while the existing constraint already permits the update.
     versioning-strategy: increase-if-necessary
+    # The CUDA files set `--index-url` to the PyTorch wheel index, which
+    # Dependabot applies to every package in /windows: non-Torch lookups get
+    # 403s, and +cu126 hashes cannot be fetched from PyPI. Bump CUDA Torch by
+    # hand and regenerate the locks with windows/release_requirements.py.
+    exclude-paths:
+      - "**/requirements-cuda*.txt"
     open-pull-requests-limit: 5
     labels:
       - dependencies
