@@ -94,8 +94,9 @@ joblib==1.5.3 \
     # via
     #   librosa
     #   scikit-learn
-lazy-loader==0.5 \
-    --hash=sha256:ab0ea149e9c554d4ffeeb21105ac60bed7f3b4fd69b1d2360a4add51b170b005
+lazy-loader==0.6 \
+    --hash=sha256:2f4b7824d6401958639008a0cae20c776b61dff619accd6890693e2de8260167 \
+    --hash=sha256:77253be3391b06124a0e16105bd663b6c54470af1a9ca8e1cf026f38d58ed056
     # via librosa
 librosa==1.0.0 \
     --hash=sha256:5910a6c0e1b2e494b92758c1615a7acbd0515a2315e138927ba2982f2af88857
