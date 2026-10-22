@@ -4953,6 +4953,8 @@ struct PressTiming: Equatable, Sendable {
     var pasteTargetCapturedAt: UInt64? = nil
     var engineStartedAt: UInt64? = nil
     var engineWasCold = false
+    /// The cold start reused an input graph built while idle.
+    var engineUsedPreparedGraph = false
     /// Part of a cold engine step spent starting the input device.
     var engineDeviceStartNanoseconds: UInt64? = nil
     /// Recording state set, menu-bar icon and HUD requested.
@@ -4990,10 +4992,13 @@ func formattedPressTiming(_ timing: PressTiming) -> String {
     let engineDetail: String
     if !timing.engineWasCold {
         engineDetail = " (warm)"
-    } else if let device = timing.engineDeviceStartNanoseconds {
-        engineDetail = " (cold, device \((device + 500_000) / 1_000_000) ms)"
     } else {
-        engineDetail = " (cold)"
+        var details = ["cold"]
+        if timing.engineUsedPreparedGraph { details.append("prepared") }
+        if let device = timing.engineDeviceStartNanoseconds {
+            details.append("device \((device + 500_000) / 1_000_000) ms")
+        }
+        engineDetail = " (\(details.joined(separator: ", ")))"
     }
     step("engine", timing.engineStartedAt, suffix: engineDetail)
     step("state", timing.stateUpdatedAt)
@@ -5015,6 +5020,57 @@ func formattedPressTiming(_ timing: PressTiming) -> String {
         line += "; " + milestones.joined(separator: ", ")
     }
     return line
+}
+
+// MARK: - Prepared input graph
+//
+// A cold press spends ~70–100 ms building the AVAudioEngine input graph
+// before the device even starts. Building it while idle, without starting
+// I/O, takes that off the press path while the microphone stays closed.
+
+func currentDefaultInputDevice() -> AudioDeviceID? {
+    var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                             mScope: kAudioObjectPropertyScopeGlobal,
+                                             mElement: kAudioObjectPropertyElementMain)
+    var device = AudioDeviceID(0)
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
+                                     &address, 0, nil, &size, &device) == noErr,
+          device != 0 else { return nil }
+    return device
+}
+
+func audioDeviceTransportType(_ device: AudioDeviceID) -> UInt32? {
+    var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyTransportType,
+                                             mScope: kAudioObjectPropertyScopeGlobal,
+                                             mElement: kAudioObjectPropertyElementMain)
+    var transport = UInt32(0)
+    var size = UInt32(MemoryLayout<UInt32>.size)
+    guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &transport) == noErr else {
+        return nil
+    }
+    return transport
+}
+
+/// Only wired inputs are prepared ahead. Opening a Bluetooth or wireless
+/// input's audio unit could change how that device behaves for other audio
+/// (for example a headset's call profile), so those keep the cold path.
+func inputTransportAllowsIdlePreparation(_ transport: UInt32?) -> Bool {
+    transport == kAudioDeviceTransportTypeBuiltIn || transport == kAudioDeviceTransportTypeUSB
+}
+
+/// A prepared graph is used only if a fresh build would match it.
+func preparedInputGraphIsCurrent(preparedPreference: String,
+                                 requestedPreference: String,
+                                 preparedFormat: AVAudioFormat,
+                                 currentFormat: AVAudioFormat,
+                                 preparedDefaultInput: AudioDeviceID?,
+                                 currentDefaultInput: AudioDeviceID?) -> Bool {
+    preparedPreference == requestedPreference
+        && preparedFormat.isEqual(currentFormat)
+        && currentFormat.sampleRate > 0
+        && currentFormat.channelCount > 0
+        && preparedDefaultInput == currentDefaultInput
 }
 
 // MARK: - Audio capture
@@ -5258,6 +5314,20 @@ final class AudioCapture: @unchecked Sendable {
     private var lastEngineDeviceStartNanoseconds: UInt64?
     private var engineStarted = false
     private var configurationObserver: NSObjectProtocol?
+    /// Node, converter and tap are in place on `engine` (started or not).
+    private var inputGraphBuilt = false
+    /// A graph built while idle, with no I/O running: the device is not
+    /// started, so the microphone and its recording indicator stay off until
+    /// a press calls `engine.start()`. Main thread only, like `engine`.
+    private var preparedGraph: PreparedInputGraph?
+    private var preparedConfigurationObserver: NSObjectProtocol?
+    private(set) var lastStartUsedPreparedGraph = false
+
+    private struct PreparedInputGraph {
+        let inputDevicePreference: String
+        let inputFormat: AVAudioFormat
+        let defaultInputDevice: AudioDeviceID?
+    }
 
     var onConfigurationChange: (@Sendable () -> Void)?
 
@@ -5294,6 +5364,44 @@ final class AudioCapture: @unchecked Sendable {
             return
         }
 
+        let usedPreparedGraph = takePreparedInputGraph(matching: inputDevicePreference)
+        if !usedPreparedGraph {
+            try buildInputGraph(inputDevicePreference: inputDevicePreference)
+        }
+        if recordingImmediately {
+            lock.lock()
+            recordingGeneration &+= 1
+            firstRecordingBufferAt = 0
+            samples.removeAll(keepingCapacity: true)
+            latestLevel = 0
+            latestLevelSequence &+= 1
+            latestCallbackStartedAt = 0
+            peakRMS = 0
+            _isRunning = true
+            lock.unlock()
+        }
+
+        let deviceStartBegan = monotonicNanoseconds()
+        do {
+            try engine.start()
+        } catch {
+            tearDownInputGraph()
+            throw error
+        }
+        let deviceStartNanoseconds = monotonicNanoseconds() - deviceStartBegan
+        lock.lock()
+        engineStarted = true
+        lastEngineDeviceStartNanoseconds = deviceStartNanoseconds
+        lock.unlock()
+        lastStartUsedPreparedGraph = usedPreparedGraph
+        installConfigurationObserver()
+        log("AudioCapture: engine started")
+    }
+
+    /// Input node, converter and tap: everything before `engine.start()`.
+    /// Nothing here starts the input device.
+    @discardableResult
+    private func buildInputGraph(inputDevicePreference: String) throws -> AVAudioFormat {
         let input = engine.inputNode
         applyInputDevicePreference(inputDevicePreference, to: input)
         // inputFormat(forBus:), not outputFormat(forBus:). The latter reports
@@ -5330,16 +5438,6 @@ final class AudioCapture: @unchecked Sendable {
         converterInputFormat = sourceFormat
         manuallyMixInputToMono = mixToMono
         converter = newConverter
-        if recordingImmediately {
-            recordingGeneration &+= 1
-            firstRecordingBufferAt = 0
-            samples.removeAll(keepingCapacity: true)
-            latestLevel = 0
-            latestLevelSequence &+= 1
-            latestCallbackStartedAt = 0
-            peakRMS = 0
-            _isRunning = true
-        }
         lock.unlock()
         let mixLabel = mixToMono ? " via manual mono mix" : ""
         log("AudioCapture: input \(inputFormat.sampleRate) Hz \(inputFormat.channelCount)ch\(mixLabel) → \(targetFormat.sampleRate) Hz mono")
@@ -5352,23 +5450,86 @@ final class AudioCapture: @unchecked Sendable {
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             self?.handleTap(buffer: buffer, target: targetFormat)
         }
+        inputGraphBuilt = true
+        return inputFormat
+    }
 
-        let deviceStartBegan = monotonicNanoseconds()
-        do {
-            try engine.start()
-        } catch {
-            input.removeTap(onBus: 0)
-            clearConverterState()
-            resetEngineInstance()
-            throw error
+    private func tearDownInputGraph() {
+        removePreparedConfigurationObserver()
+        preparedGraph = nil
+        if inputGraphBuilt {
+            engine.inputNode.removeTap(onBus: 0)
+            inputGraphBuilt = false
         }
-        let deviceStartNanoseconds = monotonicNanoseconds() - deviceStartBegan
-        lock.lock()
-        engineStarted = true
-        lastEngineDeviceStartNanoseconds = deviceStartNanoseconds
-        lock.unlock()
-        installConfigurationObserver()
-        log("AudioCapture: engine started")
+        clearConverterState()
+        resetEngineInstance()
+    }
+
+    var hasPreparedInputGraph: Bool { preparedGraph != nil }
+
+    /// Builds, while idle, the graph a cold press would otherwise build first
+    /// (~70–100 ms), and prepares the engine without starting it. The input
+    /// device is not started, so nothing is captured and the microphone
+    /// indicator stays off. Callers limit this to built-in and USB inputs.
+    func prepareInputGraph(inputDevicePreference: String) {
+        guard !isEngineStarted, !inputGraphBuilt else { return }
+        do {
+            let inputFormat = try buildInputGraph(inputDevicePreference: inputDevicePreference)
+            engine.prepare()
+            preparedGraph = PreparedInputGraph(inputDevicePreference: inputDevicePreference,
+                                               inputFormat: inputFormat,
+                                               defaultInputDevice: currentDefaultInputDevice())
+            // Any route or format change makes the graph stale; drop it rather
+            // than risk a tap at the wrong rate (silent capture).
+            preparedConfigurationObserver = NotificationCenter.default.addObserver(
+                forName: .AVAudioEngineConfigurationChange,
+                object: engine,
+                queue: .main
+            ) { [weak self] _ in
+                self?.discardPreparedInputGraph(reason: "audio configuration changed")
+            }
+        } catch {
+            tearDownInputGraph()
+            log("AudioCapture: input graph not prepared: \(privacySafeErrorLogDetail(error))")
+        }
+    }
+
+    func discardPreparedInputGraph(reason: String) {
+        guard preparedGraph != nil, !isEngineStarted else { return }
+        tearDownInputGraph()
+        log("AudioCapture: prepared input graph discarded (\(reason))")
+    }
+
+    /// Uses the prepared graph only if it still matches what a fresh build
+    /// would produce; otherwise tears it down so the caller builds anew.
+    private func takePreparedInputGraph(matching inputDevicePreference: String) -> Bool {
+        guard let prepared = preparedGraph else {
+            if inputGraphBuilt { tearDownInputGraph() }
+            return false
+        }
+        removePreparedConfigurationObserver()
+        preparedGraph = nil
+        let stillValid = preparedInputGraphIsCurrent(
+            preparedPreference: prepared.inputDevicePreference,
+            requestedPreference: inputDevicePreference,
+            preparedFormat: prepared.inputFormat,
+            currentFormat: engine.inputNode.inputFormat(forBus: 0),
+            preparedDefaultInput: prepared.defaultInputDevice,
+            currentDefaultInput: currentDefaultInputDevice()
+        )
+        guard stillValid else {
+            tearDownInputGraph()
+            log("AudioCapture: prepared input graph stale; rebuilding")
+            return false
+        }
+        return true
+    }
+
+    private func removePreparedConfigurationObserver() {
+        if let preparedConfigurationObserver {
+            NotificationCenter.default.removeObserver(preparedConfigurationObserver)
+            self.preparedConfigurationObserver = nil
+        }
     }
 
     func startRecording(inputDevicePreference: String = "") throws {
@@ -5382,13 +5543,11 @@ final class AudioCapture: @unchecked Sendable {
 
     func stopEngine() {
         removeConfigurationObserver()
-
-        let wasEngineStarted = isEngineStarted
         clearStoppedCaptureState()
-
-        guard wasEngineStarted else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        resetEngineInstance()
+        // A prepared graph goes too: every caller wants the input fully
+        // released (idle close, route restart, failure, termination).
+        guard inputGraphBuilt else { return }
+        tearDownInputGraph()
     }
 
     private func clearStoppedCaptureState() {
@@ -10292,6 +10451,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         rebuildMenu()
         startUpdateCheckLoop()
+        prepareIdleAudioInputGraph()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -11587,6 +11747,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             try audio.startRecording(inputDevicePreference: settings.inputDevice)
             timing.engineStartedAt = monotonicNanoseconds()
             if timing.engineWasCold {
+                timing.engineUsedPreparedGraph = audio.lastStartUsedPreparedGraph
                 timing.engineDeviceStartNanoseconds = audio.lastColdStartDeviceNanoseconds
             }
         } catch {
@@ -14566,6 +14727,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         if wasEngineStarted {
             log("AudioCapture: idle audio input closed (\(reason))")
         }
+        prepareIdleAudioInputGraph()
+    }
+
+    /// Build the next press's input graph now, leaving the device stopped, so
+    /// a cold press only has to start the microphone. Wired inputs only.
+    private func prepareIdleAudioInputGraph() {
+        guard ISOLATED_QA_MODE == nil, isReady, !isRecording, !isBusy, !isTerminating,
+              !audio.isEngineStarted, !audio.hasPreparedInputGraph,
+              missingPermissions().isEmpty else { return }
+        // Resolve the device the graph would bind, the same way
+        // applyInputDevicePreference falls back to the system default.
+        guard let device = audioInputDevice(matching: settings.inputDevice)?.id ?? currentDefaultInputDevice(),
+              inputTransportAllowsIdlePreparation(audioDeviceTransportType(device)) else { return }
+        audio.prepareInputGraph(inputDevicePreference: settings.inputDevice)
     }
 
     private func handleAudioConfigurationChange() {
@@ -17693,8 +17868,10 @@ private final class NativeInteractionFixture {
 
 /// Headless press-path latency measurement for debug builds:
 /// `--measure-press-latency N [--model v3|ultra] [--gap SECONDS] [--hold MS]
-/// [--input default|explicit]`. `explicit` binds the current default input by
-/// UID, as a saved microphone choice would, instead of the system default.
+/// [--input default|explicit] [--prepare on|off]`. `explicit` binds the current
+/// default input by UID, as a saved microphone choice would. `--prepare on`
+/// builds the input graph during the idle gap, as the app does after closing
+/// the input, and checks that the device is not running while only prepared.
 /// Runs the real paste-target capture and AudioCapture start on the system
 /// default input, cold then warm, N times. No status item, hotkey tap, sound,
 /// mute or keystroke is involved; the paste-target lookup only reads the
@@ -17713,10 +17890,12 @@ private enum PressLatencyMeasurement {
         var gapSeconds = 2.0
         var holdMilliseconds = 600.0
         var explicitInput = false
+        var prepare = false
     }
 
     private struct Press {
         var cold: Bool
+        var prepared: Bool
         var inputBusyElsewhere: Bool
         var targetCaptured: Bool
         var target: Double
@@ -17738,7 +17917,7 @@ private enum PressLatencyMeasurement {
     @MainActor
     static func run(arguments: [String]) -> Int32 {
         guard let options = parse(Array(arguments.dropFirst())) else {
-            print("usage: \(flag) N [--model v3|ultra] [--gap SECONDS] [--hold MS] [--input default|explicit]")
+            print("usage: \(flag) N [--model v3|ultra] [--gap SECONDS] [--hold MS] [--input default|explicit] [--prepare on|off]")
             return EXIT_FAILURE
         }
         let worker = TranscriptionWorker()
@@ -17757,21 +17936,28 @@ private enum PressLatencyMeasurement {
 
         var inputPreference = ""
         if options.explicitInput {
-            guard let device = defaultInputDevice(),
+            guard let device = currentDefaultInputDevice(),
                   let uid = audioObjectStringProperty(device, selector: kAudioDevicePropertyDeviceUID) else {
                 print("FAIL no default input device")
                 return EXIT_FAILURE
             }
             inputPreference = uid
         }
-        print("input \(options.explicitInput ? "explicit default device" : "system default")")
+        print("input \(options.explicitInput ? "explicit default device" : "system default"), prepare \(options.prepare ? "on" : "off")")
+        var deviceRunningWhilePrepared = 0
         let audio = AudioCapture()
         var presses: [Press] = []
         // Iteration 0 pays one-off framework loading in this process; it is
         // printed but kept out of the summary.
         for iteration in 0...options.iterations {
             audio.stopEngine()
+            if options.prepare {
+                audio.prepareInputGraph(inputDevicePreference: inputPreference)
+            }
             pump(seconds: options.gapSeconds)
+            if options.prepare, audio.hasPreparedInputGraph, defaultInputIsRunningSomewhere() {
+                deviceRunningWhilePrepared += 1
+            }
             do {
                 let cold = try press(audio, inputPreference: inputPreference,
                                      holdMilliseconds: options.holdMilliseconds)
@@ -17796,6 +17982,9 @@ private enum PressLatencyMeasurement {
         }
         audio.stopEngine()
         summarize(presses)
+        if options.prepare {
+            print("input device running while only prepared: \(deviceRunningWhilePrepared) of \(options.iterations + 1) gaps")
+        }
         return EXIT_SUCCESS
     }
 
@@ -17821,6 +18010,9 @@ private enum PressLatencyMeasurement {
             case "--hold":
                 guard let ms = Double(value), ms >= 50 else { return nil }
                 options.holdMilliseconds = ms
+            case "--prepare":
+                guard ["on", "off"].contains(value) else { return nil }
+                options.prepare = value == "on"
             case "--input":
                 guard ["default", "explicit"].contains(value) else { return nil }
                 options.explicitInput = value == "explicit"
@@ -17856,6 +18048,7 @@ private enum PressLatencyMeasurement {
         let leadingSilence = samples.prefix { $0 == 0 }.count
         return Press(
             cold: cold,
+            prepared: cold && audio.lastStartUsedPreparedGraph,
             inputBusyElsewhere: busy,
             targetCaptured: target != nil,
             target: milliseconds(started, targetCaptured),
@@ -17870,7 +18063,7 @@ private enum PressLatencyMeasurement {
     private static func describe(_ press: Press) -> String {
         func ms(_ value: Double?) -> String { value.map { String(format: "%.1f", $0) } ?? "none" }
         return [
-            press.cold ? "cold" : "warm",
+            press.cold ? (press.prepared ? "cold (prepared)" : "cold") : "warm",
             "target \(ms(press.target)) ms (\(press.targetCaptured ? "captured" : "unavailable"))",
             "engine \(ms(press.engine)) ms" + (press.device.map { " (device \(ms($0)) ms)" } ?? ""),
             "first buffer \(ms(press.firstBuffer)) ms",
@@ -17920,20 +18113,8 @@ private enum PressLatencyMeasurement {
 
     /// Another client (the installed app mid-dictation, a call) keeps the
     /// device running, which would make a "cold" start look warm.
-    private static func defaultInputDevice() -> AudioDeviceID? {
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                                                 mScope: kAudioObjectPropertyScopeGlobal,
-                                                 mElement: kAudioObjectPropertyElementMain)
-        var device = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),
-                                         &address, 0, nil, &size, &device) == noErr,
-              device != 0 else { return nil }
-        return device
-    }
-
     private static func defaultInputIsRunningSomewhere() -> Bool {
-        guard let device = defaultInputDevice() else { return false }
+        guard let device = currentDefaultInputDevice() else { return false }
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
                                                  mScope: kAudioObjectPropertyScopeGlobal,
                                                  mElement: kAudioObjectPropertyElementMain)
@@ -18008,6 +18189,8 @@ private enum PresspeechSelfTest {
             return runSuite("audio-level", testAudioLevelMetering)
         case "press-timing":
             return runSuite("press-timing", testPressTiming)
+        case "prepared-input":
+            return runSuite("prepared-input", testPreparedInputGraph)
         case "hud-accessibility":
             return runSuite("hud-accessibility", testRecordingHUDAccessibility)
         case "audio-conversion":
@@ -18077,6 +18260,7 @@ private enum PresspeechSelfTest {
         try testFillerWordRemoval()
         try testAudioLevelMetering()
         try testPressTiming()
+        try testPreparedInputGraph()
         try testRecordingHUDAccessibility()
         try testAudioConversion()
         try testAudioInputDeviceFiltering()
@@ -18141,6 +18325,14 @@ private enum PresspeechSelfTest {
             "a menu start has no tap or queue step, and a recording without audio says so"
         )
 
+        var prepared = hotkeyPress
+        prepared.engineUsedPreparedGraph = true
+        try expect(
+            formattedPressTiming(prepared).contains("engine 640 ms (cold, prepared, device 455 ms), state"),
+            equals: true,
+            "a cold start from a prepared graph should say so beside the device share"
+        )
+
         var clockSkew = menuStart
         clockSkew.firstBufferAt = received + 7_000_000
         try expect(
@@ -18180,6 +18372,54 @@ private enum PresspeechSelfTest {
             equals: true,
             "an implausible timestamp should not overflow or report an age"
         )
+    }
+
+    private static func testPreparedInputGraph() throws {
+        guard let yeti = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2),
+              let sameYeti = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2),
+              let builtIn = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1),
+              let monoYeti = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1) else {
+            throw SelfTestFailure.failed("test formats unavailable")
+        }
+        func isCurrent(preparedPreference: String = "", requestedPreference: String = "",
+                       preparedFormat: AVAudioFormat? = nil, currentFormat: AVAudioFormat,
+                       preparedDefault: AudioDeviceID? = 54, currentDefault: AudioDeviceID? = 54) -> Bool {
+            preparedInputGraphIsCurrent(preparedPreference: preparedPreference,
+                                        requestedPreference: requestedPreference,
+                                        preparedFormat: preparedFormat ?? yeti,
+                                        currentFormat: currentFormat,
+                                        preparedDefaultInput: preparedDefault,
+                                        currentDefaultInput: currentDefault)
+        }
+        try expect(isCurrent(currentFormat: sameYeti), equals: true,
+                   "an unchanged input should reuse the prepared graph")
+        try expect(isCurrent(currentFormat: builtIn), equals: false,
+                   "a different sample rate must rebuild, or the tap records silence")
+        try expect(isCurrent(currentFormat: monoYeti), equals: false,
+                   "a different channel count must rebuild the converter")
+        try expect(isCurrent(currentFormat: sameYeti, currentDefault: 91), equals: false,
+                   "a new default input must rebuild even when its format matches")
+        try expect(isCurrent(currentFormat: sameYeti, currentDefault: nil), equals: false,
+                   "losing the default input must rebuild")
+        try expect(isCurrent(requestedPreference: "usb-mic-uid", currentFormat: sameYeti), equals: false,
+                   "a changed microphone choice must rebuild")
+        if let silent = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 0, channels: 1, interleaved: false) {
+            try expect(isCurrent(preparedFormat: silent, currentFormat: silent), equals: false,
+                       "a zero-rate format from a vanished device must rebuild")
+        }
+
+        try expect(inputTransportAllowsIdlePreparation(kAudioDeviceTransportTypeBuiltIn), equals: true,
+                   "the built-in microphone can be prepared ahead")
+        try expect(inputTransportAllowsIdlePreparation(kAudioDeviceTransportTypeUSB), equals: true,
+                   "a USB microphone can be prepared ahead")
+        for transport in [kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE,
+                          kAudioDeviceTransportTypeAggregate, kAudioDeviceTransportTypeVirtual,
+                          kAudioDeviceTransportTypeAirPlay, kAudioDeviceTransportTypeContinuityCaptureWireless] {
+            try expect(inputTransportAllowsIdlePreparation(transport), equals: false,
+                       "wireless, aggregate and virtual inputs keep the cold path")
+        }
+        try expect(inputTransportAllowsIdlePreparation(nil), equals: false,
+                   "an unknown transport keeps the cold path")
     }
 
     private static func testSilentCaptureHint() throws {
