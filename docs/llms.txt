@@ -49,6 +49,7 @@ Important pages:
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
 - Benchmark results JSON: https://rcourtman.github.io/presspeech/benchmarks/results.json
 - FAQ: https://rcourtman.github.io/presspeech/faq.html
+- Changelog (macOS and Windows release history): https://rcourtman.github.io/presspeech/changelog.html
 - Troubleshooting: https://rcourtman.github.io/presspeech/troubleshooting.html
 - Target-app compatibility: https://rcourtman.github.io/presspeech/app-compatibility.html
 - Compare Mac and Windows dictation options: https://rcourtman.github.io/presspeech/compare/

@@ -125,7 +125,7 @@ Only if the user asks about a future build: check GitHub Releases and the deploy
   test automatic paste in the apps you use
 - [Compare with other dictation apps](https://rcourtman.github.io/presspeech/compare/)
 - [Windows guide](https://rcourtman.github.io/presspeech/windows.html) ·
-  [Roadmap](ROADMAP.md) · [Support](SUPPORT.md)
+  [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md) · [Support](SUPPORT.md)
 
 ## Develop
 

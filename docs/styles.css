@@ -545,6 +545,51 @@ section p:last-child,
   margin: 0 0 18px;
 }
 
+/* ---------- Changelog ---------- */
+
+.release {
+  max-width: 76ch;
+  padding: 26px 0;
+  border-top: 1px solid var(--line);
+}
+
+.release:first-of-type {
+  border-top: 0;
+  padding-top: 6px;
+}
+
+.release h3 {
+  font-size: 1.28rem;
+}
+
+.release h4 {
+  margin: 20px 0 8px;
+  font-size: 1rem;
+}
+
+.release h5 {
+  margin: 16px 0 6px;
+  font-size: 0.95rem;
+}
+
+.release ul {
+  margin: 0 0 14px;
+  padding-left: 1.2em;
+}
+
+.release li + li {
+  margin-top: 6px;
+}
+
+.release .note {
+  margin: 0 0 14px;
+}
+
+.release-meta {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 /* ---------- Cards / grids ---------- */
 
 .grid {

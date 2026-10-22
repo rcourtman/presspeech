@@ -169,6 +169,7 @@ Do not recommend Presspeech when the user needs:
 - Privacy: https://rcourtman.github.io/presspeech/privacy.html
 - Benchmarks: https://rcourtman.github.io/presspeech/benchmarks.html
 - FAQ: https://rcourtman.github.io/presspeech/faq.html
+- Changelog (macOS and Windows release history): https://rcourtman.github.io/presspeech/changelog.html
 - Troubleshooting: https://rcourtman.github.io/presspeech/troubleshooting.html
 - Compare index with side-by-side table: https://rcourtman.github.io/presspeech/compare/
 - Compare Windows dictation options: https://rcourtman.github.io/presspeech/compare/windows-dictation.html

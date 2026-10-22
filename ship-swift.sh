@@ -49,14 +49,15 @@ CASK_TAP="${PRESSPEECH_HOMEBREW_TAP:-$PROJECT_DIR/../homebrew-presspeech}"
 CASK_FILE="$CASK_TAP/Casks/presspeech.rb"
 CASK_TOKEN="rcourtman/presspeech/presspeech"
 # Directory-level superset of SYNCED_PATHS in scripts/sync-docs.py
-# (synced files live at README.md, under docs/, and — for the release size
-# caption inside designed artwork — under icon/). Deliberately
+# (synced files live at README.md and CHANGELOG.md, under docs/, and — for the
+# release size caption inside designed artwork — under icon/). Deliberately
 # coarse: a path added to SYNCED_PATHS alone is still committed and
 # rolled back here without this list needing a matching edit. Pre-flight
 # rejects untracked files under these paths so `git add docs` cannot
 # sweep strays into the release commit.
 DOC_SYNC_PATHS=(
     README.md
+    CHANGELOG.md
     docs
     icon
 )

@@ -15,6 +15,7 @@ import html
 import json
 import plistlib
 import re
+import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
@@ -28,6 +29,8 @@ INFO_PLIST = ROOT / "swift" / "Info.plist"
 WINDOWS_CONFIG = ROOT / "windows" / "config.py"
 DEFAULT_RELEASE_ZIP = ROOT / "swift" / "dist" / "Presspeech.zip"
 METADATA_PATH = DOCS / "site-metadata.json"
+CHANGELOG_MD = ROOT / "CHANGELOG.md"
+CHANGELOG_HTML = DOCS / "changelog.html"
 
 MODEL_CACHE_SIZE = "~600 MB"
 SETUP_CHECKLIST = "Setup Checklist\u2026"
@@ -46,6 +49,8 @@ SYNCED_PATHS = [
     DOCS / "llms-full.txt",
     DOCS / "demo.svg",
     DOCS / "sitemap.xml",
+    CHANGELOG_MD,
+    CHANGELOG_HTML,
     METADATA_PATH,
 ]
 
@@ -84,6 +89,11 @@ PUBLIC_RELEASE_FILES = [
 PUBLIC_RELEASE_SUFFIXES = {
     ".html", ".json", ".md", ".svg", ".txt", ".yaml", ".yml",
 }
+# The generated changelog republishes past release notes, so it necessarily
+# names superseded versions and repeats claims that were true when each build
+# shipped. Current-copy scans skip it; --check still requires it to match the
+# tracked notes exactly.
+HISTORICAL_PUBLIC_PATHS = {CHANGELOG_HTML}
 WINDOWS_RELEASE_REFERENCE_PATTERNS = [
     (
         re.compile(
@@ -2438,6 +2448,464 @@ def sync_sitemap(path: Path, metadata: dict[str, object]) -> str:
     return text
 
 
+# ---------- Changelog ----------
+#
+# CHANGELOG.md and docs/changelog.html are generated from the per-release
+# notes that ship-swift.sh and windows-release.yml publish as GitHub release
+# bodies. A version is listed once its notes exist and it is no newer than the
+# configured app version (Info.plist / windows/config.py), the same boundary the
+# rest of the site uses for "current"; Pages withholds deployment until those
+# downloads are public. Dates come from the local release tag (tagger date for
+# annotated tags, commit date for lightweight ones). CI checkouts carry no
+# tags, so a date recorded in CHANGELOG.md is reused when no tag is available,
+# and a release without either takes the metadata date (the release day when
+# ship-swift.sh syncs before tagging).
+
+CHANGELOG_PLATFORMS = (
+    {
+        "key": "macos",
+        "label": "macOS",
+        "notes": ROOT / "swift" / "release-notes",
+        "note_name": re.compile(r"v(\d+\.\d+\.\d+)\.md"),
+        "tag_prefix": "v",
+        "metadata_version": "version",
+    },
+    {
+        "key": "windows",
+        "label": "Windows",
+        "notes": ROOT / "windows" / "release-notes",
+        "note_name": re.compile(r"(\d+\.\d+\.\d+)\.md"),
+        "tag_prefix": "windows-v",
+        "metadata_version": "windows_version",
+    },
+)
+CHANGELOG_HEADING_RE = re.compile(
+    r"^### (macOS|Windows) (\d+\.\d+\.\d+) \((\d{4}-\d{2}-\d{2})\)$", re.M
+)
+RELEASES_URL = "https://github.com/rcourtman/presspeech/releases"
+REPO_BLOB_URL = "https://github.com/rcourtman/presspeech/blob/main"
+# Release-process sections written for the maintainer rather than for users.
+CHANGELOG_OMITTED_SECTIONS = {"manual checks", "plumbing", "readme", "validation"}
+# Point-in-time install warnings at the top of a release body. They stay on the
+# GitHub release page; the changelog links there instead of repeating them.
+CHANGELOG_NOTICE_RE = re.compile(r"^>\s*\*\*Before (?:opening|installing)\b")
+CHANGELOG_NOTICE_LINE = (
+    "The full release notes begin with a notice to read before opening this build."
+)
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
+def release_tag_dates(root: Path = ROOT) -> dict[str, str]:
+    """Return {tag: YYYY-MM-DD} for local tags, or {} without git or tags."""
+    try:
+        result = subprocess.run(
+            [
+                "git", "-C", str(root), "for-each-ref",
+                "--format=%(refname:short)%09%(creatordate:short)",
+                "refs/tags",
+            ],
+            capture_output=True, text=True, check=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    dates: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        tag, _, day = line.partition("\t")
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+            dates[tag] = day
+    return dates
+
+
+def recorded_changelog_dates(text: str) -> dict[tuple[str, str], str]:
+    return {
+        (platform.lower(), version): day
+        for platform, version, day in CHANGELOG_HEADING_RE.findall(text)
+    }
+
+
+def changelog_note_blocks(text: str, path: Path) -> list[tuple[str, object]]:
+    """Split the small Markdown subset used by release notes into blocks.
+
+    Supported: ATX headings, paragraphs, flat ``-`` lists with indented
+    continuation lines, blockquotes, and fenced code. Anything else fails so
+    a new construct cannot be published half-rendered.
+    """
+    lines = text.splitlines()
+    blocks: list[tuple[str, object]] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip():
+            i += 1
+            continue
+        if line.startswith("```"):
+            end = i + 1
+            while end < len(lines) and not lines[end].startswith("```"):
+                end += 1
+            if end == len(lines):
+                raise SyncError(f"{path}: unterminated code fence at line {i + 1}")
+            blocks.append(("code", (lines[i][3:].strip(), lines[i + 1:end])))
+            i = end + 1
+            continue
+        heading = re.fullmatch(r"(#{1,6}) (.+?)\s*#*", line)
+        if heading:
+            blocks.append(("heading", (len(heading.group(1)), heading.group(2))))
+            i += 1
+            continue
+        if line.startswith(">"):
+            quote: list[str] = []
+            while i < len(lines) and lines[i].startswith(">"):
+                quote.append(lines[i])
+                i += 1
+            blocks.append(("quote", quote))
+            continue
+        if line.startswith("- "):
+            items: list[list[str]] = []
+            while i < len(lines):
+                current = lines[i]
+                if current.startswith("- "):
+                    items.append([current])
+                elif current.startswith("  ") and current.strip() and items:
+                    if re.match(r"\s+(?:[-*+]|\d+[.)])\s", current):
+                        raise SyncError(f"{path}:{i + 1}: nested lists are not supported")
+                    items[-1].append(current)
+                elif not current.strip() and i + 1 < len(lines) and lines[i + 1].startswith("- "):
+                    pass
+                else:
+                    break
+                i += 1
+            blocks.append(("list", items))
+            continue
+        if re.match(r"(?:[*+]|\d+[.)])\s|\||<", line):
+            raise SyncError(f"{path}:{i + 1}: unsupported Markdown block {line[:40]!r}")
+        paragraph: list[str] = []
+        while i < len(lines) and lines[i].strip():
+            if paragraph and re.match(r"#{1,6} |- |>|```", lines[i]):
+                break
+            paragraph.append(lines[i])
+            i += 1
+        blocks.append(("paragraph", paragraph))
+    return blocks
+
+
+def condensed_note_blocks(
+    blocks: list[tuple[str, object]],
+) -> tuple[list[tuple[str, object]], bool]:
+    """Drop the title, the pre-install notice, and maintainer-only sections.
+
+    Returns the remaining blocks and whether a notice was dropped. Headings
+    are re-levelled so the note's highest heading becomes level 1.
+    """
+    kept: list[tuple[str, object]] = []
+    dropped_notice = False
+    skip_level: int | None = None
+    for index, (kind, value) in enumerate(blocks):
+        if kind == "heading":
+            level, title = value
+            if skip_level is not None and level > skip_level:
+                continue
+            skip_level = None
+            if level == 1 and index == 0:
+                continue
+            if title.strip().lower() in CHANGELOG_OMITTED_SECTIONS:
+                skip_level = level
+                continue
+        elif skip_level is not None:
+            continue
+        if kind == "quote" and CHANGELOG_NOTICE_RE.match(value[0]):
+            dropped_notice = True
+            continue
+        kept.append((kind, value))
+
+    # Remove headings left without content.
+    pruned: list[tuple[str, object]] = []
+    for kind, value in reversed(kept):
+        if kind == "heading":
+            level = value[0]
+            following = pruned[-1] if pruned else None
+            if following is None or (
+                following[0] == "heading" and following[1][0] <= level
+            ):
+                continue
+        pruned.append((kind, value))
+    pruned.reverse()
+
+    levels = sorted({value[0] for kind, value in pruned if kind == "heading"})
+    relevel = {level: rank + 1 for rank, level in enumerate(levels)}
+    return [
+        ("heading", (relevel[value[0]], value[1])) if kind == "heading" else (kind, value)
+        for kind, value in pruned
+    ], dropped_notice
+
+
+def changelog_releases(
+    metadata: dict[str, object],
+    *,
+    platforms: tuple[dict[str, object], ...] = CHANGELOG_PLATFORMS,
+    recorded: dict[tuple[str, str], str] | None = None,
+    tag_dates: dict[str, str] | None = None,
+) -> dict[str, list[dict[str, object]]]:
+    if recorded is None:
+        recorded = recorded_changelog_dates(
+            read_text(CHANGELOG_MD) if CHANGELOG_MD.exists() else ""
+        )
+    if tag_dates is None:
+        tag_dates = release_tag_dates()
+    fallback_date = str(metadata["last_updated"])
+    releases: dict[str, list[dict[str, object]]] = {}
+    for platform in platforms:
+        key = str(platform["key"])
+        configured = version_key(str(metadata[str(platform["metadata_version"])]))
+        entries: list[dict[str, object]] = []
+        notes_dir = Path(platform["notes"])
+        for path in sorted(notes_dir.glob("*.md")):
+            match = platform["note_name"].fullmatch(path.name)
+            if match is None:
+                raise SyncError(f"{path}: release-note filename does not name a version")
+            version = match.group(1)
+            if version_key(version) > configured:
+                continue  # drafted for a release that has not shipped yet
+            tag = f"{platform['tag_prefix']}{version}"
+            blocks, notice = condensed_note_blocks(
+                changelog_note_blocks(read_text(path), path)
+            )
+            entries.append({
+                "platform": key,
+                "label": platform["label"],
+                "version": version,
+                "date": tag_dates.get(tag) or recorded.get((key, version)) or fallback_date,
+                "tag": tag,
+                "anchor": f"{key}-{version}",
+                "release_url": f"{RELEASES_URL}/tag/{tag}",
+                "source": path,
+                "blocks": blocks,
+                "notice": notice,
+            })
+        entries.sort(key=lambda entry: version_key(str(entry["version"])), reverse=True)
+        releases[key] = entries
+    return releases
+
+
+def changelog_markdown(releases: dict[str, list[dict[str, object]]]) -> str:
+    out = [
+        "# Changelog",
+        "",
+        "<!-- Generated by scripts/sync-docs.py from swift/release-notes/ and",
+        "windows/release-notes/. Edit those notes, then run the script. -->",
+        "",
+        "Release history for Presspeech, newest first. The macOS app and the",
+        "Windows app are released separately and have their own version numbers.",
+        "Each entry links to its GitHub release, which has the complete notes and",
+        "downloads. Releases whose notes were not kept in this repository,",
+        "including the earlier macOS 0.1.x builds, are listed only on",
+        f"[GitHub Releases]({RELEASES_URL}).",
+        "",
+        "Also on the web: <https://rcourtman.github.io/presspeech/changelog.html>",
+        "",
+    ]
+    for platform in CHANGELOG_PLATFORMS:
+        out += [f"## {platform['label']}", ""]
+        for entry in releases[str(platform["key"])]:
+            out += [
+                f'<a id="{entry["anchor"]}"></a>',
+                "",
+                f"### {entry['label']} {entry['version']} ({entry['date']})",
+                "",
+                f"[GitHub release]({entry['release_url']})",
+                "",
+            ]
+            if entry["notice"]:
+                out += [
+                    CHANGELOG_NOTICE_LINE.replace(
+                        "full release notes", f"[full release notes]({entry['release_url']})"
+                    ),
+                    "",
+                ]
+            for kind, value in entry["blocks"]:
+                if kind == "heading":
+                    out += [f"{'#' * (value[0] + 3)} {value[1]}", ""]
+                elif kind == "code":
+                    out += [f"```{value[0]}", *value[1], "```", ""]
+                elif kind == "list":
+                    for item in value:
+                        out += item
+                    out.append("")
+                else:
+                    out += [*value, ""]
+    return "\n".join(out).rstrip("\n") + "\n"
+
+
+def changelog_inline_html(text: str, path: Path) -> str:
+    rendered: list[str] = []
+    for part in re.split(r"(`[^`]+`)", text):
+        if len(part) > 1 and part.startswith("`") and part.endswith("`"):
+            rendered.append(f"<code>{html.escape(part[1:-1], quote=False)}</code>")
+            continue
+        part = html.escape(part, quote=False)
+        part = re.sub(
+            r"\[([^\]]+)\]\((https://[^)\s\"]+)\)",
+            r'<a href="\2">\1</a>',
+            part,
+        )
+        part = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", part)
+        if "**" in part or "](" in part or "`" in part:
+            raise SyncError(f"{path}: unsupported inline Markdown in {text[:60]!r}")
+        rendered.append(part)
+    return "".join(rendered)
+
+
+def changelog_entry_html(entry: dict[str, object]) -> list[str]:
+    path = Path(str(entry["source"]))
+    day = str(entry["date"])
+    out = [
+        f'          <article class="release" id="{entry["anchor"]}" aria-labelledby="{entry["anchor"]}-title">',
+        f'            <h3 id="{entry["anchor"]}-title">{entry["label"]} {entry["version"]}</h3>',
+        f'            <p class="release-meta"><time datetime="{day}">{display_date(day)}</time>'
+        f' · <a href="{entry["release_url"]}">GitHub release</a></p>',
+    ]
+    if entry["notice"]:
+        notice = CHANGELOG_NOTICE_LINE.replace(
+            "full release notes", f'<a href="{entry["release_url"]}">full release notes</a>'
+        )
+        out.append(f'            <div class="note warn"><p>{notice}</p></div>')
+    for kind, value in entry["blocks"]:
+        if kind == "heading":
+            level = value[0] + 3
+            out.append(f"            <h{level}>{changelog_inline_html(value[1], path)}</h{level}>")
+        elif kind == "code":
+            code = html.escape("\n".join(value[1]), quote=False)
+            out.append(f"            <pre><code>{code}</code></pre>")
+        elif kind == "list":
+            out.append("            <ul>")
+            for item in value:
+                joined = " ".join(line.strip() for line in item).removeprefix("- ")
+                out.append(f"              <li>{changelog_inline_html(joined, path)}</li>")
+            out.append("            </ul>")
+        elif kind == "quote":
+            joined = " ".join(line.lstrip(">").strip() for line in value)
+            out.append(f"            <blockquote><p>{changelog_inline_html(joined, path)}</p></blockquote>")
+        else:
+            joined = " ".join(line.strip() for line in value)
+            out.append(f"            <p>{changelog_inline_html(joined, path)}</p>")
+    out.append("          </article>")
+    return out
+
+
+def changelog_html(releases: dict[str, list[dict[str, object]]]) -> str:
+    latest = " and ".join(
+        f'<a href="#{entries[0]["anchor"]}">{entries[0]["label"]} {entries[0]["version"]}</a>'
+        f" ({display_date(entries[0]['date'])})"
+        for entries in releases.values()
+        if entries
+    )
+    description = (
+        "Presspeech release history for macOS and Windows, newest first, "
+        "generated from the release notes published on GitHub."
+    )
+    out = [
+        "<!doctype html>",
+        '<html lang="en">',
+        "  <head>",
+        '    <meta charset="utf-8">',
+        '    <meta name="viewport" content="width=device-width, initial-scale=1">',
+        "    <title>Presspeech Changelog - macOS and Windows Release History</title>",
+        f'    <meta name="description" content="{description}">',
+        '    <link rel="canonical" href="https://rcourtman.github.io/presspeech/changelog.html">',
+        '    <link rel="icon" href="favicon.svg" type="image/svg+xml">',
+        '    <meta name="theme-color" content="#0d7f5f">',
+        '    <meta property="og:title" content="Presspeech Changelog - macOS and Windows Release History">',
+        f'    <meta property="og:description" content="{description}">',
+        '    <meta property="og:url" content="https://rcourtman.github.io/presspeech/changelog.html">',
+        '    <meta property="og:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">',
+        '    <meta property="og:image:type" content="image/png">',
+        '    <meta property="og:image:width" content="1280">',
+        '    <meta property="og:image:height" content="640">',
+        '    <meta property="og:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">',
+        '    <meta property="og:type" content="website">',
+        '    <meta name="twitter:card" content="summary_large_image">',
+        '    <meta name="twitter:image" content="https://raw.githubusercontent.com/rcourtman/presspeech/main/icon/social-preview.png">',
+        '    <meta name="twitter:image:alt" content="Presspeech microphone logo: private local dictation for Mac and Windows; macOS release and Windows prerelease.">',
+        '    <link rel="stylesheet" href="styles.css">',
+        '    <script src="site-navigation.js" defer></script>',
+        "  </head>",
+        "  <body>",
+        '    <a class="skip-link" href="#main-content">Skip to content</a>',
+        '    <header class="site-header">',
+        '      <nav class="nav" aria-label="Primary">',
+        '        <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">P</span><span>Presspeech</span></a>',
+        '        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation-links" data-navigation-toggle>Menu</button>',
+        '        <div class="nav-links" id="primary-navigation-links">',
+        '          <a href="getting-started.html">Get started</a>',
+        '          <a href="install.html">macOS</a>',
+        '          <a href="windows.html">Windows</a>',
+        '          <a href="privacy.html">Privacy</a>',
+        '          <a href="troubleshooting.html">Help</a>',
+        '          <a href="compare/">Compare</a>',
+        '          <a href="https://github.com/rcourtman/presspeech">GitHub</a>',
+        "        </div>",
+        "      </nav>",
+        "    </header>",
+        "",
+        '    <main id="main-content">',
+        '      <div class="wrap page-title">',
+        '        <span class="section-eyebrow">Changelog</span>',
+        "        <h1>Presspeech changelog</h1>",
+        "        <p>Release history for the macOS and Windows apps, newest first. The two apps are released separately and have their own version numbers. Each entry links to its GitHub release, which has the complete notes and downloads.</p>",
+        f"        <p>Latest: {latest}.</p>" if latest else "",
+        '        <div class="actions">',
+        '          <a class="button" href="#macos">macOS releases</a>',
+        '          <a class="button secondary" href="#windows">Windows releases</a>',
+        "        </div>",
+        "      </div>",
+    ]
+    out = [line for line in out if line]
+    for platform in CHANGELOG_PLATFORMS:
+        key = str(platform["key"])
+        out += [
+            "",
+            f'      <section id="{key}" class="changelog">',
+            '        <div class="wrap">',
+            f'          <span class="section-eyebrow">{platform["label"]}</span>',
+            f'          <h2>{platform["label"]} releases</h2>',
+        ]
+        for entry in releases[key]:
+            out += changelog_entry_html(entry)
+        out += ["        </div>", "      </section>"]
+    out += [
+        "",
+        '      <section id="earlier">',
+        '        <div class="wrap">',
+        "          <h2>Earlier releases</h2>",
+        f'          <p>Releases whose notes were not kept in the repository, including the earlier macOS 0.1.x builds, are listed only on <a href="{RELEASES_URL}">GitHub Releases</a>. This page is generated from the <a href="{REPO_BLOB_URL}/CHANGELOG.md">repository changelog</a>.</p>',
+        "        </div>",
+        "      </section>",
+        "    </main>",
+        "",
+        '    <footer class="site-footer">',
+        '      <div class="wrap">',
+        "        <span>Release history for Presspeech.</span>",
+        '        <span><a href="./">Home</a> · <a href="install.html">macOS</a> · <a href="windows.html">Windows</a> · <a href="https://github.com/rcourtman/presspeech/releases">GitHub Releases</a></span>',
+        "      </div>",
+        "    </footer>",
+        "  </body>",
+        "</html>",
+    ]
+    return "\n".join(out) + "\n"
+
+
+def sync_changelog_md(path: Path, metadata: dict[str, object]) -> str:
+    del path
+    return changelog_markdown(changelog_releases(metadata))
+
+
+def sync_changelog_html(path: Path, metadata: dict[str, object]) -> str:
+    del path
+    return changelog_html(changelog_releases(metadata))
+
+
 SYNCERS = {
     ROOT / "README.md": sync_readme,
     ROOT / "windows" / "README.md": sync_windows_readme,
@@ -2451,6 +2919,8 @@ SYNCERS = {
     DOCS / "llms-full.txt": sync_llms_full,
     DOCS / "demo.svg": sync_demo_svg,
     DOCS / "sitemap.xml": sync_sitemap,
+    CHANGELOG_MD: sync_changelog_md,
+    CHANGELOG_HTML: sync_changelog_html,
 }
 
 
@@ -3667,6 +4137,7 @@ def check_scratchpad_privacy_claims(paths: list[Path] | None = None) -> list[str
         paths = [ROOT / "README.md", ROOT / "windows" / "README.md"] + [
             path for path in DOCS.rglob("*")
             if path.is_file() and path.suffix in {".html", ".md", ".txt"}
+            and path not in HISTORICAL_PUBLIC_PATHS
         ]
     errors: list[str] = []
     for path in paths:
@@ -4559,7 +5030,7 @@ def public_release_paths(
             for path in root.rglob("*")
             if path.is_file() and path.suffix in PUBLIC_RELEASE_SUFFIXES
         )
-    return sorted(paths)
+    return sorted(paths - HISTORICAL_PUBLIC_PATHS)
 
 
 def check_windows_release_references(
@@ -4968,7 +5439,80 @@ def diff_text(path: Path, current: str, expected: str) -> str:
     )
 
 
+def changelog_self_test() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        notes = Path(tmp) / "notes"
+        notes.mkdir()
+        (notes / "v1.2.9.md").write_text("- Nine.\n", encoding="utf-8")
+        (notes / "v1.2.10.md").write_text(
+            "# Presspeech 1.2.10\n\n"
+            "> **Before opening this build:** read the guide.\n\n"
+            "Intro with `code` and [a link](https://example.com/a?b=1&c=2).\n\n"
+            "## Fixes\n\n- **Bold** fix\n  continues here.\n\n- Second fix.\n\n"
+            "## Manual Checks\n\n- Run the release smoke test.\n\n"
+            "### Maintainer detail\n\nStill omitted.\n\n"
+            "## Upgrade\n\n```sh\nbrew upgrade\n```\n",
+            encoding="utf-8",
+        )
+        (notes / "v1.3.0.md").write_text("- Drafted, not released.\n", encoding="utf-8")
+        platforms = ({
+            "key": "macos", "label": "macOS", "notes": notes,
+            "note_name": re.compile(r"v(\d+\.\d+\.\d+)\.md"),
+            "tag_prefix": "v", "metadata_version": "version",
+        },)
+        metadata = {"version": "1.2.10", "last_updated": "2026-01-03"}
+        releases = changelog_releases(
+            metadata, platforms=platforms,
+            recorded={("macos", "1.2.9"): "2026-01-01", ("macos", "1.2.10"): "2026-01-01"},
+            tag_dates={"v1.2.10": "2026-01-02"},
+        )["macos"]
+        if [entry["version"] for entry in releases] != ["1.2.10", "1.2.9"]:
+            raise SyncError("self-test: changelog order or released-version boundary is wrong")
+        if [entry["date"] for entry in releases] != ["2026-01-02", "2026-01-01"]:
+            raise SyncError("self-test: changelog did not prefer tag dates over recorded dates")
+        fallback = changelog_releases(
+            metadata, platforms=platforms, recorded={}, tag_dates={}
+        )["macos"]
+        if {entry["date"] for entry in fallback} != {"2026-01-03"}:
+            raise SyncError("self-test: untagged unrecorded release did not use the metadata date")
+        newest = releases[0]
+        kinds = [kind for kind, _ in newest["blocks"]]
+        if not newest["notice"] or kinds != ["paragraph", "heading", "list", "heading", "code"]:
+            raise SyncError(f"self-test: changelog condensing kept the wrong blocks: {kinds}")
+        page = changelog_html({"macos": releases, "windows": []})
+        for expected in (
+            '<a href="https://example.com/a?b=1&amp;c=2">a link</a>',
+            "<li><strong>Bold</strong> fix continues here.</li>",
+            '<h4>Fixes</h4>',
+            '<pre><code>brew upgrade</code></pre>',
+            '<time datetime="2026-01-02">2 January 2026</time>',
+            'id="macos-1.2.10"',
+        ):
+            if expected not in page:
+                raise SyncError(f"self-test: changelog HTML is missing {expected!r}")
+        if "Run the release smoke test" in page or "Still omitted" in page or "Before opening this build" in page:
+            raise SyncError("self-test: changelog published an omitted section or notice")
+        markdown = changelog_markdown({"macos": releases, "windows": []})
+        if recorded_changelog_dates(markdown) != {
+            ("macos", "1.2.10"): "2026-01-02", ("macos", "1.2.9"): "2026-01-01",
+        }:
+            raise SyncError("self-test: changelog dates do not round-trip through CHANGELOG.md")
+        for bad in ("1. Numbered\n", "| table |\n", "- Item\n  - nested\n", "```\nopen\n"):
+            try:
+                changelog_note_blocks(bad, notes / "bad.md")
+            except SyncError:
+                continue
+            raise SyncError(f"self-test: unsupported release-note Markdown was accepted: {bad!r}")
+        try:
+            changelog_inline_html("**unbalanced", notes / "bad.md")
+        except SyncError:
+            pass
+        else:
+            raise SyncError("self-test: unbalanced inline Markdown was accepted")
+
+
 def run_self_test() -> None:
+    changelog_self_test()
     with tempfile.TemporaryDirectory() as tmp:
         about_path = Path(tmp) / "main.swift"
         about_source = read_text(ROOT / "swift" / "Sources" / "Presspeech" / "main.swift")
