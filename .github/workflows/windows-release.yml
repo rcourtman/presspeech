@@ -117,6 +117,18 @@ jobs:
           # runtime. Disable all pip configuration files, including global/site
           # files that --isolated alone would still read.
           $env:PIP_CONFIG_FILE = 'NUL'
+          # The hosted image's global Python carries its own tools (pipx and its
+          # dependencies), which `pip check` would judge against versions outside
+          # this lock. Install into a fresh venv so the checks cover exactly the
+          # release runtime, and put it first on PATH for the later steps.
+          $venv = Join-Path $env:RUNNER_TEMP 'presspeech-release-venv'
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw 'Release virtual environment creation failed' }
+          $venvScripts = Join-Path $venv 'Scripts'
+          $env:PATH = "$venvScripts;$env:PATH"
+          $venvScripts | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          python -c "import sys; raise SystemExit(sys.prefix == sys.base_prefix)"
+          if ($LASTEXITCODE -ne 0) { throw 'Release Python is not the isolated virtual environment' }
           python -m pip install --isolated --no-cache-dir --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt
           if ($LASTEXITCODE -ne 0) { throw 'Hash-locked PyPI installation failed' }
           python -m pip install --isolated --no-cache-dir --no-deps --only-binary=:all: --require-hashes -r requirements-cuda-release.txt
