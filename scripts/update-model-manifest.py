@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Regenerate Presspeech's pinned speech-model SHA-256 manifest.
+"""Regenerate Presspeech's pinned speech-model SHA-256 manifests.
 
-The v3 Parakeet CoreML repository contains a mix of LFS-backed files
-and small Git blobs. Hugging Face exposes SHA-256 directly for the LFS
+Each Parakeet CoreML repository (v3, and the opt-in Ultra model selected
+with --model ultra) contains a mix of LFS-backed files and small Git blobs. Hugging Face exposes SHA-256 directly for the LFS
 objects via X-Linked-ETag; small Git blobs expose only Git object IDs,
 so this script downloads those small files and hashes the bytes.
 """
@@ -10,6 +10,7 @@ so this script downloads those small files and hashes the bytes.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import json
 import re
@@ -25,9 +26,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "swift" / "Sources" / "Presspeech" / "main.swift"
 
 DEFAULT_REPO = "FluidInference/parakeet-tdt-0.6b-v3-coreml"
-# The pinned revision is NOT duplicated here: main.swift's
-# parakeetV3RepositoryCommit is the single source of truth, parsed at
-# runtime when --revision is not passed (see revision_from_source).
+# The pinned revisions are NOT duplicated here: main.swift's
+# parakeetV3RepositoryCommit / parakeetUltraRepositoryCommit are the single
+# source of truth, parsed at runtime when --revision is not passed (see
+# revision_from_source).
 DEFAULT_BUNDLES = [
     "Decoder.mlmodelc",
     "Encoder.mlmodelc",
@@ -36,14 +38,44 @@ DEFAULT_BUNDLES = [
 ]
 DEFAULT_EXTRA_FILES = ["parakeet_vocab.json"]
 
-BEGIN_MARKER = "// BEGIN GENERATED PARAKEET_V3_MODEL_MANIFEST"
-END_MARKER = "// END GENERATED PARAKEET_V3_MODEL_MANIFEST"
 HEX64 = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 SAFE_MODEL_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
 SAFE_REPO = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 SAFE_REVISION = re.compile(r"^[A-Za-z0-9._/-]+$")
-SWIFT_REPO_RE = re.compile(r'(static let parakeetV3Repository = ")([^"]+)(")')
-SWIFT_REVISION_RE = re.compile(r'(static let parakeetV3RepositoryCommit = ")([^"]+)(")')
+
+
+@dataclasses.dataclass(frozen=True)
+class ModelSpec:
+    """One generated manifest block and its Swift repository constants."""
+
+    repo: str
+    marker: str
+    constant: str
+
+    @property
+    def begin_marker(self) -> str:
+        return f"// BEGIN GENERATED {self.marker}"
+
+    @property
+    def end_marker(self) -> str:
+        return f"// END GENERATED {self.marker}"
+
+    @property
+    def repo_re(self) -> re.Pattern[str]:
+        return re.compile(rf'(static let {self.constant}Repository = ")([^"]+)(")')
+
+    @property
+    def revision_re(self) -> re.Pattern[str]:
+        return re.compile(rf'(static let {self.constant}RepositoryCommit = ")([^"]+)(")')
+
+
+# Ultra is a post-trained v3 with the same bundle names and vocabulary file.
+MODELS = {
+    "v3": ModelSpec(DEFAULT_REPO, "PARAKEET_V3_MODEL_MANIFEST", "parakeetV3"),
+    "ultra": ModelSpec("FluidInference/parakeet-ultra-coreml",
+                       "PARAKEET_ULTRA_MODEL_MANIFEST", "parakeetUltra"),
+}
+V3 = MODELS["v3"]
 
 
 class ManifestError(RuntimeError):
@@ -213,28 +245,28 @@ def render_manifest(paths: list[str], digests: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def replace_generated_block(source: str, manifest: str) -> str:
-    begin = source.find(BEGIN_MARKER)
-    end = source.find(END_MARKER)
+def replace_generated_block(source: str, manifest: str, spec: ModelSpec = V3) -> str:
+    begin = source.find(spec.begin_marker)
+    end = source.find(spec.end_marker)
     if begin == -1 or end == -1 or end < begin:
         raise ManifestError(f"could not find generated manifest markers in {SOURCE}")
 
     line_start = source.rfind("\n", 0, begin) + 1
     marker_indent = source[line_start:begin]
     replacement = (
-        f"{BEGIN_MARKER}\n"
+        f"{spec.begin_marker}\n"
         f"{manifest}\n"
-        f"{marker_indent}{END_MARKER}"
+        f"{marker_indent}{spec.end_marker}"
     )
-    return source[:begin] + replacement + source[end + len(END_MARKER):]
+    return source[:begin] + replacement + source[end + len(spec.end_marker):]
 
 
-def current_generated_block(source: str) -> str:
-    begin = source.find(BEGIN_MARKER)
-    end = source.find(END_MARKER)
+def current_generated_block(source: str, spec: ModelSpec = V3) -> str:
+    begin = source.find(spec.begin_marker)
+    end = source.find(spec.end_marker)
     if begin == -1 or end == -1 or end < begin:
         raise ManifestError(f"could not find generated manifest markers in {SOURCE}")
-    block = source[begin + len(BEGIN_MARKER):end]
+    block = source[begin + len(spec.begin_marker):end]
     if block.startswith("\n"):
         block = block[1:]
     return block.rstrip()
@@ -247,9 +279,9 @@ def swift_constant(source: str, pattern: re.Pattern[str], label: str) -> str:
     return match.group(2)
 
 
-def revision_from_source(path: Path) -> str:
+def revision_from_source(path: Path, spec: ModelSpec = V3) -> str:
     source = path.read_text(encoding="utf-8")
-    revision = swift_constant(source, SWIFT_REVISION_RE, "repository commit")
+    revision = swift_constant(source, spec.revision_re, "repository commit")
     validate_revision(revision)
     return revision
 
@@ -264,22 +296,24 @@ def replace_swift_constant(source: str, pattern: re.Pattern[str], label: str, va
     return replaced
 
 
-def update_source(source: str, manifest: str, repo: str, revision: str) -> str:
+def update_source(source: str, manifest: str, repo: str, revision: str,
+                  spec: ModelSpec = V3) -> str:
     validate_repo(repo)
     validate_revision(revision)
-    source = replace_generated_block(source, manifest)
-    source = replace_swift_constant(source, SWIFT_REPO_RE, "repository", repo)
-    source = replace_swift_constant(source, SWIFT_REVISION_RE, "repository commit", revision)
+    source = replace_generated_block(source, manifest, spec)
+    source = replace_swift_constant(source, spec.repo_re, "repository", repo)
+    source = replace_swift_constant(source, spec.revision_re, "repository commit", revision)
     return source
 
 
-def source_matches(source: str, manifest: str, repo: str, revision: str) -> bool:
+def source_matches(source: str, manifest: str, repo: str, revision: str,
+                   spec: ModelSpec = V3) -> bool:
     validate_repo(repo)
     validate_revision(revision)
     return (
-        current_generated_block(source) == manifest
-        and swift_constant(source, SWIFT_REPO_RE, "repository") == repo
-        and swift_constant(source, SWIFT_REVISION_RE, "repository commit") == revision
+        current_generated_block(source, spec) == manifest
+        and swift_constant(source, spec.repo_re, "repository") == repo
+        and swift_constant(source, spec.revision_re, "repository commit") == revision
     )
 
 
@@ -326,11 +360,33 @@ def run_self_test() -> None:
     if current_generated_block(updated) != manifest:
         raise ManifestError("self-test manifest block mismatch")
 
+    ultra = MODELS["ultra"]
+    ultra_revision = "c" * 40
+    ultra_manifest = render_manifest(["Ultra.mlmodelc/model.mil"], {"Ultra.mlmodelc/model.mil": "d" * 64})
+    two_models = updated.replace("}\n", """    static let parakeetUltraRepository = "old/ultra"
+    static let parakeetUltraRepositoryCommit = "oldultra"
+
+    private static let parakeetUltraFiles = [
+        // BEGIN GENERATED PARAKEET_ULTRA_MODEL_MANIFEST
+        // END GENERATED PARAKEET_ULTRA_MODEL_MANIFEST
+    ]
+}
+""")
+    both = update_source(two_models, ultra_manifest, ultra.repo, ultra_revision, ultra)
+    if not source_matches(both, ultra_manifest, ultra.repo, ultra_revision, ultra):
+        raise ManifestError("self-test Ultra source update did not round-trip")
+    if not source_matches(both, manifest, DEFAULT_REPO, revision):
+        raise ManifestError("self-test Ultra update changed the v3 manifest")
+
     with tempfile.TemporaryDirectory() as tmp:
         fixture = Path(tmp) / "main.swift"
         fixture.write_text(updated, encoding="utf-8")
         if revision_from_source(fixture) != revision:
             raise ManifestError("self-test did not read pinned revision from Swift source")
+        fixture.write_text(both, encoding="utf-8")
+        if (revision_from_source(fixture, ultra) != ultra_revision
+                or revision_from_source(fixture) != revision):
+            raise ManifestError("self-test mixed up the v3 and Ultra pinned revisions")
         fixture.write_text("enum ModelIntegrity {}\n", encoding="utf-8")
         assert_raises(lambda: revision_from_source(fixture),
                       "self-test accepted Swift source without revision constant")
@@ -396,11 +452,13 @@ def run_self_test() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", default=DEFAULT_REPO)
+    parser.add_argument("--model", choices=sorted(MODELS), default="v3",
+                        help="which generated manifest block to regenerate (default: v3)")
+    parser.add_argument("--repo", default=None, help="Hugging Face repo; defaults to the --model repo")
     parser.add_argument(
         "--revision",
         default=None,
-        help="Hugging Face revision; defaults to parakeetV3RepositoryCommit parsed from --source",
+        help="Hugging Face revision; defaults to the model's RepositoryCommit parsed from --source",
     )
     parser.add_argument("--source", type=Path, default=SOURCE)
     parser.add_argument("--write", action="store_true", help="rewrite the generated manifest block in main.swift")
@@ -415,20 +473,25 @@ def main() -> int:
         run_self_test()
         return 0
 
+    spec = MODELS[args.model]
+    if args.repo is None:
+        args.repo = spec.repo
     if args.revision is None:
-        args.revision = revision_from_source(args.source)
+        args.revision = revision_from_source(args.source, spec)
 
     manifest = build_manifest(args)
 
     if args.write:
         source = args.source.read_text(encoding="utf-8")
-        args.source.write_text(update_source(source, manifest, args.repo, args.revision), encoding="utf-8")
+        args.source.write_text(update_source(source, manifest, args.repo, args.revision, spec),
+                               encoding="utf-8")
         return 0
 
     if args.check:
         source = args.source.read_text(encoding="utf-8")
-        if not source_matches(source, manifest, args.repo, args.revision):
-            print("model manifest is stale; run scripts/update-model-manifest.py --write", file=sys.stderr)
+        if not source_matches(source, manifest, args.repo, args.revision, spec):
+            print(f"model manifest is stale; run scripts/update-model-manifest.py --model {args.model} --write",
+                  file=sys.stderr)
             return 1
         return 0
 
