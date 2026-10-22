@@ -3904,13 +3904,20 @@ func speechModelSwitchDownloadDetail(from current: SpeechModelProfile,
 
 func speechModelSwitchFallbackDetail(failed: SpeechModelProfile,
                                      fallback: SpeechModelProfile,
-                                     errorDescription: String) -> String {
-    """
+                                     errorDescription: String,
+                                     downloadsApproved: Bool) -> String {
+    // With downloads approved, the failed attempt already re-downloaded a
+    // copy that failed verification; without approval nothing was fetched,
+    // so retrying would only reload the same files.
+    let next = downloadsApproved
+        ? "To try again, choose \(failed.shortName) in Settings → Dictation → Speech Model."
+        : "Speech-model downloads aren't approved on this Mac, so Presspeech didn't download a fresh copy."
+    return """
     Presspeech couldn't load \(failed.shortName), so it switched back to \(fallback.shortName). Audio is not uploaded.
 
     \(errorDescription)
 
-    To try again, choose \(failed.shortName) in Settings → Dictation → Speech Model. A model that fails verification is downloaded again once.
+    \(next)
     """
 }
 
@@ -15948,9 +15955,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "\(failed.shortName) couldn't be loaded"
-        alert.informativeText = speechModelSwitchFallbackDetail(failed: failed,
-                                                                fallback: fallback,
-                                                                errorDescription: error.localizedDescription)
+        alert.informativeText = speechModelSwitchFallbackDetail(
+            failed: failed,
+            fallback: fallback,
+            errorDescription: error.localizedDescription,
+            downloadsApproved: settings.speechModelDownloadApproved)
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
@@ -19781,14 +19790,24 @@ private enum PresspeechSelfTest {
                        .contains("about 630 MB from Hugging Face"),
                    equals: true,
                    "first-download setup copy should use the selected model's size")
-        let fallbackDetail = speechModelSwitchFallbackDetail(failed: .parakeetUltra,
-                                                             fallback: .multilingualV3,
-                                                             errorDescription: "download timed out")
-        try expect(fallbackDetail.contains("couldn't load Parakeet Ultra, so it switched back to Parakeet TDT v3")
-                       && fallbackDetail.contains("download timed out")
-                       && !fallbackDetail.contains("Reset Speech Model Cache"),
-                   equals: true,
-                   "a failed switch should explain the fallback without pointing at the v3 cache reset")
+        for approved in [true, false] {
+            let fallbackDetail = speechModelSwitchFallbackDetail(failed: .parakeetUltra,
+                                                                 fallback: .multilingualV3,
+                                                                 errorDescription: "download timed out",
+                                                                 downloadsApproved: approved)
+            try expect(fallbackDetail.contains("couldn't load Parakeet Ultra, so it switched back to Parakeet TDT v3")
+                           && fallbackDetail.contains("download timed out")
+                           && !fallbackDetail.contains("Reset Speech Model Cache")
+                           && !fallbackDetail.contains("downloaded again"),
+                       equals: true,
+                       "a failed switch should explain the fallback without promising a re-download")
+            try expect(fallbackDetail.contains("To try again, choose Parakeet Ultra"),
+                       equals: approved,
+                       "retry advice should appear only when a retry can download a fresh copy")
+            try expect(fallbackDetail.contains("didn't download a fresh copy"),
+                       equals: !approved,
+                       "without download approval the alert should say no fresh copy was fetched")
+        }
 
         try expect(
             speechModelSetupRowState(profile: .multilingualV3,
