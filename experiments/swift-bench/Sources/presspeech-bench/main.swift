@@ -1782,11 +1782,11 @@ func runBenchSelfTests() throws {
     try expect(percentile([1, 2, 3], .nan) == 0,
         "a non-finite percentile should not produce a non-finite latency")
     try expect(
-        FluidBackend.ChunkingPolicy.releasedV3.config.melChunkContext,
+        FluidBackend.ChunkingPolicy.releasedV3.config.melChunkContextOverride == true,
         "released v3 benchmark policy should keep mel-context chunking explicit"
     )
     try expect(
-        !FluidBackend.ChunkingPolicy.noMelContext.config.melChunkContext,
+        FluidBackend.ChunkingPolicy.noMelContext.config.melChunkContextOverride == false,
         "no-mel v3 candidate should explicitly disable mel-context chunking"
     )
     try expect(

@@ -22989,8 +22989,11 @@ private enum PresspeechSelfTest {
             equals: true,
             "existing installations should keep their established automatic startup"
         )
+        // Check the explicit override, not the deprecated Boolean view: that
+        // view reports true when unset, while an unset value resolves to the
+        // no-mel path for v3-family models at load time.
         try expect(
-            productionParakeetASRConfig().melChunkContext,
+            productionParakeetASRConfig().melChunkContextOverride,
             equals: true,
             "production ASR config should preserve released mel-context chunking"
         )

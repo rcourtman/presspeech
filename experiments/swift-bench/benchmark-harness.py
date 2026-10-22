@@ -28,8 +28,8 @@ FILES = (
     "Sources/presspeech-bench/main.swift",
 )
 FLUID_PIN = re.compile(
-    rb'(\.package\(\s*url:\s*"https://github\.com/FluidInference/FluidAudio\.git"'
-    rb'\s*,\s*revision:\s*")[0-9a-f]{40}("\s*\))'
+    rb'(\.package\(\s*url:\s*"https://github\.com/FluidInference/FluidAudio\.git"\s*,\s*)'
+    rb'(?:revision:\s*"[0-9a-f]{40}"|exact:\s*"[0-9]+\.[0-9]+\.[0-9]+")(\s*\))'
 )
 
 
@@ -44,8 +44,9 @@ def fingerprint(root: Path) -> str:
         if relative == "Package.swift":
             # The SDK commit must differ, but no other benchmark build setting
             # should drift between the paired reports.
+            # Commit and exact-release pins normalize to the same bytes.
             data, replacements = FLUID_PIN.subn(
-                lambda match: match[1] + b"<reviewed-sdk-revision>" + match[2], data
+                lambda match: match[1] + b'revision: "<reviewed-sdk-revision>"' + match[2], data
             )
             if replacements != 1:
                 raise ValueError("benchmark package has no unique FluidAudio pin")
@@ -71,6 +72,8 @@ def self_test() -> None:
         assert len(original) == 64 and original == fingerprint(root)
         package = root / "Package.swift"
         package.write_bytes(package.read_bytes().replace(b"a" * 40, b"b" * 40))
+        assert fingerprint(root) == original
+        package.write_bytes(package.read_bytes().replace(b'revision: "' + b"b" * 40, b'exact: "1.2.3'))
         assert fingerprint(root) == original
         package.write_bytes(package.read_bytes() + b"// build setting changed\n")
         assert fingerprint(root) != original

@@ -35,12 +35,22 @@ def metadata(path: Path):
 
 
 def revision(package: Path) -> str:
+    """Return the locked commit for a `revision:` or `exact:` FluidAudio pin.
+
+    An exact release pin names a tag, so the commit comes from Package.resolved,
+    whose recorded version must equal the manifest's.
+    """
     manifest = package.read_text(encoding="utf-8")
     pins = re.findall(
         r'\.package\(\s*url:\s*"' + re.escape(URL)
-        + r'"\s*,\s*revision:\s*"([0-9a-f]{40})"\s*\)', manifest)
+        + r'"\s*,\s*(revision|exact):\s*"([^"]*)"\s*\)', manifest)
     if len(pins) != 1:
         raise ValueError("manifest must pin exactly one canonical FluidAudio revision")
+    kind, declared = pins[0]
+    if kind == "revision" and not re.fullmatch(r"[0-9a-f]{40}", declared):
+        raise ValueError("manifest revision pin must be a full commit")
+    if kind == "exact" and not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", declared):
+        raise ValueError("manifest version pin must be one exact release")
     lock = metadata(package.with_name("Package.resolved"))
     if not isinstance(lock, dict) or not isinstance(lock.get("pins"), list):
         raise ValueError("dependency lock has no pin list")
@@ -49,9 +59,18 @@ def revision(package: Path) -> str:
     if len(fluid) != 1 or fluid[0].get("identity") != "fluidaudio" or fluid[0].get("location") != URL:
         raise ValueError("dependency lock must identify one canonical FluidAudio repository")
     state = fluid[0].get("state")
-    if not isinstance(state, dict) or state.get("revision") != pins[0]:
+    if not isinstance(state, dict):
         raise ValueError("FluidAudio manifest and resolved revisions differ")
-    return pins[0]
+    if kind == "exact":
+        if state.get("version") != declared:
+            raise ValueError("FluidAudio manifest and resolved versions differ")
+        locked = state.get("revision")
+        if not isinstance(locked, str) or not re.fullmatch(r"[0-9a-f]{40}", locked):
+            raise ValueError("dependency lock must record the release commit")
+        return locked
+    if state.get("revision") != declared:
+        raise ValueError("FluidAudio manifest and resolved revisions differ")
+    return declared
 
 
 def provenance(benchmark: Path, production: Path) -> tuple[str, str, str]:
@@ -209,6 +228,31 @@ def self_test() -> None:
             pass
         else:
             raise AssertionError("ambiguous FluidAudio manifest was accepted")
+
+        def write_exact(name: str, version: str, state: dict) -> Path:
+            package = write(name, "a" * 40)
+            package.write_text(f'.package(url: "{URL}",\n exact: "{version}")\n')
+            package.with_name("Package.resolved").write_text(json.dumps({"pins": [{
+                "identity": "fluidaudio", "location": URL, "state": state}]}))
+            return package
+
+        exact = write_exact("exact", "1.2.3", {"revision": "c" * 40, "version": "1.2.3"})
+        assert revision(exact) == "c" * 40
+        assert provenance(exact, write_exact("exact-app", "1.2.3", {
+            "revision": "c" * 40, "version": "1.2.3"}))[2] == "production-dependency"
+        for version, state in (
+            ("1.2.3", {"revision": "c" * 40, "version": "1.2.4"}),
+            ("1.2.3", {"revision": "c" * 40}),
+            ("1.2.3", {"version": "1.2.3"}),
+            ("1.2.3", {"revision": "main", "version": "1.2.3"}),
+            ("1.2", {"revision": "c" * 40, "version": "1.2"}),
+        ):
+            try:
+                revision(write_exact("exact", version, state))
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("inconsistent FluidAudio version lock was accepted")
     subprocess.run([sys.executable, str(Path(__file__).with_name("test-dependency-provenance.py"))],
                    check=True)
     print("Dependency provenance self-test passed.")
