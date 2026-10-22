@@ -512,13 +512,13 @@ MAC_MODEL_DOWNLOAD_PRIVACY_SUMMARY = {
         "Malformed proxy URLs are a separate risk", "keep 0.3.8 unopened",
     ),
     DOCS / "install" / "agents.md": (
-        "macOS 0.3.8",
-        "Hugging Face token inherited by Presspeech",
         "public model needs no account token",
-        "otherwise wait rather than launch 0.3.8",
+        "removes inherited Hugging Face account tokens",
+        "do not include dictation audio or transcripts",
         "Do not inspect or display token values",
         "informed choice",
-        "malformed inherited lowercase", "embedded proxy credentials",
+        "privacy.html#network-calls",
+        "macos-0-3-8-after-use",
     ),
     DOCS / "llms.txt": (
         "Before installing or launching macOS 0.3.8",
@@ -590,7 +590,8 @@ MAC_MODEL_DOWNLOAD_PROXY_GUIDANCE = {
         "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
     ),
     DOCS / "install" / "agents.md": (
-        "lowercase", "https_proxy", "TLS-inspecting", "0.3.8 token", "still honors proxy settings"
+        "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "still route model requests",
+        "refuses to start if either setting is malformed",
     ),
     DOCS / "privacy.html": (
         "lowercase", "https_proxy", "http_proxy", "TLS-inspecting", "treat the token as disclosed"
@@ -875,7 +876,7 @@ MAC_MODEL_DOWNLOAD_GUIDANCE = {
         "Set Up Later", "defer", "macOS 0.3.9 and later",
     ),
     DOCS / "install" / "agents.md": (
-        "0.3.8", "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defer"
+        "0.3.9", "500", "clean install", "Download Model", "Set Up Later", "defers"
     ),
 }
 
@@ -1343,7 +1344,7 @@ MAC_INSTALL_PROMPT = """Install Presspeech from https://github.com/rcourtman/pre
 
 Before choosing an install or launch path, verify the published macOS version on https://github.com/rcourtman/presspeech/releases and the deployed https://rcourtman.github.io/presspeech/install.html#direct-download guide. Use the version-pinned download only when both identify the same available release; if they disagree or the release asset is unavailable, stop and wait. The source branch, release notes, and local site metadata can be ahead of the downloadable build. Do not infer publication from those files alone.
 
-Before installing or launching macOS 0.3.8, disclose that a Hugging Face token inherited by Presspeech may be included in model-download requests; the public model needs no account token. If a token may be present in the environment that launches Presspeech—or the user is unsure—offer macOS 0.3.9 if the release and deployed guide agree; otherwise wait rather than launch 0.3.8. Explain that an inherited lowercase `https_proxy` can route the model request through a proxy: a TLS-inspecting proxy trusted by macOS can read a 0.3.8 token, while a tunnelling proxy cannot. If the trust of a TLS-inspecting proxy is unclear, do not launch 0.3.8 while it is in use. A malformed inherited lowercase `https_proxy` or `http_proxy` URL may be logged verbatim by the bundled 0.3.8 client, including embedded proxy credentials, and then ignored, allowing a model request without the expected proxy. If the user depends on an inherited proxy and is unsure its URL is valid, leave 0.3.8 unopened; do not inspect or display proxy values or share logs containing them. From 0.3.9, Presspeech removes account-token authentication but still honors proxy settings; it refuses malformed settings before model loading. Downloading the ZIP or installing the app without opening it does not make the model request; the first download of a missing model starts when Presspeech launches. Do not inspect or display token values, change credential settings, or launch 0.3.8 without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. Model downloads do not include dictation audio or transcripts. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
+Before installing or launching, explain the model download. Presspeech downloads its local speech model (~500-600 MB) from Hugging Face; the public model needs no account token, and from 0.3.9 Presspeech removes inherited Hugging Face account tokens from its model requests. Model downloads do not include dictation audio or transcripts. Valid inherited lowercase `https_proxy` or `http_proxy` settings still route model requests: a TLS-inspecting proxy trusted by macOS can read them, while a tunnelling proxy cannot. If the user depends on a proxy whose trust is unclear, wait. From 0.3.9, Presspeech refuses to start if either setting is malformed, naming only the variable; the user corrects or removes it before relaunching. Downloading the ZIP or installing the app without opening it does not make the model request. On a clean install, Setup waits for Download Model or Set Up Later; an existing installation with a missing model may start a download on launch. Do not inspect or display token values or proxy values, change credential settings, share logs containing them, or launch without the user's informed choice. If the user chooses to wait, skip the `open` command below and leave the app unopened. See https://rcourtman.github.io/presspeech/privacy.html#network-calls.
 
 Before downloading or installing, run these read-only compatibility checks:
   uname -m
@@ -1361,14 +1362,14 @@ Otherwise offer the direct notarised zip using the current version-pinned downlo
 
 Before launching, read the installed app's version without opening it:
   plutil -extract CFBundleShortVersionString raw -o - /Applications/Presspeech.app/Contents/Info.plist
-If it does not match the published version and launch decision you reviewed, stop; do not launch a different installed build. The installation method alone does not establish which version is present at that path.
+If it does not match the published version and launch decision you reviewed, stop; do not launch a different installed build. If an older 0.3.8 build is present, also point the user to https://rcourtman.github.io/presspeech/privacy.html#macos-0-3-8-after-use. The installation method alone does not establish which version is present at that path.
 
 Only after the user makes an informed choice to launch the verified published version:
   open /Applications/Presspeech.app
 
-After launch, give instructions for the version actually installed. macOS 0.3.8 starts its first local speech-model download (~500-600 MB) on launch; its Setup cannot defer that request. If 0.3.9 is published and installed, a clean install waits for Download Model or Set Up Later, but an existing installation with a missing model may still start a download on launch. A valid cached model loads without another download. Do not tell the user to choose Download Model or Set Up Later in 0.3.8. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.
+After launch, Download Model in Setup starts the speech-model download and Set Up Later defers it; a valid cached model loads without another download. Before asking the user to enable Input Monitoring, explain that macOS's grant can expose typed keys; Presspeech requests keyboard events only to detect the configured hotkey and Escape to cancel an active recording, passes other keys through without saving, logging, or sending their values, and does not inspect mouse or trackpad events. Offer Apple's guide at https://support.apple.com/guide/mac-help/mchl4cedafb6/mac. Use Setup Checklist to finish the model, permissions, and hotkey readiness. The default dictation key is Right Option. Focus on setup and the first in-app test; explain that the scratchpad can still use the system clipboard and use only harmless words. Do not ask the user to star, review, or otherwise endorse the project.
 
-A successful Try Dictation scratchpad test proves only the in-app path, not automatic paste into another app. Do not use a production field, live chat, form that can submit, or command shell as a first target. If the user asks to try another app, follow https://rcourtman.github.io/presspeech/getting-started.html#first-app with harmless words in a blank, disposable field. Count an automatic-paste pass only when the complete text appears once with no recovery notice. For macOS 0.3.8, a copied notice is manual recovery, not a paste pass: inspect the intended field first, then verify the clipboard still holds the complete transcript before manual paste; a later copy may have replaced it. Do not retry blindly. Use https://rcourtman.github.io/presspeech/app-compatibility.html before relying on repeated delivery to a specific app.
+A successful Try Dictation scratchpad test proves only the in-app path, not automatic paste into another app. Do not use a production field, live chat, form that can submit, or command shell as a first target. If the user asks to try another app, follow https://rcourtman.github.io/presspeech/getting-started.html#first-app with harmless words in a blank, disposable field. Count an automatic-paste pass only when the complete text appears once with no recovery notice. On macOS, a copied notice is manual recovery, not a paste pass: inspect the intended field first, then verify the clipboard still holds the complete transcript before manual paste; a later copy may have replaced it. Do not retry blindly. Use https://rcourtman.github.io/presspeech/app-compatibility.html before relying on repeated delivery to a specific app.
 
 Only if the user asks about a future build: check GitHub Releases and the deployed install guide before describing its controls as available. Source changes alone do not make a new download available."""
 
@@ -3346,7 +3347,7 @@ def check_readme_launch_preflight(
         f"macOS {metadata['version']}",
         f"Windows {metadata['windows_version']}",
         "missing speech-model download starts on launch",
-        "inherited Hugging Face token",
+        "asks before its first speech-model download",
         "Hugging Face usage telemetry or an available token",
         "custom download route",
         "leave the app unopened",
@@ -4735,7 +4736,7 @@ def check_macos_agent_install_order(
     markers = (
         "verify the published macOS version",
         "if they disagree or the release asset is unavailable, stop and wait",
-        "Before installing or launching macOS 0.3.8", "uname -m",
+        "Before installing or launching, explain the model download", "uname -m",
         "sw_vers -productVersion", "Stop if", "command -v brew",
         "brew install --cask", "current version-pinned download",
         "plutil -extract CFBundleShortVersionString raw",
@@ -4778,7 +4779,7 @@ def check_assistant_first_test_handoff(
             "macOS",
             mac_prompt,
             "Focus on setup and the first in-app test",
-            "For macOS 0.3.8",
+            "On macOS, a copied notice",
         ),
         (
             "Windows",
@@ -5050,9 +5051,9 @@ def run_self_test() -> None:
     if check_macos_agent_install_order():
         raise SyncError("self-test: safe macOS assistant install order was rejected")
     early_install = MAC_INSTALL_PROMPT.replace(
-        "Before installing or launching macOS 0.3.8",
+        "Before installing or launching, explain the model download",
         "brew install --cask rcourtman/presspeech/presspeech\n"
-        "Before installing or launching macOS 0.3.8", 1,
+        "Before installing or launching, explain the model download", 1,
     )
     if not check_macos_agent_install_order(prompt=early_install):
         raise SyncError("self-test: install before compatibility stop was accepted")
@@ -5676,7 +5677,7 @@ def run_self_test() -> None:
             or "site-metadata.json" not in synced_agents
             or "9.8.7" in synced_agents
             or "Do not inspect or display token values" not in MAC_INSTALL_PROMPT
-            or "launch 0.3.8 without the user's informed choice" not in MAC_INSTALL_PROMPT
+            or "launch without the user's informed choice" not in MAC_INSTALL_PROMPT
             or "skip the `open` command below" not in MAC_INSTALL_PROMPT
             or 'uncheck the installer\'s final "Launch Presspeech" option' not in WINDOWS_INSTALL_PROMPT
             or 'leave the app unopened' not in WINDOWS_INSTALL_PROMPT
@@ -6405,7 +6406,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: contradictory Windows integrity claim was accepted")
 
         readme_preflight = Path(tmp) / "readme-preflight.md"
-        published = {"version": "0.3.8", "windows_version": "0.1.12"}
+        published = {"version": "0.3.9", "windows_version": "0.1.12"}
         safe_readme = read_text(ROOT / "README.md")
         readme_preflight.write_text(safe_readme, encoding="utf-8")
         if check_readme_launch_preflight(published, readme_preflight):
@@ -6421,7 +6422,7 @@ def run_self_test() -> None:
         if not check_readme_launch_preflight(published, readme_preflight):
             raise SyncError("self-test: README warning after start links was accepted")
         for stale in (
-            intro.replace("macOS 0.3.8", "macOS 9.9.9"),
+            intro.replace("macOS 0.3.9", "macOS 9.9.9"),
             intro.replace("deployed install guide", "source checkout"),
             intro.replace("windows.html#model-download-privacy", "windows.html"),
         ):
