@@ -1,0 +1,93 @@
+name: usage stats
+
+# Weekly snapshot of the public usage signals GitHub otherwise discards:
+# cumulative release download counts, and (with STATS_TOKEN) the 14-day repo
+# and Homebrew tap traffic. History accumulates as CSVs on the `stats`
+# branch, never on main, so it cannot trigger Pages, CI or Dependabot. The
+# first run creates the branch. Read it with:
+#
+#   git fetch origin stats && git worktree add /tmp/presspeech-stats origin/stats
+#   python3 scripts/snapshot-usage-stats.py --summary /tmp/presspeech-stats
+#
+# Release downloads use the default GITHUB_TOKEN. Traffic endpoints need
+# Administration read, which GITHUB_TOKEN lacks; without STATS_TOKEN the run
+# records downloads only and leaves a notice. If STATS_TOKEN is set but
+# refused (usually expired), downloads are still committed and the run fails.
+#
+# Setting up STATS_TOKEN (maintainer only, never commit the value):
+#   1. https://github.com/settings/personal-access-tokens/new
+#      (Settings > Developer settings > Personal access tokens >
+#      Fine-grained tokens > Generate new token).
+#   2. Name it e.g. "presspeech usage stats"; resource owner rcourtman;
+#      expiration 90 days or so.
+#   3. Repository access: "Only select repositories" >
+#      rcourtman/presspeech and rcourtman/homebrew-presspeech.
+#   4. Repository permissions: Administration > Read-only. Metadata >
+#      Read-only is added automatically. Nothing else.
+#   5. Generate, copy the token, then in rcourtman/presspeech go to
+#      Settings > Secrets and variables > Actions > New repository secret,
+#      name STATS_TOKEN, paste, Add secret. (Or: gh secret set STATS_TOKEN
+#      --repo rcourtman/presspeech, and paste at the prompt.)
+#   6. Actions > usage stats > Run workflow to check it; the log should list
+#      the traffic CSVs as changed.
+# When the token expires the weekly run turns red; repeat steps 1-5
+# (or use "Regenerate token" on the token's page) to replace the secret.
+
+on:
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: usage-stats
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Always run main's script, and keep the checkout credentials so
+          # the commit step can push to the stats branch.
+          ref: main
+      - name: Check out stats branch
+        run: |
+          if git fetch --depth=1 origin stats; then
+            git worktree add -B stats stats-data FETCH_HEAD
+          else
+            git worktree add --orphan -b stats stats-data
+          fi
+      - name: Snapshot usage stats
+        id: snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STATS_TOKEN: ${{ secrets.STATS_TOKEN }}
+        run: python3 scripts/snapshot-usage-stats.py --snapshot stats-data
+      - name: Commit changes
+        # Also after a refused STATS_TOKEN, so the download snapshot is kept.
+        if: ${{ !cancelled() && steps.snapshot.outcome != 'skipped' }}
+        working-directory: stats-data
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Usage stats snapshot $(date -u +%F)"
+          git push origin HEAD:stats
+      - name: Summary
+        if: ${{ !cancelled() && steps.snapshot.outcome != 'skipped' }}
+        run: |
+          {
+            echo '```'
+            python3 scripts/snapshot-usage-stats.py --summary stats-data
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -68,6 +68,8 @@ jobs:
           python3 scripts/check-public-assets.py
           python3 scripts/check-public-releases.py --self-test
           python3 scripts/test-public-releases-gh.py
+      - name: Usage stats snapshot self-test
+        run: python3 scripts/snapshot-usage-stats.py --self-test
       - name: Pages deployment gate self-test
         run: python3 scripts/check-pages-deployment.py --self-test
       - name: Comparison release checker self-test
@@ -296,6 +298,7 @@ jobs:
               Path("scripts/check-public-releases.py"),
               Path("scripts/update-model-manifest.py"),
               Path("scripts/check-log-privacy.py"),
+              Path("scripts/snapshot-usage-stats.py"),
           ]:
               compile(path.read_text(encoding="utf-8"), str(path), "exec")
           PY
