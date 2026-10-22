@@ -1,0 +1,4 @@
+snapshot_date,repo,metric,count,uniques
+2026-10-22,rcourtman/homebrew-presspeech,clones,28,25
+2026-10-22,rcourtman/presspeech,clones,151,72
+2026-10-22,rcourtman/presspeech,views,49,15
