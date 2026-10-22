@@ -45,7 +45,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare</span>
         <h1>Presspeech vs FluidVoice</h1>
-        <p>Both are free local-first Mac dictation apps built around native speech engines. FluidVoice offers live preview, a broad model catalogue, and optional local or cloud AI enhancement. Presspeech uses one fixed local model path and deterministic text handling, with no AI rewriting, Presspeech-authored analytics, or persistent audio history.</p>
+        <p>Both are free local-first Mac dictation apps built around native speech engines. FluidVoice offers live preview, a broad model catalogue, local meeting transcription, and optional local or cloud AI enhancement. Presspeech uses one fixed local model path and deterministic text handling, with no AI rewriting, Presspeech-authored analytics, or persistent audio history.</p>
       </div>
 
       <section>
@@ -69,7 +69,7 @@
                 <tr>
                   <th scope="row">Speech engines</th>
                   <td>One fixed path: multilingual Parakeet TDT v3 through FluidAudio and CoreML on the Apple Neural Engine.</td>
-                  <td>A selectable catalogue including Nemotron Speech 3.5, Parakeet Flash, Parakeet TDT v2/v3, Cohere Transcribe, Apple Speech, and Whisper-family models.</td>
+                  <td>A selectable catalogue including Nemotron Speech 3.5, Parakeet Flash, Parakeet TDT v2/v3, Cohere Transcribe, English-only Fluid Speech Mini and Pico, Apple Speech, and Whisper-family models.</td>
                 </tr>
                 <tr>
                   <th scope="row">Text handling</th>
@@ -79,22 +79,22 @@
                 <tr>
                   <th scope="row">Privacy and network</th>
                   <td>No cloud transcription or AI path, account, Presspeech-authored analytics, or crash reporter. Model downloads, optional update checks, and user-triggered feedback and installation links use the network; see the <a href="../privacy.html#network-calls">version-specific network inventory</a> for published-build token and library-telemetry caveats.</td>
-                  <td>Speech models run locally, and external AI providers are optional. FluidVoice's privacy policy says its default-on PostHog analytics can be disabled; its repository README separately says disabling detailed analytics still leaves a weekly batch of daily activity signals. The documented analytics cover app and activity metadata plus high-level outcomes, not audio, transcripts, dictated or rewritten text, prompts, paths, clipboard contents, or API keys.</td>
+                  <td>Speech models run locally, and external AI providers are optional. FluidVoice's README says detailed anonymous analytics are on by default and can be disabled, while one anonymous daily activity signal (a random installation ID, date, app version, and macOS label) is still uploaded in a weekly batch. It lists audio, transcribed text, prompts, AI responses, typed content, file paths, and clipboard contents as not collected.</td>
                 </tr>
                 <tr>
                   <th scope="row">History</th>
                   <td>Recent transcript history is held in memory only and clears on quit. Audio is discarded after transcription.</td>
-                  <td>Optional local audio history can retain recordings with storage-budget controls and ZIP export.</td>
+                  <td>Optional local audio history can retain recordings with storage-budget controls and ZIP export. FluidMeet, added in v1.6.11, records meetings locally and keeps their transcripts in the app.</td>
                 </tr>
                 <tr>
                   <th scope="row">System and footprint</th>
                   <td>Apple Silicon and macOS 14+. The release zip is 8.4 MB and the fixed speech model cache is about 500&ndash;600 MB.</td>
-                  <td>macOS 15+. Apple Silicon supports the full model catalogue; Intel Macs use Apple Speech or Whisper. The v1.6.9 DMG is 47 MB, speech models range from built-in to about 2.9 GB, and optional Fluid Intelligence needs about 3.5 GB.</td>
+                  <td>macOS 15+. Apple Silicon supports the full model catalogue; Intel Macs use Apple Speech or Whisper. The v1.6.12 DMG is 73 MB, speech models range from built-in to about 2.9 GB, and optional Fluid Intelligence needs about 3.5 GB.</td>
                 </tr>
                 <tr>
                   <th scope="row">Platform maturity</th>
                   <td>The macOS app is the signed and notarised release. A separate x64 Windows build is an unsigned prerelease.</td>
-                  <td>The macOS app is the stable release. FluidVoice's official site also offers a separate 64-bit Windows 0.0.9 beta.</td>
+                  <td>The macOS app is the stable release. FluidVoice's official site also lists separate Windows and iPhone betas.</td>
                 </tr>
                 <tr>
                   <th scope="row">Price and license</th>
@@ -105,9 +105,9 @@
             </table>
           </div>
           <div class="note">
-            <p>Choose FluidVoice if live transcription, model switching, Intel Mac support, optional audio history, or local AI rewriting matters most. Choose Presspeech if you want macOS 14 support and a smaller fixed pipeline with deterministic output, explicit paste-destination recovery, no retained audio, and no Presspeech-authored analytics or cloud-AI path.</p>
+            <p>Choose FluidVoice if live transcription, model switching, Intel Mac support, optional audio history, meeting transcription, or local AI rewriting matters most. Choose Presspeech if you want macOS 14 support and a smaller fixed pipeline with deterministic output, explicit paste-destination recovery, no retained audio, and no Presspeech-authored analytics or cloud-AI path.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, the <a href="https://fluidvoice.org/">official FluidVoice site</a>, <a href="https://fluidvoice.org/privacy-policy/">privacy policy</a>, and <a href="https://fluidvoice.org/download/">download page</a>, plus its <a href="https://github.com/altic-dev/FluidVoice">source and documentation</a>, <a href="https://github.com/altic-dev/FluidVoice/releases/tag/v1.6.9">v1.6.9 release</a>, and <a href="https://github.com/altic-dev/FluidVoice/releases/expanded_assets/v1.6.9">release assets</a> (checked 22 September 2026). No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, the <a href="https://fluidvoice.com/">official FluidVoice site</a>, plus its <a href="https://github.com/altic-dev/FluidVoice">source and documentation</a>, <a href="https://github.com/altic-dev/FluidVoice/releases/tag/v1.6.12">v1.6.12 release</a>, and <a href="https://github.com/altic-dev/FluidVoice/releases/expanded_assets/v1.6.12">release assets</a> (checked 22 October 2026). FluidVoice's README and official site say fluidvoice.org is not affiliated with the project, so this page no longer cites it. No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
         </div>
       </section>
     </main>
