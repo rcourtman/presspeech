@@ -11,6 +11,24 @@ class EvidenceError(ValueError):
     pass
 
 
+WAVE_FORMAT_EXTENSIBLE = 0xFFFE
+# KSDATAFORMAT_SUBTYPE_* GUIDs share this tail after the 16-bit format tag.
+EXTENSIBLE_GUID_TAIL = bytes.fromhex('000000001000800000aa00389b71')
+
+
+def extensible_encoding(extension, bits):
+    # macOS 27 afconvert keeps a WAVE_FORMAT_EXTENSIBLE header from its input.
+    # Map it to the plain tag only when every container bit carries a sample,
+    # so padded or non-PCM/float subformats still fail the encoding check.
+    if len(extension) < 24:
+        raise EvidenceError('truncated WAV extensible format')
+    # cbSize, valid bits per sample, channel mask, subformat GUID.
+    size, valid_bits, _, subformat = struct.unpack_from('<HHI16s', extension)
+    if size < 22 or valid_bits != bits or subformat[2:] != EXTENSIBLE_GUID_TAIL:
+        return WAVE_FORMAT_EXTENSIBLE
+    return struct.unpack_from('<H', subformat)[0]
+
+
 def normalized_frames(path):
     # Read chunk metadata only: a long corpus must not need another audio-sized
     # allocation just to check that the benchmark consumed its final frames.
@@ -37,6 +55,8 @@ def normalized_frames(path):
                 if fmt is not None or length < 16:
                     raise EvidenceError('missing or duplicate WAV format')
                 fmt = struct.unpack('<HHIIHH', stream.read(16))
+                if fmt[0] == WAVE_FORMAT_EXTENSIBLE:
+                    fmt = (extensible_encoding(stream.read(min(length - 16, 24)), fmt[5]),) + fmt[1:]
             elif kind == b'data':
                 if payload is not None:
                     raise EvidenceError('duplicate WAV audio payload')
@@ -45,8 +65,9 @@ def normalized_frames(path):
         if fmt is None or payload is None:
             raise EvidenceError('missing WAV format or audio payload')
         encoding, channels, rate, byte_rate, alignment, bits = fmt
-        # afconvert -d LEF32@16000 emits IEEE Float32; PCM16 also covers native
-        # test fixtures. Multichannel frame count survives the loader's downmix.
+        # afconvert -d LEF32@16000 emits IEEE Float32, plain or extensible; PCM16
+        # also covers native test fixtures. Multichannel frame count survives the
+        # loader's downmix.
         if ((encoding, bits) not in ((1, 16), (3, 32)) or rate != 16000
                 or channels < 1 or alignment != channels * (bits // 8)
                 or byte_rate != rate * alignment):
