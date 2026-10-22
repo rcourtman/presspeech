@@ -6,7 +6,7 @@
 // all three backends can be cross-referenced in one table.
 //
 // Usage:
-//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v2|v3|v3-no-mel|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
+//   presspeech-bench --file path/to/audio.wav [--trials 5] [--backend apple|v2|v3|ultra|v3-no-mel|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--redact-transcripts]
 //   presspeech-bench --reference-metrics --reference-file path/to/reference.txt --critical-terms path/to/terms.txt
 //
 // Audio must be 16 kHz mono Float32 (or convertible to that —
@@ -148,11 +148,15 @@ func parseArgs() -> CLIArgs {
             nemotronMultilingualChunkMs = n
         case "-h", "--help":
             print("""
-            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v2|v3|v3-no-mel|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
+            usage: presspeech-bench --file <wav> [--trials N] [--backend apple|v2|v3|ultra|v3-no-mel|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|unified|nemotron-en|nemotron-multilingual|110m|fluid|both] [--ref "text"] [--redact-transcripts]
                    presspeech-bench --reference-metrics --reference-file <txt> --critical-terms <txt>
                    presspeech-bench --self-test
 
               --backend  v3    FluidAudio Parakeet TDT v3 — production model (default)
+                         ultra
+                              FluidAudio Parakeet Ultra — the app's opt-in model,
+                              with the released v3 chunking config; files are
+                              checked against the app's pinned Ultra manifest
                          v3-sdk-default
                               v3 with FluidAudio's dependency-defined default
                               chunking; candidate for SDK-upgrade comparisons
@@ -373,6 +377,125 @@ func completeObservedRescoring(
     switch result {
     case .success(let text): return (text, .succeeded)
     case .failure: return (fallback, .failed)
+    }
+}
+
+// MARK: - Pinned model manifest
+
+/// The app's generated SHA-256 manifest for a speech model, read from
+/// swift/Sources/Presspeech/main.swift so the benchmark checks exactly the
+/// files and hashes the app pins (scripts/update-model-manifest.py writes it).
+struct PinnedModelManifest {
+    let repository: String
+    let commit: String
+    let files: [String: String]
+
+    enum Failure: Error, CustomStringConvertible {
+        case unreadable(String)
+        case mismatch(String)
+        var description: String {
+            switch self {
+            case .unreadable(let detail): return "pinned model manifest unavailable: \(detail)"
+            case .mismatch(let detail): return "pinned model manifest check failed: \(detail)"
+            }
+        }
+    }
+
+    static func appSourceURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // presspeech-bench
+            .deletingLastPathComponent()  // Sources
+            .deletingLastPathComponent()  // swift-bench
+            .deletingLastPathComponent()  // experiments
+            .deletingLastPathComponent()  // repository root
+            .appendingPathComponent("swift/Sources/Presspeech/main.swift")
+    }
+
+    static func appUltra() throws -> PinnedModelManifest {
+        let url = appSourceURL()
+        guard let source = try? String(contentsOf: url, encoding: .utf8) else {
+            throw Failure.unreadable(url.path)
+        }
+        return try parse(source: source, marker: "PARAKEET_ULTRA_MODEL_MANIFEST", constant: "parakeetUltra")
+    }
+
+    static func parse(source: String, marker: String, constant: String) throws -> PinnedModelManifest {
+        func capture(_ pattern: String, in text: String) -> [[String]] {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+            let range = NSRange(text.startIndex..., in: text)
+            return regex.matches(in: text, range: range).map { match in
+                (1..<match.numberOfRanges).compactMap { Range(match.range(at: $0), in: text).map { String(text[$0]) } }
+            }
+        }
+        guard let begin = source.range(of: "// BEGIN GENERATED \(marker)"),
+              let end = source.range(of: "// END GENERATED \(marker)"),
+              begin.upperBound <= end.lowerBound else {
+            throw Failure.unreadable("missing \(marker) markers")
+        }
+        let block = String(source[begin.upperBound..<end.lowerBound])
+        var files: [String: String] = [:]
+        for entry in capture(#"ModelFileDigest\(relativePath: "([^"]+)", sha256: "([0-9a-f]{64})"\)"#, in: block) {
+            let path = entry[0]
+            let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+            guard !path.hasPrefix("/"), !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }),
+                  files.updateValue(entry[1], forKey: path) == nil else {
+                throw Failure.unreadable("unsafe or duplicate manifest path \(path)")
+            }
+        }
+        let repository = capture(#"static let \#(constant)Repository = "([^"]+)""#, in: source)
+        let commit = capture(#"static let \#(constant)RepositoryCommit = "([0-9a-f]{40})""#, in: source)
+        guard !files.isEmpty, repository.count == 1, commit.count == 1 else {
+            throw Failure.unreadable("\(marker) has no files or no single pinned repository commit")
+        }
+        return PinnedModelManifest(repository: repository[0][0], commit: commit[0][0], files: files)
+    }
+
+    /// Same contract as the app's ModelIntegrity.verifyFiles: every listed
+    /// file is a regular file with the pinned SHA-256, and the compiled
+    /// .mlmodelc bundles contain nothing unlisted.
+    func verify(at root: URL) throws {
+        let fm = FileManager.default
+        func nodeType(_ url: URL) -> FileAttributeType? {
+            (try? fm.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
+        }
+        for (path, expected) in files.sorted(by: { $0.key < $1.key }) {
+            let url = root.appendingPathComponent(path)
+            guard nodeType(url) == .typeRegular, let handle = try? FileHandle(forReadingFrom: url) else {
+                throw Failure.mismatch("missing or non-regular file \(path)")
+            }
+            defer { try? handle.close() }
+            var hasher = SHA256()
+            while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+                hasher.update(data: chunk)
+            }
+            let actual = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+            guard actual == expected else {
+                throw Failure.mismatch("\(path): expected \(expected), got \(actual)")
+            }
+        }
+        let bundles = Set(files.keys.compactMap { path -> String? in
+            let first = String(path.split(separator: "/")[0])
+            return first.hasSuffix(".mlmodelc") ? first : nil
+        })
+        for bundle in bundles.sorted() {
+            let base = root.appendingPathComponent(bundle)
+            guard let items = fm.enumerator(atPath: base.path) else {
+                throw Failure.mismatch("missing bundle \(bundle)")
+            }
+            for case let relative as String in items {
+                let path = "\(bundle)/\(relative)"
+                switch nodeType(base.appendingPathComponent(relative)) {
+                case .typeDirectory?:
+                    guard files.keys.contains(where: { $0.hasPrefix(path + "/") }) else {
+                        throw Failure.mismatch("unexpected directory \(path)")
+                    }
+                case .typeRegular?:
+                    guard files[path] != nil else { throw Failure.mismatch("unexpected file \(path)") }
+                default:
+                    throw Failure.mismatch("\(path) is not a regular file or directory")
+                }
+            }
+        }
     }
 }
 
@@ -599,6 +722,8 @@ final class FluidBackend: ASRBackend {
             return [("parakeet-v2", modelCacheDirectory(for: .parakeetV2))]
         case .v3:
             return [("parakeet-v3-\(encoderPrecision.rawValue)", modelCacheDirectory(for: .parakeetV3))]
+        case .ultra:
+            return [("parakeet-ultra", modelCacheDirectory(for: .parakeetUltra))]
         case .tdtCtc110m:
             return [("tdt-ctc-110m", modelCacheDirectory(for: .parakeetTdtCtc110m))]
         default:
@@ -623,10 +748,22 @@ final class FluidBackend: ASRBackend {
         // ~/Library/Application Support/FluidAudio/ unless cached (v3 is
         // ~600 MB; 110M is smaller). `AsrManager.init` takes the loaded
         // models directly; no separate configure step.
-        let models = try await AsrModels.downloadAndLoad(
-            version: version,
-            encoderPrecision: encoderPrecision
-        )
+        let models: AsrModels
+        if version == .ultra {
+            // Mirror the app: download, verify against the pinned manifest the
+            // app ships, then load. Unlike the app there is no redownload;
+            // a mismatch fails the run.
+            let directory = try await AsrModels.download(version: .ultra)
+            let manifest = try PinnedModelManifest.appUltra()
+            try manifest.verify(at: directory)
+            log("verified \(manifest.files.count) Ultra model files from \(manifest.repository) @ \(manifest.commit)")
+            models = try await AsrModels.load(from: directory, version: .ultra)
+        } else {
+            models = try await AsrModels.downloadAndLoad(
+                version: version,
+                encoderPrecision: encoderPrecision
+            )
+        }
         // Ordinary v3 and encoder-precision comparisons hold the released
         // chunking path constant. `v3-sdk-default` opts into the exact
         // dependency's default so an SDK behavior change can be measured
@@ -1672,6 +1809,51 @@ enum BenchSelfTestError: Error {
     case failed(String)
 }
 
+func runPinnedManifestSelfTests() throws {
+    func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+        guard condition() else { throw BenchSelfTestError.failed(message) }
+    }
+    func rejects(_ body: () throws -> Void) -> Bool {
+        do { try body(); return false } catch { return true }
+    }
+    let app = try PinnedModelManifest.appUltra()
+    try expect(app.repository == "FluidInference/parakeet-ultra-coreml" && app.commit.count == 40
+               && app.files["parakeet_vocab.json"] != nil && app.files.keys.contains { $0.hasPrefix("Encoder.mlmodelc/") },
+               "the app's Ultra manifest should parse with its pinned repository, commit, vocabulary and encoder")
+
+    let digest = { (data: Data) in SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    let weights = Data("weights".utf8), vocab = Data("{}".utf8)
+    let source = """
+        static let toyRepository = "owner/toy"
+        static let toyRepositoryCommit = "\(String(repeating: "a", count: 40))"
+        // BEGIN GENERATED TOY_MANIFEST
+        ModelFileDigest(relativePath: "Toy.mlmodelc/weights/weight.bin", sha256: "\(digest(weights))"),
+        ModelFileDigest(relativePath: "vocab.json", sha256: "\(digest(vocab))"),
+        // END GENERATED TOY_MANIFEST
+        """
+    let manifest = try PinnedModelManifest.parse(source: source, marker: "TOY_MANIFEST", constant: "toy")
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("presspeech-bench-manifest-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("Toy.mlmodelc/weights"),
+                                            withIntermediateDirectories: true)
+    try weights.write(to: root.appendingPathComponent("Toy.mlmodelc/weights/weight.bin"))
+    try vocab.write(to: root.appendingPathComponent("vocab.json"))
+    try Data("unlisted root files are allowed".utf8).write(to: root.appendingPathComponent("config.json"))
+    try manifest.verify(at: root)
+    try Data("tampered".utf8).write(to: root.appendingPathComponent("Toy.mlmodelc/weights/weight.bin"))
+    try expect(rejects { try manifest.verify(at: root) }, "a changed model file should fail verification")
+    try weights.write(to: root.appendingPathComponent("Toy.mlmodelc/weights/weight.bin"))
+    try Data().write(to: root.appendingPathComponent("Toy.mlmodelc/extra.bin"))
+    try expect(rejects { try manifest.verify(at: root) }, "an unlisted file inside a bundle should fail verification")
+    try FileManager.default.removeItem(at: root.appendingPathComponent("Toy.mlmodelc/extra.bin"))
+    try FileManager.default.removeItem(at: root.appendingPathComponent("vocab.json"))
+    try expect(rejects { try manifest.verify(at: root) }, "a missing file should fail verification")
+    try expect(rejects { _ = try PinnedModelManifest.parse(source: source.replacingOccurrences(of: "vocab.json", with: "../vocab.json"),
+                                                           marker: "TOY_MANIFEST", constant: "toy") },
+               "a traversal path in the manifest should be rejected")
+}
+
 func runAudioLoadingSelfTests() throws {
     let temporary = FileManager.default.temporaryDirectory
         .appendingPathComponent("presspeech-audio-self-test-\(UUID().uuidString)", isDirectory: true)
@@ -2241,6 +2423,7 @@ func runBenchSelfTests() throws {
         "CI presence must be recorded separately from ASR tuning")
     try runAudioLoadingSelfTests()
 
+    try runPinnedManifestSelfTests()
     print("presspeech-bench self-test passed")
 }
 
@@ -2482,7 +2665,7 @@ struct PresspeechBench {
             runSummary += ", nemotron-multilingual-language=\(args.nemotronMultilingualLanguage)"
             runSummary += ", nemotron-multilingual-chunk-ms=\(args.nemotronMultilingualChunkMs)"
         }
-        if args.backend == "v3" || args.backend == "v3-no-mel" ||
+        if args.backend == "v3" || args.backend == "ultra" || args.backend == "v3-no-mel" ||
             args.backend == "v3-sdk-default" ||
             args.backend == "v3-int8-v2" ||
             args.backend == "sliding-v3" || vocabularyBackends.contains(args.backend) {
@@ -2567,7 +2750,7 @@ struct PresspeechBench {
         let warmup = samples
 
         let known = [
-            "apple", "v2", "v3", "v3-no-mel", "v3-sdk-default", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
+            "apple", "v2", "v3", "ultra", "v3-no-mel", "v3-sdk-default", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
             "v3-vocab-exact-similarity",
             "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
             "sliding-vocab-no-rescue", "unified",
@@ -2598,6 +2781,15 @@ struct PresspeechBench {
                 FluidBackend(
                     name: "fluid-ParakeetTDTv3",
                     version: .v3,
+                    language: args.language
+                )
+            )
+        }
+        if args.backend == "ultra" {
+            backends.append(
+                FluidBackend(
+                    name: "fluid-ParakeetUltra",
+                    version: .ultra,
                     language: args.language
                 )
             )

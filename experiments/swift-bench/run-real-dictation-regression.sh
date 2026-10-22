@@ -57,7 +57,7 @@ usage: ./run-real-dictation-regression.sh [options]
 Options:
   --input-dir <path>       directory with audio + .txt sidecars (default: real-audio)
   --out-dir <path>         report directory (default: real-results)
-  --backend <name>         presspeech-bench backend: v2, v3, v3-no-mel,
+  --backend <name>         presspeech-bench backend: v2, v3, ultra, v3-no-mel,
                            v3-sdk-default, v3-int8-v2, unified, nemotron-en, nemotron-multilingual,
                            apple, 110m, fluid, both (default: v3)
   --language <auto|code>   Parakeet TDT v3 language/script hint (default: auto;
@@ -155,7 +155,7 @@ backend_uses_nemotron_multilingual() {
 
 backend_uses_parakeet_v3() {
     case "$BACKEND" in
-        v3|v3-no-mel|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|fluid|both)
+        v3|ultra|v3-no-mel|v3-sdk-default|v3-int8-v2|v3-vocab|v3-vocab-conservative|v3-vocab-no-rescue|v3-vocab-exact-similarity|sliding-v3|sliding-vocab|sliding-vocab-conservative|sliding-vocab-no-rescue|fluid|both)
             return 0
             ;;
         *)
