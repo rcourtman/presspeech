@@ -70,8 +70,9 @@ If you choose to make another model request after reading the warning above,
 check the connection before retrying. If Presspeech reports an incomplete or
 corrupt cache and you still choose to download again, use **Support -> Reset
 Speech Model Cache...**. Presspeech deletes the local model cache, then downloads
-and verifies a fresh copy; settings and dictionary rules remain intact. Do not
-reset a working cache.
+and verifies a fresh copy; settings and dictionary rules remain intact. From
+macOS 0.3.10 it resets only the selected model, so with Parakeet Ultra selected
+it downloads about 630 MB. Do not reset a working cache.
 
 ### Hotkey Stops Working
 

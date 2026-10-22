@@ -274,7 +274,7 @@ ANCHORED_INSTALL_PREFLIGHTS = (
         "anchor": "direct-download",
         "platform": "macos",
         "version_key": "version",
-        "reviewed_version": ("0.3.8", "0.3.9"),
+        "reviewed_version": ("0.3.8", "0.3.9", "0.3.10"),
         "required": (
             "Before opening macOS 0.3.8",
             "missing-model download starts on launch",
@@ -959,7 +959,7 @@ FIRST_RUN_ACTION_FORBIDDEN = {
 # when release metadata advances so the old steps cannot be published beneath
 # a new version heading.
 ONBOARDING_RELEASE_COPY_REVIEWED: dict[str, str | tuple[str, ...]] = {
-    "version": ("0.3.8", "0.3.9"),
+    "version": ("0.3.8", "0.3.9", "0.3.10"),
     "windows_version": "0.1.12",
 }
 
@@ -3272,7 +3272,7 @@ def check_anchored_install_preflights(
 def check_macos_upgrade_preflight(
     metadata: dict[str, object],
     page: Path = DOCS / "install.html",
-    reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9"),
+    reviewed_version: str | tuple[str, ...] = ("0.3.8", "0.3.9", "0.3.10"),
 ) -> list[str]:
     """An upgrade can fetch a missing/invalid model, so deep links need a stop choice."""
     display = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page.name
@@ -3459,8 +3459,8 @@ MODEL_DOWNLOAD_FIRST_RUN_CONTROL_EXPECTATIONS = {
         "published": [
             {
                 "model": "Parakeet TDT v3 CoreML",
-                "trigger": "automatic_on_launch",
-                "can_defer": False,
+                "trigger": "explicit_setup_choice_before_download",
+                "can_defer": True,
             }
         ],
         "upcoming": [
@@ -3731,7 +3731,7 @@ def check_published_step_scoping(
     """Keep unreleased controls out of the ordered steps for current downloads."""
     errors: list[str] = []
     for path, section_id, future_version in (
-        (mac_path, "direct-download", "0.3.10"),
+        (mac_path, "direct-download", "0.3.11"),
         (windows_path, "first-launch", "0.1.13"),
     ):
         display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
@@ -5788,7 +5788,7 @@ def run_self_test() -> None:
         preflight_surfaces = tuple(preflight_surfaces)
         if check_anchored_install_preflights(preflight_metadata, preflight_surfaces):
             raise SyncError("self-test: valid anchored install preflights were rejected")
-        stale_preflight_metadata = dict(preflight_metadata, version="0.3.10")
+        stale_preflight_metadata = dict(preflight_metadata, version="0.3.11")
         if not any(
             "review the macos anchored install preflight" in error
             for error in check_anchored_install_preflights(
@@ -7885,7 +7885,7 @@ def run_self_test() -> None:
             raise SyncError("self-test: versioned first-run action was rejected")
         if check_onboarding_release_scope({"version": "0.3.8", "windows_version": "0.1.12"}):
             raise SyncError("self-test: reviewed onboarding release scope was rejected")
-        if len(check_onboarding_release_scope({"version": "0.3.10", "windows_version": "0.1.13"})) != 2:
+        if len(check_onboarding_release_scope({"version": "0.3.11", "windows_version": "0.1.13"})) != 2:
             raise SyncError("self-test: onboarding steps were not gated on a new release")
         action_copy.write_text("Upcoming 0.1.13 asks before downloading\n", encoding="utf-8")
         if not check_first_run_action_copy(required_action_copy, forbidden_action_copy):
@@ -7904,7 +7904,7 @@ def run_self_test() -> None:
         if check_published_step_scoping(scoped_mac, scoped_windows):
             raise SyncError("self-test: separated future controls were rejected")
         scoped_mac.write_text(
-            '<section id="direct-download"><ol class="steps"><li>0.3.10</li></ol></section>',
+            '<section id="direct-download"><ol class="steps"><li>0.3.11</li></ol></section>',
             encoding="utf-8",
         )
         if not check_published_step_scoping(scoped_mac, scoped_windows):
