@@ -45,7 +45,7 @@
         <span class="section-eyebrow">Changelog</span>
         <h1>Presspeech changelog</h1>
         <p>Release history for the macOS and Windows apps, newest first. The two apps are released separately and have their own version numbers. Each entry links to its GitHub release, which has the complete notes and downloads.</p>
-        <p>Latest: <a href="#macos-0.3.9">macOS 0.3.9</a> (26 September 2026) and <a href="#windows-0.1.12">Windows 0.1.12</a> (22 September 2026).</p>
+        <p>Latest: <a href="#macos-0.3.10">macOS 0.3.10</a> (22 October 2026) and <a href="#windows-0.1.12">Windows 0.1.12</a> (22 September 2026).</p>
         <div class="actions">
           <a class="button" href="#macos">macOS releases</a>
           <a class="button secondary" href="#windows">Windows releases</a>
@@ -56,6 +56,34 @@
         <div class="wrap">
           <span class="section-eyebrow">macOS</span>
           <h2>macOS releases</h2>
+          <article class="release" id="macos-0.3.10" aria-labelledby="macos-0.3.10-title">
+            <h3 id="macos-0.3.10-title">macOS 0.3.10</h3>
+            <p class="release-meta"><time datetime="2026-10-22">22 October 2026</time> · <a href="https://github.com/rcourtman/presspeech/releases/tag/v0.3.10">GitHub release</a></p>
+            <div class="note warn"><p>The <a href="https://github.com/rcourtman/presspeech/releases/tag/v0.3.10">full release notes</a> begin with a notice to read before opening this build.</p></div>
+            <p>This update adds an optional, more accurate speech model, starts recording sooner after an idle hotkey press, and fixes a freeze after model downloads.</p>
+            <h4>Speech model choice</h4>
+            <ul>
+              <li><strong>Settings → Dictation → Speech Model</strong> now offers Parakeet Ultra alongside the default Parakeet TDT v3. Ultra is a post-trained v3 with the same 25 languages and similar speed, and lower word error rates in FluidAudio's published benchmarks.</li>
+              <li>Ultra is opt-in. Choosing it asks first, then downloads about 630 MB from Hugging Face (v3 is about 480 MB) and verifies every file before use. If Ultra cannot be downloaded, verified, or loaded, Presspeech switches back to v3 and says so.</li>
+              <li>The v3 copy stays on disk, so switching back needs no download. <strong>Reset Speech Model Cache</strong> resets only the selected model.</li>
+              <li>Parakeet TDT v3 remains the default, and nothing changes unless you choose Ultra. The bundled FluidAudio speech runtime moves to 0.17.7; on the project's comparison recordings, v3 transcripts were unchanged.</li>
+            </ul>
+            <h4>Responsiveness</h4>
+            <ul>
+              <li>Recording starts faster after the hotkey when the microphone was idle. Presspeech now prepares the audio input while idle without starting it, so the microphone and its recording indicator stay off until you press the hotkey. Built-in and USB microphones use this path; Bluetooth, aggregate, virtual, and other wireless inputs start as before.</li>
+              <li>Each recording start writes one line of step timings to the local log, beginning <code>press timing:</code>. It contains durations only, with no key, app, window, or audio content.</li>
+              <li>Presspeech no longer becomes unresponsive for minutes after a speech-model download finishes. Download progress rebuilt the menu for every received chunk; it now updates in the 5% steps the status already shows. This affected first-run model downloads as well as model switches.</li>
+            </ul>
+            <h4>Output mute</h4>
+            <ul>
+              <li>On outputs with no mute control, such as many HDMI and DisplayPort displays, <strong>Mute system audio while recording</strong> now records without attempting to mute and notes this once in the local log, instead of logging a failed mute on every dictation. Outputs that can mute behave as before.</li>
+            </ul>
+            <h4>Diagnostics</h4>
+            <ul>
+              <li>When automatic insertion stops and the transcript is copied for manual paste, the local log now says why: which destination check failed and at which step, a held modifier key, an unavailable paste key, or a Unicode typing limit. Delivery decisions are unchanged. App names, window titles, transcript text, and clipboard contents are not logged.</li>
+            </ul>
+            <p>Audio and transcription remain local.</p>
+          </article>
           <article class="release" id="macos-0.3.9" aria-labelledby="macos-0.3.9-title">
             <h3 id="macos-0.3.9-title">macOS 0.3.9</h3>
             <p class="release-meta"><time datetime="2026-09-26">26 September 2026</time> · <a href="https://github.com/rcourtman/presspeech/releases/tag/v0.3.9">GitHub release</a></p>
