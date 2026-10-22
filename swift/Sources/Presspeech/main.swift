@@ -195,7 +195,38 @@ func launchAtLoginAction(for status: SMAppService.Status) -> LaunchAtLoginAction
     }
 }
 
-let SETTINGS_SUITE = "com.local.presspeech"
+// MARK: - Isolated QA mode
+//
+// `dev-run.sh --isolated` wraps a debug build under its own bundle id and
+// stamps `PresspeechIsolatedQARoot` into that copy's Info.plist. The app then
+// keeps its settings domain, log, support files and speech-model cache apart
+// from the installed Presspeech: settings live under the QA bundle id, and the
+// log, `Presspeech/` support folder and `FluidAudio/Models` cache live under
+// the QA root. It also never starts audio input or the global hotkey tap, and
+// skips update checks and legacy-identity migration, so the speech-model UI
+// can be exercised beside the daily-use app. Release builds never read the key.
+
+struct IsolatedQAMode {
+    let root: URL
+    let settingsSuite: String
+}
+
+let ISOLATED_QA_ROOT_INFO_KEY = "PresspeechIsolatedQARoot"
+
+let ISOLATED_QA_MODE: IsolatedQAMode? = {
+    #if DEBUG
+    guard let path = Bundle.main.object(forInfoDictionaryKey: ISOLATED_QA_ROOT_INFO_KEY) as? String,
+          path.hasPrefix("/"),
+          let bundleID = Bundle.main.bundleIdentifier,
+          bundleID != "com.local.presspeech" else { return nil }
+    return IsolatedQAMode(root: URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL,
+                          settingsSuite: bundleID)
+    #else
+    return nil
+    #endif
+}()
+
+let SETTINGS_SUITE = ISOLATED_QA_MODE?.settingsSuite ?? "com.local.presspeech"
 let CORRECTIONS_FILE_UTI = "com.local.presspeech.corrections"
 let CORRECTIONS_FILE_EXTENSION = "presspeech-corrections"
 let CORRECTIONS_FILE_NAME = "Presspeech Corrections.\(CORRECTIONS_FILE_EXTENSION)"
@@ -1799,6 +1830,7 @@ enum ModelIntegrity {
 
 private func resolvedFluidAudioSupportDirectory(_ override: URL?) -> URL? {
     override
+        ?? ISOLATED_QA_MODE?.root.appendingPathComponent("FluidAudio", isDirectory: true)
         ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("FluidAudio", isDirectory: true)
 }
@@ -1851,11 +1883,20 @@ func isExistingSpeechModelCacheDirectorySafeForRemoval(
 }
 
 func speechModelCacheBaseDirectory() -> URL {
-    MLModelConfigurationUtils.defaultModelsDirectory()
+    if let isolated = ISOLATED_QA_MODE {
+        return isolated.root
+            .appendingPathComponent("FluidAudio", isDirectory: true)
+            .appendingPathComponent("Models", isDirectory: true)
+    }
+    return MLModelConfigurationUtils.defaultModelsDirectory()
 }
 
 func speechModelCacheDirectory(for _: SpeechModelProfile) -> URL {
-    AsrModels.defaultCacheDirectory(for: .v3)
+    let defaultDirectory = AsrModels.defaultCacheDirectory(for: .v3)
+    guard ISOLATED_QA_MODE != nil else { return defaultDirectory }
+    // Same per-model folder name, rehomed under the isolated QA root.
+    return speechModelCacheBaseDirectory()
+        .appendingPathComponent(defaultDirectory.lastPathComponent, isDirectory: true)
 }
 
 func speechModelDownloadRequiredBytes(for profile: SpeechModelProfile,
@@ -2494,7 +2535,8 @@ final class Logger: @unchecked Sendable {
     var fileURL: URL { url }
 
     init() {
-        let logs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        let logs = ISOLATED_QA_MODE?.root.appendingPathComponent("Logs", isDirectory: true)
+            ?? FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs", isDirectory: true)
         url = logs.appendingPathComponent("Presspeech.log")
     }
@@ -2703,7 +2745,10 @@ final class Settings: @unchecked Sendable {
         // also try the suite-name initialiser, which works regardless
         // of bundle identification.
         let standard = UserDefaults.standard
-        if let legacyDomain = standard.persistentDomain(forName: LEGACY_SETTINGS_SUITE),
+        // The legacy domain belongs to the installed app's migration, not
+        // to an isolated QA copy.
+        if ISOLATED_QA_MODE == nil,
+           let legacyDomain = standard.persistentDomain(forName: LEGACY_SETTINGS_SUITE),
            !legacyDomain.isEmpty {
             let currentDomain = standard.persistentDomain(forName: SETTINGS_SUITE) ?? [:]
             let migratedDomain = settingsDomainAfterIdentityMigration(current: currentDomain,
@@ -4464,6 +4509,10 @@ final class HotkeyListener {
 
     @discardableResult
     func start() -> Bool {
+        if ISOLATED_QA_MODE != nil {
+            log("isolated QA: global hotkey tap not installed")
+            return false
+        }
         if let tap {
             CGEvent.tapEnable(tap: tap, enable: true)
             return true
@@ -5372,7 +5421,10 @@ actor TranscriptionWorker {
         if !speechModelCacheIsComplete(for: .multilingualV3) && allowDownload {
             try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
         }
-        var modelDirectory = try await AsrModels.download(version: .v3,
+        // Outside isolated QA mode this is FluidAudio's own default directory.
+        let cacheDirectory = speechModelCacheDirectory(for: .multilingualV3)
+        var modelDirectory = try await AsrModels.download(to: cacheDirectory,
+                                                          version: .v3,
                                                           progressHandler: progressHandler)
         do {
             try ModelIntegrity.verifyParakeetV3Model(at: modelDirectory)
@@ -5383,7 +5435,8 @@ actor TranscriptionWorker {
             }
             log("ASR: model integrity check failed; redownloading once: \(privacySafeErrorLogDetail(error))")
             try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
-            modelDirectory = try await AsrModels.download(force: true,
+            modelDirectory = try await AsrModels.download(to: cacheDirectory,
+                                                          force: true,
                                                           version: .v3,
                                                           progressHandler: progressHandler)
             try ModelIntegrity.verifyParakeetV3Model(at: modelDirectory)
@@ -8238,7 +8291,8 @@ func systemAudioUnmuteRequestDecision(phase: SystemAudioMutePhase) -> SystemAudi
 }
 
 private func presspeechApplicationSupportDirectory() -> URL {
-    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    (ISOLATED_QA_MODE?.root ?? FileManager.default.urls(for: .applicationSupportDirectory,
+                                                        in: .userDomainMask)[0])
         .appendingPathComponent("Presspeech", isDirectory: true)
 }
 
@@ -9905,7 +9959,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             log("ASR: reset unsupported saved speech model selection to \(settings.speechModelProfile.shortName)")
         }
 
-        migrateLegacyIdentityFilesIfNeeded(settings: settings)
+        if let isolated = ISOLATED_QA_MODE {
+            log("isolated QA mode: settings \(isolated.settingsSuite), root \(isolated.root.path)")
+        } else {
+            migrateLegacyIdentityFilesIfNeeded(settings: settings)
+        }
         if !settings.hasSpeechModelDownloadDecision {
             // Keep automatic startup for existing installs. A genuinely new
             // install without a complete local model gets a choice before a
@@ -10228,6 +10286,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 fallbackSpeechModelProfileAfterStartupFailure = nil
                 isSpeechModelReady = true
                 speechModelStartupProgressFraction = nil
+
+                if ISOLATED_QA_MODE != nil {
+                    // Model QA only: no microphone, no hotkey tap.
+                    startupStatusTitle = "\(speechModelProfile.shortName) loaded (isolated QA: no audio or hotkey)"
+                    setMenuBarState(.idle)
+                    log("isolated QA: \(speechModelProfile.shortName) loaded; audio input and hotkey skipped")
+                    return
+                }
 
                 stage = .audioInput
                 startupStatusTitle = "Starting audio input…"
@@ -12743,6 +12809,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func maybeShowSetupChecklist(reason: String) {
         guard !didOfferSetupChecklistThisLaunch else { return }
+        // An isolated QA copy never gets permissions, so an automatic
+        // checklist would only take focus from whatever is in front. It still
+        // opens for the first-download choice, which has no other surface.
+        guard ISOLATED_QA_MODE == nil || initialSpeechModelDownloadChoiceIsRequired else { return }
         guard startupFailure != nil
             || !missingPermissions().isEmpty
             || initialSpeechModelDownloadChoiceIsRequired else { return }
@@ -15879,7 +15949,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     // MARK: - Update flow
 
     private func startUpdateCheckLoop() {
-        guard updateCheckLoopTask == nil else { return }
+        guard updateCheckLoopTask == nil, ISOLATED_QA_MODE == nil else { return }
         updateCheckLoopTask = Task.detached { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(UPDATE_CHECK_FIRST_DELAY_SECONDS * 1_000_000_000))
             while !Task.isCancelled {

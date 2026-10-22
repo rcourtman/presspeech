@@ -7,17 +7,43 @@
 # the Cask-installed Presspeech, no manual permission re-grants), kills
 # any prior dev instance, and relaunches via `open`.
 #
-# Usage: ./dev-run.sh
+# Usage: ./dev-run.sh [--isolated]
 #
 # When you're done testing and want the production Cask Presspeech
 # back, just `open /Applications/Presspeech.app` — both binaries share
 # bundle id `com.local.presspeech`, so the TCC entries are
 # interchangeable.
+#
+# --isolated builds /tmp/Presspeech-QA.app instead: bundle id
+# `com.local.presspeech.qa` (its own defaults domain and TCC rows), log,
+# support files and FluidAudio model cache under $PRESSPEECH_QA_ROOT
+# (default ~/Library/Application Support/Presspeech-QA), no audio input,
+# no global hotkey, no update checks. It leaves /Applications/Presspeech.app
+# running and its preferences and model cache untouched, so the
+# speech-model switch UI can be tested beside the daily-use app.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-APP="/tmp/Presspeech-dev.app"
+ISOLATED=0
+case "${1:-}" in
+    "") ;;
+    --isolated) ISOLATED=1 ;;
+    *) echo "usage: $0 [--isolated]" >&2; exit 2 ;;
+esac
+if (( ISOLATED )); then
+    APP="/tmp/Presspeech-QA.app"
+    BUNDLE_ID="com.local.presspeech.qa"
+    EXECUTABLE="PresspeechQA"
+    QA_ROOT="${PRESSPEECH_QA_ROOT:-$HOME/Library/Application Support/Presspeech-QA}"
+    [[ "$QA_ROOT" == /* ]] || { echo "PRESSPEECH_QA_ROOT must be absolute" >&2; exit 2; }
+    LOG_PATH="$QA_ROOT/Logs/Presspeech.log"
+else
+    APP="/tmp/Presspeech-dev.app"
+    BUNDLE_ID="com.local.presspeech"
+    EXECUTABLE="Presspeech"
+    LOG_PATH="$HOME/Library/Logs/Presspeech.log"
+fi
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
@@ -27,13 +53,30 @@ say "Building (debug)..."
 say "Wrapping in $APP..."
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$HERE/.build/debug/Presspeech" "$APP/Contents/MacOS/Presspeech"
+cp "$HERE/.build/debug/Presspeech" "$APP/Contents/MacOS/$EXECUTABLE"
 # Single canonical Info.plist (swift/Info.plist) — same file
 # ship-swift.sh uses, so dev and release builds advertise the same
 # bundle id / minimum macOS / usage descriptions / icon. Don't
 # overwrite this with an inline heredoc; the canonical Info.plist is
 # the source of truth, full stop.
 cp "$HERE/Info.plist" "$APP/Contents/Info.plist"
+if (( ISOLATED )); then
+    # Only this copy changes identity; a distinct executable name keeps
+    # name-based tools (System Events, pkill) off the installed app. Dropping
+    # the corrections document type keeps LaunchServices from routing those
+    # files to the QA app.
+    PLIST="$APP/Contents/Info.plist"
+    /usr/libexec/PlistBuddy \
+        -c "Set :CFBundleIdentifier $BUNDLE_ID" \
+        -c "Set :CFBundleExecutable $EXECUTABLE" \
+        -c "Set :CFBundleName Presspeech QA" \
+        -c "Set :CFBundleDisplayName Presspeech QA" \
+        -c "Delete :CFBundleDocumentTypes" \
+        -c "Delete :UTExportedTypeDeclarations" \
+        -c "Add :PresspeechIsolatedQARoot string $QA_ROOT" \
+        "$PLIST"
+    mkdir -p "$QA_ROOT"
+fi
 # Menubar PNGs into the canonical Contents/Resources/ slot. NSImage
 # (named:) on Bundle.main finds them under this exact path. We avoid
 # SwiftPM's auto-generated <Package>_<Target>.bundle because it lacks
@@ -74,10 +117,12 @@ do
     fi
 done
 
-say "Stopping any prior dev instance..."
-pkill -f "Presspeech-dev.app" 2>/dev/null || true
-# Also kill any Cask instance — same bundle id would clash on TCC + hotkey.
-pkill -f "/Applications/Presspeech.app" 2>/dev/null || true
+say "Stopping any prior $(basename "$APP" .app) instance..."
+pkill -f "$APP" 2>/dev/null || true
+if (( ! ISOLATED )); then
+    # Also kill any Cask instance — same bundle id would clash on TCC + hotkey.
+    pkill -f "/Applications/Presspeech.app" 2>/dev/null || true
+fi
 
 # pkill is a SIGTERM the app never gets to handle, so the active-run marker it
 # sets at launch is left standing and the NEXT launch shows the "Reopened After
@@ -85,7 +130,7 @@ pkill -f "/Applications/Presspeech.app" 2>/dev/null || true
 # notice is for real crashes; a deliberate stop by this script is not one, so
 # clear the marker rather than crying wolf on every dev iteration.
 sleep 0.5
-defaults delete com.local.presspeech active_run_marker 2>/dev/null || true
+defaults delete "$BUNDLE_ID" active_run_marker 2>/dev/null || true
 sleep 0.5
 
 say "Launching..."
@@ -95,16 +140,19 @@ open "$APP"
 # appears is a hard failure.
 LAUNCHED_PID=""
 for _ in $(seq 1 25); do
-    LAUNCHED_PID="$(pgrep -f "Presspeech-dev.app" | head -n 1 || true)"
+    LAUNCHED_PID="$(pgrep -f "$APP" | head -n 1 || true)"
     [[ -n "$LAUNCHED_PID" ]] && break
     sleep 0.2
 done
 if [[ -z "$LAUNCHED_PID" ]]; then
-    echo "Presspeech-dev did not appear within ~5s of 'open'." >&2
-    echo "Check ~/Library/Logs/Presspeech.log for a startup crash." >&2
+    echo "$(basename "$APP" .app) did not appear within ~5s of 'open'." >&2
+    echo "Check $LOG_PATH for a startup crash." >&2
     exit 1
 fi
-echo "  pid=$LAUNCHED_PID $APP/Contents/MacOS/Presspeech"
+echo "  pid=$LAUNCHED_PID $APP/Contents/MacOS/$EXECUTABLE"
 echo
-echo "  log: tail -f ~/Library/Logs/Presspeech.log"
-echo "  stop: pkill -f Presspeech-dev.app"
+echo "  log: tail -f \"$LOG_PATH\""
+echo "  stop: pkill -f $APP"
+if (( ISOLATED )); then
+    echo "  reset: pkill -f $APP; rm -rf \"$QA_ROOT\"; defaults delete $BUNDLE_ID"
+fi

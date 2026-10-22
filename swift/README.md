@@ -38,6 +38,23 @@ For real keyboard, window-focus, and paste acceptance, use the separate
 Logs land in `~/Library/Logs/Presspeech.log` — same path the production
 Cask install uses, so a single `tail -f` covers both.
 
+## Isolated QA run (speech-model UI)
+
+```sh
+./dev-run.sh --isolated
+```
+
+Builds `/tmp/Presspeech-QA.app` as `com.local.presspeech.qa` and runs it
+beside the installed Presspeech instead of replacing it: own defaults domain
+and privacy rows; log, support files and FluidAudio model cache under
+`$PRESSPEECH_QA_ROOT` (default `~/Library/Application Support/Presspeech-QA`);
+no audio input, no global hotkey, no update checks. Use it to exercise
+Settings → Dictation → Speech Model (download prompt, verification, fallback).
+It cannot dictate. An empty QA root starts at the first-download choice; to
+start from a local v3, copy `~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3`
+into `$PRESSPEECH_QA_ROOT/FluidAudio/Models/` first. The script prints the
+reset command.
+
 ## Layout
 
 | Path | Purpose |
