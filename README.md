@@ -19,8 +19,8 @@ subscription, no cloud transcription.
 > ([macOS](https://rcourtman.github.io/presspeech/install.html#direct-download) or
 > [Windows](https://rcourtman.github.io/presspeech/windows.html#download-verify-run))
 > for the exact version. The source branch can contain an unreleased candidate.
-> macOS 0.3.9 asks before its first speech-model download on a clean install
-> and sends no Hugging Face account token. On Windows 0.1.12, a missing
+> Either macOS 0.3.9 or macOS 0.3.10 asks before its first speech-model
+> download on a clean install and sends no Hugging Face account token. On Windows 0.1.12, a missing
 > speech-model download starts on launch and may send Hugging Face usage
 > telemetry or an available token, including to a custom download route.
 > Audio and transcripts are never sent. If you are

@@ -17,18 +17,18 @@
       "proxy_preflight_by_release": "In macOS 0.3.8, the pinned FluidAudio client may log a malformed inherited https_proxy or http_proxy URL verbatim, including embedded credentials, and then ignore it. The macOS 0.3.9 implementation refuses to start before model loading when either value lacks a parsable host and port; it reports variable names only. Valid inherited proxy settings remain active, including the TLS-inspection trust boundary",
       "first_run_controls_by_release": [
         {
-          "version": "0.3.8",
+          "version": "0.3.9",
           "status": "published",
           "missing_model_controls": [
             {
               "model": "Parakeet TDT v3 CoreML",
-              "trigger": "automatic_on_launch",
-              "can_defer": false
+              "trigger": "explicit_setup_choice_before_download",
+              "can_defer": true
             }
           ]
         },
         {
-          "version": "0.3.9",
+          "version": "0.3.10",
           "status": "upcoming",
           "missing_model_controls": [
             {
