@@ -131,7 +131,7 @@
             </article>
             <article class="card">
               <h3>Why does first launch take time?</h3>
-              <p>Each app must download and prepare a local speech model before the first dictation. The macOS cache is about 500–600 MB. The 0.3.8 release starts its first download on launch; in macOS 0.3.9 and later, clean installs must choose <strong>Download Model</strong> in Setup or choose Set Up Later to defer. Existing installations and cached models load automatically. A fresh Windows install needs about 2.5 GB for CUDA Parakeet or about 141 MiB for CPU Whisper. Published Windows 0.1.12 starts its selected model download on first launch; upcoming 0.1.13 asks before downloading either missing first-run default and offers deferral on both paths, plus the CPU model on the Parakeet path. Later launches reuse the cache.</p>
+              <p>Each app must download and prepare a local speech model before the first dictation. The macOS cache is about 500–600 MB. The 0.3.8 release starts its first download on launch; in macOS 0.3.9 and later, clean installs must choose <strong>Download Model</strong> in Setup or choose Set Up Later to defer. Existing installations and cached models load automatically. The optional Parakeet Ultra model in macOS 0.3.10 and later adds about 630 MB, downloaded only after you choose it. A fresh Windows install needs about 2.5 GB for CUDA Parakeet or about 141 MiB for CPU Whisper. Published Windows 0.1.12 starts its selected model download on first launch; upcoming 0.1.13 asks before downloading either missing first-run default and offers deferral on both paths, plus the CPU model on the Parakeet path. Later launches reuse the cache.</p>
             </article>
             <article class="card">
               <h3>What is in diagnostics?</h3>
@@ -139,7 +139,7 @@
             </article>
             <article class="card">
               <h3>Which speech model should I use?</h3>
-              <p><strong>macOS:</strong> Use the built-in Parakeet TDT v3 model; there is no model switcher. <strong>Windows:</strong> Keep the automatically selected Parakeet CUDA or Whisper CPU default unless another selectable local model is a better fit for your language, accuracy, speed, or hardware.</p>
+              <p><strong>macOS:</strong> Keep the default Parakeet TDT v3 model; through 0.3.9 it is the only model. From macOS 0.3.10, <strong>Settings → Dictation → Speech Model</strong> also offers opt-in Parakeet Ultra, a post-trained v3 with the same 25 languages and lower word error rates in FluidAudio’s published benchmarks. Choosing it downloads about 630 MB from Hugging Face after a confirmation and verifies every file before use. Parakeet TDT v3 stays on disk, so switching back needs no download. <strong>Windows:</strong> Keep the automatically selected Parakeet CUDA or Whisper CPU default unless another selectable local model is a better fit for your language, accuracy, speed, or hardware.</p>
             </article>
             <article class="card">
               <h3>How does it compare to other dictation apps?</h3>

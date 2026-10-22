@@ -42,6 +42,20 @@
       "data_sent": "Standard HTTPS request metadata; no dictation audio. macOS 0.3.8 can attach an inherited HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HUGGINGFACEHUB_API_TOKEN as an Authorization header. From 0.3.9, Presspeech removes those credentials from its own process before FluidAudio can read them, so its public model download carries no account credential; this does not alter the user's shell or token store. Both versions use the pinned FluidAudio client, which honors inherited lowercase https_proxy and http_proxy settings. A tunnelling proxy sees connection metadata but not request headers; a TLS-inspecting HTTPS proxy trusted by macOS could read any token sent by published 0.3.8. From 0.3.9, Presspeech still honors proxy settings but removes inherited account-token authentication"
     },
     {
+      "name": "macos_user_selected_model_download",
+      "when": "From macOS 0.3.10, only after the user chooses Parakeet Ultra in Settings → Dictation → Speech Model and confirms Download and Switch while its cache is missing or incomplete. With Ultra selected, a user-triggered Reset Speech Model Cache, or an integrity failure after download permission is recorded, can download it again. Parakeet TDT v3 remains the default; this download never happens unless Ultra is chosen",
+      "destination": [
+        "huggingface.co and its subdomains (repository FluidInference/parakeet-ultra-coreml)",
+        "Hugging Face model-storage and CDN hosts under hf.co",
+        "Inherited lowercase https_proxy and http_proxy settings route it the same way as the default model download"
+      ],
+      "purpose": "FluidAudio downloads the optional Parakeet Ultra CoreML model weights from the repository's main branch. Before loading, Presspeech checks every file against SHA-256 hashes pinned to reviewed commit 95eaa59a39d4394f047a4dc5cce480388a60d1b6; a mismatch is downloaded once more. If a switch to Ultra still cannot download, verify, or load it, Presspeech returns to the previous model. Ultra has its own cache folder, so the Parakeet TDT v3 cache stays on disk for switching back",
+      "approximate_size": "about 630 MB",
+      "user_triggered": true,
+      "can_disable": true,
+      "data_sent": "Standard HTTPS request metadata; no dictation audio or transcripts. As with the default model download from 0.3.9, Presspeech removes inherited Hugging Face account tokens from its own process, so the request carries no account credential. Valid inherited proxy settings still apply, including the TLS-inspection trust boundary"
+    },
+    {
       "name": "windows_first_launch_model_download",
       "when": "Published Windows 0.1.12 starts its selected model download on first launch. Upcoming 0.1.13 checks the first-run default model cache locally and asks in Setup before downloading missing files for either default: English-only CPU base.en (~141 MiB) or Parakeet (~2.5 GB). Cached models load without a prompt; later Settings selections may also download missing files",
       "destination": [
