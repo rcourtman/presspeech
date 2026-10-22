@@ -10267,7 +10267,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // makes the first-launch CoreML compile of the ANE Encoder
         // hang. The bench under experiments/swift-bench/ never opens
         // an audio session so it doesn't see this.
-        startupTask = Task { @MainActor in
+        startupTask = Task { @MainActor [self] in
             var stage = StartupFailureStage.speechModel
             defer {
                 startupTask = nil
