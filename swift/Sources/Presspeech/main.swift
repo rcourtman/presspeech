@@ -862,14 +862,29 @@ let DICTATION_LANGUAGE_DISPLAY: [DictationLanguage: String] = [
 
 enum SpeechModelProfile: String, CaseIterable {
     case multilingualV3 = "multilingual_v3"
+    // Opt-in: moondream's post-trained Parakeet v3 (same 25 languages,
+    // tokenizer and decode path; int8 encoder, larger download).
+    case parakeetUltra = "parakeet_ultra"
     // Deprecated production option. Kept only so old saved preferences
     // can be read and migrated back to the supported v3 model.
     case englishUnified = "english_unified"
 
     static let productionDefault: SpeechModelProfile = .multilingualV3
 
+    /// Choices offered in Settings, default first.
+    static let selectableProfiles: [SpeechModelProfile] = [.multilingualV3, .parakeetUltra]
+
     var isProductionSupported: Bool {
-        self == .multilingualV3
+        Self.selectableProfiles.contains(self)
+    }
+
+    var asrModelVersion: AsrModelVersion {
+        switch self {
+        case .multilingualV3, .englishUnified:
+            return .v3
+        case .parakeetUltra:
+            return .ultra
+        }
     }
 
     var productionProfile: SpeechModelProfile {
@@ -880,6 +895,8 @@ enum SpeechModelProfile: String, CaseIterable {
         switch self {
         case .multilingualV3:
             return "Multilingual (Parakeet TDT v3)"
+        case .parakeetUltra:
+            return "Multilingual, higher accuracy (Parakeet Ultra)"
         case .englishUnified:
             return "English optimized (Parakeet Unified, deprecated)"
         }
@@ -889,8 +906,33 @@ enum SpeechModelProfile: String, CaseIterable {
         switch self {
         case .multilingualV3:
             return "Parakeet TDT v3"
+        case .parakeetUltra:
+            return "Parakeet Ultra"
         case .englishUnified:
             return "Parakeet Unified"
+        }
+    }
+
+    /// Settings → Dictation → Speech Model item title.
+    var settingsTitle: String {
+        switch self {
+        case .multilingualV3:
+            return "Parakeet TDT v3 (Default, about 480 MB)"
+        case .parakeetUltra:
+            return "Parakeet Ultra (More Accurate, about 630 MB)"
+        case .englishUnified:
+            return displayName
+        }
+    }
+
+    var settingsToolTip: String {
+        switch self {
+        case .multilingualV3:
+            return "The default multilingual model: 25 languages, about 480 MB from Hugging Face."
+        case .parakeetUltra:
+            return "A post-trained Parakeet TDT v3 with the same 25 languages and similar speed, and lower word error rates in FluidAudio's published benchmarks. Choosing it downloads about 630 MB from Hugging Face (Parakeet TDT v3 is about 480 MB) and verifies every file before use. The Parakeet TDT v3 copy stays on disk so you can switch back without downloading again."
+        case .englishUnified:
+            return displayName
         }
     }
 
@@ -898,6 +940,8 @@ enum SpeechModelProfile: String, CaseIterable {
         switch self {
         case .multilingualV3:
             return "FluidAudio · Parakeet TDT v3 multilingual (CoreML / ANE)"
+        case .parakeetUltra:
+            return "FluidAudio · Parakeet Ultra multilingual (CoreML / ANE)"
         case .englishUnified:
             return "FluidAudio · Parakeet Unified English (deprecated)"
         }
@@ -911,17 +955,41 @@ enum SpeechModelProfile: String, CaseIterable {
         switch self {
         case .multilingualV3:
             return "Presspeech will delete the local Parakeet TDT v3 model cache, unload the current speech model, and download a fresh verified copy before dictation is available again."
+        case .parakeetUltra:
+            return "Presspeech will delete the local Parakeet Ultra model cache, unload the current speech model, and download a fresh verified copy (about 630 MB) before dictation is available again."
         case .englishUnified:
             return "Presspeech will delete the local Parakeet TDT v3 model cache, unload the current speech model, and download a fresh verified copy before dictation is available again."
         }
     }
 
+    // Disk-space estimates keep the same ~1.5x margin over the files
+    // FluidAudio fetches (v3: 483 MB; Ultra: 632 MB at the pinned commits).
     var estimatedDownloadBytes: Int64 {
-        700 * 1024 * 1024
+        switch self {
+        case .multilingualV3, .englishUnified:
+            return 700 * 1024 * 1024
+        case .parakeetUltra:
+            return 920 * 1024 * 1024
+        }
     }
 
     var downloadSizeText: String {
-        "about 500-700 MB"
+        switch self {
+        case .multilingualV3, .englishUnified:
+            return "about 500-700 MB"
+        case .parakeetUltra:
+            return "about 630 MB"
+        }
+    }
+
+    /// Download size in setup and progress copy.
+    var setupDownloadSizeText: String {
+        switch self {
+        case .multilingualV3, .englishUnified:
+            return "about 500–600 MB"
+        case .parakeetUltra:
+            return "about 630 MB"
+        }
     }
 }
 
@@ -1655,6 +1723,55 @@ enum ModelIntegrity {
         log("ASR: verified \(parakeetV3Files.count) model files from \(parakeetV3Repository) @ \(parakeetV3RepositoryCommit)")
     }
 
+    // Opt-in Parakeet Ultra: a post-trained v3 with the same bundle names
+    // and vocabulary file. FluidAudio downloads it from the repository's
+    // `main` branch, so these hashes pin the reviewed commit the same way the
+    // v3 manifest does. Regenerate with
+    // `scripts/update-model-manifest.py --model ultra --write`.
+    static let parakeetUltraRepository = "FluidInference/parakeet-ultra-coreml"
+    static let parakeetUltraRepositoryCommit = "95eaa59a39d4394f047a4dc5cce480388a60d1b6"
+
+    private static let parakeetUltraStrictDirectories = parakeetV3StrictDirectories
+
+    private static let parakeetUltraFiles = [
+        // BEGIN GENERATED PARAKEET_ULTRA_MODEL_MANIFEST
+        ModelFileDigest(relativePath: "Decoder.mlmodelc/analytics/coremldata.bin", sha256: "fe92b6cfaa012abd5248c0bc877832f19807015abffc60d87b8ccc8ccb48b3b5"),
+        ModelFileDigest(relativePath: "Decoder.mlmodelc/coremldata.bin", sha256: "3b06e66768f0df7e21795f50e2b29300e33eeb1a2579dc42c695279c2d308497"),
+        ModelFileDigest(relativePath: "Decoder.mlmodelc/model.mil", sha256: "956f600207f88396017ca5c96cfa3acd5bfee60835a5b44b762e033a8fb28955"),
+        ModelFileDigest(relativePath: "Decoder.mlmodelc/weights/weight.bin", sha256: "02a0d219f281b9665bc10c8768649403b2eebbbf4b44c627041d948e0de11bb4"),
+        ModelFileDigest(relativePath: "Encoder.mlmodelc/analytics/coremldata.bin", sha256: "d87101d824d6723cf95304da33755c3c60e762663b9ef2b0c4bd0aa166a09a0d"),
+        ModelFileDigest(relativePath: "Encoder.mlmodelc/coremldata.bin", sha256: "397a84a4062f563cbc5f56077c674f09a61d85be5090f61d2f1932afb92ac0fe"),
+        ModelFileDigest(relativePath: "Encoder.mlmodelc/model.mil", sha256: "f5d601568a4171d99a314c0fe3f6bc67715da2623732a3fb566e050ea83e5848"),
+        ModelFileDigest(relativePath: "Encoder.mlmodelc/weights/weight.bin", sha256: "315ba01f33cadbf601d43ac7f5c86208b7aa75fdaa34705c9869d5abe3521c9b"),
+        ModelFileDigest(relativePath: "JointDecisionv3.mlmodelc/analytics/coremldata.bin", sha256: "68d38ca646aebafa7a9329e2efda50f5767c49e89fdb5f77f212072bb66f97c4"),
+        ModelFileDigest(relativePath: "JointDecisionv3.mlmodelc/coremldata.bin", sha256: "5e3af5a4ce686f6c237cadbd9284e10d333bc0e1546633cd0e430e6194044bc4"),
+        ModelFileDigest(relativePath: "JointDecisionv3.mlmodelc/model.mil", sha256: "791b3c3cf3eb2079c84623fc880f6bba008d1366e5f8b03e9a8ed8bd4d7194a0"),
+        ModelFileDigest(relativePath: "JointDecisionv3.mlmodelc/weights/weight.bin", sha256: "3f310b85b82341c53ec383025ab094a4e462ee1c592e1ad7c6bfe39cff66ca25"),
+        ModelFileDigest(relativePath: "Preprocessor.mlmodelc/analytics/coremldata.bin", sha256: "c9beeb989c8d66f8be11df59bc6df277ec76cee404f6865b46243835ef562f6d"),
+        ModelFileDigest(relativePath: "Preprocessor.mlmodelc/coremldata.bin", sha256: "dbde3f2300842c1fd51ef3ff948a0bcffe65ffd2dca10707f2509f32c1d65b1d"),
+        ModelFileDigest(relativePath: "Preprocessor.mlmodelc/metadata.json", sha256: "2a98699e22d279dd37fa1d238aeb1c6db1df0d6fad687775324157689d8f3acf"),
+        ModelFileDigest(relativePath: "Preprocessor.mlmodelc/model.mil", sha256: "4b8518a956450fec57f06c2a21bdffc26973f7f1fa6842fb38fe917f896b6b93"),
+        ModelFileDigest(relativePath: "Preprocessor.mlmodelc/weights/weight.bin", sha256: "129b76e3aeafa8afa3ea76d995b964b145fe83700d579f6ff42c4c38fa0968ea"),
+        ModelFileDigest(relativePath: "parakeet_vocab.json", sha256: "7ec60e05f1b24480736ec0eed40900f4626bce1fa9a60fd700ec7e2a59198735"),
+        // END GENERATED PARAKEET_ULTRA_MODEL_MANIFEST
+    ]
+
+    static func verifyParakeetUltraModel(at directory: URL) throws {
+        try verifyFiles(root: directory,
+                        expectedFiles: parakeetUltraFiles,
+                        strictDirectories: parakeetUltraStrictDirectories)
+        log("ASR: verified \(parakeetUltraFiles.count) model files from \(parakeetUltraRepository) @ \(parakeetUltraRepositoryCommit)")
+    }
+
+    static func verifyModel(for profile: SpeechModelProfile, at directory: URL) throws {
+        switch profile {
+        case .multilingualV3, .englishUnified:
+            try verifyParakeetV3Model(at: directory)
+        case .parakeetUltra:
+            try verifyParakeetUltraModel(at: directory)
+        }
+    }
+
     static func verifyFiles(root: URL,
                             expectedFiles: [ModelFileDigest],
                             strictDirectories: [String]) throws {
@@ -1891,8 +2008,8 @@ func speechModelCacheBaseDirectory() -> URL {
     return MLModelConfigurationUtils.defaultModelsDirectory()
 }
 
-func speechModelCacheDirectory(for _: SpeechModelProfile) -> URL {
-    let defaultDirectory = AsrModels.defaultCacheDirectory(for: .v3)
+func speechModelCacheDirectory(for profile: SpeechModelProfile) -> URL {
+    let defaultDirectory = AsrModels.defaultCacheDirectory(for: profile.productionProfile.asrModelVersion)
     guard ISOLATED_QA_MODE != nil else { return defaultDirectory }
     // Same per-model folder name, rehomed under the isolated QA root.
     return speechModelCacheBaseDirectory()
@@ -1933,16 +2050,18 @@ func availableImportantDiskSpaceBytes(containing url: URL) -> Int64? {
     return Int64(capacity)
 }
 
-func speechModelCacheIsComplete(at directory: URL) -> Bool {
+func speechModelCacheIsComplete(at directory: URL,
+                                 version: AsrModelVersion = .v3) -> Bool {
     // A partially created cache directory is not a local model. The pinned
     // FluidAudio downloader checks these same required bundles and vocabulary
     // before deciding whether to fetch missing files from the network. This
     // is structural only; SHA-256 validation still runs under the offline gate.
-    AsrModels.modelsExist(at: directory, version: .v3)
+    AsrModels.modelsExist(at: directory, version: version)
 }
 
 func speechModelCacheIsComplete(for profile: SpeechModelProfile) -> Bool {
-    speechModelCacheIsComplete(at: speechModelCacheDirectory(for: profile))
+    speechModelCacheIsComplete(at: speechModelCacheDirectory(for: profile),
+                               version: profile.productionProfile.asrModelVersion)
 }
 
 func requiresInitialSpeechModelDownloadChoice(downloadApproved: Bool,
@@ -3751,11 +3870,55 @@ private func firstSpeechModelDownloadSetupDetail(profile: SpeechModelProfile) ->
     let requiredFreeSpace = formattedByteCount(
         UInt64(speechModelDownloadRequiredBytes(for: profile))
     )
-    return "The first model download is about 500–600 MB from Hugging Face and needs an internet connection. " +
+    return "The first model download is \(profile.setupDownloadSizeText) from Hugging Face and needs an internet connection. " +
         "The public model needs no account token; Presspeech removes inherited Hugging Face tokens before downloading. " +
         "Dictation audio and transcripts stay on your Mac. " +
         "Allow about \(requiredFreeSpace) free to download and prepare it with CoreML. " +
         "Choose Download Model to begin, or Set Up Later to defer."
+}
+
+enum SpeechModelSwitchPlan: Equatable {
+    case unchanged
+    /// The target model is cached; switch and verify it offline.
+    case loadCached
+    /// The target model must be downloaded; ask first.
+    case confirmDownload
+}
+
+func speechModelSwitchPlan(from current: SpeechModelProfile,
+                           to target: SpeechModelProfile,
+                           targetCacheComplete: Bool) -> SpeechModelSwitchPlan {
+    guard target.isProductionSupported, target != current.productionProfile else { return .unchanged }
+    return targetCacheComplete ? .loadCached : .confirmDownload
+}
+
+func speechModelSwitchDownloadDetail(from current: SpeechModelProfile,
+                                     to target: SpeechModelProfile) -> String {
+    let requiredFreeSpace = formattedByteCount(UInt64(speechModelDownloadRequiredBytes(for: target)))
+    return "Presspeech will download \(target.shortName) (\(target.setupDownloadSizeText)) from Hugging Face, verify every file, and then load it. " +
+        "Allow about \(requiredFreeSpace) free to download and prepare it with CoreML. " +
+        "Dictation is unavailable until it finishes. " +
+        "\(current.shortName) stays on disk; if \(target.shortName) cannot be loaded, Presspeech switches back to it. " +
+        "Dictation audio and transcripts stay on your Mac."
+}
+
+func speechModelSwitchFallbackDetail(failed: SpeechModelProfile,
+                                     fallback: SpeechModelProfile,
+                                     errorDescription: String,
+                                     downloadsApproved: Bool) -> String {
+    // With downloads approved, the failed attempt already re-downloaded a
+    // copy that failed verification; without approval nothing was fetched,
+    // so retrying would only reload the same files.
+    let next = downloadsApproved
+        ? "To try again, choose \(failed.shortName) in Settings → Dictation → Speech Model."
+        : "Speech-model downloads aren't approved on this Mac, so Presspeech didn't download a fresh copy."
+    return """
+    Presspeech couldn't load \(failed.shortName), so it switched back to \(fallback.shortName). Audio is not uploaded.
+
+    \(errorDescription)
+
+    \(next)
+    """
 }
 
 private func speechModelSetupRowState(profile: SpeechModelProfile,
@@ -3783,7 +3946,7 @@ private func speechModelSetupRowState(profile: SpeechModelProfile,
     if isStartupInProgress {
         let detail: String
         if startupStatusTitle.hasPrefix("Downloading speech model") {
-            detail = "\(startupStatusTitle) This model download is about 500–600 MB; voice audio stays on your Mac."
+            detail = "\(startupStatusTitle) This model download is \(profile.setupDownloadSizeText); voice audio stays on your Mac."
         } else {
             detail = startupStatusTitle
         }
@@ -5359,7 +5522,8 @@ private final class AudioConverterInputProvider: @unchecked Sendable {
 // call instead of corrupting ANE state.
 
 private enum LoadedSpeechEngine {
-    case parakeetV3(AsrManager)
+    // Parakeet TDT v3 or Parakeet Ultra; both use the v3 decode contract.
+    case parakeet(AsrManager)
 }
 
 private func productionParakeetASRConfig() -> ASRConfig {
@@ -5402,15 +5566,16 @@ actor TranscriptionWorker {
         log("ASR: \(loadMode) \(profile.shortName) CoreML weights…")
         // Wall-clock adjustments must not skew model-load timing.
         let t0 = ProcessInfo.processInfo.systemUptime
-        engine = .parakeetV3(try await loadParakeetV3(
-            allowDownload: allowDownload, progressHandler: progressHandler))
+        engine = .parakeet(try await loadParakeet(
+            profile: profile, allowDownload: allowDownload, progressHandler: progressHandler))
         loadedProfile = profile
         ready = true
         log("ASR: \(profile.shortName) ready in \(String(format: "%.2f", ProcessInfo.processInfo.systemUptime - t0)) s")
     }
 
-    private func loadParakeetV3(allowDownload: Bool,
-                                progressHandler: ProgressHandler?) async throws -> AsrManager {
+    private func loadParakeet(profile: SpeechModelProfile,
+                              allowDownload: Bool,
+                              progressHandler: ProgressHandler?) async throws -> AsrManager {
         // FluidAudio's load path can fetch or re-fetch missing/corrupt files,
         // including after our startup cache check. Keep every such path offline
         // until the person explicitly approves the first model download.
@@ -5418,31 +5583,32 @@ actor TranscriptionWorker {
         ModelHub.offlineMode = wasOffline || !allowDownload
         defer { ModelHub.offlineMode = wasOffline }
 
-        if !speechModelCacheIsComplete(for: .multilingualV3) && allowDownload {
-            try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
+        let version = profile.asrModelVersion
+        if !speechModelCacheIsComplete(for: profile) && allowDownload {
+            try assertSufficientDiskSpaceForSpeechModelDownload(profile: profile)
         }
         // Outside isolated QA mode this is FluidAudio's own default directory.
-        let cacheDirectory = speechModelCacheDirectory(for: .multilingualV3)
+        let cacheDirectory = speechModelCacheDirectory(for: profile)
         var modelDirectory = try await AsrModels.download(to: cacheDirectory,
-                                                          version: .v3,
+                                                          version: version,
                                                           progressHandler: progressHandler)
         do {
-            try ModelIntegrity.verifyParakeetV3Model(at: modelDirectory)
+            try ModelIntegrity.verifyModel(for: profile, at: modelDirectory)
         } catch {
             guard allowDownload && !ModelHub.offlineMode else {
                 log("ASR: cached model failed integrity verification; redownload blocked by offline policy")
                 throw error
             }
             log("ASR: model integrity check failed; redownloading once: \(privacySafeErrorLogDetail(error))")
-            try assertSufficientDiskSpaceForSpeechModelDownload(profile: .multilingualV3)
+            try assertSufficientDiskSpaceForSpeechModelDownload(profile: profile)
             modelDirectory = try await AsrModels.download(to: cacheDirectory,
                                                           force: true,
-                                                          version: .v3,
+                                                          version: version,
                                                           progressHandler: progressHandler)
-            try ModelIntegrity.verifyParakeetV3Model(at: modelDirectory)
+            try ModelIntegrity.verifyModel(for: profile, at: modelDirectory)
         }
         let models = try await AsrModels.load(from: modelDirectory,
-                                              version: .v3,
+                                              version: version,
                                               progressHandler: progressHandler)
         // Keep the released v3 chunking path explicit. FluidAudio's SDK
         // default is dependency-defined and newer revisions switch v3 to a
@@ -5450,6 +5616,8 @@ actor TranscriptionWorker {
         // dropped spans but also changes window composition, so adopt it only
         // after the release ASR corpus compares `v3` with
         // `v3-sdk-default`; an SDK pin bump alone must not change recognition.
+        // Ultra shares the same released config so the model choice changes
+        // only the weights, not chunking.
         return AsrManager(
             config: productionParakeetASRConfig(),
             models: models
@@ -5466,7 +5634,7 @@ actor TranscriptionWorker {
         inFlight = true
         defer { inFlight = false }
         switch engine {
-        case .parakeetV3(let asr):
+        case .parakeet(let asr):
             var state = try TdtDecoderState()
             let result = try await asr.transcribe(samples, decoderState: &state, language: language)
             return result.text
@@ -10267,7 +10435,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         // makes the first-launch CoreML compile of the ANE Encoder
         // hang. The bench under experiments/swift-bench/ never opens
         // an audio session so it doesn't see this.
-        startupTask = Task { @MainActor in
+        startupTask = Task { @MainActor [self] in
             var stage = StartupFailureStage.speechModel
             defer {
                 startupTask = nil
@@ -10392,6 +10560,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                     await self.asr.unload()
                     self.isSwitchingSpeechModel = false
                     self.startStartup(reason: "speech model fallback")
+                    self.showSpeechModelSwitchFallbackNotice(failed: failedProfile,
+                                                             fallback: fallback,
+                                                             error: error)
                 }
             }
             return
@@ -13752,6 +13923,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         sub.addItem(buildHotkeySettingsItem())
         sub.addItem(buildTriggerSettingsItem())
         sub.addItem(buildDictationLanguageSettingsItem())
+        sub.addItem(buildSpeechModelSettingsItem())
         sub.addItem(buildInputDeviceItem())
 
         parent.submenu = sub
@@ -14000,6 +14172,37 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
         langParent.submenu = langSub
         return langParent
+    }
+
+    private var canSwitchSpeechModel: Bool {
+        !isRecording
+            && !isBusy
+            && !isTerminating
+            && startupTask == nil
+            && !isResettingSpeechModelCache
+            && !isSwitchingSpeechModel
+    }
+
+    private func buildSpeechModelSettingsItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "Speech Model", action: nil, keyEquivalent: "")
+        parent.toolTip = "Parakeet TDT v3 is the default. Parakeet Ultra is an opt-in, more accurate model with a larger download."
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+        let current = settings.speechModelProfile
+        let canSwitch = canSwitchSpeechModel
+        for profile in SpeechModelProfile.selectableProfiles {
+            let item = NSMenuItem(title: profile.settingsTitle,
+                                  action: #selector(selectSpeechModelProfile(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.state = (profile == current) ? .on : .off
+            item.isEnabled = canSwitch || profile == current
+            item.representedObject = profile.rawValue
+            item.toolTip = profile.settingsToolTip
+            sub.addItem(item)
+        }
+        parent.submenu = sub
+        return parent
     }
 
     private func buildPasteSuffixSettingsItem() -> NSMenuItem {
@@ -15699,6 +15902,66 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
               let suffix = PasteSuffix(rawValue: raw) else { return }
         settings.pasteSuffix = suffix
         rebuildMenu()
+    }
+
+    @objc private func selectSpeechModelProfile(_ sender: NSMenuItem) {
+        guard canSwitchSpeechModel,
+              let raw = sender.representedObject as? String,
+              let target = SpeechModelProfile(rawValue: raw) else { return }
+        let current = settings.speechModelProfile
+        switch speechModelSwitchPlan(from: current,
+                                     to: target,
+                                     targetCacheComplete: speechModelCacheIsComplete(for: target)) {
+        case .unchanged:
+            return
+        case .loadCached:
+            break
+        case .confirmDownload:
+            showAppForModal()
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Download \(target.shortName)?"
+            alert.informativeText = speechModelSwitchDownloadDetail(from: current, to: target)
+            alert.addButton(withTitle: "Download and Switch")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn, canSwitchSpeechModel else { return }
+            if !settings.speechModelDownloadApproved {
+                settings.speechModelDownloadApproved = true
+                log("speech-model download approved from model switch")
+            }
+        }
+
+        // recordStartupFailure restores `current` if the new model fails to
+        // download, verify or load.
+        fallbackSpeechModelProfileAfterStartupFailure = current
+        settings.speechModelProfile = target
+        isSwitchingSpeechModel = true
+        prepareForStartupAttempt()
+        startupStatusTitle = "Switching to \(target.shortName)…"
+        log("ASR: switching speech model from \(current.shortName) to \(target.shortName)")
+        rebuildMenu()
+
+        Task { @MainActor in
+            await asr.unload()
+            isSwitchingSpeechModel = false
+            startStartup(reason: "speech model switch")
+        }
+    }
+
+    private func showSpeechModelSwitchFallbackNotice(failed: SpeechModelProfile,
+                                                     fallback: SpeechModelProfile,
+                                                     error: Error) {
+        showAppForModal()
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "\(failed.shortName) couldn't be loaded"
+        alert.informativeText = speechModelSwitchFallbackDetail(
+            failed: failed,
+            fallback: fallback,
+            errorDescription: error.localizedDescription,
+            downloadsApproved: settings.speechModelDownloadApproved)
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func selectDictationLanguage(_ sender: NSMenuItem) {
@@ -19469,6 +19732,82 @@ private enum PresspeechSelfTest {
             equals: .multilingualV3,
             "unknown speech model setting should migrate back to v3"
         )
+        try expect(
+            productionSpeechModelProfile(rawValue: SpeechModelProfile.parakeetUltra.rawValue),
+            equals: .parakeetUltra,
+            "stored opt-in Ultra speech model should remain valid"
+        )
+        try expect(SpeechModelProfile.selectableProfiles.first,
+                   equals: .multilingualV3,
+                   "the default speech model should be listed first")
+        try expect(SpeechModelProfile.productionDefault,
+                   equals: .multilingualV3,
+                   "Ultra must stay opt-in")
+        try expect(SpeechModelProfile.parakeetUltra.asrModelVersion == .ultra
+                       && SpeechModelProfile.multilingualV3.asrModelVersion == .v3,
+                   equals: true,
+                   "each speech model should load its own FluidAudio model version")
+        try expect(speechModelSwitchPlan(from: .multilingualV3, to: .multilingualV3,
+                                         targetCacheComplete: true),
+                   equals: .unchanged,
+                   "choosing the current model should not reload it")
+        try expect(speechModelSwitchPlan(from: .englishUnified, to: .multilingualV3,
+                                         targetCacheComplete: false),
+                   equals: .unchanged,
+                   "a migrated deprecated setting already means v3")
+        try expect(speechModelSwitchPlan(from: .multilingualV3, to: .englishUnified,
+                                         targetCacheComplete: true),
+                   equals: .unchanged,
+                   "a deprecated model should never be selectable")
+        try expect(speechModelSwitchPlan(from: .multilingualV3, to: .parakeetUltra,
+                                         targetCacheComplete: false),
+                   equals: .confirmDownload,
+                   "switching to an uncached model should ask before downloading")
+        try expect(speechModelSwitchPlan(from: .parakeetUltra, to: .multilingualV3,
+                                         targetCacheComplete: true),
+                   equals: .loadCached,
+                   "switching back to a cached model should not ask to download")
+        let ultraSwitchDetail = speechModelSwitchDownloadDetail(from: .multilingualV3, to: .parakeetUltra)
+        try expect(ultraSwitchDetail.contains("Parakeet Ultra (about 630 MB) from Hugging Face")
+                       && ultraSwitchDetail.contains("verify every file")
+                       && ultraSwitchDetail.contains("Parakeet TDT v3 stays on disk")
+                       && ultraSwitchDetail.contains("switches back")
+                       && ultraSwitchDetail.contains(formattedByteCount(
+                           UInt64(speechModelDownloadRequiredBytes(for: .parakeetUltra)))),
+                   equals: true,
+                   "the Ultra switch prompt should state its size, verification, and fallback")
+        try expect(SpeechModelProfile.parakeetUltra.settingsTitle.contains("630 MB")
+                       && SpeechModelProfile.multilingualV3.settingsTitle.contains("480 MB")
+                       && SpeechModelProfile.parakeetUltra.settingsToolTip.contains("about 630 MB")
+                       && SpeechModelProfile.parakeetUltra.settingsToolTip.contains("about 480 MB"),
+                   equals: true,
+                   "the model picker should compare download sizes")
+        try expect(speechModelDownloadRequiredBytes(for: .parakeetUltra, headroomBytes: 0)
+                       > speechModelDownloadRequiredBytes(for: .multilingualV3, headroomBytes: 0),
+                   equals: true,
+                   "the larger Ultra download should need more free space")
+        try expect(firstSpeechModelDownloadSetupDetail(profile: .parakeetUltra)
+                       .contains("about 630 MB from Hugging Face"),
+                   equals: true,
+                   "first-download setup copy should use the selected model's size")
+        for approved in [true, false] {
+            let fallbackDetail = speechModelSwitchFallbackDetail(failed: .parakeetUltra,
+                                                                 fallback: .multilingualV3,
+                                                                 errorDescription: "download timed out",
+                                                                 downloadsApproved: approved)
+            try expect(fallbackDetail.contains("couldn't load Parakeet Ultra, so it switched back to Parakeet TDT v3")
+                           && fallbackDetail.contains("download timed out")
+                           && !fallbackDetail.contains("Reset Speech Model Cache")
+                           && !fallbackDetail.contains("downloaded again"),
+                       equals: true,
+                       "a failed switch should explain the fallback without promising a re-download")
+            try expect(fallbackDetail.contains("To try again, choose Parakeet Ultra"),
+                       equals: approved,
+                       "retry advice should appear only when a retry can download a fresh copy")
+            try expect(fallbackDetail.contains("didn't download a fresh copy"),
+                       equals: !approved,
+                       "without download approval the alert should say no fresh copy was fetched")
+        }
 
         try expect(
             speechModelSetupRowState(profile: .multilingualV3,
@@ -22989,8 +23328,11 @@ private enum PresspeechSelfTest {
             equals: true,
             "existing installations should keep their established automatic startup"
         )
+        // Check the explicit override, not the deprecated Boolean view: that
+        // view reports true when unset, while an unset value resolves to the
+        // no-mel path for v3-family models at load time.
         try expect(
-            productionParakeetASRConfig().melChunkContext,
+            productionParakeetASRConfig().melChunkContextOverride,
             equals: true,
             "production ASR config should preserve released mel-context chunking"
         )
@@ -23227,6 +23569,10 @@ private enum PresspeechSelfTest {
         if fm.fileExists(atPath: localParakeetV3Cache.path) {
             try ModelIntegrity.verifyParakeetV3Model(at: localParakeetV3Cache)
         }
+        let localParakeetUltraCache = speechModelCacheDirectory(for: .parakeetUltra)
+        if fm.fileExists(atPath: localParakeetUltraCache.path) {
+            try ModelIntegrity.verifyModel(for: .parakeetUltra, at: localParakeetUltraCache)
+        }
     }
 
     private static func testSpeechModelCachePathSafety() throws {
@@ -23306,6 +23652,21 @@ private enum PresspeechSelfTest {
             isSafeSpeechModelCacheDirectory(speechModelCacheDirectory(for: .multilingualV3)),
             equals: true,
             "FluidAudio v3 cache path should remain inside FluidAudio Application Support"
+        )
+        try expect(
+            isSafeSpeechModelCacheDirectory(speechModelCacheDirectory(for: .parakeetUltra)),
+            equals: true,
+            "FluidAudio Ultra cache path should remain inside FluidAudio Application Support"
+        )
+        try expect(
+            speechModelCacheDirectory(for: .parakeetUltra) != speechModelCacheDirectory(for: .multilingualV3),
+            equals: true,
+            "Ultra and v3 should keep separate caches so a reset or switch leaves the other intact"
+        )
+        try expect(
+            speechModelCacheDirectory(for: .englishUnified),
+            equals: speechModelCacheDirectory(for: .multilingualV3),
+            "the deprecated profile should resolve to the v3 cache it migrates to"
         )
         let defaultV3Cache = speechModelCacheDirectory(for: .multilingualV3)
         if fm.fileExists(atPath: defaultV3Cache.path) {

@@ -45,7 +45,10 @@ def prepare_fixture(bench, production):
             r'(\.package\(\s*url:\s*"' + re.escape(url) +
             r'"\s*,\s*revision:\s*")[0-9a-f]{40}("\s*\))',
             lambda match: match[1] + revision + match[2], package.read_text())
-        assert count == 1, "fixture requires the real canonical dependency declaration"
+        # An exact release pin stays as declared; only its locked commit moves.
+        exact = re.findall(r'\.package\(\s*url:\s*"' + re.escape(url) +
+                           r'"\s*,\s*exact:\s*"[^"]+"\s*\)', manifest)
+        assert count + len(exact) == 1, "fixture requires the real canonical dependency declaration"
         package.write_text(manifest)
         lock = package.with_name("Package.resolved")
         resolved = json.loads(lock.read_text())

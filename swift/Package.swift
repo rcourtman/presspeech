@@ -21,8 +21,11 @@ let package = Package(
         .executable(name: "Presspeech", targets: ["Presspeech"]),
     ],
     dependencies: [
+        // Pinned to one exact release (not a range) so a dependency update
+        // is always an explicit, reviewable change; Package.resolved records
+        // the commit that release resolved to.
         .package(url: "https://github.com/FluidInference/FluidAudio.git",
-                 revision: "4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b"),
+                 exact: "0.17.7"),
     ],
     targets: [
         .executableTarget(
