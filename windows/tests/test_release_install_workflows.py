@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -87,19 +88,26 @@ $failed = $false
 try {
 WORKFLOW_BODY
 } catch { $failed = $true }
-[ordered]@{failed=$failed; calls=@($script:Calls.ToArray()); config=$env:PIP_CONFIG_FILE} | ConvertTo-Json -Compress
+[ordered]@{failed=$failed; calls=@($script:Calls.ToArray()); config=$env:PIP_CONFIG_FILE; path=$env:PATH} | ConvertTo-Json -Compress
 '''.replace("FAIL_AT", str(fail_at)).replace("WORKFLOW_BODY", install_block(filename))
-        result = subprocess.run(
-            [POWERSHELL, "-NoProfile", "-NonInteractive", "-EncodedCommand",
-             base64.b64encode(script.encode("utf-16le")).decode("ascii")],
-            env={**os.environ, "PRESSPEECH_TEST_NATIVE_PYTHON": sys.executable},
-            capture_output=True, text=True, timeout=30,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads(result.stdout.strip())
+        with tempfile.TemporaryDirectory() as runner_temp:
+            github_path = Path(runner_temp) / "github_path"
+            github_path.write_text("", encoding="utf-8")
+            result = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                 base64.b64encode(script.encode("utf-16le")).decode("ascii")],
+                env={**os.environ, "PRESSPEECH_TEST_NATIVE_PYTHON": sys.executable,
+                     "RUNNER_TEMP": runner_temp, "GITHUB_PATH": str(github_path)},
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            output = json.loads(result.stdout.strip())
+            output["runner_temp"] = runner_temp
+            output["github_path"] = github_path.read_text(encoding="utf-8-sig").splitlines()
+            return output
 
     def test_ci_and_release_stop_at_each_failed_native_command(self):
-        for filename, count in (("windows.yml", 4), ("windows-release.yml", 5)):
+        for filename, count in (("windows.yml", 6), ("windows-release.yml", 7)):
             for fail_at in range(1, count + 1):
                 with self.subTest(workflow=filename, fail_at=fail_at):
                     result = self.run_block(filename, fail_at)
@@ -107,17 +115,28 @@ WORKFLOW_BODY
                     self.assertEqual(len(result["calls"]), fail_at, result)
 
     def test_both_success_paths_install_and_verify_complete_runtime(self):
-        for filename, count in (("windows.yml", 4), ("windows-release.yml", 5)):
+        for filename, count in (("windows.yml", 6), ("windows-release.yml", 7)):
             with self.subTest(workflow=filename):
                 result = self.run_block(filename, 0)
                 self.assertFalse(result["failed"], result)
                 self.assertEqual(len(result["calls"]), count, result)
-                self.assertIn("--require-hashes", result["calls"][0])
-                self.assertIn("--index-url https://pypi.org/simple", result["calls"][0])
-                self.assertIn("-r requirements-cuda-release.txt", result["calls"][1])
-                for command in result["calls"][:2]:
+                # The runner's global interpreter carries unrelated tools, so the
+                # lock must be installed and checked inside a fresh venv.
+                venv = os.path.join(result["runner_temp"], "presspeech-release-venv")
+                scripts = os.path.join(venv, "Scripts")
+                self.assertEqual(result["calls"][0], f"python -m venv {venv}")
+                self.assertEqual(
+                    result["calls"][1],
+                    "python -c import sys; raise SystemExit(sys.prefix == sys.base_prefix)")
+                self.assertTrue(result["path"].startswith(scripts + ";"), result)
+                self.assertEqual(result["github_path"], [scripts])
+                installs = result["calls"][2:4]
+                self.assertIn("--require-hashes", installs[0])
+                self.assertIn("--index-url https://pypi.org/simple", installs[0])
+                self.assertIn("-r requirements-cuda-release.txt", installs[1])
+                for command in installs:
                     for option in ("--isolated", "--no-deps", "--only-binary=:all:", "--require-hashes"):
                         self.assertIn(option, command)
-                self.assertEqual(result["calls"][2], "python -m pip check")
-                self.assertEqual(result["calls"][3], "python release_requirements.py --verify-environment")
+                self.assertEqual(result["calls"][4], "python -m pip check")
+                self.assertEqual(result["calls"][5], "python release_requirements.py --verify-environment")
                 self.assertEqual(result["config"], "NUL")
