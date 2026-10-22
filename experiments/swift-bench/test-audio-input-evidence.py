@@ -14,9 +14,16 @@ evidence = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(evidence)
 
 
-def wave_bytes(frames=173760, encoding=3, bits=32, channels=1, rate=16000, extra=b''):
+GUID_TAIL = bytes.fromhex('000000001000800000aa00389b71')
+
+
+def extensible(subformat=3, valid_bits=32, size=22, mask=4, tail=GUID_TAIL):
+    return struct.pack('<HHI', size, valid_bits, mask) + struct.pack('<H', subformat) + tail
+
+
+def wave_bytes(frames=173760, encoding=3, bits=32, channels=1, rate=16000, extra=b'', fmt_extra=b''):
     align = channels * (bits // 8)
-    fmt = struct.pack('<HHIIHH', encoding, channels, rate, rate * align, align, bits)
+    fmt = struct.pack('<HHIIHH', encoding, channels, rate, rate * align, align, bits) + fmt_extra
     data = bytes(frames * align)
     body = b'WAVE' + b'fmt ' + struct.pack('<I', len(fmt)) + fmt + extra + b'data' + struct.pack('<I', len(data)) + data
     return b'RIFF' + struct.pack('<I', len(body)) + body
@@ -36,6 +43,25 @@ class AudioEvidenceTests(unittest.TestCase):
                     with self.subTest(encoding=encoding, channels=channels, frames=frames):
                         self.audio.write_bytes(wave_bytes(frames, encoding, bits, channels))
                         self.assertEqual(evidence.normalized_frames(self.audio), frames)
+
+    def test_extensible_pcm_and_float_headers_count_like_plain_tags(self):
+        # macOS 27 afconvert keeps the extensible header LibriSpeech FLAC decodes to.
+        for subformat, bits in ((1, 16), (3, 32)):
+            for channels in (1, 2):
+                for frames in (1, 1025, 173760):
+                    with self.subTest(subformat=subformat, channels=channels, frames=frames):
+                        self.audio.write_bytes(wave_bytes(frames, 0xFFFE, bits, channels,
+                            fmt_extra=extensible(subformat, bits, mask=(1 << channels) - 1)))
+                        self.assertEqual(evidence.normalized_frames(self.audio), frames)
+
+    def test_extensible_header_needs_known_full_width_subformat(self):
+        variants = [extensible(subformat=1), extensible(subformat=2), extensible(valid_bits=24),
+                    extensible(size=0), extensible(tail=bytes(14)), extensible()[:-2]]
+        for fmt_extra in variants:
+            with self.subTest(fmt_extra=fmt_extra.hex()):
+                self.audio.write_bytes(wave_bytes(frames=7, encoding=0xFFFE, fmt_extra=fmt_extra))
+                with self.assertRaises(evidence.EvidenceError):
+                    evidence.normalized_frames(self.audio)
 
     def test_metadata_chunk_padding_does_not_count_as_audio(self):
         self.audio.write_bytes(wave_bytes(extra=b'JUNK\x03\x00\x00\x00abc\x00'))
