@@ -6204,7 +6204,26 @@ func captureDictationPasteTarget(
 @MainActor
 func currentDictationPasteTarget(reportFailure: Bool = false,
                                 includeFocusedElement: Bool = true) -> DictationPasteTarget? {
-    let result = captureDictationPasteTarget(
+    let result = currentDictationPasteTargetCapture(includeFocusedElement: includeFocusedElement)
+    // captureDictationPasteTarget rechecks activation after the potentially
+    // blocking AX lookup. Missing exact-window identity still means copy-only;
+    // a process ID cannot distinguish two windows in the same application.
+    switch result {
+    case .captured(let target):
+        return target
+    case .unavailable(let failure):
+        if reportFailure {
+            log("paste target unavailable at recording start: \(failure.logDescription); completed dictation will use clipboard-only recovery")
+        }
+        return nil
+    }
+}
+
+@MainActor
+private func currentDictationPasteTargetCapture(
+    includeFocusedElement: Bool
+) -> DictationPasteTargetCaptureResult {
+    captureDictationPasteTarget(
         // Activation is tracked by the window server; it does not depend on
         // the app publishing the system-wide AX focused-application attribute.
         frontmostProcessIdentifier: {
@@ -6269,41 +6288,156 @@ func currentDictationPasteTarget(reportFailure: Bool = false,
             NSRunningApplication(processIdentifier: processIdentifier)?.bundleIdentifier
         }
     )
-    // captureDictationPasteTarget rechecks activation after the potentially
-    // blocking AX lookup. Missing exact-window identity still means copy-only;
-    // a process ID cannot distinguish two windows in the same application.
-    switch result {
-    case .captured(let target):
-        return target
-    case .unavailable(let failure):
-        if reportFailure {
-            log("paste target unavailable at recording start: \(failure.logDescription); completed dictation will use clipboard-only recovery")
+}
+
+/// Which identity check failed when the captured paste target no longer
+/// matches. Identity only: never a title, field value or app name.
+enum DictationPasteTargetMismatch: Equatable {
+    /// The current focus could not be read at all.
+    case currentTargetUnavailable(DictationPasteTargetCaptureFailure)
+    case applicationChanged
+    case windowChanged
+    /// The control focused at recording start no longer publishes focus.
+    case focusedControlUnavailable
+    case focusedControlChanged
+
+    var logDescription: String {
+        switch self {
+        case .currentTargetUnavailable(let failure):
+            return "current focus unreadable: \(failure.logDescription)"
+        case .applicationChanged:
+            return "frontmost application changed"
+        case .windowChanged:
+            return "focused window changed"
+        case .focusedControlUnavailable:
+            return "focused control no longer reported"
+        case .focusedControlChanged:
+            return "focused control changed"
         }
-        return nil
     }
+}
+
+@MainActor
+func dictationPasteTargetMismatch(_ expected: DictationPasteTarget,
+                                  _ current: DictationPasteTarget) -> DictationPasteTargetMismatch? {
+    // The window check is always required. A field identity captured at start
+    // must also survive; losing it later is not evidence that focus stayed put.
+    // No starting field identity means window-only protection, and a tab may
+    // reuse the same AX control. Keep those limits explicit in user guidance.
+    guard expected.processIdentifier == current.processIdentifier else { return .applicationChanged }
+    guard CFEqual(expected.focusedWindow, current.focusedWindow) else { return .windowChanged }
+    guard let expectedElement = expected.focusedElement else { return nil }
+    guard let currentElement = current.focusedElement else { return .focusedControlUnavailable }
+    return CFEqual(expectedElement, currentElement) ? nil : .focusedControlChanged
 }
 
 @MainActor
 func dictationPasteTargetMatches(_ expected: DictationPasteTarget,
                                  _ current: DictationPasteTarget?) -> Bool {
-    // The window check is always required. A field identity captured at start
-    // must also survive; losing it later is not evidence that focus stayed put.
-    // No starting field identity means window-only protection, and a tab may
-    // reuse the same AX control. Keep those limits explicit in user guidance.
-    guard let current,
-          expected.processIdentifier == current.processIdentifier,
-          CFEqual(expected.focusedWindow, current.focusedWindow) else { return false }
-    guard let expectedElement = expected.focusedElement else { return true }
-    guard let currentElement = current.focusedElement else { return false }
-    return CFEqual(expectedElement, currentElement)
+    guard let current else { return false }
+    return dictationPasteTargetMismatch(expected, current) == nil
+}
+
+@MainActor
+private func dictationPasteTargetFocusMismatch(_ expected: DictationPasteTarget) -> DictationPasteTargetMismatch? {
+    switch currentDictationPasteTargetCapture(includeFocusedElement: expected.focusedElement != nil) {
+    case .captured(let current):
+        return dictationPasteTargetMismatch(expected, current)
+    case .unavailable(let failure):
+        return .currentTargetUnavailable(failure)
+    }
 }
 
 @MainActor
 private func dictationPasteTargetStillFocused(_ expected: DictationPasteTarget) -> Bool {
-    let current = currentDictationPasteTarget(
-        includeFocusedElement: expected.focusedElement != nil
-    )
-    return dictationPasteTargetMatches(expected, current)
+    dictationPasteTargetFocusMismatch(expected) == nil
+}
+
+/// Same decision as dictationPasteTargetStillFocused, but a failed check is
+/// recorded as the copy-only reason for this delivery attempt.
+@MainActor
+private func dictationPasteTargetStillFocused(
+    _ expected: DictationPasteTarget,
+    recordingFailureAt checkpoint: TextInsertionCheckpoint
+) -> Bool {
+    guard let mismatch = dictationPasteTargetFocusMismatch(expected) else { return true }
+    TextInsertionDiagnostics.record(.targetChanged(mismatch, at: checkpoint))
+    return false
+}
+
+/// Where in a delivery attempt a check stopped automatic insertion.
+enum TextInsertionCheckpoint: Equatable {
+    /// Clipboard paste: initial check, before the transcript is written.
+    case beforeTranscriptWrite
+    /// Clipboard paste: after the transcript write, before Command goes down.
+    case beforePasteShortcut
+    /// Clipboard paste: Command is down, immediately before the V key-down.
+    case beforePasteKeyDown
+    /// Direct Unicode typing: before the first chunk.
+    case beforeUnicodeTyping
+
+    var logDescription: String {
+        switch self {
+        case .beforeTranscriptWrite: return "before transcript write"
+        case .beforePasteShortcut: return "before paste shortcut"
+        case .beforePasteKeyDown: return "before paste key-down"
+        case .beforeUnicodeTyping: return "before Unicode typing"
+        }
+    }
+}
+
+/// Why automatic insertion into a captured target ended in clipboard-only
+/// recovery (TextInsertionOutcome.copiedWithoutPasting). Each case is a
+/// branch that already existed; this only names it for the log.
+enum TextInsertionCopyOnlyReason: Equatable {
+    /// A line break bound for a known terminal needs the user's review.
+    case terminalLineBreakReview
+    /// The captured window or control failed an identity check.
+    case targetChanged(DictationPasteTargetMismatch, at: TextInsertionCheckpoint)
+    /// Shift, Control, Option or Fn was physically held.
+    case physicalModifierHeld(at: TextInsertionCheckpoint)
+    /// The active keyboard layout has no resolvable Command+V key.
+    case pasteKeyUnavailable
+    /// A single grapheme is larger than one Unicode keyboard event.
+    case unicodeGraphemeExceedsEventLimit
+    /// CGEvent could not create the Unicode keyboard events.
+    case unicodeEventCreationFailed
+
+    var logDescription: String {
+        switch self {
+        case .terminalLineBreakReview:
+            return "terminal line break needs review"
+        case .targetChanged(let mismatch, let checkpoint):
+            return "target check failed \(checkpoint.logDescription) (\(mismatch.logDescription))"
+        case .physicalModifierHeld(let checkpoint):
+            return "physical modifier held \(checkpoint.logDescription)"
+        case .pasteKeyUnavailable:
+            return "paste key unavailable for active layout"
+        case .unicodeGraphemeExceedsEventLimit:
+            return "grapheme exceeds Unicode event limit"
+        case .unicodeEventCreationFailed:
+            return "Unicode keyboard event creation failed"
+        }
+    }
+}
+
+func automaticInsertionStoppedLogMessage(_ reason: TextInsertionCopyOnlyReason?) -> String {
+    let prefix = "automatic insertion stopped; transcript copied for recovery"
+    guard let reason else { return "\(prefix): reason not recorded" }
+    return "\(prefix): \(reason.logDescription)"
+}
+
+/// Diagnostics side channel for the latest TextInserter.insert call. Written
+/// just before a path falls back to clipboard-only recovery and read once by
+/// the dictation log afterwards. Never consulted by a delivery decision, so
+/// TextInsertionOutcome and every fallback rule stay exactly as they were.
+@MainActor
+enum TextInsertionDiagnostics {
+    private(set) static var copyOnlyReason: TextInsertionCopyOnlyReason?
+
+    static func reset() { copyOnlyReason = nil }
+
+    static func record(_ reason: TextInsertionCopyOnlyReason) { copyOnlyReason = reason }
 }
 
 func dictationDeliveryRoute(capturedTargetAvailable: Bool,
@@ -6673,6 +6807,7 @@ enum TextInserter {
                        strategy: TextInsertionStrategy = defaultStrategy,
                        preserveClipboard: Bool = false,
                        expectedTarget: DictationPasteTarget) -> TextInsertionOutcome {
+        TextInsertionDiagnostics.reset()
         // Guard both the normal paste and direct-Unicode fallback. A line
         // break, including the selected suffix, must not be injected into a
         // known shell host before the user can inspect it.
@@ -6682,6 +6817,7 @@ enum TextInserter {
             copyOnly: { copyWithoutPasting(text, preserveClipboard: preserveClipboard) }
         ) {
             log("automatic terminal insertion skipped; line break requires review")
+            TextInsertionDiagnostics.record(.terminalLineBreakReview)
             return recovery
         }
         for candidate in textInsertionStrategyChain(primary: strategy) {
@@ -7433,7 +7569,8 @@ private enum ClipboardPasteInserter {
         let pb = NSPasteboard.general
         let sourceChangeCount: Int
         switch clipboardPasteStart(on: pb, targetStillFocused: {
-            dictationPasteTargetStillFocused(expectedTarget)
+            dictationPasteTargetStillFocused(expectedTarget,
+                                             recordingFailureAt: .beforeTranscriptWrite)
         }) {
         case .targetFocused(let count):
             sourceChangeCount = count
@@ -7478,7 +7615,8 @@ private enum ClipboardPasteInserter {
         // the last possible point before posting Command+V. A focus change
         // degrades to a protected, local manual paste instead of losing the
         // words.
-        let targetStillFocused = dictationPasteTargetStillFocused(expectedTarget)
+        let targetStillFocused = dictationPasteTargetStillFocused(expectedTarget,
+                                                                  recordingFailureAt: .beforePasteShortcut)
         guard receipt.stillOwns(pb) else {
             // The target lookup can block. Do not post Command+V for a newer
             // clipboard owner or schedule an old snapshot against its count.
@@ -7514,6 +7652,7 @@ private enum ClipboardPasteInserter {
             if outcome == .copiedWithoutPasting {
                 stageManualPreservation(context, on: pb,
                                         expectedChangeCount: writeChangeCount)
+                TextInsertionDiagnostics.record(.pasteKeyUnavailable)
                 log("paste key unavailable for active layout; transcript copied for manual paste")
             } else {
                 log("clipboard changed while resolving paste key; insertion stopped")
@@ -7532,6 +7671,7 @@ private enum ClipboardPasteInserter {
             if outcome == .copiedWithoutPasting {
                 stageManualPreservation(context, on: pb,
                                         expectedChangeCount: writeChangeCount)
+                TextInsertionDiagnostics.record(.physicalModifierHeld(at: .beforePasteShortcut))
                 log("physical modifier held before paste; transcript copied for manual paste")
             }
             return outcome
@@ -7540,7 +7680,8 @@ private enum ClipboardPasteInserter {
             steps,
             pasteKey: pasteKey,
             targetStillFocused: {
-                dictationPasteTargetStillFocused(expectedTarget)
+                dictationPasteTargetStillFocused(expectedTarget,
+                                                 recordingFailureAt: .beforePasteKeyDown)
             },
             clipboardStillOwned: { receipt.stillOwns(pb) }
         )
@@ -7556,6 +7697,7 @@ private enum ClipboardPasteInserter {
                 stageManualPreservation(context, on: pb,
                                         expectedChangeCount: writeChangeCount)
                 if postOutcome == .modifierChanged {
+                    TextInsertionDiagnostics.record(.physicalModifierHeld(at: .beforePasteKeyDown))
                     log("physical modifier pressed during paste; transcript copied for manual paste")
                 }
             } else {
@@ -7763,6 +7905,7 @@ private enum DirectUnicodeInserter {
         let clipboardAtStart = NSPasteboard.general.changeCount
         guard physicalModifiersAllowSyntheticTextDelivery() else {
             log("physical modifier held before Unicode typing; transcript copied for manual paste")
+            TextInsertionDiagnostics.record(.physicalModifierHeld(at: .beforeUnicodeTyping))
             return TextInserter.copyWithoutPasting(
                 text,
                 preserveClipboard: preserveClipboard,
@@ -7771,6 +7914,7 @@ private enum DirectUnicodeInserter {
         }
         guard let chunks = postableUnicodeInsertionChunks(for: text) else {
             log("direct Unicode typing skipped: a grapheme exceeds the event limit")
+            TextInsertionDiagnostics.record(.unicodeGraphemeExceedsEventLimit)
             return TextInserter.copyWithoutPasting(
                 text,
                 preserveClipboard: preserveClipboard,
@@ -7780,11 +7924,19 @@ private enum DirectUnicodeInserter {
         let source = CGEventSource(stateID: .combinedSessionState)
         return directUnicodeInsertionOutcome(
             chunks: chunks,
+            // Only a failure before the first chunk ends in copy-only
+            // recovery; a later one is deliveryUncertain and its recorded
+            // reason is never read.
             targetStillFocused: {
-                dictationPasteTargetStillFocused(expectedTarget)
-                    && physicalModifiersAllowSyntheticTextDelivery()
+                dictationPasteTargetStillFocused(expectedTarget,
+                                                 recordingFailureAt: .beforeUnicodeTyping)
+                    && unicodeTypingModifiersClear()
             },
-            postChunk: { post($0, source: source) },
+            postChunk: {
+                let posted = post($0, source: source)
+                if !posted { TextInsertionDiagnostics.record(.unicodeEventCreationFailed) }
+                return posted
+            },
             copyWithoutPasting: {
                 TextInserter.copyWithoutPasting(
                     text,
@@ -7793,6 +7945,14 @@ private enum DirectUnicodeInserter {
                 )
             }
         )
+    }
+
+    private static func unicodeTypingModifiersClear() -> Bool {
+        guard physicalModifiersAllowSyntheticTextDelivery() else {
+            TextInsertionDiagnostics.record(.physicalModifierHeld(at: .beforeUnicodeTyping))
+            return false
+        }
+        return true
     }
 
     private static func post(_ units: [UInt16], source: CGEventSource?) -> Bool {
@@ -11200,6 +11360,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             capturedTargetBundleIdentifier: recordingPasteTarget?.bundleIdentifier
                         )
                         let insertionOutcome: TextInsertionOutcome
+                        var copyOnlyReason: TextInsertionCopyOnlyReason?
                         if deliveryPolicy.attemptAutomaticInsertion,
                            let expectedTarget = recordingPasteTarget {
                             insertionOutcome = TextInserter.insert(
@@ -11207,6 +11368,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                 preserveClipboard: settings.preserveClipboardForManualRestore,
                                 expectedTarget: expectedTarget
                             )
+                            copyOnlyReason = TextInsertionDiagnostics.copyOnlyReason
                         } else {
                             insertionOutcome = TextInserter.copyWithoutPasting(
                                 completed.deliveredText,
@@ -11224,10 +11386,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                             } else if recordingPasteTarget == nil {
                                 log("paste skipped; target unavailable at recording start; transcript copied")
                             } else {
-                                // A late focus change and a failed event
-                                // construction can both recover by copying.
-                                // The outcome does not distinguish them.
-                                log("automatic insertion stopped; transcript copied for recovery")
+                                // The outcome alone does not say which
+                                // check stopped delivery; the diagnostics
+                                // side channel does.
+                                log(automaticInsertionStoppedLogMessage(copyOnlyReason))
                             }
                         case .deliveryUncertain:
                             log("text delivery uncertain after a posted input event; destination check required")
@@ -16874,6 +17036,9 @@ private final class NativeInteractionFixture {
         let count = sequence
         try require(ClipboardPasteInserter.insert("native-fixture-copy-only", expectedTarget: target)
                         == .copiedWithoutPasting, "original window target enforced")
+        try require(TextInsertionDiagnostics.copyOnlyReason
+                        == .targetChanged(.windowChanged, at: .beforeTranscriptWrite),
+                    "window switch recorded as the copy-only reason")
         try drain()
         try require(editors[1].string.isEmpty && sequence == count + 1, "wrong window receives no paste events")
         print("PASS native same-process different-window copy-only")
@@ -16902,6 +17067,9 @@ private final class NativeInteractionFixture {
         try require(ClipboardPasteInserter.insert("native-fixture-other-field",
                     expectedTarget: firstFieldTarget) == .copiedWithoutPasting,
                     "changed control in original window must use copy-only recovery")
+        try require(TextInsertionDiagnostics.copyOnlyReason
+                        == .targetChanged(.focusedControlChanged, at: .beforeTranscriptWrite),
+                    "field switch recorded as the copy-only reason")
         try drain()
         try require(editors[0].string.isEmpty && secondEditor.string.isEmpty
                         && sequence == sameWindowCount + 1
@@ -17568,6 +17736,23 @@ private enum PresspeechSelfTest {
                        "an app switch must prevent delivery even with a reused identity token")
             try expect(dictationPasteTargetMatches(capture, nil), equals: false,
                        "losing exact-window evidence must prevent delivery")
+            // The copy-only diagnostics name the identity check that failed.
+            try expect(dictationPasteTargetMismatch(capture, capture), equals: nil,
+                       "a matching target reports no mismatch")
+            try expect(dictationPasteTargetMismatch(capture, DictationPasteTarget(
+                processIdentifier: 701, focusedWindow: firstWindow)), equals: .applicationChanged,
+                       "an app switch is reported as an application change")
+            try expect(dictationPasteTargetMismatch(capture, DictationPasteTarget(
+                processIdentifier: 700, focusedWindow: otherWindow,
+                focusedElement: firstField)), equals: .windowChanged,
+                       "a window switch is reported before the field check")
+            try expect(dictationPasteTargetMismatch(capture, DictationPasteTarget(
+                processIdentifier: 700, focusedWindow: firstWindow)), equals: .focusedControlUnavailable,
+                       "a vanished focused control is distinct from a changed one")
+            try expect(dictationPasteTargetMismatch(capture, DictationPasteTarget(
+                processIdentifier: 700, focusedWindow: firstWindow,
+                focusedElement: otherField)), equals: .focusedControlChanged,
+                       "a same-window field switch is reported as a control change")
             let windowOnlyCapture = captureDictationPasteTarget(
                 frontmostProcessIdentifier: { 700 },
                 focusedWindowForProcess: { _ in .success(firstWindow) }
@@ -19987,6 +20172,68 @@ private enum PresspeechSelfTest {
             equals: .copiedWithoutPasting,
             "an unavailable target snapshot should fail closed to clipboard-only delivery"
         )
+        // Each copy-only reason gets its own privacy-safe log line under the
+        // established prefix, so field logs can count them separately.
+        let copyOnlyReasons: [TextInsertionCopyOnlyReason?] = [
+            nil,
+            .terminalLineBreakReview,
+            .targetChanged(.applicationChanged, at: .beforeTranscriptWrite),
+            .targetChanged(.windowChanged, at: .beforeTranscriptWrite),
+            .targetChanged(.focusedControlChanged, at: .beforePasteShortcut),
+            .targetChanged(.focusedControlUnavailable, at: .beforePasteKeyDown),
+            .targetChanged(.currentTargetUnavailable(.focusedWindowQueryFailed(-25204)),
+                           at: .beforeUnicodeTyping),
+            .targetChanged(.currentTargetUnavailable(.frontmostApplicationUnavailable),
+                           at: .beforeTranscriptWrite),
+            .physicalModifierHeld(at: .beforePasteShortcut),
+            .physicalModifierHeld(at: .beforePasteKeyDown),
+            .physicalModifierHeld(at: .beforeUnicodeTyping),
+            .pasteKeyUnavailable,
+            .unicodeGraphemeExceedsEventLimit,
+            .unicodeEventCreationFailed,
+        ]
+        let copyOnlyMessages = copyOnlyReasons.map(automaticInsertionStoppedLogMessage)
+        try expect(Set(copyOnlyMessages).count, equals: copyOnlyReasons.count,
+                   "every copy-only reason should log a distinct line")
+        try expect(
+            copyOnlyMessages.allSatisfy {
+                $0.hasPrefix("automatic insertion stopped; transcript copied for recovery: ")
+            },
+            equals: true,
+            "copy-only reasons keep the established log prefix"
+        )
+        try expect(
+            automaticInsertionStoppedLogMessage(.targetChanged(.windowChanged, at: .beforePasteShortcut)),
+            equals: "automatic insertion stopped; transcript copied for recovery: target check failed before paste shortcut (focused window changed)",
+            "a late window change names the check and the checkpoint"
+        )
+        try expect(
+            automaticInsertionStoppedLogMessage(.targetChanged(
+                .currentTargetUnavailable(.focusedWindowQueryFailed(-25204)), at: .beforeTranscriptWrite)),
+            equals: "automatic insertion stopped; transcript copied for recovery: target check failed before transcript write (current focus unreadable: focused-window query failed (AX error -25204))",
+            "an unreadable focus reports the AX failure category, not window content"
+        )
+        try expect(
+            automaticInsertionStoppedLogMessage(.unicodeEventCreationFailed),
+            equals: "automatic insertion stopped; transcript copied for recovery: Unicode keyboard event creation failed",
+            "event construction failure is distinct from a focus change"
+        )
+        try expect(
+            automaticInsertionStoppedLogMessage(nil),
+            equals: "automatic insertion stopped; transcript copied for recovery: reason not recorded",
+            "a missing diagnostic is explicit rather than guessed"
+        )
+        let recordedReason = MainActor.assumeIsolated { () -> TextInsertionCopyOnlyReason? in
+            TextInsertionDiagnostics.record(.pasteKeyUnavailable)
+            TextInsertionDiagnostics.record(.unicodeEventCreationFailed)
+            let latest = TextInsertionDiagnostics.copyOnlyReason
+            TextInsertionDiagnostics.reset()
+            return latest
+        }
+        try expect(recordedReason, equals: .unicodeEventCreationFailed,
+                   "the last strategy's copy-only reason wins after a fallback")
+        try expect(MainActor.assumeIsolated { TextInsertionDiagnostics.copyOnlyReason }, equals: nil,
+                   "reset clears the previous attempt's reason")
         let unicodeChunks = unicodeInsertionChunks(for: "ab👩‍💻cd", maxUTF16UnitsPerEvent: 4)
             .map { String(decoding: $0, as: UTF16.self) }
         try expect(
