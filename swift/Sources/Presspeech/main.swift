@@ -7859,6 +7859,18 @@ enum SystemAudioMuteCommandOutcome: Equatable, Sendable {
     case failed
 }
 
+/// Verification reads after a mute/unmute command. An output that
+/// stopped reporting a mute state mid-command (the default output
+/// changed) reads as "not muted", exactly as the old `booleanValue`
+/// read did, so those races keep their existing outcomes.
+func systemAudioVerifiedMuted(_ state: SystemAudioOutputMuteState?) -> Bool? {
+    switch state {
+    case .muted: return true
+    case .unmuted, .unsupported: return false
+    case nil: return nil
+    }
+}
+
 func systemAudioMuteCommandOutcome(commandSucceeded: Bool,
                                    verifiedMuted: Bool?) -> SystemAudioMuteCommandOutcome {
     guard commandSucceeded else { return .failed }
@@ -7866,6 +7878,32 @@ func systemAudioMuteCommandOutcome(commandSucceeded: Bool,
     case .some(true): return .muted
     case .none: return .assumedMuted
     case .some(false): return .failed
+    }
+}
+
+/// Answer to "output muted of (get volume settings)". Some outputs
+/// (HDMI/DisplayPort monitors, some USB and AirPlay devices) have no
+/// software mute or volume control: AppleScript then answers
+/// `missing value` without raising an error. That is neither muted
+/// nor unmuted, and `booleanValue` would silently read it as
+/// "unmuted".
+enum SystemAudioOutputMuteState: Equatable, Sendable {
+    case muted
+    case unmuted
+    /// The current output reports no mute state (`missing value` or
+    /// any other non-boolean answer), so it cannot be muted from here.
+    case unsupported
+}
+
+/// Classifies an AppleScript result by descriptor type rather than
+/// `booleanValue`, which coerces `missing value` to false.
+func systemAudioOutputMuteState(descriptorType: DescType,
+                                booleanValue: Bool) -> SystemAudioOutputMuteState {
+    switch descriptorType {
+    case DescType(typeTrue): return .muted
+    case DescType(typeFalse): return .unmuted
+    case DescType(typeBoolean): return booleanValue ? .muted : .unmuted
+    default: return .unsupported
     }
 }
 
@@ -7880,18 +7918,19 @@ enum SystemAudio {
     private static let queue = DispatchQueue(label: "PresspeechSystemAudio", qos: .userInitiated)
 
     /// nil = the query itself failed, as opposed to a definitive
-    /// muted/unmuted answer.
-    static func mutedState() -> Bool? {
+    /// answer (which includes "this output has no mute control").
+    static func mutedState() -> SystemAudioOutputMuteState? {
         var err: NSDictionary?
         guard let script = NSAppleScript(source: "output muted of (get volume settings)") else {
             return nil
         }
         let result = script.executeAndReturnError(&err)
         guard err == nil else { return nil }
-        return result.booleanValue
+        return systemAudioOutputMuteState(descriptorType: result.descriptorType,
+                                          booleanValue: result.booleanValue)
     }
 
-    static func isMuted() -> Bool { mutedState() == true }
+    static func isMuted() -> Bool { mutedState() == .muted }
 
     static func mute() -> SystemAudioMuteCommandOutcome {
         guard let script = NSAppleScript(source: "set volume with output muted") else {
@@ -7900,7 +7939,7 @@ enum SystemAudio {
         var err: NSDictionary?
         script.executeAndReturnError(&err)
         return systemAudioMuteCommandOutcome(commandSucceeded: err == nil,
-                                             verifiedMuted: mutedState())
+                                             verifiedMuted: systemAudioVerifiedMuted(mutedState()))
     }
 
     @discardableResult
@@ -7910,12 +7949,12 @@ enum SystemAudio {
         // A failed verification counts as "not unmuted": the caller
         // keeps the recovery marker + watchdog armed and retries
         // later, which is the safe direction.
-        return err == nil && mutedState() == false
+        return err == nil && systemAudioVerifiedMuted(mutedState()) == false
     }
 
     // Async wrappers — see the threading note above. Completions hop
     // back to the main actor, where all mute-lifecycle state lives.
-    static func mutedStateAsync(_ completion: @escaping @MainActor @Sendable (Bool?) -> Void) {
+    static func mutedStateAsync(_ completion: @escaping @MainActor @Sendable (SystemAudioOutputMuteState?) -> Void) {
         queue.async {
             let state = mutedState()
             Task { @MainActor in completion(state) }
@@ -7966,15 +8005,29 @@ enum SystemAudioMuteProbeDecision: Equatable, Sendable {
     /// probe failed (we can't risk stomping a user-set mute we can't
     /// see), or the recording already ended. Nothing to arm or undo.
     case standDown
+    /// Do not mute: the current output has no mute control, so a mute
+    /// command could only fail. Nothing to arm or undo; the caller
+    /// reports it once rather than as a failure per recording.
+    case standDownOutputCannotMute
     /// The output is live and the recording still wants it muted —
     /// arm the recovery marker + watchdog, then issue the mute.
     case armRecoveryAndMute
 }
 
-func systemAudioMuteProbeDecision(mutedState: Bool?,
+func systemAudioMuteProbeDecision(mutedState: SystemAudioOutputMuteState?,
                                   unmuteAlreadyRequested: Bool) -> SystemAudioMuteProbeDecision {
-    guard mutedState == false, !unmuteAlreadyRequested else { return .standDown }
+    if mutedState == .unsupported { return .standDownOutputCannotMute }
+    guard mutedState == .unmuted, !unmuteAlreadyRequested else { return .standDown }
     return .armRecoveryAndMute
+}
+
+/// Whether to log that the current output cannot be muted. Logged once
+/// per stretch of mute-less output: the flag resets whenever an output
+/// reports a real mute state again, so switching back to an HDMI
+/// monitor later logs once more.
+func systemAudioMuteUnavailableShouldLog(decision: SystemAudioMuteProbeDecision,
+                                         alreadyLogged: Bool) -> Bool {
+    decision == .standDownOutputCannotMute && !alreadyLogged
 }
 
 enum SystemAudioMuteCommandDecision: Equatable, Sendable {
@@ -9505,6 +9558,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     /// Set when the recording ends while the probe or mute command is
     /// still in flight; the in-flight completion honours it.
     private var systemAudioUnmuteRequested = false
+    /// Set once "output mute not available" has been logged for the
+    /// current mute-less output; cleared when an output reports a real
+    /// mute state again.
+    private var systemAudioMuteUnavailableLogged = false
     private var maxDurationWorkItem: DispatchWorkItem?
     private var postReleaseCaptureWorkItem: DispatchWorkItem?
     private var audioIdleStopWorkItem: DispatchWorkItem?
@@ -11335,14 +11392,24 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
     }
 
-    private func continueMuteAfterProbe(mutedState: Bool?) {
+    private func continueMuteAfterProbe(mutedState: SystemAudioOutputMuteState?) {
         guard systemAudioMutePhase == .probing else {
             log("output mute probe completion ignored: unexpected phase")
             return
         }
-        switch systemAudioMuteProbeDecision(mutedState: mutedState,
-                                            unmuteAlreadyRequested: systemAudioUnmuteRequested) {
-        case .standDown:
+        let decision = systemAudioMuteProbeDecision(mutedState: mutedState,
+                                                    unmuteAlreadyRequested: systemAudioUnmuteRequested)
+        if systemAudioMuteUnavailableShouldLog(decision: decision,
+                                               alreadyLogged: systemAudioMuteUnavailableLogged) {
+            log("output mute not available on this output; recording without muting")
+        }
+        if mutedState == .muted || mutedState == .unmuted {
+            systemAudioMuteUnavailableLogged = false
+        } else if mutedState == .unsupported {
+            systemAudioMuteUnavailableLogged = true
+        }
+        switch decision {
+        case .standDown, .standDownOutputCannotMute:
             systemAudioMutePhase = .idle
             systemAudioUnmuteRequested = false
             return
@@ -24403,12 +24470,12 @@ private enum PresspeechSelfTest {
         // Probe decision: only a definitive "output is live" while the
         // recording still wants the mute arms recovery and mutes.
         try expect(
-            systemAudioMuteProbeDecision(mutedState: false, unmuteAlreadyRequested: false),
+            systemAudioMuteProbeDecision(mutedState: .unmuted, unmuteAlreadyRequested: false),
             equals: .armRecoveryAndMute,
             "live output during an active recording should mute"
         )
         try expect(
-            systemAudioMuteProbeDecision(mutedState: true, unmuteAlreadyRequested: false),
+            systemAudioMuteProbeDecision(mutedState: .muted, unmuteAlreadyRequested: false),
             equals: .standDown,
             "a user-set mute must not be stomped"
         )
@@ -24418,9 +24485,89 @@ private enum PresspeechSelfTest {
             "a failed probe must not risk stomping an unseen user mute"
         )
         try expect(
-            systemAudioMuteProbeDecision(mutedState: false, unmuteAlreadyRequested: true),
+            systemAudioMuteProbeDecision(mutedState: .unmuted, unmuteAlreadyRequested: true),
             equals: .standDown,
             "a recording that already ended should not mute"
+        )
+        try expect(
+            systemAudioMuteProbeDecision(mutedState: .unsupported, unmuteAlreadyRequested: false),
+            equals: .standDownOutputCannotMute,
+            "an output with no mute control must not arm recovery or send a mute"
+        )
+        try expect(
+            systemAudioMuteProbeDecision(mutedState: .unsupported, unmuteAlreadyRequested: true),
+            equals: .standDownOutputCannotMute,
+            "a mute-less output stands down even after release"
+        )
+
+        // Output mute state comes from the descriptor type, never from
+        // booleanValue: AppleScript's `missing value` (HDMI monitors)
+        // coerces to false and used to read as "unmuted".
+        try expect(
+            systemAudioOutputMuteState(descriptorType: DescType(typeTrue), booleanValue: true),
+            equals: .muted,
+            "typeTrue is muted"
+        )
+        try expect(
+            systemAudioOutputMuteState(descriptorType: DescType(typeFalse), booleanValue: false),
+            equals: .unmuted,
+            "typeFalse is unmuted"
+        )
+        try expect(
+            systemAudioOutputMuteState(descriptorType: DescType(typeBoolean), booleanValue: true),
+            equals: .muted,
+            "typeBoolean true is muted"
+        )
+        try expect(
+            systemAudioOutputMuteState(descriptorType: DescType(typeBoolean), booleanValue: false),
+            equals: .unmuted,
+            "typeBoolean false is unmuted"
+        )
+        try expect(
+            systemAudioOutputMuteState(descriptorType: DescType(typeType), booleanValue: false),
+            equals: .unsupported,
+            "missing value (typeType 'msng') is unsupported, not unmuted"
+        )
+        try expect(
+            systemAudioOutputMuteState(descriptorType: DescType(typeNull), booleanValue: false),
+            equals: .unsupported,
+            "an empty descriptor is unsupported"
+        )
+        try expect(
+            systemAudioOutputMuteState(descriptorType: DescType(typeSInt32), booleanValue: true),
+            equals: .unsupported,
+            "a non-boolean answer is unsupported even if it coerces to true"
+        )
+
+        // Verification reads keep their pre-existing meaning: a
+        // mute-less answer after a command reads as "not muted", as
+        // the old booleanValue read did.
+        try expect(systemAudioVerifiedMuted(.muted), equals: true, "verified muted")
+        try expect(systemAudioVerifiedMuted(.unmuted), equals: false, "verified unmuted")
+        try expect(systemAudioVerifiedMuted(.unsupported), equals: false,
+                   "mute-less verification keeps the old not-muted reading")
+        try expect(systemAudioVerifiedMuted(nil), equals: nil, "failed verification is unknown")
+
+        // "Not available" is logged once per stretch of mute-less output.
+        try expect(
+            systemAudioMuteUnavailableShouldLog(decision: .standDownOutputCannotMute, alreadyLogged: false),
+            equals: true,
+            "first mute-less probe logs"
+        )
+        try expect(
+            systemAudioMuteUnavailableShouldLog(decision: .standDownOutputCannotMute, alreadyLogged: true),
+            equals: false,
+            "later mute-less probes stay quiet"
+        )
+        try expect(
+            systemAudioMuteUnavailableShouldLog(decision: .standDown, alreadyLogged: false),
+            equals: false,
+            "a user-set mute or failed probe is not reported as unavailable"
+        )
+        try expect(
+            systemAudioMuteUnavailableShouldLog(decision: .armRecoveryAndMute, alreadyLogged: false),
+            equals: false,
+            "a mutable output is not reported as unavailable"
         )
 
         // Mute completion decision: assumed mutes behave exactly like
