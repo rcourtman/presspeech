@@ -45,7 +45,7 @@ for Apple Silicon, with a Windows preview.
 
 | | **Presspeech** | [Apple Dictation](https://rcourtman.github.io/presspeech/compare/apple-dictation.html) | [Superwhisper](https://rcourtman.github.io/presspeech/compare/superwhisper.html) | [Wispr Flow](https://rcourtman.github.io/presspeech/compare/wispr-flow.html) | [VoiceInk](https://rcourtman.github.io/presspeech/compare/voiceink.html) |
 |:--|:--|:--|:--|:--|:--|
-| Price | **Free** | Included with macOS | Free tier; Pro from $8.49/month | 2,000 words/week free; Pro $15/month | From $25 one-time |
+| Price | **Free** | Included with macOS | Free tier; Pro from $8.49/month | 2,000 words/week free; Pro $15/month | Free trial, then from $25 one-time |
 | Where your audio goes | **Stays on your Mac** | On-device for some languages, otherwise Apple's servers | Local or cloud, depending on the model you pick | Always the cloud | Local, or cloud if you choose it |
 | Account | **None** | None | None; Pro uses a licence key | Required | None; paid build uses a licence key |
 | Source code | **Open (MIT)** | Closed | Closed | Closed | Open (GPL-3.0) |

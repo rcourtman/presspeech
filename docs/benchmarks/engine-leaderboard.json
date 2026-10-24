@@ -1280,7 +1280,7 @@
     {
      "name": "VoiceInk",
      "role": "option",
-     "price": "$25 one-time",
+     "price": "Free trial, then $25 one-time",
      "licence": "GPL-3.0",
      "page": "compare/voiceink.html"
     },
@@ -1621,7 +1621,7 @@
     {
      "name": "VoiceInk",
      "role": "option",
-     "price": "$25 one-time",
+     "price": "Free trial, then $25 one-time",
      "licence": "GPL-3.0",
      "page": "compare/voiceink.html"
     }
@@ -1948,7 +1948,7 @@
     {
      "name": "VoiceInk",
      "role": "option (whisper.cpp)",
-     "price": "$25 one-time",
+     "price": "Free trial, then $25 one-time",
      "licence": "GPL-3.0",
      "page": "compare/voiceink.html"
     },
@@ -2426,7 +2426,7 @@
     {
      "name": "VoiceInk",
      "role": "option (whisper.cpp)",
-     "price": "$25 one-time",
+     "price": "Free trial, then $25 one-time",
      "licence": "GPL-3.0",
      "page": "compare/voiceink.html"
     },
@@ -2910,7 +2910,7 @@
     {
      "name": "VoiceInk",
      "role": "option (whisper.cpp)",
-     "price": "$25 one-time",
+     "price": "Free trial, then $25 one-time",
      "licence": "GPL-3.0",
      "page": "compare/voiceink.html"
     },
@@ -3402,7 +3402,7 @@
     {
      "name": "VoiceInk",
      "role": "\"Apple Speech\" option",
-     "price": "$25 one-time",
+     "price": "Free trial, then $25 one-time",
      "licence": "GPL-3.0",
      "page": "compare/voiceink.html"
     },
@@ -3625,7 +3625,7 @@
     {
      "name": "VoiceInk",
      "role": "\"Apple Speech\" option",
-     "price": "$25 one-time",
+     "price": "Free trial, then $25 one-time",
      "licence": "GPL-3.0",
      "page": "compare/voiceink.html"
     },
