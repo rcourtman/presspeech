@@ -47,9 +47,9 @@ for Apple Silicon, with a Windows preview.
 |:--|:--|:--|:--|:--|:--|
 | Price | **Free** | Included with macOS | Free tier; Pro from $8.49/month | 2,000 words/week free; Pro $15/month | Free trial, then from $25 one-time |
 | Where your audio goes | **Stays on your Mac** | On-device for some languages, otherwise Apple's servers | Local or cloud, depending on the model you pick | Always the cloud | Local, or cloud if you choose it |
-| Account | **None** | None | None; Pro uses a licence key | Required | None; paid build uses a licence key |
+| Account | **None** | None | No sign-in documented; Pro uses a licence key | Required | No sign-in documented; paid build uses a licence key |
 | Source code | **Open (MIT)** | Closed | Closed | Closed | Open (GPL-3.0) |
-| Languages | 25 European, auto-detected | 63 (48 on-device) | 100+ via cloud models | 100+ | About 100 (Whisper models) |
+| Languages | 25 European, auto-detected | 63 locales (48 on-device) | 100+ | 100+ | No official count |
 
 <sub>Taken from each app's own published docs and pricing; sources, dates and more apps on the [comparison page](https://rcourtman.github.io/presspeech/compare/). Prices change, so check before you buy.</sub>
 
