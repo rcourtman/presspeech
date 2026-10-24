@@ -59,6 +59,13 @@ struct CLIArgs {
     // without printing term or transcript content.
     var criticalTerms: URL? = nil
     var evaluationOnlyTerms: URL? = nil
+    // Locale for the Apple SpeechAnalyzer backends, which have no
+    // auto-detect mode.
+    var appleLocale = Locale(identifier: "en-US")
+    // Batch mode: one model load, one warmup on the first clip, then one
+    // measured inference per listed clip, written as JSON lines.
+    var batch: URL? = nil
+    var batchOutput: URL? = nil
 }
 
 func positiveTrialCount(_ value: String) -> Int? {
@@ -80,6 +87,9 @@ func parseArgs() -> CLIArgs {
     var customVocabulary: URL? = nil
     var criticalTerms: URL? = nil
     var evaluationOnlyTerms: URL? = nil
+    var appleLocale = Locale(identifier: "en-US")
+    var batch: URL? = nil
+    var batchOutput: URL? = nil
     while let arg = iter.next() {
         switch arg {
         case "--file":
@@ -127,6 +137,24 @@ func parseArgs() -> CLIArgs {
                 exit(2)
             }
             evaluationOnlyTerms = URL(fileURLWithPath: v)
+        case "--apple-locale":
+            guard let v = iter.next(), !v.isEmpty else {
+                FileHandle.standardError.write(Data("--apple-locale requires a BCP 47 locale such as en-US\n".utf8))
+                exit(2)
+            }
+            appleLocale = Locale(identifier: v)
+        case "--batch":
+            guard let v = iter.next(), !v.isEmpty else {
+                FileHandle.standardError.write(Data("--batch requires a clip list path\n".utf8))
+                exit(2)
+            }
+            batch = URL(fileURLWithPath: v)
+        case "--batch-output":
+            guard let v = iter.next(), !v.isEmpty else {
+                FileHandle.standardError.write(Data("--batch-output requires a path\n".utf8))
+                exit(2)
+            }
+            batchOutput = URL(fileURLWithPath: v)
         case "--unified-trailing-silence-ms":
             guard let v = iter.next(), let n = Int(v), n >= 0 else {
                 FileHandle.standardError.write(Data("--unified-trailing-silence-ms requires a non-negative integer\n".utf8))
@@ -198,7 +226,9 @@ func parseArgs() -> CLIArgs {
                          110m  FluidAudio Parakeet TDT-CTC 110M (smaller English model;
                                currently fails to load — broken upstream)
                          fluid v3 + candidate FluidAudio backends + 110m head-to-head
-                         apple Apple SpeechAnalyzer (macOS 26+)
+                         apple Apple SpeechAnalyzer + DictationTranscriber (macOS 26+)
+                         apple-speech
+                               Apple SpeechAnalyzer + SpeechTranscriber (macOS 26+)
                          both  apple + fluid
               --ref      reference transcript for WER; defaults to <file>.txt if present
               --redact-transcripts
@@ -207,6 +237,13 @@ func parseArgs() -> CLIArgs {
               --language <auto|code>
                          Parakeet v3 language/script hint (for example pl or en;
                          default: auto)
+              --apple-locale <bcp47>
+                         locale for apple and apple-speech (default: en-US)
+              --batch <tsv> --batch-output <jsonl>
+                         load one backend (v3, ultra, apple or apple-speech) once,
+                         warm it up on the first listed clip, then transcribe
+                         each clip (rows: clip id, WAV path) once and write one
+                         JSON object per clip plus a final summary object
               --custom-vocabulary <path>
                          simple text or FluidAudio JSON vocabulary file; valid only
                          with a v3-vocab* or sliding-vocab* backend
@@ -241,7 +278,15 @@ func parseArgs() -> CLIArgs {
             exit(2)
         }
     }
-    guard let file else {
+    if (batch == nil) != (batchOutput == nil) {
+        FileHandle.standardError.write(Data("--batch and --batch-output must be used together\n".utf8))
+        exit(2)
+    }
+    if batch != nil, file != nil {
+        FileHandle.standardError.write(Data("--batch cannot be combined with --file\n".utf8))
+        exit(2)
+    }
+    guard let file = file ?? batch else {
         FileHandle.standardError.write(Data("--file is required\n".utf8))
         exit(2)
     }
@@ -256,7 +301,10 @@ func parseArgs() -> CLIArgs {
                    language: language,
                    customVocabulary: customVocabulary,
                    criticalTerms: criticalTerms,
-                   evaluationOnlyTerms: evaluationOnlyTerms)
+                   evaluationOnlyTerms: evaluationOnlyTerms,
+                   appleLocale: appleLocale,
+                   batch: batch,
+                   batchOutput: batchOutput)
 }
 
 // MARK: - Audio loading
@@ -553,8 +601,26 @@ func directoryLogicalBytes(at url: URL) -> UInt64 {
 #if compiler(>=6.2)
 @available(macOS 26, *)
 final class AppleBackend: ASRBackend {
-    let name = "apple-SpeechAnalyzer"
+    enum Module {
+        /// DictationTranscriber: the dictation-focused module (auto-
+        /// punctuation, sentence structure), which matches Presspeech's
+        /// workload.
+        case dictation
+        /// SpeechTranscriber: the general on-device transcription module
+        /// added with SpeechAnalyzer, measured as a separate engine.
+        case speech
+    }
+
+    let name: String
+    private let module: Module
+    private let locale: Locale
     private var localeInstalled = false
+
+    init(module: Module = .dictation, locale: Locale = Locale(identifier: "en-US")) {
+        self.module = module
+        self.locale = locale
+        self.name = module == .dictation ? "apple-SpeechAnalyzer" : "apple-SpeechTranscriber"
+    }
 
     func prepare(warmupSamples: [Float]) async throws {
         // Apple's per-locale dictation model isn't preinstalled. If the
@@ -562,12 +628,33 @@ final class AppleBackend: ASRBackend {
         // hands us a request that wraps an actual download. Skipping
         // this step makes `transcriber.results` emit zero events and the
         // program 'succeeds' silently with an empty transcript.
-        let template = makeTranscriber()
-        let installed = await DictationTranscriber.installedLocales
-        let target = Locale(identifier: "en-US")
-        let hasIt = installed.contains { $0.identifier(.bcp47) == target.identifier(.bcp47) }
+        let target = locale.identifier(.bcp47)
+        let supported: [Locale]
+        let installed: [Locale]
+        let template: any SpeechModule
+        switch module {
+        case .dictation:
+            supported = await DictationTranscriber.supportedLocales
+            installed = await DictationTranscriber.installedLocales
+            template = makeDictationTranscriber()
+        case .speech:
+            guard SpeechTranscriber.isAvailable else {
+                throw NSError(domain: "presspeech-bench", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "SpeechTranscriber is not available on this device"
+                ])
+            }
+            supported = await SpeechTranscriber.supportedLocales
+            installed = await SpeechTranscriber.installedLocales
+            template = makeSpeechTranscriber()
+        }
+        guard supported.contains(where: { $0.identifier(.bcp47) == target }) else {
+            throw NSError(domain: "presspeech-bench", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: "\(name) does not support locale \(target)"
+            ])
+        }
+        let hasIt = installed.contains { $0.identifier(.bcp47) == target }
         if !hasIt {
-            log("  DictationTranscriber en-US not installed — requesting download…")
+            log("  \(name) \(target) not installed — requesting download…")
             if let request = try await AssetInventory.assetInstallationRequest(
                 supporting: [template]
             ) {
@@ -590,18 +677,18 @@ final class AppleBackend: ASRBackend {
         return (text, ProcessInfo.processInfo.systemUptime - t0)
     }
 
-    private func makeTranscriber() -> DictationTranscriber {
-        // DictationTranscriber is the dictation-focused module (auto-
-        // punctuation, sentence structure), which matches Presspeech's
-        // workload. SpeechTranscriber is the raw-words sibling for
-        // command-recognition use cases — wrong fit here.
+    private func makeDictationTranscriber() -> DictationTranscriber {
         DictationTranscriber(
-            locale: Locale(identifier: "en-US"),
+            locale: locale,
             contentHints: [.shortForm],
             transcriptionOptions: [],
             reportingOptions: [],
             attributeOptions: []
         )
+    }
+
+    private func makeSpeechTranscriber() -> SpeechTranscriber {
+        SpeechTranscriber(locale: locale, preset: .transcription)
     }
 
     private func transcribe(samples: [Float]) async throws -> String {
@@ -612,35 +699,58 @@ final class AppleBackend: ASRBackend {
         // canonical pattern is therefore a fresh analyzer+transcriber
         // per utterance, mirroring `TdtDecoderState()` on the fluid
         // side.
-        let transcriber = makeTranscriber()
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
-
-        // Drain `transcriber.results` in a child task that starts BEFORE
+        //
+        // Drain the results in a child task that starts BEFORE
         // `analyzer.start(...)`. Reading results sequentially after
         // finalize loses events on at least DictationTranscriber: the
         // module appears to discard pending results once the analyzer
         // hits its terminal state, so by the time we'd loop the stream
         // is empty. swift-scribe uses the same parallel pattern.
-        let collected = Task<String, Error> {
-            // SpeechAnalyzer/DictationTranscriber semantics:
-            //   - `isFinal == true`  → committed text, append to finalized
-            //   - `isFinal == false` → volatile preview, replace
-            // For a single-shot push-to-talk utterance DictationTranscriber
-            // tends to emit the entire transcript in one volatile event and
-            // never marks it final, so the user-visible result is
-            // `finalized + volatile`, not just `finalized`.
-            var finalized = ""
-            var volatileText = ""
-            for try await result in transcriber.results {
-                let chunk = String(result.text.characters)
-                if result.isFinal {
-                    finalized += chunk
-                    volatileText = ""
-                } else {
-                    volatileText = chunk
+        //
+        // Result semantics:
+        //   - `isFinal == true`  → committed text, append to finalized
+        //   - `isFinal == false` → volatile preview, replace
+        // For a single-shot push-to-talk utterance DictationTranscriber
+        // tends to emit the entire transcript in one volatile event and
+        // never marks it final, so the user-visible result is
+        // `finalized + volatile`, not just `finalized`.
+        let analyzer: SpeechAnalyzer
+        let collected: Task<String, Error>
+        switch module {
+        case .dictation:
+            let transcriber = makeDictationTranscriber()
+            analyzer = SpeechAnalyzer(modules: [transcriber])
+            collected = Task<String, Error> {
+                var finalized = ""
+                var volatileText = ""
+                for try await result in transcriber.results {
+                    let chunk = String(result.text.characters)
+                    if result.isFinal {
+                        finalized += chunk
+                        volatileText = ""
+                    } else {
+                        volatileText = chunk
+                    }
                 }
+                return finalized + volatileText
             }
-            return finalized + volatileText
+        case .speech:
+            let transcriber = makeSpeechTranscriber()
+            analyzer = SpeechAnalyzer(modules: [transcriber])
+            collected = Task<String, Error> {
+                var finalized = ""
+                var volatileText = ""
+                for try await result in transcriber.results {
+                    let chunk = String(result.text.characters)
+                    if result.isFinal {
+                        finalized += chunk
+                        volatileText = ""
+                    } else {
+                        volatileText = chunk
+                    }
+                }
+                return finalized + volatileText
+            }
         }
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
@@ -2620,6 +2730,138 @@ func experimentEnvironmentReceipt(_ environment: [String: String]) -> String {
 
 // MARK: - Main
 
+// MARK: - Batch mode
+//
+// The engine leaderboard scores hundreds of clips per corpus. Loading the
+// model once per clip would measure process start-up, so batch mode loads one
+// backend, runs the first listed clip as an unmeasured warmup, then measures
+// one inference per clip. Scoring and normalisation happen outside the binary
+// so every engine, including non-Swift ones, is scored by the same code.
+
+struct BatchClip {
+    let id: String
+    let path: URL
+}
+
+enum BatchListError: LocalizedError {
+    case malformedRow(Int)
+    case empty
+
+    var errorDescription: String? {
+        switch self {
+        case .malformedRow(let row): return "batch list row \(row) is not <clip id><TAB><wav path>"
+        case .empty: return "batch list has no clips"
+        }
+    }
+}
+
+func readBatchList(_ url: URL) throws -> [BatchClip] {
+    let text = try String(contentsOf: url, encoding: .utf8)
+    var clips: [BatchClip] = []
+    for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: true).enumerated() {
+        let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+        guard fields.count == 2, !fields[0].isEmpty, !fields[1].isEmpty else {
+            throw BatchListError.malformedRow(index + 1)
+        }
+        clips.append(BatchClip(id: String(fields[0]), path: URL(fileURLWithPath: String(fields[1]))))
+    }
+    guard !clips.isEmpty else { throw BatchListError.empty }
+    return clips
+}
+
+func batchJSONLine(_ object: [String: Any]) throws -> Data {
+    var data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    data.append(0x0A)
+    return data
+}
+
+func runBatch(args: CLIArgs, list: URL, output: URL) async throws {
+    let clips = try readBatchList(list)
+    let backend: ASRBackend
+    switch args.backend {
+    case "v3":
+        backend = FluidBackend(name: "fluid-ParakeetTDTv3", version: .v3, language: args.language)
+    case "ultra":
+        backend = FluidBackend(name: "fluid-ParakeetUltra", version: .ultra, language: args.language)
+    case "apple", "apple-speech":
+#if compiler(>=6.2)
+        guard #available(macOS 26, *) else {
+            log("apple backends require macOS 26+")
+            exit(1)
+        }
+        backend = AppleBackend(module: args.backend == "apple-speech" ? .speech : .dictation,
+                               locale: args.appleLocale)
+#else
+        log("apple backends require the macOS 26 SDK and Swift 6.2+")
+        exit(1)
+#endif
+    default:
+        log("--batch supports --backend v3|ultra|apple|apple-speech")
+        exit(2)
+    }
+    log("presspeech-bench batch: \(clips.count) clips, backend=\(args.backend), "
+        + "language=\(args.language?.rawValue ?? "auto"), apple-locale=\(args.appleLocale.identifier(.bcp47))")
+    log(experimentEnvironmentReceipt(ProcessInfo.processInfo.environment))
+
+    guard FileManager.default.createFile(atPath: output.path, contents: nil) else {
+        log("cannot create batch output")
+        exit(1)
+    }
+    let handle = try FileHandle(forWritingTo: output)
+    defer { try? handle.close() }
+
+    let baseline = footprintBytes()
+    let warmup = try load16kMono(url: clips[0].path)
+    let prepT0 = ProcessInfo.processInfo.systemUptime
+    try await backend.prepare(warmupSamples: warmup)
+    let prepareSeconds = ProcessInfo.processInfo.systemUptime - prepT0
+    log("  ready in \(fmtMs(prepareSeconds)) (model load + 1 warmup inference on clip 1)")
+
+    var peak = footprintBytes()
+    var failures = 0
+    for (index, clip) in clips.enumerated() {
+        let samples = try load16kMono(url: clip.path)
+        var record: [String: Any] = [
+            "type": "clip",
+            "index": index,
+            "id": clip.id,
+            "audio_seconds": Double(samples.count) / BENCH_SAMPLE_RATE,
+        ]
+        do {
+            let (text, elapsed) = try await backend.run(samples: samples)
+            record["text"] = text
+            record["elapsed_seconds"] = elapsed
+        } catch {
+            // A failed clip scores as an empty hypothesis, never a skip.
+            failures += 1
+            record["text"] = ""
+            record["error"] = benchmarkErrorDescription(error, redactSensitiveText: false)
+        }
+        peak = max(peak, footprintBytes())
+        handle.write(try batchJSONLine(record))
+        if (index + 1) % 50 == 0 || index + 1 == clips.count {
+            log("  \(index + 1)/\(clips.count) clips")
+        }
+    }
+    let cacheBytes = backend.modelCacheComponents.reduce(UInt64(0)) { $0 + directoryLogicalBytes(at: $1.url) }
+    handle.write(try batchJSONLine([
+        "type": "summary",
+        "backend": args.backend,
+        "engine": backend.name,
+        "language": args.language?.rawValue ?? "auto",
+        "apple_locale": args.appleLocale.identifier(.bcp47),
+        "clips": clips.count,
+        "failures": failures,
+        "prepare_seconds": prepareSeconds,
+        "baseline_footprint_bytes": baseline,
+        "peak_footprint_bytes": peak,
+        "model_cache_bytes": cacheBytes,
+    ]))
+    if failures > 0 {
+        log("presspeech-bench batch: \(failures) clip(s) failed")
+    }
+}
+
 @main
 struct PresspeechBench {
     static func main() async throws {
@@ -2638,6 +2880,10 @@ struct PresspeechBench {
             return
         }
         let args = parseArgs()
+        if let batch = args.batch, let batchOutput = args.batchOutput {
+            try await runBatch(args: args, list: batch, output: batchOutput)
+            return
+        }
 
         let vocabularyBackends = [
             "v3-vocab",
@@ -2750,7 +2996,7 @@ struct PresspeechBench {
         let warmup = samples
 
         let known = [
-            "apple", "v2", "v3", "ultra", "v3-no-mel", "v3-sdk-default", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
+            "apple", "apple-speech", "v2", "v3", "ultra", "v3-no-mel", "v3-sdk-default", "v3-int8-v2", "v3-vocab", "v3-vocab-conservative", "v3-vocab-no-rescue",
             "v3-vocab-exact-similarity",
             "sliding-v3", "sliding-vocab", "sliding-vocab-conservative",
             "sliding-vocab-no-rescue", "unified",
@@ -2763,10 +3009,11 @@ struct PresspeechBench {
         }
         var backends: [ASRBackend] = []
         var failedBackends = 0
-        if args.backend == "apple" || args.backend == "both" {
+        if args.backend == "apple" || args.backend == "apple-speech" || args.backend == "both" {
 #if compiler(>=6.2)
             if #available(macOS 26, *) {
-                backends.append(AppleBackend())
+                backends.append(AppleBackend(module: args.backend == "apple-speech" ? .speech : .dictation,
+                                             locale: args.appleLocale))
             } else {
                 failedBackends += 1
                 log("apple backend unavailable — requires macOS 26+")

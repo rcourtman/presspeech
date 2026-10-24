@@ -1,0 +1,7 @@
+# Text normalisation for run-engine-leaderboard.sh (installed with --no-deps,
+# so every transitive package is pinned here).
+whisper-normalizer==0.1.15
+regex==2026.9.29
+more-itertools==11.2.1
+text2num==3.1.0
+indic-numtowords==1.1.0

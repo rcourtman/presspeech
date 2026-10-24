@@ -1338,3 +1338,15 @@ td strong {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Engine leaderboard ---------- */
+
+.leaderboard-presspeech :is(th, td) {
+  background: var(--soft);
+}
+
+.leaderboard-apps {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}

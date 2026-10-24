@@ -1,0 +1,288 @@
+{
+ "method": {
+  "audio": "Every engine reads the same 16 kHz mono 16-bit PCM WAV files, decoded losslessly from the public 16-bit sources.",
+  "measurement": "One process per engine and corpus loads the model once, runs the first clip as an unmeasured warmup, then times one inference per clip with the audio already in memory. Engines run one at a time, never in parallel.",
+  "latency": "Latency is inference time per clip (p50 and p90 over every measured clip); real-time factor is total inference time divided by total audio duration. Lower is better.",
+  "wer": "Corpus WER = (substitutions + deletions + insertions) / reference words, after the same normaliser is applied to reference and hypothesis: Whisper's EnglishTextNormalizer for English, Whisper's BasicTextNormalizer (lower-case, punctuation removed, diacritics kept) for other languages. A failed clip scores as an empty transcript.",
+  "memory": "Peak phys_footprint of the benchmark process (what Activity Monitor calls Memory). Apple's engines run recognition in a system process, so their footprint is not comparable and is not reported.",
+  "language_modes": "explicit passes the corpus language (Parakeet --language hint, Whisper -l, Apple locale); auto lets the engine detect it. Apple's engines have no auto-detect. The headline table uses explicit."
+ },
+ "engines": [
+  {
+   "id": "parakeet-v3",
+   "name": "Parakeet TDT v3",
+   "apps_label": "Presspeech (default), MacParakeet, FluidVoice, Handy, VoiceInk, Superwhisper Pro",
+   "runtime": "FluidAudio 0.17.7, CoreML on the Apple Neural Engine (presspeech-bench --backend v3, the app's released chunking config)",
+   "presspeech": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "Presspeech",
+     "role": "default",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/index.html"
+    },
+    {
+     "name": "MacParakeet",
+     "role": "default",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/macparakeet.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Pro option",
+     "price": "Pro $8.49/month",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    }
+   ]
+  },
+  {
+   "id": "parakeet-ultra",
+   "name": "Parakeet Ultra",
+   "apps_label": "Presspeech (opt-in), VoiceInk",
+   "runtime": "FluidAudio 0.17.7, CoreML on the Apple Neural Engine (presspeech-bench --backend ultra, files checked against the app's pinned manifest)",
+   "presspeech": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "Presspeech",
+     "role": "opt-in",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/index.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    }
+   ]
+  },
+  {
+   "id": "whisper-large-v3-turbo",
+   "name": "Whisper large-v3-turbo",
+   "apps_label": "VoiceInk, Superwhisper, Handy, FluidVoice",
+   "runtime": "whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-large-v3-turbo.bin",
+   "model_file_bytes": 1624555275,
+   "offline": true,
+   "apps": [
+    {
+     "name": "VoiceInk",
+     "role": "option (whisper.cpp)",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Free-tier local Whisper",
+     "price": "Free tier",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp."
+  },
+  {
+   "id": "whisper-small",
+   "name": "Whisper small",
+   "apps_label": "VoiceInk, Superwhisper, Handy, FluidVoice",
+   "runtime": "whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-small.bin",
+   "model_file_bytes": 487601967,
+   "offline": true,
+   "apps": [
+    {
+     "name": "VoiceInk",
+     "role": "option (whisper.cpp)",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Free-tier local Whisper",
+     "price": "Free tier",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp."
+  },
+  {
+   "id": "whisper-base",
+   "name": "Whisper base",
+   "apps_label": "VoiceInk, Superwhisper, Handy, FluidVoice",
+   "runtime": "whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-base.bin",
+   "model_file_bytes": 147951465,
+   "offline": true,
+   "apps": [
+    {
+     "name": "VoiceInk",
+     "role": "option (whisper.cpp)",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Free-tier local Whisper",
+     "price": "Free tier",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp."
+  },
+  {
+   "id": "apple-dictation",
+   "name": "Apple DictationTranscriber",
+   "apps_label": "macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice",
+   "runtime": "macOS Speech framework: SpeechAnalyzer + DictationTranscriber, on-device, short-form content hint (presspeech-bench --backend apple)",
+   "model_download": "macOS system asset; size not reported",
+   "memory_out_of_process": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "macOS Speech framework",
+     "role": "built in",
+     "price": "Included with macOS",
+     "licence": "Proprietary",
+     "page": "compare/apple-dictation.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "\"Apple Speech\" option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "\"Apple Speech\" option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "The public API closest to macOS Dictation, not the Dictation feature itself. VoiceInk and FluidVoice do not say which Speech module their Apple Speech option uses."
+  },
+  {
+   "id": "apple-speech",
+   "name": "Apple SpeechTranscriber",
+   "apps_label": "macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice",
+   "runtime": "macOS Speech framework: SpeechAnalyzer + SpeechTranscriber (.transcription preset), on-device (presspeech-bench --backend apple-speech)",
+   "model_download": "macOS system asset; size not reported",
+   "memory_out_of_process": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "macOS Speech framework",
+     "role": "built in",
+     "price": "Included with macOS",
+     "licence": "Proprietary",
+     "page": "compare/apple-dictation.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "\"Apple Speech\" option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "\"Apple Speech\" option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "VoiceInk and FluidVoice do not say which Speech module their Apple Speech option uses."
+  },
+  {
+   "id": "wispr-flow",
+   "name": "Wispr Flow (cloud)",
+   "apps_label": "Wispr Flow",
+   "measured": false,
+   "not_measured_reason": "cloud, not measured",
+   "offline": false,
+   "apps": [
+    {
+     "name": "Wispr Flow",
+     "role": "only engine",
+     "price": "Free 2,000 words/week; Pro $15/month",
+     "licence": "Proprietary",
+     "page": "compare/wispr-flow.html"
+    }
+   ]
+  }
+ ]
+}

@@ -33,6 +33,7 @@ the production app.
 | **`nemotron-en`** | FluidAudio Swift SDK → Nemotron Speech Streaming English 0.6 B, 1120 ms tier → CoreML | Apple Neural Engine |
 | **`nemotron-multilingual`** | FluidAudio Swift SDK → Nemotron 3.5 Streaming Multilingual 0.6 B → CoreML | Apple Neural Engine |
 | **`apple`** | `Speech.SpeechAnalyzer` + `DictationTranscriber` (built into macOS 26 Tahoe) | Apple Neural Engine |
+| **`apple-speech`** | `Speech.SpeechAnalyzer` + `SpeechTranscriber` (built into macOS 26 Tahoe) | Apple Neural Engine |
 | **`presspeech-mlx`** | presspeech's current path: `parakeet_mlx` → MLX → Metal | GPU |
 
 ## How to run
@@ -1403,6 +1404,58 @@ released explicit policy, adds the linear-int8 comparison, labels v3 as a
 candidate-revision baseline, and ends with a candidate evaluation verdict,
 never a production release pass. Restore the benchmark manifest and resolved
 file to the app's exact pin before using the wrapper as release evidence.
+
+## Engine leaderboard
+
+`run-engine-leaderboard.sh` reproduces the cross-engine table at the top of
+the main README and on the
+[benchmarks page](https://rcourtman.github.io/presspeech/benchmarks.html#engine-leaderboard):
+Presspeech's Parakeet TDT v3 and Parakeet Ultra, Whisper large-v3-turbo,
+small and base through whisper.cpp, and Apple's on-device
+`DictationTranscriber` and `SpeechTranscriber`, all on identical audio.
+
+```sh
+brew install whisper.cpp          # the published run used 1.9.5
+./run-engine-leaderboard.sh       # fetch, build, run every engine, score
+python3 ../../scripts/sync-docs.py  # render README + benchmarks tables
+```
+
+What it does:
+
+- **Corpora.** `engine-leaderboard.py prepare` verifies the OpenSLR MD5 of
+  LibriSpeech test-clean and test-other and the pinned Git LFS SHA-256 of
+  FLEURS German, Spanish, French, Italian and Polish, draws a seeded subset
+  (default 500 clips per LibriSpeech split, `--full-librispeech` for all;
+  100 per FLEURS language, one reading per sentence), composes the existing
+  English long-form set from the first 100 LibriSpeech dev-clean rows, and
+  converts everything to 16 kHz mono PCM16 WAV. The committed
+  `engine-leaderboard-manifest.json` records every clip ID with the SHA-256
+  of its PCM samples; a later run refuses corpora that differ from it.
+- **Engines.** Parakeet and Apple run through `presspeech-bench --batch`,
+  which loads one backend once, runs the first clip as an unmeasured warmup
+  and times one inference per clip. Whisper runs through
+  `whisper-batch/whisper-batch.c`, a small driver linked against Homebrew's
+  libwhisper with whisper-cli's defaults (Metal, flash attention, beam 5,
+  best-of 5, temperature fallback, 4 threads) and the official ggml models,
+  pinned by Hugging Face revision and SHA-256. Engines run one at a time.
+- **Language modes.** `explicit` passes the corpus language to every engine;
+  `auto` lets Parakeet and Whisper detect it. Apple's engines have no
+  auto-detect, so their auto runs are recorded as unsupported. The headline
+  table uses `explicit`.
+- **Scoring.** `engine-leaderboard.py score` applies Whisper's
+  `EnglishTextNormalizer` (English) or `BasicTextNormalizer` (other
+  languages, diacritics kept) from the pinned `whisper-normalizer` package to
+  references and hypotheses alike, then writes corpus WER, latency p50/p90,
+  real-time factor, model size and peak process footprint to
+  `docs/benchmarks/engine-leaderboard.json`.
+- **Conditions.** Load average, swap, memory pressure and power source are
+  recorded before every engine/corpus run. Latency depends on them; rerun
+  latency-sensitive passes with `--force` on a quiet machine.
+
+Runs are resumable; `--engines`, `--modes` and `--corpora` narrow a rerun,
+and `--skip-run` only rescores. Downloads land in `public-downloads/` and
+generated audio and raw JSONL in `public-results/engine-leaderboard/`, both
+ignored by git.
 
 ## Power measurement
 

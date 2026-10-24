@@ -45,8 +45,529 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Benchmarks</span>
         <h1>How fast is Presspeech?</h1>
-        <p>Presspeech keeps its latency claims tied to a reproducible benchmark in <code>experiments/swift-bench/</code>. Numbers below are p50 across five trials per backend, first inference excluded.</p>
+        <p>Presspeech keeps its latency claims tied to a reproducible benchmark in <code>experiments/swift-bench/</code>. The engine leaderboard compares speech engines on public test sets; the latency sections after it report p50 across five trials per backend, first inference excluded.</p>
       </div>
+
+      <!-- engine-leaderboard:start -->
+      <section id="engine-leaderboard">
+        <div class="wrap">
+          <span class="section-eyebrow">Engine leaderboard</span>
+          <h2>Speech engines compared on the same Mac</h2>
+          <p>Every local engine below was measured on the same audio, on the same machine, scored with the same text normaliser, one engine at a time. Rows are engines, labelled with the apps that offer them, so apps that share an engine share its accuracy. Presspeech's engines are highlighted. Lower is better in every numeric column; the best measured value is in bold. Cloud-only tools are listed but not measured or estimated.</p>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="leaderboard-caption-headline">
+            <table class="leaderboard">
+              <caption id="leaderboard-caption-headline">Engine leaderboard, explicit language: corpus WER, warm latency on LibriSpeech test-clean, model size</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Engine (apps)</th>
+                  <th scope="col">LibriSpeech clean WER</th>
+                  <th scope="col">LibriSpeech other WER</th>
+                  <th scope="col">FLEURS 5-language WER</th>
+                  <th scope="col">Long-form WER</th>
+                  <th scope="col">Latency p50</th>
+                  <th scope="col">Latency p90</th>
+                  <th scope="col">Model size</th>
+                  <th scope="col">Real-time factor</th>
+                  <th scope="col">Peak memory</th>
+                  <th scope="col">Offline</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet TDT v3<br><span class="leaderboard-apps">Presspeech (default), MacParakeet, FluidVoice, Handy, VoiceInk, Superwhisper Pro</span></th>
+                  <td>1.82%</td>
+                  <td>4.12%</td>
+                  <td>6.51%</td>
+                  <td>3.59%</td>
+                  <td><strong>54 ms</strong></td>
+                  <td><strong>91 ms</strong></td>
+                  <td>483 MB</td>
+                  <td><strong>0.009</strong></td>
+                  <td>83 MB</td>
+                  <td>Yes</td>
+                </tr>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet Ultra<br><span class="leaderboard-apps">Presspeech (opt-in), VoiceInk</span></th>
+                  <td><strong>1.71%</strong></td>
+                  <td><strong>3.65%</strong></td>
+                  <td>5.46%</td>
+                  <td>3.41%</td>
+                  <td>57 ms</td>
+                  <td>122 ms</td>
+                  <td>632 MB</td>
+                  <td><strong>0.009</strong></td>
+                  <td>726 MB</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper large-v3-turbo<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>1.89%</td>
+                  <td>4.12%</td>
+                  <td><strong>5.39%</strong></td>
+                  <td><strong>2.63%</strong></td>
+                  <td>1.10 s</td>
+                  <td>1.29 s</td>
+                  <td>1.62 GB</td>
+                  <td>0.153</td>
+                  <td>2.04 GB</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper small<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>2.77%</td>
+                  <td>7.21%</td>
+                  <td>11.37%</td>
+                  <td>4.67%</td>
+                  <td>354 ms</td>
+                  <td>574 ms</td>
+                  <td>488 MB</td>
+                  <td>0.053</td>
+                  <td>918 MB</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper base<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>4.33%</td>
+                  <td>11.44%</td>
+                  <td>21.99%</td>
+                  <td>7.12%</td>
+                  <td>151 ms</td>
+                  <td>264 ms</td>
+                  <td><strong>148 MB</strong></td>
+                  <td>0.023</td>
+                  <td>425 MB</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple DictationTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>7.47%</td>
+                  <td>15.69%</td>
+                  <td>12.70%</td>
+                  <td>9.33%</td>
+                  <td>160 ms</td>
+                  <td>364 ms</td>
+                  <td>macOS asset</td>
+                  <td>0.028</td>
+                  <td>n/a (system process)</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple SpeechTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>1.80%</td>
+                  <td>4.75%</td>
+                  <td>no Polish</td>
+                  <td>2.93%</td>
+                  <td>117 ms</td>
+                  <td>288 ms</td>
+                  <td>macOS asset</td>
+                  <td>0.021</td>
+                  <td>n/a (system process)</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <th scope="row">Wispr Flow (cloud)<br><span class="leaderboard-apps">Wispr Flow</span></th>
+                  <td><em>cloud, not measured</em></td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>No</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>FLEURS 5-language WER is the mean of the German, Spanish, French, Italian and Polish corpus WERs, shown only when an engine supports all five. Model size is the downloaded model on disk (Apple's engines use a macOS system asset whose size is not reported). Peak memory is the benchmark process's footprint; Core ML and the Neural Engine keep part of a model outside the process, so treat it as a lower bound rather than a RAM requirement, and it is not ranked.</p>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="leaderboard-caption-wer-explicit">
+            <table class="leaderboard">
+              <caption id="leaderboard-caption-wer-explicit">Corpus WER per test set, language set explicitly</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Engine</th>
+                  <th scope="col">LibriSpeech test-clean</th>
+                  <th scope="col">LibriSpeech test-other</th>
+                  <th scope="col">FLEURS German</th>
+                  <th scope="col">FLEURS Spanish</th>
+                  <th scope="col">FLEURS French</th>
+                  <th scope="col">FLEURS Italian</th>
+                  <th scope="col">FLEURS Polish</th>
+                  <th scope="col">English long-form</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet TDT v3<br><span class="leaderboard-apps">Presspeech (default), MacParakeet, FluidVoice, Handy, VoiceInk, Superwhisper Pro</span></th>
+                  <td>1.82%</td>
+                  <td>4.12%</td>
+                  <td>7.31%</td>
+                  <td>4.47%</td>
+                  <td>7.60%</td>
+                  <td>4.30%</td>
+                  <td>8.86%</td>
+                  <td>3.59%</td>
+                </tr>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet Ultra<br><span class="leaderboard-apps">Presspeech (opt-in), VoiceInk</span></th>
+                  <td><strong>1.71%</strong></td>
+                  <td><strong>3.65%</strong></td>
+                  <td>6.19%</td>
+                  <td><strong>3.45%</strong></td>
+                  <td>6.76%</td>
+                  <td><strong>3.54%</strong></td>
+                  <td>7.37%</td>
+                  <td>3.41%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper large-v3-turbo<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>1.89%</td>
+                  <td>4.12%</td>
+                  <td><strong>5.52%</strong></td>
+                  <td>3.80%</td>
+                  <td><strong>6.69%</strong></td>
+                  <td>3.98%</td>
+                  <td><strong>6.96%</strong></td>
+                  <td><strong>2.63%</strong></td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper small<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>2.77%</td>
+                  <td>7.21%</td>
+                  <td>11.66%</td>
+                  <td>5.69%</td>
+                  <td>14.44%</td>
+                  <td>8.17%</td>
+                  <td>16.90%</td>
+                  <td>4.67%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper base<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>4.33%</td>
+                  <td>11.44%</td>
+                  <td>21.21%</td>
+                  <td>10.63%</td>
+                  <td>28.19%</td>
+                  <td>16.37%</td>
+                  <td>33.54%</td>
+                  <td>7.12%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple DictationTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>7.47%</td>
+                  <td>15.69%</td>
+                  <td>15.25%</td>
+                  <td>7.88%</td>
+                  <td>18.33%</td>
+                  <td>7.40%</td>
+                  <td>14.64%</td>
+                  <td>9.33%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple SpeechTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>1.80%</td>
+                  <td>4.75%</td>
+                  <td>8.12%</td>
+                  <td>5.06%</td>
+                  <td>8.62%</td>
+                  <td>5.75%</td>
+                  <td>not supported</td>
+                  <td>2.93%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="leaderboard-caption-wer-auto">
+            <table class="leaderboard">
+              <caption id="leaderboard-caption-wer-auto">Corpus WER per test set, language auto-detected</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Engine</th>
+                  <th scope="col">LibriSpeech test-clean</th>
+                  <th scope="col">LibriSpeech test-other</th>
+                  <th scope="col">FLEURS German</th>
+                  <th scope="col">FLEURS Spanish</th>
+                  <th scope="col">FLEURS French</th>
+                  <th scope="col">FLEURS Italian</th>
+                  <th scope="col">FLEURS Polish</th>
+                  <th scope="col">English long-form</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet TDT v3<br><span class="leaderboard-apps">Presspeech (default), MacParakeet, FluidVoice, Handy, VoiceInk, Superwhisper Pro</span></th>
+                  <td>1.82%</td>
+                  <td>4.12%</td>
+                  <td>7.31%</td>
+                  <td>4.47%</td>
+                  <td>7.33%</td>
+                  <td>4.30%</td>
+                  <td>8.86%</td>
+                  <td>3.59%</td>
+                </tr>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet Ultra<br><span class="leaderboard-apps">Presspeech (opt-in), VoiceInk</span></th>
+                  <td><strong>1.71%</strong></td>
+                  <td><strong>3.65%</strong></td>
+                  <td>6.19%</td>
+                  <td><strong>3.45%</strong></td>
+                  <td><strong>6.46%</strong></td>
+                  <td><strong>3.54%</strong></td>
+                  <td>7.37%</td>
+                  <td>3.41%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper large-v3-turbo<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>1.89%</td>
+                  <td>4.12%</td>
+                  <td><strong>5.52%</strong></td>
+                  <td>3.80%</td>
+                  <td>6.69%</td>
+                  <td>3.98%</td>
+                  <td><strong>7.22%</strong></td>
+                  <td><strong>2.63%</strong></td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper small<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>2.77%</td>
+                  <td>8.27%</td>
+                  <td>11.66%</td>
+                  <td>5.69%</td>
+                  <td>14.44%</td>
+                  <td>8.17%</td>
+                  <td>17.51%</td>
+                  <td>4.67%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper base<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>4.33%</td>
+                  <td>11.60%</td>
+                  <td>21.21%</td>
+                  <td>10.63%</td>
+                  <td>28.19%</td>
+                  <td>16.37%</td>
+                  <td>34.20%</td>
+                  <td>7.12%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple DictationTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple SpeechTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                  <td>not supported</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Apple's engines have no auto-detect mode and are absent from the auto-detect table. Auto-detect can transcribe in the wrong language; that cost is part of the auto WER. Whisper's auto mode adds a language-detection pass, so its auto-detect latency (in the JSON) is higher than shown here.</p>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="leaderboard-caption-latency">
+            <table class="leaderboard">
+              <caption id="leaderboard-caption-latency">Warm inference latency p50 / p90 / real-time factor, explicit language</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Engine</th>
+                  <th scope="col">LibriSpeech test-clean</th>
+                  <th scope="col">LibriSpeech test-other</th>
+                  <th scope="col">English long-form</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet TDT v3<br><span class="leaderboard-apps">Presspeech (default), MacParakeet, FluidVoice, Handy, VoiceInk, Superwhisper Pro</span></th>
+                  <td>54 ms / 91 ms / 0.009</td>
+                  <td>53 ms / 85 ms / 0.009</td>
+                  <td>221 ms / 438 ms / 0.005</td>
+                </tr>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet Ultra<br><span class="leaderboard-apps">Presspeech (opt-in), VoiceInk</span></th>
+                  <td>57 ms / 122 ms / 0.009</td>
+                  <td>54 ms / 82 ms / 0.009</td>
+                  <td>206 ms / 326 ms / 0.005</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper large-v3-turbo<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>1.10 s / 1.29 s / 0.153</td>
+                  <td>1.09 s / 1.23 s / 0.171</td>
+                  <td>3.04 s / 4.18 s / 0.065</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper small<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>354 ms / 574 ms / 0.053</td>
+                  <td>342 ms / 523 ms / 0.058</td>
+                  <td>1.81 s / 2.13 s / 0.036</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper base<br><span class="leaderboard-apps">VoiceInk, Superwhisper, Handy, FluidVoice</span></th>
+                  <td>151 ms / 264 ms / 0.023</td>
+                  <td>137 ms / 236 ms / 0.024</td>
+                  <td>840 ms / 1.02 s / 0.017</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple DictationTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>160 ms / 364 ms / 0.028</td>
+                  <td>179 ms / 512 ms / 0.040</td>
+                  <td>1.27 s / 1.81 s / 0.028</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple SpeechTranscriber<br><span class="leaderboard-apps">macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</span></th>
+                  <td>117 ms / 288 ms / 0.021</td>
+                  <td>112 ms / 264 ms / 0.022</td>
+                  <td>747 ms / 1.12 s / 0.016</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="leaderboard-caption-corpora">
+            <table class="leaderboard">
+              <caption id="leaderboard-caption-corpora">Test sets: clips, audio and text normaliser</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Test set</th>
+                  <th scope="col">Clips</th>
+                  <th scope="col">Audio</th>
+                  <th scope="col">Normaliser</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">LibriSpeech test-clean</th>
+                  <td>500</td>
+                  <td>61.6 min</td>
+                  <td>whisper EnglishTextNormalizer</td>
+                </tr>
+                <tr>
+                  <th scope="row">LibriSpeech test-other</th>
+                  <td>500</td>
+                  <td>54.2 min</td>
+                  <td>whisper EnglishTextNormalizer</td>
+                </tr>
+                <tr>
+                  <th scope="row">FLEURS German</th>
+                  <td>100</td>
+                  <td>22.3 min</td>
+                  <td>whisper BasicTextNormalizer</td>
+                </tr>
+                <tr>
+                  <th scope="row">FLEURS Spanish</th>
+                  <td>100</td>
+                  <td>20.3 min</td>
+                  <td>whisper BasicTextNormalizer</td>
+                </tr>
+                <tr>
+                  <th scope="row">FLEURS French</th>
+                  <td>100</td>
+                  <td>17.1 min</td>
+                  <td>whisper BasicTextNormalizer</td>
+                </tr>
+                <tr>
+                  <th scope="row">FLEURS Italian</th>
+                  <td>100</td>
+                  <td>24.7 min</td>
+                  <td>whisper BasicTextNormalizer</td>
+                </tr>
+                <tr>
+                  <th scope="row">FLEURS Polish</th>
+                  <td>100</td>
+                  <td>17.3 min</td>
+                  <td>whisper BasicTextNormalizer</td>
+                </tr>
+                <tr>
+                  <th scope="row">English long-form</th>
+                  <td>13</td>
+                  <td>10.9 min</td>
+                  <td>whisper EnglishTextNormalizer</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="leaderboard-caption-engines">
+            <table class="leaderboard">
+              <caption id="leaderboard-caption-engines">Engine configuration, and the apps that offer each engine with price and licence from the comparison pages</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Engine</th>
+                  <th scope="col">Configuration measured</th>
+                  <th scope="col">Apps, price and licence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet TDT v3</th>
+                  <td>FluidAudio 0.17.7, CoreML on the Apple Neural Engine (presspeech-bench --backend v3, the app&#x27;s released chunking config)</td>
+                  <td>Presspeech (default): Free, MIT; MacParakeet (default): Free, GPL-3.0; FluidVoice (option): Free, GPL-3.0; Handy (option): Free, MIT; VoiceInk (option): $25 one-time, GPL-3.0; Superwhisper (Pro option): Pro $8.49/month, Proprietary.</td>
+                </tr>
+                <tr class="leaderboard-presspeech">
+                  <th scope="row">Parakeet Ultra</th>
+                  <td>FluidAudio 0.17.7, CoreML on the Apple Neural Engine (presspeech-bench --backend ultra, files checked against the app&#x27;s pinned manifest)</td>
+                  <td>Presspeech (opt-in): Free, MIT; VoiceInk (option): $25 one-time, GPL-3.0.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper large-v3-turbo</th>
+                  <td>whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-large-v3-turbo.bin</td>
+                  <td>VoiceInk (option (whisper.cpp)): $25 one-time, GPL-3.0; Superwhisper (Free-tier local Whisper): Free tier, Proprietary; Handy (option): Free, MIT; FluidVoice (option): Free, GPL-3.0. Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper small</th>
+                  <td>whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-small.bin</td>
+                  <td>VoiceInk (option (whisper.cpp)): $25 one-time, GPL-3.0; Superwhisper (Free-tier local Whisper): Free tier, Proprietary; Handy (option): Free, MIT; FluidVoice (option): Free, GPL-3.0. Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Whisper base</th>
+                  <td>whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-base.bin</td>
+                  <td>VoiceInk (option (whisper.cpp)): $25 one-time, GPL-3.0; Superwhisper (Free-tier local Whisper): Free tier, Proprietary; Handy (option): Free, MIT; FluidVoice (option): Free, GPL-3.0. Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple DictationTranscriber</th>
+                  <td>macOS Speech framework: SpeechAnalyzer + DictationTranscriber, on-device, short-form content hint (presspeech-bench --backend apple)</td>
+                  <td>macOS Speech framework (built in): Included with macOS, Proprietary; VoiceInk (&quot;Apple Speech&quot; option): $25 one-time, GPL-3.0; FluidVoice (&quot;Apple Speech&quot; option): Free, GPL-3.0. The public API closest to macOS Dictation, not the Dictation feature itself. VoiceInk and FluidVoice do not say which Speech module their Apple Speech option uses.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Apple SpeechTranscriber</th>
+                  <td>macOS Speech framework: SpeechAnalyzer + SpeechTranscriber (.transcription preset), on-device (presspeech-bench --backend apple-speech)</td>
+                  <td>macOS Speech framework (built in): Included with macOS, Proprietary; VoiceInk (&quot;Apple Speech&quot; option): $25 one-time, GPL-3.0; FluidVoice (&quot;Apple Speech&quot; option): Free, GPL-3.0. VoiceInk and FluidVoice do not say which Speech module their Apple Speech option uses.</td>
+                </tr>
+                <tr>
+                  <th scope="row">Wispr Flow (cloud)</th>
+                  <td>cloud, not measured</td>
+                  <td>Wispr Flow (only engine): Free 2,000 words/week; Pro $15/month, Proprietary.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="facts">
+            <div class="fact"><strong>Machine</strong><span>Mac mini, Apple M4, 16 GB, macOS 27.0.1 (26A434), AC power.</span></div>
+            <div class="fact"><strong>Runtimes</strong><span>FluidAudio 0.17.7, whisper.cpp 1.9.5 (Homebrew, Metal), macOS Speech framework.</span></div>
+            <div class="fact"><strong>Selection</strong><span>Seed 20261024: 500 clips per LibriSpeech test split, 100 per FLEURS language (one reading per sentence, dataset revision 70bb2e84b976), and the long-form set composed from the first 100 LibriSpeech dev-clean rows.</span></div>
+            <div class="fact"><strong>Machine load</strong><span>Before each run: 1-minute load 2.4–8.2, swap in use 8.5–12.0 GB, free memory 34–50%. Latency is sensitive to load; compare engines within this table, not with other machines. The Mac was under memory pressure with heavy swap use throughout, so absolute latencies may be higher than on a quiet machine; every engine ran under the same conditions.</span></div>
+          </div>
+          <ul>
+            <li>Every engine reads the same 16 kHz mono 16-bit PCM WAV files, decoded losslessly from the public 16-bit sources.</li>
+            <li>One process per engine and corpus loads the model once, runs the first clip as an unmeasured warmup, then times one inference per clip with the audio already in memory. Engines run one at a time, never in parallel.</li>
+            <li>Latency is inference time per clip (p50 and p90 over every measured clip); real-time factor is total inference time divided by total audio duration. Lower is better.</li>
+            <li>Corpus WER = (substitutions + deletions + insertions) / reference words, after the same normaliser is applied to reference and hypothesis: Whisper&#x27;s EnglishTextNormalizer for English, Whisper&#x27;s BasicTextNormalizer (lower-case, punctuation removed, diacritics kept) for other languages. A failed clip scores as an empty transcript.</li>
+            <li>Peak phys_footprint of the benchmark process (what Activity Monitor calls Memory). Apple&#x27;s engines run recognition in a system process, so their footprint is not comparable and is not reported.</li>
+            <li>explicit passes the corpus language (Parakeet --language hint, Whisper -l, Apple locale); auto lets the engine detect it. Apple&#x27;s engines have no auto-detect. The headline table uses explicit.</li>
+          </ul>
+          <p>Machine-readable results: <a href="benchmarks/engine-leaderboard.json">benchmarks/engine-leaderboard.json</a>. Reproduce with <code>experiments/swift-bench/run-engine-leaderboard.sh</code>; the committed <code>engine-leaderboard-manifest.json</code> lists every clip ID and PCM checksum.</p>
+        </div>
+      </section>
+      <!-- engine-leaderboard:end -->
 
       <section>
         <div class="wrap">

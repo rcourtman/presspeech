@@ -59,6 +59,7 @@ jobs:
           experiments/swift-bench/run-public-model-comparison.sh --self-test
           experiments/swift-bench/run-release-asr-checks.sh --self-test
           experiments/swift-bench/run-tail-word-regression.sh --self-test
+          experiments/swift-bench/run-engine-leaderboard.sh --self-test
       - name: Model manifest updater self-test
         run: python3 scripts/update-model-manifest.py --self-test
       - name: Docs sync self-test
