@@ -1,0 +1,3833 @@
+{
+ "schema": 1,
+ "generated_by": "experiments/swift-bench/run-engine-leaderboard.sh",
+ "environment": {
+  "machine": "Mac mini",
+  "model_identifier": "Mac16,10",
+  "chip": "Apple M4",
+  "memory": "16 GB",
+  "macos": "27.0.1 (26A434)",
+  "fluidaudio": {
+   "version": "0.17.7",
+   "revision": "503b4bd1bbf7220882de39fe8ae6716aae4132da"
+  },
+  "whisper_cpp": "1.9.5",
+  "presspeech_commit": "bd82a68",
+  "conditions": [
+   {
+    "label": "start",
+    "load_average_1_5_15": [
+     3.41,
+     4.62,
+     4.3
+    ],
+    "swap_used_mb": 9021.0,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "end",
+    "load_average_1_5_15": [
+     3.41,
+     4.62,
+     4.3
+    ],
+    "swap_used_mb": 9021.0,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "start",
+    "load_average_1_5_15": [
+     4.17,
+     4.75,
+     4.35
+    ],
+    "swap_used_mb": 9021.0,
+    "memory_free_percent": 47,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/librispeech-test-clean",
+    "load_average_1_5_15": [
+     4.17,
+     4.75,
+     4.35
+    ],
+    "swap_used_mb": 9021.0,
+    "memory_free_percent": 47,
+    "power_source": "AC"
+   },
+   {
+    "label": "end",
+    "load_average_1_5_15": [
+     3.49,
+     4.5,
+     4.28
+    ],
+    "swap_used_mb": 8981.0,
+    "memory_free_percent": 45,
+    "power_source": "AC"
+   },
+   {
+    "label": "start",
+    "load_average_1_5_15": [
+     2.94,
+     4.31,
+     4.22
+    ],
+    "swap_used_mb": 8973.0,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     2.94,
+     4.31,
+     4.22
+    ],
+    "swap_used_mb": 8973.0,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     3.3,
+     4.34,
+     4.23
+    ],
+    "swap_used_mb": 8973.0,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     3.44,
+     4.36,
+     4.24
+    ],
+    "swap_used_mb": 8973.0,
+    "memory_free_percent": 45,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/fleurs-it_it",
+    "load_average_1_5_15": [
+     4.03,
+     4.46,
+     4.27
+    ],
+    "swap_used_mb": 8973.0,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     5.08,
+     4.67,
+     4.35
+    ],
+    "swap_used_mb": 8973.0,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     5.51,
+     4.78,
+     4.4
+    ],
+    "swap_used_mb": 9100.69,
+    "memory_free_percent": 35,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/explicit/librispeech-test-other",
+    "load_average_1_5_15": [
+     5.55,
+     4.8,
+     4.4
+    ],
+    "swap_used_mb": 9231.69,
+    "memory_free_percent": 35,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/fleurs-de_de",
+    "load_average_1_5_15": [
+     6.2,
+     5.03,
+     4.5
+    ],
+    "swap_used_mb": 9224.69,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/fleurs-es_419",
+    "load_average_1_5_15": [
+     5.85,
+     5.0,
+     4.5
+    ],
+    "swap_used_mb": 9216.69,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     5.5,
+     4.95,
+     4.48
+    ],
+    "swap_used_mb": 9216.69,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/fleurs-it_it",
+    "load_average_1_5_15": [
+     5.62,
+     4.98,
+     4.5
+    ],
+    "swap_used_mb": 9216.69,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     5.54,
+     5.0,
+     4.51
+    ],
+    "swap_used_mb": 9200.69,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     5.34,
+     4.96,
+     4.5
+    ],
+    "swap_used_mb": 9200.69,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/librispeech-test-clean",
+    "load_average_1_5_15": [
+     5.71,
+     5.05,
+     4.53
+    ],
+    "swap_used_mb": 9184.69,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-v3/auto/librispeech-test-other",
+    "load_average_1_5_15": [
+     6.74,
+     5.45,
+     4.7
+    ],
+    "swap_used_mb": 9104.69,
+    "memory_free_percent": 40,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     5.97,
+     5.4,
+     4.71
+    ],
+    "swap_used_mb": 9874.0,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     7.7,
+     5.93,
+     4.94
+    ],
+    "swap_used_mb": 9678.5,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     7.73,
+     6.0,
+     4.97
+    ],
+    "swap_used_mb": 9678.5,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/fleurs-it_it",
+    "load_average_1_5_15": [
+     6.99,
+     5.9,
+     4.95
+    ],
+    "swap_used_mb": 9654.5,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     6.37,
+     5.8,
+     4.92
+    ],
+    "swap_used_mb": 9672.81,
+    "memory_free_percent": 45,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     6.48,
+     5.84,
+     4.95
+    ],
+    "swap_used_mb": 9664.81,
+    "memory_free_percent": 44,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/librispeech-test-clean",
+    "load_average_1_5_15": [
+     6.2,
+     5.79,
+     4.94
+    ],
+    "swap_used_mb": 9632.81,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/explicit/librispeech-test-other",
+    "load_average_1_5_15": [
+     5.94,
+     5.8,
+     4.98
+    ],
+    "swap_used_mb": 9528.81,
+    "memory_free_percent": 44,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/fleurs-de_de",
+    "load_average_1_5_15": [
+     5.67,
+     5.73,
+     4.98
+    ],
+    "swap_used_mb": 9456.81,
+    "memory_free_percent": 45,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/fleurs-es_419",
+    "load_average_1_5_15": [
+     5.13,
+     5.61,
+     4.95
+    ],
+    "swap_used_mb": 9611.81,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     4.81,
+     5.53,
+     4.92
+    ],
+    "swap_used_mb": 9611.81,
+    "memory_free_percent": 44,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/fleurs-it_it",
+    "load_average_1_5_15": [
+     5.24,
+     5.59,
+     4.95
+    ],
+    "swap_used_mb": 9611.81,
+    "memory_free_percent": 46,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     5.04,
+     5.54,
+     4.94
+    ],
+    "swap_used_mb": 9579.81,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     4.8,
+     5.47,
+     4.92
+    ],
+    "swap_used_mb": 9475.81,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/librispeech-test-clean",
+    "load_average_1_5_15": [
+     5.46,
+     5.6,
+     4.97
+    ],
+    "swap_used_mb": 9576.25,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "parakeet-ultra/auto/librispeech-test-other",
+    "load_average_1_5_15": [
+     5.44,
+     5.56,
+     4.98
+    ],
+    "swap_used_mb": 9392.25,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     5.04,
+     5.44,
+     4.96
+    ],
+    "swap_used_mb": 9838.94,
+    "memory_free_percent": 44,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     6.95,
+     6.18,
+     5.33
+    ],
+    "swap_used_mb": 11134.44,
+    "memory_free_percent": 49,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     4.98,
+     5.65,
+     5.23
+    ],
+    "swap_used_mb": 10663.0,
+    "memory_free_percent": 40,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/fleurs-it_it",
+    "load_average_1_5_15": [
+     4.93,
+     5.33,
+     5.15
+    ],
+    "swap_used_mb": 10822.75,
+    "memory_free_percent": 45,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     7.63,
+     5.97,
+     5.4
+    ],
+    "swap_used_mb": 11033.19,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     4.0,
+     5.25,
+     5.2
+    ],
+    "swap_used_mb": 10978.19,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/librispeech-test-clean",
+    "load_average_1_5_15": [
+     3.6,
+     4.94,
+     5.09
+    ],
+    "swap_used_mb": 10924.5,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/librispeech-test-other",
+    "load_average_1_5_15": [
+     3.78,
+     4.24,
+     4.64
+    ],
+    "swap_used_mb": 11209.75,
+    "memory_free_percent": 44,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/fleurs-de_de",
+    "load_average_1_5_15": [
+     4.61,
+     4.41,
+     4.5
+    ],
+    "swap_used_mb": 11470.12,
+    "memory_free_percent": 41,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/fleurs-es_419",
+    "load_average_1_5_15": [
+     3.5,
+     3.87,
+     4.23
+    ],
+    "swap_used_mb": 11750.31,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     4.93,
+     4.26,
+     4.29
+    ],
+    "swap_used_mb": 11770.12,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/fleurs-it_it",
+    "load_average_1_5_15": [
+     4.51,
+     4.43,
+     4.36
+    ],
+    "swap_used_mb": 11779.75,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     3.85,
+     4.17,
+     4.27
+    ],
+    "swap_used_mb": 11897.56,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     4.92,
+     4.71,
+     4.46
+    ],
+    "swap_used_mb": 11960.75,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/librispeech-test-clean",
+    "load_average_1_5_15": [
+     4.47,
+     4.64,
+     4.45
+    ],
+    "swap_used_mb": 12177.81,
+    "memory_free_percent": 50,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/auto/librispeech-test-other",
+    "load_average_1_5_15": [
+     3.53,
+     3.89,
+     4.02
+    ],
+    "swap_used_mb": 12039.44,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     3.17,
+     3.64,
+     3.71
+    ],
+    "swap_used_mb": 12312.5,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     2.72,
+     3.45,
+     3.63
+    ],
+    "swap_used_mb": 12264.5,
+    "memory_free_percent": 49,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     2.42,
+     3.24,
+     3.54
+    ],
+    "swap_used_mb": 12240.5,
+    "memory_free_percent": 50,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/fleurs-it_it",
+    "load_average_1_5_15": [
+     2.76,
+     3.21,
+     3.51
+    ],
+    "swap_used_mb": 12184.5,
+    "memory_free_percent": 49,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     5.16,
+     3.85,
+     3.73
+    ],
+    "swap_used_mb": 12136.5,
+    "memory_free_percent": 50,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     5.97,
+     4.26,
+     3.89
+    ],
+    "swap_used_mb": 12104.12,
+    "memory_free_percent": 47,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/librispeech-test-clean",
+    "load_average_1_5_15": [
+     4.76,
+     4.14,
+     3.85
+    ],
+    "swap_used_mb": 12104.12,
+    "memory_free_percent": 46,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/explicit/librispeech-test-other",
+    "load_average_1_5_15": [
+     3.89,
+     3.77,
+     3.73
+    ],
+    "swap_used_mb": 11888.12,
+    "memory_free_percent": 48,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/fleurs-de_de",
+    "load_average_1_5_15": [
+     4.36,
+     3.81,
+     3.73
+    ],
+    "swap_used_mb": 11808.12,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/fleurs-es_419",
+    "load_average_1_5_15": [
+     4.31,
+     3.86,
+     3.75
+    ],
+    "swap_used_mb": 11744.12,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     6.4,
+     4.54,
+     4.01
+    ],
+    "swap_used_mb": 9727.88,
+    "memory_free_percent": 40,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/fleurs-it_it",
+    "load_average_1_5_15": [
+     8.24,
+     5.23,
+     4.3
+    ],
+    "swap_used_mb": 10650.75,
+    "memory_free_percent": 36,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     5.32,
+     4.94,
+     4.27
+    ],
+    "swap_used_mb": 10338.75,
+    "memory_free_percent": 47,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     4.03,
+     4.6,
+     4.2
+    ],
+    "swap_used_mb": 10202.19,
+    "memory_free_percent": 45,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/librispeech-test-clean",
+    "load_average_1_5_15": [
+     3.43,
+     4.41,
+     4.14
+    ],
+    "swap_used_mb": 10058.12,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-small/auto/librispeech-test-other",
+    "load_average_1_5_15": [
+     4.25,
+     4.19,
+     4.09
+    ],
+    "swap_used_mb": 9722.19,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     3.8,
+     4.17,
+     4.11
+    ],
+    "swap_used_mb": 9969.19,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     3.88,
+     4.15,
+     4.11
+    ],
+    "swap_used_mb": 9937.19,
+    "memory_free_percent": 40,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     3.97,
+     4.15,
+     4.11
+    ],
+    "swap_used_mb": 9913.19,
+    "memory_free_percent": 42,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/fleurs-it_it",
+    "load_average_1_5_15": [
+     3.74,
+     4.09,
+     4.09
+    ],
+    "swap_used_mb": 9905.19,
+    "memory_free_percent": 40,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     3.83,
+     4.08,
+     4.08
+    ],
+    "swap_used_mb": 9873.19,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     3.96,
+     4.09,
+     4.08
+    ],
+    "swap_used_mb": 9817.06,
+    "memory_free_percent": 36,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/librispeech-test-clean",
+    "load_average_1_5_15": [
+     4.3,
+     4.17,
+     4.11
+    ],
+    "swap_used_mb": 9809.06,
+    "memory_free_percent": 35,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/explicit/librispeech-test-other",
+    "load_average_1_5_15": [
+     4.43,
+     4.21,
+     4.13
+    ],
+    "swap_used_mb": 9877.31,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/fleurs-de_de",
+    "load_average_1_5_15": [
+     3.26,
+     3.92,
+     4.02
+    ],
+    "swap_used_mb": 9797.31,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/fleurs-es_419",
+    "load_average_1_5_15": [
+     4.7,
+     4.17,
+     4.11
+    ],
+    "swap_used_mb": 9757.31,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     3.65,
+     3.96,
+     4.03
+    ],
+    "swap_used_mb": 9741.31,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/fleurs-it_it",
+    "load_average_1_5_15": [
+     3.73,
+     3.95,
+     4.02
+    ],
+    "swap_used_mb": 9800.88,
+    "memory_free_percent": 36,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     4.0,
+     4.0,
+     4.04
+    ],
+    "swap_used_mb": 9784.88,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     4.02,
+     4.01,
+     4.04
+    ],
+    "swap_used_mb": 9784.88,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/librispeech-test-clean",
+    "load_average_1_5_15": [
+     3.93,
+     3.99,
+     4.03
+    ],
+    "swap_used_mb": 9784.88,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-base/auto/librispeech-test-other",
+    "load_average_1_5_15": [
+     3.75,
+     4.03,
+     4.05
+    ],
+    "swap_used_mb": 9728.88,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     4.59,
+     4.11,
+     4.07
+    ],
+    "swap_used_mb": 9696.88,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     5.19,
+     4.29,
+     4.13
+    ],
+    "swap_used_mb": 9728.75,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     5.46,
+     4.51,
+     4.23
+    ],
+    "swap_used_mb": 9687.5,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/fleurs-it_it",
+    "load_average_1_5_15": [
+     5.58,
+     4.74,
+     4.33
+    ],
+    "swap_used_mb": 9796.31,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     5.74,
+     4.89,
+     4.4
+    ],
+    "swap_used_mb": 9700.31,
+    "memory_free_percent": 34,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     5.17,
+     4.81,
+     4.39
+    ],
+    "swap_used_mb": 9700.31,
+    "memory_free_percent": 35,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/librispeech-test-clean",
+    "load_average_1_5_15": [
+     4.53,
+     4.7,
+     4.36
+    ],
+    "swap_used_mb": 9700.31,
+    "memory_free_percent": 38,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-dictation/explicit/librispeech-test-other",
+    "load_average_1_5_15": [
+     3.7,
+     4.4,
+     4.28
+    ],
+    "swap_used_mb": 9684.31,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     4.04,
+     4.25,
+     4.23
+    ],
+    "swap_used_mb": 9612.31,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     4.02,
+     4.23,
+     4.23
+    ],
+    "swap_used_mb": 9604.31,
+    "memory_free_percent": 36,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/fleurs-fr_fr",
+    "load_average_1_5_15": [
+     4.24,
+     4.26,
+     4.24
+    ],
+    "swap_used_mb": 9642.56,
+    "memory_free_percent": 36,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/fleurs-it_it",
+    "load_average_1_5_15": [
+     5.55,
+     4.63,
+     4.38
+    ],
+    "swap_used_mb": 9618.56,
+    "memory_free_percent": 35,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/fleurs-pl_pl",
+    "load_average_1_5_15": [
+     4.72,
+     4.52,
+     4.34
+    ],
+    "swap_used_mb": 9578.56,
+    "memory_free_percent": 36,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/librispeech-dev-clean-long-form",
+    "load_average_1_5_15": [
+     5.15,
+     4.61,
+     4.37
+    ],
+    "swap_used_mb": 9578.56,
+    "memory_free_percent": 37,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/librispeech-test-clean",
+    "load_average_1_5_15": [
+     4.97,
+     4.59,
+     4.37
+    ],
+    "swap_used_mb": 9578.56,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "apple-speech/explicit/librispeech-test-other",
+    "load_average_1_5_15": [
+     5.32,
+     4.74,
+     4.44
+    ],
+    "swap_used_mb": 8722.06,
+    "memory_free_percent": 35,
+    "power_source": "AC"
+   },
+   {
+    "label": "end",
+    "load_average_1_5_15": [
+     3.96,
+     4.43,
+     4.34
+    ],
+    "swap_used_mb": 8696.0,
+    "memory_free_percent": 34,
+    "power_source": "AC"
+   },
+   {
+    "label": "start",
+    "load_average_1_5_15": [
+     4.89,
+     4.84,
+     4.58
+    ],
+    "swap_used_mb": 9320.25,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/fleurs-de_de",
+    "load_average_1_5_15": [
+     4.89,
+     4.84,
+     4.58
+    ],
+    "swap_used_mb": 9320.25,
+    "memory_free_percent": 39,
+    "power_source": "AC"
+   },
+   {
+    "label": "whisper-large-v3-turbo/explicit/fleurs-es_419",
+    "load_average_1_5_15": [
+     4.51,
+     4.67,
+     4.55
+    ],
+    "swap_used_mb": 10122.69,
+    "memory_free_percent": 43,
+    "power_source": "AC"
+   },
+   {
+    "label": "end",
+    "load_average_1_5_15": [
+     3.61,
+     4.33,
+     4.43
+    ],
+    "swap_used_mb": 10152.0,
+    "memory_free_percent": 44,
+    "power_source": "AC"
+   }
+  ]
+ },
+ "corpora": {
+  "librispeech-test-clean": {
+   "clips": 500,
+   "audio_seconds": 3693.28,
+   "normaliser": "whisper EnglishTextNormalizer"
+  },
+  "librispeech-test-other": {
+   "clips": 500,
+   "audio_seconds": 3254.83,
+   "normaliser": "whisper EnglishTextNormalizer"
+  },
+  "fleurs-de_de": {
+   "clips": 100,
+   "audio_seconds": 1339.08,
+   "normaliser": "whisper BasicTextNormalizer"
+  },
+  "fleurs-es_419": {
+   "clips": 100,
+   "audio_seconds": 1217.64,
+   "normaliser": "whisper BasicTextNormalizer"
+  },
+  "fleurs-fr_fr": {
+   "clips": 100,
+   "audio_seconds": 1026.54,
+   "normaliser": "whisper BasicTextNormalizer"
+  },
+  "fleurs-it_it": {
+   "clips": 100,
+   "audio_seconds": 1481.46,
+   "normaliser": "whisper BasicTextNormalizer"
+  },
+  "fleurs-pl_pl": {
+   "clips": 100,
+   "audio_seconds": 1039.8,
+   "normaliser": "whisper BasicTextNormalizer"
+  },
+  "librispeech-dev-clean-long-form": {
+   "clips": 13,
+   "audio_seconds": 652.54,
+   "normaliser": "whisper EnglishTextNormalizer"
+  }
+ },
+ "selection": {
+  "seed": 20261024,
+  "librispeech_count": 500,
+  "fleurs_count": 100,
+  "fleurs_revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+  "long_form_source_count": 100,
+  "audio_format": "16 kHz mono 16-bit PCM WAV (afconvert, lossless from 16-bit sources)"
+ },
+ "method": {
+  "audio": "Every engine reads the same 16 kHz mono 16-bit PCM WAV files, decoded losslessly from the public 16-bit sources.",
+  "measurement": "One process per engine and corpus loads the model once, runs the first clip as an unmeasured warmup, then times one inference per clip with the audio already in memory. Engines run one at a time, never in parallel.",
+  "latency": "Latency is inference time per clip (p50 and p90 over every measured clip); real-time factor is total inference time divided by total audio duration. Lower is better.",
+  "wer": "Corpus WER = (substitutions + deletions + insertions) / reference words, after the same normaliser is applied to reference and hypothesis: Whisper's EnglishTextNormalizer for English, Whisper's BasicTextNormalizer (lower-case, punctuation removed, diacritics kept) for other languages. A failed clip scores as an empty transcript.",
+  "memory": "Peak phys_footprint of the benchmark process (what Activity Monitor calls Memory). Apple's engines run recognition in a system process, so their footprint is not comparable and is not reported.",
+  "language_modes": "explicit passes the corpus language (Parakeet --language hint, Whisper -l, Apple locale); auto lets the engine detect it. Apple's engines have no auto-detect. The headline table uses explicit."
+ },
+ "engines": [
+  {
+   "id": "parakeet-v3",
+   "name": "Parakeet TDT v3",
+   "apps_label": "Presspeech (default), MacParakeet, FluidVoice, Handy, VoiceInk, Superwhisper Pro",
+   "runtime": "FluidAudio 0.17.7, CoreML on the Apple Neural Engine (presspeech-bench --backend v3, the app's released chunking config)",
+   "presspeech": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "Presspeech",
+     "role": "default",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/index.html"
+    },
+    {
+     "name": "MacParakeet",
+     "role": "default",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/macparakeet.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Pro option",
+     "price": "Pro $8.49/month",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    }
+   ],
+   "runs": {
+    "explicit": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 101,
+      "deletions": 17,
+      "insertions": 45,
+      "wer": 7.309,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 79.5,
+      "latency_ms_p90": 135.6,
+      "latency_ms_mean": 89.5,
+      "rtf": 0.0067,
+      "prepare_seconds": 0.86,
+      "peak_footprint_bytes": 68322168,
+      "peak_footprint_bytes_time_l": 73728888,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 72,
+      "deletions": 13,
+      "insertions": 29,
+      "wer": 4.471,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 68.5,
+      "latency_ms_p90": 130.2,
+      "latency_ms_mean": 80.4,
+      "rtf": 0.0066,
+      "prepare_seconds": 0.16,
+      "peak_footprint_bytes": 65176440,
+      "peak_footprint_bytes_time_l": 73696120,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 107,
+      "deletions": 21,
+      "insertions": 73,
+      "wer": 7.596,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 74.1,
+      "latency_ms_p90": 129.7,
+      "latency_ms_mean": 83.8,
+      "rtf": 0.0082,
+      "prepare_seconds": 0.23,
+      "peak_footprint_bytes": 63292256,
+      "peak_footprint_bytes_time_l": 66093920,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 56,
+      "deletions": 14,
+      "insertions": 37,
+      "wer": 4.304,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 80.6,
+      "latency_ms_p90": 135.1,
+      "latency_ms_mean": 93.2,
+      "rtf": 0.0063,
+      "prepare_seconds": 0.16,
+      "peak_footprint_bytes": 65356640,
+      "peak_footprint_bytes_time_l": 75465568,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 116,
+      "deletions": 16,
+      "insertions": 41,
+      "wer": 8.858,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 81.1,
+      "latency_ms_p90": 153.2,
+      "latency_ms_mean": 98.0,
+      "rtf": 0.0094,
+      "prepare_seconds": 0.15,
+      "peak_footprint_bytes": 60588896,
+      "peak_footprint_bytes_time_l": 66831200,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 43,
+      "deletions": 11,
+      "insertions": 6,
+      "wer": 3.589,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 220.7,
+      "latency_ms_p90": 438.4,
+      "latency_ms_mean": 275.2,
+      "rtf": 0.0055,
+      "prepare_seconds": 0.35,
+      "peak_footprint_bytes": 83280760,
+      "peak_footprint_bytes_time_l": 96682872,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 136,
+      "deletions": 18,
+      "insertions": 30,
+      "wer": 1.822,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 53.7,
+      "latency_ms_p90": 90.8,
+      "latency_ms_mean": 62.5,
+      "rtf": 0.0085,
+      "prepare_seconds": 16.73,
+      "peak_footprint_bytes": 63996816,
+      "peak_footprint_bytes_time_l": 69501840,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 278,
+      "deletions": 37,
+      "insertions": 51,
+      "wer": 4.116,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 53.3,
+      "latency_ms_p90": 84.6,
+      "latency_ms_mean": 61.3,
+      "rtf": 0.0094,
+      "prepare_seconds": 0.15,
+      "peak_footprint_bytes": 51184480,
+      "peak_footprint_bytes_time_l": 57246560,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     }
+    },
+    "auto": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 101,
+      "deletions": 17,
+      "insertions": 45,
+      "wer": 7.309,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 85.0,
+      "latency_ms_p90": 159.8,
+      "latency_ms_mean": 100.4,
+      "rtf": 0.0075,
+      "prepare_seconds": 0.42,
+      "peak_footprint_bytes": 72827744,
+      "peak_footprint_bytes_time_l": 83231584,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 72,
+      "deletions": 13,
+      "insertions": 29,
+      "wer": 4.471,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 70.2,
+      "latency_ms_p90": 134.0,
+      "latency_ms_mean": 84.4,
+      "rtf": 0.0069,
+      "prepare_seconds": 0.15,
+      "peak_footprint_bytes": 70845256,
+      "peak_footprint_bytes_time_l": 77480776,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 102,
+      "deletions": 19,
+      "insertions": 73,
+      "wer": 7.332,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 76.7,
+      "latency_ms_p90": 122.7,
+      "latency_ms_mean": 86.6,
+      "rtf": 0.0084,
+      "prepare_seconds": 0.24,
+      "peak_footprint_bytes": 60392264,
+      "peak_footprint_bytes_time_l": 65323848,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 56,
+      "deletions": 14,
+      "insertions": 37,
+      "wer": 4.304,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 100.8,
+      "latency_ms_p90": 157.0,
+      "latency_ms_mean": 102.9,
+      "rtf": 0.0069,
+      "prepare_seconds": 0.2,
+      "peak_footprint_bytes": 72450936,
+      "peak_footprint_bytes_time_l": 78742392,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 116,
+      "deletions": 16,
+      "insertions": 41,
+      "wer": 8.858,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 75.7,
+      "latency_ms_p90": 138.2,
+      "latency_ms_mean": 82.6,
+      "rtf": 0.0079,
+      "prepare_seconds": 0.15,
+      "peak_footprint_bytes": 60490568,
+      "peak_footprint_bytes_time_l": 66634568,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 43,
+      "deletions": 11,
+      "insertions": 6,
+      "wer": 3.589,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 298.2,
+      "latency_ms_p90": 462.3,
+      "latency_ms_mean": 328.5,
+      "rtf": 0.0065,
+      "prepare_seconds": 0.38,
+      "peak_footprint_bytes": 79938424,
+      "peak_footprint_bytes_time_l": 93193080,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 136,
+      "deletions": 18,
+      "insertions": 30,
+      "wer": 1.822,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 56.4,
+      "latency_ms_p90": 112.7,
+      "latency_ms_mean": 65.9,
+      "rtf": 0.0089,
+      "prepare_seconds": 0.19,
+      "peak_footprint_bytes": 65733448,
+      "peak_footprint_bytes_time_l": 71713608,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 278,
+      "deletions": 37,
+      "insertions": 51,
+      "wer": 4.116,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 52.9,
+      "latency_ms_p90": 87.0,
+      "latency_ms_mean": 61.8,
+      "rtf": 0.0095,
+      "prepare_seconds": 0.17,
+      "peak_footprint_bytes": 43500384,
+      "peak_footprint_bytes_time_l": 49234784,
+      "model_cache_bytes": 483256769,
+      "engine": "fluid-ParakeetTDTv3"
+     }
+    }
+   }
+  },
+  {
+   "id": "parakeet-ultra",
+   "name": "Parakeet Ultra",
+   "apps_label": "Presspeech (opt-in), VoiceInk",
+   "runtime": "FluidAudio 0.17.7, CoreML on the Apple Neural Engine (presspeech-bench --backend ultra, files checked against the app's pinned manifest)",
+   "presspeech": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "Presspeech",
+     "role": "opt-in",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/index.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    }
+   ],
+   "runs": {
+    "explicit": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 82,
+      "deletions": 13,
+      "insertions": 43,
+      "wer": 6.188,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 90.6,
+      "latency_ms_p90": 161.7,
+      "latency_ms_mean": 108.2,
+      "rtf": 0.0081,
+      "prepare_seconds": 22.2,
+      "peak_footprint_bytes": 716490096,
+      "peak_footprint_bytes_time_l": 723993968,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 52,
+      "deletions": 9,
+      "insertions": 27,
+      "wer": 3.451,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 74.0,
+      "latency_ms_p90": 142.1,
+      "latency_ms_mean": 89.7,
+      "rtf": 0.0074,
+      "prepare_seconds": 0.63,
+      "peak_footprint_bytes": 707151168,
+      "peak_footprint_bytes_time_l": 712721728,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 91,
+      "deletions": 20,
+      "insertions": 68,
+      "wer": 6.765,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 77.7,
+      "latency_ms_p90": 108.2,
+      "latency_ms_mean": 83.7,
+      "rtf": 0.0081,
+      "prepare_seconds": 0.63,
+      "peak_footprint_bytes": 697566504,
+      "peak_footprint_bytes_time_l": 700810536,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 47,
+      "deletions": 5,
+      "insertions": 36,
+      "wer": 3.54,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 83.4,
+      "latency_ms_p90": 144.7,
+      "latency_ms_mean": 94.5,
+      "rtf": 0.0064,
+      "prepare_seconds": 0.89,
+      "peak_footprint_bytes": 709952832,
+      "peak_footprint_bytes_time_l": 715015488,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 92,
+      "deletions": 10,
+      "insertions": 42,
+      "wer": 7.373,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 75.8,
+      "latency_ms_p90": 140.4,
+      "latency_ms_mean": 88.6,
+      "rtf": 0.0085,
+      "prepare_seconds": 0.54,
+      "peak_footprint_bytes": 695944512,
+      "peak_footprint_bytes_time_l": 704218432,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 41,
+      "deletions": 12,
+      "insertions": 4,
+      "wer": 3.409,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 205.7,
+      "latency_ms_p90": 325.7,
+      "latency_ms_mean": 250.2,
+      "rtf": 0.005,
+      "prepare_seconds": 0.88,
+      "peak_footprint_bytes": 725960024,
+      "peak_footprint_bytes_time_l": 737789272,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 133,
+      "deletions": 25,
+      "insertions": 15,
+      "wer": 1.713,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 56.7,
+      "latency_ms_p90": 122.5,
+      "latency_ms_mean": 67.2,
+      "rtf": 0.0091,
+      "prepare_seconds": 0.49,
+      "peak_footprint_bytes": 680314152,
+      "peak_footprint_bytes_time_l": 696436032,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 254,
+      "deletions": 36,
+      "insertions": 35,
+      "wer": 3.655,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 53.7,
+      "latency_ms_p90": 82.2,
+      "latency_ms_mean": 61.5,
+      "rtf": 0.0094,
+      "prepare_seconds": 0.67,
+      "peak_footprint_bytes": 680920360,
+      "peak_footprint_bytes_time_l": 683312424,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     }
+    },
+    "auto": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 82,
+      "deletions": 13,
+      "insertions": 43,
+      "wer": 6.188,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 81.1,
+      "latency_ms_p90": 146.0,
+      "latency_ms_mean": 96.8,
+      "rtf": 0.0072,
+      "prepare_seconds": 0.66,
+      "peak_footprint_bytes": 703530304,
+      "peak_footprint_bytes_time_l": 712705344,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 52,
+      "deletions": 9,
+      "insertions": 27,
+      "wer": 3.451,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 75.9,
+      "latency_ms_p90": 139.3,
+      "latency_ms_mean": 86.2,
+      "rtf": 0.0071,
+      "prepare_seconds": 0.63,
+      "peak_footprint_bytes": 703923496,
+      "peak_footprint_bytes_time_l": 710559016,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 83,
+      "deletions": 20,
+      "insertions": 68,
+      "wer": 6.463,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 75.3,
+      "latency_ms_p90": 131.1,
+      "latency_ms_mean": 86.7,
+      "rtf": 0.0084,
+      "prepare_seconds": 0.62,
+      "peak_footprint_bytes": 701547840,
+      "peak_footprint_bytes_time_l": 706872616,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 47,
+      "deletions": 5,
+      "insertions": 36,
+      "wer": 3.54,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 81.2,
+      "latency_ms_p90": 145.7,
+      "latency_ms_mean": 97.7,
+      "rtf": 0.0066,
+      "prepare_seconds": 0.53,
+      "peak_footprint_bytes": 700908864,
+      "peak_footprint_bytes_time_l": 707478848,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 92,
+      "deletions": 10,
+      "insertions": 42,
+      "wer": 7.373,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 76.1,
+      "latency_ms_p90": 112.9,
+      "latency_ms_mean": 85.8,
+      "rtf": 0.0083,
+      "prepare_seconds": 0.56,
+      "peak_footprint_bytes": 691586344,
+      "peak_footprint_bytes_time_l": 698205480,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 41,
+      "deletions": 12,
+      "insertions": 4,
+      "wer": 3.409,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 278.2,
+      "latency_ms_p90": 342.5,
+      "latency_ms_mean": 281.2,
+      "rtf": 0.0056,
+      "prepare_seconds": 0.72,
+      "peak_footprint_bytes": 723649880,
+      "peak_footprint_bytes_time_l": 736888152,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 133,
+      "deletions": 25,
+      "insertions": 15,
+      "wer": 1.713,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 54.5,
+      "latency_ms_p90": 109.6,
+      "latency_ms_mean": 65.3,
+      "rtf": 0.0088,
+      "prepare_seconds": 0.46,
+      "peak_footprint_bytes": 695256360,
+      "peak_footprint_bytes_time_l": 704775464,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 254,
+      "deletions": 36,
+      "insertions": 35,
+      "wer": 3.655,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 54.4,
+      "latency_ms_p90": 85.8,
+      "latency_ms_mean": 61.5,
+      "rtf": 0.0095,
+      "prepare_seconds": 0.64,
+      "peak_footprint_bytes": 676889896,
+      "peak_footprint_bytes_time_l": 680199464,
+      "model_cache_bytes": 632314500,
+      "engine": "fluid-ParakeetUltra"
+     }
+    }
+   }
+  },
+  {
+   "id": "whisper-large-v3-turbo",
+   "name": "Whisper large-v3-turbo",
+   "apps_label": "VoiceInk, Superwhisper, Handy, FluidVoice",
+   "runtime": "whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-large-v3-turbo.bin",
+   "model_file_bytes": 1624555275,
+   "offline": true,
+   "apps": [
+    {
+     "name": "VoiceInk",
+     "role": "option (whisper.cpp)",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Free-tier local Whisper",
+     "price": "Free tier",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp.",
+   "runs": {
+    "explicit": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 64,
+      "deletions": 11,
+      "insertions": 48,
+      "wer": 5.516,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 1367.2,
+      "latency_ms_p90": 1590.1,
+      "latency_ms_mean": 1431.9,
+      "rtf": 0.1069,
+      "prepare_seconds": 4.19,
+      "peak_footprint_bytes": 2036042104,
+      "peak_footprint_bytes_time_l": 2036140408,
+      "detected_languages": {
+       "de": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 57,
+      "deletions": 10,
+      "insertions": 30,
+      "wer": 3.804,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 1228.4,
+      "latency_ms_p90": 1396.8,
+      "latency_ms_mean": 1252.0,
+      "rtf": 0.1028,
+      "prepare_seconds": 3.57,
+      "peak_footprint_bytes": 2025638264,
+      "peak_footprint_bytes_time_l": 2025736568,
+      "detected_languages": {
+       "es": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 85,
+      "deletions": 23,
+      "insertions": 69,
+      "wer": 6.689,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 1229.1,
+      "latency_ms_p90": 1404.6,
+      "latency_ms_mean": 1249.9,
+      "rtf": 0.1218,
+      "prepare_seconds": 4.03,
+      "peak_footprint_bytes": 2028767608,
+      "peak_footprint_bytes_time_l": 2028865912,
+      "detected_languages": {
+       "fr": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 59,
+      "deletions": 4,
+      "insertions": 36,
+      "wer": 3.982,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 1265.0,
+      "latency_ms_p90": 1439.5,
+      "latency_ms_mean": 1316.0,
+      "rtf": 0.0888,
+      "prepare_seconds": 3.6,
+      "peak_footprint_bytes": 2028816784,
+      "peak_footprint_bytes_time_l": 2028931472,
+      "detected_languages": {
+       "it": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 82,
+      "deletions": 7,
+      "insertions": 47,
+      "wer": 6.964,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 1291.9,
+      "latency_ms_p90": 1487.3,
+      "latency_ms_mean": 1314.4,
+      "rtf": 0.1264,
+      "prepare_seconds": 3.41,
+      "peak_footprint_bytes": 2021738872,
+      "peak_footprint_bytes_time_l": 2021837176,
+      "detected_languages": {
+       "pl": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 35,
+      "deletions": 8,
+      "insertions": 1,
+      "wer": 2.632,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 3038.3,
+      "latency_ms_p90": 4175.8,
+      "latency_ms_mean": 3261.6,
+      "rtf": 0.065,
+      "prepare_seconds": 7.15,
+      "peak_footprint_bytes": 2039597504,
+      "peak_footprint_bytes_time_l": 2039712192,
+      "detected_languages": {
+       "en": 13
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 140,
+      "deletions": 26,
+      "insertions": 25,
+      "wer": 1.891,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 1098.2,
+      "latency_ms_p90": 1294.6,
+      "latency_ms_mean": 1131.4,
+      "rtf": 0.1532,
+      "prepare_seconds": 3.54,
+      "peak_footprint_bytes": 2036484448,
+      "peak_footprint_bytes_time_l": 2036599136,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 277,
+      "deletions": 42,
+      "insertions": 47,
+      "wer": 4.116,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 1086.9,
+      "latency_ms_p90": 1230.4,
+      "latency_ms_mean": 1111.6,
+      "rtf": 0.1708,
+      "prepare_seconds": 3.49,
+      "peak_footprint_bytes": 2028620152,
+      "peak_footprint_bytes_time_l": 2028718456,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     }
+    },
+    "auto": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 64,
+      "deletions": 11,
+      "insertions": 48,
+      "wer": 5.516,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 2190.3,
+      "latency_ms_p90": 2380.8,
+      "latency_ms_mean": 2232.7,
+      "rtf": 0.1667,
+      "prepare_seconds": 4.51,
+      "peak_footprint_bytes": 2034272632,
+      "peak_footprint_bytes_time_l": 2034370936,
+      "detected_languages": {
+       "de": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 57,
+      "deletions": 10,
+      "insertions": 30,
+      "wer": 3.804,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 2197.6,
+      "latency_ms_p90": 2335.5,
+      "latency_ms_mean": 2215.3,
+      "rtf": 0.1819,
+      "prepare_seconds": 4.35,
+      "peak_footprint_bytes": 2023934328,
+      "peak_footprint_bytes_time_l": 2024032632,
+      "detected_languages": {
+       "es": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 85,
+      "deletions": 23,
+      "insertions": 69,
+      "wer": 6.689,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 2188.1,
+      "latency_ms_p90": 2405.6,
+      "latency_ms_mean": 2221.0,
+      "rtf": 0.2164,
+      "prepare_seconds": 4.95,
+      "peak_footprint_bytes": 2027096440,
+      "peak_footprint_bytes_time_l": 2027194744,
+      "detected_languages": {
+       "fr": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 59,
+      "deletions": 4,
+      "insertions": 36,
+      "wer": 3.982,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 2223.5,
+      "latency_ms_p90": 2380.3,
+      "latency_ms_mean": 2270.9,
+      "rtf": 0.1533,
+      "prepare_seconds": 4.48,
+      "peak_footprint_bytes": 2035353976,
+      "peak_footprint_bytes_time_l": 2035452280,
+      "detected_languages": {
+       "it": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 84,
+      "deletions": 7,
+      "insertions": 50,
+      "wer": 7.22,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 2227.0,
+      "latency_ms_p90": 2406.4,
+      "latency_ms_mean": 2244.7,
+      "rtf": 0.2159,
+      "prepare_seconds": 4.33,
+      "peak_footprint_bytes": 2020575608,
+      "peak_footprint_bytes_time_l": 2020673912,
+      "detected_languages": {
+       "is": 1,
+       "pl": 99
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 35,
+      "deletions": 8,
+      "insertions": 1,
+      "wer": 2.632,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 3959.4,
+      "latency_ms_p90": 5122.2,
+      "latency_ms_mean": 4187.7,
+      "rtf": 0.0834,
+      "prepare_seconds": 7.53,
+      "peak_footprint_bytes": 2041481616,
+      "peak_footprint_bytes_time_l": 2041579920,
+      "detected_languages": {
+       "en": 13
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 140,
+      "deletions": 26,
+      "insertions": 25,
+      "wer": 1.891,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 2033.0,
+      "latency_ms_p90": 2204.0,
+      "latency_ms_mean": 2057.7,
+      "rtf": 0.2786,
+      "prepare_seconds": 4.53,
+      "peak_footprint_bytes": 2035304824,
+      "peak_footprint_bytes_time_l": 2035403128,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 277,
+      "deletions": 42,
+      "insertions": 47,
+      "wer": 4.116,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 1997.8,
+      "latency_ms_p90": 2147.0,
+      "latency_ms_mean": 2021.0,
+      "rtf": 0.3105,
+      "prepare_seconds": 4.38,
+      "peak_footprint_bytes": 2030373240,
+      "peak_footprint_bytes_time_l": 2030471544,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     }
+    }
+   }
+  },
+  {
+   "id": "whisper-small",
+   "name": "Whisper small",
+   "apps_label": "VoiceInk, Superwhisper, Handy, FluidVoice",
+   "runtime": "whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-small.bin",
+   "model_file_bytes": 487601967,
+   "offline": true,
+   "apps": [
+    {
+     "name": "VoiceInk",
+     "role": "option (whisper.cpp)",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Free-tier local Whisper",
+     "price": "Free tier",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp.",
+   "runs": {
+    "explicit": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 174,
+      "deletions": 25,
+      "insertions": 61,
+      "wer": 11.659,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 499.9,
+      "latency_ms_p90": 654.5,
+      "latency_ms_mean": 529.9,
+      "rtf": 0.0396,
+      "prepare_seconds": 1.71,
+      "peak_footprint_bytes": 917866056,
+      "peak_footprint_bytes_time_l": 917964360,
+      "detected_languages": {
+       "de": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 93,
+      "deletions": 16,
+      "insertions": 36,
+      "wer": 5.686,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 487.6,
+      "latency_ms_p90": 658.6,
+      "latency_ms_mean": 498.1,
+      "rtf": 0.0409,
+      "prepare_seconds": 1.17,
+      "peak_footprint_bytes": 891750008,
+      "peak_footprint_bytes_time_l": 894125688,
+      "detected_languages": {
+       "es": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 239,
+      "deletions": 38,
+      "insertions": 105,
+      "wer": 14.437,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 488.3,
+      "latency_ms_p90": 686.9,
+      "latency_ms_mean": 520.5,
+      "rtf": 0.0507,
+      "prepare_seconds": 1.82,
+      "peak_footprint_bytes": 894305888,
+      "peak_footprint_bytes_time_l": 894453344,
+      "detected_languages": {
+       "fr": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 144,
+      "deletions": 14,
+      "insertions": 45,
+      "wer": 8.166,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 524.3,
+      "latency_ms_p90": 697.1,
+      "latency_ms_mean": 553.8,
+      "rtf": 0.0374,
+      "prepare_seconds": 1.35,
+      "peak_footprint_bytes": 892814920,
+      "peak_footprint_bytes_time_l": 893158984,
+      "detected_languages": {
+       "it": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 238,
+      "deletions": 25,
+      "insertions": 67,
+      "wer": 16.897,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 549.7,
+      "latency_ms_p90": 753.5,
+      "latency_ms_mean": 567.5,
+      "rtf": 0.0546,
+      "prepare_seconds": 1.12,
+      "peak_footprint_bytes": 897959520,
+      "peak_footprint_bytes_time_l": 898074208,
+      "detected_languages": {
+       "pl": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 61,
+      "deletions": 11,
+      "insertions": 6,
+      "wer": 4.665,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 1814.2,
+      "latency_ms_p90": 2129.8,
+      "latency_ms_mean": 1828.9,
+      "rtf": 0.0364,
+      "prepare_seconds": 3.01,
+      "peak_footprint_bytes": 876365432,
+      "peak_footprint_bytes_time_l": 920143456,
+      "detected_languages": {
+       "en": 13
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 213,
+      "deletions": 38,
+      "insertions": 29,
+      "wer": 2.773,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 354.1,
+      "latency_ms_p90": 573.6,
+      "latency_ms_mean": 393.9,
+      "rtf": 0.0533,
+      "prepare_seconds": 1.12,
+      "peak_footprint_bytes": 893208136,
+      "peak_footprint_bytes_time_l": 895518280,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 491,
+      "deletions": 65,
+      "insertions": 85,
+      "wer": 7.209,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 341.5,
+      "latency_ms_p90": 522.8,
+      "latency_ms_mean": 375.9,
+      "rtf": 0.0577,
+      "prepare_seconds": 1.21,
+      "peak_footprint_bytes": 891881080,
+      "peak_footprint_bytes_time_l": 892012152,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     }
+    },
+    "auto": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 174,
+      "deletions": 25,
+      "insertions": 61,
+      "wer": 11.659,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 665.2,
+      "latency_ms_p90": 839.7,
+      "latency_ms_mean": 705.2,
+      "rtf": 0.0527,
+      "prepare_seconds": 1.56,
+      "peak_footprint_bytes": 890046072,
+      "peak_footprint_bytes_time_l": 894469752,
+      "detected_languages": {
+       "de": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 93,
+      "deletions": 16,
+      "insertions": 36,
+      "wer": 5.686,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 684.1,
+      "latency_ms_p90": 850.7,
+      "latency_ms_mean": 693.6,
+      "rtf": 0.057,
+      "prepare_seconds": 1.38,
+      "peak_footprint_bytes": 892257888,
+      "peak_footprint_bytes_time_l": 893781600,
+      "detected_languages": {
+       "es": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 239,
+      "deletions": 38,
+      "insertions": 105,
+      "wer": 14.437,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 766.2,
+      "latency_ms_p90": 1045.4,
+      "latency_ms_mean": 799.8,
+      "rtf": 0.0779,
+      "prepare_seconds": 2.01,
+      "peak_footprint_bytes": 895911520,
+      "peak_footprint_bytes_time_l": 895993440,
+      "detected_languages": {
+       "fr": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 144,
+      "deletions": 14,
+      "insertions": 45,
+      "wer": 8.166,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 802.4,
+      "latency_ms_p90": 1037.7,
+      "latency_ms_mean": 840.7,
+      "rtf": 0.0568,
+      "prepare_seconds": 1.63,
+      "peak_footprint_bytes": 892094072,
+      "peak_footprint_bytes_time_l": 892257912,
+      "detected_languages": {
+       "it": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 240,
+      "deletions": 25,
+      "insertions": 77,
+      "wer": 17.512,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 786.8,
+      "latency_ms_p90": 997.7,
+      "latency_ms_mean": 796.5,
+      "rtf": 0.0766,
+      "prepare_seconds": 1.37,
+      "peak_footprint_bytes": 894142000,
+      "peak_footprint_bytes_time_l": 896550448,
+      "detected_languages": {
+       "no": 1,
+       "pl": 99
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 61,
+      "deletions": 11,
+      "insertions": 6,
+      "wer": 4.665,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 2102.2,
+      "latency_ms_p90": 2511.2,
+      "latency_ms_mean": 2185.8,
+      "rtf": 0.0435,
+      "prepare_seconds": 3.36,
+      "peak_footprint_bytes": 871646816,
+      "peak_footprint_bytes_time_l": 920585848,
+      "detected_languages": {
+       "en": 13
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 213,
+      "deletions": 38,
+      "insertions": 29,
+      "wer": 2.773,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 581.8,
+      "latency_ms_p90": 820.9,
+      "latency_ms_mean": 627.0,
+      "rtf": 0.0849,
+      "prepare_seconds": 1.36,
+      "peak_footprint_bytes": 892749456,
+      "peak_footprint_bytes_time_l": 895174288,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 539,
+      "deletions": 61,
+      "insertions": 135,
+      "wer": 8.266,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 585.1,
+      "latency_ms_p90": 806.0,
+      "latency_ms_mean": 652.6,
+      "rtf": 0.1002,
+      "prepare_seconds": 1.46,
+      "peak_footprint_bytes": 892290704,
+      "peak_footprint_bytes_time_l": 892487312,
+      "detected_languages": {
+       "cy": 3,
+       "en": 488,
+       "fr": 1,
+       "la": 2,
+       "pl": 1,
+       "sv": 1,
+       "tl": 4
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     }
+    }
+   }
+  },
+  {
+   "id": "whisper-base",
+   "name": "Whisper base",
+   "apps_label": "VoiceInk, Superwhisper, Handy, FluidVoice",
+   "runtime": "whisper.cpp 1.9.5 (Homebrew), Metal GPU, flash attention, beam 5 / best-of 5, 4 threads (whisper-cli defaults); ggml-base.bin",
+   "model_file_bytes": 147951465,
+   "offline": true,
+   "apps": [
+    {
+     "name": "VoiceInk",
+     "role": "option (whisper.cpp)",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "Superwhisper",
+     "role": "Free-tier local Whisper",
+     "price": "Free tier",
+     "licence": "Proprietary",
+     "page": "compare/superwhisper.html"
+    },
+    {
+     "name": "Handy",
+     "role": "option",
+     "price": "Free",
+     "licence": "MIT",
+     "page": "compare/handy.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "Apps other than VoiceInk do not document which Whisper runtime they use; this row measures whisper.cpp.",
+   "runs": {
+    "explicit": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 341,
+      "deletions": 37,
+      "insertions": 95,
+      "wer": 21.211,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 225.4,
+      "latency_ms_p90": 322.4,
+      "latency_ms_mean": 241.9,
+      "rtf": 0.0181,
+      "prepare_seconds": 0.78,
+      "peak_footprint_bytes": 405144872,
+      "peak_footprint_bytes_time_l": 405243176,
+      "detected_languages": {
+       "de": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 197,
+      "deletions": 27,
+      "insertions": 47,
+      "wer": 10.627,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 215.4,
+      "latency_ms_p90": 310.7,
+      "latency_ms_mean": 230.7,
+      "rtf": 0.0189,
+      "prepare_seconds": 0.47,
+      "peak_footprint_bytes": 394446048,
+      "peak_footprint_bytes_time_l": 394544352,
+      "detected_languages": {
+       "es": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 490,
+      "deletions": 72,
+      "insertions": 184,
+      "wer": 28.193,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 222.5,
+      "latency_ms_p90": 327.7,
+      "latency_ms_mean": 237.7,
+      "rtf": 0.0232,
+      "prepare_seconds": 0.8,
+      "peak_footprint_bytes": 398771400,
+      "peak_footprint_bytes_time_l": 398869704,
+      "detected_languages": {
+       "fr": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 291,
+      "deletions": 52,
+      "insertions": 64,
+      "wer": 16.372,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 238.9,
+      "latency_ms_p90": 331.6,
+      "latency_ms_mean": 256.0,
+      "rtf": 0.0173,
+      "prepare_seconds": 0.52,
+      "peak_footprint_bytes": 396002528,
+      "peak_footprint_bytes_time_l": 400491744,
+      "detected_languages": {
+       "it": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 476,
+      "deletions": 53,
+      "insertions": 126,
+      "wer": 33.538,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 258.3,
+      "latency_ms_p90": 347.0,
+      "latency_ms_mean": 260.5,
+      "rtf": 0.0251,
+      "prepare_seconds": 0.43,
+      "peak_footprint_bytes": 395216120,
+      "peak_footprint_bytes_time_l": 395298040,
+      "detected_languages": {
+       "pl": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 86,
+      "deletions": 17,
+      "insertions": 16,
+      "wer": 7.117,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 840.0,
+      "latency_ms_p90": 1022.6,
+      "latency_ms_mean": 859.4,
+      "rtf": 0.0171,
+      "prepare_seconds": 1.34,
+      "peak_footprint_bytes": 425280784,
+      "peak_footprint_bytes_time_l": 425444624,
+      "detected_languages": {
+       "en": 13
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 330,
+      "deletions": 48,
+      "insertions": 59,
+      "wer": 4.328,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 151.3,
+      "latency_ms_p90": 264.0,
+      "latency_ms_mean": 171.8,
+      "rtf": 0.0233,
+      "prepare_seconds": 0.41,
+      "peak_footprint_bytes": 395298040,
+      "peak_footprint_bytes_time_l": 396854520,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 756,
+      "deletions": 91,
+      "insertions": 170,
+      "wer": 11.437,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 137.2,
+      "latency_ms_p90": 235.5,
+      "latency_ms_mean": 153.2,
+      "rtf": 0.0235,
+      "prepare_seconds": 0.47,
+      "peak_footprint_bytes": 395986144,
+      "peak_footprint_bytes_time_l": 396182752,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     }
+    },
+    "auto": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 341,
+      "deletions": 37,
+      "insertions": 95,
+      "wer": 21.211,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 293.2,
+      "latency_ms_p90": 376.8,
+      "latency_ms_mean": 299.6,
+      "rtf": 0.0224,
+      "prepare_seconds": 0.61,
+      "peak_footprint_bytes": 404833528,
+      "peak_footprint_bytes_time_l": 404915448,
+      "detected_languages": {
+       "de": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 197,
+      "deletions": 27,
+      "insertions": 47,
+      "wer": 10.627,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 275.0,
+      "latency_ms_p90": 365.9,
+      "latency_ms_mean": 289.1,
+      "rtf": 0.0237,
+      "prepare_seconds": 0.55,
+      "peak_footprint_bytes": 393905400,
+      "peak_footprint_bytes_time_l": 394118392,
+      "detected_languages": {
+       "es": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 490,
+      "deletions": 72,
+      "insertions": 184,
+      "wer": 28.193,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 296.9,
+      "latency_ms_p90": 398.7,
+      "latency_ms_mean": 309.0,
+      "rtf": 0.0301,
+      "prepare_seconds": 0.8,
+      "peak_footprint_bytes": 397804768,
+      "peak_footprint_bytes_time_l": 400966880,
+      "detected_languages": {
+       "fr": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 291,
+      "deletions": 52,
+      "insertions": 64,
+      "wer": 16.372,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 307.3,
+      "latency_ms_p90": 398.7,
+      "latency_ms_mean": 321.0,
+      "rtf": 0.0217,
+      "prepare_seconds": 0.6,
+      "peak_footprint_bytes": 395904272,
+      "peak_footprint_bytes_time_l": 396002576,
+      "detected_languages": {
+       "it": 100
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 478,
+      "deletions": 53,
+      "insertions": 137,
+      "wer": 34.204,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 312.8,
+      "latency_ms_p90": 414.1,
+      "latency_ms_mean": 322.1,
+      "rtf": 0.031,
+      "prepare_seconds": 0.47,
+      "peak_footprint_bytes": 398951696,
+      "peak_footprint_bytes_time_l": 402359568,
+      "detected_languages": {
+       "no": 1,
+       "pl": 99
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 86,
+      "deletions": 17,
+      "insertions": 16,
+      "wer": 7.117,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 889.1,
+      "latency_ms_p90": 1108.8,
+      "latency_ms_mean": 909.6,
+      "rtf": 0.0181,
+      "prepare_seconds": 1.42,
+      "peak_footprint_bytes": 427853072,
+      "peak_footprint_bytes_time_l": 427951376,
+      "detected_languages": {
+       "en": 13
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 330,
+      "deletions": 48,
+      "insertions": 59,
+      "wer": 4.328,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 207.2,
+      "latency_ms_p90": 318.6,
+      "latency_ms_mean": 227.8,
+      "rtf": 0.0308,
+      "prepare_seconds": 0.48,
+      "peak_footprint_bytes": 393250016,
+      "peak_footprint_bytes_time_l": 393348320,
+      "detected_languages": {
+       "en": 500
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 770,
+      "deletions": 89,
+      "insertions": 172,
+      "wer": 11.595,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 199.4,
+      "latency_ms_p90": 298.6,
+      "latency_ms_mean": 216.3,
+      "rtf": 0.0332,
+      "prepare_seconds": 0.51,
+      "peak_footprint_bytes": 394822904,
+      "peak_footprint_bytes_time_l": 394904824,
+      "detected_languages": {
+       "en": 491,
+       "fr": 1,
+       "la": 3,
+       "no": 1,
+       "pt": 1,
+       "ru": 1,
+       "tl": 2
+      },
+      "whisper_version": "1.9.5",
+      "system_info": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | SME = 1 | ACCELERATE = 1 | OPENMP = 1 | REPACK = 1 | ",
+      "threads": 4,
+      "beam_size": 5,
+      "best_of": 5,
+      "flash_attn": true,
+      "use_gpu": true
+     }
+    }
+   }
+  },
+  {
+   "id": "apple-dictation",
+   "name": "Apple DictationTranscriber",
+   "apps_label": "macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice",
+   "runtime": "macOS Speech framework: SpeechAnalyzer + DictationTranscriber, on-device, short-form content hint (presspeech-bench --backend apple)",
+   "model_download": "macOS system asset; size not reported",
+   "memory_out_of_process": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "macOS Speech framework",
+     "role": "built in",
+     "price": "Included with macOS",
+     "licence": "Proprietary",
+     "page": "compare/apple-dictation.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "\"Apple Speech\" option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "\"Apple Speech\" option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "The public API closest to macOS Dictation, not the Dictation feature itself. VoiceInk and FluidVoice do not say which Speech module their Apple Speech option uses.",
+   "runs": {
+    "explicit": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 227,
+      "deletions": 36,
+      "insertions": 77,
+      "wer": 15.247,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 261.2,
+      "latency_ms_p90": 482.5,
+      "latency_ms_mean": 314.5,
+      "rtf": 0.0235,
+      "prepare_seconds": 1.09,
+      "peak_footprint_bytes": 15663872,
+      "peak_footprint_bytes_time_l": 16876288,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "de-DE"
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 132,
+      "deletions": 23,
+      "insertions": 46,
+      "wer": 7.882,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 242.7,
+      "latency_ms_p90": 363.8,
+      "latency_ms_mean": 260.0,
+      "rtf": 0.0214,
+      "prepare_seconds": 26.53,
+      "peak_footprint_bytes": 14041880,
+      "peak_footprint_bytes_time_l": 15434520,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "es-MX"
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 293,
+      "deletions": 92,
+      "insertions": 100,
+      "wer": 18.33,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 280.9,
+      "latency_ms_p90": 481.6,
+      "latency_ms_mean": 308.3,
+      "rtf": 0.03,
+      "prepare_seconds": 20.67,
+      "peak_footprint_bytes": 11404032,
+      "peak_footprint_bytes_time_l": 12501760,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "fr-FR"
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 107,
+      "deletions": 18,
+      "insertions": 59,
+      "wer": 7.401,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 266.2,
+      "latency_ms_p90": 381.9,
+      "latency_ms_mean": 280.8,
+      "rtf": 0.019,
+      "prepare_seconds": 18.69,
+      "peak_footprint_bytes": 16630552,
+      "peak_footprint_bytes_time_l": 18727704,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "it-IT"
+     },
+     "fleurs-pl_pl": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 1953,
+      "substitutions": 140,
+      "deletions": 93,
+      "insertions": 53,
+      "wer": 14.644,
+      "audio_seconds": 1039.8,
+      "latency_ms_p50": 181.1,
+      "latency_ms_p90": 302.1,
+      "latency_ms_mean": 196.6,
+      "rtf": 0.0189,
+      "prepare_seconds": 0.56,
+      "peak_footprint_bytes": 9831168,
+      "peak_footprint_bytes_time_l": 10437376,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "pl-PL"
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 110,
+      "deletions": 27,
+      "insertions": 19,
+      "wer": 9.33,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 1269.4,
+      "latency_ms_p90": 1808.0,
+      "latency_ms_mean": 1414.3,
+      "rtf": 0.0282,
+      "prepare_seconds": 2.25,
+      "peak_footprint_bytes": 16646912,
+      "peak_footprint_bytes_time_l": 22004480,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "en-US"
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 572,
+      "deletions": 101,
+      "insertions": 81,
+      "wer": 7.467,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 160.3,
+      "latency_ms_p90": 364.1,
+      "latency_ms_mean": 205.4,
+      "rtf": 0.0278,
+      "prepare_seconds": 0.19,
+      "peak_footprint_bytes": 13042432,
+      "peak_footprint_bytes_time_l": 14484224,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "en-US"
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 1034,
+      "deletions": 215,
+      "insertions": 146,
+      "wer": 15.688,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 178.9,
+      "latency_ms_p90": 511.6,
+      "latency_ms_mean": 257.0,
+      "rtf": 0.0395,
+      "prepare_seconds": 0.28,
+      "peak_footprint_bytes": 12059416,
+      "peak_footprint_bytes_time_l": 13239064,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechAnalyzer",
+      "apple_locale": "en-US"
+     }
+    },
+    "auto": {
+     "fleurs-de_de": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-es_419": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-fr_fr": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-it_it": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-pl_pl": {
+      "unsupported": "no auto-detect mode"
+     },
+     "librispeech-dev-clean-long-form": {
+      "unsupported": "no auto-detect mode"
+     },
+     "librispeech-test-clean": {
+      "unsupported": "no auto-detect mode"
+     },
+     "librispeech-test-other": {
+      "unsupported": "no auto-detect mode"
+     }
+    }
+   }
+  },
+  {
+   "id": "apple-speech",
+   "name": "Apple SpeechTranscriber",
+   "apps_label": "macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice",
+   "runtime": "macOS Speech framework: SpeechAnalyzer + SpeechTranscriber (.transcription preset), on-device (presspeech-bench --backend apple-speech)",
+   "model_download": "macOS system asset; size not reported",
+   "memory_out_of_process": true,
+   "offline": true,
+   "apps": [
+    {
+     "name": "macOS Speech framework",
+     "role": "built in",
+     "price": "Included with macOS",
+     "licence": "Proprietary",
+     "page": "compare/apple-dictation.html"
+    },
+    {
+     "name": "VoiceInk",
+     "role": "\"Apple Speech\" option",
+     "price": "$25 one-time",
+     "licence": "GPL-3.0",
+     "page": "compare/voiceink.html"
+    },
+    {
+     "name": "FluidVoice",
+     "role": "\"Apple Speech\" option",
+     "price": "Free",
+     "licence": "GPL-3.0",
+     "page": "compare/fluidvoice.html"
+    }
+   ],
+   "apps_note": "VoiceInk and FluidVoice do not say which Speech module their Apple Speech option uses.",
+   "runs": {
+    "explicit": {
+     "fleurs-de_de": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2230,
+      "substitutions": 104,
+      "deletions": 12,
+      "insertions": 65,
+      "wer": 8.117,
+      "audio_seconds": 1339.08,
+      "latency_ms_p50": 171.4,
+      "latency_ms_p90": 260.6,
+      "latency_ms_mean": 183.7,
+      "rtf": 0.0137,
+      "prepare_seconds": 0.75,
+      "peak_footprint_bytes": 13239040,
+      "peak_footprint_bytes_time_l": 14566144,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechTranscriber",
+      "apple_locale": "de-DE"
+     },
+     "fleurs-es_419": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2550,
+      "substitutions": 75,
+      "deletions": 16,
+      "insertions": 38,
+      "wer": 5.059,
+      "audio_seconds": 1217.64,
+      "latency_ms_p50": 171.5,
+      "latency_ms_p90": 235.1,
+      "latency_ms_mean": 176.8,
+      "rtf": 0.0145,
+      "prepare_seconds": 9.14,
+      "peak_footprint_bytes": 12583680,
+      "peak_footprint_bytes_time_l": 13468416,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechTranscriber",
+      "apple_locale": "es-MX"
+     },
+     "fleurs-fr_fr": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2646,
+      "substitutions": 118,
+      "deletions": 35,
+      "insertions": 75,
+      "wer": 8.617,
+      "audio_seconds": 1026.54,
+      "latency_ms_p50": 155.5,
+      "latency_ms_p90": 216.2,
+      "latency_ms_mean": 166.1,
+      "rtf": 0.0162,
+      "prepare_seconds": 8.97,
+      "peak_footprint_bytes": 10388224,
+      "peak_footprint_bytes_time_l": 10928896,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechTranscriber",
+      "apple_locale": "fr-FR"
+     },
+     "fleurs-it_it": {
+      "clips": 100,
+      "failed_clips": 0,
+      "reference_words": 2486,
+      "substitutions": 82,
+      "deletions": 7,
+      "insertions": 54,
+      "wer": 5.752,
+      "audio_seconds": 1481.46,
+      "latency_ms_p50": 194.9,
+      "latency_ms_p90": 258.2,
+      "latency_ms_mean": 200.0,
+      "rtf": 0.0135,
+      "prepare_seconds": 8.79,
+      "peak_footprint_bytes": 12813056,
+      "peak_footprint_bytes_time_l": 17105664,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechTranscriber",
+      "apple_locale": "it-IT"
+     },
+     "fleurs-pl_pl": {
+      "unsupported": "locale pl-PL not supported"
+     },
+     "librispeech-dev-clean-long-form": {
+      "clips": 13,
+      "failed_clips": 0,
+      "reference_words": 1672,
+      "substitutions": 34,
+      "deletions": 9,
+      "insertions": 6,
+      "wer": 2.931,
+      "audio_seconds": 652.54,
+      "latency_ms_p50": 747.1,
+      "latency_ms_p90": 1122.2,
+      "latency_ms_mean": 821.3,
+      "rtf": 0.0164,
+      "prepare_seconds": 1.73,
+      "peak_footprint_bytes": 18170624,
+      "peak_footprint_bytes_time_l": 21545728,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechTranscriber",
+      "apple_locale": "en-US"
+     },
+     "librispeech-test-clean": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 10098,
+      "substitutions": 137,
+      "deletions": 25,
+      "insertions": 20,
+      "wer": 1.802,
+      "audio_seconds": 3693.285,
+      "latency_ms_p50": 116.8,
+      "latency_ms_p90": 288.1,
+      "latency_ms_mean": 158.3,
+      "rtf": 0.0214,
+      "prepare_seconds": 0.16,
+      "peak_footprint_bytes": 13107992,
+      "peak_footprint_bytes_time_l": 13927192,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechTranscriber",
+      "apple_locale": "en-US"
+     },
+     "librispeech-test-other": {
+      "clips": 500,
+      "failed_clips": 0,
+      "reference_words": 8892,
+      "substitutions": 319,
+      "deletions": 46,
+      "insertions": 57,
+      "wer": 4.746,
+      "audio_seconds": 3254.83,
+      "latency_ms_p50": 112.1,
+      "latency_ms_p90": 263.6,
+      "latency_ms_mean": 143.8,
+      "rtf": 0.0221,
+      "prepare_seconds": 0.24,
+      "peak_footprint_bytes": 11518744,
+      "peak_footprint_bytes_time_l": 13779736,
+      "model_cache_bytes": 0,
+      "engine": "apple-SpeechTranscriber",
+      "apple_locale": "en-US"
+     }
+    },
+    "auto": {
+     "fleurs-de_de": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-es_419": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-fr_fr": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-it_it": {
+      "unsupported": "no auto-detect mode"
+     },
+     "fleurs-pl_pl": {
+      "unsupported": "no auto-detect mode"
+     },
+     "librispeech-dev-clean-long-form": {
+      "unsupported": "no auto-detect mode"
+     },
+     "librispeech-test-clean": {
+      "unsupported": "no auto-detect mode"
+     },
+     "librispeech-test-other": {
+      "unsupported": "no auto-detect mode"
+     }
+    }
+   }
+  },
+  {
+   "id": "wispr-flow",
+   "name": "Wispr Flow (cloud)",
+   "apps_label": "Wispr Flow",
+   "measured": false,
+   "not_measured_reason": "cloud, not measured",
+   "offline": false,
+   "apps": [
+    {
+     "name": "Wispr Flow",
+     "role": "only engine",
+     "price": "Free 2,000 words/week; Pro $15/month",
+     "licence": "Proprietary",
+     "page": "compare/wispr-flow.html"
+    }
+   ]
+  }
+ ]
+}
