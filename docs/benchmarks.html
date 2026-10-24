@@ -45,8 +45,255 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Benchmarks</span>
         <h1>How fast is Presspeech?</h1>
-        <p>Presspeech keeps its latency claims tied to a reproducible benchmark in <code>experiments/swift-bench/</code>. The engine leaderboard compares speech engines on public test sets; the latency sections after it report p50 across five trials per backend, first inference excluded.</p>
+        <p>Presspeech keeps its latency claims tied to a reproducible benchmark in <code>experiments/swift-bench/</code>. Numbers below are p50 across five trials per backend, first inference excluded.</p>
       </div>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Setup</span>
+          <h2>Environment</h2>
+          <div class="facts">
+            <div class="fact"><strong>Machine</strong><span>Mac mini M4, 10 cores, 16 GB.</span></div>
+            <div class="fact"><strong>OS and toolchain</strong><span>macOS 26.4.1, Xcode/Swift 6.3.</span></div>
+            <div class="fact"><strong>Trials</strong><span>Five per backend per clip. First inference after model load excluded from p50.</span></div>
+            <div class="fact"><strong>Audio</strong><span>Generated 16 kHz mono Float32 WAV clips, all tested against the same backends.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">p50 latency</span>
+          <h2>Results</h2>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-1">
+            <table>
+              <caption id="table-caption-1">Measured transcription latency by audio clip</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Clip</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">FluidAudio on ANE</th>
+                  <th scope="col">Prior GPU path</th>
+                  <th scope="col">Speedup</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row"><code>short-clean</code></th>
+                  <td>2.50 s</td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar"><span style="width:30.7%"></span></span>
+                      <strong>92.4 ms</strong>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar bar--muted"><span style="width:48.3%"></span></span>
+                      <span>145.4 ms</span>
+                    </div>
+                  </td>
+                  <td>1.57&times;</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>medium-clean</code></th>
+                  <td>3.99 s</td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar"><span style="width:31.9%"></span></span>
+                      <strong>96.1 ms</strong>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar bar--muted"><span style="width:58.6%"></span></span>
+                      <span>176.3 ms</span>
+                    </div>
+                  </td>
+                  <td>1.83&times;</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>disfluent</code></th>
+                  <td>5.31 s</td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar"><span style="width:31.3%"></span></span>
+                      <strong>94.1 ms</strong>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar bar--muted"><span style="width:61.8%"></span></span>
+                      <span>185.9 ms</span>
+                    </div>
+                  </td>
+                  <td>1.97&times;</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>longer-technical</code></th>
+                  <td>9.49 s</td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar"><span style="width:50.6%"></span></span>
+                      <strong>152.4 ms</strong>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="bar-cell">
+                      <span class="bar bar--muted"><span style="width:100%"></span></span>
+                      <span>300.9 ms</span>
+                    </div>
+                  </td>
+                  <td>1.97&times;</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Machine-readable results: <a href="benchmarks/results.json">benchmarks/results.json</a>. Reproduction docs: <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench">experiments/swift-bench</a>.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Candidate models</span>
+          <h2>Candidate model evaluation</h2>
+          <div class="grid">
+            <article class="card">
+              <h3>Tail-word retention</h3>
+              <p>The release suite records production v3 on synthetic short-clip cuts with 80 ms and 400 ms capture-grace bounds. This is a report-only diagnostic, not a quality pass or a simulation of live RMS end-of-speech detection. The separate Unified padding gate remains opt-in candidate evidence.</p>
+            </article>
+            <article class="card">
+              <h3>Private corpus</h3>
+              <p>For candidate-model decisions, maintainers can run Unified, the linear-int8 v3 encoder, and current Nemotron candidates over private real-dictation clips. Reports keep transcript text and filenames redacted by default while showing WER, final-word failures, and latency.</p>
+            </article>
+            <article class="card">
+              <h3>Release gate</h3>
+              <p><code>run-release-asr-checks.sh</code> requires private real-dictation clips, five hand-audited non-speech controls with no text in any measured trial, the benchmark and app to pin the exact same FluidAudio revision, and validated English and German multi-window corpora. It gates production v3 long-form results with conservative corpus WER and consecutive-deletion limits; private short-dictation WER remains for maintainer review, not an absolute pass threshold. It also reports a same-pin production-v3 versus explicit no-mel comparison as candidate-only evidence. That comparison does not change runtime selection or the release verdict. An explicit candidate-dependency mode can compare unreleased APIs, but cannot produce a production release-pass verdict.</p>
+            </article>
+          </div>
+          <p>Private dictation fixtures stay on the evaluator's computer; a lightweight run may explicitly omit them but cannot report a production release pass. This matters because public read-speech quality does not establish spontaneous-dictation quality: a multilingual conversational-speech study found substantial performance drops relative to standard read-speech benchmarks (<a href="https://arxiv.org/abs/2409.12042">Maheshwari et al., 2024</a>).</p>
+          <p>The public-fixture fetcher can also import a deterministic row range from a pinned Google FLEURS language split. This gives encoder candidates reproducible multilingual and cross-script coverage; private human dictation is required separately for the release gate.</p>
+          <div class="note" id="language-coverage">
+            <p><strong>Language coverage is not a quality guarantee.</strong> NVIDIA lists 25 supported languages, but benchmark accuracy varies by language and speech variant. In FluidAudio's published Parakeet TDT v3 CoreML FLEURS results (24 evaluated languages, M4 Pro), WER ranges from 4.0% for Italian to 36.9% for Greek; Danish is 20.2% and Slovenian 27.4%. These are upstream results, not Presspeech measurements, and the <a href="https://huggingface.co/datasets/google/fleurs/blob/main/README.md">read-speech-focused corpus</a>, sample counts, runtime and hardware do not establish accuracy for short, spontaneous dictation. NVIDIA also notes that its European Portuguese training data differs from Brazilian Portuguese used in most evaluation benchmarks. Presspeech's result table above is English-only; use reproducible per-language fixtures and human dictation before making multilingual quality claims. Sources: <a href="https://github.com/FluidInference/FluidAudio/blob/main/Documentation/Benchmarks.md">FluidAudio FLEURS benchmark</a> and the <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3#automatic-speech-recognition-asr-performance">NVIDIA model card and evaluation notes</a>.</p>
+            <p>A recent upstream <a href="https://github.com/FluidInference/FluidAudio/issues/842">report on conversational Latin-American Spanish</a> was corrected by its author: the mixed Spanish/English output was not translation or a CoreML-only defect; the same model behaved worse in a full-precision upstream run. The author attributed it to Parakeet v3's behavior on spontaneous speech and English prior, and the issue was closed as not planned. This is a single upstream report on FluidAudio v0.15.5, not a Presspeech reproduction or evidence about the current v0.15.6 pin. NVIDIA's model card describes automatic language detection; Presspeech's selected language is documented in code as a decoder script-filter hint, not a language-forcing mechanism. To characterize this risk, use the <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench/public-audio#spanish-language-behavior-probe">same-input Spanish probe</a> on the production pin, and keep its FLEURS read-speech result distinct from local spontaneous dictation. Both remain evaluation evidence, not a quality claim or release pass.</p>
+          </div>
+          <p><strong>Evidence scope:</strong> the public comparison below ran on FluidAudio v0.15.5 (<code>19600a4</code>). The app pins v0.15.6 (<code>4dbf4f9</code>), so the table supports retaining Parakeet v3 over the tested Nemotron candidates; it does not validate the app's pinned inference-library revision for release.</p>
+          <p>Broader evidence also argues against extrapolating from this clean read-speech sample: NVIDIA's <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">model card</a> reports 1.93% WER on LibriSpeech test-clean, versus 11.31% on AMI and 11.42% on Earnings-22 (different corpora, not a Presspeech head-to-head). ASR evaluation research likewise finds multi-benchmark averages more informative about noisy real-world performance than a single corpus. Keep multi-window and human-dictation checks in the product gate; these outside results do not establish a Presspeech quality score.</p>
+          <p>Upstream FluidAudio v0.15.7 changed Parakeet v3's default long-form chunking policy and added final-window re-decode/seam fixes; v0.15.8 added fresh per-window decoder state, blank-window recovery, and text-based seam reconciliation (<a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.7">v0.15.7 notes</a>, <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.8">v0.15.8 notes</a>). As checked on 2026-09-24, upstream's latest release is v0.17.1 (<a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.17.1">release notes</a>), a CocoaPods podspec metadata fix with no Swift Package Manager code change from <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.17.0">v0.17.0</a>. That code includes an ASR optimization that bulk-resets and copies <code>MLMultiArray</code> storage. The upstream PR reports warm median inference on an 11-second clip falling from 71.1 ms to 48.3 ms with identical transcripts, on an M3 Pro and its Parakeet v3 Orukeet bundle (<a href="https://github.com/FluidInference/FluidAudio/pull/941">PR #941 and measurements</a>). This is a candidate signal, not a Presspeech result: the app still pins v0.15.6 and has no same-input v0.17.0 quality or latency measurement. A separate <a href="https://github.com/FluidInference/FluidAudio/issues/825">German long-form report</a> on v0.15.5 exposed token-order corruption with mel-context chunking; upstream <a href="https://github.com/FluidInference/FluidAudio/pull/830">PR #830</a> fixed that specific merge-order defect, and the <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.6">v0.15.6 release notes</a> show it is already in Presspeech's current pin. The PR notes that first-chunk mel-context degradation is separate, so the fix does not establish that all multilingual seams are safe. Presspeech still explicitly uses its reviewed mel-context policy.</p>
+          <p>A separate upstream <a href="https://github.com/FluidInference/FluidAudio/issues/760">Ukrainian right-context repro</a> isolated deterministic single-window word corruption to the shipped v3 CoreML encoder's 6-bit-LUT weights. FluidAudio's <a href="https://github.com/FluidInference/FluidAudio/pull/872">opt-in linear-int8 Encoder_v2</a> decoded all three reported cuts correctly in its controlled swap, but is larger (568 MB vs 425 MB) and still needs broad WER and Apple Neural Engine latency evaluation. Presspeech pins the original encoder today; its benchmark has a candidate-only comparison path, but no Presspeech result establishes a quality or latency gain. Evaluate the same Ukrainian FLEURS fixtures and human-reviewed local dictation, plus cache/memory and ANE latency, before considering promotion. This upstream case motivates testing; it is not a Presspeech reproduction or evidence to change production.</p>
+          <p>The required Presspeech multi-window release corpus is English LibriSpeech with an English hint; it cannot validate the German failure class or upstream fix. The benchmark guide documents a pinned FLEURS German long-form probe. For an SDK update, save v0.15.6 baselines on both the required English corpus and the same composed German corpus, then compare v0.17.0 using <code>run-release-asr-checks.sh --sdk-upgrade-only --allow-candidate-dependency</code>, moving only the benchmark pin. Compare explicit production-config v3 against those baselines; the candidate SDK-default/no-mel path is also evaluated on German with an explicit <code>de</code> hint, alongside its English long-form and private/public checks. Match fixture digests, trial counts, and hints. Upstream speed figures and fixes motivate evaluation but do not establish a Presspeech quality or latency gain; candidate results are not a production release pass.</p>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-2">
+            <table>
+              <caption id="table-caption-2">FluidAudio v0.15.5 public accuracy and latency recheck by speech-recognition backend</caption>
+              <thead>
+                <tr>
+                  <th scope="col">2026-07-22 v0.15.5 backend</th>
+                  <th scope="col">Avg WER</th>
+                  <th scope="col">Worst WER</th>
+                  <th scope="col">Final-word failures</th>
+                  <th scope="col">Avg p50</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row"><code>v3</code></th>
+                  <td>1.73%</td>
+                  <td>14.0%</td>
+                  <td>1</td>
+                  <td>85.0 ms</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>nemotron-en</code></th>
+                  <td>4.32%</td>
+                  <td>40.0%</td>
+                  <td>1</td>
+                  <td>679.4 ms</td>
+                </tr>
+                <tr>
+                  <th scope="row"><code>nemotron-multilingual</code></th>
+                  <td>6.22%</td>
+                  <td>40.0%</td>
+                  <td>2</td>
+                  <td>123.2 ms</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>On 25 LibriSpeech dev-clean clips, repaired Nemotron English and Nemotron 3.5 multilingual both stayed behind Parakeet TDT v3. Multilingual is much faster than the older English path, but its accuracy and final-word retention are worse, so v3 remains the production model.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Vocabulary research</span>
+          <h2>Why decoder vocabulary assistance is not in the app</h2>
+          <p>A <a href="https://github.com/rcourtman/presspeech/issues/21">daily Polish user asked for recognition-time vocabulary assistance</a> because post-transcription dictionary rules require separate entries for inflected names. The need is real, but the current FluidAudio mechanism is a second CTC scoring pass with a precision/recall tradeoff, not a morphological system: aliases can help match variants, but an accepted alias is replaced with one configured canonical form.</p>
+          <div class="grid">
+            <article class="card">
+              <h3>Known risk</h3>
+              <p>FluidAudio documents that short or acoustically similar terms can replace ordinary words that were never spoken. Its conservative controls reduce those false replacements but can also lose genuine vocabulary recall.</p>
+            </article>
+            <article class="card">
+              <h3>Presspeech gate</h3>
+              <p><code>run-vocabulary-bias-regression.sh</code> compares production v3 with four direct-v3 policies and four sliding-window paths over repeated target clips and same-language negative controls. A candidate cannot pass by improving aggregate recall while making even one compared clip worse.</p>
+            </article>
+            <article class="card">
+              <h3>Current status</h3>
+              <p>No vocabulary policy has cleared the product-candidate gate, so Presspeech still uses its deterministic Dictionary &amp; Shortcuts pass. The corrected full-audio evidence rules out enabling the tested standard policy, not just enabling it by default.</p>
+            </article>
+          </div>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-3">
+            <table>
+              <caption id="table-caption-3">Corrected Polish vocabulary experiments against the production dependency</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Baseline</th>
+                  <th scope="col">Vocabulary result</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Do five supplied lemmas recover withheld inflected forms?</th>
+                  <td>14/15 forms; 6.12% WER on 60 negative controls</td>
+                  <td>0/15 forms; 37.10–37.62% control WER; about 2.54× latency</td>
+                  <td>Failed the held-out-inflection test</td>
+                </tr>
+                <tr>
+                  <th scope="row">Do 20 explicitly supplied surface forms help?</th>
+                  <td>41/67 target hits; 10.50% target WER</td>
+                  <td>66/67 hits; 8.34% aggregate WER, but seven recordings regressed, unexpected terms appeared, and latency was 2.65–2.67×</td>
+                  <td>Useful recall signal, but failed the per-clip safety gate</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>These are bounded natural read-speech experiments, not a universal language claim. They show that this mechanism is neither morphological generalisation nor a safe product candidate under the current evidence. Read the <a href="https://github.com/rcourtman/presspeech/issues/21#issuecomment-5777963850">held-out-form report</a> and <a href="https://github.com/rcourtman/presspeech/issues/21#issuecomment-5778506977">complete-audio supplied-form replay</a> for cohort limits and measurement details.</p>
+          <p>People evaluating a materially different policy can still help without publishing private speech. Follow the <a href="https://github.com/rcourtman/presspeech/blob/main/CONTRIBUTING.md#suggesting-features">privacy-redacted contribution workflow</a> and attach only the aggregate report to <a href="https://github.com/rcourtman/presspeech/issues/21">issue #21</a>. The local fixtures, transcripts, vocabulary terms, and paths stay on the contributor's Mac. Technical background: <a href="https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Documentation/ASR/CustomVocabulary.md">FluidAudio custom-vocabulary documentation at Presspeech's pinned revision</a>.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <span class="section-eyebrow">Reading the numbers</span>
+          <h2>Interpretation</h2>
+          <div class="grid">
+            <article class="card">
+              <h3>Latency</h3>
+              <p>The ANE path is consistently faster than the prior GPU path on these clips, with p50 results around 92-152 ms.</p>
+            </article>
+            <article class="card">
+              <h3>Accuracy</h3>
+              <p>Both backends produced essentially identical transcripts on the synthetic test audio, including the same TTS artifacts.</p>
+            </article>
+            <article class="card">
+              <h3>Power</h3>
+              <p>The benchmark measures compute latency, not energy. Power measurement remains a future bench improvement.</p>
+            </article>
+          </div>
+        </div>
+      </section>
 
       <!-- engine-leaderboard:start -->
       <section id="engine-leaderboard">
@@ -568,253 +815,6 @@
         </div>
       </section>
       <!-- engine-leaderboard:end -->
-
-      <section>
-        <div class="wrap">
-          <span class="section-eyebrow">Setup</span>
-          <h2>Environment</h2>
-          <div class="facts">
-            <div class="fact"><strong>Machine</strong><span>Mac mini M4, 10 cores, 16 GB.</span></div>
-            <div class="fact"><strong>OS and toolchain</strong><span>macOS 26.4.1, Xcode/Swift 6.3.</span></div>
-            <div class="fact"><strong>Trials</strong><span>Five per backend per clip. First inference after model load excluded from p50.</span></div>
-            <div class="fact"><strong>Audio</strong><span>Generated 16 kHz mono Float32 WAV clips, all tested against the same backends.</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div class="wrap">
-          <span class="section-eyebrow">p50 latency</span>
-          <h2>Results</h2>
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-1">
-            <table>
-              <caption id="table-caption-1">Measured transcription latency by audio clip</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Clip</th>
-                  <th scope="col">Duration</th>
-                  <th scope="col">FluidAudio on ANE</th>
-                  <th scope="col">Prior GPU path</th>
-                  <th scope="col">Speedup</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th scope="row"><code>short-clean</code></th>
-                  <td>2.50 s</td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar"><span style="width:30.7%"></span></span>
-                      <strong>92.4 ms</strong>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar bar--muted"><span style="width:48.3%"></span></span>
-                      <span>145.4 ms</span>
-                    </div>
-                  </td>
-                  <td>1.57&times;</td>
-                </tr>
-                <tr>
-                  <th scope="row"><code>medium-clean</code></th>
-                  <td>3.99 s</td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar"><span style="width:31.9%"></span></span>
-                      <strong>96.1 ms</strong>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar bar--muted"><span style="width:58.6%"></span></span>
-                      <span>176.3 ms</span>
-                    </div>
-                  </td>
-                  <td>1.83&times;</td>
-                </tr>
-                <tr>
-                  <th scope="row"><code>disfluent</code></th>
-                  <td>5.31 s</td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar"><span style="width:31.3%"></span></span>
-                      <strong>94.1 ms</strong>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar bar--muted"><span style="width:61.8%"></span></span>
-                      <span>185.9 ms</span>
-                    </div>
-                  </td>
-                  <td>1.97&times;</td>
-                </tr>
-                <tr>
-                  <th scope="row"><code>longer-technical</code></th>
-                  <td>9.49 s</td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar"><span style="width:50.6%"></span></span>
-                      <strong>152.4 ms</strong>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="bar-cell">
-                      <span class="bar bar--muted"><span style="width:100%"></span></span>
-                      <span>300.9 ms</span>
-                    </div>
-                  </td>
-                  <td>1.97&times;</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p>Machine-readable results: <a href="benchmarks/results.json">benchmarks/results.json</a>. Reproduction docs: <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench">experiments/swift-bench</a>.</p>
-        </div>
-      </section>
-
-      <section>
-        <div class="wrap">
-          <span class="section-eyebrow">Candidate models</span>
-          <h2>Candidate model evaluation</h2>
-          <div class="grid">
-            <article class="card">
-              <h3>Tail-word retention</h3>
-              <p>The release suite records production v3 on synthetic short-clip cuts with 80 ms and 400 ms capture-grace bounds. This is a report-only diagnostic, not a quality pass or a simulation of live RMS end-of-speech detection. The separate Unified padding gate remains opt-in candidate evidence.</p>
-            </article>
-            <article class="card">
-              <h3>Private corpus</h3>
-              <p>For candidate-model decisions, maintainers can run Unified, the linear-int8 v3 encoder, and current Nemotron candidates over private real-dictation clips. Reports keep transcript text and filenames redacted by default while showing WER, final-word failures, and latency.</p>
-            </article>
-            <article class="card">
-              <h3>Release gate</h3>
-              <p><code>run-release-asr-checks.sh</code> requires private real-dictation clips, five hand-audited non-speech controls with no text in any measured trial, the benchmark and app to pin the exact same FluidAudio revision, and validated English and German multi-window corpora. It gates production v3 long-form results with conservative corpus WER and consecutive-deletion limits; private short-dictation WER remains for maintainer review, not an absolute pass threshold. It also reports a same-pin production-v3 versus explicit no-mel comparison as candidate-only evidence. That comparison does not change runtime selection or the release verdict. An explicit candidate-dependency mode can compare unreleased APIs, but cannot produce a production release-pass verdict.</p>
-            </article>
-          </div>
-          <p>Private dictation fixtures stay on the evaluator's computer; a lightweight run may explicitly omit them but cannot report a production release pass. This matters because public read-speech quality does not establish spontaneous-dictation quality: a multilingual conversational-speech study found substantial performance drops relative to standard read-speech benchmarks (<a href="https://arxiv.org/abs/2409.12042">Maheshwari et al., 2024</a>).</p>
-          <p>The public-fixture fetcher can also import a deterministic row range from a pinned Google FLEURS language split. This gives encoder candidates reproducible multilingual and cross-script coverage; private human dictation is required separately for the release gate.</p>
-          <div class="note" id="language-coverage">
-            <p><strong>Language coverage is not a quality guarantee.</strong> NVIDIA lists 25 supported languages, but benchmark accuracy varies by language and speech variant. In FluidAudio's published Parakeet TDT v3 CoreML FLEURS results (24 evaluated languages, M4 Pro), WER ranges from 4.0% for Italian to 36.9% for Greek; Danish is 20.2% and Slovenian 27.4%. These are upstream results, not Presspeech measurements, and the <a href="https://huggingface.co/datasets/google/fleurs/blob/main/README.md">read-speech-focused corpus</a>, sample counts, runtime and hardware do not establish accuracy for short, spontaneous dictation. NVIDIA also notes that its European Portuguese training data differs from Brazilian Portuguese used in most evaluation benchmarks. Presspeech's result table above is English-only; use reproducible per-language fixtures and human dictation before making multilingual quality claims. Sources: <a href="https://github.com/FluidInference/FluidAudio/blob/main/Documentation/Benchmarks.md">FluidAudio FLEURS benchmark</a> and the <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3#automatic-speech-recognition-asr-performance">NVIDIA model card and evaluation notes</a>.</p>
-            <p>A recent upstream <a href="https://github.com/FluidInference/FluidAudio/issues/842">report on conversational Latin-American Spanish</a> was corrected by its author: the mixed Spanish/English output was not translation or a CoreML-only defect; the same model behaved worse in a full-precision upstream run. The author attributed it to Parakeet v3's behavior on spontaneous speech and English prior, and the issue was closed as not planned. This is a single upstream report on FluidAudio v0.15.5, not a Presspeech reproduction or evidence about the current v0.15.6 pin. NVIDIA's model card describes automatic language detection; Presspeech's selected language is documented in code as a decoder script-filter hint, not a language-forcing mechanism. To characterize this risk, use the <a href="https://github.com/rcourtman/presspeech/tree/main/experiments/swift-bench/public-audio#spanish-language-behavior-probe">same-input Spanish probe</a> on the production pin, and keep its FLEURS read-speech result distinct from local spontaneous dictation. Both remain evaluation evidence, not a quality claim or release pass.</p>
-          </div>
-          <p><strong>Evidence scope:</strong> the public comparison below ran on FluidAudio v0.15.5 (<code>19600a4</code>). The app pins v0.15.6 (<code>4dbf4f9</code>), so the table supports retaining Parakeet v3 over the tested Nemotron candidates; it does not validate the app's pinned inference-library revision for release.</p>
-          <p>Broader evidence also argues against extrapolating from this clean read-speech sample: NVIDIA's <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">model card</a> reports 1.93% WER on LibriSpeech test-clean, versus 11.31% on AMI and 11.42% on Earnings-22 (different corpora, not a Presspeech head-to-head). ASR evaluation research likewise finds multi-benchmark averages more informative about noisy real-world performance than a single corpus. Keep multi-window and human-dictation checks in the product gate; these outside results do not establish a Presspeech quality score.</p>
-          <p>Upstream FluidAudio v0.15.7 changed Parakeet v3's default long-form chunking policy and added final-window re-decode/seam fixes; v0.15.8 added fresh per-window decoder state, blank-window recovery, and text-based seam reconciliation (<a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.7">v0.15.7 notes</a>, <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.8">v0.15.8 notes</a>). As checked on 2026-09-24, upstream's latest release is v0.17.1 (<a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.17.1">release notes</a>), a CocoaPods podspec metadata fix with no Swift Package Manager code change from <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.17.0">v0.17.0</a>. That code includes an ASR optimization that bulk-resets and copies <code>MLMultiArray</code> storage. The upstream PR reports warm median inference on an 11-second clip falling from 71.1 ms to 48.3 ms with identical transcripts, on an M3 Pro and its Parakeet v3 Orukeet bundle (<a href="https://github.com/FluidInference/FluidAudio/pull/941">PR #941 and measurements</a>). This is a candidate signal, not a Presspeech result: the app still pins v0.15.6 and has no same-input v0.17.0 quality or latency measurement. A separate <a href="https://github.com/FluidInference/FluidAudio/issues/825">German long-form report</a> on v0.15.5 exposed token-order corruption with mel-context chunking; upstream <a href="https://github.com/FluidInference/FluidAudio/pull/830">PR #830</a> fixed that specific merge-order defect, and the <a href="https://github.com/FluidInference/FluidAudio/releases/tag/v0.15.6">v0.15.6 release notes</a> show it is already in Presspeech's current pin. The PR notes that first-chunk mel-context degradation is separate, so the fix does not establish that all multilingual seams are safe. Presspeech still explicitly uses its reviewed mel-context policy.</p>
-          <p>A separate upstream <a href="https://github.com/FluidInference/FluidAudio/issues/760">Ukrainian right-context repro</a> isolated deterministic single-window word corruption to the shipped v3 CoreML encoder's 6-bit-LUT weights. FluidAudio's <a href="https://github.com/FluidInference/FluidAudio/pull/872">opt-in linear-int8 Encoder_v2</a> decoded all three reported cuts correctly in its controlled swap, but is larger (568 MB vs 425 MB) and still needs broad WER and Apple Neural Engine latency evaluation. Presspeech pins the original encoder today; its benchmark has a candidate-only comparison path, but no Presspeech result establishes a quality or latency gain. Evaluate the same Ukrainian FLEURS fixtures and human-reviewed local dictation, plus cache/memory and ANE latency, before considering promotion. This upstream case motivates testing; it is not a Presspeech reproduction or evidence to change production.</p>
-          <p>The required Presspeech multi-window release corpus is English LibriSpeech with an English hint; it cannot validate the German failure class or upstream fix. The benchmark guide documents a pinned FLEURS German long-form probe. For an SDK update, save v0.15.6 baselines on both the required English corpus and the same composed German corpus, then compare v0.17.0 using <code>run-release-asr-checks.sh --sdk-upgrade-only --allow-candidate-dependency</code>, moving only the benchmark pin. Compare explicit production-config v3 against those baselines; the candidate SDK-default/no-mel path is also evaluated on German with an explicit <code>de</code> hint, alongside its English long-form and private/public checks. Match fixture digests, trial counts, and hints. Upstream speed figures and fixes motivate evaluation but do not establish a Presspeech quality or latency gain; candidate results are not a production release pass.</p>
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-2">
-            <table>
-              <caption id="table-caption-2">FluidAudio v0.15.5 public accuracy and latency recheck by speech-recognition backend</caption>
-              <thead>
-                <tr>
-                  <th scope="col">2026-07-22 v0.15.5 backend</th>
-                  <th scope="col">Avg WER</th>
-                  <th scope="col">Worst WER</th>
-                  <th scope="col">Final-word failures</th>
-                  <th scope="col">Avg p50</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th scope="row"><code>v3</code></th>
-                  <td>1.73%</td>
-                  <td>14.0%</td>
-                  <td>1</td>
-                  <td>85.0 ms</td>
-                </tr>
-                <tr>
-                  <th scope="row"><code>nemotron-en</code></th>
-                  <td>4.32%</td>
-                  <td>40.0%</td>
-                  <td>1</td>
-                  <td>679.4 ms</td>
-                </tr>
-                <tr>
-                  <th scope="row"><code>nemotron-multilingual</code></th>
-                  <td>6.22%</td>
-                  <td>40.0%</td>
-                  <td>2</td>
-                  <td>123.2 ms</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p>On 25 LibriSpeech dev-clean clips, repaired Nemotron English and Nemotron 3.5 multilingual both stayed behind Parakeet TDT v3. Multilingual is much faster than the older English path, but its accuracy and final-word retention are worse, so v3 remains the production model.</p>
-        </div>
-      </section>
-
-      <section>
-        <div class="wrap">
-          <span class="section-eyebrow">Vocabulary research</span>
-          <h2>Why decoder vocabulary assistance is not in the app</h2>
-          <p>A <a href="https://github.com/rcourtman/presspeech/issues/21">daily Polish user asked for recognition-time vocabulary assistance</a> because post-transcription dictionary rules require separate entries for inflected names. The need is real, but the current FluidAudio mechanism is a second CTC scoring pass with a precision/recall tradeoff, not a morphological system: aliases can help match variants, but an accepted alias is replaced with one configured canonical form.</p>
-          <div class="grid">
-            <article class="card">
-              <h3>Known risk</h3>
-              <p>FluidAudio documents that short or acoustically similar terms can replace ordinary words that were never spoken. Its conservative controls reduce those false replacements but can also lose genuine vocabulary recall.</p>
-            </article>
-            <article class="card">
-              <h3>Presspeech gate</h3>
-              <p><code>run-vocabulary-bias-regression.sh</code> compares production v3 with four direct-v3 policies and four sliding-window paths over repeated target clips and same-language negative controls. A candidate cannot pass by improving aggregate recall while making even one compared clip worse.</p>
-            </article>
-            <article class="card">
-              <h3>Current status</h3>
-              <p>No vocabulary policy has cleared the product-candidate gate, so Presspeech still uses its deterministic Dictionary &amp; Shortcuts pass. The corrected full-audio evidence rules out enabling the tested standard policy, not just enabling it by default.</p>
-            </article>
-          </div>
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-caption-3">
-            <table>
-              <caption id="table-caption-3">Corrected Polish vocabulary experiments against the production dependency</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Question</th>
-                  <th scope="col">Baseline</th>
-                  <th scope="col">Vocabulary result</th>
-                  <th scope="col">Decision</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th scope="row">Do five supplied lemmas recover withheld inflected forms?</th>
-                  <td>14/15 forms; 6.12% WER on 60 negative controls</td>
-                  <td>0/15 forms; 37.10–37.62% control WER; about 2.54× latency</td>
-                  <td>Failed the held-out-inflection test</td>
-                </tr>
-                <tr>
-                  <th scope="row">Do 20 explicitly supplied surface forms help?</th>
-                  <td>41/67 target hits; 10.50% target WER</td>
-                  <td>66/67 hits; 8.34% aggregate WER, but seven recordings regressed, unexpected terms appeared, and latency was 2.65–2.67×</td>
-                  <td>Useful recall signal, but failed the per-clip safety gate</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p>These are bounded natural read-speech experiments, not a universal language claim. They show that this mechanism is neither morphological generalisation nor a safe product candidate under the current evidence. Read the <a href="https://github.com/rcourtman/presspeech/issues/21#issuecomment-5777963850">held-out-form report</a> and <a href="https://github.com/rcourtman/presspeech/issues/21#issuecomment-5778506977">complete-audio supplied-form replay</a> for cohort limits and measurement details.</p>
-          <p>People evaluating a materially different policy can still help without publishing private speech. Follow the <a href="https://github.com/rcourtman/presspeech/blob/main/CONTRIBUTING.md#suggesting-features">privacy-redacted contribution workflow</a> and attach only the aggregate report to <a href="https://github.com/rcourtman/presspeech/issues/21">issue #21</a>. The local fixtures, transcripts, vocabulary terms, and paths stay on the contributor's Mac. Technical background: <a href="https://github.com/FluidInference/FluidAudio/blob/4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b/Documentation/ASR/CustomVocabulary.md">FluidAudio custom-vocabulary documentation at Presspeech's pinned revision</a>.</p>
-        </div>
-      </section>
-
-      <section>
-        <div class="wrap">
-          <span class="section-eyebrow">Reading the numbers</span>
-          <h2>Interpretation</h2>
-          <div class="grid">
-            <article class="card">
-              <h3>Latency</h3>
-              <p>The ANE path is consistently faster than the prior GPU path on these clips, with p50 results around 92-152 ms.</p>
-            </article>
-            <article class="card">
-              <h3>Accuracy</h3>
-              <p>Both backends produced essentially identical transcripts on the synthetic test audio, including the same TTS artifacts.</p>
-            </article>
-            <article class="card">
-              <h3>Power</h3>
-              <p>The benchmark measures compute latency, not energy. Power measurement remains a future bench improvement.</p>
-            </article>
-          </div>
-        </div>
-      </section>
     </main>
 
     <footer class="site-footer">

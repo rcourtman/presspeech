@@ -10,20 +10,64 @@
 
 # Presspeech
 
-**Hold a key, speak, let go — your words appear at the cursor.** Speech
-recognition runs entirely on your computer. Free, open source, no account, no
-subscription, no cloud transcription.
+**Hold a key, speak, let go — your words appear at the cursor.**
+
+Free, open-source dictation that runs entirely on your computer. No account,
+no subscription, and your voice never leaves your machine. A native Mac app
+for Apple Silicon, with a Windows preview.
+
+<p align="center">
+  <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence quickly lands at the cursor." width="900">
+</p>
+
+> **~90–150 ms warm ASR inference** · **9.2 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
+
+## Why Presspeech
+
+- **Fast.** Speech recognition runs on the Apple Neural Engine, using NVIDIA's
+  multilingual [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
+  model via [FluidAudio](https://github.com/FluidInference/FluidAudio). Once
+  warm, a typical sentence is transcribed in about a tenth of a second.
+  [How it's measured](https://rcourtman.github.io/presspeech/benchmarks.html).
+- **Private by design.** There is no cloud transcription path. Audio stays in
+  memory and is discarded after transcription, and transcripts are never
+  logged. [Every network call, listed](https://rcourtman.github.io/presspeech/privacy.html).
+- **Light.** A small native menu-bar app that sits idle until you hold the key.
+- **Pastes where you started.** If you switch windows, or Presspeech cannot
+  verify the original destination, it skips automatic paste so you can paste
+  manually from the clipboard instead of it typing into the wrong place. It
+  cannot always detect a move to another field or browser tab in the same window,
+  so keep the starting field and tab selected until the text lands.
+- **Yours to tune.** Hold-to-talk or press-to-toggle, any hotkey, local
+  correction rules and text shortcuts, spoken formatting, filler-word removal.
+
+### How it compares
+
+| | **Presspeech** | [Apple Dictation](https://rcourtman.github.io/presspeech/compare/apple-dictation.html) | [Superwhisper](https://rcourtman.github.io/presspeech/compare/superwhisper.html) | [Wispr Flow](https://rcourtman.github.io/presspeech/compare/wispr-flow.html) | [VoiceInk](https://rcourtman.github.io/presspeech/compare/voiceink.html) |
+|:--|:--|:--|:--|:--|:--|
+| Price | **Free** | Included with macOS | Free tier; Pro from $8.49/month | 2,000 words/week free; Pro $15/month | From $25 one-time |
+| Where your audio goes | **Stays on your Mac** | On-device for some languages, otherwise Apple's servers | Local or cloud, depending on the model you pick | Always the cloud | Local, or cloud if you choose it |
+| Account | **None** | None | None; Pro uses a licence key | Required | None; paid build uses a licence key |
+| Source code | **Open (MIT)** | Closed | Closed | Closed | Open (GPL-3.0) |
+| Languages | 25 European, auto-detected | 63 (48 on-device) | 100+ via cloud models | 100+ | About 100 (Whisper models) |
+
+<sub>Taken from each app's own published docs and pricing; sources, dates and more apps on the [comparison page](https://rcourtman.github.io/presspeech/compare/). Prices change, so check before you buy.</sub>
+
+Presspeech does one thing: fast, private, word-for-word dictation. If you want
+AI rewriting, meeting notes or 100+ languages, one of the others may suit you
+better.
+
+## Install
 
 > **Before opening a published build:** check [GitHub Releases](https://github.com/rcourtman/presspeech/releases)
 > and the deployed install guide for your platform
 > ([macOS](https://rcourtman.github.io/presspeech/install.html#direct-download) or
 > [Windows](https://rcourtman.github.io/presspeech/windows.html#download-verify-run))
-> for the exact version. The source branch can contain an unreleased candidate.
-> Either macOS 0.3.9 or macOS 0.3.10 asks before its first speech-model
-> download on a clean install and sends no Hugging Face account token. On Windows 0.1.12, a missing
-> speech-model download starts on launch and may send Hugging Face usage
-> telemetry or an available token, including to a custom download route.
-> Audio and transcripts are never sent. If you are
+> for the exact version; the source branch can contain an unreleased candidate.
+> Either macOS 0.3.9 or macOS 0.3.10 asks before its first speech-model download.
+> On Windows 0.1.12, a missing speech-model download starts on launch and may
+> send Hugging Face usage telemetry or an available token, including to a
+> custom download route. Audio and transcripts are never sent. If you are
 > unsure, install but leave the app unopened (on Windows, clear the installer's
 > final **Launch Presspeech** option, which starts checked) and read the
 > [macOS](https://rcourtman.github.io/presspeech/install.html#model-download-privacy) or
@@ -33,45 +77,6 @@ subscription, no cloud transcription.
 **Start here:** [first dictation guide](https://rcourtman.github.io/presspeech/getting-started.html) ·
 [macOS install](https://rcourtman.github.io/presspeech/install.html) ·
 [Windows install](https://rcourtman.github.io/presspeech/windows.html)
-
-<p align="center">
-  <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence quickly lands at the cursor." width="900">
-</p>
-
-> **~90–150 ms warm ASR inference** · **9.2 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
-
-- **Fast and small.** A native Swift menu-bar app running NVIDIA's multilingual
-  [Parakeet TDT v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) on the
-  Apple Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio).
-  See the [benchmark methodology](https://rcourtman.github.io/presspeech/benchmarks.html).
-- **No cloud path.** Audio stays in memory and is discarded after
-  transcription. Transcripts are never logged.
-- **Pastes where you started.** If you switch windows, or Presspeech cannot
-  verify the original destination, it skips automatic paste so you can paste
-  manually from the clipboard instead of it typing into the wrong place. It
-  cannot always detect a move to another field or browser tab in the same
-  window, so keep the starting field and tab selected until the text lands.
-- **Yours to tune.** Hold-to-talk or press-to-toggle, a custom hotkey, local
-  correction rules and text shortcuts, spoken formatting, filler-word removal.
-
-## How the speech engines compare
-
-<!-- engine-leaderboard:start - generated by scripts/sync-docs.py from docs/benchmarks/engine-leaderboard.json -->
-| Engine (apps that use it) | LibriSpeech clean WER | LibriSpeech other WER | FLEURS 5-language WER | Long-form WER | Latency p50 | Latency p90 | Model size | Offline |
-|:--|--:|--:|--:|--:|--:|--:|--:|:-:|
-| **Parakeet TDT v3**<br><sub>**Presspeech** (default), MacParakeet, FluidVoice, Handy, VoiceInk, Superwhisper Pro</sub> | 1.82% | 4.12% | 6.51% | 3.59% | **54 ms** | **91 ms** | 483 MB | Yes |
-| **Parakeet Ultra**<br><sub>**Presspeech** (opt-in), VoiceInk</sub> | **1.71%** | **3.65%** | 5.46% | 3.41% | 57 ms | 122 ms | 632 MB | Yes |
-| Whisper large-v3-turbo<br><sub>VoiceInk, Superwhisper, Handy, FluidVoice</sub> | 1.89% | 4.12% | **5.39%** | **2.63%** | 1.10 s | 1.29 s | 1.62 GB | Yes |
-| Whisper small<br><sub>VoiceInk, Superwhisper, Handy, FluidVoice</sub> | 2.77% | 7.21% | 11.37% | 4.67% | 354 ms | 574 ms | 488 MB | Yes |
-| Whisper base<br><sub>VoiceInk, Superwhisper, Handy, FluidVoice</sub> | 4.33% | 11.44% | 21.99% | 7.12% | 151 ms | 264 ms | **148 MB** | Yes |
-| Apple DictationTranscriber<br><sub>macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</sub> | 7.47% | 15.69% | 12.70% | 9.33% | 160 ms | 364 ms | macOS asset | Yes |
-| Apple SpeechTranscriber<br><sub>macOS Speech framework; Apple Speech option in VoiceInk, FluidVoice</sub> | 1.80% | 4.75% | no Polish | 2.93% | 117 ms | 288 ms | macOS asset | Yes |
-| Wispr Flow (cloud)<br><sub>Wispr Flow</sub> | *cloud, not measured* | — | — | — | — | — | — | No |
-
-<sub>Lower is better; best measured value per column in bold. Mac mini M4, 16 GB, macOS 27.0.1; every engine gets the same audio and text normaliser, with the language set explicitly; 500 seeded clips per LibriSpeech test split and 100 per FLEURS language (de, es, fr, it, pl). Latency is warm inference on LibriSpeech test-clean clips. Method, per-language and auto-detect results, memory and caveats: [benchmarks](https://rcourtman.github.io/presspeech/benchmarks.html#engine-leaderboard).</sub>
-<!-- engine-leaderboard:end -->
-
-## Install
 
 **macOS** — Released, signed, and notarised. Apple Silicon, macOS 14+.
 
