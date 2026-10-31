@@ -88,7 +88,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
           . .\find-inno-compiler.ps1
           $compiler = Find-PresspeechInnoCompiler
-          Write-Output "Qualified compiler: $([Diagnostics.FileVersionInfo]::GetVersionInfo($compiler).FileVersion)"
+          $engine = Join-Path (Split-Path -Parent $compiler) 'ISCmplr.dll'
+          Write-Output "Qualified compiler engine: $([Diagnostics.FileVersionInfo]::GetVersionInfo($engine).FileVersion)"
           python qualify-installer.py --compiler $compiler --output (Join-Path $env:RUNNER_TEMP 'installer-qualification')
           if ($LASTEXITCODE -ne 0) { throw 'Native installer qualification failed' }
       - name: Save installer qualification evidence
