@@ -86,11 +86,9 @@ jobs:
         run: |
           winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --force --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
-          $compiler = @(
-            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
-            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')
-          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-          if (-not $compiler) { throw 'Inno Setup compiler not found' }
+          . .\find-inno-compiler.ps1
+          $compiler = Find-PresspeechInnoCompiler
+          Write-Output "Qualified compiler: $([Diagnostics.FileVersionInfo]::GetVersionInfo($compiler).FileVersion)"
           python qualify-installer.py --compiler $compiler --output (Join-Path $env:RUNNER_TEMP 'installer-qualification')
           if ($LASTEXITCODE -ne 0) { throw 'Native installer qualification failed' }
       - name: Save installer qualification evidence
@@ -144,6 +142,7 @@ jobs:
         shell: pwsh
         run: |
           [ScriptBlock]::Create((Get-Content build-release.ps1 -Raw)) | Out-Null
+          [ScriptBlock]::Create((Get-Content find-inno-compiler.ps1 -Raw)) | Out-Null
           [ScriptBlock]::Create((Get-Content validate-release-assets.ps1 -Raw)) | Out-Null
           [ScriptBlock]::Create((Get-Content validate-release-checks.ps1 -Raw)) | Out-Null
           [ScriptBlock]::Create((Get-Content validate-release-context.ps1 -Raw)) | Out-Null

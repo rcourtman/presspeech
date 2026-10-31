@@ -738,11 +738,11 @@ results, virtual environments, caches, and logs are ignored by Git.
 Release builds use CPython 3.12.10 (the final 3.12 release with Windows
 installers) and the fully resolved Windows dependency
 set in `requirements-release.txt`; source-development installs intentionally
-retain the lower bounds in `requirements.txt`. Install Inno Setup 6, create a
+retain the lower bounds in `requirements.txt`. Install Inno Setup 6.7.3, create a
 clean release environment, then run the build script from `windows/`:
 
 ```powershell
-winget install --id JRSoftware.InnoSetup --exact
+winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --source winget
 py -3.12 -m venv .release-venv
 $env:PIP_CONFIG_FILE = 'NUL'
 .\.release-venv\Scripts\python -m pip install --isolated --no-deps --only-binary=:all: --require-hashes --index-url https://pypi.org/simple -r requirements-release.txt

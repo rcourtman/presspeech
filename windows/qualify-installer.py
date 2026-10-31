@@ -4,6 +4,7 @@ Synthetic payloads and fresh AppIds only. This never installs Presspeech or
 changes its release script. Preserve the output directory as a CI artifact.
 """
 import argparse
+from contextlib import contextmanager
 import ctypes
 from ctypes import wintypes
 import json
@@ -82,6 +83,22 @@ Compression=none
         self.save()
         print(f"{name}: {json.dumps(details, sort_keys=True)}", flush=True)
 
+    @staticmethod
+    @contextmanager
+    def locked_file(path):
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                      wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel.CreateFileW(str(path), 0x80000000, 0, None, 3, 0, None)
+        if handle == wintypes.HANDLE(-1).value:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            yield
+        finally:
+            kernel.CloseHandle(handle)
+
     def save(self):
         (self.root / "results.json").write_text(
             json.dumps(self.results, indent=2) + "\n", encoding="utf-8")
@@ -114,20 +131,30 @@ Compression=none
         assert positions == sorted(positions), positions
         self.record("E1", explicit_file_entry_order=True)
 
-        # E2: fatal final-file failure, including a genuinely old file.
+        # BeforeInstall exceptions are caught by Inno's script boundary. Record
+        # that separately; they cannot inject the fatal failure E2 needs.
+        installer = self.compile("E2-script-exception", files + '; BeforeInstall: FailLast',
+                                "procedure FailLast; begin RaiseException('injected final-file failure'); end;")
+        target = self.root / "E2-exception-app"
+        status = self.install(installer, target, expected=None)
+        self.record("E2-script-exception", exit_code=status,
+                    final_file_installed=(target / "last.txt").exists())
+
+        # E2: native last-file copy failure, after an overwrite and a new file.
         target = self.root / "E2-app"
         target.mkdir()
         (target / "first.txt").write_text("old-first", encoding="ascii")
-        installer = self.compile("E2-rollback", files + '; BeforeInstall: FailLast',
-                                "procedure FailLast; begin RaiseException('injected final-file failure'); end;")
-        status = self.install(installer, target, expected=None)
-        assert status != 0
+        (target / "last.txt").write_text("old-last", encoding="ascii")
+        installer = self.compile("E2-rollback", files)
+        with self.locked_file(target / "last.txt"):
+            status = self.install(installer, target, expected=None)
         state = {p.name: p.read_text(encoding="ascii") for p in target.glob("*.txt")}
         self.record("E2", exit_code=status, surviving_files=state,
                     overwritten_old_file_restored=state.get("first.txt") == "old-first",
-                    new_files_rolled_back="second.txt" not in state and "last.txt" not in state)
+                    new_files_rolled_back="second.txt" not in state)
+        assert status != 0, state
         assert state.get("first.txt") in {"new-first", "old-first"}, state
-        assert "second.txt" not in state and "last.txt" not in state, state
+        assert "second.txt" not in state and state.get("last.txt") == "old-last", state
 
         # E3: exception after installation does not roll the new bundle back.
         post = """procedure CurStepChanged(Step: TSetupStep);
@@ -143,7 +170,7 @@ end;
         installer = self.compile("E3-postinstall", files, post)
         target = self.root / "E3-app"
         status = self.install(installer, target, expected=None)
-        assert status != 0 and (target / "last.txt").exists()
+        assert (target / "last.txt").exists()
         assert (target / "unins000.dat").exists()
         import winreg
         # The AppId is synthetic and unique, never the product's AppId.
@@ -261,16 +288,9 @@ end;
         target.mkdir()
         locked = target / "first.txt"
         locked.write_text("old-locked")
-        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                                      wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-        kernel.CreateFileW.restype = wintypes.HANDLE
-        handle = kernel.CreateFileW(str(locked), 0x80000000, 0, None, 3, 0, None)
-        assert handle != wintypes.HANDLE(-1).value
-        try:
+        with self.locked_file(locked):
             installer = self.compile("E7-locked-copy", files)
             status = self.install(installer, target, expected=None)
-        finally:
-            kernel.CloseHandle(handle)
         assert locked.read_text() == "old-locked"
         self.record("E7", silent_locked_copy_exit=status, old_locked_file_preserved=True,
                     later_file_installed=(target / "last.txt").exists())

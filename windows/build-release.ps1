@@ -44,17 +44,9 @@ if (-not $ReusePackage) {
     }
 }
 
-if (-not $SkipInstaller -and -not $InnoCompiler) {
-    $candidates = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
-        (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
-        (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
-    )
-    $InnoCompiler = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-}
-if (-not $SkipInstaller -and
-        (-not $InnoCompiler -or -not (Test-Path -LiteralPath $InnoCompiler))) {
-    throw "Inno Setup 6 was not found. Install JRSoftware.InnoSetup with winget."
+if (-not $SkipInstaller) {
+    . (Join-Path $windowsRoot 'find-inno-compiler.ps1')
+    $InnoCompiler = Find-PresspeechInnoCompiler -ExplicitPath $InnoCompiler
 }
 
 if ($CertificatePath) {
