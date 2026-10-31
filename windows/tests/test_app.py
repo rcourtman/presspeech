@@ -2185,6 +2185,8 @@ class TextRegressionTests(unittest.TestCase):
 
         def load_module(name):
             module = mock.Mock()
+            if name == "comtypes.client":
+                module.gen_dir = None
             for symbol in dict(app.PACKAGE_SMOKE_IMPORTS)[name]:
                 setattr(module, symbol, object())
             loaded[name] = module
@@ -2203,7 +2205,7 @@ class TextRegressionTests(unittest.TestCase):
             [name for name, _symbols in app.PACKAGE_SMOKE_IMPORTS],
         )
         self.assertEqual(set(loaded), {
-            "comtypes", "ctranslate2", "faster_whisper", "librosa",
+            "comtypes", "comtypes.client", "ctranslate2", "faster_whisper", "librosa",
             "hf_xet", "huggingface_hub.constants", "huggingface_hub.utils",
             "huggingface_hub.file_download",
             "model_integrity",
@@ -2229,7 +2231,7 @@ class TextRegressionTests(unittest.TestCase):
 
     def test_packaged_selftest_rejects_missing_uia_wrapper_without_details(self):
         def load_module(_name):
-            return mock.Mock()
+            return mock.Mock(gen_dir=None)
 
         with mock.patch.object(app.sys, "frozen", True, create=True), \
                 mock.patch.object(app.importlib, "import_module",
@@ -2241,6 +2243,17 @@ class TextRegressionTests(unittest.TestCase):
                     RuntimeError,
                     r"^packaged import unavailable: UIAutomationCore$") as caught:
                 app._package_selftest()
+        self.assertNotIn("private", str(caught.exception))
+
+    def test_packaged_selftest_refuses_writable_com_wrapper_cache(self):
+        with mock.patch.object(app.sys, "frozen", True, create=True), \
+                mock.patch.object(app.importlib, "import_module",
+                                  return_value=mock.Mock(gen_dir=r"C:\private\cache")), \
+                mock.patch.object(app, "_create_uia_client") as uia_client:
+            with self.assertRaisesRegex(
+                    RuntimeError, r"^packaged import unavailable: comtypes.client$") as caught:
+                app._package_selftest()
+        uia_client.assert_not_called()
         self.assertNotIn("private", str(caught.exception))
 
     def test_dictionary_rules_match_whole_phrases_only(self):

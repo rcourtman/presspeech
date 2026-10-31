@@ -812,6 +812,8 @@ missing, changed or extra payload file prevents activation, as do a running
 app or a refused executable replacement. Setup reports activation failure with
 exit code 23; close Presspeech and run Setup again. The existing installation
 remains usable, although Installed Apps may already show the new setup version.
+Frozen builds generate COM type-library wrappers in memory so Windows-specific
+wrapper generation cannot change the verified application bundle.
 
 An upgrade needs free space for the complete new bundle (about 4.4 GB) plus
 256 MiB of headroom, while the old bundle remains installed. Also allow space

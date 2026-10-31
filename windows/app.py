@@ -202,6 +202,7 @@ PACKAGE_SMOKE_IMPORTS = (
     ("soxr", ("resample",)),
     ("soundfile", ("SoundFile",)),
     ("comtypes", ()),
+    ("comtypes.client", ("GetModule", "CreateObject")),
     ("pycaw.constants", ("AudioDeviceState", "EDataFlow")),
     ("pycaw.pycaw", ("AudioUtilities",)),
     ("tk_uia", (
@@ -4037,6 +4038,8 @@ def _package_selftest():
                     (module_name, symbol)) from None
         if module_name == "comtypes":
             comtypes_module = module
+        if module_name == "comtypes.client" and module.gen_dir is not None:
+            raise RuntimeError("packaged import unavailable: comtypes.client")
     # Importing comtypes alone does not prove that the frozen app can generate
     # or load UIAutomationCore's interface wrapper. That missing wrapper would
     # turn every recognized-browser dictation into manual recovery.
