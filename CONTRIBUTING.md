@@ -221,6 +221,21 @@ observations as `installer-qualification`; it does not install Presspeech or
 publish a release. These experiments establish tool behavior, not full app
 upgrade qualification or power-loss durability.
 
+For the production installer transaction matrix and full installed upgrades:
+
+```sh
+gh workflow run windows-installer.yml --ref main -f full_package=true
+```
+
+The workflow tests the actual installer script with small frozen payloads,
+including cancellation, process termination, integrity failures, activation
+refusal, reparse points and a disposable virtual disk for low-space/disk-full
+cases. It then builds the complete app and upgrades the pinned, attested
+0.1.11 and 0.1.12 installers, checks the installed packages, repeats the same
+installer, and verifies startup, user-data preservation and uninstall. It
+publishes qualification evidence, without publishing an app release. Use
+`full_package=false` for the transaction matrix alone.
+
 ## Pull requests
 
 - Keep the diff focused on one change.

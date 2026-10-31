@@ -107,7 +107,8 @@ WORKFLOW_BODY
             return output
 
     def test_ci_and_release_stop_at_each_failed_native_command(self):
-        for filename, count in (("windows.yml", 6), ("windows-release.yml", 7)):
+        for filename, count in (("windows.yml", 6), ("windows-release.yml", 7),
+                                ("windows-installer.yml", 7)):
             for fail_at in range(1, count + 1):
                 with self.subTest(workflow=filename, fail_at=fail_at):
                     result = self.run_block(filename, fail_at)
@@ -115,7 +116,8 @@ WORKFLOW_BODY
                     self.assertEqual(len(result["calls"]), fail_at, result)
 
     def test_both_success_paths_install_and_verify_complete_runtime(self):
-        for filename, count in (("windows.yml", 6), ("windows-release.yml", 7)):
+        for filename, count in (("windows.yml", 6), ("windows-release.yml", 7),
+                                ("windows-installer.yml", 7)):
             with self.subTest(workflow=filename):
                 result = self.run_block(filename, 0)
                 self.assertFalse(result["failed"], result)

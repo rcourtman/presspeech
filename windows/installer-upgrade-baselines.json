@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "baselines": [
+    {
+      "version": "0.1.11",
+      "tag": "windows-v0.1.11",
+      "asset": "Presspeech-Setup-0.1.11-x64.exe",
+      "bytes": 1701392919,
+      "sha256": "7cc84c003379e0e1a559d5f7a6195fb2c158c76588d0cd8de2058872f7dc799a"
+    },
+    {
+      "version": "0.1.12",
+      "tag": "windows-v0.1.12",
+      "asset": "Presspeech-Setup-0.1.12-x64.exe",
+      "bytes": 1705926420,
+      "sha256": "c6a216fef8f1f9a6e446a5c5385feaf79b16f88a9f00b5a5d2027c7a01a55b93"
+    }
+  ]
+}

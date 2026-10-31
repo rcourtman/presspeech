@@ -203,6 +203,7 @@ VSVersionInfo(
 [IO.File]::WriteAllText($versionFile, $versionText, [Text.UTF8Encoding]::new($false))
 
 $env:PRESSPEECH_VERSION_FILE = $versionFile
+$env:PRESSPEECH_BUNDLE_ID = [guid]::NewGuid().ToString('N')
 try {
     & $Python -m PyInstaller --noconfirm --clean `
         --workpath $stageBuildDir `
@@ -213,6 +214,7 @@ try {
     }
 } finally {
     Remove-Item Env:PRESSPEECH_VERSION_FILE -ErrorAction SilentlyContinue
+    Remove-Item Env:PRESSPEECH_BUNDLE_ID -ErrorAction SilentlyContinue
 }
 } else {
     New-Item -ItemType Directory -Path $distDir -Force | Out-Null
@@ -224,6 +226,11 @@ if (-not (Test-Path -LiteralPath $appExe)) {
 }
 Invoke-PresspeechSign $appExe
 Invoke-PresspeechPackageSelfTest $appExe
+
+$bundleInclude = Join-Path $stageBuildDir 'installer-bundle.iss'
+& $Python (Join-Path $windowsRoot 'installer_bundle.py') `
+    --package (Join-Path $stageDistDir 'Presspeech') --include $bundleInclude
+if ($LASTEXITCODE -ne 0) { throw 'Installer payload verification failed' }
 
 $appSize = (Get-ChildItem -LiteralPath (Join-Path $stageDistDir "Presspeech") -Recurse -File |
     Measure-Object -Property Length -Sum).Sum
@@ -238,6 +245,7 @@ $installerOutput = Join-Path $distDir "installer"
     "/DAppVersion=$Version" `
     "/DSourceDir=$(Join-Path $stageDistDir 'Presspeech')" `
     "/DInstallerOutputDir=$installerOutput" `
+    "/DBundleMetadataFile=$bundleInclude" `
     (Join-Path $windowsRoot "installer.iss")
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup failed with exit code $LASTEXITCODE"

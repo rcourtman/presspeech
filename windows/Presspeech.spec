@@ -2,12 +2,16 @@
 """PyInstaller one-directory build for the Windows desktop app."""
 
 import os
+import re
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
 
 ROOT = Path(SPECPATH)
+BUNDLE_ID = os.environ.get("PRESSPEECH_BUNDLE_ID", "")
+if not re.fullmatch(r"[0-9a-f]{32}", BUNDLE_ID):
+    raise ValueError("Build through build-release.ps1 to allocate a unique bundle identity")
 
 datas = []
 binaries = []
@@ -75,6 +79,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="Presspeech",
+    contents_directory="_presspeech-" + BUNDLE_ID,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
