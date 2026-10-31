@@ -206,6 +206,21 @@ decoder warm-up, cache-only reload and unload. It needs access to the public
 model host. It does not qualify CUDA, microphone drivers or physical input;
 routine push and pull-request checks remain model-free.
 
+Windows installer assumptions can be measured on a disposable hosted runner:
+
+```sh
+gh workflow run windows.yml --ref main -f installer_qualification=true
+```
+
+This opt-in uses the pinned release toolchain with tiny synthetic payloads and
+separate temporary application identities. It records file order, rollback,
+post-install failure, exit codes, executable replacement, mutex checks,
+uninstall cleanup, PyInstaller bundle isolation, silent locked-file behavior
+and a synthetic disk-space requirement. The run saves its scripts, logs and
+observations as `installer-qualification`; it does not install Presspeech or
+publish a release. These experiments establish tool behavior, not full app
+upgrade qualification or power-loss durability.
+
 ## Pull requests
 
 - Keep the diff focused on one change.

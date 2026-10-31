@@ -8,6 +8,11 @@ on:
         required: false
         default: false
         type: boolean
+      installer_qualification:
+        description: "Measure native installer behavior with tiny disposable payloads"
+        required: false
+        default: false
+        type: boolean
   # Release publication requires a green Windows push run for the exact main
   # commit being approved. Do not path-filter main pushes: otherwise an
   # unrelated docs, benchmark, or macOS change after the last Windows change
@@ -74,6 +79,31 @@ jobs:
       - name: Compile Python sources
         working-directory: windows
         run: python -m compileall -q app.py benchmark.py british.py config.py engine.py model_cache.py model_network.py text_cleanup.py ui.py updates.py
+      - name: Native installer qualification
+        if: github.event_name == 'workflow_dispatch' && inputs.installer_qualification
+        timeout-minutes: 15
+        working-directory: windows
+        run: |
+          winget install --id JRSoftware.InnoSetup --exact --version 6.7.3 --force --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          $compiler = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $compiler) { throw 'Inno Setup compiler not found' }
+          python qualify-installer.py --compiler $compiler --output (Join-Path $env:RUNNER_TEMP 'installer-qualification')
+          if ($LASTEXITCODE -ne 0) { throw 'Native installer qualification failed' }
+      - name: Save installer qualification evidence
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.installer_qualification }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: installer-qualification
+          path: |
+            ${{ runner.temp }}/installer-qualification/results.json
+            ${{ runner.temp }}/installer-qualification/command-*.txt
+            ${{ runner.temp }}/installer-qualification/*/*.log
+            ${{ runner.temp }}/installer-qualification/*/*.iss
+          retention-days: 14
       - name: Native CPU model self-test
         if: github.event_name == 'workflow_dispatch' && inputs.cpu_model_selftest
         timeout-minutes: 10
