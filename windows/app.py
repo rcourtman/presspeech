@@ -50,7 +50,7 @@ import engine
 import ui
 import updates
 from british import to_british
-from audio_backend import AudioBackend
+from audio_backend import AudioBackend, AudioBackendBusy
 
 AUDIO_BACKEND = AudioBackend(sd)
 
@@ -99,9 +99,17 @@ MICROPHONE_CHECK_LISTEN_SEC = 2.0
 MICROPHONE_CHECK_AUDIO_RMS = POST_ROLL_ABS_SILENCE_RMS
 MICROPHONE_CHECK_LEVEL = "level"
 MICROPHONE_CHECK_SILENT = "silent"
+MICROPHONE_CHECK_REFRESHING = "refreshing"
 MICROPHONE_CHECK_UNAVAILABLE = "unavailable"
 MICROPHONE_CHECK_BUSY = "busy"
 MICROPHONE_START_TIMEOUT_SEC = 5.0
+# Conservative policy, not a measured driver limit: a ready stream that
+# delivers no buffer for this long may have been interrupted (a lost endpoint,
+# a driver reset, or a long scheduling delay), so its dictation is treated as
+# possibly incomplete. Keep it well above expected callback gaps: a false
+# stall would withhold automatic paste from a complete dictation.
+CAPTURE_STALL_TIMEOUT_SEC = 2.0
+CAPTURE_STALL_CHECK_SEC = 0.25
 MODEL_WARMUP_SEC = 8.0
 MODEL_IDLE_WAKE_SEC = 60.0
 CPU_FIRST_RUN_MODEL = "base.en"
@@ -772,6 +780,7 @@ class PresspeechApp:
         self._peak_rms = 0.0
         # PortAudio reports a discontinuity after it discards microphone
         # samples. Keep this per recording, not as mutable model-worker state.
+        # A capture stall sets it too: either way words may be missing.
         self._input_overflowed = False
         # Monotonic within one recording. The post-roll timer snapshots this
         # at the hold/toggle stop gesture and also checks when the newest
@@ -1754,6 +1763,9 @@ class PresspeechApp:
         self._schedule_recording_limit(epoch)
         threading.Thread(
             target=self._start_audio_worker, args=(epoch,), daemon=True).start()
+        threading.Thread(
+            target=self._watch_capture, args=(epoch,),
+            name="presspeech-capture-watch", daemon=True).start()
         return True
 
     def _recording_epoch_active(self, epoch):
@@ -1846,6 +1858,29 @@ class PresspeechApp:
         finally:
             with self.lock:
                 self._canceling_recording = False
+
+    def _watch_capture(self, epoch):
+        """End a ready recording whose microphone stops delivering buffers."""
+        # The first-buffer timeout covers startup only. A lost endpoint can
+        # stop callbacks without a PortAudio error; a toggle recording would
+        # then stay Listening until the cap and paste a truncated transcript.
+        while True:
+            time.sleep(CAPTURE_STALL_CHECK_SEC)
+            with self.lock:
+                if not self.recording or epoch != self._rec_epoch:
+                    return
+                without_audio = self._seconds_without_audio_locked(
+                    time.perf_counter())
+                if (without_audio is None or
+                        without_audio < CAPTURE_STALL_TIMEOUT_SEC):
+                    continue
+                # Decide under the lock that owns the epoch, so a stop,
+                # cancel or newer recording can never inherit this verdict.
+                self._input_overflowed = True
+            if self.stop_recording(expected_epoch=epoch):
+                self._log("microphone delivered no audio for %.1fs; capture "
+                          "stopped as incomplete" % without_audio)
+            return
 
     def _mute_playback_for_recording(self, epoch):
         if not self.settings.get("mute_playback_while_recording", True):
@@ -1971,6 +2006,13 @@ class PresspeechApp:
             self._restore_playback_after_recording()
             self._set_indicator(None)
             self._log("mic error: %s" % type(exc).__name__)
+            if isinstance(exc, AudioBackendBusy):
+                # An earlier press's worker is still refreshing PortAudio.
+                # Nothing was opened and the selected input is not at fault,
+                # so do not send the user to privacy or input settings.
+                self.notify("Audio devices refreshing",
+                            "Audio devices are refreshing; try again.")
+                return False
             self.notify(
                 "Microphone error",
                 "Presspeech couldn't open the selected input. Check Settings > "
@@ -2009,8 +2051,27 @@ class PresspeechApp:
                 # treat a pre-readiness/start-cue overflow as lost dictation.
                 if getattr(status, "input_overflow", False):
                     self._input_overflowed = True
+                # Input can resume after a stall before the watchdog samples
+                # it. Latch the gap before its timestamp moves on.
+                if self._capture_stalled_locked(callback_started_at):
+                    self._input_overflowed = True
                 self._audio_sequence = getattr(self, "_audio_sequence", 0) + 1
                 self._last_audio_callback_started_at = callback_started_at
+
+    def _seconds_without_audio_locked(self, now):
+        """Return how long a ready capture has accepted no buffer, else None."""
+        # Before readiness the first-buffer timeout owns an unresponsive input.
+        ready_at = getattr(self, "_capture_ready_at", None)
+        if (ready_at is None or not getattr(self, "_capture_ready", False) or
+                getattr(self, "_stop_before_ready", False)):
+            return None
+        return now - max(
+            ready_at, getattr(self, "_last_audio_callback_started_at", 0.0))
+
+    def _capture_stalled_locked(self, now):
+        without_audio = self._seconds_without_audio_locked(now)
+        return (without_audio is not None and
+                without_audio >= CAPTURE_STALL_TIMEOUT_SEC)
 
     def request_stop(self):
         """Stop after silence, retaining the full safety window for ongoing speech."""
@@ -2179,8 +2240,28 @@ class PresspeechApp:
         received_post_release_audio = (
             audio_sequence != release_audio_sequence
             and callback_started_at >= released_at)
+        stalled = False
+        if reached_maximum and not received_post_release_audio:
+            # Input is expected to deliver a buffer inside this window.
+            # Without one, capture may have been interrupted just before the
+            # stop gesture, too recently for the watchdog: wait for audio, or
+            # for the stall bound that marks the dictation possibly incomplete.
+            with self.lock:
+                without_audio = (
+                    self._seconds_without_audio_locked(time.perf_counter())
+                    if epoch == self._rec_epoch else None)
+                stalled = (without_audio is not None and
+                           without_audio >= CAPTURE_STALL_TIMEOUT_SEC)
+                if stalled:
+                    self._input_overflowed = True
+            if without_audio is not None and not stalled:
+                self._schedule_post_roll(
+                    POST_ROLL_CHECK_SEC, epoch, released_at,
+                    release_audio_sequence)
+                return
         if reached_maximum or (received_post_release_audio and silent):
-            reason = "maximum" if reached_maximum else "silence"
+            reason = ("stalled" if stalled else
+                      "maximum" if reached_maximum else "silence")
             self._log("post-roll %.3fs (%s; rms %.4f, threshold %.4f)" %
                       (elapsed, reason, tail_rms, threshold))
             self.stop_recording(expected_epoch=epoch)
@@ -2199,6 +2280,10 @@ class PresspeechApp:
             self.recording = False
             capture_was_ready = (self._capture_ready and
                                  not getattr(self, "_stop_before_ready", False))
+            # The duration limit or a stop gesture can claim a stalled
+            # recording before the watchdog samples it; judge it here too.
+            if self._capture_stalled_locked(time.perf_counter()):
+                self._input_overflowed = True
             self._capture_ready = False
             # A callback can arrive between an early release and this lock.
             # Its post-release samples must not become a dictation.
@@ -2367,11 +2452,15 @@ class PresspeechApp:
         options = [("Automatic (recommended)", AUTO_INPUT_DEVICE)]
         candidates = []
         selector_counts = {}
+        refreshing = False
         try:
             with AUDIO_BACKEND.operation():
                 devices = sd.query_devices()
                 host_apis = sd.query_hostapis()
         except Exception as exc:
+            # Another operation refreshing PortAudio says nothing about
+            # whether the configured microphone is connected.
+            refreshing = isinstance(exc, AudioBackendBusy)
             self._log("could not list input devices: %s" % type(exc).__name__)
         else:
             for i, device in enumerate(devices):
@@ -2396,7 +2485,8 @@ class PresspeechApp:
             # opening and saving either window silently switch microphones.
             host_name, separator, device_name = configured.partition("::")
             if separator and host_name and device_name:
-                reason = ("multiple indistinguishable devices"
+                reason = ("audio devices refreshing" if refreshing else
+                          "multiple indistinguishable devices"
                           if selector_counts.get(configured, 0) > 1 else
                           "currently unavailable")
                 label = "%s — %s (%s)" % (device_name, host_name, reason)
@@ -2671,6 +2761,11 @@ class PresspeechApp:
             if levels and max(levels) >= MICROPHONE_CHECK_AUDIO_RMS:
                 return MICROPHONE_CHECK_LEVEL
             return MICROPHONE_CHECK_SILENT
+        except AudioBackendBusy:
+            # An earlier press's worker is refreshing PortAudio. Nothing was
+            # opened, so postpone the check rather than blame the input.
+            self._log("microphone readiness check postponed: AudioBackendBusy")
+            return MICROPHONE_CHECK_REFRESHING
         except Exception as exc:
             self._log("microphone readiness check failed: %s" %
                       type(exc).__name__)
@@ -2830,12 +2925,14 @@ class PresspeechApp:
                         "The selected model could not load. Retry it in Settings "
                         "or choose another model before recording again.")
             return
+        parakeet_failed = False
         try:
             # Leave the language unspecified so multilingual Whisper can
             # detect each independent dictation. English-only Whisper resolves
             # this to English, and the Transformers backends ignore the hint.
             text = self.transcriber.transcribe(audio)
             model_seconds = time.perf_counter() - model_started
+            timing = getattr(self.transcriber, "last_timing", {})
         except Exception:
             # Recognizer exceptions are an untrusted text boundary: an
             # upstream decoder may include a partial hypothesis in its error
@@ -2847,44 +2944,14 @@ class PresspeechApp:
                     "The local speech model could not complete this dictation. "
                     "Try again, or choose another model in Settings.")
                 return
-            try:
-                self.notify(
-                    "Parakeet failed",
-                    "Checking for an already-installed English-only Whisper "
-                    "base.en fallback. No model will be downloaded.")
-                # A decode failure is not consent to fetch another model.  In
-                # particular, first-run Setup consented to Parakeet, not to
-                # the English-only fallback used for this one recording.
-                self.transcriber.load(
-                    "base.en", notify=self.notify, local_only=True)
-            except engine.model_cache.ModelCacheMissingError:
-                self._log("cached fallback unavailable; error details suppressed")
-                self.notify(
-                    "Transcription failed",
-                    "Parakeet could not complete this dictation. The English-only "
-                    "fallback is not installed; no model was downloaded. Try "
-                    "again, or choose another model in Settings.")
+            parakeet_failed = True
+        if parakeet_failed:
+            # Load the fallback only after leaving the handler: until then its
+            # traceback keeps the failed decode's frames and buffers alive.
+            fallback_result = self._transcribe_with_cached_fallback(audio)
+            if fallback_result is None:
                 return
-            except Exception:
-                self._log("fallback model load failed; error details suppressed")
-                self.notify(
-                    "Transcription failed",
-                    "Neither local speech model could complete this dictation. "
-                    "Try again, or choose another model in Settings.")
-                return
-            try:
-                model_started = time.perf_counter()
-                text = self.transcriber.transcribe(audio)
-                model_seconds = time.perf_counter() - model_started
-            except Exception:
-                self._log(
-                    "fallback transcription failed; recognizer error details suppressed")
-                self.notify(
-                    "Transcription failed",
-                    "Neither local speech model could complete this dictation. "
-                    "Try again, or choose another model in Settings.")
-                return
-        timing = getattr(self.transcriber, "last_timing", {})
+            text, model_seconds, timing = fallback_result
         timing_summary = _model_timing_summary(timing)
         if not text or not text.strip():
             self._log("transcription returned empty (model %.3fs)" % model_seconds)
@@ -2926,6 +2993,61 @@ class PresspeechApp:
             self._remember_undelivered_dictation(text, "audio-overflow")
             return
         self._deliver_text(text, paste_target, scratchpad_target)
+
+    def _transcribe_with_cached_fallback(self, audio):
+        """Return (text, seconds, timing) from an installed base.en, or None."""
+        self.notify(
+            "Parakeet failed",
+            "Checking for an already-installed English-only Whisper "
+            "base.en fallback. No model will be downloaded.")
+        # Load the fallback beside Parakeet for this one recording, never in
+        # its place. Replacing the selected model would lose it to a missing
+        # or unloadable fallback, and even a successful fallback would leave
+        # the next dictation waiting on a full Parakeet reload and rehash.
+        # The fallback's own load notices are omitted: the selected model
+        # does not change.
+        fallback = engine.Transcriber()
+        try:
+            try:
+                # A decode failure is not consent to fetch another model.  In
+                # particular, first-run Setup consented to Parakeet, not to
+                # the English-only fallback used for this one recording.
+                fallback.load("base.en", local_only=True)
+            except engine.model_cache.ModelCacheMissingError:
+                self._log("cached fallback unavailable; error details suppressed")
+                self.notify(
+                    "Transcription failed",
+                    "Parakeet could not complete this dictation. The English-only "
+                    "fallback is not installed; no model was downloaded. Try "
+                    "again, or choose another model in Settings.")
+                return None
+            except Exception:
+                self._log("fallback model load failed; error details suppressed")
+                self.notify(
+                    "Transcription failed",
+                    "Neither local speech model could complete this dictation. "
+                    "Try again, or choose another model in Settings.")
+                return None
+            try:
+                model_started = time.perf_counter()
+                text = fallback.transcribe(audio)
+                model_seconds = time.perf_counter() - model_started
+            except Exception:
+                self._log(
+                    "fallback transcription failed; recognizer error details suppressed")
+                self.notify(
+                    "Transcription failed",
+                    "Neither local speech model could complete this dictation. "
+                    "Try again, or choose another model in Settings.")
+                return None
+            return text, model_seconds, getattr(fallback, "last_timing", {})
+        finally:
+            # The fallback model and its staged files end with this recording.
+            # A release failure must not discard text that was already decoded.
+            try:
+                fallback.unload()
+            except Exception:
+                self._log("fallback model release failed; error details suppressed")
 
     def _deliver_text(
             self, text, paste_target=PasteTarget("", 0),

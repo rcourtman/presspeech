@@ -537,7 +537,9 @@ def _run_microphone_check(app, selected, events):
         # Native driver errors can contain a private device or user name.
         result = "check_error"
     options = None
-    if result != "busy":
+    # A postponed check opened nothing. During a refresh, discovery would list
+    # only fallback choices, so keep the picker as it is.
+    if result not in ("busy", "refreshing"):
         try:
             # A reconnect can change PortAudio's device table during the
             # check. Discover again off the UI thread.
@@ -560,6 +562,10 @@ def _microphone_result_text(result):
         return (
             "Microphone check postponed — finish or cancel dictation, "
             "then choose Check Microphone")
+    if result == "refreshing":
+        return (
+            "Microphone check postponed — audio devices are refreshing; "
+            "choose Check Microphone again")
     return "Needs attention — microphone could not be opened"
 
 

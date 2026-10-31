@@ -4942,14 +4942,16 @@ class ModelIdleTests(unittest.TestCase):
         instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
         instance.transcriber = mock.Mock()
         instance.transcriber.loaded.return_value = True
-        instance.transcriber.transcribe.side_effect = [
-            RuntimeError("first private hypothesis"),
-            RuntimeError("fallback private hypothesis"),
-        ]
+        instance.transcriber.transcribe.side_effect = RuntimeError(
+            "first private hypothesis")
+        fallback = mock.Mock()
+        fallback.transcribe.side_effect = RuntimeError(
+            "fallback private hypothesis")
         instance._log = mock.Mock()
         instance.notify = mock.Mock()
 
-        instance._transcribe_worker_inner(mock.sentinel.audio)
+        with mock.patch.object(app.engine, "Transcriber", return_value=fallback):
+            instance._transcribe_worker_inner(mock.sentinel.audio)
 
         messages = str(instance._log.mock_calls) + str(instance.notify.mock_calls)
         self.assertNotIn("private hypothesis", messages)
