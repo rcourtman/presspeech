@@ -121,7 +121,7 @@ def workflow_event_self_test() -> None:
     expression = " ".join(match[1].split()).replace("&&", " and ").replace("||", " or ")
 
     def admits(**changes):
-        values = dict(name="check", event="push", head_branch="main",
+        values = dict(name="check", path=WORKFLOW, event="push", head_branch="main",
                       conclusion="success", head_repository=SimpleNamespace(full_name=REPOSITORY))
         event_name = changes.pop("event_name", "workflow_run")
         ref = changes.pop("ref", "refs/heads/main")
@@ -130,10 +130,13 @@ def workflow_event_self_test() -> None:
                                  event=SimpleNamespace(workflow_run=SimpleNamespace(**values)))
         return eval(expression, {"__builtins__": {}}, {"github": github})
 
+    windows_release = {"name": "windows-release", "event": "workflow_dispatch",
+                       "path": ".github/workflows/windows-release.yml"}
     accepted = [{}, {"event": "release", "head_branch": "v0.3.8"},
                 {"event": "release", "head_branch": "windows-v0.1.12"},
                 {"event_name": "workflow_dispatch"},
-                {"name": "windows-release", "event": "workflow_dispatch"}]
+                windows_release,
+                dict(windows_release, name="Windows release 0.1.13 (manual)")]
     for case in accepted:
         assert admits(**case), case
     rejected_events = [
@@ -141,18 +144,20 @@ def workflow_event_self_test() -> None:
         {"event": "workflow_dispatch"}, {"name": "other-workflow"},
         {"event_name": "workflow_dispatch", "ref": "refs/heads/feature",
          "event": "workflow_dispatch"},
-        {"name": "windows-release", "event": "push"},
-        {"name": "windows-release", "event": "release"},
-        {"name": "windows-release", "event": "workflow_dispatch", "head_branch": "feature"},
+        dict(windows_release, event="push"),
+        dict(windows_release, event="release"),
+        dict(windows_release, head_branch="feature"),
+        dict(windows_release, path=".github/workflows/other.yml"),
+        dict(windows_release, name="Windows release 0.1.13 (manual)", path=WORKFLOW),
     ]
-    for source in ({}, {"event": "release"}, {"name": "windows-release", "event": "workflow_dispatch"}):
+    for source in ({}, {"event": "release"}, windows_release):
         for conclusion in ("failure", "cancelled", "skipped", None):
             rejected_events.append(dict(source, conclusion=conclusion))
         rejected_events.append(dict(source, head_repository=SimpleNamespace(full_name="fork/presspeech")))
     for case in rejected_events:
         assert not admits(**case), case
     assert "workflows: [check, windows-release]" in workflow
-    assert "github.event.workflow_run.name == 'windows-release'" in workflow.split("- name: Verify published release belongs to main", 1)[1].split("env:", 1)[0]
+    assert "github.event.workflow_run.path == '.github/workflows/windows-release.yml'" in workflow.split("- name: Verify published release belongs to main", 1)[1].split("env:", 1)[0]
     # Main moves often: a green check for a commit main already moved past, or
     # a main update during validation, ends without deploying, not as a failure.
     superseded = workflow.split("- name: Skip checks superseded by newer main", 1)[1].split("\n      - ", 1)[0]
