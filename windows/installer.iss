@@ -170,7 +170,7 @@ begin
   Result := True;
 end;
 
-function ExactTree(const Path, Relative: String; Files: TStringList): Boolean;
+function ExactTree(const Path, Relative: String; Files, Directories: TStringList): Boolean;
 var
   Entry: TFindRec;
   Child: String;
@@ -183,7 +183,8 @@ begin
           if (Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then Exit;
           Child := Relative + Entry.Name;
           if (Entry.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin
-            if not ExactTree(Path + '\' + Entry.Name, Child + '\', Files) then Exit;
+            if Directories.IndexOf(Child) < 0 then Exit;
+            if not ExactTree(Path + '\' + Entry.Name, Child + '\', Files, Directories) then Exit;
           end else if (Child <> 'presspeech-bundle.owner') and
                       (Child <> 'presspeech-bundle.sha256') and
                       (Child <> 'Presspeech.exe.pending') and
@@ -202,17 +203,28 @@ var
   Lines: TArrayOfString;
   I: Integer;
   Relative, Filename: String;
-  Files: TStringList;
+  Files, Directories: TStringList;
 begin
   Result := False;
   if not OwnedBundle(BundlePath, '{#BundleDir}') then Exit;
   Files := TStringList.Create;
+  Directories := TStringList.Create;
   try
     try
       if GetSHA256OfFile(BundlePath + '\presspeech-bundle.sha256') <> '{#ManifestSHA256}' then Exit;
       if not LoadStringsFromFile(BundlePath + '\presspeech-bundle.sha256', Lines) then Exit;
       if GetArrayLength(Lines) = 0 then Exit;
       for I := 0 to GetArrayLength(Lines) - 1 do begin
+        if Copy(Lines[I], 1, 3) = 'D  ' then begin
+          Relative := Copy(Lines[I], 4, Length(Lines[I]));
+          if (Relative = '') or (Relative[1] = '\') or (Pos('..', Relative) > 0) or
+             (Pos(':', Relative) > 0) or (Pos('/', Relative) > 0) or
+             (Directories.IndexOf(Relative) >= 0) then Exit;
+          Filename := BundlePath + '\' + Relative;
+          if not SafeChain(Filename) or not DirExists(Filename) then Exit;
+          Directories.Add(Relative);
+          Continue;
+        end;
         if (Length(Lines[I]) < 67) or (Copy(Lines[I], 65, 2) <> '  ') then Exit;
         Relative := Copy(Lines[I], 67, Length(Lines[I]));
         if (Relative = '') or (Relative[1] = '\') or
@@ -223,13 +235,14 @@ begin
         if GetSHA256OfFile(Filename) <> Copy(Lines[I], 1, 64) then Exit;
         Files.Add(Relative);
       end;
-      Result := ExactTree(BundlePath, '', Files);
+      Result := ExactTree(BundlePath, '', Files, Directories);
     except
       Log('Bundle integrity verification failed.');
       Result := False;
     end;
   finally
     Files.Free;
+    Directories.Free;
   end;
 end;
 

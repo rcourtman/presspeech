@@ -838,7 +838,10 @@ start from the pinned, immutable 0.1.11 and 0.1.12 installers after checking the
 recorded digests and GitHub release attestations. The checks repeat the same
 candidate installer, preserve synthetic settings and caches, preserve the
 selected startup command, and confirm uninstall removes application files and
-the startup entry while retaining user data.
+the startup entry while retaining user data. An isolated CPU `base.en` load,
+native decoder warm-up and synthetic-silence decode run through the installed
+candidate after each upgrade/reinstall; this is not speech accuracy or GPU
+qualification.
 Any failure blocks publication; install/uninstall logs are retained and printed
 in the workflow diagnostics. This checks the packaged installation and upgrade
 lifecycle on the hosted runner. Microphone capture, first dictation, target-app

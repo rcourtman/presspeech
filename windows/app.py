@@ -4005,6 +4005,8 @@ def _selftest():
         transcriber.load(
             model_name,
             notify=lambda title, msg: PresspeechApp._log("self-test: " + msg))
+        PresspeechApp._log("self-test warming native decoder")
+        transcriber.warmup(seconds=1)
         PresspeechApp._log("self-test transcribing silent clip")
         text = transcriber.transcribe(
             np.zeros(16000, dtype=np.float32), language="en")

@@ -224,6 +224,9 @@ $appExe = Join-Path $stageDistDir "Presspeech\Presspeech.exe"
 if (-not (Test-Path -LiteralPath $appExe)) {
     throw "Packaged executable was not created: $appExe"
 }
+if ((Get-Item -LiteralPath $appExe).VersionInfo.ProductVersion -cne $Version) {
+    throw 'Packaged executable version does not match the installer version.'
+}
 Invoke-PresspeechSign $appExe
 Invoke-PresspeechPackageSelfTest $appExe
 

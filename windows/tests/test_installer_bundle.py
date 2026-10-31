@@ -26,7 +26,7 @@ class InstallerBundleTests(unittest.TestCase):
                 second = bundle.prepare(package, include)
             self.assertEqual(first, second)
             manifest = package / name / bundle.MANIFEST
-            expected = hashlib.sha256(b"payload").hexdigest() + "  library\\café.txt\n"
+            expected = "D  library\n" + hashlib.sha256(b"payload").hexdigest() + "  library\\café.txt\n"
             self.assertEqual(manifest.read_text(encoding="utf-8-sig"), expected)
             self.assertEqual(first["ManifestSHA256"], hashlib.sha256(manifest.read_bytes()).hexdigest())
             self.assertEqual(first["ExeSHA256"], hashlib.sha256(b"synthetic frozen image").hexdigest())

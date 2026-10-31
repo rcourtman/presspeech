@@ -22,7 +22,16 @@ if ([IO.Path]::GetFileName($installerPath) -cne "Presspeech-Setup-$ExpectedVersi
 $candidateHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
 
 # Retain the fresh-install/startup/uninstall qualification as a prerequisite.
-& (Join-Path $PSScriptRoot 'smoke-installer.ps1') -Installer $installerPath -ExpectedVersion $ExpectedVersion
+$baselineVerificationToken = $env:GH_TOKEN
+$baselineActionsToken = $env:GITHUB_TOKEN
+try {
+    $env:GH_TOKEN = ''
+    $env:GITHUB_TOKEN = ''
+    & (Join-Path $PSScriptRoot 'smoke-installer.ps1') -Installer $installerPath -ExpectedVersion $ExpectedVersion
+} finally {
+    $env:GH_TOKEN = $baselineVerificationToken
+    $env:GITHUB_TOKEN = $baselineActionsToken
+}
 
 $qaRoot = Join-Path $env:RUNNER_TEMP ('presspeech-full-upgrade-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $qaRoot | Out-Null
@@ -34,6 +43,15 @@ foreach ($name in @('APPDATA', 'LOCALAPPDATA', 'HF_HOME', 'HF_HUB_CACHE')) {
 }
 $uninstaller = $null
 $results = @()
+function Invoke-UpgradeProcess(
+        [string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds,
+        [string]$Description, [hashtable]$Environment = @{}) {
+    # Baseline verification needs repository credentials; installed binaries
+    # and uninstallers do not. Keep the verification token in the controller.
+    $childEnvironment = @{ GH_TOKEN = ''; GITHUB_TOKEN = '' }
+    foreach ($key in $Environment.Keys) { $childEnvironment[$key] = $Environment[$key] }
+    Invoke-CheckedProcess $FilePath $Arguments $TimeoutSeconds $Description $childEnvironment
+}
 try {
     # Only the disposable child applications see these synthetic data roots.
     # The installer uses its real per-user Programs location on this runner,
@@ -49,7 +67,10 @@ try {
     )
     foreach ($file in $dataFiles) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $file) -Force | Out-Null
-        [IO.File]::WriteAllText($file, '{"qualification_marker":"preserve-user-data"}')
+        $content = if ($file -ceq $dataFiles[0]) {
+            '{"qualification_marker":"preserve-user-data","model":"base.en","model_explicit":true,"check_updates":false}'
+        } else { '{"qualification_marker":"preserve-user-data"}' }
+        [IO.File]::WriteAllText($file, $content)
     }
     $dataHashes = @{}
     foreach ($file in $dataFiles) { $dataHashes[$file] = (Get-FileHash -LiteralPath $file).Hash }
@@ -77,7 +98,7 @@ try {
         gh release verify-asset $baseline.tag $oldInstaller --repo rcourtman/presspeech
         if ($LASTEXITCODE -ne 0) { throw 'Baseline asset attestation failed' }
         $releaseText | Set-Content -LiteralPath (Join-Path $baselineRoot 'release.json')
-        Invoke-CheckedProcess $oldInstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
+        Invoke-UpgradeProcess $oldInstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
             '/NOICONS', '/NOCLOSEAPPLICATIONS', '/NORESTARTAPPLICATIONS', '/TASKS=',
             "/DIR=$installDir", "/LOG=$(Join-Path $baselineRoot 'legacy-install.log')") 600 'Install immutable legacy baseline'
         $uninstaller = Join-Path $installDir 'unins000.exe'
@@ -85,7 +106,7 @@ try {
             throw 'Legacy installation version mismatch'
         }
         $oldResult = Join-Path $baselineRoot 'old-package.txt'
-        Invoke-CheckedProcess $appExecutable @('--package-selftest') 180 'Legacy installed package self-test' `
+        Invoke-UpgradeProcess $appExecutable @('--package-selftest') 180 'Legacy installed package self-test' `
             @{PRESSPEECH_PACKAGE_SELFTEST_RESULT=$oldResult}
         if ((Get-Content -LiteralPath $oldResult -Raw).Trim() -cne 'ok') { throw 'Legacy package did not self-test' }
         $runKey = Open-CurrentUserRunKey $true
@@ -102,7 +123,7 @@ try {
                     }
                 }
             }
-            Invoke-CheckedProcess $installerPath @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
+            Invoke-UpgradeProcess $installerPath @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
                 '/NOICONS', '/NOCLOSEAPPLICATIONS', '/NORESTARTAPPLICATIONS', '/TASKS=',
                 "/DIR=$installDir", "/LOG=$(Join-Path $baselineRoot "$phase.log")") 900 'Upgrade installed package'
             if ((Get-Item -LiteralPath $appExecutable).VersionInfo.ProductVersion -cne $ExpectedVersion) {
@@ -118,9 +139,11 @@ try {
                 }
             }
             $resultFile = Join-Path $baselineRoot "$phase-package.txt"
-            Invoke-CheckedProcess $appExecutable @('--package-selftest') 180 'Upgraded installed package self-test' `
+            Invoke-UpgradeProcess $appExecutable @('--package-selftest') 180 'Upgraded installed package self-test' `
                 @{PRESSPEECH_PACKAGE_SELFTEST_RESULT=$resultFile}
             if ((Get-Content -LiteralPath $resultFile -Raw).Trim() -cne 'ok') { throw 'Upgraded package did not self-test' }
+            Invoke-UpgradeProcess $appExecutable @('--selftest') 600 'Installed CPU model and decoder self-test' `
+                @{CUDA_VISIBLE_DEVICES='-1'}
             $runKey = Open-CurrentUserRunKey $false
             try {
                 if ($null -eq $runKey -or $runKey.GetValue('Presspeech') -cne $startupCommand) {
@@ -131,7 +154,7 @@ try {
                 if ((Get-FileHash -LiteralPath $file).Hash -cne $dataHashes[$file]) { throw 'Upgrade changed user data' }
             }
         }
-        Invoke-CheckedProcess $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+        Invoke-UpgradeProcess $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
             "/LOG=$(Join-Path $baselineRoot 'uninstall.log')") 300 'Uninstall upgraded package'
         for ($attempt = 0; $attempt -lt 120 -and (Test-Path -LiteralPath $installDir); $attempt++) {
             Start-Sleep -Milliseconds 250
@@ -147,6 +170,7 @@ try {
         $results += @{baseline=$baseline.tag; baseline_sha256=$baseline.sha256;
             candidate_sha256=$candidateHash.ToLowerInvariant(); upgrade='passed'; identical_reinstall='passed';
             installed_package_selftests='passed'; startup_preservation_and_cleanup='passed';
+            installed_cpu_model_warmup_and_silence_decode='passed';
             user_data_preserved='passed'; uninstall='passed'}
         $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $qaRoot 'results.json')
         Remove-Item -LiteralPath $oldInstaller -Force
@@ -158,7 +182,7 @@ try {
 } finally {
     try {
         if ($uninstaller -and (Test-Path -LiteralPath $uninstaller)) {
-            Invoke-CheckedProcess $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 300 'Qualification cleanup uninstall'
+            Invoke-UpgradeProcess $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 300 'Qualification cleanup uninstall'
         }
     } finally {
         foreach ($name in $originalEnvironment.Keys) {

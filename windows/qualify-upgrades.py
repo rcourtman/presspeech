@@ -86,6 +86,7 @@ else:
             with (package / name / filename).open("wb") as output:
                 for _ in range(16):
                     output.write(b"\0" * 1024 * 1024)
+        (package / name / 'café-data.txt').write_text('Unicode payload path', encoding='utf-8')
         include = self.root / f"bundle-{label}.iss"
         if not legacy:
             bundle.prepare(package, include)
@@ -179,10 +180,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
         assert value == {"bundle": name, "marker": marker}, value
 
     @contextmanager
-    def checkpoint(self, case, stage):
+    def checkpoint(self, case, stage, suppress=True):
         checkpoint = case["root"] / f"checkpoint-{uuid.uuid4().hex}"
         log = checkpoint.with_suffix(".log")
-        process = subprocess.Popen([str(case["new"]), "/VERYSILENT", "/SUPPRESSMSGBOXES",
+        process = subprocess.Popen([str(case["new"]), "/VERYSILENT" if suppress else "/SILENT",
+                                    *(["/SUPPRESSMSGBOXES"] if suppress else []),
                                     "/NORESTART", "/NOCLOSEAPPLICATIONS", "/NOICONS", "/SP-",
                                     "/TASKS=", f"/DIR={case['app']}", f"/LOG={log}",
                                     f"/QASTAGE={stage}", f"/QACHECKPOINT={checkpoint}"])
@@ -204,6 +206,49 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
         Path(str(checkpoint) + ".release").touch()
         status = process.wait(timeout=120)
         assert status == expected, (status, expected, str(checkpoint))
+
+    @staticmethod
+    def confirm_cancel(wizard):
+        user = ctypes.WinDLL('user32', use_last_error=True)
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user.GetDlgItem.argtypes = [wintypes.HWND, ctypes.c_int]
+        user.GetDlgItem.restype = wintypes.HWND
+        user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+        user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+        user.EnumChildWindows.argtypes = [wintypes.HWND, callback_type, wintypes.LPARAM]
+        owner = wintypes.DWORD()
+        user.GetWindowThreadProcessId(wizard, ctypes.byref(owner))
+        buttons = []
+
+        @callback_type
+        def child(window, unused):
+            text = ctypes.create_unicode_buffer(128)
+            user.GetWindowTextW(window, text, len(text))
+            if text.value.replace('&', '').casefold() == 'yes':
+                buttons.append(window)
+            return True
+
+        @callback_type
+        def dialog(window, unused):
+            pid = wintypes.DWORD()
+            user.GetWindowThreadProcessId(window, ctypes.byref(pid))
+            if pid.value == owner.value and window != wizard:
+                button = user.GetDlgItem(window, 6)  # IDYES on this owned dialog
+                if button:
+                    buttons.append(button)
+                else:
+                    user.EnumChildWindows(window, child, 0)
+            return True
+
+        for _ in range(300):
+            user.EnumWindows(dialog, 0)
+            if buttons:
+                assert user.PostMessageW(buttons[0], 0xF5, 0, 0)  # BM_CLICK
+                return
+            time.sleep(.05)
+        raise RuntimeError('Owned cancellation confirmation did not appear')
 
     @staticmethod
     @contextmanager
@@ -264,7 +309,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
             assert path.read_bytes()[:7] == b"damaged"
         self.record("damaged-active-generation", refused_without_overwrite=True)
 
-        for fault in ("missing", "corrupt", "extra", "manifest", "pending"):
+        for fault in ("missing", "corrupt", "extra", "extra-empty", "manifest", "pending"):
             with self.case("integrity-" + fault) as case:
                 with self.checkpoint(case, "staged") as (process, checkpoint):
                     target = case["app"] / self.name_b
@@ -273,6 +318,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
                     elif fault == "extra":
                         (target / "poisoned.dist-info").mkdir()
                         (target / "poisoned.dist-info" / "METADATA").write_text("poison")
+                    elif fault == 'extra-empty':
+                        (target / 'poisoned.dist-info').mkdir()
                     else:
                         filename = {"corrupt": "zz-sentinel.bin", "manifest": bundle.MANIFEST,
                                     "pending": bundle.PENDING}[fault]
@@ -325,11 +372,14 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
         self.record("native-copy-failure", old_preserved=True, rerun_recovered=True)
 
         with self.case("cancel") as case:
-            with self.checkpoint(case, "payload") as (process, checkpoint):
+            with self.checkpoint(case, "payload", suppress=False) as (process, checkpoint):
                 user = ctypes.WinDLL("user32", use_last_error=True)
                 user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-                assert user.PostMessageW(int(checkpoint.read_text()), 0x10, 0, 0)
-                self.resume(process, checkpoint, 5)
+                wizard = int(checkpoint.read_text())
+                assert user.PostMessageW(wizard, 0x10, 0, 0)
+                Path(str(checkpoint) + '.release').touch()
+                self.confirm_cancel(wizard)
+                assert process.wait(timeout=120) == 5
             self.probe(case, "1.0", self.name_a)
             self.install(case)
             self.probe(case, "2.0", self.name_b)

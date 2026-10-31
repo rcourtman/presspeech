@@ -56,24 +56,29 @@ def prepare(root, include):
     seen = set()
     size = executable.stat().st_size
     longest = 0
+    file_count = 0
     for path in sorted(bundle.rglob("*")):
         if path.is_symlink() or getattr(path.lstat(), "st_file_attributes", 0) & 0x400:
             raise ValueError("Reparse points are not supported in installer bundles")
-        if path.is_dir():
-            continue
         relative = path.relative_to(bundle)
         if len(relative.parts) == 1 and relative.name.casefold() == PENDING.casefold():
             raise ValueError('Package contains a staged executable from an installation')
         if len(relative.parts) == 1 and relative.name.casefold() in RESERVED:
+            if path.is_dir():
+                raise ValueError('Reserved metadata path is a directory')
             continue
         value = safe_relative(relative)
         if value.casefold() in seen:
             raise ValueError("Case-colliding bundle paths")
         seen.add(value.casefold())
-        size += path.stat().st_size
         longest = max(longest, len(value))
+        if path.is_dir():
+            entries.append(f'D  {value}')
+            continue
+        size += path.stat().st_size
+        file_count += 1
         entries.append(f"{digest(path)}  {value}")
-    if not entries:
+    if not file_count:
         raise ValueError("Bundle is empty")
     manifest = bundle / MANIFEST
     manifest.write_text("\n".join(entries) + "\n", encoding="utf-8-sig", newline="\n")

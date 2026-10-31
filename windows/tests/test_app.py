@@ -2158,6 +2158,28 @@ class TextRegressionTests(unittest.TestCase):
         self.delivery_recovery_window = patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_selftest_warms_decoder_before_silence_and_unloads(self):
+        transcriber = mock.Mock()
+        transcriber.transcribe.return_value = ''
+        with mock.patch.object(app.cfg, 'load', return_value={'model': 'base.en'}), \
+                mock.patch.object(app.engine, 'Transcriber', return_value=transcriber), \
+                mock.patch.object(app.PresspeechApp, '_log'):
+            app._selftest()
+        self.assertEqual([call[0] for call in transcriber.method_calls],
+                         ['load', 'warmup', 'transcribe', 'unload'])
+        transcriber.warmup.assert_called_once_with(seconds=1)
+
+    def test_selftest_unloads_when_decoder_warmup_fails(self):
+        transcriber = mock.Mock()
+        transcriber.warmup.side_effect = RuntimeError('synthetic decoder failure')
+        with mock.patch.object(app.cfg, 'load', return_value={'model': 'base.en'}), \
+                mock.patch.object(app.engine, 'Transcriber', return_value=transcriber), \
+                mock.patch.object(app.PresspeechApp, '_log'):
+            with self.assertRaisesRegex(RuntimeError, 'synthetic decoder failure'):
+                app._selftest()
+        transcriber.unload.assert_called_once_with()
+        transcriber.transcribe.assert_not_called()
+
     def test_packaged_selftest_loads_every_lazy_runtime_dependency(self):
         loaded = {}
 

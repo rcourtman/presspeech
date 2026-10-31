@@ -179,6 +179,8 @@ jobs:
           }
       - name: Qualify installed Windows package
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           .\windows\qualify-full-upgrade.ps1 `
             -Installer "windows\dist\installer\Presspeech-Setup-$env:PRESSPEECH_RELEASE_VERSION-x64.exe" `
