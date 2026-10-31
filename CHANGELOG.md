@@ -1027,6 +1027,10 @@ paths are not represented as qualified. Audio retention is unchanged.
 
 #### Model-download privacy correction
 
+The frozen release also updates its CA bundle and the Pillow, filelock,
+MessagePack and setuptools dependencies to their patched versions. The rest
+of the reviewed inference and packaging stack remains pinned.
+
 Windows 0.1.12 left Hugging Face Hub/Transformers usage telemetry enabled
 during model downloads and allowed default implicit authentication. An
 available Hugging Face token could accompany a request; inherited

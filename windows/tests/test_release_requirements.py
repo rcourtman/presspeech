@@ -14,6 +14,26 @@ import release_requirements
 
 
 class ReleaseRequirementTests(unittest.TestCase):
+    def test_targeted_refresh_preserves_unrelated_reviewed_pins(self):
+        pins = {"transformers": "5.16.1", "certifi": "2026.7.22", "pillow": "12.3.0"}
+        self.assertEqual(
+            release_requirements.retained_pins(pins, ["Pillow", "certifi"]),
+            "transformers==5.16.1\n",
+        )
+        with self.assertRaises(ValueError):
+            release_requirements.retained_pins(pins, ["misspelled-package"])
+
+    def test_targeted_refresh_preserves_reviewed_hashes_and_rejects_graph_drift(self):
+        def block(name, version, digest):
+            return f"{name}=={version} \\\n    --hash=sha256:{digest * 64}\n"
+        old = block("alpha", "1", "a") + block("beta", "2", "b")
+        new = block("alpha", "3", "c") + block("beta", "2", "d")
+        self.assertEqual(release_requirements.merge_targeted_lock(old, new, ["alpha"]),
+                         block("alpha", "3", "c") + block("beta", "2", "b"))
+        for invalid in (new + block("extra", "1", "e"), new.replace("beta==2", "beta==3")):
+            with self.assertRaises(ValueError):
+                release_requirements.merge_targeted_lock(old, invalid, ["alpha"])
+
     def test_locked_python_patch_has_an_official_windows_installer(self):
         version = tuple(map(int, release_requirements.PYTHON_VERSION.split(".")))
         if version[:2] == (3, 12):

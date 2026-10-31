@@ -238,6 +238,13 @@ publishes qualification evidence, without publishing an app release. Use
 
 ## Hosted macOS release builds
 
+For a focused Windows dependency security refresh, use
+`python windows/release_requirements.py --upgrade-package NAME` and repeat
+the option for each reviewed package. Unselected packages remain constrained
+to their existing versions; the resolver verifies compatibility and regenerates
+the hashes. Update the source requirement floors and run the native Windows
+release checks against the resulting lock before publishing.
+
 When local resources cannot support compilation, dispatch
 `macos-release-build.yml` on `main` with the intended version and the exact
 approved commit as `expected_sha`. It runs the debug self-tests, packaged-app

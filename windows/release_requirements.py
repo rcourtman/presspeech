@@ -251,7 +251,30 @@ def without_torch(compiled: str) -> str:
     return "\n".join(output).rstrip() + "\n"
 
 
-def generate() -> None:
+def retained_pins(existing: dict[str, str], upgrade: list[str]) -> str:
+    names = {canonical_name(name) for name in upgrade}
+    unknown = names - existing.keys()
+    if unknown:
+        raise ValueError("Targeted upgrades must name existing locked packages: " + ", ".join(sorted(unknown)))
+    return "".join(f"{name}=={version}\n" for name, version in sorted(existing.items()) if name not in names)
+
+
+def merge_targeted_lock(existing: str, resolved: str, upgrade: list[str]) -> str:
+    old_pins, new_pins = pin_map(existing), pin_map(resolved)
+    names = {canonical_name(name) for name in upgrade}
+    if old_pins.keys() != new_pins.keys():
+        raise ValueError("Targeted refresh changed the package inventory; review a full lock refresh instead")
+    if any(new_pins[name] != version for name, version in old_pins.items() if name not in names):
+        raise ValueError("Targeted refresh changed an unselected package")
+    def blocks(text: str) -> dict[str, str]:
+        parts = re.split(r"(?m)(?=^[A-Za-z0-9][A-Za-z0-9_.-]*==)", text)
+        return {canonical_name(PIN_RE.match(part.splitlines()[0])[1]): part
+                for part in parts if part and PIN_RE.match(part.splitlines()[0])}
+    old_blocks, new_blocks = blocks(existing), blocks(resolved)
+    return "".join(new_blocks[name] if name in names else old_blocks[name] for name in sorted(old_pins))
+
+
+def generate(upgrade: list[str] | None = None) -> None:
     uv = shutil.which("uv")
     if not uv:
         raise SystemExit(
@@ -286,8 +309,16 @@ def generate() -> None:
             "--output-file",
             str(output),
         ]
+        if upgrade:
+            # Keep the reviewed inference and packaging stack fixed while
+            # resolving a targeted security update and all of its hashes.
+            constraints = temporary_path / "retained-pins.txt"
+            constraints.write_text(retained_pins(pin_map(LOCK.read_text()), upgrade), encoding="utf-8")
+            command.extend(["--constraint", str(constraints)])
         subprocess.run(command, cwd=ROOT, check=True)
         body = without_torch(output.read_text(encoding="utf-8"))
+        if upgrade:
+            body = merge_targeted_lock(LOCK.read_text(), body, upgrade)
     cuda_text = resolved_cuda_lock()
     overrides = {INPUTS[3]: cuda_text}
     result = header(body, overrides) + body
@@ -375,7 +406,11 @@ def main() -> None:
     mode.add_argument("--check", action="store_true", help="validate the committed lock")
     mode.add_argument("--verify-environment", action="store_true")
     mode.add_argument("--self-test", action="store_true")
+    parser.add_argument("--upgrade-package", action="append", default=[],
+                        help="update only this locked package; repeat for a targeted refresh")
     args = parser.parse_args()
+    if args.upgrade_package and (args.check or args.verify_environment or args.self_test):
+        parser.error("--upgrade-package requires lock generation")
     if args.self_test:
         self_test()
     elif args.verify_environment:
@@ -384,7 +419,7 @@ def main() -> None:
         validate(LOCK.read_text(encoding="utf-8"))
         print("Windows release requirement lock is current.")
     else:
-        generate()
+        generate(args.upgrade_package)
 
 
 if __name__ == "__main__":

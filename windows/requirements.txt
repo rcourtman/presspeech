@@ -2,7 +2,7 @@ faster-whisper>=1.2.1
 sounddevice>=0.4.6
 pynput>=1.7.6
 pystray>=0.19.5
-Pillow>=10.0.0
+Pillow>=13.0.0
 pycaw==20251023
 tk-uia==0.8.0
 numpy>=1.26.0
@@ -11,6 +11,11 @@ transformers>=5.14.1,<6
 sentencepiece>=0.2.0
 librosa>=0.11.0
 soxr>=1.1.0
+
+# Security floors for the bundled model/download dependencies.
+certifi>=2026.10.18
+filelock>=4.2.1
+msgpack>=1.2.3
 
 # PyTorch uses its own package index, so its exact CUDA build lives in
 # requirements-cuda.txt and is installed in a separate pip invocation.
