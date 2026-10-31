@@ -224,6 +224,10 @@ begin
   if not OwnedBundle(BundlePath, '{#BundleDir}') then Exit;
   Files := TStringList.Create;
   Directories := TStringList.Create;
+  { Large runtime bundles contain thousands of paths. Keep inventory lookup
+    logarithmic instead of rescanning the complete list for every file. }
+  Files.Sorted := True;
+  Directories.Sorted := True;
   try
     try
       if GetSHA256OfFile(BundlePath + '\presspeech-bundle.sha256') <> '{#ManifestSHA256}' then Exit;
