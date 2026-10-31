@@ -66,7 +66,9 @@ better.
 > ([macOS](https://rcourtman.github.io/presspeech/install.html#direct-download) or
 > [Windows](https://rcourtman.github.io/presspeech/windows.html#download-verify-run))
 > for the exact version; the source branch can contain an unreleased candidate.
-> Either macOS 0.3.9 or macOS 0.3.10 asks before its first speech-model download.
+> A clean installation of macOS 0.3.9, macOS 0.3.10 or macOS 0.3.11
+> asks before its first speech-model download. Existing installations retain
+> automatic startup, so a missing model may still download on launch.
 > On Windows 0.1.12, a missing speech-model download starts on launch and may
 > send Hugging Face usage telemetry or an available token, including to a
 > custom download route. Audio and transcripts are never sent. If you are
