@@ -53,8 +53,9 @@ route. They are not live corrections; recheck both release pages before use.
 
 Recheck release-size and benchmark numbers against `docs/site-metadata.json`
 and the benchmarks page. Run `python3 scripts/sync-docs.py --check` and
-`python3 scripts/check-public-assets.py` before any future posting; these
-checks do not establish native delivery or privacy safety.
+`python3 scripts/check-public-assets.py` before any future posting, plus
+`python3 scripts/sync-docs.py --check-compare-age` before linking a comparison
+page; these checks do not establish native delivery or privacy safety.
 
 ## Assets
 

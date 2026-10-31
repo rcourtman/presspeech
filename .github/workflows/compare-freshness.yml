@@ -1,5 +1,10 @@
 name: comparison freshness
 
+# The reminder for comparison-page reviews. Review age is deliberately not part
+# of `sync-docs.py --check`, which also gates PRs, Pages, and releases; this run
+# fails from COMPARE_REMINDER_DAYS (scripts/sync-docs.py) before a review falls
+# due until its stamp is refreshed.
+
 on:
   schedule:
     - cron: "17 8 * * 1"
@@ -17,6 +22,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Check comparison review age
-        run: python3 scripts/sync-docs.py --check
+        run: python3 scripts/sync-docs.py --check-compare-age
       - name: Check pinned comparison releases
+        # Report both reminders when the review-age step fails.
+        if: ${{ !cancelled() }}
         run: python3 scripts/check-compare-releases.py

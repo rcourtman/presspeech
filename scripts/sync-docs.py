@@ -13,13 +13,14 @@ import difflib
 import hashlib
 import html
 import json
+import os
 import plistlib
 import re
 import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 
@@ -1180,12 +1181,17 @@ REPOSITORY_UNSAFE_DOWNLOAD_PATTERNS = {
 }
 
 # Compare pages quote fast-moving competitor pricing and claims. Each page must
-# carry an exact "checked <day> <Month> <Year>" stamp; sync and --check fail
-# once the oldest stamp ages out so a release forces a re-verify against the
-# cited sources. scripts/check-compare-releases.py separately watches products
-# whose first-party GitHub release can be checked between those reviews.
+# carry an exact "checked <day> <Month> <Year>" stamp, and its oldest stamp is
+# due for re-verification against the cited sources COMPARE_MAX_AGE_DAYS later.
+# Sync and --check enforce the stamps but only warn about review age: --check
+# also gates PRs, Pages, and releases, so its verdict for a commit must not
+# change with the calendar. --check-compare-age fails from COMPARE_REMINDER_DAYS
+# before a review is due and runs weekly in .github/workflows/compare-freshness.yml.
+# scripts/check-compare-releases.py separately watches products whose
+# first-party GitHub release can be checked between those reviews.
 COMPARE_DIR = DOCS / "compare"
 COMPARE_MAX_AGE_DAYS = 90
+COMPARE_REMINDER_DAYS = 14
 COMPARE_CHECKED_RE = re.compile(
     r"\bchecked (\d{1,2}) "
     r"(January|February|March|April|May|June|July|August|September|October|November|December)"
@@ -5417,51 +5423,84 @@ def check_windows_release_references(
     return errors
 
 
-def check_compare_freshness(
+def compare_checked_dates(path: Path) -> tuple[list[date], list[str]]:
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+    stamps = COMPARE_CHECKED_RE.findall(read_text(path))
+    if not stamps:
+        return [], [
+            f"{display}: competitor claims carry no exact "
+            "'checked <day> <Month> <Year>' stamp"
+        ]
+    checked_dates: list[date] = []
+    errors: list[str] = []
+    for day, month, year in stamps:
+        try:
+            checked_dates.append(date(int(year), MONTH_NUMBERS[month], int(day)))
+        except ValueError:
+            errors.append(f"{display}: invalid competitor-check date {day} {month} {year}")
+    return checked_dates, errors
+
+
+def format_checked_date(value: date) -> str:
+    return f"{value.day} {value.strftime('%B %Y')}"
+
+
+def check_compare_stamps(
     today: date | None = None, compare_dir: Path = COMPARE_DIR
 ) -> list[str]:
+    """Require valid, non-future stamps; a commit cannot start failing this later."""
     today = today or date.today()
     errors: list[str] = []
     for path in sorted(compare_dir.glob("*.html")):
-        text = read_text(path)
-        stamps = COMPARE_CHECKED_RE.findall(text)
-        if not stamps:
+        checked_dates, stamp_errors = compare_checked_dates(path)
+        errors.extend(stamp_errors)
+        if checked_dates and max(checked_dates) > today:
+            display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
             errors.append(
-                f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
-                "competitor claims carry no exact "
-                "'checked <day> <Month> <Year>' stamp"
+                f"{display}: competitor claims have a future check date, "
+                f"{format_checked_date(max(checked_dates))}"
             )
-            continue
-        checked_dates: list[date] = []
-        for day, month, year in stamps:
-            try:
-                checked_dates.append(
-                    date(int(year), MONTH_NUMBERS[month], int(day))
-                )
-            except ValueError:
-                errors.append(
-                    f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
-                    f"invalid competitor-check date {day} {month} {year}"
-                )
+    return errors
+
+
+def compare_reviews_due(
+    today: date | None = None, compare_dir: Path = COMPARE_DIR
+) -> list[str]:
+    """Name pages whose review is overdue or due within COMPARE_REMINDER_DAYS."""
+    today = today or date.today()
+    reminders: list[str] = []
+    for path in sorted(compare_dir.glob("*.html")):
+        checked_dates, _stamp_errors = compare_checked_dates(path)
         if not checked_dates:
             continue
         oldest = min(checked_dates)
-        newest = max(checked_dates)
-        if newest > today:
-            errors.append(
-                f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
-                "competitor claims have a future check date, "
-                f"{newest.day} {newest.strftime('%B %Y')}"
-            )
-        if (today - oldest).days > COMPARE_MAX_AGE_DAYS:
-            errors.append(
-                f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}: "
-                f"competitor claims last checked {oldest.day} "
-                f"{oldest.strftime('%B %Y')}, more than "
-                f"{COMPARE_MAX_AGE_DAYS} days ago — re-verify against the cited sources "
-                "and update the stamp"
-            )
-    return errors
+        due = oldest + timedelta(days=COMPARE_MAX_AGE_DAYS)
+        if (due - today).days > COMPARE_REMINDER_DAYS:
+            continue
+        display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name
+        status = "was due" if today > due else "due"
+        reminders.append(
+            f"{display}: comparison review {status} {format_checked_date(due)}; "
+            f"competitor claims last checked {format_checked_date(oldest)} — "
+            "re-verify against the cited sources and update the stamp"
+        )
+    return reminders
+
+
+def check_compare_pages() -> list[str]:
+    """Return blocking stamp errors; due reviews only warn (see COMPARE_MAX_AGE_DAYS)."""
+    for reminder in compare_reviews_due():
+        print_warning(reminder)
+    return check_compare_stamps()
+
+
+def print_warning(message: str) -> None:
+    # GitHub Actions turns this workflow command into a run annotation, which
+    # pull requests show without anyone opening the log.
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"::warning::{message}")
+    else:
+        print(f"warning: {message}", file=sys.stderr)
 
 
 def check_cross_platform_compare_privacy(
@@ -6781,26 +6820,135 @@ def run_self_test() -> None:
         compare_dir = Path(tmp) / "compare"
         compare_dir.mkdir()
         page = compare_dir / "sample.html"
-        page.write_text("<p>Sources: example (checked 1 January 2026).</p>", encoding="utf-8")
-        if check_compare_freshness(today=date(2026, 3, 1), compare_dir=compare_dir):
-            raise SyncError("self-test: fresh compare stamp was flagged")
-        if not check_compare_freshness(today=date(2026, 4, 2), compare_dir=compare_dir):
-            raise SyncError("self-test: stale compare stamp was not flagged")
+        # The oldest stamp drives the review: 1 September is due 30 November,
+        # reminded from 16 November, and overdue from 1 December. Stamp rules
+        # never depend on that age.
+        page.write_text(
+            "<p>Sources: example (checked 22 October 2026); "
+            "other (checked 1 September 2026).</p>",
+            encoding="utf-8",
+        )
+        for today in (date(2026, 10, 22), date(2026, 12, 1), date(2030, 1, 1)):
+            if check_compare_stamps(today=today, compare_dir=compare_dir):
+                raise SyncError(f"self-test: compare stamp aged into an error on {today}")
+        for today, status in (
+            (date(2026, 11, 15), None),
+            (date(2026, 11, 16), "due"),
+            (date(2026, 11, 30), "due"),
+            (date(2026, 12, 1), "was due"),
+        ):
+            display = page.relative_to(ROOT) if page.is_relative_to(ROOT) else page.name
+            expected = [] if status is None else [
+                f"{display}: comparison review {status} 30 November 2026; "
+                "competitor claims last checked 1 September 2026 — "
+                "re-verify against the cited sources and update the stamp"
+            ]
+            if compare_reviews_due(today=today, compare_dir=compare_dir) != expected:
+                raise SyncError(f"self-test: wrong compare review reminder on {today}")
         page.write_text("<p>Sources: example (checked 11 June 2026).</p>", encoding="utf-8")
-        if check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
+        if check_compare_stamps(today=date(2026, 7, 1), compare_dir=compare_dir):
             raise SyncError("self-test: day-carrying compare stamp was not parsed")
         page.write_text("<p>Sources: example (checked June 2026).</p>", encoding="utf-8")
-        if not check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
+        if not check_compare_stamps(today=date(2026, 7, 1), compare_dir=compare_dir):
             raise SyncError("self-test: inexact compare stamp was not flagged")
         page.write_text("<p>Sources: example (checked 31 June 2026).</p>", encoding="utf-8")
-        if not check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
+        if not check_compare_stamps(today=date(2026, 7, 1), compare_dir=compare_dir):
             raise SyncError("self-test: invalid compare stamp was not flagged")
         page.write_text("<p>Sources: example (checked 2 July 2026).</p>", encoding="utf-8")
-        if not check_compare_freshness(today=date(2026, 7, 1), compare_dir=compare_dir):
+        if not check_compare_stamps(today=date(2026, 7, 1), compare_dir=compare_dir):
             raise SyncError("self-test: future compare stamp was not flagged")
         page.write_text("<p>Sources: example.</p>", encoding="utf-8")
-        if not check_compare_freshness(today=date(2026, 3, 1), compare_dir=compare_dir):
+        if not check_compare_stamps(today=date(2026, 3, 1), compare_dir=compare_dir):
             raise SyncError("self-test: missing compare stamp was not flagged")
+
+        # --check also gates PRs, Pages, and releases: its verdict for this
+        # commit must not change however far the calendar advances, while the
+        # weekly --check-compare-age reminder must fail on the same pages.
+        # (`patch` is rebound to a version component above, so use `mock`.)
+        from unittest import mock
+
+        class FarFuture(date):
+            @classmethod
+            def today(cls) -> date:
+                return cls(9999, 12, 31)
+
+        def run_main(args: list[str], date_class: type = date) -> tuple[int, str]:
+            output = StringIO()
+            with (
+                mock.patch.object(sys.modules[__name__], "date", date_class),
+                mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}),
+                mock.patch.object(sys, "argv", ["sync-docs.py", *args]),
+                redirect_stderr(output),
+                redirect_stdout(output),
+            ):
+                return main(), output.getvalue()
+
+        def blocking_output(output: str) -> list[str]:
+            # Compare everything except review-age annotations and sync notices,
+            # so an unrelated failure cannot make the comparison pass vacuously.
+            return [line for line in output.splitlines()
+                    if not line.startswith(("::warning::", "updated "))]
+
+        check_now, check_now_output = run_main(["--check"])
+        check_later, check_later_output = run_main(["--check"], FarFuture)
+        if (check_later, blocking_output(check_later_output)) != (
+            check_now, blocking_output(check_now_output)
+        ):
+            raise SyncError("self-test: --check verdict changed as the calendar advanced")
+        if "::warning::docs/compare/" not in check_later_output:
+            raise SyncError("self-test: --check did not annotate overdue comparison reviews")
+        age_later, age_later_output = run_main(["--check-compare-age"], FarFuture)
+        if age_later != 1 or "comparison review was due" not in age_later_output:
+            raise SyncError("self-test: --check-compare-age accepted overdue comparison reviews")
+        with mock.patch.object(sys.modules[__name__], "compare_reviews_due", return_value=[]):
+            age_now, age_now_output = run_main(["--check-compare-age"])
+        if age_now != 0 or "comparison reviews are current" not in age_now_output:
+            raise SyncError("self-test: --check-compare-age rejected current comparison reviews")
+
+        # Sync mode is what ship-swift.sh runs after notarising, so it must not
+        # start failing with the calendar either. Writes are stubbed so the
+        # self-test never rewrites the checkout.
+        def run_sync(date_class: type = date) -> tuple[int, str]:
+            with mock.patch.object(sys.modules[__name__], "write_text"):
+                return run_main([], date_class)
+
+        sync_now, sync_now_output = run_sync()
+        sync_later, sync_later_output = run_sync(FarFuture)
+        if (sync_later, blocking_output(sync_later_output)) != (
+            sync_now, blocking_output(sync_now_output)
+        ):
+            raise SyncError("self-test: sync verdict changed as the calendar advanced")
+        if "::warning::docs/compare/" not in sync_later_output:
+            raise SyncError("self-test: sync did not annotate overdue comparison reviews")
+
+        # Stamp validity stays blocking in every mode.
+        with mock.patch.object(sys.modules[__name__], "check_compare_stamps",
+                               return_value=["compare-stamp-probe"]):
+            stamp_runs = {
+                "--check": run_main(["--check"]),
+                "--check-compare-age": run_main(["--check-compare-age"]),
+                "sync": run_sync(),
+            }
+        for mode, (result, output) in stamp_runs.items():
+            if result != 1 or "compare-stamp-probe" not in output:
+                raise SyncError(f"self-test: {mode} no longer blocks on invalid comparison stamps")
+
+        try:
+            run_main(["--check", "--check-compare-age"])
+        except SystemExit as exc:
+            if exc.code != 2:
+                raise SyncError("self-test: combined --check-compare-age exited unexpectedly") from exc
+        else:
+            raise SyncError("self-test: --check-compare-age combined with --check skipped --check")
+
+        workflow = read_text(ROOT / ".github" / "workflows" / "compare-freshness.yml")
+        if not re.search(r"(?m)^ *- name: Check comparison review age\n"
+                         r" *run: python3 scripts/sync-docs\.py --check-compare-age$", workflow):
+            raise SyncError("self-test: the weekly comparison workflow skips --check-compare-age")
+        if not re.search(r"(?m)^ *- name: Check pinned comparison releases\n(?: *#.*\n)*"
+                         r" *if: \$\{\{ !cancelled\(\) \}\}\n"
+                         r" *run: python3 scripts/check-compare-releases\.py$", workflow):
+            raise SyncError("self-test: the weekly release check no longer runs after a review-age failure")
 
         compare_privacy = Path(tmp) / "handy.html"
         compare_privacy.write_text(
@@ -8354,12 +8502,28 @@ def main() -> int:
     parser.add_argument("--release-zip", help="release zip whose byte size should be written to docs")
     parser.add_argument("--date", help="override last_updated date as YYYY-MM-DD")
     parser.add_argument("--self-test", action="store_true", help="run offline sync self-tests")
+    parser.add_argument(
+        "--check-compare-age",
+        action="store_true",
+        help=f"fail if a comparison review is overdue or due within {COMPARE_REMINDER_DAYS} days",
+    )
     args = parser.parse_args()
+    if args.check_compare_age and (args.check or args.self_test or args.release_zip or args.date):
+        parser.error("--check-compare-age runs on its own")
 
     try:
         if args.self_test:
             run_self_test()
             print("sync-docs self-test passed")
+            return 0
+
+        if args.check_compare_age:
+            problems = check_compare_stamps() + compare_reviews_due()
+            if problems:
+                for problem in problems:
+                    print(problem, file=sys.stderr)
+                return 1
+            print("comparison reviews are current")
             return 0
 
         metadata = build_metadata(args)
@@ -8422,7 +8586,7 @@ def main() -> int:
             errors.extend(check_command_shell_guidance())
             errors.extend(check_agent_reporting_route_guidance())
             errors.extend(check_repository_install_guidance())
-            errors.extend(check_compare_freshness())
+            errors.extend(check_compare_pages())
             errors.extend(check_cross_platform_compare_privacy())
             errors.extend(check_windows_10_compare_guidance())
             for path, want in expected.items():
@@ -8494,7 +8658,7 @@ def main() -> int:
         errors.extend(check_command_shell_guidance())
         errors.extend(check_agent_reporting_route_guidance())
         errors.extend(check_repository_install_guidance())
-        errors.extend(check_compare_freshness())
+        errors.extend(check_compare_pages())
         errors.extend(check_cross_platform_compare_privacy())
         errors.extend(check_windows_10_compare_guidance())
         errors.extend(check_install_prompt_sync(metadata))
