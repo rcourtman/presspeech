@@ -40,7 +40,11 @@ AppPublisherURL=https://github.com/rcourtman/presspeech
 AppSupportURL=https://github.com/rcourtman/presspeech/blob/main/SUPPORT.md
 AppUpdatesURL=https://github.com/rcourtman/presspeech/releases
 DefaultDirName={localappdata}\Programs\Presspeech
+#ifdef Qualification
+DefaultGroupName=Presspeech qualification {#QualificationAppId}
+#else
 DefaultGroupName=Presspeech
+#endif
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ; Keep Setup's admission checks aligned with the documented support boundary.
@@ -60,7 +64,9 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 AppMutex={#InstanceMutex}
-SetupMutex=Local\PresspeechSetup
+; Serialize setup across sessions as well as within this session: a second
+; setup must not roll back files another setup has already activated.
+SetupMutex=PresspeechSetup,Global\PresspeechSetup
 LicenseFile=..\LICENSE
 VersionInfoVersion={#AppVersion}.0
 VersionInfoCompany=rcourtman
@@ -270,12 +276,12 @@ begin
     Build verification checks that option before packaging. }
   Result := True;
   if not LoadStringFromFile(Live, Image) then Exit;
-  Result := Pos(AnsiString('{#BundleDir}'), Image) > 0;
+  Result := Pos('{#BundleDir}', String(Image)) > 0;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  Parent: String;
+  Parent, Ancestor: String;
   FreeBytes, TotalBytes, RequiredBytes: Int64;
 begin
   Result := 'Setup cannot safely use this installation directory.';
@@ -300,7 +306,11 @@ begin
     Exit;
   end;
   Parent := ExpandConstant('{app}');
-  while not DirExists(Parent) do Parent := ExtractFileDir(Parent);
+  while not DirExists(Parent) do begin
+    Ancestor := ExtractFileDir(Parent);
+    if (Ancestor = '') or (CompareText(Ancestor, Parent) = 0) then Exit;
+    Parent := Ancestor;
+  end;
   RequiredBytes := StrToInt64('{#BundleBytes}') + 268435456;
   if ReuseBundle then RequiredBytes := StrToInt64('{#ExeBytes}') + 268435456;
   { The complete old and new payloads coexist; a skipped folder page or a

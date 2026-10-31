@@ -127,7 +127,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
         return executable
 
     @contextmanager
-    def case(self, name, old=True, volume=None):
+    def case(self, name, old=True, volume=None, expect_removed=True):
         self.case_number += 1
         root = self.root / f"case-{self.case_number:02d}-{name}"
         root.mkdir()
@@ -148,6 +148,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
             if uninstaller.exists():
                 self.run([uninstaller, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
                           f"/LOG={root / 'uninstall.log'}"])
+                if expect_removed:
+                    for _ in range(120):
+                        if not case["app"].exists(): break
+                        time.sleep(.1)
+                    assert not case["app"].exists(), list(case["app"].rglob('*'))
             import winreg
             with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,
                                     r"Software\Microsoft\Windows\CurrentVersion\Run",
@@ -330,6 +335,21 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
             self.probe(case, "2.0", self.name_b)
         self.record("native-cancel", old_preserved=True, rerun_recovered=True)
 
+        with self.case("concurrent-setup") as case:
+            with self.checkpoint(case, "payload") as (process, checkpoint):
+                status = self.install(case, expected=None)
+                assert status != 0, 'Concurrent setup was admitted'
+                kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+                kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+                kernel.OpenMutexW.restype = wintypes.HANDLE
+                kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+                handle = kernel.OpenMutexW(0x00100000, False, 'Global\\PresspeechSetup')
+                assert handle, 'Setup did not acquire the cross-session mutex'
+                kernel.CloseHandle(handle)
+                self.resume(process, checkpoint, 0)
+            self.probe(case, '2.0', self.name_b)
+        self.record('concurrent-setup', second_setup_refused=True, global_mutex_held=True)
+
         for stage in ("payload", "staged", "verified", "activated"):
             with self.case("kill-" + stage) as case:
                 with self.checkpoint(case, stage) as (process, _):
@@ -339,6 +359,15 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
                 self.install(case)
                 self.probe(case, "2.0", self.name_b)
             self.record("process-kill-" + stage, usable_install_preserved=True, rerun_recovered=True)
+
+        for stage in ("payload", "staged"):
+            with self.case("fresh-kill-" + stage, old=False) as case:
+                with self.checkpoint(case, stage) as (process, _):
+                    self.kill(process)
+                assert not (case["app"] / "Presspeech.exe").exists()
+                self.install(case)
+                self.probe(case, "2.0", self.name_b)
+            self.record("fresh-process-kill-" + stage, rerun_recovered=True, uninstall_clean=True)
 
         self.qualify_reparse()
         self.qualify_disk()
@@ -374,7 +403,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
             self.install(case, expected=7)
             self.probe(case, "1.0", self.name_a)
             junction.rmdir()
-        with self.case("junction-cleanup") as case:
+        with self.case("junction-cleanup", expect_removed=False) as case:
             junction = case["app"] / self.name_a / "foreign"
             self.run(["cmd", "/c", "mklink", "/J", junction, victim])
             unknown = case["app"] / (bundle.PREFIX + uuid.uuid4().hex)

@@ -803,13 +803,48 @@ as immutable and uses `gh release verify` plus `gh release verify-asset` for
 both files, so a successful run has checked the generated release attestation
 as well as REST metadata.
 
-Before publication, the hosted Windows runner installs the finished installer
-into a temporary directory, checks its version and uninstall registration,
-runs the installed executable's model-free package test, creates the startup
-entry the installed app would use, and confirms uninstall removes it.
+New source builds assign each package an immutable `_presspeech-<build-id>`
+contents directory. Setup stages that directory and a pending executable,
+checks the complete file inventory and SHA-256 hashes, then replaces the live
+`Presspeech.exe` with one same-volume rename after Inno has committed its
+uninstall log. It never deletes the working bundle before activation. A
+missing, changed or extra payload file prevents activation, as do a running
+app or a refused executable replacement. Setup reports activation failure with
+exit code 23; close Presspeech and run Setup again. The existing installation
+remains usable, although Installed Apps may already show the new setup version.
+
+An upgrade needs free space for the complete new bundle (about 4.4 GB) plus
+256 MiB of headroom, while the old bundle remains installed. Also allow space
+for the downloaded installer and model caches. This check is mandatory during
+silent installs and upgrades that skip the folder page. An identical installer
+reuses a verified bundle without rewriting it. A damaged active bundle is
+preserved and refused rather than repaired in place: uninstall and reinstall,
+or use a newer package build. Settings and model caches live outside the
+application directory and are preserved by uninstall.
+
+After activation, Setup removes marked superseded bundles. It removes legacy
+`_internal` contents automatically only at the dedicated default install path;
+unlogged contents in a custom legacy location are retained for manual review.
+Reparse points are refused as installation paths, and cleanup does not follow
+junctions into another directory. These source changes do not retrofit the
+published 0.1.12 or earlier installers, which retain the legacy overwrite path.
+
+Before publication, the hosted Windows runner qualifies the production
+installer's cancellation, process-interruption, integrity, locked-launcher,
+ownership, reparse-point and virtual-disk failure paths with small frozen apps.
+It then installs the complete candidate, checks its version and registration,
+and runs the installed executable's model-free package test. Full upgrades
+start from the pinned, immutable 0.1.11 and 0.1.12 installers after checking their
+recorded digests and GitHub release attestations. The checks repeat the same
+candidate installer, preserve synthetic settings and caches, preserve the
+selected startup command, and confirm uninstall removes application files and
+the startup entry while retaining user data.
 Any failure blocks publication; install/uninstall logs are retained and printed
-in the workflow diagnostics. This checks the packaged installation lifecycle,
-not microphone capture, first dictation, upgrades, or interaction with target apps.
+in the workflow diagnostics. This checks the packaged installation and upgrade
+lifecycle on the hosted runner. Microphone capture, first dictation, target-app
+interaction and hardware power-loss behavior require separate validation.
+Run the same unpublished qualification with
+`gh workflow run windows-installer.yml --ref main -f full_package=true`.
 `pwsh -File windows/smoke-installer.ps1 -SelfTest` exercises its guards and process
 handling without installing anything. Real qualification refuses developer and
 self-hosted machines, including machines with an existing Presspeech installation.
