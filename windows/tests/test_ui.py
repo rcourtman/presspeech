@@ -3335,6 +3335,7 @@ class DictionarySettingsTests(unittest.TestCase):
             "var_suffix": "space",
             "var_fillers": True,
             "var_british": True,
+            "var_english_dictation": False,
             "var_audio_cues": True,
             "var_mute_playback": True,
             "var_visual_indicator": True,
@@ -3352,6 +3353,7 @@ class DictionarySettingsTests(unittest.TestCase):
             window._save()
 
         self.assertEqual(window.app.settings["dictionary"], rules)
+        self.assertEqual(window.app.settings["dictation_language"], "auto")
         self.assertTrue(window.app.settings["model_explicit"])
         self.assertEqual(window.app.settings["max_recording_seconds"], 300)
         self.assertIsNot(window.app.settings["dictionary"], window.dictionary_rules)
@@ -3371,6 +3373,12 @@ class DictionarySettingsTests(unittest.TestCase):
             "Saved, but Start with Windows was not updated. "
             "Open Startup Settings to review it.",
         )
+
+        window.var_english_dictation.get.return_value = True
+        with mock.patch.object(ui.cfg, "save"), \
+                mock.patch.object(ui, "_set_accessible_text"):
+            window._save()
+        self.assertEqual(window.app.settings["dictation_language"], "en")
 
     def test_save_prepares_a_changed_model_immediately(self):
         window = self.make_window()
@@ -3407,6 +3415,7 @@ class DictionarySettingsTests(unittest.TestCase):
             "var_suffix": "space",
             "var_fillers": True,
             "var_british": True,
+            "var_english_dictation": False,
             "var_audio_cues": True,
             "var_mute_playback": True,
             "var_visual_indicator": True,

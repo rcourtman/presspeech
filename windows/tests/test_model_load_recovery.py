@@ -21,7 +21,7 @@ class ModelLoadRecoveryTests(unittest.TestCase):
         instance.notify = mock.Mock()
         instance._log = mock.Mock()
         instance._deliver_text = mock.Mock()
-        instance._apply_text = lambda text:text
+        instance._apply_text = lambda text, language=None: text
         return instance
 
     def test_cache_and_constructor_errors_do_not_switch_to_another_model(self):
@@ -58,6 +58,36 @@ class ModelLoadRecoveryTests(unittest.TestCase):
     def assert_parakeet_untouched(self, instance):
         instance.transcriber.load.assert_not_called()
         instance.transcriber.unload.assert_not_called()
+
+    def test_cached_fallback_preserves_language_choice_through_text_cleanup(self):
+        for language, expected in (
+                ('auto', 'Um, I like the color. '),
+                ('en', 'I like the colour. ')):
+            with self.subTest(language=language):
+                instance = self.make_app()
+                instance.settings = dict(app.cfg.DEFAULTS,
+                                         dictation_language=language)
+                instance.transcriber.loaded.return_value = True
+                instance.transcriber.transcribe.side_effect = RuntimeError(
+                    'private hypothesis')
+                instance._apply_text = app.PresspeechApp._apply_text.__get__(
+                    instance)
+                fallback = self.mock_fallback()
+                fallback.transcribe.return_value = 'Um, I like the color.'
+                fallback.last_timing = {
+                    'backend': 'whisper', 'model_name': 'base.en',
+                    'detected_language': 'en',
+                    'detected_language_probability': 1.0}
+
+                with mock.patch.object(app.engine, 'Transcriber',
+                                       return_value=fallback):
+                    instance._transcribe_worker_inner(mock.sentinel.audio)
+
+                instance._deliver_text.assert_called_once_with(
+                    expected, app.PasteTarget('', 0), None)
+                fallback.load.assert_called_once_with('base.en', local_only=True)
+                fallback.unload.assert_called_once_with()
+                self.assert_parakeet_untouched(instance)
 
     def test_loaded_parakeet_decode_failure_uses_only_cached_fallback(self):
         fallback = self.mock_fallback()

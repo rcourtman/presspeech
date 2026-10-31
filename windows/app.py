@@ -16,7 +16,6 @@ import struct
 import sys
 import threading
 import time
-import unicodedata
 import winsound
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
@@ -49,7 +48,9 @@ import config as cfg
 import engine
 import ui
 import updates
-from british import to_british
+import text_cleanup
+# The existing tests reach these helpers through app.
+from text_cleanup import _apply_dictionary_rules, _remove_fillers
 from audio_backend import AudioBackend, AudioBackendBusy
 
 AUDIO_BACKEND = AudioBackend(sd)
@@ -72,14 +73,6 @@ KEY_MAP = {
     "f11": {pkb.Key.f11},
     "f12": {pkb.Key.f12},
 }
-
-FILLER_RE = re.compile(
-    r"(?<![\w'-])(?:um+|uh+|ah+|er|erm|hm+)(?![\w'-])", re.IGNORECASE
-)
-
-FILLER_BOUNDARY_WRAPPERS = "\"'\u201c\u201d\u2018\u2019([{"
-FILLER_SENTENCE_TERMINATORS = ".!?"
-FILLER_ORPHAN_SEPARATORS = ",.;:!?"
 
 SINGLE_INSTANCE_MUTEX = "Local\\PresspeechSingleInstance"
 SINGLE_INSTANCE_ACTIVATE_EVENT = "Local\\PresspeechActivate"
@@ -226,104 +219,6 @@ def _update_check_due(last_check_epoch, now_epoch=None):
     except (TypeError, ValueError):
         return True
     return now_epoch - last_check_epoch >= UPDATE_CHECK_INTERVAL_SEC
-
-
-def _filler_capitalization_targets(text, matches):
-    """Locate sentence starts whose capitalized filler carried the casing."""
-    targets = set()
-    for match in matches:
-        filler = match.group(0)
-        if not filler or not filler[0].isupper():
-            continue
-        index = match.start()
-        while index > 0:
-            previous = text[index - 1]
-            if previous.isspace() or previous in FILLER_BOUNDARY_WRAPPERS:
-                index -= 1
-                continue
-            if previous in FILLER_SENTENCE_TERMINATORS:
-                targets.add(sum(
-                    character in FILLER_SENTENCE_TERMINATORS
-                    for character in text[:index]))
-            break
-        else:
-            targets.add(0)
-    return targets
-
-
-def _restore_filler_capitalization(text, targets):
-    if not text or not targets:
-        return text
-    result = []
-    terminator_ordinal = 0
-    should_capitalize = 0 in targets
-    for character in text:
-        if should_capitalize:
-            if character.islower():
-                result.append(character.upper())
-                should_capitalize = False
-                continue
-            if character.isalpha() or character.isdigit():
-                should_capitalize = False
-
-        result.append(character)
-        if character in FILLER_SENTENCE_TERMINATORS:
-            terminator_ordinal += 1
-            if terminator_ordinal in targets:
-                should_capitalize = True
-        elif (should_capitalize and not character.isspace()
-              and character not in FILLER_BOUNDARY_WRAPPERS
-              and character not in FILLER_ORPHAN_SEPARATORS):
-            should_capitalize = False
-    return "".join(result)
-
-
-def _remove_fillers(text):
-    """Remove conservative filler words and repair their punctuation/casing."""
-    matches = list(FILLER_RE.finditer(text))
-    if not matches:
-        return text
-    capitalization_targets = _filler_capitalization_targets(text, matches)
-    result = FILLER_RE.sub("", text)
-    # Removing a filler must not leave comma runs, punctuation pairs, or a
-    # lowercase sentence start when the filler carried the capital letter.
-    result = re.sub(r"\s*,(?:\s*,)+", ",", result)
-    result = re.sub(r"([.!?])\s+[,.;:!?]+\s*", r"\1 ", result)
-    result = re.sub(r"\s+([.,!?;:])", r"\1", result)
-    result = re.sub(r",+([.!?;:])", r"\1", result)
-    result = re.sub(r"\s+", " ", result)
-    result = re.sub(r"^[\s,.;:!?]+", "", result).strip()
-    return _restore_filler_capitalization(result, capitalization_targets)
-
-
-def _apply_dictionary_rules(text, rules, *, return_effects=False):
-    """Apply longest non-overlapping rules once against the original text."""
-    active = [
-        (index, spoken, replacement)
-        for index, (spoken, replacement) in enumerate(
-            cfg.validated_dictionary(rules) or [])
-    ]
-    # Prefer the most specific phrase regardless of the order rules were added.
-    # The original order remains a deterministic tie-breaker for equal phrases.
-    active.sort(key=lambda rule: (-len(rule[1]), rule[1].casefold(), rule[0]))
-    matches = []
-    for _index, spoken, replacement in active:
-        pattern = r"(?<!\w)%s(?!\w)" % re.escape(spoken)
-        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-            start, end = match.span()
-            if any(start < other_end and other_start < end
-                   for other_start, other_end, _replacement in matches):
-                continue
-            matches.append((start, end, replacement))
-
-    # Every range belongs to the untouched transcript, so replacement text is
-    # inserted literally and can never trigger a later dictionary rule.
-    for start, end, replacement in sorted(matches, reverse=True):
-        text = text[:start] + replacement + text[end:]
-    if return_effects:
-        return (text, any(not replacement for _, _, replacement in matches),
-                any(bool(replacement) for _, _, replacement in matches))
-    return text
 
 
 def _make_cue_wave(frequency, duration=0.055, volume=0.14, sample_rate=24000):
@@ -2911,6 +2806,8 @@ class PresspeechApp:
             self, audio, paste_target=PasteTarget("", 0),
             scratchpad_target=None, input_overflowed=False):
         model_started = time.perf_counter()
+        used_english_only_fallback = False
+        timing_summary = None
         try:
             if not self.transcriber.loaded(self.settings["model"]):
                 self.transcriber.load(self.settings["model"], notify=self.notify)
@@ -2933,6 +2830,7 @@ class PresspeechApp:
             text = self.transcriber.transcribe(audio)
             model_seconds = time.perf_counter() - model_started
             timing = getattr(self.transcriber, "last_timing", {})
+            timing_summary = _model_timing_summary(timing)
         except Exception:
             # Recognizer exceptions are an untrusted text boundary: an
             # upstream decoder may include a partial hypothesis in its error
@@ -2948,11 +2846,14 @@ class PresspeechApp:
         if parakeet_failed:
             # Load the fallback only after leaving the handler: until then its
             # traceback keeps the failed decode's frames and buffers alive.
+            used_english_only_fallback = True
             fallback_result = self._transcribe_with_cached_fallback(audio)
             if fallback_result is None:
                 return
-            text, model_seconds, timing = fallback_result
-        timing_summary = _model_timing_summary(timing)
+            text, timing = fallback_result
+            # Include the failed primary decode, fallback load and release in
+            # this worker's total. The fallback logs its own decode timing.
+            model_seconds = time.perf_counter() - model_started
         if not text or not text.strip():
             self._log("transcription returned empty (model %.3fs)" % model_seconds)
             if timing_summary is not None:
@@ -2967,7 +2868,12 @@ class PresspeechApp:
             if engine.whisper_vad_rejected(timing):
                 return NO_SPEECH_OUTCOME
             return NO_TEXT_OUTCOME
-        text = self._apply_text(text)
+        # English-only cleanup needs declared English; Parakeet reports no
+        # language, and the English-only fallback declares none either.
+        language = text_cleanup.dictation_language(
+            self.settings, timing,
+            english_only_fallback=used_english_only_fallback)
+        text = self._apply_text(text, language)
         if not text:
             # Filler removal or a deliberate empty dictionary replacement can
             # erase a recognized phrase. Never paste just the configured suffix
@@ -2995,7 +2901,7 @@ class PresspeechApp:
         self._deliver_text(text, paste_target, scratchpad_target)
 
     def _transcribe_with_cached_fallback(self, audio):
-        """Return (text, seconds, timing) from an installed base.en, or None."""
+        """Return (text, timing) from an installed base.en, or None."""
         self.notify(
             "Parakeet failed",
             "Checking for an already-installed English-only Whisper "
@@ -3040,7 +2946,14 @@ class PresspeechApp:
                     "Neither local speech model could complete this dictation. "
                     "Try again, or choose another model in Settings.")
                 return None
-            return text, model_seconds, getattr(fallback, "last_timing", {})
+            # Keep content-free decode diagnostics beside their transcriber;
+            # the result passed to delivery also contains private text.
+            self._log("fallback decode completed (model %.3fs)" % model_seconds)
+            timing = getattr(fallback, "last_timing", {})
+            timing_summary = _model_timing_summary(timing)
+            if timing_summary is not None:
+                self._log(timing_summary)
+            return text, timing
         finally:
             # The fallback model and its staged files end with this recording.
             # A release failure must not discard text that was already decoded.
@@ -3081,24 +2994,9 @@ class PresspeechApp:
         # than paste into an unrelated app or silently lose the dictation.
         self._remember_undelivered_dictation(text, "scratchpad-unavailable")
 
-    def _apply_text(self, text):
-        text, removed_by_rule, inserted_by_rule = _apply_dictionary_rules(
-            text, self.settings["dictionary"], return_effects=True)
-        if self.settings["remove_fillers"]:
-            text = _remove_fillers(text)
-        if self.settings.get("british"):
-            text = to_british(text)
-        if (not text or
-                (removed_by_rule and not inserted_by_rule and
-                 all(char.isspace() or unicodedata.category(char).startswith("P")
-                     for char in text))):
-            # An empty replacement can leave the recognizer's trailing period
-            # behind. A punctuation-only remnant is not worth replacing the
-            # user's selected text with; an explicit punctuation replacement
-            # remains deliverable because inserted_by_rule is true.
-            return ""
-        text += cfg.SUFFIXES.get(self.settings["suffix"], " ")
-        return text
+    def _apply_text(self, text,
+                    language=text_cleanup.LANGUAGE_NOT_DECLARED):
+        return text_cleanup.apply_text_settings(text, self.settings, language)
 
     def has_undelivered_dictation(self):
         """Return whether uncertain delivery left private text in memory."""

@@ -2866,6 +2866,7 @@ final class Settings: @unchecked Sendable {
     static let keyPendingSpeechModelSwitch = "pending_speech_model_switch"
     private static let keyInitialSpeechModelChoiceRequired = "initial_speech_model_choice_required"
     private static let keyRemoveFillerWords = "remove_filler_words"
+    private static let keyEnglishDictation = "english_dictation"
     private static let keySpokenFormattingCommands = "spoken_formatting_commands"
     private static let keyActiveRunMarker = "active_run_marker"
 
@@ -3334,6 +3335,13 @@ final class Settings: @unchecked Sendable {
     var removeFillerWords: Bool {
         get { defaults.bool(forKey: Self.keyRemoveFillerWords) }
         set { defaults.set(newValue, forKey: Self.keyRemoveFillerWords) }
+    }
+
+    /// Declares English dictation, which lets filler removal take "um" and
+    /// "er". Off by default: they are words in other languages.
+    var englishDictation: Bool {
+        get { defaults.bool(forKey: Self.keyEnglishDictation) }
+        set { defaults.set(newValue, forKey: Self.keyEnglishDictation) }
     }
 
     var spokenFormattingCommands: Bool {
@@ -6645,28 +6653,49 @@ enum FillerWordRemover {
         case afterSentenceTerminator(Int)
     }
 
-    /// Non-word interjections only. "like" and "you know" are excluded
+    /// Interjections only. "like" and "you know" are excluded
     /// because they have valid non-filler meanings ("I like cats", "you
     /// know who"). Most entries are regex fragments that allow the
     /// trailing letter to repeat, since real-world fillers stretch out
     /// ("ummm", "uhhhh", "ahhh", "hmmm") and the word-boundary lookahead
     /// would otherwise reject them. "er" and "erm" deliberately have no
     /// repeat quantifier: "er+" would also match the real word "err".
-    private static let fillerPatterns = ["um+", "uh+", "ah+", "er", "erm", "hm+"]
+    ///
+    /// "um" and "er" are fillers only in English: "um" is a Portuguese
+    /// article and a German preposition, and "er" is a German, Dutch,
+    /// Danish and Swedish word. Callers remove them only with English
+    /// evidence (`EnglishCleanupEvidence`). The rest are not words in any
+    /// language the speech models transcribe.
+    // text-cleanup-parity: begin neutral-fillers
+    static let languageNeutralFillerPatterns = ["umm+", "uh+", "ah+", "erm", "hm+"]
+    // text-cleanup-parity: end neutral-fillers
+    // text-cleanup-parity: begin english-only-fillers
+    static let englishOnlyFillerPatterns = ["um", "er"]
+    // text-cleanup-parity: end english-only-fillers
 
-    static func apply(to text: String) -> (text: String, removedCount: Int) {
+    /// `englishOnlyFillers` is an `EnglishCleanupEvidence.scope` result
+    /// deciding which "um" and "er" go; each is judged in its own sentence.
+    /// They are real words in other languages, so the default removes none.
+    /// Language-neutral fillers go unless they read as part of a name.
+    static func apply(to text: String,
+                      englishOnlyFillers: EnglishCleanupScope = .nowhere) -> (text: String, removedCount: Int) {
         guard !text.isEmpty else { return (text, 0) }
 
-        // Word-boundary lookarounds include `'` (so "it's" stays one
-        // token) and `-` (so "uh-huh", "uh-oh" don't get split apart).
-        let alternation = fillerPatterns.joined(separator: "|")
-        let pattern = #"(?i)(?<![\p{L}\p{N}'\-])("# + alternation + #")(?![\p{L}\p{N}'\-])"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+        guard let regex = fillerRegex(englishOnlyFillerPatterns + languageNeutralFillerPatterns),
+              let neutralToken = neutralFillerTokenRegex else {
             return (text, 0)
         }
 
         let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
-        let matches = regex.matches(in: text, range: fullRange)
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: fullRange).filter { match in
+            let token = nsText.substring(with: match.range)
+            if neutralToken.firstMatch(in: token, range: NSRange(location: 0, length: (token as NSString).length)) != nil {
+                return EnglishCleanupEvidence.neutralFillerRemovable(at: match.range, in: nsText)
+            }
+            return EnglishCleanupEvidence.englishFillerRemovable(at: match.range, in: nsText,
+                                                                 scope: englishOnlyFillers)
+        }
         guard !matches.isEmpty else { return (text, 0) }
 
         // Preserve sentence-start casing when the removed filler carried
@@ -6715,6 +6744,30 @@ enum FillerWordRemover {
                                          targets: capitalizationRepairTargets)
 
         return (result, matches.count)
+    }
+
+    /// Number of "um"/"er" left in `text`, abbreviations excluded, for a
+    /// count-only log line when they are kept for lack of English evidence.
+    static func englishOnlyFillerCount(in text: String) -> Int {
+        guard !text.isEmpty, let regex = fillerRegex(englishOnlyFillerPatterns) else { return 0 }
+        let nsText = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+            .filter { !EnglishCleanupEvidence.isAbbreviation(nsText.substring(with: $0.range)) }
+            .count
+    }
+
+    private static let neutralFillerTokenRegex = try? NSRegularExpression(
+        pattern: "^(?:" + languageNeutralFillerPatterns.joined(separator: "|") + ")$",
+        options: [.caseInsensitive])
+
+    private static func fillerRegex(_ patterns: [String]) -> NSRegularExpression? {
+        // Word-boundary lookarounds include `'` (so "it's" stays one
+        // token) and `-` (so "uh-huh", "uh-oh" don't get split apart).
+        let alternation = patterns.joined(separator: "|")
+        // Combining marks count as word characters, so a decomposed
+        // "vzt\u{030C}ah" is one word rather than "vzt" plus "ah".
+        let pattern = #"(?i)(?<![\p{L}\p{N}\p{M}'\-])("# + alternation + #")(?![\p{L}\p{N}\p{M}'\-])"#
+        return try? NSRegularExpression(pattern: pattern)
     }
 
     private static func capitalizationRepairTargets(for matches: [NSTextCheckingResult],
@@ -6814,6 +6867,343 @@ enum FillerWordRemover {
     }
 }
 
+// MARK: - English-only cleanup evidence
+//
+// Some cleanup is correct only for English text: "um" is a Portuguese article
+// and numeral and a German preposition, and "er" is a German, Dutch, Danish
+// and Swedish word. Text alone cannot tell them apart: German "Wer war das?
+// Er, I think." and an English "Er, I think." are the same characters, and
+// Parakeet v3 and Ultra report no transcript language (FluidAudio's
+// `language:` argument only filters token scripts, for English as for every
+// Latin-script language). So "um" and "er" are removed only when the user has
+// declared English with Settings → Text → My dictation is in English, and
+// never with a non-English Language Hint.
+//
+// Within declared English, word lists can only keep words, never justify
+// removing one: a non-English marker in the dictation or the word's sentence
+// keeps it, all-capital "UM"/"ER" are abbreviations, and an "um"/"er" inside
+// a phrase goes only when both neighbouring words are common English words
+// ("I'm um not", but not "lacht er I think"). One set apart by punctuation
+// goes only in a sentence with a common English word ("Um, I think", but not
+// German "Er, Peter.").
+//
+// The Windows app applies the same rule (windows/text_cleanup.py);
+// scripts/check-text-cleanup-parity.py keeps the lists identical.
+
+/// How much English-only cleanup a dictation may receive.
+enum EnglishCleanupScope: Equatable {
+    /// Every "um"/"er"; only for callers that already know the text is English.
+    case everywhere
+    /// English declared ("My dictation is in English") and no non-English word.
+    case englishDeclared
+    case nowhere
+}
+
+enum TextLanguagePrior: Equatable {
+    case english
+    case nonEnglish
+    case unknown
+
+    /// English is declared only by "My dictation is in English". The Language
+    /// Hint only filters token scripts; a non-English hint contradicts the
+    /// declaration, so words are kept.
+    init(englishDictation: Bool, dictationLanguage: DictationLanguage) {
+        switch dictationLanguage {
+        case .auto, .english: self = englishDictation ? .english : .unknown
+        default: self = .nonEnglish
+        }
+    }
+}
+
+enum EnglishCleanupEvidence {
+    /// Frequent English words that are not common words in another supported
+    /// language. Shared words such as "is", "to", "in", "was" and "die" are
+    /// deliberately absent, as are "had", "been", "have", "get" and "or"
+    /// (Dutch, Danish, Swedish and French words): one of them in a short
+    /// German or Dutch sentence must not make that sentence look English.
+    // text-cleanup-parity: begin english-markers
+    static let englishMarkers: Set<String> = [
+        "the", "and", "you", "that", "this", "with", "not", "but",
+        "they", "what", "your", "there", "their", "would", "could", "should",
+        "which", "about", "our", "she", "him", "his", "were", "from",
+        "because", "very", "really", "know", "think", "going", "yes", "please",
+        "thank", "thanks", "it", "if", "when", "where", "why",
+        "who", "how", "them", "these", "those", "does", "did", "got",
+        "need", "like", "can", "some", "any", "other", "only",
+        "here", "now", "well", "good", "right", "sure", "maybe", "something",
+        "anything", "nothing", "everything", "someone", "people", "today",
+        "tomorrow", "yesterday", "call", "us", "are", "being", "than", "then",
+        "into", "after", "before", "again", "much", "many", "such", "own",
+        "same", "each", "every", "both", "few", "while", "until", "since",
+        "though", "although", "yet", "ever", "never", "always", "often",
+        "already", "around", "through", "without", "between", "against",
+        "during", "another", "else", "whether", "i'm", "i've", "i'll", "i'd",
+        "it's", "that's", "there's", "what's", "let's", "don't", "doesn't",
+        "didn't", "can't", "won't", "isn't", "aren't", "wasn't", "weren't",
+        "you're", "you've", "you'll", "we're", "we've", "we'll", "they're",
+        "they've", "couldn't", "wouldn't", "shouldn't", "haven't", "hasn't",
+    ]
+    // text-cleanup-parity: end english-markers
+
+    /// Frequent words of the other supported Latin-script languages that are
+    /// not English words. Any token with a non-ASCII letter or mark also
+    /// counts. A hit here only ever keeps words.
+    // text-cleanup-parity: begin non-english-markers
+    static let nonEnglishMarkers: Set<String> = [
+        // German
+        "der", "das", "und", "ist", "nicht", "ich", "sie", "ein", "eine",
+        "einen", "einem", "einer", "zu", "mit", "auf", "sich", "des", "auch",
+        "wir", "ihr", "wie", "aber", "oder", "wenn", "noch", "nach", "bei",
+        "aus", "sind", "haben", "wird", "werden", "kann", "dass", "schon",
+        "nur", "jetzt", "hier", "heute", "mir", "mich", "dich", "uns", "sehr",
+        "nein", "kein", "keine", "diese", "dieser", "dieses", "vom", "zum",
+        "zur", "im", "es", "ja", "doch", "mal", "gibt", "gut", "kommt", "geht",
+        "macht", "sagt", "habe", "hatte", "gestern", "morgen", "immer",
+        "wieder", "ins", "zieht", "wer",
+        // Dutch
+        "het", "een", "ik", "niet", "dat", "op", "zijn", "voor", "maar", "ook",
+        "als", "bij", "nog", "naar", "wat", "deze", "dit", "hij", "zij", "wij",
+        "jij", "heb", "hebben", "worden", "wordt", "geen", "niets", "niks",
+        "wel", "mijn", "jouw", "uw", "ons", "onze", "waar", "hoe", "omdat",
+        "alleen", "moet", "kunnen", "zou", "veel", "en", "de", "om", "komt",
+        "gaat", "zegt", "heeft", "staat", "gisteren", "twee",
+        // Danish and Swedish
+        "og", "ikke", "det", "jeg", "som", "har", "af", "var", "du", "vi",
+        "kan", "hvad", "hvor", "eller", "efter", "skal", "vil", "blev", "nu",
+        "sig", "mig", "dig", "os", "hun", "han", "hende", "meget", "godt",
+        "rigtig", "lige", "nej", "och", "att", "inte", "ett", "jag", "av",
+        "hon", "vad", "mycket", "kommer", "sin", "sitt", "sina", "bara", "ska",
+        "med", "siger", "laver", "fem", "hvem", "tack", "säger",
+        // Portuguese
+        "que", "uma", "da", "em", "para", "por", "se", "na", "mais", "mas",
+        "eu", "ele", "ela", "isso", "isto", "este", "esta", "muito", "foi",
+        "tem", "ter", "nos", "pelo", "pela", "ao", "dos", "seu", "sua", "meu",
+        "minha", "quando", "onde", "porque", "aqui", "obrigado", "obrigada",
+        "tenho", "temos", "vou", "vai", "fazer", "tudo", "nada", "sim", "bem",
+        "quero", "passa", "pega", "tipo", "comprei", "mandei", "dois", "tres",
+        // Spanish
+        "el", "la", "del", "y", "un", "una", "con", "su", "lo", "le", "pero",
+        "muy", "sobre", "donde", "quien", "cuando", "esto", "eso", "ya", "ella",
+        "nosotros", "gracias", "hola", "entonces", "estoy", "fue", "tiene",
+        "hace", "tengo", "voy", "todo", "bien", "mucho", "ese", "gusta",
+        // French
+        "les", "et", "est", "pas", "je", "tu", "il", "elle", "nous", "vous",
+        "ils", "elles", "qui", "dans", "pour", "sur", "avec", "ce", "cette",
+        "ou", "aussi", "avoir", "fait", "tout", "rien", "merci", "oui", "non",
+        // Italian
+        "gli", "di", "che", "sono", "della", "delle", "dei", "nel", "nella",
+        "anche", "molto", "questo", "questa", "mi", "ti", "ci", "si", "grazie",
+        "sei", "siamo", "essere", "fare", "tutto", "niente", "bene", "cosa",
+        // Polish, Czech and Slovak
+        "w", "z", "nie", "jest", "co", "jak", "ale", "tak", "czy", "mam",
+        "jestem", "tylko", "bardzo", "dla", "od", "po", "przez", "przy", "oraz",
+        "tego", "tym", "jsem", "jsou", "jen", "aby", "nebo", "sa",
+        // Slovenian, Croatian, Bosnian and Serbian
+        "smo", "ste", "nije", "kao", "ako", "ili", "za", "iz", "pa", "kad",
+        "kada", "samo", "jako", "ima", "nema", "biti", "bila", "hvala",
+        // Romanian
+        "pe", "cu", "mai", "sunt", "sau", "foarte", "aici", "acum", "dar",
+        "fost", "fi", "ea", "noi", "voi", "lor",
+        // Hungarian
+        "az", "hogy", "nem", "egy", "csak", "ez", "azt", "igen", "nagyon",
+        "lesz", "vagy", "itt", "ott",
+        // Finnish and Estonian
+        "ei", "mutta", "kun", "niin", "oli", "myös", "kanssa", "joka", "sitten",
+        "kiitos", "ta", "mis", "kui", "aga", "ning", "ka", "nii", "siis", "nad",
+        "olen", "jah",
+        // Latvian and Lithuanian
+        "ir", "ar", "uz", "kas", "tas", "nav", "jau", "tai", "yra", "ne",
+        "kaip", "jis", "ji", "mes", "labai", "taip",
+        // Maltese
+        "fil", "minn", "mhux", "huwa", "hija", "jien", "int", "grazzi", "iva",
+    ]
+    // text-cleanup-parity: end non-english-markers
+
+    // text-cleanup-parity: begin punctuation
+    // After an "um"/"er", one of these sets it apart from the following words.
+    static let englishFillerDelimiters = ",.?!;:\u{2026}"
+    // Sentence ends for per-sentence evidence and the sentence-initial "I" rule.
+    static let sentenceBreaks = ".!?\u{2026}\n\r"
+    // French elisions such as c'est, j'ai, l'eau and qu'il.
+    static let frenchElisionPrefixes = ["c'", "d'", "j'", "l'", "m'", "n'", "s'", "t'", "qu'"]
+    // text-cleanup-parity: end punctuation
+
+    private static let boundaryWrappers = "\"'\u{201C}\u{201D}\u{2018}\u{2019}([{"
+    // Letters plus combining marks, so a decomposed accent stays in its word.
+    private static let tokenRegex = try? NSRegularExpression(pattern: #"\p{L}[\p{L}\p{M}'\x{2019}]*"#)
+    private static let fillerTokenRegex = try? NSRegularExpression(
+        pattern: "^(?:" + (FillerWordRemover.englishOnlyFillerPatterns
+            + FillerWordRemover.languageNeutralFillerPatterns).joined(separator: "|") + ")$",
+        options: [.caseInsensitive])
+
+    static func isAbbreviation(_ token: String) -> Bool {
+        token.count > 1 && token.contains(where: \.isCased)
+            && token.allSatisfy { !$0.isCased || $0.isUppercase }
+    }
+
+    private enum TokenKind {
+        case english
+        case other
+    }
+
+    /// Classify one token, or nil when it is neither kind of marker.
+    private static func tokenKind(_ token: String, at location: Int, in text: NSString) -> TokenKind? {
+        guard let fillerTokenRegex else { return nil }
+        let raw = token
+            .replacingOccurrences(of: "\u{2019}", with: "'")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "'"))
+        guard !raw.isEmpty else { return nil }
+        if fillerTokenRegex.firstMatch(in: raw, range: NSRange(location: 0, length: (raw as NSString).length)) != nil {
+            return nil
+        }
+        if raw == "I" {
+            // Sentence-initial "I" is the Slavic conjunction as often as English.
+            return clauseStartBefore(location, lowerBound: 0, in: text) ? nil : .english
+        }
+        if isAbbreviation(raw) { return nil }
+        let lowered = raw.lowercased()
+        if englishMarkers.contains(lowered) { return .english }
+        if nonEnglishMarkers.contains(lowered)
+            || !lowered.unicodeScalars.allSatisfy(\.isASCII)
+            || frenchElisionPrefixes.contains(where: { lowered.hasPrefix($0) && lowered.count > $0.count }) {
+            return .other
+        }
+        return nil
+    }
+
+    /// English and non-English marker counts. Filler candidates and
+    /// all-capital abbreviations such as "EU" or "OS" are ignored.
+    static func evidence(in text: String) -> (english: Int, other: Int) {
+        guard let tokenRegex else { return (0, 0) }
+        var english = 0
+        var other = 0
+        let nsText = text as NSString
+        for match in tokenRegex.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
+            switch tokenKind(nsText.substring(with: match.range), at: match.range.location, in: nsText) {
+            case .english: english += 1
+            case .other: other += 1
+            case nil: break
+            }
+        }
+        return (english, other)
+    }
+
+    /// Only declared English enables English-only cleanup; the recognizer
+    /// text, read before any correction rewrites it, can still veto it.
+    static func scope(in text: String, prior: TextLanguagePrior) -> EnglishCleanupScope {
+        guard prior == .english else { return .nowhere }
+        return evidence(in: text).other == 0 ? .englishDeclared : .nowhere
+    }
+
+    private static let wordRegex = try? NSRegularExpression(pattern: #"\p{L}[\p{L}\p{M}]*"#)
+
+    /// Keep a capitalised "Umm"/"Ah" that reads as part of a name.
+    /// Recognizers capitalise a filler only at a sentence start, so "Umm Qasr"
+    /// mid-sentence is a name, and a capitalised word straight after a
+    /// sentence-initial one ("Umm Kulthum", "Ah Q") may be too. "I" is not.
+    static func neutralFillerRemovable(at range: NSRange, in text: NSString) -> Bool {
+        guard text.substring(with: range).first?.isUppercase == true else { return true }
+        guard clauseStartBefore(range.location, lowerBound: 0, in: text) else { return false }
+        let end = range.location + range.length
+        var index = end
+        while index < text.length, contains(" \t", text.character(at: index)) { index += 1 }
+        guard index > end, index < text.length,
+              text.substring(with: NSRange(location: index, length: 1)).first?.isUppercase == true else {
+            return true
+        }
+        guard let wordRegex,
+              let word = wordRegex.firstMatch(in: text as String,
+                                              range: NSRange(location: index, length: text.length - index)),
+              word.range.location == index else { return true }
+        return text.substring(with: word.range) == "I"
+    }
+
+    /// Whether the "um"/"er" at `range` may go under `scope`.
+    static func englishFillerRemovable(at range: NSRange, in text: NSString,
+                                       scope: EnglishCleanupScope) -> Bool {
+        if isAbbreviation(text.substring(with: range)) { return false }
+        switch scope {
+        case .everywhere: return true
+        case .nowhere: return false
+        case .englishDeclared: break
+        }
+        let sentence = sentenceRange(containing: range, in: text)
+        let counts = evidence(in: text.substring(with: sentence))
+        guard counts.other == 0 else { return false }
+        let end = range.location + range.length
+        let boundary = boundaryBefore(range.location, sentenceStart: sentence.location, in: text)
+        if boundary, end < text.length, contains(englishFillerDelimiters, text.character(at: end)) {
+            // Set apart ("Um, I think"), but German "Er, Peter." has no English.
+            return counts.english >= 1
+        }
+        return (boundary || neighbourIsEnglish(of: range, before: true, sentence: sentence, in: text))
+            && neighbourIsEnglish(of: range, before: false, sentence: sentence, in: text)
+    }
+
+    /// Whether the word right before or after `range`, with only spaces
+    /// between, is an English marker. A quote or apostrophe next to the space
+    /// ("'thanks' um") is punctuation, not part of the word.
+    private static func neighbourIsEnglish(of range: NSRange, before: Bool,
+                                           sentence: NSRange, in text: NSString) -> Bool {
+        guard let tokenRegex else { return false }
+        var index = before ? range.location : range.location + range.length
+        let sentenceEnd = sentence.location + sentence.length
+        if before {
+            while index > sentence.location, contains(" \t", text.character(at: index - 1)) { index -= 1 }
+            if index > sentence.location, contains("'\u{2019}", text.character(at: index - 1)) { return false }
+        } else {
+            while index < sentenceEnd, contains(" \t", text.character(at: index)) { index += 1 }
+        }
+        for match in tokenRegex.matches(in: text as String, range: sentence) {
+            let edge = before ? match.range.location + match.range.length : match.range.location
+            guard edge == index, match.range != range else { continue }
+            return tokenKind(text.substring(with: match.range), at: match.range.location, in: text) == .english
+        }
+        return false
+    }
+
+    private static func contains(_ characters: String, _ unit: unichar) -> Bool {
+        characters.utf16.contains(unit)
+    }
+
+    private static func sentenceRange(containing range: NSRange, in text: NSString) -> NSRange {
+        var start = range.location
+        while start > 0, !contains(sentenceBreaks, text.character(at: start - 1)) {
+            start -= 1
+        }
+        var end = range.location + range.length
+        while end < text.length {
+            end += 1
+            if contains(sentenceBreaks, text.character(at: end - 1)) { break }
+        }
+        return NSRange(location: start, length: end - start)
+    }
+
+    /// A sentence start, or a comma, before the word (spaces aside).
+    private static func boundaryBefore(_ start: Int, sentenceStart: Int, in text: NSString) -> Bool {
+        if clauseStartBefore(start, lowerBound: sentenceStart, in: text) { return true }
+        var index = start
+        while index > sentenceStart, contains(" \t", text.character(at: index - 1)) {
+            index -= 1
+        }
+        return index > sentenceStart && text.character(at: index - 1) == 0x2C
+    }
+
+    /// Whether only spaces or quotes separate `start` from a sentence start.
+    private static func clauseStartBefore(_ start: Int, lowerBound: Int, in text: NSString) -> Bool {
+        var index = start
+        while index > lowerBound {
+            let previous = text.character(at: index - 1)
+            if contains(" \t", previous) || contains(boundaryWrappers, previous) {
+                index -= 1
+                continue
+            }
+            return contains(sentenceBreaks, previous)
+        }
+        return true
+    }
+}
+
 // MARK: - Recording lifecycle decisions
 
 private enum RecordingReleaseAction: Equatable {
@@ -6910,13 +7300,16 @@ private struct DictationTextProcessingResult: Equatable {
     let appliedCorrectionCount: Int
     let appliedFormattingCommandCount: Int
     let removedFillerWordCount: Int
+    /// "um"/"er" left in the delivered text, abbreviations excluded.
+    var keptEnglishOnlyFillerCount = 0
 }
 
 private func processedDictationText(rawTranscript: String,
                                     corrections: [TranscriptCorrection],
                                     spokenFormattingCommands: Bool,
                                     dictationLanguage: DictationLanguage,
-                                    removeFillerWords: Bool) -> DictationTextProcessingResult {
+                                    removeFillerWords: Bool,
+                                    englishDictation: Bool = false) -> DictationTextProcessingResult {
     let trimmed = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     let corrected = TranscriptCorrector.apply(to: trimmed, corrections: corrections)
     let formatted = spokenFormattingCommands
@@ -6931,11 +7324,17 @@ private func processedDictationText(rawTranscript: String,
                                              removedFillerWordCount: 0)
     }
 
-    let stripped = FillerWordRemover.apply(to: formatted.text)
+    // Evidence comes from what was spoken, before corrections rewrite it.
+    let scope = EnglishCleanupEvidence.scope(
+        in: trimmed,
+        prior: TextLanguagePrior(englishDictation: englishDictation, dictationLanguage: dictationLanguage)
+    )
+    let stripped = FillerWordRemover.apply(to: formatted.text, englishOnlyFillers: scope)
     return DictationTextProcessingResult(text: stripped.text,
                                          appliedCorrectionCount: corrected.appliedCount,
                                          appliedFormattingCommandCount: formatted.appliedCount,
-                                         removedFillerWordCount: stripped.removedCount)
+                                         removedFillerWordCount: stripped.removedCount,
+                                         keptEnglishOnlyFillerCount: FillerWordRemover.englishOnlyFillerCount(in: stripped.text))
 }
 
 // MARK: - Text insertion
@@ -12539,7 +12938,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                                                            corrections: settings.transcriptCorrections,
                                                            spokenFormattingCommands: settings.spokenFormattingCommands,
                                                            dictationLanguage: dictationLanguage,
-                                                           removeFillerWords: settings.removeFillerWords)
+                                                           removeFillerWords: settings.removeFillerWords,
+                                                           englishDictation: settings.englishDictation)
                     if processed.appliedCorrectionCount > 0 {
                         log("transcript corrections applied: \(processed.appliedCorrectionCount)")
                     }
@@ -12548,6 +12948,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                     }
                     if processed.removedFillerWordCount > 0 {
                         log("filler words removed: \(processed.removedFillerWordCount)")
+                    }
+                    if processed.keptEnglishOnlyFillerCount > 0 {
+                        log("ambiguous filler words kept: \(processed.keptEnglishOnlyFillerCount)")
                     }
                     let cleaned = processed.text
                     log("\(String(format: "%.2f", dur)) s audio → \(String(format: "%.2f", dt)) s → \(cleaned.count) chars")
@@ -13923,6 +14326,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 "Language: \(languageSettingText)",
                 "Paste behavior: \(PASTE_SUFFIX_DISPLAY[settings.pasteSuffix] ?? settings.pasteSuffix.rawValue)",
                 "Remove filler words: \(settings.removeFillerWords)",
+                "English dictation: \(settings.englishDictation)",
                 "Spoken formatting commands: \(settings.spokenFormattingCommands)",
                 "Recent transcripts: \(RECENT_TRANSCRIPT_LIMIT_DISPLAY[settings.recentTranscriptLimit] ?? settings.recentTranscriptLimit.rawValue) (\(history.count) in memory)",
                 "Text corrections: \(settings.transcriptCorrections.count) configured",
@@ -14953,11 +15357,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         formatting.toolTip = "English commands are available by default; selecting French as the Language Hint uses French line, paragraph, punctuation, quote, and parenthesis commands."
         sub.addItem(formatting)
 
-        let filler = NSMenuItem(title: "Remove filler words (um, uh, ah, er, hmm)",
+        let englishDictation = NSMenuItem(title: "My dictation is in English",
+                                          action: #selector(toggleEnglishDictation(_:)),
+                                          keyEquivalent: "")
+        englishDictation.target = self
+        englishDictation.state = settings.englishDictation ? .on : .off
+        englishDictation.toolTip = "Lets Remove filler words also remove “um” and “er”. Turn it on only if you dictate in English: they are German, Dutch, Danish, Swedish and Portuguese words. A non-English Language Hint, or words from another language in a dictation, still keep them."
+        sub.addItem(englishDictation)
+
+        let filler = NSMenuItem(title: "Remove filler words (uh, ah, hmm; um and er with English dictation)",
                                 action: #selector(toggleRemoveFillerWords(_:)),
                                 keyEquivalent: "")
         filler.target = self
         filler.state = settings.removeFillerWords ? .on : .off
+        filler.toolTip = "Removes uh, ah, erm and hmm in any language. “um” and “er” are also German, Dutch, Danish, Swedish and Portuguese words, so they are removed only with My dictation is in English turned on. Even then they stay in a dictation with words from another language, and are removed only where common English words and punctuation mark them as fillers."
         sub.addItem(filler)
 
         parent.submenu = sub
@@ -17041,6 +17454,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     @objc private func toggleRemoveFillerWords(_ sender: NSMenuItem) {
         settings.removeFillerWords.toggle()
         sender.state = settings.removeFillerWords ? .on : .off
+    }
+
+    @objc private func toggleEnglishDictation(_ sender: NSMenuItem) {
+        settings.englishDictation.toggle()
+        sender.state = settings.englishDictation ? .on : .off
     }
 
     @objc private func toggleSpokenFormattingCommands(_ sender: NSMenuItem) {
@@ -24698,20 +25116,245 @@ private enum PresspeechSelfTest {
         )
     }
 
+    /// Short and code-switched dictation in other languages with a real
+    /// "um"/"er", English-looking words, shared words, or US spellings that are
+    /// words in another language. These lists mirror windows/tests/
+    /// test_text_cleanup.py; scripts/check-text-cleanup-parity.py compares them.
+    // text-cleanup-parity: begin non-english-dictation
+    private static let nonEnglishDictation = [
+        // German
+        "Er sagt thanks.", "Er sagt thank you.", "Er meinte: I don't know.",
+        "Er findet das nice.", "Er war right.", "Er hat ein Meeting today.",
+        "Um sieben habe ich einen Call.", "Um ehrlich zu sein, it's fine.",
+        "Er, the boss, kommt sp\u{00E4}ter.", "Er ist heute nicht da.",
+        "Ich komme um acht Uhr, um dich abzuholen.", "Um acht.",
+        "Kommt er? I don't know, maybe.", "Hat er, you know, the files?",
+        "Morgen, sagt er, that's the deadline.", "Steig um, the train is right there.",
+        "You know what? Er zieht um.", "Wer, er? Yes, him, the new guy.",
+        "Wer war das? Er, I think.", "Lacht er I think.", "Er lacht laut.",
+        "We have to leave now, um rechtzeitig anzukommen.",
+        // Portuguese
+        "Dei um like.", "Mandei um email today.", "Tenho um call.",
+        "Vi um show really good.", "Um, dois, tr\u{00EA}s.", "Eu tenho um carro novo.",
+        "Me passa um, please, thanks.", "Comprei um, like, a new one, you know.",
+        "Quantos? Um, I think.",
+        // Danish, Dutch and Swedish
+        "Han er the best.", "Han er, you know, the best.", "Er du ready?",
+        "Det er nice.", "Det er godt.", "Hvem er? You know, the new guy.",
+        "Er is.", "Er is een probleem met de printer.", "Is er, you know, a problem?",
+        "Komt er? I don't think so.", "Ni har er bok.", "Tack till er, you know, really.",
+        // Spanish and other US-spelling collisions
+        "Me gusta the color.", "Por favor, cambia el color.", "Hazme ese favor, you know.",
+        "Qual o valor? I don't know, maybe ten.", "Ins Labor, the results are there, I think.",
+        "Fem kilometer, you know, that's far.", "Dialog, you know, is the key here.",
+        "Tre\u{0302}s, I think you know the color.",
+    ]
+    // text-cleanup-parity: end non-english-dictation
+
+    /// Real words that must survive even with English declared.
+    // text-cleanup-parity: begin preserved-with-english-declared
+    private static let preservedWithEnglishDeclared = [
+        "We flew to Umm Qasr.", "Umm Kulthum sang.", "Ah Q is a character.",
+        "Vzt\u{030C}ah je dobry\u{0301}.", "Er, Peter.", "Um, Lisboa.", "Quantos? Um.",
+        "Um, okay.", "Um.", "Had er been trouble?", "I said 'thanks' um and left.",
+        "We need to um schedule it.", "Lacht er I think.", "Er lacht laut.",
+        "Dei um like.", "I love the colores here.", "Offense.",
+    ]
+    // text-cleanup-parity: end preserved-with-english-declared
+
+    /// English dictation and its cleanup with English declared.
+    // text-cleanup-parity: begin english-dictation
+    private static let englishDictation: [(spoken: String, declared: String)] = [
+        ("Um, I think we should go.", "I think we should go."),
+        ("So, um, I was going to the store.", "So, I was going to the store."),
+        ("Er, can you send it tomorrow?", "Can you send it tomorrow?"),
+        ("I was, um, thinking about it.", "I was, thinking about it."),
+        ("It's, er, not ready yet.", "It's, not ready yet."),
+        ("Um, yes.", "Yes."),
+        ("That's all, um.", "That's all."),
+        ("We need, um, more time.", "We need, more time."),
+        ("Um, the meeting is at three.", "The meeting is at three."),
+        ("Is that right, um?", "Is that right?"),
+        ("This is it. Um, what do you think?", "This is it. What do you think?"),
+        ("I'm um not sure about that.", "I'm not sure about that."),
+        // Neither neighbour vouches for "um": kept even with English declared.
+        ("So um I think we should go.", "So um I think we should go."),
+    ]
+    // text-cleanup-parity: end english-dictation
+
+    private static func testEnglishOnlyCleanupEvidence() throws {
+        func scope(_ text: String, _ prior: TextLanguagePrior) -> EnglishCleanupScope {
+            EnglishCleanupEvidence.scope(in: text, prior: prior)
+        }
+        for prior in [TextLanguagePrior.unknown, .nonEnglish] {
+            try expect(scope("Um, I think we should go.", prior), equals: .nowhere,
+                       "English-only cleanup needs declared English")
+        }
+        try expect(scope("Um, okay.", .english), equals: .englishDeclared, "declared English")
+        for text in [
+            "Um, das Meeting ist um neun, okay?",
+            "Okay, I'll call you later. Er kommt morgen.",
+            "Um, I don't think the Bahnhof und so is open.",
+            "Han er, you know, the best.",
+            "Wer war das? Er, I think.",
+        ] {
+            try expect(scope(text, .english), equals: .nowhere, "any non-English word vetoes declared English: \(text)")
+        }
+
+        func evidence(_ text: String) -> [Int] {
+            let counts = EnglishCleanupEvidence.evidence(in: text)
+            return [counts.english, counts.other]
+        }
+        try expect(evidence("EU OS um er uh"), equals: [0, 0], "abbreviations and fillers are not language evidence")
+        try expect(evidence("I tak dalej."), equals: [0, 1], "sentence-initial I is not English evidence")
+        try expect(evidence("Um, I see."), equals: [1, 0], "mid-sentence I is English evidence")
+        try expect(evidence("A 50 m\u{00B2} flat, c\u{2019}est la vie, I think."), equals: [2, 2],
+                   "letters only, with French elisions counted as non-English")
+        try expect(evidence("Tre\u{0302}s, I think."), equals: [2, 1], "a decomposed accent stays in its word")
+        try expect(evidence("Tr\u{00EA}s, I think."), equals: [2, 1], "a precomposed accent counts the same")
+
+        try expect(TextLanguagePrior(englishDictation: false, dictationLanguage: .auto), equals: .unknown,
+                   "nothing is declared by default")
+        try expect(TextLanguagePrior(englishDictation: false, dictationLanguage: .english), equals: .unknown,
+                   "the English Language Hint alone declares nothing; it only filters scripts")
+        try expect(TextLanguagePrior(englishDictation: true, dictationLanguage: .auto), equals: .english,
+                   "My dictation is in English declares English")
+        try expect(TextLanguagePrior(englishDictation: true, dictationLanguage: .english), equals: .english,
+                   "an English hint agrees with the declaration")
+        for language in DictationLanguage.allCases where language != .auto && language != .english {
+            try expect(TextLanguagePrior(englishDictation: true, dictationLanguage: language), equals: .nonEnglish,
+                       "a \(language.rawValue) hint contradicts declared English")
+        }
+
+        let byDefault = FillerWordRemover.apply(to: "Um, uh, er, I was going.")
+        try expect(byDefault.text, equals: "Um, er, I was going.", "the default removes no um or er")
+        try expect(byDefault.removedCount, equals: 1, "default removal count")
+        let neutralOnly = FillerWordRemover.apply(to: "Um, uh, erm, ummm, hmm, er, ja.", englishOnlyFillers: .nowhere)
+        try expect(neutralOnly.text, equals: "Um, er, ja.", "without declared English only neutral fillers go")
+        try expect(neutralOnly.removedCount, equals: 4, "neutral filler removal count")
+        let declared = FillerWordRemover.apply(to: "Um, I think um we should, er, go.", englishOnlyFillers: .englishDeclared)
+        try expect(declared.text, equals: "I think um we should, go.",
+                   "declared English keeps an um whose next word is not an English marker")
+        try expect(declared.removedCount, equals: 2, "declared English removal count")
+        let all = FillerWordRemover.apply(to: "Um, I think um we should, er, go.", englishOnlyFillers: .everywhere)
+        try expect(all.text, equals: "I think we should, go.", "known-English callers remove every um and er")
+        for text in ["We flew to Umm Qasr.", "Umm Kulthum sang.", "Ah Q is a character.", "Vzt\u{030C}ah je dobry\u{0301}."] {
+            try expect(FillerWordRemover.apply(to: text).text, equals: text,
+                       "neutral fillers keep names and decomposed accents: \(text)")
+        }
+        try expect(FillerWordRemover.apply(to: "Uhh I think so.").text, equals: "I think so.", "I is not a name")
+        try expect(FillerWordRemover.apply(to: "Umm, Kulthum sang.").text, equals: "Kulthum sang.",
+                   "a comma sets the filler apart from the name")
+        try expect(FillerWordRemover.englishOnlyFillerCount(in: "Um, er, umm, sum, her, ER"), equals: 2,
+                   "only standalone lowercase or capitalised um and er count")
+    }
+
+    private static func testLanguageAwareDictationTextProcessing() throws {
+        func process(_ text: String,
+                     _ language: DictationLanguage = .auto,
+                     english: Bool = false,
+                     corrections: [TranscriptCorrection] = []) -> DictationTextProcessingResult {
+            processedDictationText(rawTranscript: text,
+                                   corrections: corrections,
+                                   spokenFormattingCommands: false,
+                                   dictationLanguage: language,
+                                   removeFillerWords: true,
+                                   englishDictation: english)
+        }
+        func result(_ text: String, removed: Int, kept: Int, corrections: Int = 0) -> DictationTextProcessingResult {
+            DictationTextProcessingResult(text: text,
+                                          appliedCorrectionCount: corrections,
+                                          appliedFormattingCommandCount: 0,
+                                          removedFillerWordCount: removed,
+                                          keptEnglishOnlyFillerCount: kept)
+        }
+
+        for text in nonEnglishDictation {
+            try expect(process(text).text, equals: text, "the default keeps every word: \(text)")
+            try expect(process(text, .german, english: true).text, equals: text,
+                       "a German hint keeps every word despite declared English: \(text)")
+        }
+        for text in preservedWithEnglishDeclared {
+            try expect(process(text).text, equals: text, "the default keeps every word: \(text)")
+            try expect(process(text, english: true).text, equals: text, "declared English keeps real words: \(text)")
+        }
+        // The user-visible tradeoff of the safe default: English dictation
+        // keeps um and er until My dictation is in English is turned on.
+        for (spoken, declared) in englishDictation {
+            try expect(process(spoken).text, equals: spoken, "the default keeps um and er: \(spoken)")
+            try expect(process(spoken, .english).text, equals: spoken, "the English hint alone keeps um and er: \(spoken)")
+            try expect(process(spoken, english: true).text, equals: declared, "declared English removes um and er: \(spoken)")
+        }
+
+        try expect(process("Uh, I think so."), equals: result("I think so.", removed: 1, kept: 0),
+                   "neutral fillers still go by default")
+        try expect(process("Uh, er ist heute nicht da."), equals: result("Er ist heute nicht da.", removed: 1, kept: 1),
+                   "neutral fillers go; German er stays")
+        try expect(process("Okay, I'll call you later. Er kommt morgen.", english: true),
+                   equals: result("Okay, I'll call you later. Er kommt morgen.", removed: 0, kept: 1),
+                   "a German sentence vetoes declared English")
+        try expect(process("Lacht er I think.", english: true), equals: result("Lacht er I think.", removed: 0, kept: 1),
+                   "an er beside a non-English word stays with declared English")
+        try expect(process("We took him to the ER.", english: true), equals: result("We took him to the ER.", removed: 0, kept: 0),
+                   "ER is an abbreviation")
+        // German "Er, I think." (he, I think) is the same characters as an
+        // English filler. Declaring English accepts the English reading.
+        try expect(process("Er, I think.", english: true).text, equals: "I think.", "declared English reads identical text as English")
+        try expect(process("Er, I think.").text, equals: "Er, I think.", "the default keeps identical text")
+
+        try expect(process("Um, I told the boss.", english: true,
+                           corrections: [TranscriptCorrection(source: "the boss", replacement: "der Chef")]),
+                   equals: result("Um, I told der Chef.", removed: 0, kept: 1, corrections: 1),
+                   "a German word supplied by a correction keeps the filler")
+        try expect(process("Um, I told the boss.", english: true,
+                           corrections: [TranscriptCorrection(source: "the boss", replacement: "the manager")]),
+                   equals: result("I told the manager.", removed: 1, kept: 0, corrections: 1),
+                   "corrections still run before filler removal")
+        try expect(process("Um, quero falar.", english: true,
+                           corrections: [TranscriptCorrection(source: "quero falar", replacement: "I want to speak")]),
+                   equals: result("Um, I want to speak.", removed: 0, kept: 1, corrections: 1),
+                   "a correction cannot supply English evidence for the spoken words")
+
+        let disabled = processedDictationText(rawTranscript: "Um, er ist da.",
+                                              corrections: [],
+                                              spokenFormattingCommands: false,
+                                              dictationLanguage: .auto,
+                                              removeFillerWords: false,
+                                              englishDictation: true)
+        try expect(disabled, equals: result("Um, er ist da.", removed: 0, kept: 0),
+                   "with the setting off nothing is removed or counted")
+
+        // New and existing installations start without declared English.
+        // Reading only, so nothing is written to the test suite.
+        let suite = "com.local.presspeech.self-test.text-language.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw SelfTestFailure.failed("text language test defaults unavailable")
+        }
+        let fresh = Settings(testDefaults: defaults)
+        try expect(fresh.englishDictation, equals: false, "English dictation is not declared by default")
+        try expect(fresh.removeFillerWords, equals: false, "filler removal stays opt-in")
+        try expect(fresh.dictationLanguage, equals: .auto, "Auto-detect stays the default hint")
+        try expect(defaults.persistentDomain(forName: suite) == nil, equals: true,
+                   "reading text settings writes no migration")
+    }
+
     private static func testFillerWordRemoval() throws {
+        try testEnglishOnlyCleanupEvidence()
+        try testLanguageAwareDictationTextProcessing()
+
         // Mid-sentence filler with surrounding commas → orphan comma
         // gets collapsed.
-        let mid = FillerWordRemover.apply(to: "So, um, I was going.")
+        let mid = FillerWordRemover.apply(to: "So, um, I was going.", englishOnlyFillers: .everywhere)
         try expect(mid.text, equals: "So, I was going.", "mid-sentence filler should leave a single comma")
         try expect(mid.removedCount, equals: 1, "mid-sentence filler removal count")
 
         // Sentence-initial filler with leading-comma cleanup AND
         // capitalisation restored (the original 'U' was uppercase).
-        let initial = FillerWordRemover.apply(to: "Um, hello.")
+        let initial = FillerWordRemover.apply(to: "Um, hello.", englishOnlyFillers: .everywhere)
         try expect(initial.text, equals: "Hello.", "sentence-initial filler should re-capitalise the next word")
         try expect(initial.removedCount, equals: 1, "sentence-initial filler removal count")
 
-        let secondSentence = FillerWordRemover.apply(to: "This is the first sentence. Um this is the second sentence.")
+        let secondSentence = FillerWordRemover.apply(to: "This is the first sentence. Um this is the second sentence.", englishOnlyFillers: .everywhere)
         try expect(
             secondSentence.text,
             equals: "This is the first sentence. This is the second sentence.",
@@ -24719,7 +25362,7 @@ private enum PresspeechSelfTest {
         )
         try expect(secondSentence.removedCount, equals: 1, "second-sentence filler removal count")
 
-        let secondSentenceWithComma = FillerWordRemover.apply(to: "This is the first sentence. Um, this is the second sentence.")
+        let secondSentenceWithComma = FillerWordRemover.apply(to: "This is the first sentence. Um, this is the second sentence.", englishOnlyFillers: .everywhere)
         try expect(
             secondSentenceWithComma.text,
             equals: "This is the first sentence. This is the second sentence.",
@@ -24727,7 +25370,7 @@ private enum PresspeechSelfTest {
         )
         try expect(secondSentenceWithComma.removedCount, equals: 1, "second-sentence comma filler removal count")
 
-        let secondSentenceQuestion = FillerWordRemover.apply(to: "This is the first sentence. Um? this is the second sentence.")
+        let secondSentenceQuestion = FillerWordRemover.apply(to: "This is the first sentence. Um? this is the second sentence.", englishOnlyFillers: .everywhere)
         try expect(
             secondSentenceQuestion.text,
             equals: "This is the first sentence. This is the second sentence.",
@@ -24735,7 +25378,7 @@ private enum PresspeechSelfTest {
         )
         try expect(secondSentenceQuestion.removedCount, equals: 1, "second-sentence question filler removal count")
 
-        let capitalizedMidSentence = FillerWordRemover.apply(to: "This is not a sentence boundary Um this stays lowercase.")
+        let capitalizedMidSentence = FillerWordRemover.apply(to: "This is not a sentence boundary Um this stays lowercase.", englishOnlyFillers: .everywhere)
         try expect(
             capitalizedMidSentence.text,
             equals: "This is not a sentence boundary this stays lowercase.",
@@ -24744,67 +25387,67 @@ private enum PresspeechSelfTest {
         try expect(capitalizedMidSentence.removedCount, equals: 1, "capitalized mid-sentence filler removal count")
 
         // Bare filler with adjacent punctuation collapses to empty.
-        let bare = FillerWordRemover.apply(to: "Um.")
+        let bare = FillerWordRemover.apply(to: "Um.", englishOnlyFillers: .everywhere)
         try expect(bare.text, equals: "", "bare filler with trailing punctuation should leave empty string")
         try expect(bare.removedCount, equals: 1, "bare filler removal count")
 
         // Filler with no surrounding punctuation just leaves a space
         // that gets collapsed away.
-        let inline = FillerWordRemover.apply(to: "I'm uh going to the store.")
+        let inline = FillerWordRemover.apply(to: "I'm uh going to the store.", englishOnlyFillers: .everywhere)
         try expect(inline.text, equals: "I'm going to the store.", "inline filler should collapse the leftover whitespace")
         try expect(inline.removedCount, equals: 1, "inline filler removal count")
 
         // Compound interjection "uh-huh" must NOT match — the hyphen is
         // part of the boundary class.
-        let uhHuh = FillerWordRemover.apply(to: "Yeah, uh-huh.")
+        let uhHuh = FillerWordRemover.apply(to: "Yeah, uh-huh.", englishOnlyFillers: .everywhere)
         try expect(uhHuh.text, equals: "Yeah, uh-huh.", "uh-huh must not be stripped")
         try expect(uhHuh.removedCount, equals: 0, "uh-huh removal count")
 
         // Words that *contain* a filler substring must not match. "her"
         // contains "er", "sum" contains "um", "exercise" contains "er".
-        let contains = FillerWordRemover.apply(to: "Her sum exercise is harder.")
+        let contains = FillerWordRemover.apply(to: "Her sum exercise is harder.", englishOnlyFillers: .everywhere)
         try expect(contains.text, equals: "Her sum exercise is harder.", "filler substrings inside larger words must be preserved")
         try expect(contains.removedCount, equals: 0, "no removals when fillers are embedded in real words")
 
         // Multiple fillers in one utterance all get stripped.
-        let multi = FillerWordRemover.apply(to: "Um, ah, I uh think so.")
+        let multi = FillerWordRemover.apply(to: "Um, ah, I uh think so.", englishOnlyFillers: .everywhere)
         try expect(multi.text, equals: "I think so.", "multiple fillers should all be removed and artifacts cleaned up")
         try expect(multi.removedCount, equals: 3, "multi-filler removal count")
 
         // Empty input should be a no-op.
-        let empty = FillerWordRemover.apply(to: "")
+        let empty = FillerWordRemover.apply(to: "", englishOnlyFillers: .everywhere)
         try expect(empty.text, equals: "", "empty input passes through unchanged")
         try expect(empty.removedCount, equals: 0, "empty input has zero removals")
 
         // No fillers present → identical text, zero removals.
-        let clean = FillerWordRemover.apply(to: "Hello world.")
+        let clean = FillerWordRemover.apply(to: "Hello world.", englishOnlyFillers: .everywhere)
         try expect(clean.text, equals: "Hello world.", "filler-free input passes through unchanged")
         try expect(clean.removedCount, equals: 0, "filler-free input has zero removals")
 
         // Elongated fillers — common in real dictation. The word-
         // boundary lookahead would have rejected these without the
         // per-pattern trailing-repeat allowance.
-        let elongatedUm = FillerWordRemover.apply(to: "Ummm, hello.")
+        let elongatedUm = FillerWordRemover.apply(to: "Ummm, hello.", englishOnlyFillers: .everywhere)
         try expect(elongatedUm.text, equals: "Hello.", "ummm should be stripped like um")
         try expect(elongatedUm.removedCount, equals: 1, "elongated um removal count")
 
-        let elongatedUh = FillerWordRemover.apply(to: "Uhhh I think so.")
+        let elongatedUh = FillerWordRemover.apply(to: "Uhhh I think so.", englishOnlyFillers: .everywhere)
         try expect(elongatedUh.text, equals: "I think so.", "uhhh should be stripped like uh")
         try expect(elongatedUh.removedCount, equals: 1, "elongated uh removal count")
 
-        let elongatedAh = FillerWordRemover.apply(to: "Ahhh, that makes sense.")
+        let elongatedAh = FillerWordRemover.apply(to: "Ahhh, that makes sense.", englishOnlyFillers: .everywhere)
         try expect(elongatedAh.text, equals: "That makes sense.", "ahhh should be stripped like ah")
         try expect(elongatedAh.removedCount, equals: 1, "elongated ah removal count")
 
         // `hm+` covers both "hm" (single m) and "hmmm" (extended). The
         // earlier fixed-list "hmm" entry rejected the single-m form.
-        let shortHm = FillerWordRemover.apply(to: "Hm, interesting.")
+        let shortHm = FillerWordRemover.apply(to: "Hm, interesting.", englishOnlyFillers: .everywhere)
         try expect(shortHm.text, equals: "Interesting.", "short hm should be stripped like hmm")
         try expect(shortHm.removedCount, equals: 1, "short hm removal count")
 
         // Words containing the new repeat-friendly patterns must still
         // pass through. "ohm" embeds "hm" but has a leading letter.
-        let embedded = FillerWordRemover.apply(to: "An ohm is a unit.")
+        let embedded = FillerWordRemover.apply(to: "An ohm is a unit.", englishOnlyFillers: .everywhere)
         try expect(embedded.text, equals: "An ohm is a unit.", "ohm must not match hm")
         try expect(embedded.removedCount, equals: 0, "ohm should produce zero removals")
 
@@ -24812,58 +25455,58 @@ private enum PresspeechSelfTest {
         // comma-collapse pass was single-pass/non-overlapping: it
         // consumed one ", ," pair and the whitespace-before-punctuation
         // pass then glued the leftover " ," into ",,".
-        let consecutive = FillerWordRemover.apply(to: "So, um, uh, yes.")
+        let consecutive = FillerWordRemover.apply(to: "So, um, uh, yes.", englishOnlyFillers: .everywhere)
         try expect(consecutive.text, equals: "So, yes.", "consecutive fillers should collapse to a single comma")
         try expect(consecutive.removedCount, equals: 2, "consecutive filler removal count")
 
         // Three consecutive fillers exercise runs longer than one
         // collapse step.
-        let tripleRun = FillerWordRemover.apply(to: "He said, um, uh, er, no.")
+        let tripleRun = FillerWordRemover.apply(to: "He said, um, uh, er, no.", englishOnlyFillers: .everywhere)
         try expect(tripleRun.text, equals: "He said, no.", "a run of three fillers should collapse to a single comma")
         try expect(tripleRun.removedCount, equals: 3, "triple filler removal count")
 
         // Consecutive fillers mid-sentence keep exactly one comma,
         // matching the single-filler behavior above.
-        let midRun = FillerWordRemover.apply(to: "I think, um, uh, we should go.")
+        let midRun = FillerWordRemover.apply(to: "I think, um, uh, we should go.", englishOnlyFillers: .everywhere)
         try expect(midRun.text, equals: "I think, we should go.", "mid-sentence consecutive fillers should keep one comma")
         try expect(midRun.removedCount, equals: 2, "mid-sentence consecutive filler removal count")
 
         // Trailing filler before terminal punctuation used to leave
         // ",." because no pass cleaned a comma glued onto a period.
-        let trailing = FillerWordRemover.apply(to: "That's all, um.")
+        let trailing = FillerWordRemover.apply(to: "That's all, um.", englishOnlyFillers: .everywhere)
         try expect(trailing.text, equals: "That's all.", "trailing filler should not leave a comma before the period")
         try expect(trailing.removedCount, equals: 1, "trailing filler removal count")
 
-        let beforeQuestion = FillerWordRemover.apply(to: "Is that right, um?")
+        let beforeQuestion = FillerWordRemover.apply(to: "Is that right, um?", englishOnlyFillers: .everywhere)
         try expect(beforeQuestion.text, equals: "Is that right?", "filler before a question mark should not leave a comma")
         try expect(beforeQuestion.removedCount, equals: 1, "filler before question mark removal count")
 
-        let beforeBang = FillerWordRemover.apply(to: "Stop, um!")
+        let beforeBang = FillerWordRemover.apply(to: "Stop, um!", englishOnlyFillers: .everywhere)
         try expect(beforeBang.text, equals: "Stop!", "filler before an exclamation mark should not leave a comma")
         try expect(beforeBang.removedCount, equals: 1, "filler before exclamation mark removal count")
 
         // Sentence-initial filler with its own terminal punctuation:
         // the leading-strip class must include "?" and "!" or the
         // orphaned punctuation survives ("Um? What?" → "? What?").
-        let leadingQuestion = FillerWordRemover.apply(to: "Um? What?")
+        let leadingQuestion = FillerWordRemover.apply(to: "Um? What?", englishOnlyFillers: .everywhere)
         try expect(leadingQuestion.text, equals: "What?", "leading filler question should take its punctuation with it")
         try expect(leadingQuestion.removedCount, equals: 1, "leading filler question removal count")
 
-        let leadingBang = FillerWordRemover.apply(to: "Ah! Careful.")
+        let leadingBang = FillerWordRemover.apply(to: "Ah! Careful.", englishOnlyFillers: .everywhere)
         try expect(leadingBang.text, equals: "Careful.", "leading filler exclamation should take its punctuation with it")
         try expect(leadingBang.removedCount, equals: 1, "leading filler exclamation removal count")
 
-        let multiline = FillerWordRemover.apply(to: "First. Um, line.\nSecond line.\n\nThird line.")
+        let multiline = FillerWordRemover.apply(to: "First. Um, line.\nSecond line.\n\nThird line.", englishOnlyFillers: .everywhere)
         try expect(multiline.text, equals: "First. Line.\nSecond line.\n\nThird line.",
                    "filler cleanup must retain unrelated line and paragraph breaks")
         try expect(multiline.removedCount, equals: 1, "multiline filler removal count")
 
-        let afterBreak = FillerWordRemover.apply(to: "First.\nUm second.\r\nThird.")
+        let afterBreak = FillerWordRemover.apply(to: "First.\nUm second.\r\nThird.", englishOnlyFillers: .everywhere)
         try expect(afterBreak.text, equals: "First.\nSecond.\r\nThird.",
                    "filler removal at a line start must retain LF and CRLF boundaries")
         try expect(afterBreak.removedCount, equals: 1, "line-start filler removal count")
 
-        let afterParagraph = FillerWordRemover.apply(to: "First.\n\nUm, second.")
+        let afterParagraph = FillerWordRemover.apply(to: "First.\n\nUm, second.", englishOnlyFillers: .everywhere)
         try expect(afterParagraph.text, equals: "First.\n\nSecond.",
                    "orphan punctuation after a paragraph break must be removed without flattening it")
         try expect(afterParagraph.removedCount, equals: 1, "paragraph-start filler removal count")
@@ -27274,8 +27917,9 @@ private enum PresspeechSelfTest {
             rawTranscript: "  Um, parakeet is fast.  ",
             corrections: [TranscriptCorrection(source: "parakeet", replacement: "Presspeech")],
             spokenFormattingCommands: false,
-            dictationLanguage: .auto,
-            removeFillerWords: true
+            dictationLanguage: .english,
+            removeFillerWords: true,
+            englishDictation: true
         )
         try expect(
             processed,
@@ -27321,16 +27965,17 @@ private enum PresspeechSelfTest {
         )
 
         let formattedWithFillerRemoval = processedDictationText(
-            rawTranscript: "First new paragraph um second new line third",
+            rawTranscript: "First new paragraph um the second new line third",
             corrections: [],
             spokenFormattingCommands: true,
             dictationLanguage: .english,
-            removeFillerWords: true
+            removeFillerWords: true,
+            englishDictation: true
         )
         try expect(
             formattedWithFillerRemoval,
             equals: DictationTextProcessingResult(
-                text: "First\n\nsecond\nthird",
+                text: "First\n\nthe second\nthird",
                 appliedCorrectionCount: 0,
                 appliedFormattingCommandCount: 2,
                 removedFillerWordCount: 1

@@ -189,7 +189,7 @@ class CaptureStallTests(unittest.TestCase):
         instance.transcriber.transcribe.return_value = TRANSCRIPT
         instance._model_executor = InlineExecutor()
         instance._paste = mock.Mock()
-        instance._apply_text = lambda text: text
+        instance._apply_text = lambda text, language=None: text
         instance._dictation_model_ready = mock.Mock(return_value=True)
         instance._get_input_device = mock.Mock(return_value=(2, 16000))
         instance._play_cue_worker = mock.Mock()
@@ -441,7 +441,7 @@ class UnseenStallTests(unittest.TestCase):
         instance.transcriber.transcribe.return_value = TRANSCRIPT
         instance._model_executor = InlineExecutor()
         instance._paste = mock.Mock()
-        instance._apply_text = lambda text: text
+        instance._apply_text = lambda text, language=None: text
         for name in ("_play_cue", "_restore_playback_after_recording",
                      "_schedule_model_idle_unload",
                      "_capture_benchmark_if_armed", "open_delivery_recovery"):

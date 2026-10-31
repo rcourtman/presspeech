@@ -2296,27 +2296,36 @@ class TextRegressionTests(unittest.TestCase):
             "british": False,
             "suffix": "none",
         }
-        self.assertEqual(instance._apply_text("Um, it works."), "It works.")
+        english = app.text_cleanup.LANGUAGE_ENGLISH_DECLARED
+        self.assertEqual(instance._apply_text("Um, it works.", english),
+                         "It works.")
         self.assertEqual(
             instance._apply_text(
-                "This is the first sentence. Um this is the second sentence."),
+                "This is the first sentence. Um this is the second sentence.",
+                english),
             "This is the first sentence. This is the second sentence.")
+        # Without declared English the same dictation keeps its words.
+        self.assertEqual(instance._apply_text("Um, it works."), "Um, it works.")
         self.assertEqual(
-            app._remove_fillers("This is not a boundary Um this stays lowercase."),
+            app._remove_fillers("This is not a boundary Um this stays lowercase.",
+                                english_fillers=app.text_cleanup.ENGLISH_CLEANUP_ALL),
             "This is not a boundary this stays lowercase.")
 
     def test_filler_removal_cleans_punctuation_runs(self):
-        self.assertEqual(
-            app._remove_fillers("So, um, uh, I was going."),
-            "So, I was going.")
-        self.assertEqual(app._remove_fillers("That's all, um."), "That's all.")
-        self.assertEqual(app._remove_fillers("Um? What?"), "What?")
+        def remove(text):
+            return app._remove_fillers(
+                text, english_fillers=app.text_cleanup.ENGLISH_CLEANUP_ALL)
+
+        self.assertEqual(remove("So, um, uh, I was going."), "So, I was going.")
+        self.assertEqual(remove("That's all, um."), "That's all.")
+        self.assertEqual(remove("Um? What?"), "What?")
 
     def test_filler_removal_preserves_real_words_and_compounds(self):
         for text in ("It works well.", "I might err.", "Yeah, uh-huh.",
                      "An ohm is a unit."):
             with self.subTest(text=text):
-                self.assertEqual(app._remove_fillers(text), text)
+                self.assertEqual(app._remove_fillers(
+                    text, english_fillers=app.text_cleanup.ENGLISH_CLEANUP_ALL), text)
 
     def test_text_settings_cannot_turn_removed_words_into_a_suffix_only_paste(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
@@ -2326,7 +2335,7 @@ class TextRegressionTests(unittest.TestCase):
                     "dictionary": [], "remove_fillers": True,
                     "british": False, "suffix": suffix,
                 }
-                self.assertEqual(instance._apply_text("Um."), "")
+                self.assertEqual(instance._apply_text("Uh."), "")
                 instance.settings["dictionary"] = [["remove me", ""]]
                 instance.settings["remove_fillers"] = False
                 self.assertEqual(instance._apply_text("remove me"), "")
@@ -4755,6 +4764,67 @@ class ModelIdleTests(unittest.TestCase):
         self.assertNotIn("synthetic private phrase",
                          str(instance._log.call_args_list))
 
+    def test_text_cleanup_receives_the_language_of_the_model_used(self):
+        cases = (
+            ({"backend": "parakeet", "model_name": "parakeet-tdt-0.6b-v3"},
+             app.text_cleanup.LANGUAGE_NOT_DECLARED),
+            ({"backend": "whisper", "model_name": "base.en",
+              "detected_language": "en"},
+             app.text_cleanup.LANGUAGE_ENGLISH_DECLARED),
+            ({"backend": "whisper", "model_name": "turbo",
+              "detected_language": "de", "detected_language_probability": 0.9},
+             app.text_cleanup.LANGUAGE_OTHER),
+        )
+        for timing, expected in cases:
+            with self.subTest(model_name=timing["model_name"]):
+                instance = app.PresspeechApp.__new__(app.PresspeechApp)
+                instance.settings = {"model": "base.en"}
+                instance.transcriber = mock.Mock()
+                instance.transcriber.loaded.return_value = True
+                instance.transcriber.transcribe.return_value = "synthetic phrase"
+                # The timing recorded with the text decides, not the model
+                # that happens to be loaded afterwards.
+                instance.transcriber.model_name = "base.en"
+                instance.transcriber.last_timing = timing
+                instance._apply_text = mock.Mock(return_value="synthetic phrase ")
+                instance._remember_undelivered_dictation = mock.Mock()
+                instance._deliver_text = mock.Mock()
+                instance._log = mock.Mock()
+
+                instance._transcribe_worker_inner(
+                    mock.sentinel.audio, input_overflowed=True)
+
+                instance._apply_text.assert_called_once_with(
+                    "synthetic phrase", expected)
+
+    def test_english_only_fallback_does_not_declare_english(self):
+        instance = app.PresspeechApp.__new__(app.PresspeechApp)
+        instance.settings = {"model": "parakeet-tdt-0.6b-v3"}
+        instance.transcriber = mock.Mock()
+        instance.transcriber.loaded.return_value = True
+        instance.transcriber.transcribe.side_effect = RuntimeError(
+            "synthetic decode failure")
+        fallback = mock.Mock()
+        fallback.transcribe.return_value = "synthetic phrase"
+        fallback.last_timing = {
+            "backend": "whisper", "model_name": "base.en",
+            "detected_language": "en"}
+        instance.notify = mock.Mock()
+        instance._apply_text = mock.Mock(return_value="synthetic phrase ")
+        instance._remember_undelivered_dictation = mock.Mock()
+        instance._deliver_text = mock.Mock()
+        instance._log = mock.Mock()
+
+        with mock.patch.object(app.engine, "Transcriber", return_value=fallback):
+            instance._transcribe_worker_inner(
+                mock.sentinel.audio, input_overflowed=True)
+
+        fallback.load.assert_called_once_with("base.en", local_only=True)
+        fallback.unload.assert_called_once_with()
+        instance.transcriber.load.assert_not_called()
+        instance._apply_text.assert_called_once_with(
+            "synthetic phrase", app.text_cleanup.LANGUAGE_NOT_DECLARED)
+
     def test_overflow_review_notice_identifies_possible_missing_words(self):
         instance = app.PresspeechApp.__new__(app.PresspeechApp)
         instance.notify = mock.Mock()
@@ -4873,7 +4943,7 @@ class ModelIdleTests(unittest.TestCase):
 
     def test_removed_words_never_reach_clipboard_or_paste_delivery(self):
         for recognized, dictionary, remove_fillers in (
-                ("Um.", [], True),
+                ("Uh.", [], True),
                 ("remove me", [["remove me", ""]], False),
                 ("Remove me.", [["remove me", ""]], False)):
             with self.subTest(recognized=recognized):

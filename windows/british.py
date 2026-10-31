@@ -108,20 +108,46 @@ BRITISH = {
     "smolder": "smoulder", "sulfur": "sulphur", "tire": "tyre",
 }
 
+# US spellings that are also ordinary words in another language Presspeech
+# transcribes (Spanish "color", German "Liter", Danish "disk", French
+# "tire"). Callers without English evidence for the whole sentence keep them.
+SHARED_US_SPELLINGS = frozenset((
+    "ameba", "analog", "anemia", "ardor", "candor", "catalog", "center",
+    "centimeter", "clangor", "color", "demagog", "dialog", "disk", "edema",
+    "epilog", "estrogen", "favor", "fervor", "fetus", "fiber", "honor",
+    "honorable", "kilometer", "labor", "liter", "milliliter", "millimeter",
+    "monolog", "odor", "pedagog", "prolog", "rancor", "rumor", "saber",
+    "scepter", "tire", "valor", "vigor", "offense", "donut", "favorite",
+))
+_UNSHARED_BRITISH = {us: gb for us, gb in BRITISH.items()
+                     if us not in SHARED_US_SPELLINGS}
+# English endings a shared spelling may take; "-es" and "-er" on "color" or
+# "dialog" are Spanish and Swedish plurals.
+_SHARED_SUFFIXES = ("s", "ed", "ing")
+
 _TOKEN_RE = re.compile(r"[A-Za-z']+")
 
 
-def to_british(text):
+def to_british(text, *, keep_shared_spellings=False):
+    """Respell US words as British; optionally keep SHARED_US_SPELLINGS.
+
+    With ``keep_shared_spellings``, a shared spelling is never respelled.
+    Without it, the word and its English inflections are ("colors",
+    "favored"), but not other endings: Spanish "colores" and Swedish
+    "dialoger" are not English plurals.
+    """
+    table = _UNSHARED_BRITISH if keep_shared_spellings else BRITISH
+
     def convert(match):
         token = match.group(0)
         lower = token.lower()
-        repl = BRITISH.get(lower)
+        repl = table.get(lower)
         if repl is None and lower.endswith("'s"):
-            repl = BRITISH.get(lower[:-2])
+            repl = table.get(lower[:-2])
             if repl is not None:
                 repl += "'s"
         if repl is None:
-            repl = _inflect(lower)
+            repl = _inflect(lower, table)
         if repl is None:
             return token
         if token.isupper():
@@ -133,32 +159,35 @@ def to_british(text):
     return _TOKEN_RE.sub(convert, text)
 
 
-def _inflect(lower):
+def _inflect(lower, table=BRITISH):
     # ``analyze`` is the one listed -yze verb, so it does not enter the -ize
     # branches below even though its British inflections follow the same rule.
     if lower.endswith("yzing"):
-        base = BRITISH.get(lower[:-3] + "e")
+        base = table.get(lower[:-3] + "e")
         if base:
             return base[:-1] + "ing" if base.endswith("e") else base + "ing"
     if lower.endswith("yzed"):
-        base = BRITISH.get(lower[:-1])
+        base = table.get(lower[:-1])
         if base:
             return base + "d"
     if lower.endswith("izing"):
-        base = BRITISH.get(lower[:-3] + "e")
+        base = table.get(lower[:-3] + "e")
         if base:
             return base[:-1] + "ing" if base.endswith("e") else base + "ing"
     if lower.endswith("ized"):
-        base = BRITISH.get(lower[:-1])
+        base = table.get(lower[:-1])
         if base:
             return base + "d"
     if lower.endswith("izes"):
-        base = BRITISH.get(lower[:-1])
+        base = table.get(lower[:-1])
         if base:
             return base + "s"
     for suffix in ("es", "s", "ed", "ing", "er", "est", "ly"):
         if lower.endswith(suffix):
-            base = BRITISH.get(lower[:-len(suffix)])
+            stem = lower[:-len(suffix)]
+            base = table.get(stem)
+            if base and stem in SHARED_US_SPELLINGS and suffix not in _SHARED_SUFFIXES:
+                continue
             if base:
                 # Some conversions add a silent e (center -> centre,
                 # catalog -> catalogue). Apply English suffix rules to the

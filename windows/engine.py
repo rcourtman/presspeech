@@ -663,6 +663,7 @@ class Transcriber:
                 model = self.model
                 processor = self.processor
                 backend = self.backend
+                model_name = self.model_name
             if model is None or backend is None:
                 raise RuntimeError("no model loaded")
             self._backend_timing = {}
@@ -697,6 +698,11 @@ class Transcriber:
                     # benchmark so an automatic-language run is auditable.
                     # A code inferred from VAD-rejected silence is meaningless.
                     "detected_language": detected_language,
+                    # Text cleanup trusts the detected language only above a
+                    # probability floor; see text_cleanup.
+                    "detected_language_probability": (
+                        getattr(info, "language_probability", None)
+                        if detected_language is not None else None),
                 }
                 # Whisper can decode plausible text from silence. faster-whisper's
                 # standard API still returns a lazy segment generator when Silero
@@ -707,6 +713,10 @@ class Transcriber:
             finished_at = time.perf_counter()
             self.last_timing = {
                 "backend": backend,
+                # The model that produced this text, recorded with it so a
+                # later model change does not relabel it (unless another
+                # transcription replaces last_timing before it is read).
+                "model_name": model_name,
                 "lock_wait": acquired_at - requested_at,
                 "inference": finished_at - acquired_at,
                 **self._backend_timing,

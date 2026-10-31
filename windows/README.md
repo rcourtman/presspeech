@@ -607,8 +607,17 @@ again; unsaved edits remain in place while it waits.
   English.
 - After pasting: space / newline / nothing (newline can submit text in a command
   shell; review commands outside the shell first)
-- Remove filler words (um, uh, er, …)
-- British English spelling (color → colour, realize → realise)
+- Remove filler words: uh, hmm, erm and stretched umm in any language; um and
+  er only in dictation declared English, because they are also German, Dutch,
+  Danish, Swedish and Portuguese words
+- British English spelling (color → colour, realize → realise), only in
+  dictation declared English
+- My dictation is in English (off by default): declares English for um/er
+  removal and British spelling. Choosing an English-only model also declares
+  English. Even then the check uses a list of common words: a dictation with a
+  listed non-English word or an accented letter keeps um and er, and one is
+  removed only in a sentence with a listed English word, when commas or
+  sentence punctuation set it apart or listed English words sit on both sides.
 - Audio cues when dictation starts and stops
 - Mute every active Windows playback endpoint while recording, restoring each
   device's previous mute state afterwards

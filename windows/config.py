@@ -42,6 +42,9 @@ DEFAULTS = {
     "suffix": "space",
     "remove_fillers": True,
     "british": True,
+    # "en" declares English dictation, which enables English-only cleanup
+    # (um/er removal and British spelling). "auto" keeps those words.
+    "dictation_language": "auto",
     "audio_cues": True,
     "mute_playback_while_recording": True,
     "visual_indicator": True,
@@ -85,6 +88,12 @@ MODEL_LABELS = {
     "base.en": "Whisper base.en (English-only \u00b7 fastest CPU)",
 }
 
+# Models that can only emit English. Their output may receive English-only
+# text cleanup without other language evidence.
+ENGLISH_ONLY_MODELS = frozenset({
+    "nemotron-speech-streaming-en-0.6b", "small.en", "medium.en", "base.en",
+})
+
 SUFFIXES = {"space": " ", "newline": "\n", "none": ""}
 
 _ENUM_SETTINGS = {
@@ -93,6 +102,7 @@ _ENUM_SETTINGS = {
     "model": set(MODELS),
     "precision": {"auto", "fp16", "bf16"},
     "suffix": set(SUFFIXES),
+    "dictation_language": {"auto", "en"},
     "max_recording_seconds": set(RECORDING_LENGTHS),
 }
 _NONNEGATIVE_INT_SETTINGS = {

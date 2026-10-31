@@ -1805,8 +1805,9 @@ clipboard.
   Test the Space, Newline and None suffix choices separately. When that phrase
   is recognized, **Nothing to insert** must appear, the selected text and
   previous clipboard item must remain unchanged, and no Ctrl+V may be sent.
-  Repeat with filler removal enabled and a filler-only recognized phrase when
-  the recognizer produces one. Record an unrecognized phrase as **Not run** for
+  Repeat with filler removal enabled and a filler-only recognized phrase such
+  as "uh" when the recognizer produces one; "um" alone is removed only with
+  **My dictation is in English** turned on or an English-only model. Record an unrecognized phrase as **Not run** for
   this check, not a pass. A deliberate single-space dictionary replacement
   must remain deliverable; do not treat all whitespace as removed content.
 - On a disposable Windows desktop, set **After pasting** to **newline** and

@@ -2406,14 +2406,28 @@ class SettingsWindow(_RegisteredDialog):
         ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
         row += 1
 
+        self.var_english_dictation = tk.BooleanVar(
+            value=s.get("dictation_language") == "en")
+        ttk.Checkbutton(
+            f, text="My dictation is in English",
+            variable=self.var_english_dictation).grid(
+                row=row, column=0, columnspan=3, sticky="w", pady=2)
+        row += 1
+        ttk.Label(
+            f, text=("Allows English text cleanup with multilingual models. "
+                     "Choosing an English-only model also enables it."),
+            justify="left", wraplength=620,
+        ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(0, 5))
+        row += 1
+
         self.var_fillers = tk.BooleanVar(value=s["remove_fillers"])
-        ttk.Checkbutton(f, text="Remove filler words (um, uh, er\u2026)",
+        ttk.Checkbutton(f, text="Remove filler words (um and er need declared English)",
                         variable=self.var_fillers).grid(row=row, column=0, columnspan=3,
                                                         sticky="w", pady=2)
         row += 1
 
         self.var_british = tk.BooleanVar(value=s.get("british", True))
-        ttk.Checkbutton(f, text="British English spelling (color \u2192 colour)",
+        ttk.Checkbutton(f, text="British English spelling (English dictation only)",
                         variable=self.var_british).grid(row=row, column=0, columnspan=3,
                                                         sticky="w", pady=2)
         row += 1
@@ -2758,6 +2772,8 @@ class SettingsWindow(_RegisteredDialog):
             s["suffix"] = self.var_suffix.get() or cfg.DEFAULTS["suffix"]
             s["remove_fillers"] = bool(self.var_fillers.get())
             s["british"] = bool(self.var_british.get())
+            s["dictation_language"] = (
+                "en" if self.var_english_dictation.get() else "auto")
             s["audio_cues"] = bool(self.var_audio_cues.get())
             s["mute_playback_while_recording"] = bool(self.var_mute_playback.get())
             s["visual_indicator"] = bool(self.var_visual_indicator.get())
