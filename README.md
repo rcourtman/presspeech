@@ -20,7 +20,7 @@ for Apple Silicon, with a Windows preview.
   <img src="icon/demo.svg" alt="Demo: hold Right Option, speak, and on release the sentence quickly lands at the cursor." width="900">
 </p>
 
-> **~90–150 ms warm ASR inference** · **9.2 MB release zip** · **~80 MB RAM** · **0% CPU between dictations**
+> **~90–150 ms warm ASR inference** · **9.2 MB release zip**
 
 ## Why Presspeech
 

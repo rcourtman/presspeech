@@ -45,7 +45,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare on Windows</span>
         <h1>Presspeech vs Scribe AI</h1>
-        <p>Both are free, MIT-licensed Windows tray apps with local Parakeet speech recognition, push-to-talk and toggle modes, dictionaries, voice shortcuts, and no required account or subscription. Scribe AI is a larger Windows 11 workspace with a signed Microsoft Store install, retained history, usage views, per-app profiles, and optional AI cleanup. Presspeech is a narrower deterministic dictation path with no persistent transcript history, Presspeech-authored analytics, or cloud-AI option.</p>
+        <p>Both are free, MIT-licensed Windows tray apps with local Parakeet speech recognition, push-to-talk and toggle modes, dictionaries, voice shortcuts, and no required account or subscription. Scribe AI is a larger Windows 11 workspace with a signed Microsoft Store install, retained history, usage views, per-app profiles, optional AI cleanup, and, in direct installs, an optional cloud speech model. Presspeech is a narrower deterministic dictation path with no persistent transcript history, Presspeech-authored analytics, or cloud-AI option.</p>
       </div>
 
       <section>
@@ -64,12 +64,12 @@
                 <tr>
                   <th scope="row">Primary workflow</th>
                   <td>Hold or toggle a configurable key, then normally paste after confirming the original destination. An uncertain or changed destination uses explicit clipboard recovery instead.</td>
-                  <td>Hold or toggle a configurable key, optionally stop on silence, then insert through Unicode or clipboard methods with fallback. Failed insertion keeps recent text available to copy.</td>
+                  <td>Hold or toggle a configurable key, optionally stop when you stop talking, then type or paste into the app, with per-app profiles choosing the method and the clipboard restored after a paste. Text that cannot be typed stays available to copy from the tray.</td>
                 </tr>
                 <tr>
                   <th scope="row">Speech engine</th>
                   <td>A usable NVIDIA CUDA installation selects multilingual Parakeet; a fresh CPU-only installation selects English-only Whisper base.en. Other local models can be selected.</td>
-                  <td>Bundles multilingual Parakeet for CPU recognition, with optional verified English-only Moonshine downloads.</td>
+                  <td>Bundles multilingual Parakeet (about 25 European languages) for CPU recognition, with optional verified English-only Moonshine downloads. Direct installs can also choose an optional MAI-Transcribe-2 cloud model through the user's own Microsoft Foundry resource, falling back to Parakeet.</td>
                 </tr>
                 <tr>
                   <th scope="row">Text handling</th>
@@ -78,7 +78,7 @@
                 </tr>
                 <tr>
                   <th scope="row">History and insights</th>
-                  <td>Recent transcripts stay in process memory only and clear on quit. Transcript text, audio, and dictionary contents are excluded from logs.</td>
+                  <td>There is no transcript history. Transcript text, audio, and dictionary contents are excluded from logs.</td>
                   <td>Stores local transcript history and usage statistics; audio retention is optional. History can be cleared, and an explicit AI-insight action can send bounded aggregate data to the configured provider.</td>
                 </tr>
                 <tr>
@@ -89,7 +89,7 @@
                 <tr>
                   <th scope="row">Privacy boundary</th>
                   <td>Speech recognition is local. No account, Presspeech-authored analytics, cloud transcription, or optional cloud text-processing endpoint exists. Published Windows 0.1.12 does not disable bundled Hugging Face library telemetry during model downloads; see the <a href="../privacy.html#network-calls">version-specific network inventory</a>.</td>
-                  <td>Speech recognition is local and the publisher receives no automatic telemetry. Optional AI cleanup can stay local or send transcript text—not audio—to a provider the user configures.</td>
+                  <td>Speech recognition is local unless a direct install selects the optional MAI-Transcribe-2 cloud model, which sends each dictation's audio and up to 500 vocabulary phrases to the user's Microsoft Foundry resource. The publisher operates no service that receives audio or dictation history. Optional AI cleanup can stay local or send transcript text—not audio—to a provider the user configures.</td>
                 </tr>
                 <tr>
                   <th scope="row">Price and license</th>
@@ -102,7 +102,7 @@
           <div class="note">
             <p>Choose Scribe AI if a signed Store install, Windows on Arm, a bundled multilingual CPU model, optional AI cleanup, per-app profiles, or reviewable local history matters most. Choose Presspeech if Windows 10 compatibility on an edition still supported or enrolled in Extended Security Updates, a CUDA-accelerated multilingual path, no persistent transcript library, no cloud-processing option, and conservative same-destination recovery matter more. Presspeech's Windows build remains a prerelease and is not the lower-friction install.</p>
           </div>
-          <p>Sources: <a href="https://rcourtman.github.io/presspeech/windows.html">Presspeech Windows guide</a>, <a href="https://rcourtman.github.io/presspeech/privacy.html">privacy documentation</a>, and <a href="https://github.com/rcourtman/presspeech/tree/main/windows">Windows source</a>; Scribe AI's <a href="https://github.com/ChrisMcKee1/scribe">source and feature documentation</a>, <a href="https://github.com/ChrisMcKee1/scribe/blob/main/PRIVACY.md">privacy policy</a>, and <a href="https://apps.microsoft.com/detail/9N2P0SG059TJ">Microsoft Store listing</a> (checked 22 September 2026). The products' published latency figures are not compared because they use different hardware, fixtures, and timing boundaries.</p>
+          <p>Sources: <a href="https://rcourtman.github.io/presspeech/windows.html">Presspeech Windows guide</a>, <a href="https://rcourtman.github.io/presspeech/privacy.html">privacy documentation</a>, and <a href="https://github.com/rcourtman/presspeech/tree/main/windows">Windows source</a>; Scribe AI's <a href="https://github.com/ChrisMcKee1/scribe">source and feature documentation</a>, <a href="https://github.com/ChrisMcKee1/scribe/blob/main/PRIVACY.md">privacy policy</a>, and <a href="https://apps.microsoft.com/detail/9N2P0SG059TJ">Microsoft Store listing</a> (checked 30 October 2026). Scribe's <a href="https://github.com/ChrisMcKee1/scribe/blob/13cbd167aa059d58d3fa7443091a64fc5fbc277a/src/Scribe.Core/Transcription/TranscriptionModel.cs">model catalog</a>, <a href="https://github.com/ChrisMcKee1/scribe/blob/13cbd167aa059d58d3fa7443091a64fc5fbc277a/src/Scribe.Core/Transcription/TranscriptionModelInstaller.cs">download verification</a>, and <a href="https://github.com/ChrisMcKee1/scribe/blob/13cbd167aa059d58d3fa7443091a64fc5fbc277a/src/Scribe.App/Settings/SettingsWindow.xaml.cs">settings wiring</a> were checked 31 October 2026 at that source commit; this is a source review, not a released-binary test. The products' published latency figures are not compared because they use different hardware, fixtures, and timing boundaries.</p>
         </div>
       </section>
     </main>

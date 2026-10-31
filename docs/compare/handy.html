@@ -73,12 +73,12 @@
                 </tr>
                 <tr>
                   <th scope="row">Speech engines</th>
-                  <td>Fixed per platform: multilingual Parakeet TDT v3 through FluidAudio/CoreML on macOS; multilingual Parakeet TDT v3 on NVIDIA CUDA or English-only Whisper base.en by default on CPU-only Windows PCs.</td>
+                  <td>Per platform: multilingual Parakeet TDT v3 through FluidAudio/CoreML on macOS, with opt-in Parakeet Ultra (a post-trained v3) from 0.3.10; multilingual Parakeet TDT v3 on NVIDIA CUDA or English-only Whisper base.en by default on CPU-only Windows PCs.</td>
                   <td>User-selectable local Whisper models and Parakeet models. Its documentation describes GPU acceleration for Whisper and CPU operation for Parakeet.</td>
                 </tr>
                 <tr>
                   <th scope="row">Paste and clipboard recovery</th>
-                  <td>Checks that the captured destination is still the focused window before automatic paste; otherwise it keeps the transcript available for explicit manual paste. On macOS 0.3.8, optional preservation of the previous clipboard requires a separate Restore action and confirmation rather than restoring on a timer.</td>
+                  <td>Checks that the captured destination is still the focused window before automatic paste; otherwise it keeps the transcript available for explicit manual paste. From macOS 0.3.8, optional preservation of the previous clipboard requires a separate Restore action and confirmation rather than restoring on a timer.</td>
                   <td>Handy's documented standard clipboard method restores the previous clipboard after a fixed delay. Its troubleshooting guide warns that a slow target can read the old content instead; macOS and Windows also offer a Reliable Paste beta that waits for a clipboard-read notification, plus adjustable delays for the standard method. On Linux, its <a href="https://github.com/cjpais/Handy#linux-notes">README notes</a> the recording overlay is off by default because some compositors treat it as active; enabling it may steal focus and make clipboard pasting fail or go to the wrong window.</td>
                 </tr>
                 <tr>
@@ -93,12 +93,12 @@
                 </tr>
                 <tr>
                   <th scope="row">Transcript and audio retention</th>
-                  <td>On macOS, optional recent transcripts stay in memory and clear on quit. Windows has no in-app transcript history. Completed audio is discarded on both platforms; the system clipboard and third-party clipboard managers have separate retention behavior.</td>
+                  <td>On macOS, recent transcripts (the last five by default; one or none in Settings) stay in memory and clear on quit. Windows has no in-app transcript history. Completed audio is discarded on both platforms; the system clipboard and third-party clipboard managers have separate retention behavior.</td>
                   <td>Handy's privacy policy says official releases keep a limited number of recent local history entries and their audio recordings by default. Saved entries may remain until deleted; users can change retention or set the history limit to zero.</td>
                 </tr>
                 <tr>
                   <th scope="row">Implementation and scope</th>
-                  <td>Native Swift/AppKit macOS app with a separate Python Windows implementation. The macOS release zip is 8.4 MB before its model download.</td>
+                  <td>Native Swift/AppKit macOS app with a separate Python Windows implementation. The macOS release zip is 9.2 MB before its model download.</td>
                   <td>Extensible Tauri, React, and Rust application shared across platforms. Current release packages and models vary by operating system and architecture.</td>
                 </tr>
                 <tr>
@@ -110,9 +110,9 @@
             </table>
           </div>
           <div class="note">
-            <p>Choose Handy if Linux or Intel Mac support, one cross-platform application, model switching, or a configurable local transcript and audio history matters most. Choose Presspeech if you want the smaller native macOS surface and its published model-transcription benchmark, or its intentionally fixed engine and no persistent transcript archive. On Windows, test both on the actual hardware: their packaging and acceleration paths differ substantially.</p>
+            <p>Choose Handy if Linux or Intel Mac support, one cross-platform application, model switching, or a configurable local transcript and audio history matters most. Choose Presspeech if you want the smaller native macOS surface and its published model-transcription benchmark, or its deliberately narrow model choice and no persistent transcript archive. On Windows, test both on the actual hardware: their packaging and acceleration paths differ substantially.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, Handy's <a href="https://github.com/cjpais/Handy#linux-notes">Linux notes</a> and <a href="https://github.com/cjpais/Handy#previous-clipboard-content-is-pasted-instead-of-the-transcription">clipboard troubleshooting guidance</a> (checked 22 October 2026), its <a href="https://handy.computer/privacy">privacy policy</a> (effective 18 September; checked 24 September 2026), and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.8">Handy v0.9.8 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.9.8">release assets</a> (checked 22 October 2026). These are the projects' published claims, not independent privacy or performance tests. No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../benchmarks.html">Presspeech benchmarks</a>, Handy's <a href="https://github.com/cjpais/Handy#linux-notes">Linux notes</a> and <a href="https://github.com/cjpais/Handy#previous-clipboard-content-is-pasted-instead-of-the-transcription">clipboard troubleshooting guidance</a> (checked 22 October 2026), its <a href="https://handy.computer/privacy">privacy policy</a> (effective 18 September 2026; checked 30 October 2026), and the <a href="https://github.com/cjpais/Handy/releases/tag/v0.9.8">Handy v0.9.8 release</a> and <a href="https://github.com/cjpais/Handy/releases/expanded_assets/v0.9.8">release assets</a> (checked 22 October 2026). These are the projects' published claims, not independent privacy or performance tests. No cross-product latency or accuracy result is claimed because neither project publishes a controlled head-to-head benchmark.</p>
         </div>
       </section>
     </main>

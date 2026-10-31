@@ -45,7 +45,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare</span>
         <h1>Presspeech vs Qwen Scribe</h1>
-        <p>Both are free, open-source Apple Silicon apps that run speech recognition locally. Presspeech is a released, focused dictation app with a fixed Parakeet path and explicit paste-destination recovery. Qwen Scribe is a beta voice workspace that combines push-to-talk with local audio/video transcription, Qwen model choices, and searchable transcript history.</p>
+        <p>Both are free, open-source Apple Silicon apps that run speech recognition locally. Presspeech is a released, focused dictation app with a Parakeet-only model path and explicit paste-destination recovery. Qwen Scribe is a beta voice workspace that combines push-to-talk with local audio/video transcription, Qwen model choices, and searchable transcript history.</p>
       </div>
 
       <section>
@@ -68,13 +68,13 @@
                 </tr>
                 <tr>
                   <th scope="row">Speech model</th>
-                  <td>One fixed multilingual Parakeet TDT v3 path through FluidAudio and CoreML on the Apple Neural Engine.</td>
+                  <td>Multilingual Parakeet TDT v3 by default, or opt-in Parakeet Ultra (a post-trained v3) from 0.3.10, through FluidAudio and CoreML on the Apple Neural Engine.</td>
                   <td>Qwen3-ASR through MLX on the Mac's Metal GPU, with 1.7B and 0.6B model variants. The project documents fourteen supported languages, automatic or forced language selection, and vocabulary hints.</td>
                 </tr>
                 <tr>
                   <th scope="row">Beyond live dictation</th>
                   <td>Deterministic dictionary corrections, exact voice shortcuts, filler removal, and opt-in spoken formatting. It does not transcribe audio or video files.</td>
-                  <td>Drag-and-drop audio/video transcription, word timestamps, SRT export, vocabulary hints, and a local web interface alongside desktop dictation. Non-WAV media requires ffmpeg.</td>
+                  <td>Drag-and-drop audio/video transcription, word timestamps, SRT export, vocabulary hints, and a local web interface alongside desktop dictation. In v0.3.0-beta.1, non-WAV media requires ffmpeg.</td>
                 </tr>
                 <tr>
                   <th scope="row">Transcript history</th>
@@ -88,12 +88,12 @@
                 </tr>
                 <tr>
                   <th scope="row">System and setup</th>
-                  <td>Apple Silicon and macOS 14+. The signed, notarised app is about 8.4 MB; the model cache is about 500&ndash;600 MB.</td>
-                  <td>Apple Silicon and macOS 14+. The project lists native Python 3.12+ for its run/build setup; its packaged app installs Python dependencies and model weights on first use. ffmpeg is needed for non-WAV media.</td>
+                  <td>Apple Silicon and macOS 14+. The signed, notarised app is about 9.2 MB; the default model cache is about 500&ndash;600 MB; opt-in Parakeet Ultra adds about 630 MB.</td>
+                  <td>Apple Silicon and macOS 14+. For v0.3.0-beta.1, the project lists native Python 3.12+; its packaged app installs Python dependencies and model weights on first use, and ffmpeg is needed for non-WAV media. The project's current source README, whose status line still names v0.3.0-beta.1, says the app carries its own Python interpreter and needs ffmpeg only for six container formats.</td>
                 </tr>
                 <tr>
                   <th scope="row">Release maturity</th>
-                  <td>macOS 0.3.8 is the published, signed, and notarised release.</td>
+                  <td>macOS 0.3.10 is the published, signed, and notarised release.</td>
                   <td>The inspected release is v0.3.0-beta.1, published 4 September 2026 as an ad-hoc-signed, non-notarised build. macOS may require approving it in System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway.</td>
                 </tr>
                 <tr>
@@ -110,9 +110,9 @@
             </table>
           </div>
           <div class="note">
-            <p>Choose Qwen Scribe if you want local file/video transcription, Qwen model variants, vocabulary hints, or a searchable transcript archive in one beta app. Choose Presspeech if you want the currently released and notarised Mac build, a small fixed dictation pipeline, no persistent transcript archive, or a documented fallback when the original paste destination cannot be verified. Both projects describe local recognition; their documented workflow, retention, and release maturity differ.</p>
+            <p>Choose Qwen Scribe if you want local file/video transcription, Qwen model variants, vocabulary hints, or a searchable transcript archive in one beta app. Choose Presspeech if you want the currently released and notarised Mac build, a small, focused dictation pipeline, no persistent transcript archive, or a documented fallback when the original paste destination cannot be verified. Both projects describe local recognition; their documented workflow, retention, and release maturity differ.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, and <a href="../benchmarks.html">Presspeech benchmarks</a>; Qwen Scribe's <a href="https://github.com/VladUZH/qwen-scribe">source and README</a>, <a href="https://github.com/VladUZH/qwen-scribe/releases/tag/v0.3.0-beta.1">v0.3.0-beta.1 release and provenance</a>, and <a href="https://github.com/VladUZH/qwen-scribe/blob/main/PRIVACY.md">privacy notes</a> (checked 23 September 2026). No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source and platform documentation</a>, <a href="../privacy.html">Presspeech privacy and network documentation</a>, and <a href="../benchmarks.html">Presspeech benchmarks</a>; Qwen Scribe's <a href="https://github.com/VladUZH/qwen-scribe">source and README</a>, <a href="https://github.com/VladUZH/qwen-scribe/releases/tag/v0.3.0-beta.1">v0.3.0-beta.1 release and provenance</a> and <a href="https://github.com/VladUZH/qwen-scribe/blob/v0.3.0-beta.1/README.md">README at that tag</a>, and <a href="https://github.com/VladUZH/qwen-scribe/blob/main/PRIVACY.md">privacy notes</a> (checked 30 October 2026). No cross-product latency or accuracy winner is claimed because there is no controlled head-to-head benchmark.</p>
         </div>
       </section>
     </main>

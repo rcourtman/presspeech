@@ -68,13 +68,13 @@
                 </tr>
                 <tr>
                   <th scope="row">Where transcription happens</th>
-                  <td>On the Mac. The local Parakeet TDT v3 CoreML model runs on the Apple Neural Engine; no network round-trip for transcription.</td>
+                  <td>On the Mac. The local Parakeet TDT v3 CoreML model (or opt-in Parakeet Ultra from 0.3.10) runs on the Apple Neural Engine; no network round-trip for transcription.</td>
                   <td>In the cloud — Wispr's privacy page states "Transcription always happens in the cloud." A separate cloud-storage control governs retained dictation audio, transcripts, and history; it does not make processing local.</td>
                 </tr>
                 <tr>
                   <th scope="row">Platforms</th>
                   <td>Signed and notarised release for Apple Silicon Macs on macOS 14+; a separate <a href="../windows.html">x64 Windows prerelease</a> has an unsigned installer.</td>
-                  <td>Mac, Windows, iPhone, and Android, with a shared dictionary across devices.</td>
+                  <td>Mac, Windows, iPhone, and Android, with the same personalization on every device.</td>
                 </tr>
                 <tr>
                   <th scope="row">Price</th>
@@ -84,12 +84,12 @@
                 <tr>
                   <th scope="row">Account and data controls</th>
                   <td>No account or Presspeech-authored analytics; transcript history is memory-only. Model downloads and optional update checks use the network; see the <a href="../privacy.html#network-calls">version-specific network inventory</a> for published-build token and library-telemetry caveats.</td>
-                  <td>Requires an account. Settings control model-improvement permission, dictation cloud storage, and Notetaker retention; Notetaker transcripts use Wispr's cloud for sync and meeting resumption.</td>
+                  <td>Setup requires signing in with Google, Apple, Microsoft, SSO, or email. Settings control model-improvement permission, dictation cloud storage, and Notetaker retention; Notetaker transcripts use Wispr's cloud for sync and meeting resumption.</td>
                 </tr>
                 <tr>
                   <th scope="row">Beyond dictation</th>
                   <td>Deliberately narrow: verbatim transcription, local text corrections, opt-in filler-word removal.</td>
-                  <td>AI editing and formatting, tone adjustment, command mode, cross-device personalization, and Notetaker for meetings and voice memos.</td>
+                  <td>AI editing and formatting, tone adjustment, an experimental Command Mode for paid plans and trials, cross-device personalization, and Notetaker for meetings and voice memos.</td>
                 </tr>
               </tbody>
             </table>
@@ -97,7 +97,7 @@
           <div class="note">
             <p>Choose Wispr Flow if you want AI-shaped output across many devices, cloud-synced personalization, and meeting notes. Choose Presspeech if you want dictation whose audio never leaves the computer, with no account, cloud transcription service, or recurring cost.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; the <a href="https://wisprflow.ai/">Wispr Flow official site</a>, <a href="https://wisprflow.ai/pricing">pricing and feature matrix</a>, and <a href="https://wisprflow.ai/privacy">privacy and data-control summary</a> (checked 23 September 2026).</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; the <a href="https://wisprflow.ai/">Wispr Flow official site</a>, <a href="https://wisprflow.ai/pricing">pricing and feature matrix</a>, <a href="https://wisprflow.ai/privacy">privacy and data-control summary</a>, <a href="https://docs.wisprflow.ai/articles/3152211871-setup-guide">setup guide</a>, and <a href="https://docs.wisprflow.ai/articles/4816967992-how-to-use-command-mode">Command Mode guide</a> (checked 30 October 2026).</p>
         </div>
       </section>
     </main>

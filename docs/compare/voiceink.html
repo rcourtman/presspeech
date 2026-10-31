@@ -45,7 +45,7 @@
       <div class="wrap page-title">
         <span class="section-eyebrow">Compare</span>
         <h1>Presspeech vs VoiceInk</h1>
-        <p>These are philosophical neighbors: both open source, both local-first, and both can run NVIDIA's Parakeet models through FluidAudio. VoiceInk is a configurable workspace with many models and AI enhancement. Presspeech is one fixed pipeline tuned for latency.</p>
+        <p>These are philosophical neighbors: both open source, both local-first, and both can run NVIDIA's Parakeet models through FluidAudio. VoiceInk is a configurable workspace with many models and AI enhancement. Presspeech is one narrow pipeline tuned for latency.</p>
       </div>
 
       <section>
@@ -68,8 +68,8 @@
                 </tr>
                 <tr>
                   <th scope="row">Engine path</th>
-                  <td>Local Parakeet TDT v3 CoreML model on the Apple Neural Engine via FluidAudio.</td>
-                  <td>Your choice: Parakeet V2/V3 or Parakeet Ultra (a post-trained V3) via FluidAudio, Whisper models via whisper.cpp, Apple Speech on macOS 26+, or optional cloud providers.</td>
+                  <td>Local Parakeet TDT v3 CoreML model, or opt-in Parakeet Ultra from 0.3.10, on the Apple Neural Engine via FluidAudio.</td>
+                  <td>Your choice of local models, including Parakeet (Parakeet Ultra was added in v2.21) via FluidAudio, Whisper via whisper.cpp, SenseVoice, Apple Speech, and others in its current catalog, or hosted models through your own API key.</td>
                 </tr>
                 <tr>
                   <th scope="row">Privacy posture</th>
@@ -83,12 +83,12 @@
                 </tr>
                 <tr>
                   <th scope="row">Footprint</th>
-                  <td>8.4 MB app, ~80 MB RAM idle, 0% CPU between dictations; <a href="../benchmarks.html">published benchmark</a>.</td>
+                  <td>9.2 MB release zip; no documented idle-resource measurement; <a href="../benchmarks.html">published latency benchmark</a>.</td>
                   <td>48.7 MB v2.21 DMG; resource figures not published, 8 GB RAM recommended.</td>
                 </tr>
                 <tr>
                   <th scope="row">Configurability</th>
-                  <td>Focused and deterministic: hotkey and trigger style, language pinning, local corrections and shortcuts, spoken formatting, and filler removal.</td>
+                  <td>Focused and deterministic: hotkey and trigger style, an optional language hint, local corrections and shortcuts, spoken formatting, and filler removal.</td>
                   <td>Extensive: model management, Modes with custom prompts and app triggers, a dictionary that can learn from corrections, and searchable history with optional audio replay.</td>
                 </tr>
                 <tr>
@@ -100,9 +100,9 @@
             </table>
           </div>
           <div class="note">
-            <p>Choose VoiceInk if you want one configurable tool that also handles AI cleanup, per-app behavior, saved history, and file transcription, and a one-time price fits. Choose Presspeech if you want a smaller fixed utility without cloud transcription or persistent transcript history, or need macOS 14 support. Both Mac apps can run Parakeet, so the larger difference is product surface and data-flow choice.</p>
+            <p>Choose VoiceInk if you want one configurable tool that also handles AI cleanup, per-app behavior, saved history, and file transcription, and a one-time price fits. Choose Presspeech if you want a smaller, focused utility without cloud transcription or persistent transcript history, or need macOS 14 support. Both Mac apps can run Parakeet, so the larger difference is product surface and data-flow choice.</p>
           </div>
-          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; VoiceInk's <a href="https://tryvoiceink.com/docs/introduction">workflow guide</a>, <a href="https://tryvoiceink.com/docs/ai-models">model catalog</a>, <a href="https://tryvoiceink.com/docs/transcription-history">history documentation</a>, and <a href="https://tryvoiceink.com/privacy">privacy policy</a> (checked 22 September 2026); and the <a href="https://tryvoiceink.com/">VoiceInk official site</a>, <a href="https://tryvoiceink.com/ios">iOS beta</a>, <a href="https://github.com/Beingpax/VoiceInk/blob/v2.21/README.md">v2.21 README</a>, <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.21">v2.21 release</a>, and <a href="https://github.com/Beingpax/VoiceInk/releases/expanded_assets/v2.21">release assets</a> (checked 22 October 2026).</p>
+          <p>Sources: <a href="https://github.com/rcourtman/presspeech">Presspeech source</a>, <a href="https://rcourtman.github.io/presspeech/benchmarks.html">Presspeech benchmarks</a>; VoiceInk's <a href="https://tryvoiceink.com/docs/introduction">workflow guide</a>, <a href="https://tryvoiceink.com/docs/ai-models">model catalog</a>, <a href="https://tryvoiceink.com/docs/transcription-history">history documentation</a>, and <a href="https://tryvoiceink.com/privacy">privacy policy</a> (checked 30 October 2026); and the <a href="https://tryvoiceink.com/">VoiceInk official site</a>, <a href="https://tryvoiceink.com/ios">iOS beta</a>, <a href="https://github.com/Beingpax/VoiceInk/blob/v2.21/README.md">v2.21 README</a>, <a href="https://github.com/Beingpax/VoiceInk/releases/tag/v2.21">v2.21 release</a>, and <a href="https://github.com/Beingpax/VoiceInk/releases/expanded_assets/v2.21">release assets</a> (checked 22 October 2026).</p>
         </div>
       </section>
     </main>
