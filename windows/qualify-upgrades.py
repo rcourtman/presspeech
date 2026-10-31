@@ -92,7 +92,7 @@ else:
         return package, name, include
 
     def compile(self, case, package, include, legacy=False):
-        output = case["root"] / ("old-installer" if legacy else "new-installer")
+        output = case["root"] / ("legacy-installer" if legacy else "installer-" + package.parent.name)
         output.mkdir()
         if legacy:
             script = output / "legacy.iss"
