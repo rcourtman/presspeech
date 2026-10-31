@@ -874,6 +874,10 @@ enum SpeechModelProfile: String, CaseIterable {
     /// Choices offered in Settings, default first.
     static let selectableProfiles: [SpeechModelProfile] = [.multilingualV3, .parakeetUltra]
 
+    /// Models covered by the Mac-wide download approval that 0.3.9 and 0.3.10
+    /// stored. That flag is honoured as approval of exactly these models.
+    static let legacyMacWideApprovalProfiles: Set<SpeechModelProfile> = [.multilingualV3, .parakeetUltra]
+
     var isProductionSupported: Bool {
         Self.selectableProfiles.contains(self)
     }
@@ -930,7 +934,7 @@ enum SpeechModelProfile: String, CaseIterable {
         case .multilingualV3:
             return "The default multilingual model: 25 languages, about 480 MB from Hugging Face."
         case .parakeetUltra:
-            return "A post-trained Parakeet TDT v3 with the same 25 languages and similar speed, and lower word error rates in FluidAudio's published benchmarks. Choosing it downloads about 630 MB from Hugging Face (Parakeet TDT v3 is about 480 MB) and verifies every file before use. The Parakeet TDT v3 copy stays on disk so you can switch back without downloading again."
+            return "A post-trained Parakeet TDT v3 with the same 25 languages and similar speed, and lower word error rates in FluidAudio's published benchmarks. Choosing it downloads about 630 MB from Hugging Face (Parakeet TDT v3 is about 480 MB) and verifies every file before use."
         case .englishUnified:
             return displayName
         }
@@ -2075,6 +2079,18 @@ func initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: Bool) -> Bool {
     hadPriorLaunch
 }
 
+/// Whether a missing download decision belongs to an installation whose last
+/// launch predates the choice (0.3.9). Releases from 0.3.9 write the decision
+/// before lastSeenVersion, but UserDefaults does not promise to persist
+/// separate keys in that order: a later lastSeenVersion without a decision
+/// means the decision was lost, which approves nothing. "0.0.0" is
+/// currentBundleVersion()'s fallback, not a release.
+func lastSeenVersionPredatesSpeechModelDownloadChoice(_ lastSeenVersion: String) -> Bool {
+    guard let version = normalizedStoredAppVersion(lastSeenVersion),
+          isNewer(version, than: "0.0.0") else { return false }
+    return isNewer("0.3.9", than: version)
+}
+
 func assertSufficientDiskSpaceForSpeechModelDownload(profile: SpeechModelProfile) throws {
     let requiredBytes = speechModelDownloadRequiredBytes(for: profile)
     let availableBytes = availableImportantDiskSpaceBytes(containing: speechModelCacheBaseDirectory())
@@ -2842,7 +2858,12 @@ final class Settings: @unchecked Sendable {
     private static let keyTranscriptCorrectionsSyncFile = "transcript_corrections_sync_file"
     private static let keyDictationLanguage = "dictation_language"
     private static let keySpeechModelProfile = "speech_model_profile"
+    // Mac-wide flag from 0.3.9–0.3.10, kept as a rollback-safe summary of the
+    // model-scoped approvals below.
     private static let keySpeechModelDownloadApproved = "speech_model_download_approved"
+    // Internal so self-tests can plant malformed values.
+    static let keySpeechModelDownloadApprovals = "speech_model_download_approvals"
+    static let keyPendingSpeechModelSwitch = "pending_speech_model_switch"
     private static let keyInitialSpeechModelChoiceRequired = "initial_speech_model_choice_required"
     private static let keyRemoveFillerWords = "remove_filler_words"
     private static let keySpokenFormattingCommands = "spoken_formatting_commands"
@@ -3229,13 +3250,67 @@ final class Settings: @unchecked Sendable {
         set { defaults.set(newValue.productionProfile.rawValue, forKey: Self.keySpeechModelProfile) }
     }
 
-    var speechModelDownloadApproved: Bool {
-        get { defaults.bool(forKey: Self.keySpeechModelDownloadApproved) }
-        set { defaults.set(newValue, forKey: Self.keySpeechModelDownloadApproved) }
+    /// nil until a launch records a decision.
+    var legacySpeechModelDownloadApproved: Bool? {
+        guard defaults.object(forKey: Self.keySpeechModelDownloadApproved) != nil else { return nil }
+        return defaults.bool(forKey: Self.keySpeechModelDownloadApproved)
     }
 
-    var hasSpeechModelDownloadDecision: Bool {
-        defaults.object(forKey: Self.keySpeechModelDownloadApproved) != nil
+    var speechModelPersistedState: SpeechModelPersistedState {
+        SpeechModelPersistedState(
+            profile: speechModelProfile,
+            downloadApprovals: decodeSpeechModelDownloadApprovals(
+                defaults.object(forKey: Self.keySpeechModelDownloadApprovals)) ?? [],
+            pendingSwitch: decodePendingSpeechModelSwitch(
+                defaults.object(forKey: Self.keyPendingSpeechModelSwitch)))
+    }
+
+    func isSpeechModelDownloadApproved(for profile: SpeechModelProfile) -> Bool {
+        speechModelPersistedState.isDownloadApproved(for: profile)
+    }
+
+    /// Writes that make the model-scoped approvals honour the Mac-wide flag,
+    /// whether it predates them or an older release set it after a rollback.
+    /// Must run before the launch records lastSeenVersion.
+    func speechModelDownloadApprovalReconciliationWrites() -> [SpeechModelPersistedWrite] {
+        let storedObject = defaults.object(forKey: Self.keySpeechModelDownloadApprovals)
+        let stored = decodeSpeechModelDownloadApprovals(storedObject)
+        let legacy = legacySpeechModelDownloadApproved
+        let approvals = reconciledSpeechModelDownloadApprovals(
+            stored: stored,
+            legacyApproved: legacy,
+            lastLaunchPredatesChoice: lastSeenVersionPredatesSpeechModelDownloadChoice(lastSeenVersion))
+        var writes: [SpeechModelPersistedWrite] = []
+        if stored != approvals || !(storedObject is [String]) {
+            writes.append(.downloadApprovals(approvals))
+        }
+        let mirror = legacySpeechModelDownloadApprovalMirror(approvals)
+        if legacy != mirror {
+            writes.append(.legacyDownloadApproved(mirror))
+        }
+        return writes
+    }
+
+    /// Apply writes in order; each is one defaults change, so a process exit
+    /// can land between any two of them.
+    func apply(_ writes: [SpeechModelPersistedWrite]) {
+        for write in writes {
+            switch write {
+            case .downloadApprovals(let approvals):
+                defaults.set(approvals.map(\.productionProfile.rawValue).sorted(),
+                             forKey: Self.keySpeechModelDownloadApprovals)
+            case .legacyDownloadApproved(let approved):
+                defaults.set(approved, forKey: Self.keySpeechModelDownloadApproved)
+            case .pendingSwitch(let pending):
+                if let pending {
+                    defaults.set(pending.propertyList, forKey: Self.keyPendingSpeechModelSwitch)
+                } else {
+                    defaults.removeObject(forKey: Self.keyPendingSpeechModelSwitch)
+                }
+            case .profile(let profile):
+                speechModelProfile = profile
+            }
+        }
     }
 
     @discardableResult
@@ -3397,6 +3472,78 @@ private func readinessTransition(
         : .blockForPermissions(missingPermissions)
 }
 
+/// User-driven moments to re-read grants while Ready. There is deliberately
+/// no timer here: the app stays idle between dictations.
+private enum PermissionRecheckTrigger: String, Equatable {
+    case statusMenuOpen = "status menu opened"
+    case applicationActivation = "application activated"
+}
+
+/// Readiness polling stops at Ready, and a revoked Input Monitoring grant can
+/// leave the hotkey tap silent, so a later loss may never reach a press.
+/// Blocking tears down capture, the post-release tail and the hotkey tap, so
+/// re-check only while Ready and idle. Startup, a model switch, a cache reset
+/// and an audio restart clear Ready and re-evaluate grants when they finish.
+private func shouldRecheckPermissionsWhileReady(trigger: PermissionRecheckTrigger,
+                                                isReady: Bool,
+                                                isRecording: Bool,
+                                                isFinishingRecording: Bool,
+                                                isBusy: Bool,
+                                                isTerminating: Bool,
+                                                isRuntimeTransitionInProgress: Bool,
+                                                isStatusMenuOpen: Bool) -> Bool {
+    guard isReady, !isTerminating, !isRuntimeTransitionInProgress else { return false }
+    guard !isRecording, !isFinishingRecording, !isBusy else { return false }
+    // The open-time check already ran for a displayed status menu; blocking
+    // now would rebuild the menu AppKit is still tracking.
+    if trigger == .applicationActivation, isStatusMenuOpen { return false }
+    return true
+}
+
+private enum PermissionBlockSource: Equatable {
+    /// Startup, the readiness monitor, and dictation completion paths.
+    case readinessCheck
+    /// A hotkey, menu, or Voice Control request to start dictating.
+    case dictationRequest
+    case recheck(PermissionRecheckTrigger)
+}
+
+private enum PermissionBlockedChecklistOffer: Equatable {
+    /// The existing once-per-launch offer, which activates Presspeech.
+    case firstLaunchOffer
+    /// Order the checklist in front without activating Presspeech, so keys
+    /// and any posted paste keep going to the app the user is in.
+    case reofferWithoutActivating
+    /// The user can already see the loss. Count it as offered so a later
+    /// readiness-monitor refresh does not activate the checklist over them.
+    case alreadyShown
+}
+
+/// Re-offer Setup Checklist once per Ready→blocked transition found by a
+/// refused press or an app switch: only the block that clears Ready sees
+/// `wasReady`, and later monitor refreshes come from `.readinessCheck`.
+/// `.readinessCheck` blocks, including a loss found as a dictation finishes,
+/// keep the once-per-launch offer and never re-offer. A dictation request is
+/// refused before capture starts, and the idle re-check never runs during
+/// capture, its tail or delivery.
+private func permissionBlockedChecklistOffer(source: PermissionBlockSource,
+                                             wasReady: Bool,
+                                             checklistIsVisible: Bool) -> PermissionBlockedChecklistOffer {
+    switch source {
+    case .readinessCheck:
+        return .firstLaunchOffer
+    case .recheck(.statusMenuOpen):
+        // The menu being opened shows the loss and its permission rows. A
+        // window now would compete with AppKit's menu tracking.
+        return .alreadyShown
+    case .dictationRequest, .recheck(.applicationActivation):
+        guard wasReady else { return .firstLaunchOffer }
+        // An open checklist already shows live grant state; reordering it
+        // could cover the System Settings pane the user is working in.
+        return checklistIsVisible ? .alreadyShown : .reofferWithoutActivating
+    }
+}
+
 private enum AudioRouteChangeAction: Equatable {
     case ignore
     case rebuildMenuOnly
@@ -3414,6 +3561,39 @@ private func audioRouteChangeAction(isTerminating: Bool,
     guard isCoreRuntimeReady else { return .rebuildMenuOnly }
     guard !isRecording, !isBusy, !hasStartupTask else { return .deferRefresh }
     return .restartNow
+}
+
+/// At most one audio-only restart (a route change, an input change or a wake)
+/// is in flight. A startup attempt, which a model switch and a cache reset
+/// also make, supersedes it because that attempt starts audio input itself.
+/// A superseded restart's late success or failure must publish nothing:
+/// otherwise it could show Ready while the model is still loading.
+private struct AudioRestartOwnership {
+    private var lastAttempt = 0
+    private var currentAttempt: Int?
+
+    var isRestarting: Bool { currentAttempt != nil }
+
+    mutating func begin() -> Int {
+        lastAttempt += 1
+        currentAttempt = lastAttempt
+        return lastAttempt
+    }
+
+    func owns(_ attempt: Int) -> Bool {
+        currentAttempt == attempt
+    }
+
+    mutating func supersede() {
+        currentAttempt = nil
+    }
+
+    /// False for a superseded attempt, which must leave a newer restart alone.
+    mutating func end(_ attempt: Int) -> Bool {
+        guard owns(attempt) else { return false }
+        currentAttempt = nil
+        return true
+    }
 }
 
 private func audioConfigurationChangeIsSuppressed(now: TimeInterval,
@@ -3895,32 +4075,257 @@ func speechModelSwitchPlan(from current: SpeechModelProfile,
 }
 
 func speechModelSwitchDownloadDetail(from current: SpeechModelProfile,
-                                     to target: SpeechModelProfile) -> String {
+                                     to target: SpeechModelProfile,
+                                     currentCacheComplete: Bool = true,
+                                     currentDownloadApproved: Bool = true) -> String {
     let requiredFreeSpace = formattedByteCount(UInt64(speechModelDownloadRequiredBytes(for: target)))
+    // Promise a download-free fallback only when the current model is on disk.
+    let fallback: String
+    if currentCacheComplete {
+        fallback = "\(current.shortName) stays on disk; if \(target.shortName) cannot be loaded, Presspeech switches back to it. "
+    } else if currentDownloadApproved {
+        fallback = "\(current.shortName) isn't fully downloaded; if \(target.shortName) cannot be loaded, Presspeech switches back to it and finishes downloading it. "
+    } else {
+        fallback = "\(current.shortName) isn't downloaded yet; if \(target.shortName) cannot be loaded, Presspeech switches back to it and waits for Download Model in Setup before downloading it. "
+    }
     return "Presspeech will download \(target.shortName) (\(target.setupDownloadSizeText)) from Hugging Face, verify every file, and then load it. " +
         "Allow about \(requiredFreeSpace) free to download and prepare it with CoreML. " +
         "Dictation is unavailable until it finishes. " +
-        "\(current.shortName) stays on disk; if \(target.shortName) cannot be loaded, Presspeech switches back to it. " +
+        fallback +
         "Dictation audio and transcripts stay on your Mac."
 }
 
 func speechModelSwitchFallbackDetail(failed: SpeechModelProfile,
                                      fallback: SpeechModelProfile,
                                      errorDescription: String,
-                                     downloadsApproved: Bool) -> String {
+                                     downloadsApproved: Bool,
+                                     fallbackAwaitsDownloadChoice: Bool = false) -> String {
     // With downloads approved, the failed attempt already re-downloaded a
     // copy that failed verification; without approval nothing was fetched,
     // so retrying would only reload the same files.
     let next = downloadsApproved
         ? "To try again, choose \(failed.shortName) in Settings → Dictation → Speech Model."
-        : "Speech-model downloads aren't approved on this Mac, so Presspeech didn't download a fresh copy."
+        : "Downloads of \(failed.shortName) aren't approved on this Mac, so Presspeech didn't download a fresh copy."
+    let fallbackChoice = fallbackAwaitsDownloadChoice
+        ? "\n\n\(fallback.shortName) isn't downloaded yet. Presspeech won't download it until you choose Download Model in Setup."
+        : ""
     return """
     Presspeech couldn't load \(failed.shortName), so it switched back to \(fallback.shortName). Audio is not uploaded.
 
     \(errorDescription)
 
-    \(next)
+    \(next)\(fallbackChoice)
     """
+}
+
+/// Settings → Speech Model tooltip. Promise a download-free return to the
+/// default model only when its cache is complete on this Mac.
+func speechModelSettingsToolTip(for profile: SpeechModelProfile,
+                                defaultModelCacheComplete: Bool) -> String {
+    guard profile == .parakeetUltra else { return profile.settingsToolTip }
+    let fallback = defaultModelCacheComplete
+        ? "The Parakeet TDT v3 copy stays on disk so you can switch back without downloading again."
+        : "Parakeet TDT v3 isn't fully downloaded on this Mac, so switching back to it asks before downloading."
+    return "\(profile.settingsToolTip) \(fallback)"
+}
+
+// MARK: - Speech model download approval and pending switches
+//
+// Download approval is recorded per model: Setup's Download Model approves the
+// selected model and Download and Switch approves only its target. A pending
+// switch record lets a failed or interrupted switch return to the previous
+// model after a restart. The record never grants approval, so a malformed or
+// stale one can only be discarded.
+
+/// A confirmed switch that has not loaded yet. Version 1 has exactly these
+/// fields; anything else is treated as malformed.
+struct PendingSpeechModelSwitch: Equatable {
+    static let currentVersion = 1
+
+    let id: String
+    let target: SpeechModelProfile
+    let fallback: SpeechModelProfile
+
+    var propertyList: [String: Any] {
+        [
+            "version": Self.currentVersion,
+            "id": id,
+            "target": target.rawValue,
+            "fallback": fallback.rawValue,
+        ]
+    }
+}
+
+enum StoredPendingSpeechModelSwitch: Equatable {
+    case absent
+    case malformed
+    case valid(PendingSpeechModelSwitch)
+}
+
+func decodePendingSpeechModelSwitch(_ object: Any?) -> StoredPendingSpeechModelSwitch {
+    guard let object else { return .absent }
+    guard let record = object as? [String: Any],
+          record.count == 4,
+          let version = record["version"] as? Int,
+          version == PendingSpeechModelSwitch.currentVersion,
+          let id = record["id"] as? String,
+          !id.isEmpty,
+          let targetRaw = record["target"] as? String,
+          let target = SpeechModelProfile(rawValue: targetRaw),
+          target.isProductionSupported,
+          let fallbackRaw = record["fallback"] as? String,
+          let fallback = SpeechModelProfile(rawValue: fallbackRaw),
+          fallback.isProductionSupported,
+          target != fallback else {
+        return .malformed
+    }
+    return .valid(PendingSpeechModelSwitch(id: id, target: target, fallback: fallback))
+}
+
+/// nil when nothing is stored. A value of the wrong type approves nothing;
+/// unknown or unsupported model names are ignored.
+func decodeSpeechModelDownloadApprovals(_ object: Any?) -> Set<SpeechModelProfile>? {
+    guard let object else { return nil }
+    guard let rawValues = object as? [String] else { return [] }
+    return Set(rawValues.compactMap { SpeechModelProfile(rawValue: $0) }.filter(\.isProductionSupported))
+}
+
+func reconciledSpeechModelDownloadApprovals(stored: Set<SpeechModelProfile>?,
+                                            legacyApproved: Bool?,
+                                            lastLaunchPredatesChoice: Bool) -> Set<SpeechModelProfile> {
+    // With no decision of either kind, keep 0.3.9's first-launch rule: only an
+    // installation last launched before the choice keeps automatic downloads.
+    let macWideApproval = legacyApproved
+        ?? (stored == nil
+            && initialSpeechModelDownloadApprovalForLaunch(hadPriorLaunch: lastLaunchPredatesChoice))
+    var approvals = stored ?? []
+    if macWideApproval {
+        approvals.formUnion(SpeechModelProfile.legacyMacWideApprovalProfiles)
+    }
+    return approvals
+}
+
+/// The Mac-wide flag that older releases read. It is true only when it would
+/// not let them download a model this release has not approved.
+func legacySpeechModelDownloadApprovalMirror(_ approvals: Set<SpeechModelProfile>) -> Bool {
+    SpeechModelProfile.legacyMacWideApprovalProfiles.isSubset(of: approvals)
+}
+
+struct SpeechModelPersistedState: Equatable {
+    var profile: SpeechModelProfile
+    var downloadApprovals: Set<SpeechModelProfile>
+    var pendingSwitch: StoredPendingSpeechModelSwitch
+
+    func isDownloadApproved(for profile: SpeechModelProfile) -> Bool {
+        downloadApprovals.contains(profile.productionProfile)
+    }
+}
+
+/// One persisted defaults change.
+enum SpeechModelPersistedWrite: Equatable {
+    case downloadApprovals(Set<SpeechModelProfile>)
+    case legacyDownloadApproved(Bool)
+    case pendingSwitch(PendingSpeechModelSwitch?)
+    case profile(SpeechModelProfile)
+}
+
+func speechModelDownloadApprovalWrites(approving profile: SpeechModelProfile,
+                                       in state: SpeechModelPersistedState) -> [SpeechModelPersistedWrite] {
+    guard !state.isDownloadApproved(for: profile) else { return [] }
+    let approvals = state.downloadApprovals.union([profile.productionProfile])
+    return [
+        .downloadApprovals(approvals),
+        .legacyDownloadApproved(legacySpeechModelDownloadApprovalMirror(approvals)),
+    ]
+}
+
+/// Logical write order for a confirmed switch: the target's own approval (it
+/// covers nothing else), then the record, then the selection it describes.
+/// UserDefaults may persist separate keys independently; this is not a durable
+/// transaction. A launch that finds the record without its selection discards it.
+func speechModelSwitchWrites(in state: SpeechModelPersistedState,
+                             to target: SpeechModelProfile,
+                             approvingTargetDownload: Bool,
+                             attemptID: String) -> [SpeechModelPersistedWrite] {
+    let current = state.profile.productionProfile
+    let target = target.productionProfile
+    guard target.isProductionSupported, target != current, !attemptID.isEmpty else { return [] }
+    var writes = approvingTargetDownload
+        ? speechModelDownloadApprovalWrites(approving: target, in: state)
+        : []
+    writes.append(.pendingSwitch(PendingSpeechModelSwitch(id: attemptID, target: target, fallback: current)))
+    writes.append(.profile(target))
+    return writes
+}
+
+enum SpeechModelStartupAction: Equatable {
+    case awaitDownloadChoice(SpeechModelProfile)
+    case load(SpeechModelProfile, allowDownload: Bool, switchAttempt: PendingSpeechModelSwitch?)
+}
+
+struct SpeechModelStartupPlan: Equatable {
+    let writes: [SpeechModelPersistedWrite]
+    let action: SpeechModelStartupAction
+}
+
+/// Resolve the pending switch, then decide what startup may do. Network
+/// downloads are allowed only for an approved model; a complete cache only
+/// lets an unapproved model load offline.
+func speechModelStartupPlan(for state: SpeechModelPersistedState,
+                            cacheComplete: (SpeechModelProfile) -> Bool) -> SpeechModelStartupPlan {
+    var writes: [SpeechModelPersistedWrite] = []
+    var profile = state.profile.productionProfile
+    var switchAttempt: PendingSpeechModelSwitch?
+    switch state.pendingSwitch {
+    case .absent:
+        break
+    case .malformed:
+        writes.append(.pendingSwitch(nil))
+    case .valid(let pending) where pending.target != profile:
+        // The switch never took effect, or its fallback is already selected.
+        writes.append(.pendingSwitch(nil))
+    case .valid(let pending):
+        if requiresInitialSpeechModelDownloadChoice(
+            downloadApproved: state.isDownloadApproved(for: pending.target),
+            cacheExists: cacheComplete(pending.target)
+        ) {
+            // An unapproved trial lost its cached files: restore the previous
+            // model rather than ask to download the trial.
+            writes.append(.profile(pending.fallback))
+            writes.append(.pendingSwitch(nil))
+            profile = pending.fallback
+        } else {
+            switchAttempt = pending
+        }
+    }
+
+    let approved = state.isDownloadApproved(for: profile)
+    if requiresInitialSpeechModelDownloadChoice(downloadApproved: approved,
+                                                cacheExists: cacheComplete(profile)) {
+        return SpeechModelStartupPlan(writes: writes, action: .awaitDownloadChoice(profile))
+    }
+    return SpeechModelStartupPlan(writes: writes,
+                                  action: .load(profile, allowDownload: approved, switchAttempt: switchAttempt))
+}
+
+/// Clear the record only if it still describes this attempt; a newer switch
+/// owns any other record.
+func speechModelLoadSucceededWrites(in state: SpeechModelPersistedState,
+                                    switchAttempt: PendingSpeechModelSwitch?) -> [SpeechModelPersistedWrite] {
+    guard let switchAttempt, state.pendingSwitch == .valid(switchAttempt) else { return [] }
+    return [.pendingSwitch(nil)]
+}
+
+/// Writes that return a failed switch to its previous model, or none when the
+/// failed load was not the recorded switch (no switch, a stale attempt, or the
+/// fallback itself, which never falls back again).
+func speechModelSwitchFallbackWrites(in state: SpeechModelPersistedState,
+                                     switchAttempt: PendingSpeechModelSwitch?) -> [SpeechModelPersistedWrite] {
+    guard let switchAttempt,
+          state.pendingSwitch == .valid(switchAttempt),
+          state.profile.productionProfile == switchAttempt.target else { return [] }
+    // Select first: a restart before the record is cleared then discards it.
+    return [.profile(switchAttempt.fallback), .pendingSwitch(nil)]
 }
 
 private func speechModelSetupRowState(profile: SpeechModelProfile,
@@ -4037,6 +4442,17 @@ private func setupChecklistCompletionState(isSpeechModelReady: Bool,
     isSpeechModelReady && isReady && permissionsGranted && hotkeyTestSucceeded
 }
 
+/// Setup's Download Model may start a load only when nothing else owns the
+/// speech model: a startup, a switch or fallback still awaiting its unload, or
+/// a cache reset still deleting the selected model's files. The row can show
+/// the button during those gaps because the model then looks undownloaded.
+private func setupDownloadModelMayStart(hasStartupTask: Bool,
+                                        isSwitchingSpeechModel: Bool,
+                                        isResettingSpeechModelCache: Bool,
+                                        isTerminating: Bool) -> Bool {
+    !hasStartupTask && !isSwitchingSpeechModel && !isResettingSpeechModelCache && !isTerminating
+}
+
 private func setupChecklistFooterButtonTitle(isComplete: Bool,
                                              requiresInitialDownloadChoice: Bool) -> String {
     if isComplete { return "Done" }
@@ -4103,20 +4519,38 @@ private func setupChecklistTipText(snapshot: SetupChecklistSnapshot,
     return "Setup updates automatically as Presspeech checks the model, audio input, permissions, and hotkey."
 }
 
+/// `buttonTitle` is the row's visible action. After one request every
+/// non-restricted row shows Try Again (a TCC reset, then a fresh request), so
+/// the first-request "Choose Continue/Open Settings" wording no longer fits.
+/// nil keeps the first-request wording.
 private func permissionSetupDetail(_ permission: Permission,
                                    microphoneAuthorizationStatus: AVAuthorizationStatus,
+                                   buttonTitle: String? = nil,
                                    operatingSystemMajorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> String {
+    let isRetry = buttonTitle == "Try Again"
     switch permission {
     case .microphone:
-        return microphoneSetupDetail(authorizationStatus: microphoneAuthorizationStatus)
+        guard isRetry, microphoneAuthorizationStatus != .restricted else {
+            return microphoneSetupDetail(authorizationStatus: microphoneAuthorizationStatus)
+        }
+        let context = microphoneAuthorizationStatus == .denied
+            ? "Microphone access was previously denied. Audio is recorded only during dictation and transcribed locally."
+            : "Records audio only while dictation is active and transcribes locally on your Mac."
+        return "\(context) Choose Try Again to reset Presspeech's microphone permission entry and ask again, then choose OK. If System Settings opens instead, enable Presspeech in Privacy & Security → Microphone."
     case .accessibility:
         let paneName = permission.displayName(operatingSystemMajorVersion: operatingSystemMajorVersion)
         let renameNote = paneName == permission.rawValue
             ? ""
             : " This is the permission called Accessibility on earlier macOS versions."
-        return "Verifies the focused window and sends the paste shortcut. Apple's grant can control your Mac; its scope is broader than Presspeech's use. Choose Open Settings to review System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
+        let action = isRetry
+            ? "Choose Try Again to reset the missing grant and ask again, then enable Presspeech in System Settings → Privacy & Security → \(paneName).\(renameNote)"
+            : "Choose Open Settings to review System Settings → Privacy & Security → \(paneName), then enable Presspeech.\(renameNote) If it is already enabled but still Missing, choose Try Again to refresh the missing grant."
+        return "Verifies the focused window and sends the paste shortcut. Apple's grant can control your Mac; its scope is broader than Presspeech's use. \(action)"
     case .inputMonitoring:
-        return "macOS's Input Monitoring grant allows apps to monitor input, including typed keys. Presspeech receives keyboard events to detect the configured hotkey and Escape to cancel an active recording; it doesn't inspect mouse or trackpad events, and other keys pass through without their values being saved, logged, or sent. Choose Open Settings to review System Settings → Privacy & Security → Input Monitoring, then enable Presspeech."
+        let action = isRetry
+            ? "Choose Try Again to reset Presspeech's Input Monitoring permission entry and ask again, then enable Presspeech in System Settings → Privacy & Security → Input Monitoring."
+            : "Choose Open Settings to review System Settings → Privacy & Security → Input Monitoring, then enable Presspeech."
+        return "macOS's Input Monitoring grant allows apps to monitor input, including typed keys. Presspeech receives keyboard events to detect the configured hotkey and Escape to cancel an active recording; it doesn't inspect mouse or trackpad events, and other keys pass through without their values being saved, logged, or sent. \(action)"
     }
 }
 
@@ -4199,6 +4633,61 @@ private func permissionReadinessMenuStatusTitle(missingPermissions: [Permission]
         return "Microphone access is restricted"
     }
     return "Grant permissions to finish setup"
+}
+
+/// Status-row priority. Live capture and transcription come first, then a
+/// dictation's recovery notice, which may describe the only copy of a
+/// transcript. A missing grant outranks the Ready title: the menu must not
+/// invite a dictation that `readinessTransition` would refuse.
+/// `permissionReadinessTitle` is nil when nothing is missing. Each autoclosure
+/// is read only when the result depends on it, so the hotkey-name and
+/// model-cache lookups stay as lazy as before and the title adds no TCC read
+/// when an earlier status wins. `buildMenu` still reads grants on every
+/// rebuild for its control state and permission rows.
+private func resolvedMenuStatusTitle(isRecording: Bool,
+                                     isBusy: Bool,
+                                     dictationNotice: DictationNotice?,
+                                     isReady: Bool,
+                                     triggerMode: TriggerMode,
+                                     hotkeyName: @autoclosure () -> String,
+                                     startupFailure: StartupFailure?,
+                                     requiresInitialDownloadChoice: @autoclosure () -> Bool,
+                                     isStartupInProgress: Bool,
+                                     startupStatusTitle: String,
+                                     isCoreRuntimeReady: Bool,
+                                     permissionReadinessTitle: @autoclosure () -> String?) -> String {
+    if isRecording {
+        return "Recording..."
+    }
+    if isBusy {
+        return "Transcribing..."
+    }
+    if let dictationNotice {
+        return dictationNotice.statusTitle
+    }
+    if isReady {
+        if let permissionTitle = permissionReadinessTitle() {
+            return permissionTitle
+        }
+        let verb = triggerMode == .hold ? "Hold" : "Press"
+        return "\(verb) \(hotkeyName()) to dictate"
+    }
+    if let startupFailure {
+        return startupFailure.statusTitle
+    }
+    if requiresInitialDownloadChoice() {
+        return "Choose when to download speech model"
+    }
+    if isStartupInProgress {
+        return startupStatusTitle
+    }
+    if let permissionTitle = permissionReadinessTitle() {
+        return permissionTitle
+    }
+    if isCoreRuntimeReady {
+        return "Starting hotkey listener…"
+    }
+    return "Presspeech is not ready"
 }
 
 @MainActor
@@ -10257,7 +10746,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var isTerminating = false
     private var isResettingSpeechModelCache = false
     private var isSwitchingSpeechModel = false
-    private var fallbackSpeechModelProfileAfterStartupFailure: SpeechModelProfile?
     private var startupTask: Task<Void, Never>?
     private var updateCheckLoopTask: Task<Void, Never>?
     private var manualUpdateCheckTask: Task<Void, Never>?
@@ -10286,15 +10774,31 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     private var maxDurationWorkItem: DispatchWorkItem?
     private var postReleaseCaptureWorkItem: DispatchWorkItem?
     private var audioIdleStopWorkItem: DispatchWorkItem?
-    private var isRestartingAudioInput = false
+    private var audioRestart = AudioRestartOwnership()
+    /// Cancelled when superseded, so its remaining retries never touch the
+    /// engine that the newer startup attempt now owns.
+    private var audioRestartTask: Task<Void, Never>?
+    private var isRestartingAudioInput: Bool { audioRestart.isRestarting }
     private var pendingAudioRouteRefresh = false
     private var audioConfigurationChangeSuppressedUntil: TimeInterval?
     private var workspacePowerObservers: [NSObjectProtocol] = []
     private var workspaceAccessibilityObserver: NSObjectProtocol?
+    private var workspaceActivationObserver: NSObjectProtocol?
     private var keyboardLayoutObserver: NSObjectProtocol?
+    /// The status menu instance AppKit is displaying, from `menuWillOpen`
+    /// until `menuDidClose`. Weak and compared by identity: an asynchronous
+    /// rebuild can replace `statusItem.menu` while this one is still open.
+    private weak var openStatusMenu: NSMenu?
+    /// Non-nil only while `menuNeedsUpdate` re-checks permissions for the
+    /// status menu; `rebuildMenu` refills that instance.
+    private weak var statusMenuBeingPrepared: NSMenu?
     private var shouldResumeRuntimeAfterWake = false
     private var didLogDeferredWakeRecovery = false
     private var didOfferSetupChecklistThisLaunch = false
+    /// Set when a grant is lost after Ready and cleared when Ready returns, so
+    /// the readiness monitor's repeated blocked refreshes keep the baked
+    /// attention icon rather than the loading tint macOS can drop.
+    private var permissionLostAfterReady = false
     private var setupChecklistWindow: NSWindow?
     private var setupChecklistRefreshTimer: Timer?
     private var renderedSetupChecklistSnapshot: SetupChecklistSnapshot?
@@ -10388,7 +10892,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     // MARK: - Lifecycle
 
-    private func completeReadinessIfPossible(reason: String) {
+    private func completeReadinessIfPossible(reason: String,
+                                             blockSource: PermissionBlockSource = .readinessCheck) {
         let missing = (isReady || isCoreRuntimeReady) ? missingPermissions() : []
         switch readinessTransition(isReady: isReady,
                                    isCoreRuntimeReady: isCoreRuntimeReady,
@@ -10401,7 +10906,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             rebuildMenu()
             return
         case .blockForPermissions(let missing):
-            enterPermissionBlockedState(missing: missing, reason: reason)
+            enterPermissionBlockedState(missing: missing, reason: reason, source: blockSource)
             return
         case .startHotkeyListener:
             break
@@ -10446,6 +10951,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isReady = true
         startupStatusTitle = "Ready"
         startupFailure = nil
+        // A grant that came back proves its entry was not stuck. A later loss
+        // starts again at Continue/Open Settings, not at a TCC reset.
+        permClickCount.removeAll()
+        permissionLostAfterReady = false
         stopPermissionReadinessMonitor()
         setMenuBarState(.idle)
 
@@ -10464,14 +10973,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         } else {
             migrateLegacyIdentityFilesIfNeeded(settings: settings)
         }
-        if !settings.hasSpeechModelDownloadDecision {
-            // Keep automatic startup for existing installs. A genuinely new
-            // install without a complete local model gets a choice before a
-            // large transfer.
-            let hadPriorLaunch = !settings.lastSeenVersion.isEmpty
-            settings.speechModelDownloadApproved = initialSpeechModelDownloadApprovalForLaunch(
-                hadPriorLaunch: hadPriorLaunch
-            )
+        // Keep automatic startup for existing installs. A genuinely new install
+        // without a complete local model gets a choice before a large
+        // transfer. Must run before the launch records lastSeenVersion.
+        let approvalWrites = settings.speechModelDownloadApprovalReconciliationWrites()
+        if !approvalWrites.isEmpty {
+            settings.apply(approvalWrites)
+            let approved = settings.speechModelPersistedState.downloadApprovals
+                .map(\.shortName).sorted().joined(separator: ", ")
+            log("ASR: speech-model download approvals reconciled: \(approved.isEmpty ? "none" : approved)")
         }
         if settings.didMigrateLegacyIdentity {
             // macOS does not transfer privacy grants between bundle
@@ -10525,6 +11035,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
         installWorkspacePowerObservers()
         installWorkspaceAccessibilityObserver()
+        installWorkspaceActivationObserver()
         keyboardLayoutObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
             object: nil, queue: .main
@@ -10619,6 +11130,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         stopSetupChecklistRefreshTimer()
         removeWorkspacePowerObservers()
         removeWorkspaceAccessibilityObserver()
+        removeWorkspaceActivationObserver()
         if let observer = keyboardLayoutObserver {
             DistributedNotificationCenter.default().removeObserver(observer)
             keyboardLayoutObserver = nil
@@ -10687,6 +11199,28 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         workspaceAccessibilityObserver = nil
     }
 
+    /// Leaving System Settings activates another app, which is when a grant
+    /// changed there becomes worth re-reading.
+    private func installWorkspaceActivationObserver() {
+        removeWorkspaceActivationObserver()
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceActivationObserver = center.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.recheckPermissionsWhileReady(trigger: .applicationActivation)
+            }
+        }
+    }
+
+    private func removeWorkspaceActivationObserver() {
+        guard let observer = workspaceActivationObserver else { return }
+        NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        workspaceActivationObserver = nil
+    }
+
     private func refreshRecordingHUDAccessibility() {
         let options = RecordingHUDAccessibilityOptions.current()
         recordingHUDAccessibilityOptions = options
@@ -10748,17 +11282,27 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
 
-        let speechModelProfile = settings.speechModelProfile
-        if requiresInitialSpeechModelDownloadChoice(
-            downloadApproved: settings.speechModelDownloadApproved,
-            cacheExists: speechModelCacheIsComplete(for: speechModelProfile)
-        ) {
+        let plan = speechModelStartupPlan(for: settings.speechModelPersistedState,
+                                          cacheComplete: speechModelCacheIsComplete(for:))
+        if !plan.writes.isEmpty {
+            settings.apply(plan.writes)
+            log("ASR: resolved pending speech-model switch before startup (\(reason)); selected \(settings.speechModelProfile.shortName)")
+        }
+        let speechModelProfile: SpeechModelProfile
+        let allowDownload: Bool
+        let switchAttempt: PendingSpeechModelSwitch?
+        switch plan.action {
+        case .awaitDownloadChoice:
             startupStatusTitle = "Waiting for your speech-model download choice."
             log("startup paused (\(reason)): first speech-model download awaits user choice")
             setMenuBarState(.loading)
             rebuildMenu()
             maybeShowSetupChecklist(reason: "first speech-model download choice")
             return
+        case .load(let profile, let approved, let attempt):
+            speechModelProfile = profile
+            allowDownload = approved
+            switchAttempt = attempt
         }
 
         prepareForStartupAttempt()
@@ -10777,13 +11321,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
             do {
                 try await asr.load(profile: speechModelProfile,
-                                   allowDownload: settings.speechModelDownloadApproved) { [weak self] progress in
+                                   allowDownload: allowDownload) { [weak self] progress in
                     Task { @MainActor in
                         self?.updateSpeechModelStartupProgress(progress)
                     }
                 }
                 guard !Task.isCancelled, !isTerminating else { return }
-                fallbackSpeechModelProfileAfterStartupFailure = nil
+                settings.apply(speechModelLoadSucceededWrites(in: settings.speechModelPersistedState,
+                                                              switchAttempt: switchAttempt))
                 isSpeechModelReady = true
                 speechModelStartupProgressFraction = nil
 
@@ -10809,7 +11354,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
                 completeReadinessIfPossible(reason: reason)
             } catch {
                 guard !Task.isCancelled, !isTerminating else { return }
-                recordStartupFailure(stage: stage, error: error, reason: reason)
+                recordStartupFailure(stage: stage, error: error, reason: reason,
+                                     speechModelSwitchAttempt: switchAttempt)
             }
         }
     }
@@ -10831,6 +11377,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isBusy = false
         recordingPasteTarget = nil
         pendingAudioRouteRefresh = false
+        audioRestartTask?.cancel()
+        audioRestartTask = nil
+        audioRestart.supersede()
         shouldResumeRuntimeAfterWake = false
         didLogDeferredWakeRecovery = false
         startupFailure = nil
@@ -10864,15 +11413,21 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         rebuildMenu()
     }
 
-    private func recordStartupFailure(stage: StartupFailureStage, error: Error, reason: String) {
+    private func recordStartupFailure(stage: StartupFailureStage,
+                                      error: Error,
+                                      reason: String,
+                                      speechModelSwitchAttempt: PendingSpeechModelSwitch? = nil) {
         cancelPostReleaseCapture()
-        if stage == .speechModel,
-           let fallback = fallbackSpeechModelProfileAfterStartupFailure,
-           fallback != settings.speechModelProfile,
-           !isTerminating {
-            let failedProfile = settings.speechModelProfile
-            fallbackSpeechModelProfileAfterStartupFailure = nil
-            settings.speechModelProfile = fallback
+        // The persisted record, not process memory, decides the fallback, so
+        // the same rule applies to a switch resumed after a restart.
+        let fallbackWrites = stage == .speechModel && !isTerminating
+            ? speechModelSwitchFallbackWrites(in: settings.speechModelPersistedState,
+                                              switchAttempt: speechModelSwitchAttempt)
+            : []
+        if let attempt = speechModelSwitchAttempt, !fallbackWrites.isEmpty {
+            let failedProfile = attempt.target
+            let fallback = attempt.fallback
+            settings.apply(fallbackWrites)
             isSwitchingSpeechModel = true
             isCoreRuntimeReady = false
             isSpeechModelReady = false
@@ -10900,7 +11455,6 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
 
-        fallbackSpeechModelProfileAfterStartupFailure = nil
         isCoreRuntimeReady = false
         if stage == .speechModel {
             isSpeechModelReady = false
@@ -11081,7 +11635,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         isCoreRuntimeReady = false
         isRecording = false
         pendingAudioRouteRefresh = false
-        isRestartingAudioInput = true
+        let attempt = audioRestart.begin()
         startupFailure = nil
         startupStatusTitle = "Restarting audio input…"
         hotkey.onPress = nil
@@ -11096,17 +11650,19 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         setMenuBarState(.loading)
         rebuildMenu()
 
-        Task { @MainActor in
-            defer { isRestartingAudioInput = false }
+        audioRestartTask = Task { @MainActor in
+            defer {
+                if audioRestart.end(attempt) { audioRestartTask = nil }
+            }
             do {
                 try await startAudioInputWithRetries(reason: reason,
                                                      initialStatusTitle: "Restarting audio input…")
-                guard !isTerminating else { return }
+                guard audioRestart.owns(attempt), !isTerminating else { return }
                 isCoreRuntimeReady = true
                 startupStatusTitle = "Finishing setup…"
                 completeReadinessIfPossible(reason: reason)
             } catch {
-                guard !isTerminating else { return }
+                guard audioRestart.owns(attempt), !isTerminating else { return }
                 recordStartupFailure(stage: .audioInput, error: error, reason: reason)
             }
         }
@@ -11114,12 +11670,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     // MARK: - Permission readiness
 
-    private func enterPermissionBlockedState(missing: [Permission]? = nil, reason: String) {
+    private func enterPermissionBlockedState(missing: [Permission]? = nil,
+                                             reason: String,
+                                             source: PermissionBlockSource = .readinessCheck) {
         let missing = missing ?? missingPermissions()
         guard !missing.isEmpty else {
             completeReadinessIfPossible(reason: reason)
             return
         }
+        let wasReady = isReady
 
         cancelMaxDurationAutoRelease()
         cancelPostReleaseCapture()
@@ -11143,16 +11702,56 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         hotkey.recordingStartBlocker = nil
         hotkey.resetToggleState()
         hotkey.stop()
+        if wasReady {
+            permissionLostAfterReady = true
+        }
 
         logPermissionReadinessWait(missing)
         startPermissionReadinessMonitor(reason: reason)
-        maybeShowSetupChecklist(reason: reason)
-        setMenuBarState(.loading)
+        switch permissionBlockedChecklistOffer(source: source,
+                                               wasReady: wasReady,
+                                               checklistIsVisible: setupChecklistWindow?.isVisible == true) {
+        case .firstLaunchOffer:
+            maybeShowSetupChecklist(reason: reason)
+        case .reofferWithoutActivating:
+            didOfferSetupChecklistThisLaunch = true
+            log("setup checklist re-offered after permission loss (\(reason))")
+            showSetupChecklist(activating: false)
+        case .alreadyShown:
+            didOfferSetupChecklistThisLaunch = true
+        }
+        // A grant lost after Ready needs the user to act. The loading tint can
+        // be dropped on template images (see Menu bar appearance); the baked
+        // attention icon cannot.
+        setMenuBarState(permissionLostAfterReady ? .error : .loading)
         rebuildMenu()
     }
 
     private func missingPermissions() -> [Permission] {
         Permission.allCases.filter { !Permissions.isGranted($0) }
+    }
+
+    /// Ready grants are otherwise re-read only by a press, which a revoked
+    /// Input Monitoring grant can stop from arriving at all. A loss found here
+    /// takes the same route as one found by a press or the readiness monitor.
+    private func recheckPermissionsWhileReady(trigger: PermissionRecheckTrigger) {
+        guard shouldRecheckPermissionsWhileReady(
+            trigger: trigger,
+            isReady: isReady,
+            isRecording: isRecording,
+            isFinishingRecording: isFinishingRecording,
+            isBusy: isBusy,
+            isTerminating: isTerminating,
+            isRuntimeTransitionInProgress: startupTask != nil
+                || isSwitchingSpeechModel
+                || isResettingSpeechModelCache
+                || isRestartingAudioInput,
+            isStatusMenuOpen: openStatusMenu != nil
+        ) else { return }
+        let missing = missingPermissions()
+        guard !missing.isEmpty else { return }
+        log("permission re-check (\(trigger.rawValue)): missing \(missing.map(\.rawValue).joined(separator: ", "))")
+        completeReadinessIfPossible(reason: trigger.rawValue, blockSource: .recheck(trigger))
     }
 
     @discardableResult
@@ -11724,7 +12323,9 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         cancelPostReleaseCapture()
         let missing = missingPermissions()
         guard missing.isEmpty else {
-            enterPermissionBlockedState(missing: missing, reason: "hotkey press")
+            enterPermissionBlockedState(missing: missing,
+                                        reason: "hotkey press",
+                                        source: .dictationRequest)
             return
         }
         timing.permissionsCheckedAt = monotonicNanoseconds()
@@ -12691,8 +13292,32 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private func rebuildMenu() {
         let menu = buildMenu()
+        if let opening = statusMenuBeingPrepared {
+            // `menuNeedsUpdate` is populating `opening`; a replacement assigned
+            // now would only appear on the next click. Refill it in place.
+            let items = menu.items
+            menu.removeAllItems()
+            opening.removeAllItems()
+            for item in items {
+                opening.addItem(item)
+            }
+            return
+        }
         menu.delegate = self
         statusItem.menu = menu
+    }
+
+    /// AppKit's delegate hook for adding and removing items at the start of a
+    /// tracking session. NSMenu.h says not to modify a menu's structure or
+    /// items in `menuWillOpen`/`menuDidClose`, so a loss found as the status
+    /// menu opens is refilled here. AppKit can also populate a menu while
+    /// matching key equivalents; the re-check gate keeps that to an idle,
+    /// Ready app, where a block is the correct state anyway.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === statusItem.menu else { return }
+        statusMenuBeingPrepared = menu
+        recheckPermissionsWhileReady(trigger: .statusMenuOpen)
+        statusMenuBeingPrepared = nil
     }
 
     /// Refresh dynamic menu state immediately before AppKit presents it.
@@ -12728,6 +13353,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
 
+        if menu === statusItem.menu {
+            openStatusMenu = menu
+        }
+
         if menu === statusItem.menu,
            let restore = menuItem(with: NSUserInterfaceItemIdentifier("manual-clipboard-restore"), in: menu) {
             configureManualClipboardRestoreItem(restore)
@@ -12741,6 +13370,12 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             return
         }
         configureLaunchAtLoginMenuItem(item, status: refreshLaunchAtLoginStatus())
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        if menu === openStatusMenu {
+            openStatusMenu = nil
+        }
     }
 
     private func refreshLaunchAtLoginStatus() -> SMAppService.Status {
@@ -13165,40 +13800,30 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     private func menuStatusTitle() -> String {
-        if isRecording {
-            return "Recording..."
-        }
-        if isBusy {
-            return "Transcribing..."
-        }
-        if let dictationNotice {
-            return dictationNotice.statusTitle
-        }
-        if isReady {
-            let hk = hotkey.hotkey.name
-            let verb = settings.triggerMode == .hold ? "Hold" : "Press"
-            return "\(verb) \(hk) to dictate"
-        }
-        if let failure = startupFailure {
-            return failure.statusTitle
-        }
-        if initialSpeechModelDownloadChoiceIsRequired {
-            return "Choose when to download speech model"
-        }
-        if startupTask != nil || isRestartingAudioInput || isSwitchingSpeechModel {
-            return startupStatusTitle
-        }
+        resolvedMenuStatusTitle(
+            isRecording: isRecording,
+            isBusy: isBusy,
+            dictationNotice: dictationNotice,
+            isReady: isReady,
+            triggerMode: settings.triggerMode,
+            hotkeyName: hotkey.hotkey.name,
+            startupFailure: startupFailure,
+            requiresInitialDownloadChoice: initialSpeechModelDownloadChoiceIsRequired,
+            isStartupInProgress: startupTask != nil || isRestartingAudioInput || isSwitchingSpeechModel,
+            startupStatusTitle: startupStatusTitle,
+            isCoreRuntimeReady: isCoreRuntimeReady,
+            permissionReadinessTitle: missingPermissionsMenuStatusTitle()
+        )
+    }
+
+    /// nil when every grant is present.
+    private func missingPermissionsMenuStatusTitle() -> String? {
         let missing = missingPermissions()
-        if !missing.isEmpty {
-            return permissionReadinessMenuStatusTitle(
-                missingPermissions: missing,
-                microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio)
-            )
-        }
-        if isCoreRuntimeReady {
-            return "Starting hotkey listener…"
-        }
-        return "Presspeech is not ready"
+        guard !missing.isEmpty else { return nil }
+        return permissionReadinessMenuStatusTitle(
+            missingPermissions: missing,
+            microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio)
+        )
     }
 
     private func diagnosticsText() -> String {
@@ -13332,7 +13957,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
     private var initialSpeechModelDownloadChoiceIsRequired: Bool {
         requiresInitialSpeechModelDownloadChoice(
-            downloadApproved: settings.speechModelDownloadApproved,
+            downloadApproved: settings.isSpeechModelDownloadApproved(for: settings.speechModelProfile),
             cacheExists: speechModelCacheIsComplete(for: settings.speechModelProfile)
         )
     }
@@ -13357,11 +13982,20 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         showSetupChecklist()
     }
 
-    private func showSetupChecklist() {
-        showAppForModal()
+    /// `activating: false` orders the window in front without activating
+    /// Presspeech or making the window key, so keystrokes and any posted
+    /// paste keep going to the app the user is in.
+    private func showSetupChecklist(activating: Bool = true) {
+        if activating {
+            showAppForModal()
+        }
         if let window = setupChecklistWindow {
             updateSetupChecklist()
-            window.makeKeyAndOrderFront(nil)
+            if activating {
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                window.orderFrontRegardless()
+            }
             startSetupChecklistRefreshTimer()
             return
         }
@@ -13384,7 +14018,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
 
         updateSetupChecklist()
         window.center()
-        window.makeKeyAndOrderFront(nil)
+        if activating {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFrontRegardless()
+        }
         startSetupChecklistRefreshTimer()
     }
 
@@ -13535,7 +14173,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             )
             return SetupChecklistPermissionState(
                 permission: permission,
-                detail: setupDetail(for: permission),
+                detail: setupDetail(for: permission, buttonTitle: presentation.buttonTitle),
                 status: presentation.status,
                 buttonTitle: presentation.buttonTitle)
         }
@@ -13893,10 +14531,11 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         )
     }
 
-    private func setupDetail(for permission: Permission) -> String {
+    private func setupDetail(for permission: Permission, buttonTitle: String?) -> String {
         permissionSetupDetail(
             permission,
-            microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio)
+            microphoneAuthorizationStatus: AVCaptureDevice.authorizationStatus(for: .audio),
+            buttonTitle: buttonTitle
         )
     }
 
@@ -14126,9 +14765,15 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
     }
 
     @objc private func downloadSpeechModelFromSetupClicked(_ sender: NSButton) {
-        guard startupTask == nil, !isTerminating else { return }
-        settings.speechModelDownloadApproved = true
-        log("first speech-model download approved from setup")
+        guard setupDownloadModelMayStart(hasStartupTask: startupTask != nil,
+                                         isSwitchingSpeechModel: isSwitchingSpeechModel,
+                                         isResettingSpeechModelCache: isResettingSpeechModelCache,
+                                         isTerminating: isTerminating) else { return }
+        // Setup offers the selected model's download, so approve only that model.
+        let profile = settings.speechModelProfile
+        settings.apply(speechModelDownloadApprovalWrites(approving: profile,
+                                                         in: settings.speechModelPersistedState))
+        log("first speech-model download approved from setup for \(profile.shortName)")
         startStartup(reason: "first speech-model download approved")
     }
 
@@ -14551,6 +15196,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         sub.autoenablesItems = false
         let current = settings.speechModelProfile
         let canSwitch = canSwitchSpeechModel
+        let defaultModelCacheComplete = speechModelCacheIsComplete(for: .productionDefault)
         for profile in SpeechModelProfile.selectableProfiles {
             let item = NSMenuItem(title: profile.settingsTitle,
                                   action: #selector(selectSpeechModelProfile(_:)),
@@ -14559,7 +15205,8 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             item.state = (profile == current) ? .on : .off
             item.isEnabled = canSwitch || profile == current
             item.representedObject = profile.rawValue
-            item.toolTip = profile.settingsToolTip
+            item.toolTip = speechModelSettingsToolTip(for: profile,
+                                                      defaultModelCacheComplete: defaultModelCacheComplete)
             sub.addItem(item)
         }
         parent.submenu = sub
@@ -14789,7 +15436,7 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         }
 
         pendingAudioRouteRefresh = false
-        isRestartingAudioInput = true
+        let attempt = audioRestart.begin()
         isReady = false
         isRecording = false
         isBusy = false
@@ -14798,14 +15445,18 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         rebuildMenu()
         stopAudioEngineImmediately()
 
-        Task { @MainActor in
-            defer { isRestartingAudioInput = false }
+        audioRestartTask = Task { @MainActor in
+            defer {
+                if audioRestart.end(attempt) { audioRestartTask = nil }
+            }
             do {
                 try await startAudioInputWithRetries(reason: reason,
                                                      initialStatusTitle: "Restarting audio input…")
+                guard audioRestart.owns(attempt) else { return }
                 isCoreRuntimeReady = true
                 completeReadinessIfPossible(reason: reason)
             } catch {
+                guard audioRestart.owns(attempt) else { return }
                 isCoreRuntimeReady = false
                 isReady = false
                 isRecording = false
@@ -16284,9 +16935,10 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
               let raw = sender.representedObject as? String,
               let target = SpeechModelProfile(rawValue: raw) else { return }
         let current = settings.speechModelProfile
-        switch speechModelSwitchPlan(from: current,
-                                     to: target,
-                                     targetCacheComplete: speechModelCacheIsComplete(for: target)) {
+        let plan = speechModelSwitchPlan(from: current,
+                                         to: target,
+                                         targetCacheComplete: speechModelCacheIsComplete(for: target))
+        switch plan {
         case .unchanged:
             return
         case .loadCached:
@@ -16296,20 +16948,26 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = "Download \(target.shortName)?"
-            alert.informativeText = speechModelSwitchDownloadDetail(from: current, to: target)
+            alert.informativeText = speechModelSwitchDownloadDetail(
+                from: current,
+                to: target,
+                currentCacheComplete: speechModelCacheIsComplete(for: current),
+                currentDownloadApproved: settings.isSpeechModelDownloadApproved(for: current))
             alert.addButton(withTitle: "Download and Switch")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn, canSwitchSpeechModel else { return }
-            if !settings.speechModelDownloadApproved {
-                settings.speechModelDownloadApproved = true
-                log("speech-model download approved from model switch")
+            if !settings.isSpeechModelDownloadApproved(for: target) {
+                log("speech-model download approved for \(target.shortName) from model switch")
             }
         }
 
-        // recordStartupFailure restores `current` if the new model fails to
-        // download, verify or load.
-        fallbackSpeechModelProfileAfterStartupFailure = current
-        settings.speechModelProfile = target
+        // The pending-switch record lets recordStartupFailure restore
+        // `current` if the new model fails to download, verify or load, even
+        // after a restart. Download and Switch approves only the target.
+        settings.apply(speechModelSwitchWrites(in: settings.speechModelPersistedState,
+                                               to: target,
+                                               approvingTargetDownload: plan == .confirmDownload,
+                                               attemptID: UUID().uuidString))
         isSwitchingSpeechModel = true
         prepareForStartupAttempt()
         startupStatusTitle = "Switching to \(target.shortName)…"
@@ -16330,11 +16988,14 @@ final class PresspeechApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NS
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "\(failed.shortName) couldn't be loaded"
+        // Shown after the fallback startup was planned, so the selection is
+        // already `fallback`.
         alert.informativeText = speechModelSwitchFallbackDetail(
             failed: failed,
             fallback: fallback,
             errorDescription: error.localizedDescription,
-            downloadsApproved: settings.speechModelDownloadApproved)
+            downloadsApproved: settings.isSpeechModelDownloadApproved(for: failed),
+            fallbackAwaitsDownloadChoice: initialSpeechModelDownloadChoiceIsRequired)
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
@@ -20053,7 +20714,7 @@ private enum PresspeechSelfTest {
             equals: SetupPermissionPresentation(status: "Missing",
                                                 buttonTitle: "Try Again",
                                                 isRestricted: false),
-            "a user-denied microphone permission should retain its Settings recovery action"
+            "after one request, a user-denied microphone permission should offer Try Again (reset, then ask again)"
         )
         try expect(
             setupPermissionPresentation(permission: .accessibility,
@@ -20140,6 +20801,40 @@ private enum PresspeechSelfTest {
                        "other keys pass through without their values being saved, logged, or sent"),
                    equals: true,
                    "input-monitoring setup should describe how ordinary key events are handled")
+        // A row's guidance must name the button the row shows, including after
+        // a first request turns it into Try Again.
+        for permission in Permission.allCases {
+            for microphoneStatus in [AVAuthorizationStatus.notDetermined, .denied, .restricted] {
+                for requests in 0...2 {
+                    let presentation = setupPermissionPresentation(permission: permission,
+                                                                   isGranted: false,
+                                                                   microphoneAuthorizationStatus: microphoneStatus,
+                                                                   grantRequestCount: requests)
+                    let detail = permissionSetupDetail(permission,
+                                                       microphoneAuthorizationStatus: microphoneStatus,
+                                                       buttonTitle: presentation.buttonTitle,
+                                                       operatingSystemMajorVersion: 27)
+                    let context = "\(permission.rawValue), \(requests) request(s)"
+                    try expect(detail.localizedCaseInsensitiveContains("click"),
+                               equals: false,
+                               "\(context): row guidance should work for keyboard and pointer users")
+                    guard let buttonTitle = presentation.buttonTitle else {
+                        try expect(detail.contains("Try Again") || detail.contains("Open Settings"),
+                                   equals: false,
+                                   "\(context): a row without an action should not name one")
+                        continue
+                    }
+                    try expect(detail.contains("Choose \(buttonTitle)"),
+                               equals: true,
+                               "\(context): row guidance should name its visible \(buttonTitle) action")
+                    if buttonTitle == "Try Again" {
+                        try expect(detail.contains("Choose Open Settings") || detail.contains("Choose Continue"),
+                                   equals: false,
+                                   "\(context): a Try Again row should not direct users to an action it no longer shows")
+                    }
+                }
+            }
+        }
         let setupPermission = SetupChecklistPermissionState(
             permission: .microphone,
             detail: "Needs microphone access.",
@@ -20429,6 +21124,134 @@ private enum PresspeechSelfTest {
             equals: .rebuildMenuOnly,
             "ready app with all permissions should remain ready and rebuild only"
         )
+        func recheck(_ trigger: PermissionRecheckTrigger = .applicationActivation,
+                     isReady: Bool = true,
+                     isRecording: Bool = false,
+                     isFinishingRecording: Bool = false,
+                     isBusy: Bool = false,
+                     isTerminating: Bool = false,
+                     isRuntimeTransitionInProgress: Bool = false,
+                     isStatusMenuOpen: Bool = false) -> Bool {
+            shouldRecheckPermissionsWhileReady(trigger: trigger,
+                                               isReady: isReady,
+                                               isRecording: isRecording,
+                                               isFinishingRecording: isFinishingRecording,
+                                               isBusy: isBusy,
+                                               isTerminating: isTerminating,
+                                               isRuntimeTransitionInProgress: isRuntimeTransitionInProgress,
+                                               isStatusMenuOpen: isStatusMenuOpen)
+        }
+        try expect(recheck(), equals: true,
+                   "an idle Ready app should re-read grants when the user switches apps")
+        try expect(recheck(.statusMenuOpen, isStatusMenuOpen: true), equals: true,
+                   "opening the status menu should re-read grants before the menu is shown")
+        try expect(recheck(isRecording: true), equals: false,
+                   "a permission re-check must not tear down a live recording")
+        try expect(recheck(isFinishingRecording: true), equals: false,
+                   "a permission re-check must not cut the retained post-release audio tail")
+        try expect(recheck(isBusy: true), equals: false,
+                   "a permission re-check must not interrupt transcription or delivery")
+        try expect(recheck(.statusMenuOpen, isTerminating: true), equals: false,
+                   "a quitting app should not re-check permissions")
+        try expect(recheck(isReady: false), equals: false,
+                   "a not-ready app should leave grants to startup and the readiness monitor")
+        try expect(recheck(isRuntimeTransitionInProgress: true), equals: false,
+                   "startup, a model switch or an audio restart should finish before grants are re-read")
+        try expect(recheck(isStatusMenuOpen: true), equals: false,
+                   "an app switch during menu tracking should not rebuild the displayed menu")
+        // The open-time re-check runs from menuNeedsUpdate, which can come
+        // before menuWillOpen marks the menu open. It can refill the menu and
+        // stop audio, so it needs the same idle guards as an app switch.
+        try expect(recheck(.statusMenuOpen, isStatusMenuOpen: false), equals: true,
+                   "the open-time re-check should not wait for menuWillOpen to mark the menu open")
+        try expect(recheck(.statusMenuOpen, isRecording: true), equals: false,
+                   "opening the status menu during a recording must not tear it down")
+        try expect(recheck(.statusMenuOpen, isFinishingRecording: true), equals: false,
+                   "opening the status menu must not cut the retained post-release audio tail")
+        try expect(recheck(.statusMenuOpen, isBusy: true), equals: false,
+                   "opening the status menu must not interrupt transcription or delivery")
+        try expect(recheck(.statusMenuOpen, isRuntimeTransitionInProgress: true), equals: false,
+                   "opening the status menu during startup or an audio restart should not re-read grants")
+
+        let lostInputMonitoringTitle = permissionReadinessMenuStatusTitle(
+            missingPermissions: [.inputMonitoring],
+            microphoneAuthorizationStatus: .authorized
+        )
+        func statusTitle(isRecording: Bool = false,
+                         isBusy: Bool = false,
+                         notice: DictationNotice? = nil,
+                         isReady: Bool = true,
+                         isStartupInProgress: Bool = false,
+                         permissionTitle: String? = nil) -> String {
+            resolvedMenuStatusTitle(isRecording: isRecording,
+                                    isBusy: isBusy,
+                                    dictationNotice: notice,
+                                    isReady: isReady,
+                                    triggerMode: .hold,
+                                    hotkeyName: "Right Option",
+                                    startupFailure: nil,
+                                    requiresInitialDownloadChoice: false,
+                                    isStartupInProgress: isStartupInProgress,
+                                    startupStatusTitle: "Restarting audio input…",
+                                    isCoreRuntimeReady: true,
+                                    permissionReadinessTitle: permissionTitle)
+        }
+        try expect(statusTitle(), equals: "Hold Right Option to dictate",
+                   "a Ready app with every grant should keep its hotkey guidance")
+        try expect(statusTitle(permissionTitle: lostInputMonitoringTitle),
+                   equals: lostInputMonitoringTitle,
+                   "a Ready app with a lost grant should not invite a dictation it would refuse")
+        try expect(statusTitle(permissionTitle: permissionReadinessMenuStatusTitle(
+                       missingPermissions: [.microphone],
+                       microphoneAuthorizationStatus: .restricted
+                   )),
+                   equals: "Microphone access is restricted",
+                   "a Ready app whose microphone became restricted should say so")
+        try expect(statusTitle(isRecording: true, permissionTitle: lostInputMonitoringTitle),
+                   equals: "Recording...",
+                   "live capture should stay visible when a grant disappears mid-recording")
+        try expect(statusTitle(isBusy: true, permissionTitle: lostInputMonitoringTitle),
+                   equals: "Transcribing...",
+                   "transcription should stay visible when a grant disappears before delivery")
+        try expect(statusTitle(notice: .copiedToClipboard, permissionTitle: lostInputMonitoringTitle),
+                   equals: DictationNotice.copiedToClipboard.statusTitle,
+                   "a dictation's clipboard recovery notice should outrank a missing grant")
+        try expect(statusTitle(isReady: false,
+                               isStartupInProgress: true,
+                               permissionTitle: lostInputMonitoringTitle),
+                   equals: "Restarting audio input…",
+                   "runtime progress should keep its priority over permission guidance")
+
+        try expect(permissionBlockedChecklistOffer(source: .dictationRequest,
+                                                   wasReady: true,
+                                                   checklistIsVisible: false),
+                   equals: .reofferWithoutActivating,
+                   "a press refused after a grant loss should re-offer the checklist without taking focus")
+        try expect(permissionBlockedChecklistOffer(source: .recheck(.applicationActivation),
+                                                   wasReady: true,
+                                                   checklistIsVisible: false),
+                   equals: .reofferWithoutActivating,
+                   "a loss found on an app switch should re-offer the checklist without taking focus")
+        try expect(permissionBlockedChecklistOffer(source: .recheck(.statusMenuOpen),
+                                                   wasReady: true,
+                                                   checklistIsVisible: false),
+                   equals: .alreadyShown,
+                   "a loss found as the status menu opens should be shown by that menu, not a window")
+        try expect(permissionBlockedChecklistOffer(source: .recheck(.applicationActivation),
+                                                   wasReady: true,
+                                                   checklistIsVisible: true),
+                   equals: .alreadyShown,
+                   "an open checklist should not be reordered over System Settings")
+        try expect(permissionBlockedChecklistOffer(source: .readinessCheck,
+                                                   wasReady: false,
+                                                   checklistIsVisible: false),
+                   equals: .firstLaunchOffer,
+                   "readiness-monitor refreshes while blocked should not re-offer the same loss")
+        try expect(permissionBlockedChecklistOffer(source: .readinessCheck,
+                                                   wasReady: true,
+                                                   checklistIsVisible: false),
+                   equals: .firstLaunchOffer,
+                   "a loss found as a dictation finishes should keep the existing offer, not re-offer")
         try expect(
             shouldAttemptAutomaticDictationDelivery(
                 permissionInterruptionObserved: false,
@@ -20610,6 +21433,54 @@ private enum PresspeechSelfTest {
                        equals: !approved,
                        "without download approval the alert should say no fresh copy was fetched")
         }
+        try expect(speechModelSwitchDownloadDetail(from: .multilingualV3,
+                                                   to: .parakeetUltra,
+                                                   currentCacheComplete: true,
+                                                   currentDownloadApproved: false),
+                   equals: ultraSwitchDetail,
+                   "a cached current model should keep the on-disk fallback wording")
+        let deferredCurrentDetail = speechModelSwitchDownloadDetail(from: .multilingualV3,
+                                                                    to: .parakeetUltra,
+                                                                    currentCacheComplete: false,
+                                                                    currentDownloadApproved: false)
+        try expect(!deferredCurrentDetail.contains("stays on disk")
+                       && deferredCurrentDetail.contains("Parakeet TDT v3 isn't downloaded yet")
+                       && deferredCurrentDetail.contains("waits for Download Model in Setup"),
+                   equals: true,
+                   "the Ultra prompt must not promise an on-disk v3 fallback after Set Up Later")
+        let partialCurrentDetail = speechModelSwitchDownloadDetail(from: .multilingualV3,
+                                                                   to: .parakeetUltra,
+                                                                   currentCacheComplete: false,
+                                                                   currentDownloadApproved: true)
+        try expect(!partialCurrentDetail.contains("stays on disk")
+                       && partialCurrentDetail.contains("finishes downloading it"),
+                   equals: true,
+                   "an approved but incomplete current model should be described as downloading on fallback")
+        let awaitingChoiceDetail = speechModelSwitchFallbackDetail(failed: .parakeetUltra,
+                                                                   fallback: .multilingualV3,
+                                                                   errorDescription: "download timed out",
+                                                                   downloadsApproved: true,
+                                                                   fallbackAwaitsDownloadChoice: true)
+        try expect(awaitingChoiceDetail.contains("To try again, choose Parakeet Ultra")
+                       && awaitingChoiceDetail.contains("Parakeet TDT v3 isn't downloaded yet")
+                       && awaitingChoiceDetail.contains("choose Download Model in Setup"),
+                   equals: true,
+                   "a fallback to an undownloaded model should say it waits for Download Model")
+        try expect(speechModelSettingsToolTip(for: .parakeetUltra, defaultModelCacheComplete: true)
+                       .contains("Parakeet TDT v3 copy stays on disk"),
+                   equals: true,
+                   "the Ultra tooltip may promise a download-free return when v3 is cached")
+        let uncachedDefaultToolTip = speechModelSettingsToolTip(for: .parakeetUltra,
+                                                                defaultModelCacheComplete: false)
+        try expect(!uncachedDefaultToolTip.contains("stays on disk")
+                       && uncachedDefaultToolTip.contains("asks before downloading")
+                       && uncachedDefaultToolTip.contains("about 630 MB"),
+                   equals: true,
+                   "the Ultra tooltip must not claim a v3 copy that isn't on disk")
+        try expect(speechModelSettingsToolTip(for: .multilingualV3, defaultModelCacheComplete: false),
+                   equals: SpeechModelProfile.multilingualV3.settingsToolTip,
+                   "the v3 tooltip does not depend on its own cache")
+        try testSpeechModelSwitchPersistence()
 
         try expect(
             speechModelSetupRowState(profile: .multilingualV3,
@@ -24377,6 +25248,516 @@ private enum PresspeechSelfTest {
         }
     }
 
+    /// Drives the persisted approval and switch transitions through simulated
+    /// process exits. Every prefix of a production write plan is a state a
+    /// restart can find; a fresh Settings over the same defaults is the
+    /// restarted process, and `launch` repeats applicationDidFinishLaunching's
+    /// reconciliation and startStartup's plan.
+    private static func testSpeechModelSwitchPersistence() throws {
+        let v3 = SpeechModelProfile.multilingualV3
+        let ultra = SpeechModelProfile.parakeetUltra
+        // The 0.3.9–0.3.10 key, written here the way an older release would.
+        let legacyKey = "speech_model_download_approved"
+
+        func withDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) throws {
+            let suite = "com.local.presspeech.self-test.speech-model-switch.\(name).\(UUID().uuidString)"
+            guard let defaults = UserDefaults(suiteName: suite) else {
+                throw SelfTestFailure.failed("speech-model switch test defaults unavailable")
+            }
+            defer { defaults.removePersistentDomain(forName: suite) }
+            try body(defaults)
+        }
+        func state(_ defaults: UserDefaults) -> SpeechModelPersistedState {
+            Settings(testDefaults: defaults).speechModelPersistedState
+        }
+        func persist(_ defaults: UserDefaults, _ writes: [SpeechModelPersistedWrite], upTo count: Int? = nil) {
+            Settings(testDefaults: defaults).apply(Array(writes.prefix(count ?? writes.count)))
+        }
+        // lastSeenVersion is whatever the simulated history persisted; tests
+        // that model an upgrade set it explicitly.
+        func launch(_ defaults: UserDefaults,
+                    cached: Set<SpeechModelProfile>) throws -> SpeechModelStartupAction {
+            let settings = Settings(testDefaults: defaults)
+            settings.apply(settings.speechModelDownloadApprovalReconciliationWrites())
+            let before = settings.speechModelPersistedState
+            let plan = speechModelStartupPlan(for: before,
+                                              cacheComplete: { cached.contains($0.productionProfile) })
+            settings.apply(plan.writes)
+            let after = Settings(testDefaults: defaults).speechModelPersistedState
+            if case .load(let profile, let allowDownload, _) = plan.action {
+                try expect(!allowDownload || before.isDownloadApproved(for: profile),
+                           equals: true,
+                           "a launch must not download \(profile.shortName) without that model's approval")
+            }
+            try expect(after.downloadApprovals,
+                       equals: before.downloadApprovals,
+                       "a pending switch or cache state must never change download approvals")
+            if case .valid(let pending) = after.pendingSwitch {
+                try expect(pending.target,
+                           equals: after.profile,
+                           "a surviving pending switch must describe the selected model")
+            }
+            return plan.action
+        }
+
+        let ultraAttempt = PendingSpeechModelSwitch(id: "attempt-ultra", target: ultra, fallback: v3)
+        try expect(decodePendingSpeechModelSwitch(ultraAttempt.propertyList),
+                   equals: .valid(ultraAttempt),
+                   "a written pending switch should decode unchanged")
+
+        // Clean install, Set Up Later, then Download and Switch to Ultra. Exit
+        // after each switch write and restart with nothing cached.
+        for exitAfter in 0...4 {
+            try withDefaults("clean-switch") { defaults in
+                try expect(try launch(defaults, cached: []),
+                           equals: .awaitDownloadChoice(v3),
+                           "a clean install should wait for Download Model")
+                try expect(Settings(testDefaults: defaults).legacySpeechModelDownloadApproved,
+                           equals: false,
+                           "the first launch should record the Mac-wide flag so an older release cannot assume approval")
+                let writes = speechModelSwitchWrites(in: state(defaults),
+                                                     to: ultra,
+                                                     approvingTargetDownload: true,
+                                                     attemptID: ultraAttempt.id)
+                try expect(writes.count, equals: 4,
+                           "an uncached switch should write approval, mirror, record and selection")
+                persist(defaults, writes, upTo: exitAfter)
+                let expected: SpeechModelStartupAction = exitAfter == writes.count
+                    ? .load(ultra, allowDownload: true, switchAttempt: ultraAttempt)
+                    : .awaitDownloadChoice(v3)
+                try expect(try launch(defaults, cached: []),
+                           equals: expected,
+                           "an exit after \(exitAfter) switch write(s) should keep the old choice or the whole switch")
+                try expect(state(defaults).isDownloadApproved(for: v3),
+                           equals: false,
+                           "Download and Switch must never approve the deferred v3 download")
+            }
+        }
+
+        // The resumed Ultra attempt fails. Exit after each fallback write and
+        // restart: the unapproved, absent v3 returns to its choice and the
+        // trial never runs again.
+        for exitAfter in 0...2 {
+            try withDefaults("clean-fallback") { defaults in
+                _ = try launch(defaults, cached: [])
+                persist(defaults, speechModelSwitchWrites(in: state(defaults),
+                                                          to: ultra,
+                                                          approvingTargetDownload: true,
+                                                          attemptID: ultraAttempt.id))
+                try expect(try launch(defaults, cached: []),
+                           equals: .load(ultra, allowDownload: true, switchAttempt: ultraAttempt),
+                           "an interrupted switch should resume after a restart")
+                let fallback = speechModelSwitchFallbackWrites(in: state(defaults), switchAttempt: ultraAttempt)
+                try expect(fallback, equals: [.profile(v3), .pendingSwitch(nil)],
+                           "a failed recorded switch should select its previous model, then clear the record")
+                persist(defaults, fallback, upTo: exitAfter)
+                let expected: SpeechModelStartupAction = exitAfter == 0
+                    ? .load(ultra, allowDownload: true, switchAttempt: ultraAttempt)
+                    : .awaitDownloadChoice(v3)
+                try expect(try launch(defaults, cached: []),
+                           equals: expected,
+                           "an exit after \(exitAfter) fallback write(s) should retry the trial or wait for the v3 choice")
+                if exitAfter > 0 {
+                    try expect(state(defaults).pendingSwitch, equals: .absent,
+                               "a selected fallback should leave no pending switch")
+                    try expect(speechModelSwitchFallbackWrites(in: state(defaults), switchAttempt: ultraAttempt),
+                               equals: [],
+                               "a failed trial must not fall back twice")
+                }
+            }
+        }
+
+        // Working, approved v3; the Ultra switch is interrupted mid-download,
+        // resumes after a restart and fails.
+        try withDefaults("cached-v3") { defaults in
+            _ = try launch(defaults, cached: [])
+            persist(defaults, speechModelDownloadApprovalWrites(approving: v3, in: state(defaults)))
+            try expect(try launch(defaults, cached: [v3]),
+                       equals: .load(v3, allowDownload: true, switchAttempt: nil),
+                       "Setup's Download Model should approve the selected v3")
+            try expect(Settings(testDefaults: defaults).legacySpeechModelDownloadApproved,
+                       equals: false,
+                       "approving only v3 should not give older releases Mac-wide approval")
+            persist(defaults, speechModelSwitchWrites(in: state(defaults),
+                                                      to: ultra,
+                                                      approvingTargetDownload: true,
+                                                      attemptID: ultraAttempt.id))
+            try expect(Settings(testDefaults: defaults).legacySpeechModelDownloadApproved,
+                       equals: true,
+                       "both models approved separately may keep the Mac-wide flag for older releases")
+            try expect(try launch(defaults, cached: [v3]),
+                       equals: .load(ultra, allowDownload: true, switchAttempt: ultraAttempt),
+                       "the interrupted switch should resume")
+            persist(defaults, speechModelSwitchFallbackWrites(in: state(defaults), switchAttempt: ultraAttempt))
+            try expect(try launch(defaults, cached: [v3]),
+                       equals: .load(v3, allowDownload: true, switchAttempt: nil),
+                       "a failed resumed switch should return to the working v3")
+            try expect(speechModelSwitchFallbackWrites(in: state(defaults), switchAttempt: nil),
+                       equals: [],
+                       "a failed fallback load should not fall back again")
+        }
+
+        // Preinstalled v3 that was never approved: an Ultra approval must not
+        // let a later v3 integrity failure download v3.
+        try withDefaults("preinstalled-v3") { defaults in
+            try expect(try launch(defaults, cached: [v3]),
+                       equals: .load(v3, allowDownload: false, switchAttempt: nil),
+                       "a preinstalled cache should load offline without approving downloads")
+            persist(defaults, speechModelSwitchWrites(in: state(defaults),
+                                                      to: ultra,
+                                                      approvingTargetDownload: true,
+                                                      attemptID: ultraAttempt.id))
+            _ = try launch(defaults, cached: [v3])
+            persist(defaults, speechModelSwitchFallbackWrites(in: state(defaults), switchAttempt: ultraAttempt))
+            try expect(try launch(defaults, cached: [v3]),
+                       equals: .load(v3, allowDownload: false, switchAttempt: nil),
+                       "the fallback v3 should stay offline")
+            try expect(state(defaults).downloadApprovals, equals: [ultra],
+                       "only the confirmed target should be approved")
+        }
+
+        // Ultra downloads and verifies, but the app exits before the success
+        // write: the next launch reloads it once as the same switch.
+        try withDefaults("success") { defaults in
+            _ = try launch(defaults, cached: [])
+            persist(defaults, speechModelSwitchWrites(in: state(defaults),
+                                                      to: ultra,
+                                                      approvingTargetDownload: true,
+                                                      attemptID: ultraAttempt.id))
+            try expect(try launch(defaults, cached: [ultra]),
+                       equals: .load(ultra, allowDownload: true, switchAttempt: ultraAttempt),
+                       "a success interrupted before clearing should reload the same switch")
+            persist(defaults, speechModelLoadSucceededWrites(in: state(defaults), switchAttempt: ultraAttempt))
+            try expect(try launch(defaults, cached: [ultra]),
+                       equals: .load(ultra, allowDownload: true, switchAttempt: nil),
+                       "after success Ultra should load as the plain selection")
+            try expect(state(defaults).isDownloadApproved(for: v3), equals: false,
+                       "a successful Ultra switch must not approve v3")
+        }
+
+        // An unapproved switch to structurally complete files loads offline
+        // only; if its files vanish before a restart, the previous model is
+        // restored instead of asking to download the trial.
+        let cachedTrial = PendingSpeechModelSwitch(id: "attempt-cached", target: ultra, fallback: v3)
+        for exitAfter in 0...2 {
+            try withDefaults("cached-trial") { defaults in
+                _ = try launch(defaults, cached: [v3, ultra])
+                let writes = speechModelSwitchWrites(in: state(defaults),
+                                                     to: ultra,
+                                                     approvingTargetDownload: false,
+                                                     attemptID: cachedTrial.id)
+                try expect(writes, equals: [.pendingSwitch(cachedTrial), .profile(ultra)],
+                           "a switch to a cached model should write no approval")
+                persist(defaults, writes)
+                try expect(try launch(defaults, cached: [v3, ultra]),
+                           equals: .load(ultra, allowDownload: false, switchAttempt: cachedTrial),
+                           "structurally complete files should load offline only")
+                let restore = speechModelStartupPlan(for: state(defaults), cacheComplete: { $0 == v3 })
+                try expect(restore.writes, equals: [.profile(v3), .pendingSwitch(nil)],
+                           "a trial without its files should restore the previous model, then clear the record")
+                persist(defaults, restore.writes, upTo: exitAfter)
+                try expect(try launch(defaults, cached: [v3]),
+                           equals: .load(v3, allowDownload: false, switchAttempt: nil),
+                           "an exit after \(exitAfter) restoring write(s) should still settle on the previous model")
+                try expect(state(defaults).pendingSwitch, equals: .absent,
+                           "the abandoned trial's record should be cleared")
+                try expect(state(defaults).downloadApprovals, equals: [],
+                           "cache presence must never approve a download")
+            }
+        }
+
+        // A stale attempt cannot change a newer decision.
+        try withDefaults("stale") { defaults in
+            _ = try launch(defaults, cached: [v3, ultra])
+            let older = PendingSpeechModelSwitch(id: "older", target: ultra, fallback: v3)
+            let newer = PendingSpeechModelSwitch(id: "newer", target: ultra, fallback: v3)
+            persist(defaults, speechModelSwitchWrites(in: state(defaults),
+                                                      to: ultra,
+                                                      approvingTargetDownload: false,
+                                                      attemptID: older.id))
+            persist(defaults, [.pendingSwitch(newer)])
+            try expect(speechModelSwitchFallbackWrites(in: state(defaults), switchAttempt: older),
+                       equals: [],
+                       "a stale failure must not change a newer switch")
+            try expect(speechModelLoadSucceededWrites(in: state(defaults), switchAttempt: older),
+                       equals: [],
+                       "a stale success must not clear a newer switch")
+            try expect(speechModelLoadSucceededWrites(in: state(defaults), switchAttempt: newer),
+                       equals: [.pendingSwitch(nil)],
+                       "the current attempt's success should clear its own record")
+        }
+
+        // Malformed or partial records are discarded and change nothing else.
+        let malformedRecords: [Any] = [
+            ultra.rawValue,
+            ["version": 2, "id": "x", "target": ultra.rawValue, "fallback": v3.rawValue] as [String: Any],
+            ["version": 1, "target": ultra.rawValue, "fallback": v3.rawValue] as [String: Any],
+            ["version": 1, "id": "", "target": ultra.rawValue, "fallback": v3.rawValue] as [String: Any],
+            ["version": 1, "id": "x", "target": SpeechModelProfile.englishUnified.rawValue,
+             "fallback": v3.rawValue] as [String: Any],
+            ["version": 1, "id": "x", "target": ultra.rawValue, "fallback": ultra.rawValue] as [String: Any],
+            ["version": 1, "id": "x", "target": ultra.rawValue] as [String: Any],
+            ["version": 1, "id": "x", "target": ultra.rawValue, "fallback": v3.rawValue,
+             "approved": true] as [String: Any],
+        ]
+        for (index, record) in malformedRecords.enumerated() {
+            try expect(decodePendingSpeechModelSwitch(record), equals: .malformed,
+                       "malformed pending switch \(index) should be rejected")
+            try withDefaults("malformed-\(index)") { defaults in
+                _ = try launch(defaults, cached: [])
+                persist(defaults, [.profile(ultra)])
+                defaults.set(record, forKey: Settings.keyPendingSpeechModelSwitch)
+                try expect(try launch(defaults, cached: [v3]),
+                           equals: .awaitDownloadChoice(ultra),
+                           "malformed pending switch \(index) must neither fall back nor approve a download")
+                try expect(defaults.object(forKey: Settings.keyPendingSpeechModelSwitch) == nil,
+                           equals: true,
+                           "malformed pending switch \(index) should be removed")
+            }
+        }
+
+        // Only a lastSeenVersion from before 0.3.9 can stand in for a missing
+        // decision; anything later means the decision write was lost.
+        let versionGate: [(String, Bool)] = [
+            ("", false), ("0.0.0", false), ("0.1.0", true), ("0.3.8", true),
+            ("0.3.9", false), ("0.3.10", false), ("1.0.0", false), ("not-a-version", false),
+        ]
+        for (version, predates) in versionGate {
+            try expect(lastSeenVersionPredatesSpeechModelDownloadChoice(version),
+                       equals: predates,
+                       "lastSeenVersion \(version) should \(predates ? "" : "not ")count as a launch before the choice")
+        }
+
+        // Mac-wide approval from 0.3.9–0.3.10 keeps its effect on the models
+        // those releases knew; no decision keeps 0.3.9's first-launch rule,
+        // and a decision lost after 0.3.9 approves nothing.
+        let migrations: [(legacy: Bool?, lastSeen: String?, approvals: Set<SpeechModelProfile>, mirror: Bool)] = [
+            (nil, nil, [], false),
+            (nil, "0.3.8", [v3, ultra], true),
+            (true, nil, [v3, ultra], true),
+            (false, "0.3.8", [], false),
+            (nil, "0.3.9", [], false),
+            (nil, "0.3.10", [], false),
+            (nil, "0.0.0", [], false),
+        ]
+        for (index, migration) in migrations.enumerated() {
+            try withDefaults("migration-\(index)") { defaults in
+                if let legacy = migration.legacy {
+                    defaults.set(legacy, forKey: legacyKey)
+                }
+                if let lastSeen = migration.lastSeen {
+                    Settings(testDefaults: defaults).lastSeenVersion = lastSeen
+                }
+                _ = try launch(defaults, cached: [])
+                try expect(state(defaults).downloadApprovals, equals: migration.approvals,
+                           "migration \(index) should keep the recorded decision")
+                try expect(Settings(testDefaults: defaults).legacySpeechModelDownloadApproved,
+                           equals: migration.mirror,
+                           "migration \(index) should leave a matching Mac-wide flag")
+                // The launch then records its own version.
+                Settings(testDefaults: defaults).lastSeenVersion = "0.3.11"
+                try expect(Settings(testDefaults: defaults).speechModelDownloadApprovalReconciliationWrites(),
+                           equals: [],
+                           "migration \(index) should be idempotent across restarts")
+            }
+        }
+
+        // An exit between the first launch's two reconciliation writes. If
+        // lastSeenVersion was not yet recorded, the next launch repeats the same
+        // rule. If it persisted without them (out of order), a lost decision
+        // approves nothing: an upgrade from before 0.3.9 then falls back to the
+        // first-download choice instead of gaining approval.
+        for priorVersion in [nil, "0.3.8"] as [String?] {
+            for exitAfter in 0...2 {
+                for lastSeenPersisted in [false, true] {
+                    try withDefaults("reconcile-exit") { defaults in
+                        if let priorVersion {
+                            Settings(testDefaults: defaults).lastSeenVersion = priorVersion
+                        }
+                        let writes = Settings(testDefaults: defaults).speechModelDownloadApprovalReconciliationWrites()
+                        try expect(writes.count, equals: 2,
+                                   "a first launch should write approvals and the Mac-wide flag")
+                        persist(defaults, writes, upTo: exitAfter)
+                        if lastSeenPersisted {
+                            Settings(testDefaults: defaults).lastSeenVersion = "0.3.11"
+                        }
+                        _ = try launch(defaults, cached: [])
+                        let expected: Set<SpeechModelProfile> =
+                            priorVersion != nil && (exitAfter >= 1 || !lastSeenPersisted) ? [v3, ultra] : []
+                        let situation = "prior \(priorVersion ?? "none"), \(exitAfter) write(s), lastSeenVersion \(lastSeenPersisted ? "persisted" : "not persisted")"
+                        try expect(state(defaults).downloadApprovals, equals: expected,
+                                   "\(situation): approvals should come only from a recorded or pre-0.3.9 decision")
+                        try expect(Settings(testDefaults: defaults).legacySpeechModelDownloadApproved,
+                                   equals: !expected.isEmpty,
+                                   "\(situation): the Mac-wide flag should match the approvals")
+                    }
+                }
+            }
+        }
+
+        // Out-of-order persistence. UserDefaults reaches disk asynchronously and
+        // promises no order across keys, so after an abrupt exit each key may
+        // hold any value from its own write history, independently. Clean
+        // install, Set Up Later, Download and Switch to Ultra, every combination:
+        // nothing may approve v3, Ultra downloads only with its own approval,
+        // and each expected action names the recovery that combination loses.
+        for legacy in [nil, false] as [Bool?] {
+            for approvals in [nil, [], [ultra]] as [Set<SpeechModelProfile>?] {
+                for lastSeen in [nil, "0.3.11"] as [String?] {
+                    for selectsUltra in [false, true] {
+                        for record in [nil, ultraAttempt] as [PendingSpeechModelSwitch?] {
+                            try withDefaults("out-of-order-clean") { defaults in
+                                if let legacy { defaults.set(legacy, forKey: legacyKey) }
+                                if let approvals { persist(defaults, [.downloadApprovals(approvals)]) }
+                                if let lastSeen { Settings(testDefaults: defaults).lastSeenVersion = lastSeen }
+                                if selectsUltra { persist(defaults, [.profile(ultra)]) }
+                                if let record { persist(defaults, [.pendingSwitch(record)]) }
+                                let ultraApproved = approvals == [ultra]
+                                let expected: SpeechModelStartupAction
+                                let recovery: String
+                                switch (selectsUltra, record != nil, ultraApproved) {
+                                case (false, _, _):
+                                    expected = .awaitDownloadChoice(v3)
+                                    recovery = "the switch is lost; v3 waits for its choice"
+                                case (true, true, true):
+                                    expected = .load(ultra, allowDownload: true, switchAttempt: ultraAttempt)
+                                    recovery = "the whole switch survives"
+                                case (true, true, false):
+                                    expected = .awaitDownloadChoice(v3)
+                                    recovery = "Ultra's approval is lost, so the trial is undone"
+                                case (true, false, true):
+                                    expected = .load(ultra, allowDownload: true, switchAttempt: nil)
+                                    recovery = "the selection survives without its record: no fallback after a failure"
+                                case (true, false, false):
+                                    expected = .awaitDownloadChoice(ultra)
+                                    recovery = "the selection survives alone: Setup asks for Ultra again"
+                                }
+                                let combination = "legacy \(legacy.map { $0 ? "true" : "false" } ?? "absent"), "
+                                    + "approvals \(approvals.map { $0.map(\.rawValue).sorted().joined(separator: "+") } ?? "absent"), "
+                                    + "lastSeenVersion \(lastSeen ?? "absent"), selection \(selectsUltra ? "Ultra" : "v3"), "
+                                    + "record \(record == nil ? "absent" : "present")"
+                                try expect(try launch(defaults, cached: []),
+                                           equals: expected,
+                                           "\(combination): \(recovery)")
+                                try expect(state(defaults).isDownloadApproved(for: v3),
+                                           equals: false,
+                                           "\(combination): no persisted combination may approve the deferred v3")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The same for a working, approved, cached v3 whose Ultra switch was
+        // interrupted and possibly fell back. Approval comes only from a
+        // persisted approvals value or a persisted Mac-wide true (written only
+        // once both models were approved); a lost record loses the automatic
+        // return to v3, never the cached v3 itself.
+        for legacy in [nil, false, true] as [Bool?] {
+            for approvals in [nil, [], [v3], [v3, ultra]] as [Set<SpeechModelProfile>?] {
+                for lastSeen in [nil, "0.3.11"] as [String?] {
+                    for selectsUltra in [false, true] {
+                        for record in [nil, ultraAttempt] as [PendingSpeechModelSwitch?] {
+                            try withDefaults("out-of-order-cached") { defaults in
+                                if let legacy { defaults.set(legacy, forKey: legacyKey) }
+                                if let approvals { persist(defaults, [.downloadApprovals(approvals)]) }
+                                if let lastSeen { Settings(testDefaults: defaults).lastSeenVersion = lastSeen }
+                                persist(defaults, [.profile(selectsUltra ? ultra : v3)])
+                                if let record { persist(defaults, [.pendingSwitch(record)]) }
+                                let effective = (approvals ?? [])
+                                    .union(legacy == true ? SpeechModelProfile.legacyMacWideApprovalProfiles : [])
+                                let expected: SpeechModelStartupAction
+                                switch (selectsUltra, record != nil, effective.contains(ultra)) {
+                                case (false, _, _), (true, true, false):
+                                    expected = .load(v3, allowDownload: effective.contains(v3), switchAttempt: nil)
+                                case (true, true, true):
+                                    expected = .load(ultra, allowDownload: true, switchAttempt: ultraAttempt)
+                                case (true, false, true):
+                                    expected = .load(ultra, allowDownload: true, switchAttempt: nil)
+                                case (true, false, false):
+                                    expected = .awaitDownloadChoice(ultra)
+                                }
+                                let combination = "legacy \(legacy.map { $0 ? "true" : "false" } ?? "absent"), "
+                                    + "approvals \(approvals.map { $0.map(\.rawValue).sorted().joined(separator: "+") } ?? "absent"), "
+                                    + "lastSeenVersion \(lastSeen ?? "absent"), selection \(selectsUltra ? "Ultra" : "v3"), "
+                                    + "record \(record == nil ? "absent" : "present")"
+                                try expect(try launch(defaults, cached: [v3]),
+                                           equals: expected,
+                                           "\(combination): unexpected startup action")
+                                try expect(state(defaults).downloadApprovals,
+                                           equals: effective,
+                                           "\(combination): approvals should be exactly the persisted ones")
+                                try expect(Settings(testDefaults: defaults).legacySpeechModelDownloadApproved,
+                                           equals: legacySpeechModelDownloadApprovalMirror(effective),
+                                           "\(combination): a stale Mac-wide flag should be reconciled to the approvals")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        try expect(setupDownloadModelMayStart(hasStartupTask: false,
+                                              isSwitchingSpeechModel: false,
+                                              isResettingSpeechModelCache: false,
+                                              isTerminating: false),
+                   equals: true,
+                   "an idle app should accept Download Model")
+        for owner in 0..<4 {
+            try expect(setupDownloadModelMayStart(hasStartupTask: owner == 0,
+                                                  isSwitchingSpeechModel: owner == 1,
+                                                  isResettingSpeechModelCache: owner == 2,
+                                                  isTerminating: owner == 3),
+                       equals: false,
+                       "Download Model must wait while startup, a switch or fallback, a reset or termination owns the model (\(owner))")
+        }
+
+        // Policy pin: an existing Mac-wide approval still covers v3, so
+        // automatic startup continues exactly as in 0.3.10.
+        try withDefaults("legacy-startup") { defaults in
+            defaults.set(true, forKey: legacyKey)
+            try expect(try launch(defaults, cached: []),
+                       equals: .load(v3, allowDownload: true, switchAttempt: nil),
+                       "an existing Mac-wide approval should keep automatic v3 startup")
+        }
+
+        // Rollback and return: a Mac-wide flag set by an older release after
+        // migration is honoured on the next launch of this release.
+        try withDefaults("rollback") { defaults in
+            _ = try launch(defaults, cached: [])
+            persist(defaults, speechModelDownloadApprovalWrites(approving: v3, in: state(defaults)))
+            defaults.set(true, forKey: legacyKey)
+            _ = try launch(defaults, cached: [v3])
+            try expect(state(defaults).downloadApprovals, equals: [v3, ultra],
+                       "a Mac-wide approval recorded in an older release should be honoured")
+        }
+
+        // Unreadable approvals approve nothing and are rewritten.
+        try withDefaults("malformed-approvals") { defaults in
+            _ = try launch(defaults, cached: [])
+            defaults.set(v3.rawValue, forKey: Settings.keySpeechModelDownloadApprovals)
+            try expect(try launch(defaults, cached: []),
+                       equals: .awaitDownloadChoice(v3),
+                       "unreadable approvals should approve nothing")
+            try expect(defaults.object(forKey: Settings.keySpeechModelDownloadApprovals) as? [String],
+                       equals: [],
+                       "unreadable approvals should be rewritten as an empty list")
+        }
+        try expect(decodeSpeechModelDownloadApprovals([v3.rawValue, "future_model",
+                                                       SpeechModelProfile.englishUnified.rawValue]),
+                   equals: [v3],
+                   "only supported model names should count as approvals")
+        try expect(speechModelSwitchWrites(in: SpeechModelPersistedState(profile: v3,
+                                                                         downloadApprovals: [],
+                                                                         pendingSwitch: .absent),
+                                           to: .englishUnified,
+                                           approvingTargetDownload: true,
+                                           attemptID: "same-model"),
+                   equals: [],
+                   "choosing a model that resolves to the current one should write nothing")
+    }
+
     private static func testSpeechModelCachePathSafety() throws {
         let fm = FileManager.default
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -25388,6 +26769,83 @@ private enum PresspeechSelfTest {
             equals: false,
             "configuration changes at the suppression deadline should be handled normally"
         )
+
+        // Audio-restart ownership under the completion orders a startup
+        // attempt can produce. Each restart Task checks `owns` before it
+        // writes readiness or a failure and calls `end` from its defer;
+        // prepareForStartupAttempt calls `supersede`. Every step is one
+        // main-actor turn, so a late completion can land only between steps.
+        var ordinary = AudioRestartOwnership()
+        let routeChange = ordinary.begin()
+        try expect(ordinary.isRestarting, equals: true,
+                   "a route-change restart should mark audio input as restarting")
+        try expect(
+            audioRouteChangeAction(isTerminating: false,
+                                   isRestartingAudioInput: ordinary.isRestarting,
+                                   isCoreRuntimeReady: true,
+                                   isRecording: false,
+                                   isBusy: false,
+                                   hasStartupTask: false),
+            equals: .ignore,
+            "a route change during a restart should not start an overlapping one"
+        )
+        try expect(ordinary.owns(routeChange), equals: true,
+                   "an unsuperseded restart should publish its own success or failure")
+        try expect(ordinary.end(routeChange), equals: true,
+                   "an unsuperseded restart should end its own ownership")
+        try expect(ordinary.isRestarting, equals: false,
+                   "an ended restart should let the next route change restart audio")
+        try expect(ordinary.end(routeChange), equals: false,
+                   "ending a restart twice should change nothing")
+
+        // Setup's Download Model, a Retry, a model switch or a confirmed cache
+        // reset supersedes a restart that is sleeping between retries. Its late
+        // success would otherwise publish Ready while the model loads, and its
+        // late failure an audio error over the newer attempt.
+        var superseded = AudioRestartOwnership()
+        let stale = superseded.begin()
+        superseded.supersede()
+        try expect(superseded.isRestarting, equals: false,
+                   "a startup attempt should end the restart it supersedes")
+        try expect(
+            audioRouteChangeAction(isTerminating: false,
+                                   isRestartingAudioInput: superseded.isRestarting,
+                                   isCoreRuntimeReady: false,
+                                   isRecording: false,
+                                   isBusy: false,
+                                   hasStartupTask: true),
+            equals: .rebuildMenuOnly,
+            "a route change during the superseding startup should only refresh the menu"
+        )
+        try expect(superseded.owns(stale), equals: false,
+                   "a superseded restart's late success or failure must publish nothing")
+        try expect(superseded.end(stale), equals: false,
+                   "a superseded restart's defer should change nothing")
+
+        // The startup reaches Ready and a new route change restarts audio
+        // before the stale Task's cancelled sleep has resumed.
+        let newer = superseded.begin()
+        try expect(newer != stale, equals: true,
+                   "a newer restart must never reuse a superseded attempt")
+        try expect(superseded.owns(stale), equals: false,
+                   "a stale completion must not publish for the newer restart")
+        try expect(superseded.end(stale), equals: false,
+                   "a stale completion must not end the newer restart")
+        try expect(superseded.isRestarting, equals: true,
+                   "the newer restart should still own audio input after a stale completion")
+        try expect(superseded.owns(newer), equals: true,
+                   "the newer restart should publish its own result")
+        try expect(superseded.end(newer), equals: true,
+                   "the newer restart should end its own ownership")
+        try expect(superseded.isRestarting, equals: false,
+                   "no restart should remain after the newer one ends")
+
+        // A startup with no restart in flight supersedes nothing later.
+        var idle = AudioRestartOwnership()
+        idle.supersede()
+        let afterIdleSupersede = idle.begin()
+        try expect(idle.owns(afterIdleSupersede), equals: true,
+                   "an earlier supersede should not affect a later restart")
     }
 
     private static func testRecordingLifecycle() throws {
