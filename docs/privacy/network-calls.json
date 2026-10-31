@@ -18,7 +18,7 @@
       "first_run_controls_by_release": [
         {
           "version": "0.3.10",
-          "status": "published",
+          "status": "historical",
           "missing_model_controls": [
             {
               "model": "Parakeet TDT v3 CoreML",
@@ -29,7 +29,7 @@
         },
         {
           "version": "0.3.11",
-          "status": "upcoming",
+          "status": "published",
           "missing_model_controls": [
             {
               "model": "Parakeet TDT v3 CoreML",

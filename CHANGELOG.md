@@ -14,6 +14,57 @@ Also on the web: <https://rcourtman.github.io/presspeech/changelog.html>
 
 ## macOS
 
+<a id="macos-0.3.11"></a>
+
+### macOS 0.3.11 (2026-10-31)
+
+[GitHub release](https://github.com/rcourtman/presspeech/releases/tag/v0.3.11)
+
+The [full release notes](https://github.com/rcourtman/presspeech/releases/tag/v0.3.11) begin with a notice to read before opening this build.
+
+This update improves permission recovery, microphone restart ownership and
+model-switch recovery, and makes English text cleanup an explicit choice.
+
+#### Readiness and permissions
+
+- Recheck required permissions after Setup has reached Ready. If a grant is
+  removed, return to the appropriate readiness action instead of continuing
+  to imply that dictation and automatic delivery are available.
+- Keep Setup Checklist available for permission recovery and refresh the
+  represented permission state when returning from System Settings.
+- Let a newer startup attempt supersede an older audio-only restart so a late
+  completion cannot take ownership from the current startup operation.
+
+#### Model switching and recovery
+
+- Track download approval for the selected speech model. A cached model can
+  load without granting permission to fetch missing files for another model.
+- Keep the previously usable model selection while a replacement is pending;
+  recover to it if the replacement cannot be downloaded, verified or loaded.
+- Preserve pending-switch state across ordinary restarts. Preference keys are
+  saved separately; this is not a power-loss durability guarantee.
+
+#### Language-aware text cleanup
+
+- **My dictation is in English** is off by default. Enable it to authorize
+  ambiguous English filler cleanup and British spelling with multilingual
+  recognition. Recognizer language evidence can prevent that cleanup but does
+  not enable it on its own.
+- Without the declaration, preserve ambiguous words such as “um” and “er” and
+  spellings that can be valid words in another language. An English declaration
+  cannot resolve every ambiguity in identical multilingual text.
+
+#### Validation and remaining coverage
+
+Native hosted macOS builds, model-free self-tests and packaged-app checks
+passed for the source changes. The final release archive is Developer ID
+signed and notarised through the release pipeline. Physical microphone and
+input testing, permission grant/revocation, target-app paste, sleep/wake and
+hardware power-loss testing remain deferred. Those paths are not represented
+as qualified by the automated checks.
+
+Audio retention is unchanged. Audio and transcription remain local.
+
 <a id="macos-0.3.10"></a>
 
 ### macOS 0.3.10 (2026-10-22)

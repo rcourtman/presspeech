@@ -45,7 +45,7 @@
         <span class="section-eyebrow">Changelog</span>
         <h1>Presspeech changelog</h1>
         <p>Release history for the macOS and Windows apps, newest first. The two apps are released separately and have their own version numbers. Each entry links to its GitHub release, which has the complete notes and downloads.</p>
-        <p>Latest: <a href="#macos-0.3.10">macOS 0.3.10</a> (22 October 2026) and <a href="#windows-0.1.13">Windows 0.1.13</a> (31 October 2026).</p>
+        <p>Latest: <a href="#macos-0.3.11">macOS 0.3.11</a> (31 October 2026) and <a href="#windows-0.1.13">Windows 0.1.13</a> (31 October 2026).</p>
         <div class="actions">
           <a class="button" href="#macos">macOS releases</a>
           <a class="button secondary" href="#windows">Windows releases</a>
@@ -56,6 +56,32 @@
         <div class="wrap">
           <span class="section-eyebrow">macOS</span>
           <h2>macOS releases</h2>
+          <article class="release" id="macos-0.3.11" aria-labelledby="macos-0.3.11-title">
+            <h3 id="macos-0.3.11-title">macOS 0.3.11</h3>
+            <p class="release-meta"><time datetime="2026-10-31">31 October 2026</time> · <a href="https://github.com/rcourtman/presspeech/releases/tag/v0.3.11">GitHub release</a></p>
+            <div class="note warn"><p>The <a href="https://github.com/rcourtman/presspeech/releases/tag/v0.3.11">full release notes</a> begin with a notice to read before opening this build.</p></div>
+            <p>This update improves permission recovery, microphone restart ownership and model-switch recovery, and makes English text cleanup an explicit choice.</p>
+            <h4>Readiness and permissions</h4>
+            <ul>
+              <li>Recheck required permissions after Setup has reached Ready. If a grant is removed, return to the appropriate readiness action instead of continuing to imply that dictation and automatic delivery are available.</li>
+              <li>Keep Setup Checklist available for permission recovery and refresh the represented permission state when returning from System Settings.</li>
+              <li>Let a newer startup attempt supersede an older audio-only restart so a late completion cannot take ownership from the current startup operation.</li>
+            </ul>
+            <h4>Model switching and recovery</h4>
+            <ul>
+              <li>Track download approval for the selected speech model. A cached model can load without granting permission to fetch missing files for another model.</li>
+              <li>Keep the previously usable model selection while a replacement is pending; recover to it if the replacement cannot be downloaded, verified or loaded.</li>
+              <li>Preserve pending-switch state across ordinary restarts. Preference keys are saved separately; this is not a power-loss durability guarantee.</li>
+            </ul>
+            <h4>Language-aware text cleanup</h4>
+            <ul>
+              <li><strong>My dictation is in English</strong> is off by default. Enable it to authorize ambiguous English filler cleanup and British spelling with multilingual recognition. Recognizer language evidence can prevent that cleanup but does not enable it on its own.</li>
+              <li>Without the declaration, preserve ambiguous words such as “um” and “er” and spellings that can be valid words in another language. An English declaration cannot resolve every ambiguity in identical multilingual text.</li>
+            </ul>
+            <h4>Validation and remaining coverage</h4>
+            <p>Native hosted macOS builds, model-free self-tests and packaged-app checks passed for the source changes. The final release archive is Developer ID signed and notarised through the release pipeline. Physical microphone and input testing, permission grant/revocation, target-app paste, sleep/wake and hardware power-loss testing remain deferred. Those paths are not represented as qualified by the automated checks.</p>
+            <p>Audio retention is unchanged. Audio and transcription remain local.</p>
+          </article>
           <article class="release" id="macos-0.3.10" aria-labelledby="macos-0.3.10-title">
             <h3 id="macos-0.3.10-title">macOS 0.3.10</h3>
             <p class="release-meta"><time datetime="2026-10-22">22 October 2026</time> · <a href="https://github.com/rcourtman/presspeech/releases/tag/v0.3.10">GitHub release</a></p>
