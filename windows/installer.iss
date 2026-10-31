@@ -105,7 +105,7 @@ Filename: "{app}\Presspeech.exe"; Description: "Launch Presspeech"; WorkingDir: 
 
 [Code]
 var
-  ReuseBundle, ActivationOK, OwnedInstall: Boolean;
+  ReuseBundle, ActivationOK, OwnedInstall, ExclusiveInstall: Boolean;
 #ifdef Qualification
   PayloadPaused: Boolean;
 #endif
@@ -147,16 +147,31 @@ begin
   Result := String(Marker) = Name;
 end;
 
-function OwnedRoot: Boolean;
+function RootOwner: String;
 var
   Marker: AnsiString;
   Path: String;
 begin
-  Result := False;
+  Result := '';
   Path := ExpandConstant('{app}\.presspeech-install-owner');
   if not SafeChain(Path) then Exit;
   if not LoadStringFromFile(Path, Marker) then Exit;
-  Result := String(Marker) = '{#InstallerAppId}';
+  Result := String(Marker);
+end;
+
+function OwnedRoot: Boolean;
+var
+  Owner: String;
+begin
+  Owner := RootOwner;
+  Result := (Owner = '{#InstallerAppId}') or
+    (Owner = '{#InstallerAppId}|exclusive') or
+    (Owner = '{#InstallerAppId}|shared');
+end;
+
+function ExclusiveRoot: Boolean;
+begin
+  Result := RootOwner = '{#InstallerAppId}|exclusive';
 end;
 
 function BundleName(const Name: String): Boolean;
@@ -301,6 +316,10 @@ begin
   if not SafeChain(ExpandConstant('{app}\Presspeech.exe')) or
      not SafeChain(BundlePath) then Exit;
   OwnedInstall := KnownInstall;
+  ExclusiveInstall := ExclusiveRoot or not DirExists(ExpandConstant('{app}')) or
+    EmptyDirectory(ExpandConstant('{app}')) or
+    (OwnedInstall and (CompareText(ExpandConstant('{app}'),
+      ExpandConstant('{localappdata}\Programs\Presspeech')) = 0));
   if FileExists(ExpandConstant('{app}\.presspeech-install-owner')) and not OwnedRoot then Exit;
   if DirExists(ExpandConstant('{app}')) and not OwnedInstall and not OwnedRoot and
      not EmptyDirectory(ExpandConstant('{app}')) then begin
@@ -400,14 +419,76 @@ begin
   end;
 end;
 
+function UninstallerSlot(const Name: String): Boolean;
+var
+  I: Integer;
+  Extension: String;
+begin
+  Result := False;
+  if (Length(Name) <> 12) or (Copy(Name, 1, 5) <> 'unins') then Exit;
+  for I := 6 to 8 do if Pos(Name[I], '0123456789') = 0 then Exit;
+  Extension := Copy(Name, 9, 4);
+  Result := (Extension = '.exe') or (Extension = '.dat') or
+    (Extension = '.msg') or (Extension = '.tmp');
+end;
+
+function InstallerTemporary(const Name: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if (Length(Name) <> 17) or (Copy(Name, 1, 3) <> 'is-') or
+     (Copy(Name, 14, 4) <> '.tmp') then Exit;
+  for I := 4 to 13 do
+    if Pos(Name[I], '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz') = 0 then Exit;
+  Result := True;
+end;
+
+procedure CleanupInstallerOrphans;
+var
+  Entry: TFindRec;
+  Name, CurrentSlot: String;
+begin
+  { Inno can leave an uninstaller replacement temp file or a reserved log
+    slot after process termination. The root was originally empty or is the
+    dedicated registered default install. A shared legacy root is excluded. }
+  if not ExclusiveRoot or not SafeChain(ExpandConstant('{app}')) then Exit;
+  CurrentSlot := Lowercase(Copy(ExtractFileName(ExpandConstant('{uninstallexe}')), 1, 8));
+  if FindFirst(ExpandConstant('{app}\*'), Entry) then begin
+    try
+      repeat
+        if ((Entry.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0) and
+           ((Entry.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) = 0) then begin
+          Name := Lowercase(Entry.Name);
+          if InstallerTemporary(Name) or
+             (UninstallerSlot(Name) and (Copy(Name, 1, 8) <> CurrentSlot)) then
+            if not DeleteFile(ExpandConstant('{app}\') + Entry.Name) then
+              Log('An interrupted installer artifact could not be removed.');
+        end;
+      until not FindNext(Entry);
+    finally
+      FindClose(Entry);
+    end;
+  end;
+end;
+
 procedure CurStepChanged(Step: TSetupStep);
 var
-  Pending: String;
+  Pending, OwnerPath, OwnerValue: String;
 begin
   if Step = ssInstall then begin
-    if not SafeChain(ExpandConstant('{app}')) or not ForceDirectories(ExpandConstant('{app}')) or
-       not SaveStringToFile(ExpandConstant('{app}\.presspeech-install-owner'), '{#InstallerAppId}', False) then
+    if not SafeChain(ExpandConstant('{app}')) or not ForceDirectories(ExpandConstant('{app}')) then
       RaiseException('Installation ownership could not be recorded safely');
+    OwnerPath := ExpandConstant('{app}\.presspeech-install-owner');
+    if not FileExists(OwnerPath) or
+       ((RootOwner = '{#InstallerAppId}') and ExclusiveInstall) then begin
+      OwnerValue := '{#InstallerAppId}|shared';
+      if ExclusiveInstall then OwnerValue := '{#InstallerAppId}|exclusive';
+      Pending := OwnerPath + '.pending';
+      if not SafeChain(Pending) or not SaveStringToFile(Pending, OwnerValue, False) or
+         not MoveFileEx(Pending, OwnerPath, 1 or 8) then
+        RaiseException('Installation ownership could not be committed safely');
+    end;
     if not ReuseBundle then begin
       { Recover only this package's owned, inactive interrupted staging. }
       if DirExists(BundlePath) then begin
@@ -439,6 +520,7 @@ begin
     Log('PRESSPEECH: verified bundle activated {#BundleDir}');
     QualificationCheckpoint('activated');
     CleanupBundles('{#BundleDir}');
+    CleanupInstallerOrphans;
     { Legacy contents are automatically removed only in the dedicated default
       directory. A custom/shared legacy directory retains unlogged files. }
     if OwnedInstall and
@@ -465,6 +547,7 @@ procedure CurUninstallStepChanged(Step: TUninstallStep);
 begin
   if Step = usPostUninstall then begin
     CleanupBundles('');
+    CleanupInstallerOrphans;
     if OwnedRoot then DeleteFile(ExpandConstant('{app}\.presspeech-install-owner'));
     { The owner marker is deliberately independent of Inno's rollback log.
       Remove the app directory only if no unrelated files remain. }
